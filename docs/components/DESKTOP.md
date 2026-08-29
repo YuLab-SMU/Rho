@@ -47,7 +47,8 @@ Rust commands. `transport/mock.ts` supports deterministic browser development.
 Controllers under `app/controllers/` serialize project, Surface, Console, and
 Studio mutations. The compact left rail keeps Studio/Vibe/Compose captions
 hidden until hover or keyboard focus, exposes one tools button for every placed
-component, and routes toolbar customization through the single Rho menu.
+component, and folds the former top Rho menu into the bottom-pinned rail menu
+alongside toolbar customization.
 Component tools provide focus, mode, runtime, duplicate, and close actions.
 Exact Plot links from Console or History open the durable Plot identity, while
 the general Plots view includes both current-session and historical project

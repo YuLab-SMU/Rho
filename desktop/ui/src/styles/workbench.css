@@ -383,6 +383,7 @@
     align-items: center;
   }
   .rho-toolbar-anchor { flex-direction: column; gap: var(--rho-space-2); width: 100%; }
+  .rho-toolbar-anchor-left { position: absolute; width: 0; height: 0; overflow: visible; }
   .rho-toolbar-anchor-right {
     flex: 1 1 auto;
     justify-content: flex-end;
@@ -438,6 +439,16 @@
   }
   .rho-studio-bar .rho-rho-menu > summary:hover,
   .rho-studio-bar .rho-rho-menu[open] > summary { color: var(--rho-rail-text); background: var(--rho-rail-fill); }
+  .rho-studio-bar .rho-rho-menu-bottom > summary { display: none; }
+  .rho-studio-bar .rho-rho-menu-bottom .rho-rho-menu-panel {
+    position: fixed;
+    top: auto;
+    bottom: calc(var(--rho-statusbar-height) + var(--rho-space-3));
+    left: calc(var(--rho-rail-width) + var(--rho-space-2));
+    width: min(var(--rho-toolbar-popover-width), calc(100vw - var(--rho-rail-width) - 2 * var(--rho-space-4)));
+    max-height: calc(100vh - var(--rho-statusbar-height) - 2 * var(--rho-space-5));
+  }
+  .rho-unified-menu-trigger { margin-top: var(--rho-space-1); }
 
   /* Active workspace plugins, shown as an icon rail section. */
   .rho-plugin-rail {

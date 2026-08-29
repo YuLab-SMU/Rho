@@ -272,7 +272,7 @@ describe("Studio foundation app", () => {
     const menu = container.querySelector<HTMLDetailsElement>(".rho-rho-menu")!;
     if (!menu.open) {
       await act(async () => {
-        menu.querySelector<HTMLElement>("summary")!.click();
+        container.querySelector<HTMLButtonElement>("button[aria-label='Rho menu']")!.click();
         await settle();
       });
     }
@@ -364,7 +364,8 @@ describe("Studio foundation app", () => {
   it("merges toolbar customization into the two fixed Rho and mode anchors", async () => {
     const { container } = await renderApp();
     const bar = container.querySelector<HTMLElement>(".rho-studio-bar")!;
-    expect(bar.querySelector("[aria-label='Rho menu']")).not.toBeNull();
+    const rhoMenuTrigger = bar.querySelector("button[aria-label='Rho menu']")!;
+    expect(rhoMenuTrigger.closest(".rho-toolbar-anchor-right")).not.toBeNull();
     expect(bar.querySelector(".rho-mode-switch")).not.toBeNull();
     expect(bar.querySelector("[aria-label='Customize toolbar']")).toBeNull();
     expect(bar.querySelectorAll("[data-toolbar-component]")).toHaveLength(0);
@@ -1223,7 +1224,7 @@ describe("Studio foundation app", () => {
     expect(transport.openProject).toHaveBeenCalledOnce();
     expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectA);
 
-    const summary = menu.querySelector<HTMLElement>("summary")!;
+    const summary = container.querySelector<HTMLButtonElement>("button[aria-label='Rho menu']")!;
     target.focus();
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));

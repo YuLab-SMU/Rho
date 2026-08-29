@@ -105,8 +105,29 @@ async function evidence(page) {
 async function openSurface(page, surfaceId) {
   let compose = page.getByRole("button", { name: "Compose" });
   if (await compose.count() === 0) {
-    await page.locator('[aria-label="Rho menu"]').click();
-    await page.getByRole("button", { name: "Customize toolbar…" }).click();
+    const rhoMenu = page.locator(".rho-rho-menu");
+    const rhoMenuTrigger = page.locator('[aria-label="Rho menu"]');
+    const customizeToolbar = page.getByRole("button", { name: "Customize toolbar…" });
+    for (let attempt = 0; attempt < 4 && !await customizeToolbar.isVisible(); attempt += 1) {
+      if (await rhoMenu.evaluate((menu) => !(menu instanceof HTMLDetailsElement) || !menu.open)) {
+        await rhoMenuTrigger.click();
+      }
+      await page.waitForTimeout(100);
+    }
+    if (!await customizeToolbar.isVisible()) {
+      const state = await page.evaluate(() => {
+        const menu = document.querySelector(".rho-rho-menu");
+        const panel = document.querySelector(".rho-rho-menu-panel");
+        return {
+          open: menu?.hasAttribute("open") ?? false,
+          panelDisplay: panel == null ? null : getComputedStyle(panel).display,
+          panelRects: panel?.getClientRects().length ?? 0,
+          panelText: panel?.textContent ?? null,
+        };
+      });
+      throw new Error(`Rho menu did not expose toolbar customization: ${JSON.stringify(state)}`);
+    }
+    await customizeToolbar.click();
     const dialog = page.getByRole("dialog", { name: "Toolbar components" });
     await dialog.getByRole("checkbox", { name: "Compose" }).check();
     await dialog.getByRole("button", { name: "Done" }).click();
@@ -201,7 +222,7 @@ try {
       const caption = document.querySelector('.rho-mode-switch button[title="Studio mode"] span');
       return caption != null && getComputedStyle(caption).opacity === "1";
     });
-    await page.getByLabel("Rho menu").click();
+    await page.getByRole("button", { name: "Rho menu", exact: true }).click();
     await page.getByRole("button", { name: new RegExp(`Development build\\s+${declared.build_id}`) }).waitFor();
 
     const separator = page.locator('[role="separator"][aria-orientation="vertical"]:visible').first();

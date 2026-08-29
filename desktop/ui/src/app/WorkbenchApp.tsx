@@ -346,7 +346,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   });
   const commandSearchRef = useRef<HTMLInputElement>(null);
   const rhoMenuRef = useRef<HTMLDetailsElement>(null);
-  const rhoMenuTriggerRef = useRef<HTMLElement>(null);
+  const rhoMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const vibeWorkspaceRef = useRef<VibeWorkspaceSurfaceHandle>(null);
   const vibeReturnPointRef = useRef<VibeReturnPoint | null>(null);
   const vibeTransitionRef = useRef<Promise<unknown> | null>(null);
@@ -573,7 +573,8 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   useEffect(() => {
     const closeRhoMenu = (event: PointerEvent) => {
       const menu = rhoMenuRef.current;
-      if (menu?.open === true && event.target instanceof Node && !menu.contains(event.target)) {
+      if (menu?.open === true && event.target instanceof Node
+          && !menu.contains(event.target) && !rhoMenuTriggerRef.current?.contains(event.target)) {
         menu.open = false;
       }
     };
@@ -2484,6 +2485,9 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const RailVibeIcon = () => (
     <svg {...railIconProps}><path d="M8 2v4M8 10v4M2 8h4M10 8h4M4.2 4.2l2 2M9.8 9.8l2 2M11.8 4.2l-2 2M6.2 9.8l-2 2" /></svg>
   );
+  const RailTuneIcon = () => (
+    <svg {...railIconProps}><path d="M2 4h5M10 4h4M2 12h2M7 12h7M7 2v4M4 10v4" /></svg>
+  );
   const renderToolbarComponent = (componentId: ToolbarComponentId) => {
     let content: ReactNode;
     switch (componentId) {
@@ -2734,8 +2738,8 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     <main className="rho-studio-shell">
       <header className="rho-studio-bar">
         <div className="rho-toolbar-anchor rho-toolbar-anchor-left">
-          <details className="rho-rho-menu" ref={rhoMenuRef}>
-            <summary ref={rhoMenuTriggerRef} aria-label="Rho menu" onClick={() => setToolbarCustomizerOpen(false)}><span className="rho-mark-word">Rho</span><span aria-hidden="true">⌄</span></summary>
+          <details className="rho-rho-menu rho-rho-menu-bottom" ref={rhoMenuRef}>
+            <summary aria-hidden="true" tabIndex={-1}><span className="rho-mark-word">Rho</span></summary>
             <div className="rho-rho-menu-panel" aria-busy={projectSwitching}>
               <button
                 type="button"
@@ -2893,6 +2897,18 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
             onCommit={commitToolbarLayout}
             showTrigger={false}
           />
+          <button
+            type="button"
+            ref={rhoMenuTriggerRef}
+            className="rho-rail-btn rho-unified-menu-trigger"
+            aria-label="Rho menu"
+            aria-haspopup="menu"
+            title="Rho menu and toolbar settings"
+            onClick={() => {
+              setToolbarCustomizerOpen(false);
+              if (rhoMenuRef.current != null) rhoMenuRef.current.open = !rhoMenuRef.current.open;
+            }}
+          ><RailTuneIcon /></button>
         </div>
         {commandSearchTransient && (
           <div className="rho-toolbar-command-overlay">{commandSearch}</div>
