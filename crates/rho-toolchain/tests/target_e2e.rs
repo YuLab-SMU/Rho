@@ -8,7 +8,8 @@ use rho_toolchain::{
     PythonEnvironmentReceipt, RemoteEffectPayload, RemoteHelperOperation, RemoteHelperRequest,
     RemoteOperationMirrorStatus, TargetAdmissionMode, adapt_plan_for_target, admit_target,
     execute_journaled_operation, invoke_remote_effect, load_target_registry, load_toolchain_config,
-    python_run_plan, read_remote_operation_mirror, reconcile_remote_operation,
+    monitor_project_resources, python_run_plan, read_remote_operation_mirror,
+    reconcile_remote_operation,
 };
 use sha2::{Digest, Sha256};
 
@@ -333,6 +334,22 @@ fn ssh_e2e(local_root: &Path, remote_root: &Path, fake_tools: &Path) {
     let admission = admit_target(local_root, &targets, TargetAdmissionMode::Run).unwrap();
     assert_eq!(admission.host_kind(), "ssh");
     assert_eq!(admission.isolation_kind(), "native");
+    let monitored = monitor_project_resources(local_root, &targets).unwrap();
+    let remote_monitor = monitored
+        .targets
+        .iter()
+        .find(|target| target.target_id == "ssh-e2e")
+        .unwrap();
+    assert!(remote_monitor.device.is_some());
+    assert!(
+        remote_monitor
+            .device
+            .as_ref()
+            .unwrap()
+            .metrics
+            .iter()
+            .any(|metric| metric.kind == "memory")
+    );
     let registry_sha256 = targets.sha256.as_deref().unwrap();
     let effect_program = fake_tools.join(format!("rho-e2e-effect{}", std::env::consts::EXE_SUFFIX));
 

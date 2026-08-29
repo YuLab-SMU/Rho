@@ -31,6 +31,7 @@ license, and notice files remain controlling.
 | KaTeX | Vite dependency bundled into the generated Rho Surface Runtime | MIT; reviewed source notice at `desktop/legal/licenses/katex/LICENSE` |
 | Ark runtime | pinned by `runtime/ark.json` and staged as a Tauri sidecar | MIT plus upstream notices; the bootstrap process copies the archive's `LICENSE` and `NOTICE` into `desktop/resources/runtime/` for bundling |
 | Wasmtime / Cranelift | `wasmtime 38.0.4` Cargo dependency for the no-WASI Phase 2 Wasm host | Apache-2.0 WITH LLVM-exception; exact version/features are pinned in `Cargo.toml` and `Cargo.lock` |
+| sysinfo | `sysinfo 0.39.6` Cargo dependency for cross-platform CPU, memory, and project-filesystem telemetry | MIT; exact version/features are pinned in `Cargo.toml` and `Cargo.lock` |
 | WAT parser | test-only `wat 1.257.1` Cargo dependency for deterministic Wasm fixtures | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT; excluded from production dependencies |
 
 Rust, Node, and R dependency manifests identify additional source/runtime

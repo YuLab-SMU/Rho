@@ -718,6 +718,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                 "Environment",
                 &[
                     ("toolchains", "Toolchains"),
+                    ("resources", "Resources"),
                     ("packages", "Packages"),
                     ("requests", "Requests"),
                 ],
@@ -805,6 +806,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                         "Environment",
                         &[
                             ("toolchains", "Toolchains"),
+                            ("resources", "Resources"),
                             ("packages", "Packages"),
                             ("requests", "Requests"),
                         ],

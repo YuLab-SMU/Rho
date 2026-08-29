@@ -42,6 +42,7 @@ serde_norway = "0.9.42"
 sha2 = "0.10"
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
 specta-typescript = "=0.0.12"
+sysinfo = { version = "0.39.6", default-features = false, features = ["disk", "system"] }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 tempfile = "3.20"
 thiserror = "2.0"

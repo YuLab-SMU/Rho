@@ -1471,6 +1471,44 @@
   .rho-toolchain-checks small { overflow-wrap: anywhere; color: var(--rho-muted); font-size: var(--rho-text-caption); line-height: 1.4; }
   .rho-toolchain-checks .rho-status-dot { margin-top: var(--rho-space-1); }
 
+  .rho-resource-monitor { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; background: var(--rho-panel); }
+  .rho-resource-monitor-body { min-width: 0; min-height: 0; padding: var(--rho-space-3); overflow: auto; }
+  .rho-resource-governance-summary { display: flex; align-items: center; justify-content: space-between; gap: var(--rho-space-4); padding: var(--rho-space-3); border: var(--rho-border); border-left: 3px solid var(--rho-ok); border-radius: var(--rho-radius-1); background: var(--rho-paper); }
+  .rho-resource-governance-summary > div { display: grid; gap: var(--rho-space-1); }
+  .rho-resource-governance-summary > div > strong { color: var(--rho-ink); font-size: var(--rho-text-body); text-transform: capitalize; }
+  .rho-resource-governance-summary > small { color: var(--rho-muted); font-size: var(--rho-text-caption); text-align: right; }
+  .rho-resource-pressure-warning { border-left-color: var(--rho-warn); }
+  .rho-resource-pressure-critical { border-left-color: var(--rho-danger); }
+  .rho-resource-pressure-unavailable { border-left-color: var(--rho-muted); }
+  .rho-resource-monitor-notice, .rho-resource-observed-at { display: block; margin: var(--rho-space-3) 0 0; color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  .rho-resource-targets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--rho-space-3); margin-top: var(--rho-space-3); }
+  .rho-resource-target { min-width: 0; padding: var(--rho-space-3); border: var(--rho-border); border-left: 3px solid var(--rho-ok); border-radius: var(--rho-radius-1); background: var(--rho-paper); }
+  .rho-resource-target.rho-resource-pressure-warning { border-left-color: var(--rho-warn); }
+  .rho-resource-target.rho-resource-pressure-critical { border-left-color: var(--rho-danger); }
+  .rho-resource-target.rho-resource-pressure-unavailable { border-left-color: var(--rho-muted); }
+  .rho-resource-target > header { display: flex; align-items: start; justify-content: space-between; gap: var(--rho-space-3); }
+  .rho-resource-target > header > div:first-child { display: grid; min-width: 0; gap: var(--rho-space-1); }
+  .rho-resource-target > header strong, .rho-resource-target > header small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rho-resource-target > header strong { color: var(--rho-ink); font-size: var(--rho-text-ui); }
+  .rho-resource-target > header small { color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  .rho-resource-target-state { display: flex; flex-wrap: wrap; justify-content: end; gap: var(--rho-space-1); color: var(--rho-muted); font-size: var(--rho-text-caption); text-transform: capitalize; }
+  .rho-resource-target-state span { padding: var(--rho-space-1) var(--rho-space-2); border-radius: var(--rho-radius-pill); background: var(--rho-panel); }
+  .rho-resource-admission-ready, .rho-resource-admission-blocked { margin: var(--rho-space-3) 0 0; color: var(--rho-ok); font-size: var(--rho-text-caption); font-weight: var(--rho-weight-semibold); }
+  .rho-resource-admission-blocked { color: var(--rho-danger); }
+  .rho-resource-device { display: grid; gap: var(--rho-space-1); margin-top: var(--rho-space-3); padding-top: var(--rho-space-3); border-top: var(--rho-border); }
+  .rho-resource-device strong { color: var(--rho-ink-2); font-size: var(--rho-text-ui); }
+  .rho-resource-device small { overflow: hidden; color: var(--rho-muted); font-size: var(--rho-text-caption); text-overflow: ellipsis; white-space: nowrap; }
+  .rho-resource-metrics { display: grid; gap: var(--rho-space-2); margin-top: var(--rho-space-3); }
+  .rho-resource-metric { display: grid; gap: var(--rho-space-1); padding: var(--rho-space-2); border-radius: var(--rho-radius-1); background: var(--rho-panel); }
+  .rho-resource-metric > div { display: flex; align-items: center; justify-content: space-between; gap: var(--rho-space-2); }
+  .rho-resource-metric strong { color: var(--rho-ink); font-size: var(--rho-text-caption); }
+  .rho-resource-metric span, .rho-resource-metric small { color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  .rho-resource-metric progress { width: 100%; height: var(--rho-space-1); overflow: hidden; border: 0; border-radius: var(--rho-radius-pill); accent-color: var(--rho-ok); }
+  .rho-resource-metric.rho-resource-pressure-warning progress { accent-color: var(--rho-warn); }
+  .rho-resource-metric.rho-resource-pressure-critical progress { accent-color: var(--rho-danger); }
+  .rho-resource-governance-reasons { margin: var(--rho-space-3) 0 0; padding-left: var(--rho-space-4); color: var(--rho-ink-2); font-size: var(--rho-text-caption); line-height: 1.45; }
+  .rho-resource-monitor-error { margin: var(--rho-space-3) 0 0; color: var(--rho-danger); font-size: var(--rho-text-caption); overflow-wrap: anywhere; }
+
   .rho-domain-surface { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; background: var(--rho-panel); }
   .rho-domain-toolbar { display: flex; align-items: center; gap: var(--rho-space-1); min-width: 0; padding: var(--rho-space-2) var(--rho-space-3); border-bottom: var(--rho-border); background: var(--rho-paper); }
   .rho-domain-toolbar > div { min-width: 0; flex: 1 1 auto; }

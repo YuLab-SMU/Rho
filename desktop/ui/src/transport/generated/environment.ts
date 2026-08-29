@@ -12,9 +12,20 @@ export const createEnvironmentCommands = (__TAURI_INVOKE: EnvironmentInvoke) => 
 	listInstalledPackages: (limit: number | null) => __TAURI_INVOKE<InstalledPackageInventory>("list_installed_packages", { limit }),
 	listEnvironmentOperationRequests: (limit: number | null, status: string | null) => __TAURI_INVOKE<EnvironmentOperationRequestSummary[]>("list_environment_operation_requests", { limit, status }),
 	toolchainDoctor: () => __TAURI_INVOKE<ToolchainDoctorView>("toolchain_doctor"),
+	resourceMonitorSnapshot: () => __TAURI_INVOKE<ResourceMonitorView>("resource_monitor_snapshot"),
 });
 
 /* Types */
+export type DeviceResourceView = {
+	device_id: string,
+	host_name: string,
+	operating_system: string,
+	architecture: string,
+	observed_at: string,
+	cpu_logical_count: number,
+	metrics: ResourceMetricView[],
+};
+
 export type EnvironmentOperationRequestSummary = {
 	request_id: string,
 	turn_id: string | null,
@@ -39,6 +50,56 @@ export type EnvironmentOperationRequestSummary = {
 };
 
 export type InstalledPackageInventory = unknown;
+
+export type ResourceGovernanceThresholdsView = {
+	cpu_warning_basis_points: number,
+	cpu_critical_basis_points: number,
+	memory_available_warning_basis_points: number,
+	memory_available_critical_basis_points: number,
+	disk_available_warning_basis_points: number,
+	disk_available_critical_basis_points: number,
+	gpu_warning_basis_points: number,
+	gpu_critical_basis_points: number,
+};
+
+export type ResourceMetricView = {
+	resource_id: string,
+	kind: string,
+	label: string,
+	unit: string,
+	capacity: string | null,
+	available: string | null,
+	utilization_basis_points: number | null,
+	pressure: string,
+	detail: string,
+};
+
+export type ResourceMonitorView = {
+	status: string,
+	selected_target_id: string,
+	observed_at: string,
+	configured: boolean,
+	rho_toml_sha256: string | null,
+	target_registry_sha256: string | null,
+	thresholds: ResourceGovernanceThresholdsView,
+	targets: TargetResourceView[],
+	total_targets: number,
+	truncated: boolean,
+};
+
+export type TargetResourceView = {
+	target_id: string,
+	selected: boolean,
+	host_kind: string,
+	isolation_kind: string,
+	environment_identity: string,
+	capabilities: string[],
+	status: string,
+	admission_allowed: boolean,
+	governance_reasons: string[],
+	device: DeviceResourceView | null,
+	error: string | null,
+};
 
 export type ToolchainDoctorCheckView = {
 	id: string,

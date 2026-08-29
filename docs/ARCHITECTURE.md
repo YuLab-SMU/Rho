@@ -23,7 +23,7 @@ rho CLI and MCP ── public workbench protocol ── read-side store projecti
 
 - Workspace R is authoritative for live R execution and scientific objects.
 - The Rust broker owns process lifecycle, project identity, revisions,
-  permissions, transport, and durable coordination.
+  permissions, transport, durable coordination, and resource-admission policy.
 - `rho-store` owns persisted projects, runs, outputs, evidence, Agent records,
   environment snapshots, and plugin lifecycle state.
 - React owns presentation and ephemeral interaction state. A UI state is not
@@ -42,6 +42,7 @@ rho CLI and MCP ── public workbench protocol ── read-side store projecti
 | Desktop frontend | `desktop/ui/src/main.tsx`, `app/`, `transport/` |
 | R processes | `r/rho.bridge`, `r/rho.agent` |
 | Extensions | `crates/rho-extension-runtime`, `desktop/src-tauri/src/workspace_plugins` |
+| Targets and resource governance | `crates/rho-toolchain`, `desktop/src-tauri/src/commands/resource_monitor.rs` |
 | Public tools | `crates/rho-cli`, `crates/rho-mcp` |
 
 Open the generated [source index](SOURCE-INDEX.md) for exact paths

@@ -28,8 +28,11 @@ Important runtime owners include:
   in Environment → Toolchains and the managed-project Target Admission cache.
   Workspace startup admits the exact local/native R realization before Ark
   launch; Runtime Run and auxiliary Live entry points revalidate the cached
-  config/registry binding before persistence or process dispatch. External
-  sync/lock authority remains in `rho-toolchain`.
+  config/registry binding and recent resource-governance observation before
+  persistence or process dispatch. Environment → Resources refreshes bounded
+  local/SSH device telemetry across native, Docker, and Conda target identities
+  every 15 seconds while that view is open. External sync/lock authority
+  remains in `rho-toolchain`.
 
 ## Frontend
 

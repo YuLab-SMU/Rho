@@ -11,6 +11,7 @@ mod command;
 mod config;
 mod doctor;
 mod journal;
+mod monitor;
 mod receipt;
 mod remote;
 mod remote_mirror;
@@ -35,6 +36,11 @@ pub use doctor::{
 pub use journal::{
     EffectStatus, ExternalEffectRecord, OperationJournal, OperationKind, OperationStatus,
     execute_journaled_operation, operation_journal_path, read_operation_journal,
+};
+pub use monitor::{
+    DeviceResourceSnapshot, ResourceGovernanceThresholds, ResourceMetricSnapshot,
+    ResourceMonitorSnapshot, ResourcePressure, TargetResourceSnapshot, inspect_local_resources,
+    monitor_project_resources, monitor_target_resource,
 };
 pub use receipt::{
     EnvironmentReceipt, EnvironmentReceiptMode, PythonEnvironmentReceipt, REnvironmentReceipt,

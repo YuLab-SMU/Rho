@@ -290,7 +290,7 @@ export function createMockUiKernelTransport(
   const firstPartyFactorySpecs = [
     ["rho.agent", "Agent", [["conversation", "Conversation"], ["activity", "Activity"], ["composer", "Composer"]], false],
     ["rho.settings", "Settings", [["settings", "Settings"]], false],
-    ["rho.environment", "Environment", [["toolchains", "Toolchains"], ["packages", "Packages"], ["requests", "Requests"]], false],
+    ["rho.environment", "Environment", [["toolchains", "Toolchains"], ["resources", "Resources"], ["packages", "Packages"], ["requests", "Requests"]], false],
     ["rho.navigator", "Navigator", [["files", "Files"], ["runs", "History"]], false],
     ["rho.evidence", "Evidence", [["claims", "Claims"]], false],
     ["rho.git", "Git", [["changes", "Changes"], ["history", "History"]], false],
@@ -3429,6 +3429,53 @@ export function createMockUiKernelTransport(
           { id: "renv", status: "ready", detail: "project library ready" },
           { id: "uv", status: "ready", detail: "Python 3.12 environment ready" },
         ],
+      };
+    },
+    async resourceMonitorSnapshot() {
+      return {
+        status: "healthy",
+        selected_target_id: "local",
+        observed_at: agentNow,
+        configured: true,
+        rho_toml_sha256: "f".repeat(64),
+        target_registry_sha256: null,
+        thresholds: {
+          cpu_warning_basis_points: 8500,
+          cpu_critical_basis_points: 9500,
+          memory_available_warning_basis_points: 2000,
+          memory_available_critical_basis_points: 1000,
+          disk_available_warning_basis_points: 1500,
+          disk_available_critical_basis_points: 500,
+          gpu_warning_basis_points: 9000,
+          gpu_critical_basis_points: 9800,
+        },
+        targets: [{
+          target_id: "local",
+          selected: true,
+          host_kind: "local",
+          isolation_kind: "native",
+          environment_identity: "native",
+          capabilities: ["cpu"],
+          status: "healthy",
+          admission_allowed: true,
+          governance_reasons: ["All observed governed resources are within threshold"],
+          device: {
+            device_id: "device-mock",
+            host_name: "Mock workstation",
+            operating_system: "macos",
+            architecture: "aarch64",
+            observed_at: agentNow,
+            cpu_logical_count: 12,
+            metrics: [
+              { resource_id: "device-mock:cpu", kind: "cpu", label: "CPU", unit: "percent", capacity: "12", available: null, utilization_basis_points: 3200, pressure: "healthy", detail: "12 logical processors" },
+              { resource_id: "device-mock:memory", kind: "memory", label: "Memory", unit: "bytes", capacity: "34359738368", available: "21474836480", utilization_basis_points: 3750, pressure: "healthy", detail: "20 GiB available" },
+              { resource_id: "device-mock:disk", kind: "disk", label: "Project disk", unit: "bytes", capacity: "1000000000000", available: "600000000000", utilization_basis_points: 4000, pressure: "healthy", detail: "600 GB available" },
+            ],
+          },
+          error: null,
+        }],
+        total_targets: 1,
+        truncated: false,
       };
     },
     async loadDomainSurface(surfaceId) {

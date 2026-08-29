@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "688cf8e06bfc125881dc06544945be496bd5d2e54c7ba00e3fa70b5743fd2aff";
+const EXPECTED_HANDLER_DIGEST = "df8a6adfd37df9837125d90c96e1122f858a84f2561f86a982eb5d82fb27dfe7";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [
@@ -51,6 +51,7 @@ const ENVIRONMENT_COMMANDS = [
 ];
 
 const TOOLCHAIN_COMMANDS = ["toolchain_doctor"];
+const RESOURCE_MONITOR_COMMANDS = ["resource_monitor_snapshot"];
 
 const EDITOR_COMMANDS = [
   "editor_discover_chunks",
@@ -323,6 +324,16 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Toolchain command module ownership changed",
   );
 
+  const resourceMonitorSource = sources.find(
+    ({ name }) => name.endsWith("commands/resource_monitor.rs"),
+  );
+  assert.ok(resourceMonitorSource, "Resource monitor command module is missing");
+  assert.deepEqual(
+    commandDefinitions([resourceMonitorSource]).map(({ name }) => name).sort(),
+    RESOURCE_MONITOR_COMMANDS,
+    "Resource monitor command module ownership changed",
+  );
+
   const editorSource = sources.find(({ name }) => name.endsWith("commands/editor.rs"));
   assert.ok(editorSource, "Editor command module is missing");
   assert.deepEqual(
@@ -427,6 +438,9 @@ function fixtures() {
   const toolchainHandlers = TOOLCHAIN_COMMANDS.map(
     (command) => `  commands::toolchain::${command},`,
   ).join("\n");
+  const resourceMonitorHandlers = RESOURCE_MONITOR_COMMANDS.map(
+    (command) => `  commands::resource_monitor::${command},`,
+  ).join("\n");
   const editorHandlers = EDITOR_COMMANDS.map(
     (command) => `  commands::editor::${command},`,
   ).join("\n");
@@ -470,6 +484,7 @@ ${artifactHandlers}
 ${evidenceHandlers}
 ${environmentHandlers}
 ${toolchainHandlers}
+${resourceMonitorHandlers}
 ${editorHandlers}
 ${projectHandlers}
 ${agentLlmHandlers}
@@ -504,6 +519,9 @@ ${runtimeControlHandlers}
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
       { name: "commands/toolchain.rs", text: TOOLCHAIN_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
+      { name: "commands/resource_monitor.rs", text: RESOURCE_MONITOR_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
       { name: "commands/editor.rs", text: EDITOR_COMMANDS.map(
@@ -547,6 +565,7 @@ ${runtimeControlHandlers}
       ...EVIDENCE_COMMANDS,
       ...ENVIRONMENT_COMMANDS,
       ...TOOLCHAIN_COMMANDS,
+      ...RESOURCE_MONITOR_COMMANDS,
       ...EDITOR_COMMANDS,
       ...PROJECT_COMMANDS,
       ...AGENT_LLM_COMMANDS,

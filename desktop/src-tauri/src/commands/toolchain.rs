@@ -1,12 +1,13 @@
 use anyhow::{Context, Result, bail, ensure};
 use rho_toolchain::{
     DoctorStatus, TargetAdmission, TargetAdmissionMode, admit_target, doctor_for_target,
-    load_target_registry, load_toolchain_config,
+    load_target_registry, load_toolchain_config, monitor_target_resource,
 };
 use serde::Serialize;
 use tauri::State;
 
 use crate::AppState;
+use crate::application_state::ResourceGovernanceCache;
 use crate::startup_runtime::runtime_config;
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -78,6 +79,7 @@ pub(crate) async fn prepare_workspace_target_admission(
 ) -> Result<Option<TargetAdmission>> {
     let project_root = state.project_root.read().await.clone();
     *state.target_admission.write().await = None;
+    *state.resource_governance.write().await = None;
     let admission = prepare_workspace_target_admission_for(state, &project_root).await?;
     ensure!(
         *state.project_root.read().await == project_root,
@@ -101,12 +103,44 @@ pub(crate) async fn require_target_admission(
     }
     let cached = cached
         .context("Target Admission is unavailable for the managed project; restart Workspace R")?;
+    let governance = state
+        .resource_governance
+        .read()
+        .await
+        .clone()
+        .filter(|governance| {
+            governance.project_root == project_root
+                && governance.rho_toml_sha256 == cached.rho_toml_sha256()
+                && governance.target_registry_sha256.as_deref() == cached.target_registry_sha256()
+                && governance.target_id == cached.target_id()
+                && governance.observed_at.elapsed() <= std::time::Duration::from_secs(15)
+        });
+    if let Some(governance) = governance.as_ref()
+        && !governance.admission_allowed
+    {
+        bail!(
+            "Resource governance blocks target {}: {}",
+            governance.target_id,
+            governance.reasons.join("; ")
+        );
+    }
+    let refresh_governance = governance.is_none();
     let rho_home = crate::agent_llm::agent_config::rho_home()?;
     let root_for_task = project_root.clone();
-    let admission = tauri::async_runtime::spawn_blocking(move || {
+    let (admission, refreshed) = tauri::async_runtime::spawn_blocking(move || {
         let config = load_toolchain_config(&root_for_task)?;
         let targets = load_target_registry(&rho_home)?;
-        cached.for_mode(&config, &targets, mode)
+        let admission = cached.for_mode(&config, &targets, mode)?;
+        let refreshed = if refresh_governance {
+            Some((
+                monitor_target_resource(&root_for_task, &targets, admission.target_id())?,
+                config.sha256,
+                targets.sha256,
+            ))
+        } else {
+            None
+        };
+        Ok::<_, rho_toolchain::ToolchainError>((admission, refreshed))
     })
     .await
     .context("Target Admission validation task failed")??;
@@ -114,6 +148,27 @@ pub(crate) async fn require_target_admission(
         *state.project_root.read().await == project_root,
         "Target Admission is stale after a project switch"
     );
+    if let Some((resources, rho_toml_sha256, target_registry_sha256)) = refreshed {
+        let governance = ResourceGovernanceCache {
+            project_root,
+            rho_toml_sha256,
+            target_registry_sha256,
+            target_id: resources.target_id.clone(),
+            observed_at: std::time::Instant::now(),
+            admission_allowed: resources.admission_allowed,
+            reasons: resources.governance_reasons.clone(),
+        };
+        let allowed = governance.admission_allowed;
+        let reason = governance.reasons.join("; ");
+        *state.resource_governance.write().await = Some(governance);
+        if !allowed {
+            bail!(
+                "Resource governance blocks target {}: {}",
+                admission.target_id(),
+                reason
+            );
+        }
+    }
     Ok(Some(admission))
 }
 

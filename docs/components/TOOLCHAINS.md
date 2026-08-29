@@ -114,6 +114,19 @@ fails closed if `rho.toml` or `targets.yaml` changes. Desktop Workspace R is
 currently local Ark only: an admitted Docker, Conda, or SSH Workspace is
 reported as unsupported instead of being silently launched against local R.
 
+Resource governance observes up to 16 registered target environments per
+refresh and keeps target identity separate from physical device identity, so
+local native, Docker, and Conda environments can share one device while SSH
+targets report their remote device through the authenticated Helper. CPU,
+memory, the project filesystem, and bounded `nvidia-smi` GPU telemetry are
+classified as healthy, warning, critical, or unavailable. Memory below 10%
+available, project storage below 5% available, critical pressure on a
+GPU-capable target selected for required GPU work, or missing telemetry for
+that project-required GPU capability blocks formal Target Admission. CPU pressure
+is visible but remains advisory. Desktop Run/Live admission reuses a matching
+observation for at most 15 seconds, then refreshes before admitting more work;
+project/config/target changes invalidate the cache.
+
 ## Resolution and execution
 
 - `rig list --json` is bounded and parsed into installed R records. Rho accepts

@@ -2,6 +2,7 @@ import {
   createEnvironmentCommands,
   type EnvironmentInvoke,
   type EnvironmentOperationRequestSummary as EnvironmentOperationRequestSummaryWire,
+  type ResourceMonitorView as ResourceMonitorViewWire,
   type ToolchainDoctorView as ToolchainDoctorViewWire,
 } from "./generated/environment";
 
@@ -16,6 +17,7 @@ type DeepReadonly<T> = T extends (...args: never[]) => unknown
 export type EnvironmentOperationRequestSummary =
   DeepReadonly<EnvironmentOperationRequestSummaryWire>;
 export type ToolchainDoctorView = DeepReadonly<ToolchainDoctorViewWire>;
+export type ResourceMonitorView = DeepReadonly<ResourceMonitorViewWire>;
 
 export interface EnvironmentReadTransport {
   listInstalledPackages(limit?: number): Promise<unknown>;
@@ -24,6 +26,7 @@ export interface EnvironmentReadTransport {
     status?: string | null,
   ): Promise<readonly EnvironmentOperationRequestSummary[]>;
   toolchainDoctor(): Promise<ToolchainDoctorView>;
+  resourceMonitorSnapshot(): Promise<ResourceMonitorView>;
 }
 
 export function createTauriEnvironmentReadTransport(
@@ -35,5 +38,6 @@ export function createTauriEnvironmentReadTransport(
     listEnvironmentOperationRequests: (limit, status) =>
       commands.listEnvironmentOperationRequests(limit ?? null, status ?? null),
     toolchainDoctor: () => commands.toolchainDoctor(),
+    resourceMonitorSnapshot: () => commands.resourceMonitorSnapshot(),
   };
 }

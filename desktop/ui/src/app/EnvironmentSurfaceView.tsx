@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { DomainSurfaceData, SurfaceInstance, UiKernelTransport } from "../transport";
-import type { ToolchainDoctorView } from "../transport/environment";
+import type { ResourceMonitorView, ToolchainDoctorView } from "../transport/environment";
 import {
   environmentDetail,
   environmentItemsForMode,
@@ -66,6 +66,89 @@ function ToolchainDoctorPanel({
   </section>;
 }
 
+function formatBytes(value: string | null): string | null {
+  if (value == null) return null;
+  try {
+    const bytes = BigInt(value);
+    const units = ["B", "KiB", "MiB", "GiB", "TiB"] as const;
+    let scaled = Number(bytes);
+    let unit = 0;
+    while (scaled >= 1024 && unit < units.length - 1) {
+      scaled /= 1024;
+      unit += 1;
+    }
+    return `${scaled >= 10 || unit === 0 ? scaled.toFixed(0) : scaled.toFixed(1)} ${units[unit]}`;
+  } catch {
+    return null;
+  }
+}
+
+function formatPercent(value: number | null): string {
+  return value == null ? "Not observed" : `${(value / 100).toFixed(value % 100 === 0 ? 0 : 1)}%`;
+}
+
+function ResourceMonitorPanel({
+  view,
+  loading,
+  error,
+  reload,
+}: {
+  readonly view: ResourceMonitorView | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly reload: () => void;
+}) {
+  const blocked = view?.targets.filter((target) => !target.admission_allowed).length ?? 0;
+  return <section className="rho-resource-monitor" aria-label="Compute resource monitor">
+    <header className="rho-environment-toolbar">
+      <div>
+        <strong>Resource governance</strong>
+        <small>{view == null
+          ? "Observing devices and target environments"
+          : `${view.total_targets} ${view.total_targets === 1 ? "target" : "targets"} · ${blocked} admission ${blocked === 1 ? "guard" : "guards"} active`}</small>
+      </div>
+      <button type="button" className="rho-icon-btn" aria-label="Refresh resources" disabled={loading} onClick={reload}>↻</button>
+    </header>
+    {loading && view == null && <SurfaceTaskState tone="loading" title="Inspecting resources…" detail="Sampling CPU, memory, project storage, GPU telemetry, devices, and target environments." role="status" busy />}
+    {error != null && <SurfaceTaskState tone="error" title="Resource monitor unavailable" detail={error} role="alert"><button type="button" onClick={reload}>Try again</button></SurfaceTaskState>}
+    {error == null && view != null && <div className="rho-resource-monitor-body" aria-busy={loading}>
+      <div className={`rho-resource-governance-summary rho-resource-pressure-${view.status}`}>
+        <div><span className="rho-eyebrow">Fleet status</span><strong>{view.status}</strong></div>
+        <small>CPU warn {(view.thresholds.cpu_warning_basis_points / 100).toFixed(0)}% · Memory guard below {(view.thresholds.memory_available_critical_basis_points / 100).toFixed(0)}% free · Disk guard below {(view.thresholds.disk_available_critical_basis_points / 100).toFixed(0)}% free</small>
+      </div>
+      {view.truncated && <p className="rho-resource-monitor-notice">Showing the first monitored targets; the registry contains {view.total_targets} entries.</p>}
+      <div className="rho-resource-targets">
+        {view.targets.map((target) => <article className={`rho-resource-target rho-resource-pressure-${target.status}`} data-target-id={target.target_id} key={target.target_id}>
+          <header>
+            <div><strong>{target.target_id}</strong><small>{target.host_kind} / {target.isolation_kind} · {target.environment_identity}</small></div>
+            <div className="rho-resource-target-state">{target.selected && <span>Selected</span>}<span>{target.status}</span></div>
+          </header>
+          <p className={target.admission_allowed ? "rho-resource-admission-ready" : "rho-resource-admission-blocked"}>
+            {target.admission_allowed ? "Resource admission ready" : "Resource admission guarded"}
+          </p>
+          {target.device != null && <>
+            <div className="rho-resource-device"><strong>{target.device.host_name}</strong><small>{target.device.device_id} · {target.device.operating_system} {target.device.architecture}</small></div>
+            <div className="rho-resource-metrics">
+              {target.device.metrics.map((metric) => {
+                const available = formatBytes(metric.available);
+                const capacity = formatBytes(metric.capacity);
+                return <div className={`rho-resource-metric rho-resource-pressure-${metric.pressure}`} key={metric.resource_id}>
+                  <div><strong>{metric.label}</strong><span>{formatPercent(metric.utilization_basis_points)}</span></div>
+                  {metric.utilization_basis_points != null && <progress max={10000} value={metric.utilization_basis_points} aria-label={`${metric.label} utilization`} />}
+                  <small>{available != null && capacity != null ? `${available} available of ${capacity}` : metric.detail}</small>
+                </div>;
+              })}
+            </div>
+          </>}
+          <ul className="rho-resource-governance-reasons">{target.governance_reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+          {target.error != null && <p className="rho-resource-monitor-error">{target.error}</p>}
+        </article>)}
+      </div>
+      <small className="rho-resource-observed-at">Observed {new Date(view.observed_at).toLocaleTimeString()}</small>
+    </div>}
+  </section>;
+}
+
 export function EnvironmentSurfaceView({
   instance,
   transport,
@@ -82,37 +165,62 @@ export function EnvironmentSurfaceView({
     ? instance.view_state.filter
     : "";
   const toolchainMode = instance.mode_id === "toolchains";
+  const resourceMode = instance.mode_id === "resources";
   const mode: EnvironmentMode = instance.mode_id === "requests" ? "requests" : "packages";
   const [filter, setFilter] = useState(initialFilter);
   const [searchOpen, setSearchOpen] = useState(Boolean(initialFilter));
   const [data, setData] = useState<DomainSurfaceData | null>(null);
   const [toolchain, setToolchain] = useState<ToolchainDoctorView | null>(null);
+  const [resources, setResources] = useState<ResourceMonitorView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadingRef = useRef(false);
   const load = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     try {
       if (toolchainMode) {
         setToolchain(await transport.toolchainDoctor());
+        setResources(null);
+        setData(null);
+      } else if (resourceMode) {
+        setResources(await transport.resourceMonitorSnapshot());
+        setToolchain(null);
         setData(null);
       } else {
         setData(await transport.loadDomainSurface(instance.surface_id));
         setToolchain(null);
+        setResources(null);
       }
       setError(null);
     } catch (cause: unknown) {
       setError(workbenchFailureMessage(cause, "Environment could not load."));
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
-  }, [instance.surface_id, toolchainMode, transport]);
+  }, [instance.surface_id, resourceMode, toolchainMode, transport]);
   useEffect(() => {
     void load();
     return transport.subscribeInvalidated(() => void load());
   }, [load, transport]);
+  useEffect(() => {
+    if (!resourceMode) return;
+    const timer = window.setInterval(() => void load(), 15_000);
+    return () => window.clearInterval(timer);
+  }, [load, resourceMode]);
   if (toolchainMode) {
     return <ToolchainDoctorPanel
       view={toolchain}
+      loading={loading}
+      error={error}
+      reload={load}
+    />;
+  }
+  if (resourceMode) {
+    return <ResourceMonitorPanel
+      view={resources}
       loading={loading}
       error={error}
       reload={load}

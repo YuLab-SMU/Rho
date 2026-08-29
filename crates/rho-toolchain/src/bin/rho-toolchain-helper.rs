@@ -6,8 +6,8 @@ use rho_toolchain::{
     ComputeTarget, EnvironmentReceiptMode, OperationJournal, OperationKind, OperationStatus,
     RemoteEffectPayload, RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse,
     RemoteInspectPayload, TargetRegistry, TargetRegistryDocument, doctor_local_realization,
-    execute_journaled_operation, load_toolchain_config, read_operation_journal,
-    write_environment_receipt,
+    execute_journaled_operation, inspect_local_resources, load_toolchain_config,
+    read_operation_journal, write_environment_receipt,
 };
 
 const MAX_REQUEST_FRAME_BYTES: u64 = 1024 * 1024;
@@ -198,6 +198,45 @@ fn inspect_operation(request: &RemoteHelperRequest) -> RemoteHelperResponse {
     }
 }
 
+fn inspect_resources(request: &RemoteHelperRequest) -> RemoteHelperResponse {
+    let result = (|| {
+        if request.payload != serde_json::json!({}) {
+            return Err(rho_toolchain::ToolchainError::InvalidTarget(
+                "resource inspection payload must be empty".to_string(),
+            ));
+        }
+        let config = load_toolchain_config(Path::new(&request.project_root))?;
+        if config.sha256 != request.rho_toml_sha256 {
+            return Err(rho_toolchain::ToolchainError::InvalidConfig(
+                "remote project identity changed before resource inspection".to_string(),
+            ));
+        }
+        inspect_local_resources(&config.project_root)
+    })();
+    match result {
+        Ok(snapshot) => RemoteHelperResponse {
+            protocol: request.protocol,
+            request_id: request.request_id.clone(),
+            target_id: request.target_id.clone(),
+            ok: true,
+            status: "completed".to_string(),
+            payload: serde_json::to_value(snapshot).unwrap_or(serde_json::Value::Null),
+            error: None,
+            partial_effects_possible: false,
+        },
+        Err(error) => RemoteHelperResponse {
+            protocol: request.protocol,
+            request_id: request.request_id.clone(),
+            target_id: request.target_id.clone(),
+            ok: false,
+            status: "failed".to_string(),
+            payload: serde_json::Value::Null,
+            error: Some(error.to_string()),
+            partial_effects_possible: false,
+        },
+    }
+}
+
 fn main() {
     if std::env::args().nth(1).as_deref() != Some("--stdio") {
         eprintln!("rho-toolchain-helper requires --stdio");
@@ -246,6 +285,7 @@ fn main() {
             }
         }
         RemoteHelperOperation::InspectOperation => inspect_operation(&request),
+        RemoteHelperOperation::InspectResources => inspect_resources(&request),
         RemoteHelperOperation::Run => execute_effect(&request, OperationKind::Run),
         RemoteHelperOperation::Live => execute_effect(&request, OperationKind::Live),
         RemoteHelperOperation::Sync => execute_effect(&request, OperationKind::Sync),

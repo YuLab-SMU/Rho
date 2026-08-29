@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     DoctorReport, DoctorStatus, TargetRegistryDocument, ToolchainConfigDocument, ToolchainError,
-    doctor_for_target, load_toolchain_config,
+    doctor_for_target, load_toolchain_config, monitor_target_resource,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,7 +163,16 @@ pub fn admit_target(
 ) -> Result<TargetAdmission, ToolchainError> {
     let config = load_toolchain_config(project_root)?;
     let doctor = doctor_for_target(&config.project_root, targets)?;
-    TargetAdmission::from_verified_report(&config, targets, mode, doctor)
+    let admission = TargetAdmission::from_verified_report(&config, targets, mode, doctor)?;
+    let resources = monitor_target_resource(&config.project_root, targets, admission.target_id())?;
+    if !resources.admission_allowed {
+        return Err(ToolchainError::InvalidTarget(format!(
+            "resource governance blocked target {}: {}",
+            admission.target_id(),
+            resources.governance_reasons.join("; ")
+        )));
+    }
+    Ok(admission)
 }
 
 fn validate_runtime_evidence(

@@ -320,6 +320,7 @@ where
 
     *state.project_root.write().await = root.clone();
     *state.target_admission.write().await = next_target_admission;
+    *state.resource_governance.write().await = None;
     let mut watcher = state.project_watcher.lock().await;
     let previous_watcher = watcher.replace(next_watcher);
     drop(watcher);

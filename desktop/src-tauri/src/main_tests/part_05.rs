@@ -977,6 +977,7 @@
                 crate::commands::environment::list_installed_packages,
                 crate::commands::environment::list_environment_operation_requests,
                 crate::commands::toolchain::toolchain_doctor,
+                crate::commands::resource_monitor::resource_monitor_snapshot,
             ])
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)

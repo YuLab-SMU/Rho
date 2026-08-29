@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock as SyncRwLock};
+use std::time::Instant;
 
 use anyhow::{Context, Result, anyhow};
 use rho_extension_runtime::ExtensionHost;
@@ -25,6 +26,17 @@ use crate::{
     surface_runtime, ui_profile, ui_runtime, workbench_projection, workspace_plugins,
 };
 
+#[derive(Clone)]
+pub(crate) struct ResourceGovernanceCache {
+    pub(crate) project_root: PathBuf,
+    pub(crate) rho_toml_sha256: String,
+    pub(crate) target_registry_sha256: Option<String>,
+    pub(crate) target_id: String,
+    pub(crate) observed_at: Instant,
+    pub(crate) admission_allowed: bool,
+    pub(crate) reasons: Vec<String>,
+}
+
 pub(crate) struct AppState {
     pub(crate) data_dir: PathBuf,
     pub(crate) ark: PathBuf,
@@ -34,6 +46,7 @@ pub(crate) struct AppState {
     pub(crate) project_store: ProjectSessionStore,
     pub(crate) project_root: RwLock<PathBuf>,
     pub(crate) target_admission: RwLock<Option<rho_toolchain::TargetAdmission>>,
+    pub(crate) resource_governance: RwLock<Option<ResourceGovernanceCache>>,
     pub(crate) project_watcher: Mutex<Option<ProjectWatcherControl>>,
     pub(crate) session: RwLock<Option<Arc<ArkSession>>>,
     pub(crate) context: Mutex<Option<Arc<WorkspaceBrokerLane>>>,

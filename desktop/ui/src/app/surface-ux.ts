@@ -158,9 +158,9 @@ export const FIRST_PARTY_SURFACE_UX: Readonly<Record<string, SurfaceUxProfile>> 
     emptyState: "Ready for R code.",
   },
   "rho.environment": {
-    label: "Environment", primaryTask: "Inspect project packages and operations", defaultFocus: "Package list",
+    label: "Environment", primaryTask: "Govern toolchains, devices, resources, and packages", defaultFocus: "Target health",
     primaryAction: "Refresh", actionBudget: 2, areaRole: "context", narrowBehavior: "collapse",
-    emptyState: "Package state appears after inspection.",
+    emptyState: "Environment and resource state appears after inspection.",
   },
   "rho.evidence": {
     label: "Evidence", primaryTask: "Inspect supporting evidence", defaultFocus: "First evidence item",

@@ -21,6 +21,7 @@ const REMOTE_HELPER_PROTOCOL: u16 = 1;
 pub enum RemoteHelperOperation {
     Doctor,
     InspectOperation,
+    InspectResources,
     Run,
     Live,
     Sync,
@@ -87,7 +88,7 @@ pub fn verify_ssh_host_fingerprint(target: &ComputeTarget) -> Result<(), Toolcha
         ));
     };
     let scan = Command::new("ssh-keyscan")
-        .args(["-p", &port.to_string(), "--", host])
+        .args(["-T", "5", "-p", &port.to_string(), "--", host])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -163,6 +164,12 @@ pub fn invoke_remote_helper(
             "BatchMode=yes",
             "-o",
             "StrictHostKeyChecking=yes",
+            "-o",
+            "ConnectTimeout=10",
+            "-o",
+            "ServerAliveInterval=5",
+            "-o",
+            "ServerAliveCountMax=1",
             "-p",
             &port.to_string(),
             "--",
@@ -384,7 +391,9 @@ fn validate_reconciled_journal(
         RemoteHelperOperation::Live => OperationKind::Live,
         RemoteHelperOperation::Sync => OperationKind::Sync,
         RemoteHelperOperation::Lock => OperationKind::Lock,
-        RemoteHelperOperation::Doctor | RemoteHelperOperation::InspectOperation => {
+        RemoteHelperOperation::Doctor
+        | RemoteHelperOperation::InspectOperation
+        | RemoteHelperOperation::InspectResources => {
             return Err(ToolchainError::InvalidJournal(
                 "local mirror contains a non-effect operation".to_string(),
             ));
