@@ -12,7 +12,8 @@
 }
 
 @layer base {
-  ::selection { background: var(--rho-fill-2); }
+  body { color: var(--rho-ink); background: var(--rho-canvas); }
+  ::selection { color: var(--rho-ink); background: var(--rho-selection); }
 
   /* Quiet, thin scrollbars everywhere; never a mid-app gray block. */
   * {
@@ -27,7 +28,7 @@
     background: var(--rho-line);
     background-clip: padding-box;
   }
-  *::-webkit-scrollbar-thumb:hover { background: var(--rho-muted); background-clip: padding-box; }
+  *::-webkit-scrollbar-thumb:hover { background: var(--rho-accent); background-clip: padding-box; }
   *::-webkit-scrollbar-corner { background: transparent; }
 
   .rho-visually-hidden {

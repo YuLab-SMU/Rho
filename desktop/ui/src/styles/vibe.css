@@ -21,7 +21,8 @@
     min-width: 0;
     padding: var(--rho-space-3) var(--rho-space-4);
     border-bottom: var(--rho-border);
-    background: var(--rho-panel);
+    background: var(--rho-paper);
+    box-shadow: var(--rho-shadow-raised);
   }
 
   .rho-vibe-workspace-identity {
@@ -47,20 +48,25 @@
     justify-content: flex-end;
     gap: var(--rho-space-1);
     min-width: 0;
+    padding: var(--rho-space-1);
+    border-radius: var(--rho-radius-2);
+    background: var(--rho-fill);
   }
 
   .rho-vibe-region-switcher button {
     min-height: var(--rho-target-min);
     padding: var(--rho-space-1) var(--rho-space-3);
-    border-color: transparent;
+    border: 0;
+    border-radius: var(--rho-radius-1);
     background: transparent;
     white-space: nowrap;
   }
 
-  .rho-vibe-region-switcher button:hover { background: var(--rho-fill); }
+  .rho-vibe-region-switcher button:hover { color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
   .rho-vibe-region-switcher button[aria-pressed="true"] {
-    border-color: var(--rho-line-strong);
+    color: var(--rho-accent-ink);
     background: var(--rho-paper);
+    box-shadow: var(--rho-shadow-raised);
     font-weight: var(--rho-weight-semibold);
   }
 
@@ -75,6 +81,7 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    transition: grid-template-columns var(--rho-motion-slow) var(--rho-ease-spring);
   }
 
   .rho-vibe-workspace[data-layout="focus-manuscript"] .rho-vibe-regions {
@@ -122,8 +129,8 @@
     background: transparent;
   }
 
-  .rho-vibe-region-focus:hover { background: var(--rho-fill); }
-  .rho-vibe-region-focus[aria-pressed="true"] { border-inline-start: 2px solid var(--rho-ink); }
+  .rho-vibe-region-focus:hover { color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
+  .rho-vibe-region-focus[aria-pressed="true"] { border-inline-start: 3px solid var(--rho-accent); color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
   .rho-vibe-region-focus strong { font: var(--rho-weight-semibold) var(--rho-text-body)/1.3 var(--rho-font-ui); }
   .rho-vibe-region-focus span {
     min-width: 0;

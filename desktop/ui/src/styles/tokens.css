@@ -9,7 +9,8 @@
     font-synthesis: none;
     text-rendering: optimizeLegibility;
 
-    /* Ink on paper. Functional color is reserved for status semantics. */
+    /* Original ink-on-paper palette. Interaction is expressed through shape,
+       weight, and neutral tone rather than introducing a brand accent. */
     --rho-ink: #1b1b1b;
     --rho-ink-2: #4a4a4a;
     --rho-muted: #767676;
@@ -22,6 +23,18 @@
     --rho-fill-2: #e4e4e4;
     --rho-inverse: #1b1b1b;
     --rho-on-inverse: #ffffff;
+
+    /* Neutral interaction aliases keep one shape system without adding color. */
+    --rho-accent: var(--rho-ink);
+    --rho-accent-strong: #333333;
+    --rho-accent-ink: var(--rho-ink);
+    --rho-accent-tint: var(--rho-fill);
+    --rho-accent-tint-strong: var(--rho-fill-2);
+    --rho-selection: var(--rho-fill-2);
+    --rho-rail: var(--rho-panel);
+    --rho-rail-fill: var(--rho-fill);
+    --rho-rail-text: var(--rho-ink);
+    --rho-rail-muted: var(--rho-muted);
 
     /* Status semantics only; never the sole carrier of meaning. */
     --rho-ok: #1e7f4f;
@@ -56,24 +69,37 @@
     --rho-space-7: 32px;
     --rho-space-8: 48px;
 
-    /* Shape. */
-    --rho-radius-1: 3px;
-    --rho-radius-2: 6px;
+    /* Shape: soft containers, compact controls, pill states. */
+    --rho-radius-xs: 4px;
+    --rho-radius-1: 7px;
+    --rho-radius-2: 12px;
+    --rho-radius-3: 18px;
+    --rho-radius-pill: 999px;
     --rho-border: 1px solid var(--rho-line);
     --rho-border-strong: 1px solid var(--rho-line-strong);
 
-    /* Elevation: floating layers only. */
-    --rho-shadow-float: 0 8px 24px rgb(0 0 0 / 12%);
+    /* Elevation separates editable work from the canvas. */
+    --rho-shadow-raised: 0 1px 2px rgb(32 36 44 / 5%), 0 5px 16px rgb(32 36 44 / 5%);
+    --rho-shadow-panel: 0 12px 34px rgb(32 36 44 / 9%);
+    --rho-shadow-float: 0 22px 56px rgb(32 36 44 / 18%);
+    --rho-shadow-focus: 0 0 0 3px rgb(27 27 27 / 12%);
+
+    /* Motion only explains focus, selection, and spatial change. */
+    --rho-motion-fast: 120ms;
+    --rho-motion-base: 180ms;
+    --rho-motion-slow: 280ms;
+    --rho-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --rho-ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
 
     /* Interaction geometry. */
-    --rho-focus-ring: 2px solid var(--rho-ink);
+    --rho-focus-ring: 2px solid var(--rho-accent);
     --rho-target-min: 28px;
     --rho-target-preferred: 36px;
     --rho-control-small: 24px;
 
     /* Frame geometry (UI-design sheet 1). */
     --rho-bar-height: 56px;
-    --rho-rail-width: 4rem;
+    --rho-rail-width: 4.5rem;
     --rho-statusbar-height: 28px;
     --rho-nav-min: 240px;
     --rho-nav-max: 340px;

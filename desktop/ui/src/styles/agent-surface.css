@@ -18,7 +18,7 @@
     background: transparent;
     font-size: var(--rho-text-caption);
   }
-  section.rho-agent-surface .rho-agent-toolbar-action:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
+  section.rho-agent-surface .rho-agent-toolbar-action:hover:not(:disabled) { border-color: transparent; color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
   section.rho-agent-surface .rho-agent-toolbar-action:active:not(:disabled) { background: var(--rho-fill-2); }
   section.rho-agent-surface .rho-agent-toolbar-action[aria-expanded="true"] { color: var(--rho-ink); background: var(--rho-fill-2); }
 
@@ -132,23 +132,26 @@
   section.rho-agent-surface .rho-agent-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--rho-space-2); margin-top: var(--rho-space-3); }
   section.rho-agent-surface .rho-agent-suggestions button {
     min-height: var(--rho-control-small);
-    padding: var(--rho-space-1) var(--rho-space-3);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
+    padding: var(--rho-space-2) var(--rho-space-4);
+    border: 0;
+    border-radius: var(--rho-radius-pill);
     color: var(--rho-ink-2);
     background: var(--rho-paper);
+    box-shadow: var(--rho-shadow-raised);
     font-size: var(--rho-text-caption);
   }
-  section.rho-agent-surface .rho-agent-suggestions button:hover:not(:disabled) { border-color: var(--rho-line-strong); color: var(--rho-ink); background: var(--rho-fill); }
+  section.rho-agent-surface .rho-agent-suggestions button:hover:not(:disabled) { color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
 
   /* --- Composer dock: one container with status, input, and control row ------ */
   section.rho-agent-surface .rho-agent-composer {
     grid-template-columns: minmax(0, 1fr);
-    margin: var(--rho-space-2);
+    margin: var(--rho-space-3);
     border: var(--rho-border);
-    border-radius: var(--rho-radius-2);
+    border-radius: var(--rho-radius-3);
+    box-shadow: var(--rho-shadow-panel);
+    transition: border-color var(--rho-motion-fast) var(--rho-ease-out), box-shadow var(--rho-motion-fast) var(--rho-ease-out);
   }
-  section.rho-agent-surface .rho-agent-composer:focus-within { border-color: var(--rho-line-strong); }
+  section.rho-agent-surface .rho-agent-composer:focus-within { border-color: var(--rho-accent); box-shadow: var(--rho-shadow-focus), var(--rho-shadow-panel); }
   section.rho-agent-surface .rho-agent-composer > .rho-agent-running {
     grid-column: 1 / -1;
     margin: calc(-1 * var(--rho-space-3)) calc(-1 * var(--rho-space-3)) var(--rho-space-1);
@@ -189,12 +192,12 @@
   section.rho-agent-surface .rho-agent-context-controls > button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); font-size: var(--rho-text-caption); }
   /* Review context is a quiet ghost action; Send stays the only solid control. */
   section.rho-agent-surface .rho-agent-context-controls > button:first-child:not(.rho-primary-action) { border-color: transparent; color: var(--rho-ink-2); background: transparent; }
-  section.rho-agent-surface .rho-agent-context-controls > button:first-child:not(.rho-primary-action):hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
+  section.rho-agent-surface .rho-agent-context-controls > button:first-child:not(.rho-primary-action):hover:not(:disabled) { border-color: transparent; color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
   section.rho-agent-surface .rho-agent-context-controls > button:first-child:not(.rho-primary-action):active:not(:disabled) { background: var(--rho-fill-2); }
   section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { margin-left: auto; font-size: var(--rho-text-ui); }
 
   /* Segmented Ask/Plan/Act, aligned with the Studio mode-switch language. */
-  section.rho-agent-surface .rho-agent-mode { flex: 0 0 auto; gap: 0; padding: var(--rho-space-1); border: var(--rho-border); border-radius: var(--rho-radius-1); background: var(--rho-panel); }
+  section.rho-agent-surface .rho-agent-mode { flex: 0 0 auto; gap: 0; padding: var(--rho-space-1); border: 0; border-radius: var(--rho-radius-2); background: var(--rho-fill); }
   section.rho-agent-surface .rho-agent-mode button {
     flex: 0 0 auto;
     min-height: var(--rho-control-small);
@@ -204,8 +207,14 @@
     background: transparent;
     font-size: var(--rho-text-caption);
   }
-  section.rho-agent-surface .rho-agent-mode button:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
-  section.rho-agent-surface .rho-agent-mode button[aria-pressed="true"] { font-weight: var(--rho-weight-semibold); }
+  section.rho-agent-surface .rho-agent-mode button:hover:not(:disabled) { border-color: transparent; color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
+  section.rho-agent-surface .rho-agent-mode button[aria-pressed="true"] {
+    border-color: transparent;
+    color: var(--rho-accent-ink);
+    font-weight: var(--rho-weight-semibold);
+    background: var(--rho-paper);
+    box-shadow: var(--rho-shadow-raised);
+  }
   section.rho-agent-surface .rho-agent-mode-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--rho-muted); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 
   section.rho-agent-surface .rho-agent-posture-menu { position: relative; flex: 0 0 auto; }
@@ -226,7 +235,7 @@
   section.rho-agent-surface .rho-agent-posture-menu > summary::-webkit-details-marker { display: none; }
   section.rho-agent-surface .rho-agent-posture-menu > summary::after { content: "▾"; color: var(--rho-muted); }
   section.rho-agent-surface .rho-agent-posture-menu > summary:hover,
-  section.rho-agent-surface .rho-agent-posture-menu[open] > summary { border-color: var(--rho-line-strong); color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-posture-menu[open] > summary { border-color: var(--rho-accent); color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
   section.rho-agent-surface .rho-agent-posture-menu > div {
     position: absolute;
     z-index: 4;
@@ -276,8 +285,8 @@
   section.rho-agent-surface .rho-agent-model-menu > summary::-webkit-details-marker { display: none; }
   section.rho-agent-surface .rho-agent-model-menu > summary > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   section.rho-agent-surface .rho-agent-model-menu > summary::after { content: "▾"; flex: 0 0 auto; color: var(--rho-muted); }
-  section.rho-agent-surface .rho-agent-model-menu > summary:hover { border-color: var(--rho-line-strong); color: var(--rho-ink); }
-  section.rho-agent-surface .rho-agent-model-menu[open] > summary { border-color: var(--rho-line-strong); color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-model-menu > summary:hover { border-color: var(--rho-accent); color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
+  section.rho-agent-surface .rho-agent-model-menu[open] > summary { border-color: var(--rho-accent); color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
   section.rho-agent-surface .rho-agent-model-menu > div {
     position: absolute;
     z-index: 4;

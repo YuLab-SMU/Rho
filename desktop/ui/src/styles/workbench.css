@@ -312,23 +312,23 @@
     align-items: center;
     gap: var(--rho-space-2);
     width: var(--rho-rail-width);
-    padding: var(--rho-space-2) var(--rho-space-1);
+    padding: var(--rho-space-3) var(--rho-space-2);
     border-right: var(--rho-border);
-    background: var(--rho-panel);
+    color: var(--rho-rail-text);
+    background: var(--rho-rail);
+    box-shadow: 2px 0 10px rgb(27 27 27 / 4%);
   }
-  .rho-mark-word { letter-spacing: -0.02em; }
+  .rho-mark-word { color: var(--rho-rail-text); letter-spacing: -0.03em; }
 
-  /* Icon-only rail buttons, with an optional caption underneath. The rail has
-     its own pressed language: a quiet fill plus a leading accent bar, never
-     the inverse segmented-control pill used by bars. */
+  /* Icon-only rail buttons, with an optional caption underneath. Selection
+     uses neutral fill and elevation so the monochrome palette stays intact. */
   .rho-rail-btn, .rho-rail-choice {
     display: grid;
     place-items: center;
     padding: 0;
-    border: var(--rho-border);
-    border-color: transparent;
+    border: 0;
     border-radius: var(--rho-radius-2);
-    color: var(--rho-ink-2);
+    color: var(--rho-rail-muted);
     background: transparent;
     cursor: pointer;
   }
@@ -342,14 +342,15 @@
     line-height: 1;
   }
   .rho-rail-btn:hover:not(:disabled), .rho-rail-choice:hover:not(:disabled) {
-    color: var(--rho-ink);
-    background: var(--rho-fill);
+    color: var(--rho-rail-text);
+    background: var(--rho-rail-fill);
+    box-shadow: none;
   }
   .rho-rail-btn[aria-pressed="true"], .rho-rail-choice[aria-pressed="true"] {
-    border-radius: 0 var(--rho-radius-2) var(--rho-radius-2) 0;
-    color: var(--rho-ink);
-    background: var(--rho-fill);
-    box-shadow: inset 2px 0 0 var(--rho-ink);
+    border-radius: var(--rho-radius-2);
+    color: var(--rho-accent-ink);
+    background: var(--rho-accent-tint-strong);
+    box-shadow: var(--rho-shadow-raised);
   }
 
   .rho-toolbar-anchor, .rho-toolbar-lane, .rho-toolbar-slot {
@@ -391,23 +392,28 @@
     width: 100%;
     gap: var(--rho-space-1);
     padding: var(--rho-space-2) 0;
+    color: var(--rho-rail-muted);
     font-size: var(--rho-text-caption);
     line-height: 1;
   }
+  .rho-studio-bar .rho-mode-switch button:hover:not(:disabled) { color: var(--rho-rail-text); background: var(--rho-rail-fill); box-shadow: none; }
   .rho-studio-bar .rho-mode-switch button[aria-pressed="true"] {
     border-color: transparent;
-    border-radius: 0 var(--rho-radius-2) var(--rho-radius-2) 0;
-    color: var(--rho-ink);
-    background: var(--rho-fill);
-    box-shadow: inset 2px 0 0 var(--rho-ink);
+    border-radius: var(--rho-radius-2);
+    color: var(--rho-accent-ink);
+    background: var(--rho-accent-tint-strong);
+    box-shadow: var(--rho-shadow-raised);
   }
 
   /* The Rho wordmark stays, compact. */
   .rho-studio-bar .rho-rho-menu > summary {
     gap: var(--rho-space-1);
-    padding: var(--rho-space-1) var(--rho-space-2);
+    padding: var(--rho-space-2);
+    color: var(--rho-rail-text);
     font-size: var(--rho-text-ui);
   }
+  .rho-studio-bar .rho-rho-menu > summary:hover,
+  .rho-studio-bar .rho-rho-menu[open] > summary { color: var(--rho-rail-text); background: var(--rho-rail-fill); }
 
   /* Active workspace plugins, shown as an icon rail section. */
   .rho-plugin-rail {
@@ -426,12 +432,13 @@
     height: var(--rho-space-7);
     place-items: center;
     padding: 0;
-    border: var(--rho-border);
+    border: 0;
     border-radius: var(--rho-radius-2);
-    background: var(--rho-paper);
+    color: var(--rho-rail-muted);
+    background: var(--rho-rail-fill);
     font-size: var(--rho-text-title);
   }
-  .rho-plugin-icon:hover { border-color: var(--rho-line-strong); color: var(--rho-ink); }
+  .rho-plugin-icon:hover { color: var(--rho-rail-text); background: color-mix(in srgb, var(--rho-rail-fill) 80%, white); box-shadow: none; }
   .rho-plugin-icon-active::after {
     content: "";
     position: absolute;
@@ -488,7 +495,7 @@
     display: flex;
     align-items: center;
     gap: var(--rho-space-2);
-    color: var(--rho-ink-2);
+    color: var(--rho-rail-muted);
     font-size: var(--rho-text-ui);
   }
   .rho-command-projection { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -542,6 +549,7 @@
     border-top: var(--rho-border);
     color: var(--rho-ink-2);
     background: var(--rho-paper);
+    box-shadow: 0 -6px 18px rgb(32 36 44 / 4%);
     font-size: var(--rho-text-ui);
     overflow: hidden;
   }
@@ -712,7 +720,7 @@
   .rho-runtime-actions button { flex: 1 1 auto; min-height: 24px; padding: var(--rho-space-1) var(--rho-space-2); font-size: var(--rho-text-caption); }
 
   /* --- Canvas ---------------------------------------------------------------- */
-  .rho-studio-canvas { position: relative; min-width: 0; min-height: 0; padding: var(--rho-space-2); overflow: hidden; }
+  .rho-studio-canvas { position: relative; min-width: 0; min-height: 0; padding: calc(var(--rho-space-3) + var(--rho-space-1)); overflow: hidden; }
   .rho-canvas-vibe { padding: 0; overflow: auto; background: var(--rho-canvas); }
   .rho-studio-loading { display: grid; height: 100%; place-items: center; color: var(--rho-muted); font-size: var(--rho-text-body); }
   .rho-action-error {
@@ -806,7 +814,7 @@
     --dv-inactivegroup-hiddenpanel-tab-background-color: var(--rho-canvas);
     --dv-tab-divider-color: var(--rho-line);
     --dv-separator-border: var(--rho-line);
-    --dv-paneview-active-outline-color: var(--rho-ink-2);
+    --dv-paneview-active-outline-color: var(--rho-accent);
     --dv-activegroup-visiblepanel-tab-color: var(--rho-ink);
     --dv-activegroup-hiddenpanel-tab-color: var(--rho-ink-2);
     --dv-inactivegroup-visiblepanel-tab-color: var(--rho-ink-2);
@@ -814,13 +822,34 @@
     --dv-tabs-and-actions-container-background-color: var(--rho-canvas);
     --dv-group-view-background-color: var(--rho-paper);
     --dv-drag-over-background-color: var(--rho-selection);
-    --dv-drag-over-border-color: var(--rho-ink-2);
+    --dv-drag-over-border-color: var(--rho-accent);
   }
   .rho-dockview-scene > .dv-dockview,
   .rho-dockview-scene > div,
   .rho-dockview-scene .dv-react-part { min-width: 0; min-height: 0; }
-  .rho-dockview-scene .dv-groupview { border: var(--rho-border); }
-  .rho-dockview-scene .dv-tabs-and-actions-container { min-height: var(--rho-control-small); }
+  .rho-dockview-scene .dv-groupview {
+    overflow: hidden;
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-2);
+    background: var(--rho-paper);
+    box-shadow: var(--rho-shadow-raised);
+    transition: box-shadow var(--rho-motion-base) var(--rho-ease-out);
+  }
+  .rho-dockview-scene .dv-groupview.dv-active-group { box-shadow: var(--rho-shadow-panel); }
+  .rho-dockview-scene .dv-tabs-and-actions-container {
+    min-height: var(--rho-target-preferred);
+    padding: var(--rho-space-1);
+    border-bottom: var(--rho-border);
+    background: var(--rho-panel);
+  }
+  .rho-dockview-scene .dv-tab {
+    margin-inline-end: var(--rho-space-1);
+    border: 0;
+    border-radius: var(--rho-radius-1);
+    transition: color var(--rho-motion-fast) var(--rho-ease-out), background-color var(--rho-motion-fast) var(--rho-ease-out);
+  }
+  .rho-dockview-scene .dv-tab:hover { color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
+  .rho-dockview-scene .dv-tab.dv-active-tab { color: var(--rho-accent-ink); background: var(--rho-paper); box-shadow: var(--rho-shadow-raised); }
   .rho-dockview-surface-actions-host {
     display: flex;
     min-width: 0;
@@ -832,9 +861,10 @@
   .rho-dockview-scene .dv-default-tab {
     min-width: 0;
     color: inherit;
-    font-family: var(--rho-font-sans);
-    font-size: var(--rho-text-caption);
+    font-family: var(--rho-font-ui);
+    font-size: var(--rho-text-ui);
   }
+  .rho-dockview-scene .dv-active-tab .dv-default-tab-content { font-weight: var(--rho-weight-semibold); }
   .rho-dockview-scene .dv-sash[role="separator"]:focus-visible {
     outline: 2px solid var(--rho-ink);
     outline-offset: -2px;
