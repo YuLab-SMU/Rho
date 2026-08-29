@@ -39,8 +39,8 @@ pub use receipt::{
     write_environment_receipt,
 };
 pub use remote::{
-    RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse, invoke_remote_helper,
-    verify_ssh_host_fingerprint,
+    RemoteEffectPayload, RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse,
+    invoke_remote_helper, verify_ssh_host_fingerprint,
 };
 pub use rig::{RigInstallation, RigInventory, parse_rig_inventory, resolve_r_installation};
 pub use target::{

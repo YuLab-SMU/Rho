@@ -1,11 +1,77 @@
+use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 
 use rho_toolchain::{
-    RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse, doctor_local_realization,
+    LOCAL_TARGET_ID, OperationJournal, OperationKind, RemoteEffectPayload, RemoteHelperOperation,
+    RemoteHelperRequest, RemoteHelperResponse, TargetRegistry, TargetRegistryDocument,
+    doctor_local_realization, execute_journaled_operation, load_toolchain_config,
+    operation_journal_path,
 };
 
 const MAX_FRAME_BYTES: u64 = 1024 * 1024;
+
+fn execute_effect(request: &RemoteHelperRequest, kind: OperationKind) -> RemoteHelperResponse {
+    let result = (|| {
+        let payload: RemoteEffectPayload = serde_json::from_value(request.payload.clone())?;
+        let mut config = load_toolchain_config(Path::new(&request.project_root))?;
+        if config.sha256 != request.rho_toml_sha256 {
+            return Err(rho_toolchain::ToolchainError::InvalidConfig(
+                "remote rho.toml digest changed before execution".to_string(),
+            ));
+        }
+        config.config.compute.default_target = LOCAL_TARGET_ID.to_string();
+        config.config.compute.required_capabilities.clear();
+        let targets = TargetRegistryDocument {
+            rho_home: config.project_root.clone(),
+            path: config.project_root.join("targets.yaml"),
+            sha256: Some(request.target_registry_sha256.clone()),
+            registry: TargetRegistry::local_only(),
+        };
+        let journal = execute_journaled_operation(
+            &config,
+            &payload.operation_id,
+            kind,
+            &[payload.command],
+            &targets,
+            payload.confirmed,
+        )?;
+        Ok::<OperationJournal, rho_toolchain::ToolchainError>(journal)
+    })();
+    match result {
+        Ok(journal) => RemoteHelperResponse {
+            protocol: request.protocol,
+            request_id: request.request_id.clone(),
+            target_id: request.target_id.clone(),
+            ok: true,
+            status: "completed".to_string(),
+            payload: serde_json::to_value(journal).unwrap_or(serde_json::Value::Null),
+            error: None,
+            partial_effects_possible: false,
+        },
+        Err(error) => {
+            let partial = serde_json::from_value::<RemoteEffectPayload>(request.payload.clone())
+                .ok()
+                .and_then(|payload| {
+                    operation_journal_path(Path::new(&request.project_root), &payload.operation_id)
+                        .ok()
+                })
+                .and_then(|path| fs::read(path).ok())
+                .and_then(|bytes| serde_json::from_slice::<OperationJournal>(&bytes).ok())
+                .is_some_and(|journal| journal.partial_effects_possible);
+            RemoteHelperResponse {
+                protocol: request.protocol,
+                request_id: request.request_id.clone(),
+                target_id: request.target_id.clone(),
+                ok: false,
+                status: "failed".to_string(),
+                payload: serde_json::Value::Null,
+                error: Some(error.to_string()),
+                partial_effects_possible: partial,
+            }
+        }
+    }
+}
 
 fn main() {
     if std::env::args().nth(1).as_deref() != Some("--stdio") {
@@ -54,6 +120,8 @@ fn main() {
                 },
             }
         }
+        RemoteHelperOperation::Run => execute_effect(&request, OperationKind::Run),
+        RemoteHelperOperation::Live => execute_effect(&request, OperationKind::Live),
         _ => RemoteHelperResponse {
             protocol: request.protocol,
             request_id: request.request_id,

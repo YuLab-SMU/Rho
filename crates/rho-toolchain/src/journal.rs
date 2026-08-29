@@ -15,6 +15,8 @@ const MAX_OUTPUT_PREVIEW_BYTES: usize = 64 * 1024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OperationKind {
+    Run,
+    Live,
     Sync,
     Lock,
     RPackageInstall,

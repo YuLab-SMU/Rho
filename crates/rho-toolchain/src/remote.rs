@@ -3,12 +3,12 @@ use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ComputeHost, ComputeTarget, ToolchainError, validate_target_id};
+use crate::{CommandSpec, ComputeHost, ComputeTarget, ToolchainError, validate_target_id};
 
 const MAX_REMOTE_FRAME_BYTES: usize = 1024 * 1024;
 const REMOTE_HELPER_PROTOCOL: u16 = 1;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RemoteHelperOperation {
     Doctor,
@@ -29,6 +29,14 @@ pub struct RemoteHelperRequest {
     pub target_registry_sha256: String,
     pub operation: RemoteHelperOperation,
     pub payload: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoteEffectPayload {
+    pub operation_id: String,
+    pub confirmed: bool,
+    pub command: CommandSpec,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
