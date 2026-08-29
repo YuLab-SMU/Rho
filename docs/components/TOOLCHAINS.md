@@ -1,0 +1,76 @@
+# Toolchains and project environments
+
+`rho-toolchain` owns the project-level R and Python execution contract. The
+project root contains one strict `rho.toml`; unknown or missing fields, moving R
+aliases, unsafe relative paths, oversized files, and symlinked configuration
+are rejected:
+
+```toml
+schema = 1
+
+[runtime.r]
+version = "4.5.2"
+manager = "rig"
+environment = "renv"
+lockfile = "renv.lock"
+installer = "pak"
+
+[runtime.python]
+version = "3.12"
+manager = "uv"
+project = "pyproject.toml"
+lockfile = "uv.lock"
+```
+
+Package names are not duplicated into `rho.toml`: renv and `renv.lock` own the
+R project library, while pyproject and `uv.lock` own Python dependencies.
+
+## Resolution and execution
+
+- `rig list --json` is bounded and parsed into installed R records. Rho accepts
+  only the record whose reported semantic version exactly equals
+  `runtime.r.version`; aliases such as `release` are never durable config.
+- Managed R execution uses the safe `Rscript` sibling of the selected rig R
+  binary with `--no-save --no-restore --no-site-file` and a positional script.
+  Rscript therefore preserves its underlying `--file=<path>` identity rather
+  than Rho translating the script to `source()` or `-e`.
+- Project `.Rprofile`/`.Renviron` are selected explicitly when safe, renv owns
+  the private project library, and automatic snapshots are disabled.
+- R sync restores the configured lock with renv; locking is a separate
+  `renv::snapshot()` operation. `pak::pkg_install()` targets the renv project
+  library with dependency upgrades disabled and does not update `renv.lock`.
+- Python execution uses
+  `uv run --project <project> --locked --no-sync --python <version> -- ...`.
+  Ordinary execution cannot install dependencies or change `uv.lock`.
+  Explicit sync uses `uv sync --locked`; explicit lock uses `uv lock`.
+
+`doctor()` is read-only. It verifies rig's exact R/Rscript pair, renv activation
+and project library, pak/jsonlite, configured locks, uv, the configured Python
+project, `uv sync --locked --check`, and `.venv` Python.
+
+## Durable effects and receipts
+
+Every explicit sync, lock, or R package-install sequence is recorded before
+spawn under:
+
+```text
+.rho/toolchain/operations/<operation-id>/operation.json
+```
+
+The journal stores ordered argv/cwd effects, timestamps, bounded output,
+status, and exit codes. A command that starts and fails is recorded with
+`partial_effects_possible = true`; Rho does not pretend an external package
+manager rolled back effects it may already have committed.
+
+Every run or live activation has a validated receipt at:
+
+```text
+.rho/runs/<run-id>/environment.json
+.rho/live/<session-id>/environment.json
+```
+
+The receipt binds the exact `rho.toml` digest to resolved interpreters,
+lockfile hashes, R system/user/project/effective libraries, installed package
+versions, `.venv`, Python site-packages, platform, and observed system
+requirements. A changed config, lock, or incompatible runtime invalidates the
+receipt.

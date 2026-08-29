@@ -43,6 +43,9 @@
     "rust.store": {
       "command": ["cargo", "test", "-p", "rho-store", "--locked"]
     },
+    "rust.toolchain": {
+      "command": ["cargo", "test", "-p", "rho-toolchain", "--locked"]
+    },
     "rust.workspace": {
       "command": ["cargo", "test", "--workspace", "--locked"]
     }
@@ -134,6 +137,12 @@
         "scripts/test-extension-*.mjs"
       ],
       "checks": ["rust.extensions", "rust.workspace"]
+    },
+    "toolchains": {
+      "sources": [
+        "crates/rho-toolchain/**"
+      ],
+      "checks": ["rust.toolchain", "rust.workspace"]
     },
     "release": {
       "sources": [

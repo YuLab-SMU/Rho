@@ -192,3 +192,18 @@ Checks:
 - `release.signing`: `["node","scripts/test-signpath-candidate-workflow.mjs"]`
 - `release.site`: `["node","scripts/generate-update-site.mjs","--test","true"]`
 - `release.updater`: `["node","scripts/tauri-native-updater.mjs","--test","true"]`
+
+## `toolchains`
+
+Documentation:
+
+- [Toolchains and project environments](<components/TOOLCHAINS.md>) — `TOOLCHAINS`
+
+Sources:
+
+- `crates/rho-toolchain/**`
+
+Checks:
+
+- `rust.toolchain`: `["cargo","test","-p","rho-toolchain","--locked"]`
+- `rust.workspace`: `["cargo","test","--workspace","--locked"]`

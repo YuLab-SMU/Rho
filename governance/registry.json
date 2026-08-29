@@ -38,6 +38,12 @@
       "area": "extensions"
     },
     {
+      "id": "TOOLCHAINS",
+      "title": "Toolchains and project environments",
+      "document": "docs/components/TOOLCHAINS.md",
+      "area": "toolchains"
+    },
+    {
       "id": "RELEASE",
       "title": "Build and release operations",
       "document": "docs/RELEASE.md",

@@ -31,3 +31,7 @@ Generated from `governance/registry.json`. Edit the JSON source and regenerate.
 ## `release`
 
 - [Build and release operations](<RELEASE.md>) — `RELEASE`
+
+## `toolchains`
+
+- [Toolchains and project environments](<components/TOOLCHAINS.md>) — `TOOLCHAINS`

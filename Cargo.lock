@@ -4119,6 +4119,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-toolchain"
+version = "0.4.1-dev.22"
+dependencies = [
+ "chrono",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml 0.8.2",
+]
+
+[[package]]
 name = "rho-ui-contract"
 version = "0.4.1-dev.22"
 dependencies = [

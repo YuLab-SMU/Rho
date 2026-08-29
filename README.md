@@ -11,6 +11,8 @@ scientific outputs, and an AI collaborator in one application.
   run history with project provenance;
 - supports Ask, Plan, and reviewed Act workflows through a separate Agent R
   process;
+- admits exact R/rig/renv/pak and Python/uv project toolchains from
+  `rho.toml`, with explicit effect journals and environment receipts;
 - manages model providers, capabilities, routes, and credentials;
 - previews Agent file proposals before applying them;
 - hosts bounded project plugins and typed plugin surfaces;
