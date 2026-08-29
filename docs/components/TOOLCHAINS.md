@@ -65,9 +65,15 @@ small local compute environment. Passwords and private keys are unsupported in
 the registry and remain in system SSH/credential facilities.
 
 Doctor resolves the project target before probing runtimes. Local/native uses
-the implemented rig/renv/pak/uv path. Other host/isolation combinations are
-reported as not-yet-admitted adapters rather than silently falling back to
-local execution.
+the implemented rig/renv/pak/uv path. Local Docker/Podman Run and Live plans
+now wrap commands in an immutable-digest, read-only, network-disabled container
+with only the project mounted writable; sync, lock, and package install are
+rejected because an ephemeral container cannot truthfully persist an image
+environment. Local Conda plans execute through the named environment while
+preserving the original command environment. Their full realization Doctors
+are still blocked until image lock realization and `conda list --explicit`
+digest verification are implemented. SSH remains blocked until the remote
+Helper exists. No unsupported target silently falls back to local execution.
 
 ## Resolution and execution
 
