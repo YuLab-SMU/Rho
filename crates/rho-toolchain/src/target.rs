@@ -40,6 +40,10 @@ pub enum ComputeIsolation {
         #[serde(default = "default_docker_engine")]
         engine: String,
         image: String,
+        #[serde(default = "default_container_r_library")]
+        r_library: String,
+        #[serde(default = "default_container_python_environment")]
+        python_environment: String,
     },
     Conda {
         environment: String,
@@ -49,6 +53,14 @@ pub enum ComputeIsolation {
 
 fn default_docker_engine() -> String {
     "docker".to_string()
+}
+
+fn default_container_r_library() -> String {
+    "/opt/rho/renv/library".to_string()
+}
+
+fn default_container_python_environment() -> String {
+    "/opt/rho/.venv".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,7 +138,12 @@ impl ComputeTarget {
         }
         match &self.isolation {
             ComputeIsolation::Native => {}
-            ComputeIsolation::Docker { engine, image } => {
+            ComputeIsolation::Docker {
+                engine,
+                image,
+                r_library,
+                python_environment,
+            } => {
                 if !matches!(engine.as_str(), "docker" | "podman") {
                     return Err(ToolchainError::InvalidTarget(
                         "container engine must be docker or podman".to_string(),
@@ -144,6 +161,20 @@ impl ComputeTarget {
                     return Err(ToolchainError::InvalidTarget(
                         "container image digest is invalid".to_string(),
                     ));
+                }
+                for (label, path) in [
+                    ("container r_library", r_library),
+                    ("container python_environment", python_environment),
+                ] {
+                    if !path.starts_with('/')
+                        || path.len() > 1024
+                        || path.split('/').any(|segment| segment == "..")
+                        || path.chars().any(char::is_control)
+                    {
+                        return Err(ToolchainError::InvalidTarget(format!(
+                            "{label} must be an absolute normalized container path"
+                        )));
+                    }
                 }
             }
             ComputeIsolation::Conda {

@@ -25,7 +25,12 @@ pub fn adapt_plan_for_target(
     }
     match &target.isolation {
         ComputeIsolation::Native => Ok(plan.clone()),
-        ComputeIsolation::Docker { engine, image } => {
+        ComputeIsolation::Docker {
+            engine,
+            image,
+            r_library,
+            python_environment,
+        } => {
             if !matches!(plan.kind, ToolchainPlanKind::Run | ToolchainPlanKind::Live) {
                 return Err(ToolchainError::InvalidTarget(
                     "immutable Docker targets do not perform sync, lock, or package installation; rebuild the pinned image explicitly"
@@ -35,7 +40,16 @@ pub fn adapt_plan_for_target(
             let commands = plan
                 .commands
                 .iter()
-                .map(|command| docker_command(config, engine, image, command))
+                .map(|command| {
+                    docker_command(
+                        config,
+                        engine,
+                        image,
+                        r_library,
+                        python_environment,
+                        command,
+                    )
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(ToolchainPlan {
                 kind: plan.kind,
@@ -64,6 +78,8 @@ fn docker_command(
     config: &ToolchainConfigDocument,
     engine: &str,
     image: &str,
+    r_library: &str,
+    python_environment: &str,
     command: &CommandSpec,
 ) -> Result<CommandSpec, ToolchainError> {
     ensure_project_cwd(config, &command.cwd)?;
@@ -89,11 +105,17 @@ fn docker_command(
             translate_embedded_project_path(config, value)
         ));
     }
-    args.push("--env".to_string());
-    args.push(format!(
-        "RHO_COMPUTE_TARGET={}",
-        config.config.compute.default_target
-    ));
+    for (key, value) in [
+        (
+            "RHO_COMPUTE_TARGET",
+            config.config.compute.default_target.as_str(),
+        ),
+        ("RENV_PATHS_LIBRARY", r_library),
+        ("UV_PROJECT_ENVIRONMENT", python_environment),
+    ] {
+        args.push("--env".to_string());
+        args.push(format!("{key}={value}"));
+    }
     args.push(image.to_string());
     args.push(translate_program(config, &command.program));
     args.extend(

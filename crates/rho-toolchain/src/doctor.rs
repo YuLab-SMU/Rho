@@ -103,16 +103,48 @@ fn doctor_with_target(
             format!("target lacks {}", missing_capabilities.join(", ")),
         ));
     }
-    if !matches!(target.host, ComputeHost::Local)
-        || !matches!(target.isolation, ComputeIsolation::Native)
-    {
+    if !matches!(target.host, ComputeHost::Local) {
         report.checks.push(failed(
             "target-adapter",
-            format!(
-                "{}/{} execution adapter is not admitted yet",
-                target.host_kind(),
-                target.isolation_kind()
-            ),
+            "SSH execution requires the authenticated remote Toolchain Helper",
+        ));
+        report.status = DoctorStatus::Failed;
+        return Ok(report);
+    }
+    if let ComputeIsolation::Docker {
+        engine,
+        image,
+        r_library,
+        python_environment,
+    } = &target.isolation
+    {
+        match doctor_docker(config, engine, image, r_library, python_environment) {
+            Ok((r_version, rscript, python_version, python, checks)) => {
+                report.r_version = r_version;
+                report.rscript = rscript;
+                report.python_version = python_version;
+                report.python = python;
+                report.checks.extend(checks);
+            }
+            Err(error) => report
+                .checks
+                .push(failed("docker", bounded(&error.to_string()))),
+        }
+        report.status = if report
+            .checks
+            .iter()
+            .all(|check| check.status == DoctorStatus::Ready)
+        {
+            DoctorStatus::Ready
+        } else {
+            DoctorStatus::Failed
+        };
+        return Ok(report);
+    }
+    if matches!(target.isolation, ComputeIsolation::Conda { .. }) {
+        report.checks.push(failed(
+            "target-adapter",
+            "Conda runtime realization Doctor is not admitted yet",
         ));
         report.status = DoctorStatus::Failed;
         return Ok(report);
@@ -150,6 +182,171 @@ fn doctor_with_target(
         DoctorStatus::Failed
     };
     Ok(report)
+}
+
+type DockerDoctorOutcome = (
+    Option<String>,
+    Option<PathBuf>,
+    Option<String>,
+    Option<PathBuf>,
+    Vec<DoctorCheck>,
+);
+
+fn doctor_docker(
+    config: &ToolchainConfigDocument,
+    engine_name: &str,
+    image: &str,
+    r_library: &str,
+    python_environment: &str,
+) -> Result<DockerDoctorOutcome, ToolchainError> {
+    let engine = find_program(engine_name).ok_or_else(|| {
+        ToolchainError::CommandStart(format!("{engine_name} was not found on PATH"))
+    })?;
+    execute(&CommandSpec {
+        program: engine.clone(),
+        args: vec![
+            "image".to_string(),
+            "inspect".to_string(),
+            image.to_string(),
+        ],
+        cwd: config.project_root.clone(),
+        env: Default::default(),
+    })?;
+    let mut checks = vec![ready(
+        "container-image",
+        format!("immutable image {image} is available"),
+    )];
+    let probe = DockerProbe {
+        config,
+        engine: &engine,
+        image,
+        r_library,
+        python_environment,
+    };
+    let mut r_version = None;
+    let mut rscript = None;
+    if let Some(r) = &config.config.runtime.r {
+        let inventory = execute(&probe.command("rig", &["list", "--json"], &[]))?;
+        let inventory = parse_rig_inventory(&inventory)?;
+        let installation = resolve_r_installation(&inventory, &r.version)?;
+        let selected_rscript = installation
+            .binary
+            .parent()
+            .ok_or_else(|| ToolchainError::MissingRscript(installation.binary.clone()))?
+            .join(if cfg!(windows) {
+                "Rscript.exe"
+            } else {
+                "Rscript"
+            });
+        execute(&probe.command(&selected_rscript.to_string_lossy(), &["--version"], &[]))?;
+        let lockfile = format!("/workspace/{}", r.lockfile);
+        let project = "/workspace";
+        let expression = format!(
+            ".libPaths(c(\"{r_library}\", .libPaths())); if (!(requireNamespace(\"renv\", quietly=TRUE) && requireNamespace(\"pak\", quietly=TRUE) && requireNamespace(\"jsonlite\", quietly=TRUE))) quit(status=41); lock <- jsonlite::read_json(\"{lockfile}\", simplifyVector=FALSE); records <- lock$Packages; installed <- installed.packages(); ok <- all(vapply(names(records), function(name) name %in% rownames(installed) && identical(as.character(installed[name, \"Version\"]), records[[name]]$Version), logical(1))); cat(\"RHO_DOCKER_RENV_READY=\", if (isTRUE(ok)) \"true\" else \"false\", \"\\n\", sep=\"\"); cat(\"RHO_DOCKER_PROJECT={project}\\n\")"
+        );
+        let output = execute(&probe.command(
+            &selected_rscript.to_string_lossy(),
+            &["--no-save", "-e", &expression],
+            &[],
+        ))?;
+        let output = String::from_utf8_lossy(&output);
+        if marker(&output, "RHO_DOCKER_RENV_READY=").as_deref() != Some("true") {
+            return Err(ToolchainError::CommandFailed(
+                "container R library does not realize renv.lock".to_string(),
+            ));
+        }
+        r_version = Some(r.version.to_string());
+        rscript = Some(selected_rscript);
+        checks.push(ready(
+            "docker-r",
+            format!("exact R {} and renv lock ready", r.version),
+        ));
+    }
+    let mut python_version = None;
+    let mut python = None;
+    if let Some(python_config) = &config.config.runtime.python {
+        let project = format!("/workspace/{}", python_config.project);
+        let version_request = python_config.version.to_string();
+        execute(&probe.command(
+            "uv",
+            &[
+                "sync",
+                "--project",
+                &project,
+                "--locked",
+                "--check",
+                "--python",
+                &version_request,
+            ],
+            &[("UV_PROJECT_ENVIRONMENT", python_environment)],
+        ))?;
+        let python_path = PathBuf::from(python_environment).join("bin/python");
+        let output = execute(&probe.command(&python_path.to_string_lossy(), &["--version"], &[]))?;
+        if !String::from_utf8_lossy(&output).contains(&python_config.version.to_string()) {
+            return Err(ToolchainError::CommandFailed(
+                "container Python environment reports the wrong version".to_string(),
+            ));
+        }
+        python_version = Some(python_config.version.to_string());
+        python = Some(python_path);
+        checks.push(ready(
+            "docker-python",
+            format!("Python {} and uv lock ready", python_config.version),
+        ));
+    }
+    Ok((r_version, rscript, python_version, python, checks))
+}
+
+struct DockerProbe<'a> {
+    config: &'a ToolchainConfigDocument,
+    engine: &'a Path,
+    image: &'a str,
+    r_library: &'a str,
+    python_environment: &'a str,
+}
+
+impl DockerProbe<'_> {
+    fn command(
+        &self,
+        program: &str,
+        program_args: &[&str],
+        extra_env: &[(&str, &str)],
+    ) -> CommandSpec {
+        let mut args = vec![
+            "run".to_string(),
+            "--rm".to_string(),
+            "--read-only".to_string(),
+            "--network=none".to_string(),
+            "--mount".to_string(),
+            format!(
+                "type=bind,source={},target=/workspace,readonly",
+                self.config.project_root.to_string_lossy()
+            ),
+            "--tmpfs".to_string(),
+            "/tmp:rw,nosuid,nodev,size=512m".to_string(),
+            "--workdir".to_string(),
+            "/workspace".to_string(),
+        ];
+        for (key, value) in [
+            ("RENV_PATHS_LIBRARY", self.r_library),
+            ("UV_PROJECT_ENVIRONMENT", self.python_environment),
+        ]
+        .into_iter()
+        .chain(extra_env.iter().copied())
+        {
+            args.push("--env".to_string());
+            args.push(format!("{key}={value}"));
+        }
+        args.push(self.image.to_string());
+        args.push(program.to_string());
+        args.extend(program_args.iter().map(|value| (*value).to_string()));
+        CommandSpec {
+            program: self.engine.to_path_buf(),
+            args,
+            cwd: self.config.project_root.clone(),
+            env: Default::default(),
+        }
+    }
 }
 
 fn doctor_r(
