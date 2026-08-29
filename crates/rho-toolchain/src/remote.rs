@@ -14,6 +14,7 @@ const REMOTE_HELPER_PROTOCOL: u16 = 1;
 #[serde(rename_all = "snake_case")]
 pub enum RemoteHelperOperation {
     Doctor,
+    InspectOperation,
     Run,
     Live,
     Sync,

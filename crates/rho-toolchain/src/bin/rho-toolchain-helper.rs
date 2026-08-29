@@ -86,6 +86,44 @@ fn execute_effect(request: &RemoteHelperRequest, kind: OperationKind) -> RemoteH
     }
 }
 
+fn inspect_operation(request: &RemoteHelperRequest) -> RemoteHelperResponse {
+    let operation_id = request
+        .payload
+        .get("operation_id")
+        .and_then(serde_json::Value::as_str);
+    let result = operation_id
+        .ok_or("operation_id is required".to_string())
+        .and_then(|id| {
+            operation_journal_path(Path::new(&request.project_root), id).map_err(|e| e.to_string())
+        })
+        .and_then(|path| fs::read(path).map_err(|e| e.to_string()))
+        .and_then(|bytes| {
+            serde_json::from_slice::<OperationJournal>(&bytes).map_err(|e| e.to_string())
+        });
+    match result {
+        Ok(journal) => RemoteHelperResponse {
+            protocol: request.protocol,
+            request_id: request.request_id.clone(),
+            target_id: request.target_id.clone(),
+            ok: true,
+            status: "completed".to_string(),
+            payload: serde_json::to_value(&journal).unwrap(),
+            error: None,
+            partial_effects_possible: journal.partial_effects_possible,
+        },
+        Err(error) => RemoteHelperResponse {
+            protocol: request.protocol,
+            request_id: request.request_id.clone(),
+            target_id: request.target_id.clone(),
+            ok: false,
+            status: "not_found".to_string(),
+            payload: serde_json::Value::Null,
+            error: Some(error),
+            partial_effects_possible: false,
+        },
+    }
+}
+
 fn main() {
     if std::env::args().nth(1).as_deref() != Some("--stdio") {
         eprintln!("rho-toolchain-helper requires --stdio");
@@ -133,6 +171,7 @@ fn main() {
                 },
             }
         }
+        RemoteHelperOperation::InspectOperation => inspect_operation(&request),
         RemoteHelperOperation::Run => execute_effect(&request, OperationKind::Run),
         RemoteHelperOperation::Live => execute_effect(&request, OperationKind::Live),
         _ => RemoteHelperResponse {
