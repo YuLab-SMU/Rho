@@ -77,19 +77,18 @@ image instead. Local Conda Doctor now hashes the exact stdout from
 `conda list --explicit`, compares it with the configured digest, then performs
 rig/Rscript, renv/pak/jsonlite, uv lock, `.venv`, and exact Python checks through
 `conda run --no-capture-output --name <environment>`. Conda Run/Live preserves
-the original command environment. SSH remains blocked until the remote Helper
-exists. The target-aware Doctor now invokes `rho-toolchain-helper --stdio` as
-a bounded JSON endpoint on the remote host, validates the returned project
-`rho.toml` digest, and adopts only matching runtime checks into the local
-report. Remote Run/Live requests now carry one structured `CommandSpec`, an
-explicit confirmation flag, and the complete target-bound environment receipt.
-The Helper rechecks the remote `rho.toml` digest, requires the receipt ID/mode
-to match the operation, writes `environment.json` before the operation journal
-and spawn, and returns
-`partial_effects_possible` from durable remote state after failures. Remote
-Sync/Lock remain unsupported until multi-effect disconnect reconciliation is
-complete. Before invoking the Helper, the client obtains the host key with
-`ssh-keyscan`, verifies the exact configured SHA-256 through `ssh-keygen`, and
+the original command environment. SSH uses `rho-toolchain-helper --stdio` as a
+bounded JSON endpoint on the remote host. Target-aware Doctor validates the
+returned project `rho.toml` digest and adopts only matching runtime checks into
+the local report. Remote requests carry an explicitly confirmed, bounded,
+ordered command vector. Run/Live requires exactly one command plus the complete
+target-bound environment receipt; the Helper checks its ID/mode and writes
+`environment.json` before the operation journal and spawn. Sync/Lock accepts
+multiple effects without a Run/Live receipt. All effects share one operation
+journal, stop at the first failure, retain each reached effect's exact status,
+and expose `partial_effects_possible` plus that journal in the response and
+through inspection. Before invoking the Helper, the client obtains the host key
+with `ssh-keyscan`, verifies the exact configured SHA-256 through `ssh-keygen`, and
 then uses OpenSSH `BatchMode=yes` plus `StrictHostKeyChecking=yes`. Request and
 response identities bind protocol, request, target, remote project root, and
 configuration digests. Once SSH dispatch begins, a disconnect, invalid frame,

@@ -11,6 +11,7 @@ use crate::{TargetRegistryDocument, ToolchainConfigDocument, ToolchainError};
 
 const MAX_JOURNAL_BYTES: usize = 2 * 1024 * 1024;
 const MAX_OUTPUT_PREVIEW_BYTES: usize = 64 * 1024;
+const MAX_OPERATION_EFFECTS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -134,10 +135,10 @@ pub fn execute_journaled_operation(
             "explicit toolchain effects require confirmation".to_string(),
         ));
     }
-    if commands.is_empty() {
-        return Err(ToolchainError::InvalidJournal(
-            "operation must contain at least one external effect".to_string(),
-        ));
+    if commands.is_empty() || commands.len() > MAX_OPERATION_EFFECTS {
+        return Err(ToolchainError::InvalidJournal(format!(
+            "operation must contain 1..={MAX_OPERATION_EFFECTS} external effects"
+        )));
     }
     let target_id = &config.config.compute.default_target;
     let target = targets.registry.resolve(target_id)?;

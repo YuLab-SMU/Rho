@@ -12,7 +12,8 @@ use crate::{
     update_remote_operation_mirror, validate_target_id,
 };
 
-const MAX_REMOTE_FRAME_BYTES: usize = 1024 * 1024;
+const MAX_REMOTE_REQUEST_BYTES: usize = 1024 * 1024;
+const MAX_REMOTE_RESPONSE_BYTES: usize = 3 * 1024 * 1024;
 const REMOTE_HELPER_PROTOCOL: u16 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,8 +51,8 @@ pub struct RemoteHelperRequest {
 pub struct RemoteEffectPayload {
     pub operation_id: String,
     pub confirmed: bool,
-    pub command: CommandSpec,
-    pub environment: EnvironmentReceipt,
+    pub commands: Vec<CommandSpec>,
+    pub environment: Option<EnvironmentReceipt>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,7 +95,7 @@ pub fn verify_ssh_host_fingerprint(target: &ComputeTarget) -> Result<(), Toolcha
         .map_err(|error| ToolchainError::CommandStart(error.to_string()))?;
     if !scan.status.success()
         || scan.stdout.is_empty()
-        || scan.stdout.len() > MAX_REMOTE_FRAME_BYTES
+        || scan.stdout.len() > MAX_REMOTE_REQUEST_BYTES
     {
         return Err(ToolchainError::CommandFailed(
             "ssh-keyscan did not return a bounded host key".to_string(),
@@ -150,7 +151,7 @@ pub fn invoke_remote_helper(
         .as_ref()
         .map_or_else(|| host.clone(), |username| format!("{username}@{host}"));
     let request_bytes = serde_json::to_vec(request)?;
-    if request_bytes.len() > MAX_REMOTE_FRAME_BYTES {
+    if request_bytes.len() > MAX_REMOTE_REQUEST_BYTES {
         return Err(ToolchainError::InvalidTarget(
             "remote helper request exceeds the frame bound".to_string(),
         ));
@@ -196,7 +197,7 @@ pub fn invoke_remote_helper(
             ),
         ));
     }
-    if output.stdout.len() > MAX_REMOTE_FRAME_BYTES {
+    if output.stdout.len() > MAX_REMOTE_RESPONSE_BYTES {
         return Err(remote_transport(
             true,
             "remote helper output exceeded its frame bound",
@@ -492,15 +493,23 @@ fn complete_mirror_from_response(
 ) {
     let now = Utc::now().to_rfc3339();
     mirror.updated_at = now.clone();
-    mirror.finished_at = Some(now);
     mirror.remote_status = Some(response.status.clone());
     mirror.partial_effects_possible = response.partial_effects_possible;
     mirror.error = response.error.clone();
     mirror.remote_journal =
         serde_json::from_value::<OperationJournal>(response.payload.clone()).ok();
     mirror.status = if response.ok {
+        mirror.finished_at = Some(now);
         RemoteOperationMirrorStatus::Succeeded
+    } else if response.status == "uncertain" {
+        mirror.finished_at = None;
+        mirror.partial_effects_possible = true;
+        if mirror.error.is_none() {
+            mirror.error = Some("remote helper could not persist terminal truth".to_string());
+        }
+        RemoteOperationMirrorStatus::Uncertain
     } else {
+        mirror.finished_at = Some(now);
         RemoteOperationMirrorStatus::Failed
     };
 }
@@ -546,7 +555,7 @@ mod tests {
             payload: serde_json::json!({}),
         };
         let encoded = serde_json::to_vec(&request).unwrap();
-        assert!(encoded.len() < MAX_REMOTE_FRAME_BYTES);
+        assert!(encoded.len() < MAX_REMOTE_REQUEST_BYTES);
         assert_eq!(
             serde_json::from_slice::<RemoteHelperRequest>(&encoded).unwrap(),
             request

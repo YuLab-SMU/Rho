@@ -10,30 +10,71 @@ use rho_toolchain::{
     write_environment_receipt,
 };
 
-const MAX_FRAME_BYTES: u64 = 1024 * 1024;
+const MAX_REQUEST_FRAME_BYTES: u64 = 1024 * 1024;
+const MAX_RESPONSE_FRAME_BYTES: usize = 3 * 1024 * 1024;
+const MAX_REMOTE_EFFECTS: usize = 64;
 
 fn execute_effect(request: &RemoteHelperRequest, kind: OperationKind) -> RemoteHelperResponse {
     let result = (|| {
         let payload: RemoteEffectPayload = serde_json::from_value(request.payload.clone())?;
         let config = load_toolchain_config(Path::new(&request.project_root))?;
-        if config.sha256 != request.rho_toml_sha256 {
-            return Err(rho_toolchain::ToolchainError::InvalidConfig(
-                "remote rho.toml digest changed before execution".to_string(),
-            ));
-        }
-        let expected_mode = match kind {
-            OperationKind::Run => EnvironmentReceiptMode::Run,
-            OperationKind::Live => EnvironmentReceiptMode::Live,
-            _ => unreachable!("remote helper admits only Run/Live here"),
-        };
-        if payload.environment.execution_id != payload.operation_id
-            || payload.environment.mode != expected_mode
+        if config.sha256 != request.rho_toml_sha256
+            || config.config.compute.default_target != request.target_id
         {
-            return Err(rho_toolchain::ToolchainError::InvalidReceipt(
-                "remote environment receipt identity does not match the operation".to_string(),
+            return Err(rho_toolchain::ToolchainError::InvalidConfig(
+                "remote project or target identity changed before execution".to_string(),
             ));
         }
-        write_environment_receipt(&config, &payload.environment)?;
+        if !payload.confirmed {
+            return Err(rho_toolchain::ToolchainError::InvalidJournal(
+                "remote toolchain effects require confirmation".to_string(),
+            ));
+        }
+        if payload.commands.is_empty() || payload.commands.len() > MAX_REMOTE_EFFECTS {
+            return Err(rho_toolchain::ToolchainError::InvalidJournal(format!(
+                "remote operation must contain 1..={MAX_REMOTE_EFFECTS} ordered effects"
+            )));
+        }
+        match kind {
+            OperationKind::Run | OperationKind::Live => {
+                if payload.commands.len() != 1 {
+                    return Err(rho_toolchain::ToolchainError::InvalidJournal(
+                        "remote Run/Live requires exactly one command".to_string(),
+                    ));
+                }
+                let environment = payload.environment.as_ref().ok_or_else(|| {
+                    rho_toolchain::ToolchainError::InvalidReceipt(
+                        "remote Run/Live requires an environment receipt".to_string(),
+                    )
+                })?;
+                let expected_mode = if kind == OperationKind::Run {
+                    EnvironmentReceiptMode::Run
+                } else {
+                    EnvironmentReceiptMode::Live
+                };
+                if environment.execution_id != payload.operation_id
+                    || environment.mode != expected_mode
+                {
+                    return Err(rho_toolchain::ToolchainError::InvalidReceipt(
+                        "remote environment receipt identity does not match the operation"
+                            .to_string(),
+                    ));
+                }
+                write_environment_receipt(&config, environment)?;
+            }
+            OperationKind::Sync | OperationKind::Lock => {
+                if payload.environment.is_some() {
+                    return Err(rho_toolchain::ToolchainError::InvalidReceipt(
+                        "remote Sync/Lock does not accept a Run/Live receipt".to_string(),
+                    ));
+                }
+            }
+            OperationKind::RPackageInstall => {
+                return Err(rho_toolchain::ToolchainError::InvalidJournal(
+                    "remote package installation is not admitted".to_string(),
+                ));
+            }
+        }
         let mut realization = ComputeTarget::local_native();
         realization.capabilities = config.config.compute.required_capabilities.clone();
         let targets = TargetRegistryDocument {
@@ -44,15 +85,14 @@ fn execute_effect(request: &RemoteHelperRequest, kind: OperationKind) -> RemoteH
                 targets: BTreeMap::from([(request.target_id.clone(), realization)]),
             },
         };
-        let journal = execute_journaled_operation(
+        execute_journaled_operation(
             &config,
             &payload.operation_id,
             kind,
-            &[payload.command],
+            &payload.commands,
             &targets,
-            payload.confirmed,
-        )?;
-        Ok::<OperationJournal, rho_toolchain::ToolchainError>(journal)
+            true,
+        )
     })();
     match result {
         Ok(journal) => RemoteHelperResponse {
@@ -60,26 +100,35 @@ fn execute_effect(request: &RemoteHelperRequest, kind: OperationKind) -> RemoteH
             request_id: request.request_id.clone(),
             target_id: request.target_id.clone(),
             ok: true,
-            status: "completed".to_string(),
+            status: "succeeded".to_string(),
             payload: serde_json::to_value(journal).unwrap_or(serde_json::Value::Null),
             error: None,
             partial_effects_possible: false,
         },
         Err(error) => {
-            let partial = serde_json::from_value::<RemoteEffectPayload>(request.payload.clone())
+            let journal = serde_json::from_value::<RemoteEffectPayload>(request.payload.clone())
                 .ok()
                 .and_then(|payload| {
                     read_operation_journal(Path::new(&request.project_root), &payload.operation_id)
                         .ok()
-                })
-                .is_some_and(|journal| journal.partial_effects_possible);
+                });
+            let uncertain = journal
+                .as_ref()
+                .is_some_and(|journal| journal.status == OperationStatus::Running);
+            let partial = uncertain
+                || journal
+                    .as_ref()
+                    .is_some_and(|journal| journal.partial_effects_possible);
             RemoteHelperResponse {
                 protocol: request.protocol,
                 request_id: request.request_id.clone(),
                 target_id: request.target_id.clone(),
                 ok: false,
-                status: "failed".to_string(),
-                payload: serde_json::Value::Null,
+                status: if uncertain { "uncertain" } else { "failed" }.to_string(),
+                payload: journal
+                    .as_ref()
+                    .and_then(|journal| serde_json::to_value(journal).ok())
+                    .unwrap_or(serde_json::Value::Null),
                 error: Some(error.to_string()),
                 partial_effects_possible: partial,
             }
@@ -156,10 +205,10 @@ fn main() {
     }
     let mut bytes = Vec::new();
     if std::io::stdin()
-        .take(MAX_FRAME_BYTES + 1)
+        .take(MAX_REQUEST_FRAME_BYTES + 1)
         .read_to_end(&mut bytes)
         .is_err()
-        || bytes.len() as u64 > MAX_FRAME_BYTES
+        || bytes.len() as u64 > MAX_REQUEST_FRAME_BYTES
     {
         eprintln!("remote helper request exceeded its frame bound");
         std::process::exit(2);
@@ -199,19 +248,11 @@ fn main() {
         RemoteHelperOperation::InspectOperation => inspect_operation(&request),
         RemoteHelperOperation::Run => execute_effect(&request, OperationKind::Run),
         RemoteHelperOperation::Live => execute_effect(&request, OperationKind::Live),
-        _ => RemoteHelperResponse {
-            protocol: request.protocol,
-            request_id: request.request_id,
-            target_id: request.target_id,
-            ok: false,
-            status: "unsupported".to_string(),
-            payload: serde_json::Value::Null,
-            error: Some("remote effect operation is not admitted yet".to_string()),
-            partial_effects_possible: false,
-        },
+        RemoteHelperOperation::Sync => execute_effect(&request, OperationKind::Sync),
+        RemoteHelperOperation::Lock => execute_effect(&request, OperationKind::Lock),
     };
     let encoded = serde_json::to_vec(&response).unwrap();
-    if encoded.len() as u64 > MAX_FRAME_BYTES {
+    if encoded.len() > MAX_RESPONSE_FRAME_BYTES {
         eprintln!("remote helper response exceeded its frame bound");
         std::process::exit(2);
     }
