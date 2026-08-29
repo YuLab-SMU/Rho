@@ -41,7 +41,7 @@ pub use receipt::{
 };
 pub use remote::{
     RemoteEffectPayload, RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse,
-    invoke_remote_helper, verify_ssh_host_fingerprint,
+    invoke_remote_effect, invoke_remote_helper, verify_ssh_host_fingerprint,
 };
 pub use remote_mirror::{
     RemoteOperationMirror, RemoteOperationMirrorStatus, create_remote_operation_mirror,
@@ -85,6 +85,13 @@ pub enum ToolchainError {
     CommandStart(String),
     #[error("toolchain command failed: {0}")]
     CommandFailed(String),
+    #[error(
+        "remote helper transport failed (completion_uncertain={completion_uncertain}): {detail}"
+    )]
+    RemoteTransport {
+        completion_uncertain: bool,
+        detail: String,
+    },
     #[error("toolchain journal is invalid: {0}")]
     InvalidJournal(String),
     #[error("environment receipt is invalid: {0}")]
@@ -93,4 +100,16 @@ pub enum ToolchainError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+}
+
+impl ToolchainError {
+    pub fn completion_uncertain(&self) -> bool {
+        matches!(
+            self,
+            Self::RemoteTransport {
+                completion_uncertain: true,
+                ..
+            }
+        )
+    }
 }

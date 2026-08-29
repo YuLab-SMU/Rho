@@ -17,6 +17,7 @@ const MAX_REMOTE_OPERATION_MIRROR_BYTES: usize = 3 * 1024 * 1024;
 pub enum RemoteOperationMirrorStatus {
     Prepared,
     Dispatching,
+    Uncertain,
     Succeeded,
     Failed,
 }
@@ -142,6 +143,13 @@ impl RemoteOperationMirror {
                 "remote operation mirror terminal timestamp is inconsistent".to_string(),
             ));
         }
+        if self.status == RemoteOperationMirrorStatus::Uncertain
+            && (!self.partial_effects_possible || self.error.is_none())
+        {
+            return Err(ToolchainError::InvalidJournal(
+                "uncertain remote operation mirror must preserve uncertainty detail".to_string(),
+            ));
+        }
         if self.status == RemoteOperationMirrorStatus::Succeeded
             && (self.error.is_some() || self.partial_effects_possible)
         {
@@ -254,7 +262,9 @@ pub fn update_remote_operation_mirror(
                 RemoteOperationMirrorStatus::Dispatching | RemoteOperationMirrorStatus::Failed
             ) | (
                 RemoteOperationMirrorStatus::Dispatching,
-                RemoteOperationMirrorStatus::Succeeded | RemoteOperationMirrorStatus::Failed
+                RemoteOperationMirrorStatus::Uncertain
+                    | RemoteOperationMirrorStatus::Succeeded
+                    | RemoteOperationMirrorStatus::Failed
             )
         );
     if !allowed {

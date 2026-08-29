@@ -1,10 +1,14 @@
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CommandSpec, ComputeHost, ComputeTarget, EnvironmentReceipt, ToolchainError, validate_target_id,
+    CommandSpec, ComputeHost, ComputeTarget, EnvironmentReceipt, OperationJournal,
+    RemoteOperationMirror, RemoteOperationMirrorStatus, ToolchainError,
+    create_remote_operation_mirror, update_remote_operation_mirror, validate_target_id,
 };
 
 const MAX_REMOTE_FRAME_BYTES: usize = 1024 * 1024;
@@ -162,26 +166,148 @@ pub fn invoke_remote_helper(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|error| ToolchainError::CommandStart(error.to_string()))?;
-    child.stdin.as_mut().unwrap().write_all(&request_bytes)?;
+        .map_err(|error| remote_transport(false, error.to_string()))?;
+    child
+        .stdin
+        .as_mut()
+        .expect("piped SSH stdin is available")
+        .write_all(&request_bytes)
+        .map_err(|error| remote_transport(true, error.to_string()))?;
     let output = child
         .wait_with_output()
-        .map_err(|error| ToolchainError::CommandStart(error.to_string()))?;
-    if !output.status.success() || output.stdout.len() > MAX_REMOTE_FRAME_BYTES {
-        return Err(ToolchainError::CommandFailed(
-            "remote helper transport failed or exceeded its output bound".to_string(),
+        .map_err(|error| remote_transport(true, error.to_string()))?;
+    if !output.status.success() {
+        return Err(remote_transport(
+            true,
+            format!(
+                "SSH exited with {}: {}",
+                output
+                    .status
+                    .code()
+                    .map_or_else(|| "signal".to_string(), |code| code.to_string()),
+                bounded_transport_detail(&output.stderr)
+            ),
         ));
     }
-    let response: RemoteHelperResponse = serde_json::from_slice(&output.stdout)?;
+    if output.stdout.len() > MAX_REMOTE_FRAME_BYTES {
+        return Err(remote_transport(
+            true,
+            "remote helper output exceeded its frame bound",
+        ));
+    }
+    let response: RemoteHelperResponse =
+        serde_json::from_slice(&output.stdout).map_err(|error| {
+            remote_transport(true, format!("remote helper response was invalid: {error}"))
+        })?;
     if response.protocol != REMOTE_HELPER_PROTOCOL
         || response.request_id != request.request_id
         || response.target_id != target_id
     {
-        return Err(ToolchainError::CommandFailed(
-            "remote helper response identity is invalid".to_string(),
+        return Err(remote_transport(
+            true,
+            "remote helper response identity is invalid",
         ));
     }
     Ok(response)
+}
+
+/// Invoke one mutating request with a durable local mirror. Once SSH has been
+/// spawned, every transport failure is conservatively recorded as uncertain.
+pub fn invoke_remote_effect(
+    local_project_root: &Path,
+    target_id: &str,
+    target: &ComputeTarget,
+    request: &RemoteHelperRequest,
+) -> Result<RemoteHelperResponse, ToolchainError> {
+    invoke_remote_effect_with(local_project_root, request, || {
+        invoke_remote_helper(target_id, target, request)
+    })
+}
+
+fn invoke_remote_effect_with<F>(
+    local_project_root: &Path,
+    request: &RemoteHelperRequest,
+    invoke: F,
+) -> Result<RemoteHelperResponse, ToolchainError>
+where
+    F: FnOnce() -> Result<RemoteHelperResponse, ToolchainError>,
+{
+    if !request.operation.is_effect() {
+        return Err(ToolchainError::InvalidJournal(
+            "remote operation mirror requires an effect request".to_string(),
+        ));
+    }
+    let operation_id = request
+        .payload
+        .get("operation_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            ToolchainError::InvalidJournal(
+                "remote effect payload requires operation_id".to_string(),
+            )
+        })?;
+    let mut mirror = create_remote_operation_mirror(local_project_root, operation_id, request)?;
+    mirror.status = RemoteOperationMirrorStatus::Dispatching;
+    mirror.updated_at = Utc::now().to_rfc3339();
+    update_remote_operation_mirror(local_project_root, &mirror)?;
+
+    match invoke() {
+        Ok(response) => {
+            complete_mirror_from_response(&mut mirror, &response);
+            update_remote_operation_mirror(local_project_root, &mirror)?;
+            Ok(response)
+        }
+        Err(error) => {
+            let detail = error.to_string();
+            mirror.updated_at = Utc::now().to_rfc3339();
+            mirror.error = Some(detail.clone());
+            if error.completion_uncertain() {
+                mirror.status = RemoteOperationMirrorStatus::Uncertain;
+                mirror.partial_effects_possible = true;
+                mirror.remote_status = Some("transport_disconnected".to_string());
+            } else {
+                mirror.status = RemoteOperationMirrorStatus::Failed;
+                mirror.finished_at = Some(mirror.updated_at.clone());
+                mirror.remote_status = Some("not_dispatched".to_string());
+            }
+            if let Err(mirror_error) = update_remote_operation_mirror(local_project_root, &mirror) {
+                return Err(ToolchainError::InvalidJournal(format!(
+                    "could not persist remote transport outcome ({mirror_error}); original error: {detail}"
+                )));
+            }
+            Err(error)
+        }
+    }
+}
+
+fn complete_mirror_from_response(
+    mirror: &mut RemoteOperationMirror,
+    response: &RemoteHelperResponse,
+) {
+    let now = Utc::now().to_rfc3339();
+    mirror.updated_at = now.clone();
+    mirror.finished_at = Some(now);
+    mirror.remote_status = Some(response.status.clone());
+    mirror.partial_effects_possible = response.partial_effects_possible;
+    mirror.error = response.error.clone();
+    mirror.remote_journal =
+        serde_json::from_value::<OperationJournal>(response.payload.clone()).ok();
+    mirror.status = if response.ok {
+        RemoteOperationMirrorStatus::Succeeded
+    } else {
+        RemoteOperationMirrorStatus::Failed
+    };
+}
+
+fn remote_transport(completion_uncertain: bool, detail: impl Into<String>) -> ToolchainError {
+    ToolchainError::RemoteTransport {
+        completion_uncertain,
+        detail: detail.into(),
+    }
+}
+
+fn bounded_transport_detail(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(&bytes[..bytes.len().min(4_096)]).into_owned()
 }
 
 fn fingerprints(output: &[u8]) -> Vec<String> {
@@ -219,5 +345,58 @@ mod tests {
             serde_json::from_slice::<RemoteHelperRequest>(&encoded).unwrap(),
             request
         );
+    }
+
+    #[test]
+    fn ssh_disconnect_after_dispatch_marks_the_local_mirror_uncertain() {
+        let root = tempfile::tempdir().unwrap();
+        let request = RemoteHelperRequest {
+            protocol: 1,
+            request_id: "request-disconnect".to_string(),
+            target_id: "lab".to_string(),
+            project_root: "/remote/project".to_string(),
+            rho_toml_sha256: "a".repeat(64),
+            target_registry_sha256: "b".repeat(64),
+            operation: RemoteHelperOperation::Run,
+            payload: serde_json::json!({"operation_id": "run-disconnect"}),
+        };
+        let result = invoke_remote_effect_with(root.path(), &request, || {
+            Err(remote_transport(
+                true,
+                "SSH connection closed after request dispatch",
+            ))
+        });
+        assert!(result.unwrap_err().completion_uncertain());
+        let mirror = crate::read_remote_operation_mirror(root.path(), "run-disconnect").unwrap();
+        assert_eq!(mirror.status, RemoteOperationMirrorStatus::Uncertain);
+        assert!(mirror.partial_effects_possible);
+        assert!(mirror.finished_at.is_none());
+        assert_eq!(
+            mirror.remote_status.as_deref(),
+            Some("transport_disconnected")
+        );
+    }
+
+    #[test]
+    fn ssh_spawn_failure_is_terminal_and_known_not_dispatched() {
+        let root = tempfile::tempdir().unwrap();
+        let request = RemoteHelperRequest {
+            protocol: 1,
+            request_id: "request-spawn-failure".to_string(),
+            target_id: "lab".to_string(),
+            project_root: "/remote/project".to_string(),
+            rho_toml_sha256: "a".repeat(64),
+            target_registry_sha256: "b".repeat(64),
+            operation: RemoteHelperOperation::Run,
+            payload: serde_json::json!({"operation_id": "run-spawn-failure"}),
+        };
+        let result = invoke_remote_effect_with(root.path(), &request, || {
+            Err(remote_transport(false, "SSH executable was not found"))
+        });
+        assert!(!result.unwrap_err().completion_uncertain());
+        let mirror = crate::read_remote_operation_mirror(root.path(), "run-spawn-failure").unwrap();
+        assert_eq!(mirror.status, RemoteOperationMirrorStatus::Failed);
+        assert_eq!(mirror.remote_status.as_deref(), Some("not_dispatched"));
+        assert!(mirror.finished_at.is_some());
     }
 }
