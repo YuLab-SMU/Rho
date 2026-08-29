@@ -81,9 +81,11 @@ the original command environment. SSH remains blocked until the remote Helper
 exists. The target-aware Doctor now invokes `rho-toolchain-helper --stdio` as
 a bounded JSON endpoint on the remote host, validates the returned project
 `rho.toml` digest, and adopts only matching runtime checks into the local
-report. Remote Run/Live requests now carry one structured `CommandSpec` and an
-explicit confirmation flag; the Helper rechecks the remote `rho.toml` digest,
-writes the remote operation journal before spawn, and returns
+report. Remote Run/Live requests now carry one structured `CommandSpec`, an
+explicit confirmation flag, and the complete target-bound environment receipt.
+The Helper rechecks the remote `rho.toml` digest, requires the receipt ID/mode
+to match the operation, writes `environment.json` before the operation journal
+and spawn, and returns
 `partial_effects_possible` from durable remote state after failures. Remote
 Sync/Lock remain unsupported until multi-effect disconnect reconciliation is
 complete. Before invoking the Helper, the client obtains the host key with

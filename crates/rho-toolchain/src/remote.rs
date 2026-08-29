@@ -3,7 +3,9 @@ use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CommandSpec, ComputeHost, ComputeTarget, ToolchainError, validate_target_id};
+use crate::{
+    CommandSpec, ComputeHost, ComputeTarget, EnvironmentReceipt, ToolchainError, validate_target_id,
+};
 
 const MAX_REMOTE_FRAME_BYTES: usize = 1024 * 1024;
 const REMOTE_HELPER_PROTOCOL: u16 = 1;
@@ -37,6 +39,7 @@ pub struct RemoteEffectPayload {
     pub operation_id: String,
     pub confirmed: bool,
     pub command: CommandSpec,
+    pub environment: EnvironmentReceipt,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

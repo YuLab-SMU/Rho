@@ -3,10 +3,10 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use rho_toolchain::{
-    LOCAL_TARGET_ID, OperationJournal, OperationKind, RemoteEffectPayload, RemoteHelperOperation,
-    RemoteHelperRequest, RemoteHelperResponse, TargetRegistry, TargetRegistryDocument,
-    doctor_local_realization, execute_journaled_operation, load_toolchain_config,
-    operation_journal_path,
+    EnvironmentReceiptMode, LOCAL_TARGET_ID, OperationJournal, OperationKind, RemoteEffectPayload,
+    RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse, TargetRegistry,
+    TargetRegistryDocument, doctor_local_realization, execute_journaled_operation,
+    load_toolchain_config, operation_journal_path, write_environment_receipt,
 };
 
 const MAX_FRAME_BYTES: u64 = 1024 * 1024;
@@ -20,6 +20,19 @@ fn execute_effect(request: &RemoteHelperRequest, kind: OperationKind) -> RemoteH
                 "remote rho.toml digest changed before execution".to_string(),
             ));
         }
+        let expected_mode = match kind {
+            OperationKind::Run => EnvironmentReceiptMode::Run,
+            OperationKind::Live => EnvironmentReceiptMode::Live,
+            _ => unreachable!("remote helper admits only Run/Live here"),
+        };
+        if payload.environment.execution_id != payload.operation_id
+            || payload.environment.mode != expected_mode
+        {
+            return Err(rho_toolchain::ToolchainError::InvalidReceipt(
+                "remote environment receipt identity does not match the operation".to_string(),
+            ));
+        }
+        write_environment_receipt(&config, &payload.environment)?;
         config.config.compute.default_target = LOCAL_TARGET_ID.to_string();
         config.config.compute.required_capabilities.clear();
         let targets = TargetRegistryDocument {
