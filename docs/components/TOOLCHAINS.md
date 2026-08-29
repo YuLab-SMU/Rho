@@ -133,7 +133,12 @@ spawn under:
 The journal stores ordered argv/cwd effects, timestamps, bounded output,
 status, and exit codes. A command that starts and fails is recorded with
 `partial_effects_possible = true`; Rho does not pretend an external package
-manager rolled back effects it may already have committed.
+manager rolled back effects it may already have committed. Before a mutating
+SSH request is dispatched, the local project also persists a payload-digest
+mirror under `.rho/toolchain/remote-operations/<operation-id>/mirror.json`.
+The mirror binds local and remote project identity, target/configuration
+digests, request identity, and the last authoritative remote journal without
+copying command environments into a second durable file.
 
 Every run or live activation has a validated receipt at:
 

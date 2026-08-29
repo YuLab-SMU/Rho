@@ -12,6 +12,7 @@ mod doctor;
 mod journal;
 mod receipt;
 mod remote;
+mod remote_mirror;
 mod rig;
 mod target;
 
@@ -41,6 +42,10 @@ pub use receipt::{
 pub use remote::{
     RemoteEffectPayload, RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse,
     invoke_remote_helper, verify_ssh_host_fingerprint,
+};
+pub use remote_mirror::{
+    RemoteOperationMirror, RemoteOperationMirrorStatus, create_remote_operation_mirror,
+    read_remote_operation_mirror, remote_operation_mirror_path, update_remote_operation_mirror,
 };
 pub use rig::{RigInstallation, RigInventory, parse_rig_inventory, resolve_r_installation};
 pub use target::{

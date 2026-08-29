@@ -21,6 +21,12 @@ pub enum RemoteHelperOperation {
     Lock,
 }
 
+impl RemoteHelperOperation {
+    pub fn is_effect(self) -> bool {
+        matches!(self, Self::Run | Self::Live | Self::Sync | Self::Lock)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RemoteHelperRequest {
