@@ -1,4 +1,65 @@
 export type SurfaceAreaRole = "primary" | "support" | "context" | "strip" | "developer";
+export type SurfaceCatalogVisibility = "primary" | "contextual" | "internal" | "developer";
+export type SurfaceCapabilityGroup =
+  | "workbench"
+  | "workspace_r"
+  | "results"
+  | "agent"
+  | "project_integration"
+  | "project_extension"
+  | "developer";
+
+export interface SurfaceCatalogPolicy {
+  readonly visibility: SurfaceCatalogVisibility;
+  readonly capabilityGroup: SurfaceCapabilityGroup;
+}
+
+export const SURFACE_CAPABILITY_GROUPS: Readonly<Record<
+  Exclude<SurfaceCapabilityGroup, "project_extension" | "developer">,
+  { readonly label: string; readonly description: string }
+>> = {
+  workbench: {
+    label: "Core Workbench",
+    description: "Project navigation, documents, settings, and contextual guidance.",
+  },
+  workspace_r: {
+    label: "Workspace R",
+    description: "Ark-backed execution, Console transcripts, Runtime state, and project environments.",
+  },
+  results: {
+    label: "Results & Verification",
+    description: "Runs, Plots, Problems, checks, evidence, rendering, and diagnostics.",
+  },
+  agent: {
+    label: "Agent Collaboration",
+    description: "Agent conversations, reviewed changes, and Studio result-scene composition.",
+  },
+  project_integration: {
+    label: "Project Integration",
+    description: "Source control and bounded integrations owned by the active project.",
+  },
+};
+
+export const FIRST_PARTY_SURFACE_CATALOG: Readonly<Record<string, SurfaceCatalogPolicy>> = {
+  "rho.agent": { visibility: "primary", capabilityGroup: "agent" },
+  "rho.check-result": { visibility: "contextual", capabilityGroup: "results" },
+  "rho.console": { visibility: "primary", capabilityGroup: "workspace_r" },
+  "rho.environment": { visibility: "primary", capabilityGroup: "workspace_r" },
+  "rho.evidence": { visibility: "contextual", capabilityGroup: "results" },
+  "rho.file-preview": { visibility: "contextual", capabilityGroup: "workbench" },
+  "rho.file-source": { visibility: "primary", capabilityGroup: "workbench" },
+  "rho.git": { visibility: "primary", capabilityGroup: "project_integration" },
+  "rho.help": { visibility: "contextual", capabilityGroup: "workbench" },
+  "rho.logs": { visibility: "contextual", capabilityGroup: "results" },
+  "rho.navigator": { visibility: "primary", capabilityGroup: "workbench" },
+  "rho.plots": { visibility: "primary", capabilityGroup: "results" },
+  "rho.problems": { visibility: "primary", capabilityGroup: "results" },
+  "rho.render-jobs": { visibility: "contextual", capabilityGroup: "results" },
+  "rho.runs": { visibility: "primary", capabilityGroup: "results" },
+  "rho.settings": { visibility: "internal", capabilityGroup: "workbench" },
+  "rho.status": { visibility: "internal", capabilityGroup: "workspace_r" },
+  "rho.surface-playground": { visibility: "developer", capabilityGroup: "developer" },
+};
 
 export interface SurfaceUxProfile {
   readonly label: string;
@@ -108,6 +169,12 @@ export function humanizeSurfaceId(surfaceId: string): string {
   const segment = surfaceId.split(".").filter(Boolean).at(-1) ?? surfaceId;
   const words = segment.replaceAll(/[-_]+/gu, " ").trim();
   return words === "" ? "Component" : words[0]!.toLocaleUpperCase() + words.slice(1);
+}
+
+export function surfaceCatalogPolicy(surfaceId: string): SurfaceCatalogPolicy {
+  return FIRST_PARTY_SURFACE_CATALOG[surfaceId] ?? (surfaceId.startsWith("rho.")
+    ? { visibility: "internal", capabilityGroup: "workbench" }
+    : { visibility: "primary", capabilityGroup: "project_extension" });
 }
 
 export function surfaceDisplayLabel(surfaceId: string): string {

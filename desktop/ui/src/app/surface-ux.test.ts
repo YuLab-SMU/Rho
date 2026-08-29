@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
-import { FIRST_PARTY_SURFACE_UX, humanizeSurfaceId, surfaceDisplayLabel, surfaceUxProfile } from "./surface-ux";
+import {
+  FIRST_PARTY_SURFACE_CATALOG,
+  FIRST_PARTY_SURFACE_UX,
+  humanizeSurfaceId,
+  surfaceCatalogPolicy,
+  surfaceDisplayLabel,
+  surfaceUxProfile,
+} from "./surface-ux";
 
 const EXPECTED_FIRST_PARTY = [
   "rho.agent", "rho.check-result", "rho.console", "rho.environment",
@@ -13,6 +20,7 @@ const EXPECTED_FIRST_PARTY = [
 describe("Surface UX contract", () => {
   it("keeps the closed first-party inventory complete and task-specific", () => {
     expect(Object.keys(FIRST_PARTY_SURFACE_UX).sort()).toEqual(EXPECTED_FIRST_PARTY);
+    expect(Object.keys(FIRST_PARTY_SURFACE_CATALOG).sort()).toEqual(EXPECTED_FIRST_PARTY);
     for (const profile of Object.values(FIRST_PARTY_SURFACE_UX)) {
       expect(profile.label.trim()).not.toBe("");
       expect(profile.primaryTask.trim()).not.toBe("");
@@ -28,6 +36,25 @@ describe("Surface UX contract", () => {
       .map((factory) => factory.definition.surface_id)
       .filter((surfaceId) => surfaceId.startsWith("rho."));
     for (const surfaceId of factoryIds) expect(FIRST_PARTY_SURFACE_UX[surfaceId]).toBeDefined();
+  });
+
+  it("keeps only nine stable workbench components in the primary catalog", () => {
+    const primary = EXPECTED_FIRST_PARTY.filter(
+      (surfaceId) => surfaceCatalogPolicy(surfaceId).visibility === "primary",
+    );
+    expect(primary).toEqual([
+      "rho.agent", "rho.console", "rho.environment", "rho.file-source", "rho.git",
+      "rho.navigator", "rho.plots", "rho.problems", "rho.runs",
+    ]);
+    expect(surfaceCatalogPolicy("rho.check-result")).toEqual({
+      visibility: "contextual",
+      capabilityGroup: "results",
+    });
+    expect(surfaceCatalogPolicy("rho.surface-playground").visibility).toBe("developer");
+    expect(surfaceCatalogPolicy("ui.surface.volcano")).toEqual({
+      visibility: "primary",
+      capabilityGroup: "project_extension",
+    });
   });
 
   it("turns project component identifiers into human labels without hiding first-party names", () => {

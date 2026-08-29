@@ -173,17 +173,16 @@ fn project_file_resource_provider_capability_id() -> CapabilityId {
         .expect("built-in project file Resource Provider capability must be valid")
 }
 
-struct SurfacePlaygroundPlugin {
+struct CoreWorkbenchPlugin {
     descriptor: PluginDescriptor,
 }
 
-impl SurfacePlaygroundPlugin {
+impl CoreWorkbenchPlugin {
     fn new() -> Self {
         let mut descriptor = PluginDescriptor::new(
-            rho_extension_runtime::PluginId::new("org.yulab.rho.surface-playground")
-                .expect("built-in Surface Playground plugin ID must be valid"),
-            PluginVersion::parse("1.0.0")
-                .expect("built-in Surface Playground version must be valid"),
+            rho_extension_runtime::PluginId::new("org.yulab.rho.core-workbench")
+                .expect("built-in Core Workbench plugin ID must be valid"),
+            PluginVersion::parse("1.0.0").expect("built-in Core Workbench version must be valid"),
             vec![rho_extension_runtime::ScopePolicy::application_kind()],
         );
         descriptor.provides = vec![
@@ -202,7 +201,7 @@ impl SurfacePlaygroundPlugin {
     }
 }
 
-impl InternalPlugin for SurfacePlaygroundPlugin {
+impl InternalPlugin for CoreWorkbenchPlugin {
     fn descriptor(&self) -> &PluginDescriptor {
         &self.descriptor
     }
@@ -880,7 +879,7 @@ impl SourceHandler for RunHistorySourceHandler {
 
 fn internal_plugin_inventory() -> Vec<Arc<dyn InternalPlugin>> {
     vec![
-        Arc::new(SurfacePlaygroundPlugin::new()),
+        Arc::new(CoreWorkbenchPlugin::new()),
         Arc::new(ProjectFileViewerPlugin::new()),
         Arc::new(RunHistoryPlugin::new()),
         Arc::new(WorkspaceSnapshotPlugin::new()),

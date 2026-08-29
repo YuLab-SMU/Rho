@@ -11,6 +11,11 @@ import type {
 import { buildAddedModelProfile } from "../transport";
 import { ModelOptionsDialog } from "./ModelOptionsDialog";
 import { SurfaceTaskState } from "./SurfaceTaskState";
+import {
+  SURFACE_CAPABILITY_GROUPS,
+  surfaceCatalogPolicy,
+  surfaceDisplayLabel,
+} from "./surface-ux";
 
 export type SettingsModuleId = "providers" | "components";
 
@@ -26,8 +31,8 @@ export const SETTINGS_MODULES: readonly SettingsModuleDefinition[] = [{
   description: "Connect services Rho can use.",
 }, {
   module_id: "components",
-  label: "Components",
-  description: "Inspect trusted application and project components.",
+  label: "Capabilities",
+  description: "Inspect built-in capabilities and project extensions.",
 }];
 
 const SETTINGS_MODULE_IDS = new Set<SettingsModuleId>(
@@ -1024,32 +1029,58 @@ function ProvidersSettingsModule({
 }
 
 function ComponentsSettingsModule({ factories }: { readonly factories: readonly SurfaceFactoryRegistration[] }) {
-  const groups = useMemo(() => ({
-    application: factories.filter((factory) => factory.definition.origin.kind === "application"),
-    project: factories.filter((factory) => factory.definition.origin.kind === "workspace_plugin"),
-  }), [factories]);
-  const renderGroup = (label: string, items: readonly SurfaceFactoryRegistration[]) => <section className="rho-settings-section">
-    <div className="rho-settings-section-heading"><div><h3>{label}</h3><p>{items.length} registered component{items.length === 1 ? "" : "s"}</p></div></div>
-    {items.length === 0 ? <p className="rho-settings-empty">No components in this group.</p> : <div className="rho-settings-component-list">
-      {[...items].sort((left, right) => left.definition.label.localeCompare(right.definition.label)).map((factory) => {
-        const origin = factory.definition.origin;
-        return <article key={`${factory.definition.surface_id}:${factory.activation_generation}`}>
-          <div><strong>{factory.definition.label}</strong><code>{factory.definition.surface_id}</code></div>
-          <p>{factory.definition.purpose}</p>
-          <dl>
-            <div><dt>Scope</dt><dd>{factory.definition.scope}</dd></div>
-            <div><dt>Instances</dt><dd>{readable(factory.definition.instance_policy)}</dd></div>
-            <div><dt>Origin</dt><dd>{origin.kind === "application" ? "Rho application" : origin.plugin_id}</dd></div>
-          </dl>
-        </article>;
-      })}
-    </div>}
-  </section>;
+  const groups = useMemo(() => {
+    const application = factories.filter((factory) =>
+      factory.definition.origin.kind === "application"
+      && surfaceCatalogPolicy(factory.definition.surface_id).capabilityGroup !== "developer");
+    return {
+      capabilities: Object.entries(SURFACE_CAPABILITY_GROUPS).map(([groupId, definition]) => ({
+        groupId,
+        definition,
+        factories: application.filter((factory) =>
+          surfaceCatalogPolicy(factory.definition.surface_id).capabilityGroup === groupId),
+      })),
+      project: factories.filter((factory) => factory.definition.origin.kind === "workspace_plugin"),
+    };
+  }, [factories]);
   return <div className="rho-settings-module rho-settings-components">
-    <header className="rho-settings-module-heading"><div><span className="rho-eyebrow">Components</span><h2>Component catalog</h2></div></header>
-    <p className="rho-settings-intro">This view is informational. Component lifecycle and permissions stay in their existing workflows.</p>
-    {renderGroup("Rho application", groups.application)}
-    {renderGroup("Current project", groups.project)}
+    <header className="rho-settings-module-heading"><div><span className="rho-eyebrow">Capabilities</span><h2>Built-in capabilities</h2></div></header>
+    <p className="rho-settings-intro">Rho groups its stable workbench components by user task. Only installed project packages are treated as plugins.</p>
+    <section className="rho-settings-section">
+      <div className="rho-settings-section-heading"><div><h3>Rho application</h3><p>{groups.capabilities.length} stable capability groups</p></div></div>
+      <div className="rho-settings-component-list">
+        {groups.capabilities.map(({ groupId, definition, factories: items }) => {
+          const primaryCount = items.filter((factory) =>
+            surfaceCatalogPolicy(factory.definition.surface_id).visibility === "primary").length;
+          return <article data-capability-group={groupId} key={groupId}>
+            <div><strong>{definition.label}</strong><small>{items.map((factory) => surfaceDisplayLabel(factory.definition.surface_id)).join(" · ") || "No registered views"}</small></div>
+            <p>{definition.description}</p>
+            <dl>
+              <div><dt>Views</dt><dd>{items.length}</dd></div>
+              <div><dt>Compose</dt><dd>{primaryCount}</dd></div>
+              <div><dt>Origin</dt><dd>Rho application</dd></div>
+            </dl>
+          </article>;
+        })}
+      </div>
+    </section>
+    <section className="rho-settings-section">
+      <div className="rho-settings-section-heading"><div><h3>Project extensions</h3><p>{groups.project.length} installed Surface contribution{groups.project.length === 1 ? "" : "s"}</p></div></div>
+      {groups.project.length === 0 ? <p className="rho-settings-empty">No project extensions are installed.</p> : <div className="rho-settings-component-list">
+        {[...groups.project].sort((left, right) => left.definition.label.localeCompare(right.definition.label)).map((factory) => {
+          const origin = factory.definition.origin;
+          return <article key={`${factory.definition.surface_id}:${factory.activation_generation}`}>
+            <div><strong>{factory.definition.label}</strong><code>{factory.definition.surface_id}</code></div>
+            <p>{factory.definition.purpose}</p>
+            <dl>
+              <div><dt>Scope</dt><dd>{factory.definition.scope}</dd></div>
+              <div><dt>Instances</dt><dd>{readable(factory.definition.instance_policy)}</dd></div>
+              <div><dt>Plugin</dt><dd>{origin.kind === "workspace_plugin" ? origin.plugin_id : "Rho application"}</dd></div>
+            </dl>
+          </article>;
+        })}
+      </div>}
+    </section>
   </div>;
 }
 

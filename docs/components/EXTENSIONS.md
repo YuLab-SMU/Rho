@@ -21,5 +21,12 @@ Plugin UI is a typed document projected through `plugin_surface_runtime` and
 the frontend plugin transport. Plugins do not inject arbitrary React or gain
 ambient filesystem, network, Workspace R, or credential access.
 
+Rho's built-in Surfaces are application capabilities, not installed plugins.
+The UI groups them as Core Workbench, Workspace R, Results & Verification,
+Agent Collaboration, and Project Integration; only nine stable task Surfaces
+appear in Compose. Contextual result viewers stay available to commands and
+result workflows, while development fixtures remain development-only. The
+project extension list contains only accepted workspace-plugin packages.
+
 Current behavior is best read from the crate public exports, the WIT contract,
 `workspace_plugins/`, and their adjacent tests.

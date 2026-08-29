@@ -6585,13 +6585,19 @@ describe("Studio foundation app", () => {
     expect(container.querySelector(".rho-studio-inspector > header")?.textContent).toContain("Arrange workspace");
     expect(container.querySelector<HTMLDetailsElement>(".rho-compose-layout")?.open).toBe(false);
     expect([...container.querySelectorAll<HTMLDetailsElement>(".rho-compose-advanced")].every((section) => !section.open)).toBe(true);
-    expect(catalog.querySelector(".rho-surface-catalog-heading")?.textContent).toContain("Components");
+    expect(catalog.querySelector(".rho-surface-catalog-heading")?.textContent).toContain("Core components");
     expect(catalog.querySelector(".rho-surface-catalog-heading")?.textContent).not.toContain("factories");
     expect(catalog.querySelector(":scope > [data-surface-factory='rho.surface-playground']")).toBeNull();
+    expect(catalog.querySelector("[data-surface-factory='rho.settings']")).toBeNull();
+    expect(catalog.querySelector("[data-surface-factory='rho.check-result']")).toBeNull();
+    expect(catalog.querySelector("[data-surface-factory='rho.render-jobs']")).toBeNull();
+    expect(catalog.querySelectorAll(":scope > [data-surface-factory]")).toHaveLength(9);
     expect(catalog.querySelector("[data-surface-factory='ui.surface.differential-expression'] .rho-component-origin")?.textContent)
       .toBe("Project component");
 
-    const developer = catalog.querySelector<HTMLDetailsElement>(".rho-developer-components")!;
+    const projectExtensions = catalog.querySelector<HTMLDetailsElement>(".rho-project-components")!;
+    expect(projectExtensions.querySelector("[data-surface-factory='ui.surface.differential-expression']")).not.toBeNull();
+    const developer = catalog.querySelector<HTMLDetailsElement>(".rho-developer-components:not(.rho-project-components)")!;
     expect(developer.open).toBe(false);
     expect(developer.querySelector("[data-surface-factory='rho.surface-playground']")).not.toBeNull();
     await act(async () => {
@@ -6636,9 +6642,26 @@ describe("Studio foundation app", () => {
     await openInspector(container);
     expect(container.querySelector("[data-surface-factory='rho.artifacts']")).toBeNull();
     const open = async (surfaceId: string) => {
+      const factory = container.querySelector<HTMLElement>(`[data-surface-factory='${surfaceId}']`);
       await act(async () => {
-        container.querySelector<HTMLElement>(`[data-surface-factory='${surfaceId}']`)!
-          .querySelector<HTMLButtonElement>("button")!.click();
+        if (factory != null) {
+          factory.querySelector<HTMLButtonElement>("button")!.click();
+        } else {
+          document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "k", metaKey: true }));
+          await settle();
+          const search = container.querySelector<HTMLInputElement>("[aria-label='Search commands']")!;
+          const setInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+          const commandId = `rho.surface.open.${surfaceId.slice("rho.".length)}`;
+          setInputValue.call(search, commandId);
+          search.dispatchEvent(new Event("input", { bubbles: true }));
+          await settle();
+          const command = [...container.querySelectorAll<HTMLButtonElement>(".rho-command-results button")]
+            .find((button) => button.textContent?.includes(commandId));
+          if (command == null) throw new Error(`Contextual command ${commandId} is unavailable`);
+          command.click();
+          search.blur();
+          await new Promise((resolve) => window.setTimeout(resolve, 140));
+        }
         for (let index = 0; index < 8; index += 1) await Promise.resolve();
       });
       return container.querySelector<HTMLElement>(`[data-surface-id='${surfaceId}']`)!;

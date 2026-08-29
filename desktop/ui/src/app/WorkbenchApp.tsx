@@ -99,7 +99,7 @@ import {
   presentAgentTurnInStudio as applyAgentStudioPresentation,
 } from "./controllers/agent-studio-presentation-controller";
 import { SurfaceInstanceMutationController } from "./controllers/surface-instance-mutation-controller";
-import { surfaceDisplayLabel, surfaceUxProfile } from "./surface-ux";
+import { surfaceCatalogPolicy, surfaceDisplayLabel, surfaceUxProfile } from "./surface-ux";
 import {
   findLayoutPlacement,
   NodeOutline,
@@ -2529,15 +2529,16 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const recentProjectPaths = projectHistory.history.paths.filter((path) =>
     path !== snapshot?.project.display_path
   );
-  const componentFactories = surfaces?.catalog.factories.filter(
-    (factory) => factory.definition.surface_id !== "rho.surface-playground",
-  ) ?? [];
-  const developerFactories = surfaces?.catalog.factories.filter(
-    (factory) => factory.definition.surface_id === "rho.surface-playground",
-  ) ?? [];
-  const pluginFactories = surfaces?.catalog.factories.filter(
-    (factory) => factory.definition.origin.kind === "workspace_plugin",
-  ) ?? [];
+  const componentFactories = surfaces?.catalog.factories.filter((factory) =>
+    factory.definition.origin.kind === "application"
+    && surfaceCatalogPolicy(factory.definition.surface_id).visibility === "primary") ?? [];
+  const developerFactories = surfaces?.catalog.factories.filter((factory) =>
+    factory.definition.origin.kind === "application"
+    && surfaceCatalogPolicy(factory.definition.surface_id).visibility === "developer") ?? [];
+  const pluginFactories = surfaces?.catalog.factories.filter((factory) =>
+    factory.definition.origin.kind === "workspace_plugin"
+    && surfaceCatalogPolicy(factory.definition.surface_id).visibility === "primary") ?? [];
+  const showDeveloperComponents = import.meta.env.DEV;
   const activePluginSurfaceIds = new Set(
     surfaces?.catalog.instances
       .filter((instance) =>
@@ -2762,13 +2763,18 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
               {surfaces != null && (
                 <section className="rho-surface-catalog">
                   <div className="rho-surface-catalog-heading">
-                    <span className="rho-eyebrow">Components</span>
+                    <span className="rho-eyebrow">Core components</span>
                     <span>{componentFactories.length}</span>
                   </div>
                   {componentFactories.map((factory) => renderComponentFactory(factory))}
-                  {developerFactories.length > 0 && <details className="rho-developer-components">
+                  {pluginFactories.length > 0 && <details className="rho-developer-components rho-project-components">
+                    <summary><span>Project extensions</span><span>{pluginFactories.length}</span></summary>
+                    <p>Only Surface contributions installed for this project appear here.</p>
+                    {pluginFactories.map((factory) => renderComponentFactory(factory))}
+                  </details>}
+                  {showDeveloperComponents && developerFactories.length > 0 && <details className="rho-developer-components">
                     <summary><span>Developer tools</span><span>{developerFactories.length}</span></summary>
-                    <p>Preview and diagnostic components are kept separate from the normal workbench catalog.</p>
+                    <p>Preview fixtures are available in development builds only.</p>
                     {developerFactories.map((factory) => renderComponentFactory(factory, true))}
                   </details>}
                 </section>

@@ -107,7 +107,7 @@ describe("Provider-first Settings Surface", () => {
     expect(container.textContent).toContain("Models");
   }
 
-  it("uses Providers as the default and legacy fallback with only Components beside it", async () => {
+  it("uses Providers as the default and legacy fallback with only Capabilities beside it", async () => {
     expect(settingsModuleFromViewState({ module_id: "components" })).toBe("components");
     expect(settingsModuleFromViewState({ module_id: "providers" })).toBe("providers");
     expect(settingsModuleFromViewState({ module_id: "models" })).toBe("providers");
@@ -117,7 +117,7 @@ describe("Provider-first Settings Surface", () => {
     const { container } = await renderSettings({ viewState: { module_id: "models" } });
     expect([...container.querySelectorAll("[role='tab']")].map((tab) => tab.textContent)).toEqual([
       "ProvidersConnect services Rho can use.",
-      "ComponentsInspect trusted application and project components.",
+      "CapabilitiesInspect built-in capabilities and project extensions.",
     ]);
     expect(container.textContent).toContain("Providers");
     expect(container.textContent).not.toContain("Capability routes");
@@ -707,7 +707,7 @@ describe("Provider-first Settings Surface", () => {
     expect(container.textContent).toContain("mock-environment-api-key");
   });
 
-  it("recovers a failed Provider read and keeps Components project-local and read-only", async () => {
+  it("recovers a failed Provider read and keeps Capabilities project-local and read-only", async () => {
     const transport = createMockUiKernelTransport("plugin=surface");
     const settings = await createMockUiKernelTransport().loadAgentLlmSettings();
     transport.loadAgentLlmSettings = vi.fn()
@@ -717,9 +717,12 @@ describe("Provider-first Settings Surface", () => {
     expect(container.textContent).toContain("settings file unavailable");
     await click(button(container, "Retry"));
     expect(container.textContent).toContain("No Providers");
-    await click(button(container, "Components"));
+    await click(button(container, "Capabilities"));
     expect(persist).toHaveBeenCalledWith({ module_id: "components" });
-    expect(container.textContent).toContain("rho.settings");
+    expect(container.textContent).toContain("Built-in capabilities");
+    expect(container.querySelectorAll("[data-capability-group]")).toHaveLength(5);
+    expect(container.textContent).toContain("Core Workbench");
+    expect(container.textContent).toContain("Agent Collaboration");
     expect(container.textContent).toContain("org.example.analysis");
     expect(container.querySelector(".rho-settings-components input")).toBeNull();
 
@@ -736,7 +739,7 @@ describe("Provider-first Settings Surface", () => {
       await settle();
     });
     expect(container.textContent).not.toContain("org.example.analysis");
-    expect(container.textContent).toContain("Current project");
+    expect(container.textContent).toContain("Project extensions");
   });
 
   it("adds a discovered remote model with its evidence and removes the remote row", async () => {
