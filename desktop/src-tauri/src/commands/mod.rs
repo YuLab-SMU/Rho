@@ -13,4 +13,5 @@ pub(crate) mod render;
 pub(crate) mod runs;
 pub(crate) mod runtime_control;
 pub(crate) mod startup;
+pub(crate) mod toolchain;
 pub(crate) mod workspace;

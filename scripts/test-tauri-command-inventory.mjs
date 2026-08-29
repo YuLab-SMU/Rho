@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "50b256109be62e8ec769238599ffa5c8e6bca250972b28cf1d1d75a675ab1985";
+const EXPECTED_HANDLER_DIGEST = "688cf8e06bfc125881dc06544945be496bd5d2e54c7ba00e3fa70b5743fd2aff";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [
@@ -49,6 +49,8 @@ const ENVIRONMENT_COMMANDS = [
   "request_environment_operation_preview",
   "respond_environment_operation",
 ];
+
+const TOOLCHAIN_COMMANDS = ["toolchain_doctor"];
 
 const EDITOR_COMMANDS = [
   "editor_discover_chunks",
@@ -313,6 +315,14 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Environment command module ownership changed",
   );
 
+  const toolchainSource = sources.find(({ name }) => name.endsWith("commands/toolchain.rs"));
+  assert.ok(toolchainSource, "Toolchain command module is missing");
+  assert.deepEqual(
+    commandDefinitions([toolchainSource]).map(({ name }) => name).sort(),
+    TOOLCHAIN_COMMANDS,
+    "Toolchain command module ownership changed",
+  );
+
   const editorSource = sources.find(({ name }) => name.endsWith("commands/editor.rs"));
   assert.ok(editorSource, "Editor command module is missing");
   assert.deepEqual(
@@ -414,6 +424,9 @@ function fixtures() {
   const environmentHandlers = ENVIRONMENT_COMMANDS.map(
     (command) => `  commands::environment::${command},`,
   ).join("\n");
+  const toolchainHandlers = TOOLCHAIN_COMMANDS.map(
+    (command) => `  commands::toolchain::${command},`,
+  ).join("\n");
   const editorHandlers = EDITOR_COMMANDS.map(
     (command) => `  commands::editor::${command},`,
   ).join("\n");
@@ -456,6 +469,7 @@ ${pluginHandlers}
 ${artifactHandlers}
 ${evidenceHandlers}
 ${environmentHandlers}
+${toolchainHandlers}
 ${editorHandlers}
 ${projectHandlers}
 ${agentLlmHandlers}
@@ -487,6 +501,9 @@ ${runtimeControlHandlers}
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
       { name: "commands/environment.rs", text: ENVIRONMENT_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
+      { name: "commands/toolchain.rs", text: TOOLCHAIN_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
       { name: "commands/editor.rs", text: EDITOR_COMMANDS.map(
@@ -529,6 +546,7 @@ ${runtimeControlHandlers}
       ...ARTIFACT_COMMANDS,
       ...EVIDENCE_COMMANDS,
       ...ENVIRONMENT_COMMANDS,
+      ...TOOLCHAIN_COMMANDS,
       ...EDITOR_COMMANDS,
       ...PROJECT_COMMANDS,
       ...AGENT_LLM_COMMANDS,

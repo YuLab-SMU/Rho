@@ -23,7 +23,10 @@ Important runtime owners include:
   atomic mutation, and permission checks. `RHO_HOME` overrides discovery;
   otherwise an existing `~/.rho` wins over the XDG variant, and new installs
   default to `~/.rho`. Credentials resolve session → environment → config
-  literal without a second vault authority.
+  literal without a second vault authority;
+- `commands/toolchain.rs` for the read-only project Toolchain Doctor projected
+  in Environment → Toolchains. External sync/lock authority remains in
+  `rho-toolchain`, separate from ordinary run admission.
 
 ## Frontend
 

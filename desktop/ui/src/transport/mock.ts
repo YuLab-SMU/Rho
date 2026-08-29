@@ -290,7 +290,7 @@ export function createMockUiKernelTransport(
   const firstPartyFactorySpecs = [
     ["rho.agent", "Agent", [["conversation", "Conversation"], ["activity", "Activity"], ["composer", "Composer"]], false],
     ["rho.settings", "Settings", [["settings", "Settings"]], false],
-    ["rho.environment", "Environment", [["packages", "Packages"], ["requests", "Requests"]], false],
+    ["rho.environment", "Environment", [["toolchains", "Toolchains"], ["packages", "Packages"], ["requests", "Requests"]], false],
     ["rho.navigator", "Navigator", [["files", "Files"], ["runs", "History"]], false],
     ["rho.evidence", "Evidence", [["claims", "Claims"]], false],
     ["rho.git", "Git", [["changes", "Changes"], ["history", "History"]], false],
@@ -3410,6 +3410,22 @@ export function createMockUiKernelTransport(
     },
     async listEvidenceClaims(limit = 100) {
       return structuredClone(typedEvidenceRecords().slice(0, Math.max(0, limit)));
+    },
+    async toolchainDoctor() {
+      return {
+        status: "ready",
+        configured: true,
+        rho_toml_sha256: "f".repeat(64),
+        r_version: "4.5.2",
+        rscript: "/opt/R/4.5.2/bin/Rscript",
+        python_version: "3.12",
+        python: "/project/.venv/bin/python",
+        checks: [
+          { id: "rig", status: "ready", detail: "exact R 4.5.2 resolved" },
+          { id: "renv", status: "ready", detail: "project library ready" },
+          { id: "uv", status: "ready", detail: "Python 3.12 environment ready" },
+        ],
+      };
     },
     async loadDomainSurface(surfaceId) {
       const fixtures: Readonly<Record<string, DomainSurfaceData["items"]>> = {

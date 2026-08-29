@@ -276,6 +276,11 @@
       "resource_kinds": [],
       "modes": [
         {
+          "mode_id": "toolchains",
+          "label": "Toolchains",
+          "interaction_kind": "interactive"
+        },
+        {
           "mode_id": "packages",
           "label": "Packages",
           "interaction_kind": "interactive"
@@ -690,7 +695,7 @@
       },
       "activation_generation": 1,
       "surface_revision": 1,
-      "mode_id": "packages",
+      "mode_id": "toolchains",
       "resource_binding": null,
       "runtime_binding": null,
       "view_group_id": null,
@@ -1692,6 +1697,11 @@
             "resource_kinds": [],
             "modes": [
               {
+                "mode_id": "toolchains",
+                "label": "Toolchains",
+                "interaction_kind": "interactive"
+              },
+              {
                 "mode_id": "packages",
                 "label": "Packages",
                 "interaction_kind": "interactive"
@@ -1982,7 +1992,7 @@
           },
           "activation_generation": 1,
           "surface_revision": 1,
-          "mode_id": "packages",
+          "mode_id": "toolchains",
           "resource_binding": null,
           "runtime_binding": null,
           "view_group_id": null,
@@ -2423,7 +2433,7 @@
             "kind": "application",
             "component_id": "rho.environment"
           },
-          "mode_id": "packages",
+          "mode_id": "toolchains",
           "resource_binding": null,
           "runtime_attachment_intent": null,
           "view_group_id": null,
@@ -2685,7 +2695,7 @@
               "kind": "application",
               "component_id": "rho.environment"
             },
-            "mode_id": "packages",
+            "mode_id": "toolchains",
             "resource_binding": null,
             "runtime_attachment_intent": null,
             "view_group_id": null,

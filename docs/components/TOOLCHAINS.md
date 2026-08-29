@@ -46,7 +46,10 @@ R project library, while pyproject and `uv.lock` own Python dependencies.
 
 `doctor()` is read-only. It verifies rig's exact R/Rscript pair, renv activation
 and project library, pak/jsonlite, configured locks, uv, the configured Python
-project, `uv sync --locked --check`, and `.venv` Python.
+project, `uv sync --locked --check`, and `.venv` Python. The desktop exposes
+this through `toolchain_doctor`; Environment → Toolchains is the primary
+read-only project toolchain view, while Packages and Requests remain separate
+modes.
 
 ## Durable effects and receipts
 

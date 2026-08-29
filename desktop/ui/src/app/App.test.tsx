@@ -6402,8 +6402,40 @@ describe("Studio foundation app", () => {
     expect(agent.querySelector(".rho-agent-auto-approve")).toBeNull();
   });
 
+  it("makes read-only Toolchain Doctor the primary Environment view", async () => {
+    const transport = createMockUiKernelTransport();
+    const doctor = vi.spyOn(transport, "toolchainDoctor");
+    const { container } = await renderApp(transport);
+    await openInspector(container);
+    await act(async () => {
+      container.querySelector<HTMLElement>("[data-surface-factory='rho.environment']")!
+        .querySelector<HTMLButtonElement>("button")!.click();
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    const toolchain = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")]
+      .find((surface) => surface.querySelector(".rho-toolchain-surface") != null)!;
+    expect(toolchain).toBeDefined();
+    expect(toolchain.textContent).toContain("Exact project environments are ready");
+    expect(toolchain.textContent).toContain("R 4.5.2");
+    expect(toolchain.textContent).toContain("Python 3.12");
+    expect(toolchain.textContent).toContain("project library ready");
+    const doctorCallsBeforeRefresh = doctor.mock.calls.length;
+    expect(doctorCallsBeforeRefresh).toBeGreaterThan(0);
+    await act(async () => {
+      toolchain.querySelector<HTMLButtonElement>("[aria-label='Refresh toolchains']")!.click();
+      await settle();
+    });
+    expect(doctor).toHaveBeenCalledTimes(doctorCallsBeforeRefresh + 1);
+  });
+
   it("presents Environment inventory semantically with on-demand search and no raw payload", async () => {
     const transport = createMockUiKernelTransport();
+    const packageSurfaces = structuredClone(await transport.loadSurfaces());
+    const packageEnvironment = packageSurfaces.catalog.instances.find(
+      (instance) => instance.surface_id === "rho.environment",
+    )!;
+    (packageEnvironment as { mode_id: string | null }).mode_id = "packages";
+    transport.publishSurfaces(packageSurfaces);
     const persist = vi.spyOn(transport, "updateSurface");
     const loadDomainSurface = transport.loadDomainSurface.bind(transport);
     vi.spyOn(transport, "loadDomainSurface").mockImplementation(async (surfaceId) => {
@@ -6426,7 +6458,14 @@ describe("Studio foundation app", () => {
         .querySelector<HTMLButtonElement>("button")!.click();
       for (let index = 0; index < 8; index += 1) await Promise.resolve();
     });
-    const environment = container.querySelector<HTMLElement>("[data-surface-id='rho.environment']")!;
+    const environments = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")];
+    const environment = environments.at(-1)!;
+    const environmentMenu = await openSurfaceMenu(environment);
+    await act(async () => {
+      [...environmentMenu.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent?.includes("Packages"))!.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
     expect(environment.querySelector(".rho-environment-toolbar")?.textContent)
       .toContain("1 package needs attention");
     expect(environment.querySelectorAll(".rho-environment-record")).toHaveLength(2);
@@ -6505,11 +6544,14 @@ describe("Studio foundation app", () => {
     const environments = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")];
     const environment = environments.at(-1)!;
     const menu = await openSurfaceMenu(environment);
+    const toolchains = [...menu.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Toolchains"));
     const packages = [...menu.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.includes("Packages"));
     const requests = [...menu.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.includes("Requests"));
-    expect(packages?.getAttribute("aria-pressed")).toBe("true");
+    expect(toolchains?.getAttribute("aria-pressed")).toBe("true");
+    expect(packages?.getAttribute("aria-pressed")).toBe("false");
     expect(requests?.getAttribute("aria-pressed")).toBe("false");
     await act(async () => {
       requests!.click();
@@ -6541,7 +6583,14 @@ describe("Studio foundation app", () => {
         .querySelector<HTMLButtonElement>("button")!.click();
       for (let index = 0; index < 8; index += 1) await Promise.resolve();
     });
-    const environment = container.querySelector<HTMLElement>("[data-surface-id='rho.environment']")!;
+    const environments = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")];
+    const environment = environments.at(-1)!;
+    const environmentMenu = await openSurfaceMenu(environment);
+    await act(async () => {
+      [...environmentMenu.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent?.includes("Packages"))!.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
     await vi.waitFor(() => expect(environment.querySelector("[role='alert']")).not.toBeNull());
     expect(environment.querySelector("[role='alert']")?.textContent).toContain("Environment broker unavailable");
     expect(environment.querySelector("[role='alert']")?.textContent).toContain("[local path]");

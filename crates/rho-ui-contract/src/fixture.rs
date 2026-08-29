@@ -450,7 +450,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
         instance(
             "instance:environment",
             "rho.environment",
-            Some("packages"),
+            Some("toolchains"),
             None,
             None,
         ),
@@ -716,7 +716,11 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             definition(
                 "rho.environment",
                 "Environment",
-                &[("packages", "Packages"), ("requests", "Requests")],
+                &[
+                    ("toolchains", "Toolchains"),
+                    ("packages", "Packages"),
+                    ("requests", "Requests"),
+                ],
                 false,
             ),
             definition(
@@ -799,7 +803,11 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                     definition(
                         "rho.environment",
                         "Environment",
-                        &[("packages", "Packages"), ("requests", "Requests")],
+                        &[
+                            ("toolchains", "Toolchains"),
+                            ("packages", "Packages"),
+                            ("requests", "Requests"),
+                        ],
                         false,
                     ),
                     definition(

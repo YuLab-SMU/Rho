@@ -316,6 +316,7 @@ fn main() {
             commands::environment::respond_environment_operation,
             commands::environment::list_installed_packages,
             commands::environment::list_lockfile_packages,
+            commands::toolchain::toolchain_doctor,
             commands::plugins::list_workspace_plugins,
             commands::plugins::get_workspace_plugin_transition,
             commands::plugins::request_workspace_plugin_enable,

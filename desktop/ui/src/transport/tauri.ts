@@ -355,6 +355,7 @@ export function createTauriUiKernelTransport(
     ...createTauriAgentSettingsTransport(invoke),
     ...createTauriAgentFileTransport(invoke),
     ...historyTransport,
+    ...environmentTransport,
     ...evidenceTransport,
     subscribeAgentInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("agent"), listener),

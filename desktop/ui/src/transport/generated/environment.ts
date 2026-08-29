@@ -11,6 +11,7 @@ export type EnvironmentInvoke = <T>(
 export const createEnvironmentCommands = (__TAURI_INVOKE: EnvironmentInvoke) => ({
 	listInstalledPackages: (limit: number | null) => __TAURI_INVOKE<InstalledPackageInventory>("list_installed_packages", { limit }),
 	listEnvironmentOperationRequests: (limit: number | null, status: string | null) => __TAURI_INVOKE<EnvironmentOperationRequestSummary[]>("list_environment_operation_requests", { limit, status }),
+	toolchainDoctor: () => __TAURI_INVOKE<ToolchainDoctorView>("toolchain_doctor"),
 });
 
 /* Types */
@@ -38,3 +39,20 @@ export type EnvironmentOperationRequestSummary = {
 };
 
 export type InstalledPackageInventory = unknown;
+
+export type ToolchainDoctorCheckView = {
+	id: string,
+	status: string,
+	detail: string,
+};
+
+export type ToolchainDoctorView = {
+	status: string,
+	configured: boolean,
+	rho_toml_sha256: string | null,
+	r_version: string | null,
+	rscript: string | null,
+	python_version: string | null,
+	python: string | null,
+	checks: ToolchainDoctorCheckView[],
+};

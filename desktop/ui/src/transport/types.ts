@@ -43,6 +43,7 @@ import type { KernelTransport } from "./kernel-generated";
 import type { CheckTransport } from "./check";
 import type { WorkbenchProjectionTransport } from "./workbench-projection";
 import type { EvidenceReadTransport } from "./evidence";
+import type { ToolchainDoctorView } from "./environment";
 import type { HistoryReadTransport } from "./history";
 
 export type {
@@ -408,5 +409,6 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   subscribeResourcesInvalidated(listener: () => void): Unsubscribe;
   subscribeAgentInvalidated(listener: () => void): Unsubscribe;
   loadDomainSurface(surfaceId: string): Promise<DomainSurfaceData>;
+  toolchainDoctor(): Promise<ToolchainDoctorView>;
   retryRun(runId: string): Promise<unknown>;
 }

@@ -3977,6 +3977,7 @@ dependencies = [
  "rho-protocol",
  "rho-server",
  "rho-store",
+ "rho-toolchain",
  "rho-ui-contract",
  "rusqlite",
  "semver",

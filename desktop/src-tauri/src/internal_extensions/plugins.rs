@@ -380,6 +380,7 @@ impl InternalPlugin for CoreWorkbenchPlugin {
                     "Environment",
                     "Inspect and operate the project scientific environment through its dedicated broker lane.",
                     &[
+                        ("toolchains", "Toolchains", read_only),
                         ("packages", "Packages", interactive),
                         ("requests", "Requests", interactive),
                     ],

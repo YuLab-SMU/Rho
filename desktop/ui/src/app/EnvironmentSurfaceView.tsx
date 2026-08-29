@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { DomainSurfaceData, SurfaceInstance, UiKernelTransport } from "../transport";
+import type { ToolchainDoctorView } from "../transport/environment";
 import {
   environmentDetail,
   environmentItemsForMode,
@@ -11,6 +12,57 @@ import {
 import type { EnvironmentMode } from "./environment-presentation";
 import { SurfaceTaskState } from "./SurfaceTaskState";
 import { workbenchFailureMessage } from "./workbench-failure";
+
+function ToolchainDoctorPanel({
+  view,
+  loading,
+  error,
+  reload,
+}: {
+  readonly view: ToolchainDoctorView | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly reload: () => void;
+}) {
+  return <section className="rho-toolchain-surface" aria-label="Project toolchains">
+    <header className="rho-environment-toolbar">
+      <div>
+        <strong>Toolchains</strong>
+        <small>{view == null ? "Checking rho.toml, rig, renv, pak, and uv" : view.status === "ready"
+          ? "Exact project environments are ready"
+          : view.status === "unmanaged" ? "No managed project environment" : "Environment admission is blocked"}</small>
+      </div>
+      <button type="button" className="rho-icon-btn" aria-label="Refresh toolchains" disabled={loading} onClick={reload}>↻</button>
+    </header>
+    {loading && view == null && <SurfaceTaskState tone="loading" title="Checking toolchains…" detail="Resolving exact project runtimes without changing environments or lockfiles." role="status" busy />}
+    {error != null && <SurfaceTaskState tone="error" title="Toolchain Doctor unavailable" detail={error} role="alert"><button type="button" onClick={reload}>Try again</button></SurfaceTaskState>}
+    {error == null && view != null && <div className="rho-toolchain-body">
+      <div className={`rho-toolchain-summary rho-toolchain-summary-${view.status}`}>
+        <span className={`rho-domain-state rho-domain-${view.status === "ready" ? "ready" : view.status === "failed" ? "error" : "warning"}`}>{view.status}</span>
+        <div><strong>{view.configured ? "rho.toml managed" : "Unmanaged project"}</strong>
+          <small>{view.rho_toml_sha256 == null ? "No configuration digest" : `Config ${view.rho_toml_sha256.slice(0, 12)}`}</small></div>
+      </div>
+      <div className="rho-toolchain-runtime-grid">
+        <article>
+          <span className="rho-eyebrow">R</span>
+          <strong>{view.r_version == null ? "Not configured" : `R ${view.r_version}`}</strong>
+          {view.rscript != null && <code>{view.rscript}</code>}
+        </article>
+        <article>
+          <span className="rho-eyebrow">Python</span>
+          <strong>{view.python_version == null ? "Not configured" : `Python ${view.python_version}`}</strong>
+          {view.python != null && <code>{view.python}</code>}
+        </article>
+      </div>
+      <ol className="rho-toolchain-checks">
+        {view.checks.map((check) => <li data-status={check.status} key={check.id}>
+          <span className={`rho-status-dot rho-status-${check.status === "ready" ? "ready" : "degraded"}`} aria-hidden="true" />
+          <div><strong>{check.id}</strong><small>{check.detail}</small></div>
+        </li>)}
+      </ol>
+    </div>}
+  </section>;
+}
 
 export function EnvironmentSurfaceView({
   instance,
@@ -27,27 +79,43 @@ export function EnvironmentSurfaceView({
       "filter" in instance.view_state && typeof instance.view_state.filter === "string"
     ? instance.view_state.filter
     : "";
+  const toolchainMode = instance.mode_id === "toolchains";
   const mode: EnvironmentMode = instance.mode_id === "requests" ? "requests" : "packages";
   const [filter, setFilter] = useState(initialFilter);
   const [searchOpen, setSearchOpen] = useState(Boolean(initialFilter));
   const [data, setData] = useState<DomainSurfaceData | null>(null);
+  const [toolchain, setToolchain] = useState<ToolchainDoctorView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await transport.loadDomainSurface(instance.surface_id));
+      if (toolchainMode) {
+        setToolchain(await transport.toolchainDoctor());
+        setData(null);
+      } else {
+        setData(await transport.loadDomainSurface(instance.surface_id));
+        setToolchain(null);
+      }
       setError(null);
     } catch (cause: unknown) {
       setError(workbenchFailureMessage(cause, "Environment could not load."));
     } finally {
       setLoading(false);
     }
-  }, [instance.surface_id, transport]);
+  }, [instance.surface_id, toolchainMode, transport]);
   useEffect(() => {
     void load();
     return transport.subscribeInvalidated(() => void load());
   }, [load, transport]);
+  if (toolchainMode) {
+    return <ToolchainDoctorPanel
+      view={toolchain}
+      loading={loading}
+      error={error}
+      reload={load}
+    />;
+  }
   const modeItems = environmentItemsForMode(data?.items ?? [], mode);
   const items = modeItems.filter((item) => environmentMatches(item, filter));
   const summary = environmentSummary(modeItems, mode);
