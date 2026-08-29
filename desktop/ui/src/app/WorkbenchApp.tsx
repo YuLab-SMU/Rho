@@ -99,7 +99,13 @@ import {
   presentAgentTurnInStudio as applyAgentStudioPresentation,
 } from "./controllers/agent-studio-presentation-controller";
 import { SurfaceInstanceMutationController } from "./controllers/surface-instance-mutation-controller";
-import { surfaceCatalogPolicy, surfaceDisplayLabel, surfaceUxProfile } from "./surface-ux";
+import {
+  COMPOSE_FLOW_STAGES,
+  compareSurfaceCatalogOrder,
+  surfaceCatalogPolicy,
+  surfaceDisplayLabel,
+  surfaceUxProfile,
+} from "./surface-ux";
 import {
   findLayoutPlacement,
   NodeOutline,
@@ -2529,9 +2535,19 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const recentProjectPaths = projectHistory.history.paths.filter((path) =>
     path !== snapshot?.project.display_path
   );
-  const componentFactories = surfaces?.catalog.factories.filter((factory) =>
+  const componentFactories = [...(surfaces?.catalog.factories.filter((factory) =>
     factory.definition.origin.kind === "application"
-    && surfaceCatalogPolicy(factory.definition.surface_id).visibility === "primary") ?? [];
+    && surfaceCatalogPolicy(factory.definition.surface_id).visibility === "primary") ?? [])]
+    .sort((left, right) => compareSurfaceCatalogOrder(
+      left.definition.surface_id,
+      right.definition.surface_id,
+    ));
+  const componentFactoryGroups = Object.entries(COMPOSE_FLOW_STAGES).map(([stage, definition]) => ({
+    stage,
+    definition,
+    factories: componentFactories.filter((factory) =>
+      surfaceCatalogPolicy(factory.definition.surface_id).flowStage === stage),
+  })).filter((group) => group.factories.length > 0);
   const developerFactories = surfaces?.catalog.factories.filter((factory) =>
     factory.definition.origin.kind === "application"
     && surfaceCatalogPolicy(factory.definition.surface_id).visibility === "developer") ?? [];
@@ -2766,7 +2782,14 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                     <span className="rho-eyebrow">Core components</span>
                     <span>{componentFactories.length}</span>
                   </div>
-                  {componentFactories.map((factory) => renderComponentFactory(factory))}
+                  {componentFactoryGroups.map(({ stage, definition, factories }) => (
+                    <section className="rho-surface-catalog-flow" data-flow-stage={stage} key={stage}>
+                      <div className="rho-surface-catalog-flow-heading">
+                        <strong>{definition.label}</strong><small>{definition.description}</small>
+                      </div>
+                      {factories.map((factory) => renderComponentFactory(factory))}
+                    </section>
+                  ))}
                   {pluginFactories.length > 0 && <details className="rho-developer-components rho-project-components">
                     <summary><span>Project extensions</span><span>{pluginFactories.length}</span></summary>
                     <p>Only Surface contributions installed for this project appear here.</p>
@@ -2966,10 +2989,10 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         <button
           type="button"
           className="rho-link"
-          disabled={surfaces?.catalog.factories.some((factory) => factory.definition.surface_id === "rho.problems") !== true}
+          disabled={surfaces?.catalog.factories.some((factory) => factory.definition.surface_id === "rho.logs") !== true}
           onClick={() => {
-            const problems = surfaces?.catalog.factories.find((factory) => factory.definition.surface_id === "rho.problems");
-            if (problems != null) run(openFactory(problems));
+            const logs = surfaces?.catalog.factories.find((factory) => factory.definition.surface_id === "rho.logs");
+            if (logs != null) run(openFactory(logs));
           }}
         >Diagnostics</button>
         <span className="rho-statusbar-path" title={snapshot?.project.display_path ?? ""}>{snapshot?.project.display_path ?? ""}</span>

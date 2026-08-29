@@ -23,9 +23,11 @@ ambient filesystem, network, Workspace R, or credential access.
 
 Rho's built-in Surfaces are application capabilities, not installed plugins.
 The UI groups them as Core Workbench, Workspace R, Results & Verification,
-Agent Collaboration, and Project Integration; only nine stable task Surfaces
-appear in Compose. Contextual result viewers stay available to commands and
-result workflows, while development fixtures remain development-only. The
+Agent Collaboration, and Project Integration; only eight stable task Surfaces
+appear in Compose, ordered as work → run → results → collaborate → project.
+Failed-run Problems, checks, evidence, rendering, logs, and other contextual
+viewers stay available to commands and result workflows instead of competing
+with Console and History, while development fixtures remain development-only. The
 project extension list contains only accepted workspace-plugin packages.
 
 Current behavior is best read from the crate public exports, the WIT contract,

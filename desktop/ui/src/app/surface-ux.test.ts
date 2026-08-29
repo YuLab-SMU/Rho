@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import {
+  COMPOSE_FLOW_STAGES,
   FIRST_PARTY_SURFACE_CATALOG,
   FIRST_PARTY_SURFACE_UX,
+  compareSurfaceCatalogOrder,
   humanizeSurfaceId,
   surfaceCatalogPolicy,
   surfaceDisplayLabel,
@@ -38,23 +40,58 @@ describe("Surface UX contract", () => {
     for (const surfaceId of factoryIds) expect(FIRST_PARTY_SURFACE_UX[surfaceId]).toBeDefined();
   });
 
-  it("keeps only nine stable workbench components in the primary catalog", () => {
+  it("keeps only eight stable workbench components in the primary catalog", () => {
     const primary = EXPECTED_FIRST_PARTY.filter(
       (surfaceId) => surfaceCatalogPolicy(surfaceId).visibility === "primary",
     );
     expect(primary).toEqual([
       "rho.agent", "rho.console", "rho.environment", "rho.file-source", "rho.git",
-      "rho.navigator", "rho.plots", "rho.problems", "rho.runs",
+      "rho.navigator", "rho.plots", "rho.runs",
     ]);
-    expect(surfaceCatalogPolicy("rho.check-result")).toEqual({
+    expect(surfaceCatalogPolicy("rho.check-result")).toMatchObject({
       visibility: "contextual",
       capabilityGroup: "results",
+      flowStage: "results",
     });
+    expect(surfaceCatalogPolicy("rho.problems").visibility).toBe("contextual");
     expect(surfaceCatalogPolicy("rho.surface-playground").visibility).toBe("developer");
-    expect(surfaceCatalogPolicy("ui.surface.volcano")).toEqual({
+    expect(surfaceCatalogPolicy("ui.surface.volcano")).toMatchObject({
       visibility: "primary",
       capabilityGroup: "project_extension",
+      flowStage: "project",
     });
+  });
+
+  it("fixes the information flow and handoff order for the whole primary workbench", () => {
+    const primary = EXPECTED_FIRST_PARTY
+      .filter((surfaceId) => surfaceCatalogPolicy(surfaceId).visibility === "primary")
+      .sort(compareSurfaceCatalogOrder);
+    expect(primary).toEqual([
+      "rho.navigator",
+      "rho.file-source",
+      "rho.console",
+      "rho.plots",
+      "rho.runs",
+      "rho.agent",
+      "rho.environment",
+      "rho.git",
+    ]);
+    expect(Object.keys(COMPOSE_FLOW_STAGES)).toEqual([
+      "work", "run", "results", "collaborate", "project",
+    ]);
+    const orders = primary.map((surfaceId) => surfaceCatalogPolicy(surfaceId).composeOrder);
+    expect(new Set(orders).size).toBe(orders.length);
+    for (const policy of Object.values(FIRST_PARTY_SURFACE_CATALOG)) {
+      for (const target of policy.handoffTargets) {
+        expect(FIRST_PARTY_SURFACE_CATALOG[target]).toBeDefined();
+      }
+    }
+    expect(surfaceCatalogPolicy("rho.console").handoffTargets).toEqual([
+      "rho.plots", "rho.runs",
+    ]);
+    expect(surfaceCatalogPolicy("rho.agent").handoffTargets).toEqual([
+      "rho.file-source", "rho.console", "rho.plots", "rho.runs",
+    ]);
   });
 
   it("turns project component identifiers into human labels without hiding first-party names", () => {

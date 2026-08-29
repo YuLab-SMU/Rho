@@ -6557,24 +6557,24 @@ describe("Studio foundation app", () => {
     expect(environment.querySelectorAll(".rho-environment-record")).toHaveLength(2);
   });
 
-  it("creates intrinsic and full domain Surfaces from the shared factory catalog", async () => {
+  it("keeps contextual failed-run Problems out of Compose but reachable by command", async () => {
     const { container } = await renderApp();
     await openInspector(container);
-    const open = async (surfaceId: string) => {
-      const factory = container.querySelector<HTMLElement>(
-        `[data-surface-factory='${surfaceId}']`,
-      );
-      if (factory == null) throw new Error(`Factory ${surfaceId} is missing`);
-      await act(async () => {
-        factory.querySelector<HTMLButtonElement>("button")!.click();
-        for (let index = 0; index < 8; index += 1) await Promise.resolve();
-      });
-    };
-    await open("rho.problems");
-    await open("rho.environment");
+    expect(container.querySelector("[data-surface-factory='rho.problems']")).toBeNull();
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "k", metaKey: true }));
+      await settle();
+      const search = container.querySelector<HTMLInputElement>("[aria-label='Search commands']")!;
+      const setInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setInputValue.call(search, "rho.surface.open.problems");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-command-results button")]
+        .find((button) => button.textContent?.includes("rho.surface.open.problems"))!.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
     expect(container.querySelector("[data-surface-id='rho.problems']")?.classList)
       .toContain("rho-surface-strip");
-    expect(container.querySelector("[data-surface-id='rho.environment']")).not.toBeNull();
   });
 
   it("keeps normal components focused while separating project and developer components", async () => {
@@ -6591,7 +6591,18 @@ describe("Studio foundation app", () => {
     expect(catalog.querySelector("[data-surface-factory='rho.settings']")).toBeNull();
     expect(catalog.querySelector("[data-surface-factory='rho.check-result']")).toBeNull();
     expect(catalog.querySelector("[data-surface-factory='rho.render-jobs']")).toBeNull();
-    expect(catalog.querySelectorAll(":scope > [data-surface-factory]")).toHaveLength(9);
+    expect(catalog.querySelector("[data-surface-factory='rho.problems']")).toBeNull();
+    const flowGroups = [...catalog.querySelectorAll<HTMLElement>(".rho-surface-catalog-flow")];
+    expect(flowGroups.map((group) => group.dataset.flowStage)).toEqual([
+      "work", "run", "results", "collaborate", "project",
+    ]);
+    const coreFactories = [...catalog.querySelectorAll<HTMLElement>(
+      ".rho-surface-catalog-flow > [data-surface-factory]",
+    )];
+    expect(coreFactories.map((factory) => factory.dataset.surfaceFactory)).toEqual([
+      "rho.navigator", "rho.file-source", "rho.console", "rho.plots",
+      "rho.runs", "rho.agent", "rho.environment", "rho.git",
+    ]);
     expect(catalog.querySelector("[data-surface-factory='ui.surface.differential-expression'] .rho-component-origin")?.textContent)
       .toBe("Project component");
 

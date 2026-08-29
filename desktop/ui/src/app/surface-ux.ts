@@ -1,5 +1,6 @@
 export type SurfaceAreaRole = "primary" | "support" | "context" | "strip" | "developer";
 export type SurfaceCatalogVisibility = "primary" | "contextual" | "internal" | "developer";
+export type SurfaceFlowStage = "work" | "run" | "results" | "collaborate" | "project" | "developer";
 export type SurfaceCapabilityGroup =
   | "workbench"
   | "workspace_r"
@@ -12,7 +13,21 @@ export type SurfaceCapabilityGroup =
 export interface SurfaceCatalogPolicy {
   readonly visibility: SurfaceCatalogVisibility;
   readonly capabilityGroup: SurfaceCapabilityGroup;
+  readonly flowStage: SurfaceFlowStage;
+  readonly composeOrder: number;
+  readonly handoffTargets: readonly string[];
 }
+
+export const COMPOSE_FLOW_STAGES: Readonly<Record<
+  Exclude<SurfaceFlowStage, "developer">,
+  { readonly label: string; readonly description: string }
+>> = {
+  work: { label: "Work", description: "Find and edit project material." },
+  run: { label: "Run", description: "Execute code in Workspace R." },
+  results: { label: "Results", description: "Inspect outputs and durable execution history." },
+  collaborate: { label: "Collaborate", description: "Direct Agent work and review its handoffs." },
+  project: { label: "Project", description: "Maintain dependencies and source control." },
+};
 
 export const SURFACE_CAPABILITY_GROUPS: Readonly<Record<
   Exclude<SurfaceCapabilityGroup, "project_extension" | "developer">,
@@ -41,24 +56,78 @@ export const SURFACE_CAPABILITY_GROUPS: Readonly<Record<
 };
 
 export const FIRST_PARTY_SURFACE_CATALOG: Readonly<Record<string, SurfaceCatalogPolicy>> = {
-  "rho.agent": { visibility: "primary", capabilityGroup: "agent" },
-  "rho.check-result": { visibility: "contextual", capabilityGroup: "results" },
-  "rho.console": { visibility: "primary", capabilityGroup: "workspace_r" },
-  "rho.environment": { visibility: "primary", capabilityGroup: "workspace_r" },
-  "rho.evidence": { visibility: "contextual", capabilityGroup: "results" },
-  "rho.file-preview": { visibility: "contextual", capabilityGroup: "workbench" },
-  "rho.file-source": { visibility: "primary", capabilityGroup: "workbench" },
-  "rho.git": { visibility: "primary", capabilityGroup: "project_integration" },
-  "rho.help": { visibility: "contextual", capabilityGroup: "workbench" },
-  "rho.logs": { visibility: "contextual", capabilityGroup: "results" },
-  "rho.navigator": { visibility: "primary", capabilityGroup: "workbench" },
-  "rho.plots": { visibility: "primary", capabilityGroup: "results" },
-  "rho.problems": { visibility: "primary", capabilityGroup: "results" },
-  "rho.render-jobs": { visibility: "contextual", capabilityGroup: "results" },
-  "rho.runs": { visibility: "primary", capabilityGroup: "results" },
-  "rho.settings": { visibility: "internal", capabilityGroup: "workbench" },
-  "rho.status": { visibility: "internal", capabilityGroup: "workspace_r" },
-  "rho.surface-playground": { visibility: "developer", capabilityGroup: "developer" },
+  "rho.navigator": {
+    visibility: "primary", capabilityGroup: "workbench", flowStage: "work", composeOrder: 0,
+    handoffTargets: ["rho.file-source", "rho.runs"],
+  },
+  "rho.file-source": {
+    visibility: "primary", capabilityGroup: "workbench", flowStage: "work", composeOrder: 10,
+    handoffTargets: ["rho.console"],
+  },
+  "rho.file-preview": {
+    visibility: "contextual", capabilityGroup: "workbench", flowStage: "work", composeOrder: 11,
+    handoffTargets: [],
+  },
+  "rho.console": {
+    visibility: "primary", capabilityGroup: "workspace_r", flowStage: "run", composeOrder: 20,
+    handoffTargets: ["rho.plots", "rho.runs"],
+  },
+  "rho.status": {
+    visibility: "internal", capabilityGroup: "workspace_r", flowStage: "run", composeOrder: 21,
+    handoffTargets: [],
+  },
+  "rho.plots": {
+    visibility: "primary", capabilityGroup: "results", flowStage: "results", composeOrder: 30,
+    handoffTargets: ["rho.agent"],
+  },
+  "rho.runs": {
+    visibility: "primary", capabilityGroup: "results", flowStage: "results", composeOrder: 40,
+    handoffTargets: ["rho.file-source", "rho.agent"],
+  },
+  "rho.render-jobs": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 41,
+    handoffTargets: ["rho.runs"],
+  },
+  "rho.problems": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 42,
+    handoffTargets: ["rho.runs", "rho.file-source"],
+  },
+  "rho.check-result": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 43,
+    handoffTargets: ["rho.file-source", "rho.evidence"],
+  },
+  "rho.evidence": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 44,
+    handoffTargets: ["rho.file-source"],
+  },
+  "rho.logs": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 45,
+    handoffTargets: [],
+  },
+  "rho.agent": {
+    visibility: "primary", capabilityGroup: "agent", flowStage: "collaborate", composeOrder: 50,
+    handoffTargets: ["rho.file-source", "rho.console", "rho.plots", "rho.runs"],
+  },
+  "rho.environment": {
+    visibility: "primary", capabilityGroup: "workspace_r", flowStage: "project", composeOrder: 60,
+    handoffTargets: ["rho.console"],
+  },
+  "rho.git": {
+    visibility: "primary", capabilityGroup: "project_integration", flowStage: "project", composeOrder: 70,
+    handoffTargets: ["rho.file-source"],
+  },
+  "rho.help": {
+    visibility: "contextual", capabilityGroup: "workbench", flowStage: "project", composeOrder: 80,
+    handoffTargets: [],
+  },
+  "rho.settings": {
+    visibility: "internal", capabilityGroup: "workbench", flowStage: "project", composeOrder: 81,
+    handoffTargets: [],
+  },
+  "rho.surface-playground": {
+    visibility: "developer", capabilityGroup: "developer", flowStage: "developer", composeOrder: 999,
+    handoffTargets: [],
+  },
 };
 
 export interface SurfaceUxProfile {
@@ -173,8 +242,20 @@ export function humanizeSurfaceId(surfaceId: string): string {
 
 export function surfaceCatalogPolicy(surfaceId: string): SurfaceCatalogPolicy {
   return FIRST_PARTY_SURFACE_CATALOG[surfaceId] ?? (surfaceId.startsWith("rho.")
-    ? { visibility: "internal", capabilityGroup: "workbench" }
-    : { visibility: "primary", capabilityGroup: "project_extension" });
+    ? {
+        visibility: "internal", capabilityGroup: "workbench", flowStage: "project",
+        composeOrder: 900, handoffTargets: [],
+      }
+    : {
+        visibility: "primary", capabilityGroup: "project_extension", flowStage: "project",
+        composeOrder: 900, handoffTargets: [],
+      });
+}
+
+export function compareSurfaceCatalogOrder(leftSurfaceId: string, rightSurfaceId: string): number {
+  const left = surfaceCatalogPolicy(leftSurfaceId);
+  const right = surfaceCatalogPolicy(rightSurfaceId);
+  return left.composeOrder - right.composeOrder || leftSurfaceId.localeCompare(rightSurfaceId);
 }
 
 export function surfaceDisplayLabel(surfaceId: string): string {

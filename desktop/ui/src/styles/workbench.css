@@ -655,6 +655,11 @@
     color: var(--rho-muted);
     font-size: var(--rho-text-caption);
   }
+  .rho-surface-catalog-flow { margin-top: var(--rho-space-4); }
+  .rho-surface-catalog-flow + .rho-surface-catalog-flow { padding-top: var(--rho-space-3); border-top: var(--rho-border); }
+  .rho-surface-catalog-flow-heading { display: grid; gap: var(--rho-space-1); }
+  .rho-surface-catalog-flow-heading strong { color: var(--rho-ink); font-size: var(--rho-text-ui); }
+  .rho-surface-catalog-flow-heading small { color: var(--rho-muted); font-size: var(--rho-text-caption); line-height: 1.4; }
   .rho-surface-factory {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

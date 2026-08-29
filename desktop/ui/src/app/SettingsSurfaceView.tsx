@@ -13,6 +13,7 @@ import { ModelOptionsDialog } from "./ModelOptionsDialog";
 import { SurfaceTaskState } from "./SurfaceTaskState";
 import {
   SURFACE_CAPABILITY_GROUPS,
+  compareSurfaceCatalogOrder,
   surfaceCatalogPolicy,
   surfaceDisplayLabel,
 } from "./surface-ux";
@@ -1038,7 +1039,11 @@ function ComponentsSettingsModule({ factories }: { readonly factories: readonly 
         groupId,
         definition,
         factories: application.filter((factory) =>
-          surfaceCatalogPolicy(factory.definition.surface_id).capabilityGroup === groupId),
+          surfaceCatalogPolicy(factory.definition.surface_id).capabilityGroup === groupId)
+          .sort((left, right) => compareSurfaceCatalogOrder(
+            left.definition.surface_id,
+            right.definition.surface_id,
+          )),
       })),
       project: factories.filter((factory) => factory.definition.origin.kind === "workspace_plugin"),
     };
