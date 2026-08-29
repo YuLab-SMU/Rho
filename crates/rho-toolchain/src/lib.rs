@@ -11,6 +11,7 @@ mod config;
 mod doctor;
 mod journal;
 mod receipt;
+mod remote;
 mod rig;
 mod target;
 
@@ -34,6 +35,10 @@ pub use receipt::{
     EnvironmentReceipt, EnvironmentReceiptMode, PythonEnvironmentReceipt, REnvironmentReceipt,
     RLibraryLayers, environment_receipt_path, read_and_validate_environment_receipt,
     write_environment_receipt,
+};
+pub use remote::{
+    RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse, invoke_remote_helper,
+    verify_ssh_host_fingerprint,
 };
 pub use rig::{RigInstallation, RigInventory, parse_rig_inventory, resolve_r_installation};
 pub use target::{
