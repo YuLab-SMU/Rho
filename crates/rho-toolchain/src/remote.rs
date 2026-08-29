@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     CommandSpec, ComputeHost, ComputeTarget, EnvironmentReceipt, OperationJournal, OperationKind,
     OperationStatus, RemoteOperationMirror, RemoteOperationMirrorStatus, ToolchainError,
-    create_remote_operation_mirror, read_remote_operation_mirror, update_remote_operation_mirror,
-    validate_target_id,
+    create_remote_operation_mirror, read_remote_operation_mirror, remote_operation_mirror_path,
+    update_remote_operation_mirror, validate_target_id,
 };
 
 const MAX_REMOTE_FRAME_BYTES: usize = 1024 * 1024;
@@ -431,6 +431,27 @@ where
                 "remote effect payload requires operation_id".to_string(),
             )
         })?;
+    let mirror_path = remote_operation_mirror_path(local_project_root, operation_id)?;
+    if mirror_path.exists() {
+        let existing = read_remote_operation_mirror(local_project_root, operation_id)?;
+        if !existing.matches_request(request)? {
+            return Err(ToolchainError::InvalidJournal(format!(
+                "remote operation identity {operation_id} is already bound to another request"
+            )));
+        }
+        if matches!(
+            existing.status,
+            RemoteOperationMirrorStatus::Dispatching | RemoteOperationMirrorStatus::Uncertain
+        ) {
+            return Err(ToolchainError::RemoteOperationUncertain(
+                operation_id.to_string(),
+            ));
+        }
+        return Err(ToolchainError::InvalidJournal(format!(
+            "remote operation identity already exists in {:?} state: {operation_id}; use a new operation identity",
+            existing.status
+        )));
+    }
     let mut mirror = create_remote_operation_mirror(local_project_root, operation_id, request)?;
     mirror.status = RemoteOperationMirrorStatus::Dispatching;
     mirror.updated_at = Utc::now().to_rfc3339();
@@ -617,6 +638,28 @@ mod tests {
             effects: Vec::new(),
             error: (status == OperationStatus::Failed).then(|| "effect failed".to_string()),
         }
+    }
+
+    #[test]
+    fn uncertain_operation_cannot_be_blindly_dispatched_again() {
+        let root = tempfile::tempdir().unwrap();
+        let request = uncertain_request("run-no-blind-retry");
+        let _ = invoke_remote_effect_with(root.path(), &request, || {
+            Err(remote_transport(true, "connection reset"))
+        });
+        let error = invoke_remote_effect_with(root.path(), &request, || {
+            panic!("uncertain operation reached the SSH transport twice")
+        })
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            ToolchainError::RemoteOperationUncertain(ref id) if id == "run-no-blind-retry"
+        ));
+        assert!(error.completion_uncertain());
+        let mirror =
+            crate::read_remote_operation_mirror(root.path(), "run-no-blind-retry").unwrap();
+        assert_eq!(mirror.status, RemoteOperationMirrorStatus::Uncertain);
+        assert!(mirror.finished_at.is_none());
     }
 
     #[test]

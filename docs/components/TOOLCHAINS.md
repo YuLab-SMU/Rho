@@ -99,8 +99,10 @@ read-only `InspectOperation` then returns the bounded durable remote journal.
 Only a journal with matching operation, project, target, configuration, kind,
 and status can converge the mirror to `succeeded` or `failed`; a still-running
 journal remains uncertain, while a verified missing pre-spawn journal converges
-to a known no-command-admission failure. No unsupported target silently falls
-back to local execution.
+to a known no-command-admission failure. Dispatch refuses any second request
+for a `dispatching` or `uncertain` operation identity before inspection; retry
+is a deliberate new operation only after the original terminal truth is known.
+No unsupported target silently falls back to local execution.
 
 ## Resolution and execution
 

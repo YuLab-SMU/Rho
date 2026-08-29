@@ -93,6 +93,10 @@ pub enum ToolchainError {
         completion_uncertain: bool,
         detail: String,
     },
+    #[error(
+        "remote operation outcome is uncertain: {0}; reconcile with InspectOperation before choosing a new operation identity"
+    )]
+    RemoteOperationUncertain(String),
     #[error("toolchain journal is invalid: {0}")]
     InvalidJournal(String),
     #[error("environment receipt is invalid: {0}")]
@@ -110,7 +114,7 @@ impl ToolchainError {
             Self::RemoteTransport {
                 completion_uncertain: true,
                 ..
-            }
+            } | Self::RemoteOperationUncertain(_)
         )
     }
 }

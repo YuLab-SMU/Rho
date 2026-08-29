@@ -79,7 +79,7 @@ impl RemoteOperationMirror {
                 "remote request and mirror operation identities differ".to_string(),
             ));
         }
-        let request_bytes = serde_json::to_vec(request)?;
+        let request_sha256 = request_sha256(request)?;
         let now = Utc::now().to_rfc3339();
         let mirror = Self {
             schema_version: REMOTE_OPERATION_MIRROR_SCHEMA,
@@ -92,7 +92,7 @@ impl RemoteOperationMirror {
             rho_toml_sha256: request.rho_toml_sha256.clone(),
             target_id: request.target_id.clone(),
             target_registry_sha256: request.target_registry_sha256.clone(),
-            request_sha256: format!("{:x}", Sha256::digest(request_bytes)),
+            request_sha256,
             created_at: now.clone(),
             updated_at: now,
             finished_at: None,
@@ -165,6 +165,16 @@ impl RemoteOperationMirror {
             ));
         }
         Ok(())
+    }
+
+    pub fn matches_request(&self, request: &RemoteHelperRequest) -> Result<bool, ToolchainError> {
+        Ok(self.request_id == request.request_id
+            && self.operation == request.operation
+            && self.remote_project_root == request.project_root
+            && self.rho_toml_sha256 == request.rho_toml_sha256
+            && self.target_id == request.target_id
+            && self.target_registry_sha256 == request.target_registry_sha256
+            && self.request_sha256 == request_sha256(request)?)
     }
 
     fn immutable_identity_matches(&self, other: &Self) -> bool {
@@ -277,6 +287,13 @@ pub fn update_remote_operation_mirror(
         )));
     }
     persist(&path, mirror, true)
+}
+
+fn request_sha256(request: &RemoteHelperRequest) -> Result<String, ToolchainError> {
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(request)?)
+    ))
 }
 
 fn valid_sha256(value: &str) -> bool {
