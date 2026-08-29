@@ -978,6 +978,9 @@
                 crate::commands::environment::list_environment_operation_requests,
                 crate::commands::toolchain::toolchain_doctor,
                 crate::commands::resource_monitor::resource_monitor_snapshot,
+                crate::commands::remote_connection::compute_target_list,
+                crate::commands::remote_connection::remote_connection_probe,
+                crate::commands::remote_connection::configure_ssh_target,
             ])
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)

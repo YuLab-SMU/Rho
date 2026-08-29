@@ -1,8 +1,13 @@
 import {
   createEnvironmentCommands,
+  type ComputeTargetListView as ComputeTargetListViewWire,
+  type ConfigureSshTargetRequest as ConfigureSshTargetRequestWire,
+  type ConfigureSshTargetView as ConfigureSshTargetViewWire,
   type EnvironmentInvoke,
   type EnvironmentOperationRequestSummary as EnvironmentOperationRequestSummaryWire,
   type ResourceMonitorView as ResourceMonitorViewWire,
+  type SshConnectionProbeRequest as SshConnectionProbeRequestWire,
+  type SshConnectionProbeView as SshConnectionProbeViewWire,
   type ToolchainDoctorView as ToolchainDoctorViewWire,
 } from "./generated/environment";
 
@@ -18,6 +23,11 @@ export type EnvironmentOperationRequestSummary =
   DeepReadonly<EnvironmentOperationRequestSummaryWire>;
 export type ToolchainDoctorView = DeepReadonly<ToolchainDoctorViewWire>;
 export type ResourceMonitorView = DeepReadonly<ResourceMonitorViewWire>;
+export type ComputeTargetListView = DeepReadonly<ComputeTargetListViewWire>;
+export type SshConnectionProbeRequest = DeepReadonly<SshConnectionProbeRequestWire>;
+export type SshConnectionProbeView = DeepReadonly<SshConnectionProbeViewWire>;
+export type ConfigureSshTargetRequest = DeepReadonly<ConfigureSshTargetRequestWire>;
+export type ConfigureSshTargetView = DeepReadonly<ConfigureSshTargetViewWire>;
 
 export interface EnvironmentReadTransport {
   listInstalledPackages(limit?: number): Promise<unknown>;
@@ -27,6 +37,9 @@ export interface EnvironmentReadTransport {
   ): Promise<readonly EnvironmentOperationRequestSummary[]>;
   toolchainDoctor(): Promise<ToolchainDoctorView>;
   resourceMonitorSnapshot(): Promise<ResourceMonitorView>;
+  computeTargetList(): Promise<ComputeTargetListView>;
+  remoteConnectionProbe(request: SshConnectionProbeRequest): Promise<SshConnectionProbeView>;
+  configureSshTarget(request: ConfigureSshTargetRequest): Promise<ConfigureSshTargetView>;
 }
 
 export function createTauriEnvironmentReadTransport(
@@ -39,5 +52,11 @@ export function createTauriEnvironmentReadTransport(
       commands.listEnvironmentOperationRequests(limit ?? null, status ?? null),
     toolchainDoctor: () => commands.toolchainDoctor(),
     resourceMonitorSnapshot: () => commands.resourceMonitorSnapshot(),
+    computeTargetList: () => commands.computeTargetList(),
+    remoteConnectionProbe: (request) => commands.remoteConnectionProbe(request),
+    configureSshTarget: (request) => commands.configureSshTarget({
+      ...request,
+      capabilities: [...request.capabilities],
+    }),
   };
 }

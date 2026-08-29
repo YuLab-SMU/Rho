@@ -29,7 +29,9 @@ Important runtime owners include:
   Workspace startup admits the exact local/native R realization before Ark
   launch; Runtime Run and auxiliary Live entry points revalidate the cached
   config/registry binding and recent resource-governance observation before
-  persistence or process dispatch. Environment → Resources refreshes bounded
+  persistence or process dispatch. Environment → Connections provides host-key
+  confirmation, one-time password/key bootstrap, target persistence, project
+  selection, and Slurm discovery without requiring a terminal. Environment → Resources refreshes bounded
   local/SSH device telemetry across native, Docker, and Conda target identities
   every 15 seconds while that view is open. The workbench taskbar reuses the
   same typed Environment read surface as a three-metric CPU/RAM/disk panel,

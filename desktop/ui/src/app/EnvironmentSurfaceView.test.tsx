@@ -133,6 +133,84 @@ describe("Environment resource governance", () => {
     expect(host.querySelector("progress")?.getAttribute("value")).toBe("9500");
   });
 
+  it("configures an SSH Slurm target without requiring a terminal", async () => {
+    const probe = vi.fn(async (request: { readonly confirmed_fingerprint: string | null }) => request.confirmed_fingerprint == null
+      ? {
+          status: "host_key_confirmation_required", fingerprints: [{ algorithm: "ED25519", sha256: "SHA256:test" }],
+          authenticated: false, host_name: null, slurm_version: null, partitions: [], helper_available: false,
+          message: "Confirm one discovered host fingerprint before authentication.",
+        }
+      : {
+          status: "ready", fingerprints: [{ algorithm: "ED25519", sha256: "SHA256:test" }],
+          authenticated: true, host_name: "master", slurm_version: "slurm 19.05.2",
+          partitions: [{ partition: "gpu_batch", available: "up", nodes: "1", gres: "gpu:3", cpus: "2/46/0/48" }],
+          helper_available: false, message: "SSH is ready.",
+        });
+    const configure = vi.fn(async () => ({
+      target: {
+        target_id: "lab-hpc", selected: true, host_kind: "ssh", host: "172.16.153.230", port: 2329,
+        username: "user", remote_root: "/project", isolation_kind: "native", capabilities: ["cpu", "gpu"],
+        identity_file: "/rho/ssh/lab-hpc/id_ed25519", identity_available: true,
+      },
+      probe: await probe({ confirmed_fingerprint: "SHA256:test" }),
+      project_selected: true,
+    }));
+    const transport = {
+      computeTargetList: vi.fn(async () => ({
+        selected_target_id: "local", targets_yaml: "/rho/targets.yaml",
+        targets: [{ target_id: "local", selected: true, host_kind: "local", host: null, port: null, username: null, remote_root: null, isolation_kind: "native", capabilities: ["cpu"], identity_file: null, identity_available: true }],
+      })),
+      remoteConnectionProbe: probe,
+      configureSshTarget: configure,
+      subscribeInvalidated: vi.fn(() => () => undefined),
+    } as unknown as UiKernelTransport;
+    const instance = { ...resourceSurface(), mode_id: "connections" };
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () => {
+      root.render(<EnvironmentSurfaceView instance={instance} transport={transport} persist={vi.fn()} reportError={vi.fn()} />);
+      await settle();
+    });
+    const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    const enter = async (label: string, value: string) => {
+      const input = [...host.querySelectorAll<HTMLInputElement>("label input")]
+        .find((candidate) => candidate.closest("label")?.textContent?.startsWith(label))!;
+      await act(async () => {
+        setInput.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        await settle();
+      });
+    };
+    await enter("Target name", "lab-hpc");
+    await enter("Address", "172.16.153.230");
+    await enter("SSH port", "2329");
+    await enter("Username", "user");
+    await enter("Remote project folder", "/project");
+    await enter("One-time password", "one-time-secret");
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Inspect host")!.click();
+      await settle();
+    });
+    expect(host.textContent).toContain("Confirm host identity");
+    await act(async () => {
+      host.querySelector<HTMLInputElement>("input[name='ssh-fingerprint']")!.click();
+      [...host.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Confirm fingerprint and test login")!.click();
+      await settle();
+    });
+    expect(host.textContent).toContain("slurm 19.05.2");
+    expect(host.textContent).toContain("gpu_batch · 1 node(s) · gpu:3");
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Install key and save target")!.click();
+      await settle();
+    });
+    expect(configure).toHaveBeenCalledOnce();
+    expect(host.querySelector<HTMLInputElement>("input[type='password']")?.value).toBe("");
+  });
+
   it("turns the status bar into a live three-metric Environment panel", async () => {
     const transport = {
       resourceMonitorSnapshot: vi.fn(async () => snapshot),
@@ -153,6 +231,7 @@ describe("Environment resource governance", () => {
         agentLabel="Agent runtime needs attention"
         activeOperations={2}
         openResources={openResources}
+        openConnections={vi.fn()}
         openDiagnostics={openDiagnostics}
         diagnosticsAvailable
       />);

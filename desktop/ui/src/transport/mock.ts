@@ -290,7 +290,7 @@ export function createMockUiKernelTransport(
   const firstPartyFactorySpecs = [
     ["rho.agent", "Agent", [["conversation", "Conversation"], ["activity", "Activity"], ["composer", "Composer"]], false],
     ["rho.settings", "Settings", [["settings", "Settings"]], false],
-    ["rho.environment", "Environment", [["toolchains", "Toolchains"], ["resources", "Resources"], ["packages", "Packages"], ["requests", "Requests"]], false],
+    ["rho.environment", "Environment", [["toolchains", "Toolchains"], ["connections", "Connections"], ["resources", "Resources"], ["packages", "Packages"], ["requests", "Requests"]], false],
     ["rho.navigator", "Navigator", [["files", "Files"], ["runs", "History"]], false],
     ["rho.evidence", "Evidence", [["claims", "Claims"]], false],
     ["rho.git", "Git", [["changes", "Changes"], ["history", "History"]], false],
@@ -3476,6 +3476,77 @@ export function createMockUiKernelTransport(
         }],
         total_targets: 1,
         truncated: false,
+      };
+    },
+    async computeTargetList() {
+      return {
+        selected_target_id: "local",
+        targets_yaml: "/mock/.rho/targets.yaml",
+        targets: [{
+          target_id: "local",
+          selected: true,
+          host_kind: "local",
+          host: null,
+          port: null,
+          username: null,
+          remote_root: null,
+          isolation_kind: "native",
+          capabilities: ["cpu"],
+          identity_file: null,
+          identity_available: true,
+        }],
+      };
+    },
+    async remoteConnectionProbe(request) {
+      const fingerprints = [{ algorithm: "ED25519", sha256: "SHA256:mock-host-key" }];
+      if (request.confirmed_fingerprint == null) {
+        return {
+          status: "host_key_confirmation_required",
+          fingerprints,
+          authenticated: false,
+          host_name: null,
+          slurm_version: null,
+          partitions: [],
+          helper_available: false,
+          message: "Confirm one discovered host fingerprint before authentication.",
+        };
+      }
+      return {
+        status: "ready",
+        fingerprints,
+        authenticated: true,
+        host_name: "master",
+        slurm_version: "slurm 19.05.2",
+        partitions: [{ partition: "gpu_batch", available: "up", nodes: "1", gres: "gpu:3", cpus: "2/46/0/48" }],
+        helper_available: false,
+        message: "SSH is ready. Install the Rho remote Helper before remote execution.",
+      };
+    },
+    async configureSshTarget(request) {
+      const probe = await this.remoteConnectionProbe({
+        host: request.host,
+        port: request.port,
+        username: request.username,
+        password: null,
+        identity_file: request.identity_file,
+        confirmed_fingerprint: request.confirmed_fingerprint,
+      });
+      return {
+        target: {
+          target_id: request.target_id,
+          selected: request.select_for_project,
+          host_kind: "ssh",
+          host: request.host,
+          port: request.port,
+          username: request.username,
+          remote_root: request.remote_root,
+          isolation_kind: "native",
+          capabilities: request.capabilities,
+          identity_file: request.install_managed_key ? `/mock/.rho/ssh/${request.target_id}/id_ed25519` : request.identity_file,
+          identity_available: true,
+        },
+        probe,
+        project_selected: request.select_for_project,
       };
     },
     async loadDomainSurface(surfaceId) {

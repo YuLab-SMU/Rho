@@ -38,6 +38,7 @@ specta.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2.10.1"
 tempfile.workspace = true
+toml_edit.workspace = true
 tar = "0.4"
 tokio.workspace = true
 uuid.workspace = true

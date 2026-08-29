@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { DomainSurfaceData, SurfaceInstance, UiKernelTransport } from "../transport";
-import type { ResourceMonitorView, ToolchainDoctorView } from "../transport/environment";
+import type {
+  ComputeTargetListView,
+  ConfigureSshTargetRequest,
+  ResourceMonitorView,
+  SshConnectionProbeView,
+  ToolchainDoctorView,
+} from "../transport/environment";
 import {
   environmentDetail,
   environmentItemsForMode,
@@ -63,6 +69,175 @@ function ToolchainDoctorPanel({
         </li>)}
       </ol>
     </div>}
+  </section>;
+}
+
+interface ConnectionDraft {
+  readonly target_id: string;
+  readonly host: string;
+  readonly port: string;
+  readonly username: string;
+  readonly password: string;
+  readonly remote_root: string;
+  readonly identity_file: string;
+  readonly cpu: boolean;
+  readonly gpu: boolean;
+  readonly install_managed_key: boolean;
+  readonly select_for_project: boolean;
+}
+
+const EMPTY_CONNECTION: ConnectionDraft = {
+  target_id: "",
+  host: "",
+  port: "22",
+  username: "",
+  password: "",
+  remote_root: "",
+  identity_file: "",
+  cpu: true,
+  gpu: false,
+  install_managed_key: true,
+  select_for_project: true,
+};
+
+function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTransport }) {
+  const [targets, setTargets] = useState<ComputeTargetListView | null>(null);
+  const [draft, setDraft] = useState<ConnectionDraft>(EMPTY_CONNECTION);
+  const [probe, setProbe] = useState<SshConnectionProbeView | null>(null);
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"list" | "probe" | "save" | null>("list");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const loadTargets = useCallback(async () => {
+    try {
+      setBusy((current) => current ?? "list");
+      setTargets(await transport.computeTargetList());
+      setError(null);
+    } catch (cause: unknown) {
+      setError(workbenchFailureMessage(cause, "Compute targets could not load."));
+    } finally {
+      setBusy((current) => current === "list" ? null : current);
+    }
+  }, [transport]);
+  useEffect(() => { void loadTargets(); }, [loadTargets]);
+  const probeRequest = (confirmedFingerprint: string | null) => ({
+    host: draft.host.trim(),
+    port: Number(draft.port),
+    username: draft.username.trim(),
+    password: draft.password || null,
+    identity_file: draft.identity_file.trim() || null,
+    confirmed_fingerprint: confirmedFingerprint,
+  });
+  const inspect = async (confirmedFingerprint: string | null) => {
+    setBusy("probe");
+    try {
+      const next = await transport.remoteConnectionProbe(probeRequest(confirmedFingerprint));
+      setProbe(next);
+      if (confirmedFingerprint != null) setFingerprint(confirmedFingerprint);
+      else if (next.fingerprints.length === 1) setFingerprint(next.fingerprints[0]!.sha256);
+      setError(null);
+    } catch (cause: unknown) {
+      setError(workbenchFailureMessage(cause, "SSH connection test failed."));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const configure = async () => {
+    if (fingerprint == null) {
+      setError("Inspect and confirm the host fingerprint first.");
+      return;
+    }
+    setBusy("save");
+    try {
+      const capabilities = [draft.cpu ? "cpu" : null, draft.gpu ? "gpu" : null]
+        .filter((value): value is string => value != null);
+      const request: ConfigureSshTargetRequest = {
+        target_id: draft.target_id.trim(),
+        host: draft.host.trim(),
+        port: Number(draft.port),
+        username: draft.username.trim(),
+        password: draft.password || null,
+        confirmed_fingerprint: fingerprint,
+        remote_root: draft.remote_root.trim(),
+        capabilities,
+        install_managed_key: draft.install_managed_key,
+        identity_file: draft.identity_file.trim() || null,
+        select_for_project: draft.select_for_project,
+      };
+      const result = await transport.configureSshTarget(request);
+      setProbe(result.probe);
+      setDraft((current) => ({ ...current, password: "", identity_file: result.target.identity_file ?? current.identity_file }));
+      await loadTargets();
+      setNotice(result.project_selected
+        ? `Target ${result.target.target_id} was saved and selected for this project.`
+        : `Target ${result.target.target_id} was saved. Project selection remains guarded until the remote Helper is ready.`);
+      setError(null);
+    } catch (cause: unknown) {
+      setDraft((current) => ({ ...current, password: "" }));
+      setError(workbenchFailureMessage(cause, "SSH target could not be configured."));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const update = <Key extends keyof ConnectionDraft>(key: Key, value: ConnectionDraft[Key]) => {
+    setDraft((current) => ({ ...current, [key]: value }));
+    if (["host", "port", "username"].includes(key)) {
+      setProbe(null);
+      setFingerprint(null);
+    }
+  };
+  return <section className="rho-remote-connections" aria-label="Remote environment connections">
+    <header className="rho-environment-toolbar">
+      <div><strong>Remote connections</strong><small>Connect SSH and Slurm environments without storing passwords.</small></div>
+      <button type="button" className="rho-icon-btn" aria-label="Refresh connections" disabled={busy != null} onClick={() => void loadTargets()}>↻</button>
+    </header>
+    <div className="rho-remote-connections-body">
+      {error != null && <SurfaceTaskState tone="error" title="Connection needs attention" detail={error} role="alert" />}
+      {notice != null && <p className="rho-connection-notice" role="status"><strong>Connection saved.</strong> {notice}</p>}
+      <section className="rho-connection-target-list" aria-label="Configured targets">
+        <header><span className="rho-eyebrow">Configured targets</span><strong>{targets?.targets.length ?? 0}</strong></header>
+        {targets?.targets.map((target) => <article data-target-id={target.target_id} key={target.target_id}>
+          <div><strong>{target.target_id}</strong><small>{target.host_kind === "ssh" ? `${target.username ?? "user"}@${target.host}:${target.port}` : "This device"}</small></div>
+          <span className={`rho-domain-state rho-domain-${target.selected ? "ready" : target.identity_available ? "current" : "warning"}`}>{target.selected ? "selected" : target.identity_available ? "ready" : "key missing"}</span>
+          <p>{target.isolation_kind} · {target.capabilities.join(", ") || "no capabilities"}{target.remote_root == null ? "" : ` · ${target.remote_root}`}</p>
+        </article>)}
+        {busy === "list" && targets == null && <SurfaceTaskState tone="loading" title="Loading connections…" detail="Reading the device-local target registry." role="status" busy />}
+      </section>
+      <section className="rho-connection-wizard" aria-label="Add SSH target">
+        <header><span className="rho-eyebrow">Add SSH / Slurm target</span><strong>Connection details</strong></header>
+        <div className="rho-connection-fields">
+          <label>Target name<input value={draft.target_id} onChange={(event) => update("target_id", event.target.value)} placeholder="lab-hpc" /></label>
+          <label>Address<input value={draft.host} onChange={(event) => update("host", event.target.value)} placeholder="hpc.example.edu" /></label>
+          <label>SSH port<input type="number" min="1" max="65535" value={draft.port} onChange={(event) => update("port", event.target.value)} /></label>
+          <label>Username<input autoComplete="username" value={draft.username} onChange={(event) => update("username", event.target.value)} /></label>
+          <label className="rho-connection-wide">Remote project folder<input value={draft.remote_root} onChange={(event) => update("remote_root", event.target.value)} placeholder="/home/user/projects/analysis" /></label>
+          <label className="rho-connection-wide">Existing private key (optional)<input value={draft.identity_file} onChange={(event) => update("identity_file", event.target.value)} placeholder="/Users/me/.ssh/id_ed25519" disabled={draft.install_managed_key} /></label>
+          <label className="rho-connection-wide">One-time password<input type="password" autoComplete="current-password" value={draft.password} onChange={(event) => update("password", event.target.value)} placeholder={draft.install_managed_key ? "Used once to install a managed key" : "Used only for this connection test"} /></label>
+        </div>
+        <div className="rho-connection-options">
+          <label><input type="checkbox" checked={draft.cpu} onChange={(event) => update("cpu", event.target.checked)} /> CPU</label>
+          <label><input type="checkbox" checked={draft.gpu} onChange={(event) => update("gpu", event.target.checked)} /> GPU</label>
+          <label><input type="checkbox" checked={draft.install_managed_key} onChange={(event) => update("install_managed_key", event.target.checked)} /> Create and install a dedicated Rho key</label>
+          <label><input type="checkbox" checked={draft.select_for_project} onChange={(event) => update("select_for_project", event.target.checked)} /> Use for this project</label>
+        </div>
+        <p className="rho-connection-secret-note">The password remains in memory only for this action. Rho saves a restricted private key reference, never the password.</p>
+        <div className="rho-connection-actions">
+          <button type="button" disabled={busy != null || !draft.host.trim() || !draft.username.trim()} onClick={() => void inspect(null)}>{busy === "probe" ? "Inspecting…" : "Inspect host"}</button>
+          <button type="button" className="rho-primary-action" disabled={busy != null || fingerprint == null || !draft.target_id.trim() || !draft.remote_root.trim()} onClick={() => void configure()}>{busy === "save" ? "Connecting…" : draft.install_managed_key ? "Install key and save target" : "Test key and save target"}</button>
+        </div>
+        {probe != null && <section className="rho-connection-probe" aria-label="SSH probe result">
+          <header><strong>{probe.status === "ready" ? probe.host_name ?? "SSH ready" : "Confirm host identity"}</strong><span className={`rho-domain-state rho-domain-${probe.authenticated ? "ready" : "warning"}`}>{probe.status}</span></header>
+          <p>{probe.message}</p>
+          <div className="rho-connection-fingerprints">{probe.fingerprints.map((item) => <label key={item.sha256}>
+            <input type="radio" name="ssh-fingerprint" checked={fingerprint === item.sha256} onChange={() => setFingerprint(item.sha256)} />
+            <span><strong>{item.algorithm}</strong><code>{item.sha256}</code></span>
+          </label>)}</div>
+          {fingerprint != null && !probe.authenticated && <button type="button" disabled={busy != null} onClick={() => void inspect(fingerprint)}>Confirm fingerprint and test login</button>}
+          {probe.slurm_version != null && <div className="rho-slurm-summary"><strong>{probe.slurm_version}</strong>{probe.partitions.map((partition) => <span key={partition.partition}>{partition.partition} · {partition.nodes} node(s) · {partition.gres} · CPU {partition.cpus}</span>)}</div>}
+          {probe.authenticated && <p className={probe.helper_available ? "rho-connection-helper-ready" : "rho-connection-helper-missing"}>{probe.helper_available ? "Rho remote Helper ready" : "Rho remote Helper is not installed yet; monitoring works after target setup, execution remains guarded."}</p>}
+        </section>}
+      </section>
+    </div>
   </section>;
 }
 
@@ -174,6 +349,7 @@ export function EnvironmentTaskbarPanel({
   agentLabel,
   activeOperations,
   openResources,
+  openConnections,
   openDiagnostics,
   diagnosticsAvailable,
 }: {
@@ -184,6 +360,7 @@ export function EnvironmentTaskbarPanel({
   readonly agentLabel: string;
   readonly activeOperations: number;
   readonly openResources: () => void;
+  readonly openConnections: () => void;
   readonly openDiagnostics: () => void;
   readonly diagnosticsAvailable: boolean;
 }) {
@@ -274,6 +451,7 @@ export function EnvironmentTaskbarPanel({
       {error != null && <p className="rho-resource-monitor-error">{error}</p>}
       <footer>
         <button type="button" onClick={() => { setExpanded(false); openResources(); }}>Open Environment Resources</button>
+        <button type="button" onClick={() => { setExpanded(false); openConnections(); }}>Remote Connections</button>
         <button type="button" disabled={!diagnosticsAvailable} onClick={() => { setExpanded(false); openDiagnostics(); }}>Diagnostics</button>
         <small>{view == null ? "Waiting for first observation" : `Updated ${new Date(view.observed_at).toLocaleTimeString()}`}</small>
       </footer>
@@ -297,6 +475,7 @@ export function EnvironmentSurfaceView({
     ? instance.view_state.filter
     : "";
   const toolchainMode = instance.mode_id === "toolchains";
+  const connectionMode = instance.mode_id === "connections";
   const resourceMode = instance.mode_id === "resources";
   const mode: EnvironmentMode = instance.mode_id === "requests" ? "requests" : "packages";
   const [filter, setFilter] = useState(initialFilter);
@@ -316,6 +495,10 @@ export function EnvironmentSurfaceView({
         setToolchain(await transport.toolchainDoctor());
         setResources(null);
         setData(null);
+      } else if (connectionMode) {
+        setResources(null);
+        setToolchain(null);
+        setData(null);
       } else if (resourceMode) {
         setResources(await transport.resourceMonitorSnapshot());
         setToolchain(null);
@@ -332,7 +515,7 @@ export function EnvironmentSurfaceView({
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [instance.surface_id, resourceMode, toolchainMode, transport]);
+  }, [connectionMode, instance.surface_id, resourceMode, toolchainMode, transport]);
   useEffect(() => {
     void load();
     return transport.subscribeInvalidated(() => void load());
@@ -342,6 +525,9 @@ export function EnvironmentSurfaceView({
     const timer = window.setInterval(() => void load(), 15_000);
     return () => window.clearInterval(timer);
   }, [load, resourceMode]);
+  if (connectionMode) {
+    return <RemoteConnectionsPanel transport={transport} />;
+  }
   if (toolchainMode) {
     return <ToolchainDoctorPanel
       view={toolchain}

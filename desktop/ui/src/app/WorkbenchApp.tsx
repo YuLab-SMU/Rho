@@ -1045,7 +1045,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     if (factory == null) throw new Error("Plots Surface is unavailable.");
     await openFactory(factory, { selected_id: plotId, filter: "" });
   };
-  const openEnvironmentResources = async () => {
+  const openEnvironmentMode = async (modeId: "resources" | "connections") => {
     if (surfaces == null || studio == null) {
       throw new Error("Environment Resources is unavailable while the Surface Runtime loads.");
     }
@@ -1054,10 +1054,10 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     );
     const placement = existing == null ? null : findLayoutPlacement(studio.scene.root, existing.instance_id);
     if (profile?.active_mode === "studio" && existing != null && placement != null) {
-      if (existing.mode_id !== "resources") {
+      if (existing.mode_id !== modeId) {
         await surfaceMutationController.update(existing.instance_id, {
           kind: "set_mode",
-          mode_id: "resources",
+          mode_id: modeId,
         });
       }
       await focusAutomationInstance(existing.instance_id);
@@ -1067,8 +1067,10 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       (candidate) => candidate.definition.surface_id === "rho.environment",
     );
     if (factory == null) throw new Error("Environment Surface is unavailable.");
-    await openFactory(factory, undefined, undefined, "resources");
+    await openFactory(factory, undefined, undefined, modeId);
   };
+  const openEnvironmentResources = () => openEnvironmentMode("resources");
+  const openEnvironmentConnections = () => openEnvironmentMode("connections");
   const currentProfileSnapshot = () => {
     const current = profileStore.getProfileSnapshot();
     if (current.status !== "ready") throw new Error("The Project UI Profile is unavailable.");
@@ -3148,6 +3150,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           agentLabel={snapshot?.health.agent.label ?? "Agent unavailable"}
           activeOperations={snapshot?.context.active_operations.length ?? 0}
           openResources={() => run(openEnvironmentResources())}
+          openConnections={() => run(openEnvironmentConnections())}
           openDiagnostics={() => {
             const logs = surfaces?.catalog.factories.find((factory) => factory.definition.surface_id === "rho.logs");
             if (logs != null) run(openFactory(logs));

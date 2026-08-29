@@ -59,7 +59,7 @@ pub use remote_mirror::{
 pub use rig::{RigInstallation, RigInventory, parse_rig_inventory, resolve_r_installation};
 pub use target::{
     ComputeHost, ComputeIsolation, ComputeTarget, LOCAL_TARGET_ID, TargetRegistry,
-    TargetRegistryDocument, load_target_registry, validate_target_id,
+    TargetRegistryDocument, load_target_registry, validate_compute_target, validate_target_id,
 };
 
 #[derive(Debug, thiserror::Error)]

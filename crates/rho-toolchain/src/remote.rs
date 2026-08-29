@@ -75,6 +75,27 @@ pub struct RemoteHelperResponse {
     pub partial_effects_possible: bool,
 }
 
+fn validate_ssh_identity_file(path: &Path) -> Result<(), ToolchainError> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|error| {
+        ToolchainError::InvalidTarget(format!("SSH identity file is unavailable: {error}"))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(ToolchainError::InvalidTarget(
+            "SSH identity file must be a regular non-symlink file".to_string(),
+        ));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err(ToolchainError::InvalidTarget(
+                "SSH identity file permissions must not grant group or other access".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn verify_ssh_host_fingerprint(target: &ComputeTarget) -> Result<(), ToolchainError> {
     let ComputeHost::Ssh {
         host,
@@ -132,6 +153,7 @@ pub fn invoke_remote_helper(
         username,
         port,
         remote_root,
+        identity_file,
         ..
     } = &target.host
     else {
@@ -157,19 +179,26 @@ pub fn invoke_remote_helper(
             "remote helper request exceeds the frame bound".to_string(),
         ));
     }
-    let mut child = Command::new("ssh")
+    let mut ssh = Command::new("ssh");
+    ssh.args([
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "-o",
+        "ServerAliveInterval=5",
+        "-o",
+        "ServerAliveCountMax=1",
+    ]);
+    if let Some(identity_file) = identity_file {
+        validate_ssh_identity_file(Path::new(identity_file))?;
+        ssh.arg("-i").arg(identity_file);
+    }
+    let mut child = ssh
         .args([
-            "-T",
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "StrictHostKeyChecking=yes",
-            "-o",
-            "ConnectTimeout=10",
-            "-o",
-            "ServerAliveInterval=5",
-            "-o",
-            "ServerAliveCountMax=1",
             "-p",
             &port.to_string(),
             "--",

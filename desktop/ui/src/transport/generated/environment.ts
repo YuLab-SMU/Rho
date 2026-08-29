@@ -13,9 +13,52 @@ export const createEnvironmentCommands = (__TAURI_INVOKE: EnvironmentInvoke) => 
 	listEnvironmentOperationRequests: (limit: number | null, status: string | null) => __TAURI_INVOKE<EnvironmentOperationRequestSummary[]>("list_environment_operation_requests", { limit, status }),
 	toolchainDoctor: () => __TAURI_INVOKE<ToolchainDoctorView>("toolchain_doctor"),
 	resourceMonitorSnapshot: () => __TAURI_INVOKE<ResourceMonitorView>("resource_monitor_snapshot"),
+	computeTargetList: () => __TAURI_INVOKE<ComputeTargetListView>("compute_target_list"),
+	remoteConnectionProbe: (request: SshConnectionProbeRequest) => __TAURI_INVOKE<SshConnectionProbeView>("remote_connection_probe", { request }),
+	configureSshTarget: (request: ConfigureSshTargetRequest) => __TAURI_INVOKE<ConfigureSshTargetView>("configure_ssh_target", { request }),
 });
 
 /* Types */
+export type ComputeTargetListView = {
+	selected_target_id: string,
+	targets_yaml: string,
+	targets: ComputeTargetView[],
+};
+
+export type ComputeTargetView = {
+	target_id: string,
+	selected: boolean,
+	host_kind: string,
+	host: string | null,
+	port: number | null,
+	username: string | null,
+	remote_root: string | null,
+	isolation_kind: string,
+	capabilities: string[],
+	identity_file: string | null,
+	identity_available: boolean,
+};
+
+export type ConfigureSshTargetRequest = {
+	target_id: string,
+	host: string,
+	port: number,
+	username: string,
+	password: string | null,
+	confirmed_fingerprint: string,
+	remote_root: string,
+	capabilities: string[],
+	install_managed_key: boolean,
+	identity_file: string | null,
+	select_for_project: boolean,
+};
+
+export type ConfigureSshTargetView = {
+	target: ComputeTargetView,
+	probe: SshConnectionProbeView,
+	project_selected: boolean,
+};
+
 export type DeviceResourceView = {
 	device_id: string,
 	host_name: string,
@@ -85,6 +128,39 @@ export type ResourceMonitorView = {
 	targets: TargetResourceView[],
 	total_targets: number,
 	truncated: boolean,
+};
+
+export type SlurmPartitionView = {
+	partition: string,
+	available: string,
+	nodes: string,
+	gres: string,
+	cpus: string,
+};
+
+export type SshConnectionProbeRequest = {
+	host: string,
+	port: number,
+	username: string,
+	password: string | null,
+	identity_file: string | null,
+	confirmed_fingerprint: string | null,
+};
+
+export type SshConnectionProbeView = {
+	status: string,
+	fingerprints: SshHostFingerprintView[],
+	authenticated: boolean,
+	host_name: string | null,
+	slurm_version: string | null,
+	partitions: SlurmPartitionView[],
+	helper_available: boolean,
+	message: string,
+};
+
+export type SshHostFingerprintView = {
+	algorithm: string,
+	sha256: string,
 };
 
 export type TargetResourceView = {

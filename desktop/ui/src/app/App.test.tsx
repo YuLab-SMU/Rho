@@ -6490,6 +6490,16 @@ describe("Studio foundation app", () => {
     expect(resources).toBeDefined();
     expect(resources?.textContent).toContain("Resource governance");
     expect(monitor.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[aria-label='Environment realtime information']")!.click();
+      await settle();
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-environment-taskbar-popover footer button")]
+        .find((button) => button.textContent === "Remote Connections")!.click();
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector("[data-surface-id='rho.environment'] .rho-remote-connections"))
+      .not.toBeNull();
   });
 
   it("presents Environment inventory semantically with on-demand search and no raw payload", async () => {

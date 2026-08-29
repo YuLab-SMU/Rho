@@ -43,7 +43,15 @@ import type { KernelTransport } from "./kernel-generated";
 import type { CheckTransport } from "./check";
 import type { WorkbenchProjectionTransport } from "./workbench-projection";
 import type { EvidenceReadTransport } from "./evidence";
-import type { ResourceMonitorView, ToolchainDoctorView } from "./environment";
+import type {
+  ComputeTargetListView,
+  ConfigureSshTargetRequest,
+  ConfigureSshTargetView,
+  ResourceMonitorView,
+  SshConnectionProbeRequest,
+  SshConnectionProbeView,
+  ToolchainDoctorView,
+} from "./environment";
 import type { HistoryReadTransport } from "./history";
 
 export type {
@@ -411,5 +419,8 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   loadDomainSurface(surfaceId: string): Promise<DomainSurfaceData>;
   toolchainDoctor(): Promise<ToolchainDoctorView>;
   resourceMonitorSnapshot(): Promise<ResourceMonitorView>;
+  computeTargetList(): Promise<ComputeTargetListView>;
+  remoteConnectionProbe(request: SshConnectionProbeRequest): Promise<SshConnectionProbeView>;
+  configureSshTarget(request: ConfigureSshTargetRequest): Promise<ConfigureSshTargetView>;
   retryRun(runId: string): Promise<unknown>;
 }

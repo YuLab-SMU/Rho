@@ -50,6 +50,7 @@ targets:
       username: scientist
       host_fingerprint: SHA256:...
       remote_root: /data/projects
+      identity_file: /home/me/.rho/ssh/lab-gpu/id_ed25519
     isolation:
       kind: docker
       engine: docker
@@ -61,8 +62,12 @@ Hosts are `local` or pinned-fingerprint `ssh`; isolation is `native`, immutable
 digest `docker`/`podman`, or a Conda environment with an exact explicit-spec
 digest. The built-in `local` target is always available and cannot be changed
 away from local/native. Missing `targets.yaml` therefore still leaves a stable
-small local compute environment. Passwords and private keys are unsupported in
-the registry and remain in system SSH/credential facilities.
+small local compute environment. Passwords are never written to the registry.
+Environment → Connections may use a password once, through a temporary
+askpass bridge, to install a dedicated Ed25519 public key. The private key is
+stored with restricted permissions under `<Rho home>/ssh/<target-id>/`; only
+its absolute `identity_file` reference is recorded in `targets.yaml`. Existing
+operator-managed keys can be referenced instead.
 
 Doctor resolves the project target before probing runtimes. Local/native uses
 the implemented rig/renv/pak/uv path. Local Docker/Podman Doctor inspects the
@@ -113,6 +118,14 @@ target binding before every Run and auxiliary Live process admission, and
 fails closed if `rho.toml` or `targets.yaml` changes. Desktop Workspace R is
 currently local Ark only: an admitted Docker, Conda, or SSH Workspace is
 reported as unsupported instead of being silently launched against local R.
+
+Environment → Connections is the no-terminal setup path. It discovers and
+requires explicit confirmation of the offered SHA-256 host key, tests password
+or existing-key authentication, detects Slurm and bounded partition facts,
+reports remote Helper readiness, atomically updates `targets.yaml`, and can
+select the target in the current `rho.toml` without discarding unrelated TOML
+formatting. The one-time password is cleared after the operation and is never
+returned to the frontend or included in errors.
 
 Resource governance observes up to 16 registered target environments per
 refresh and keeps target identity separate from physical device identity, so

@@ -43,6 +43,15 @@ who receives the request and therefore changes the trust boundary. Verify the
 scheme, host, organization, and privacy terms before using a custom Base URL.
 Do not place credentials in a Base URL, project file, Issue, or diagnostic.
 
+SSH passwords entered in Environment → Connections are used only for the
+current probe or managed-key installation. They are passed to OpenSSH through
+a temporary askpass bridge whose file contains no password, cleared from the
+frontend after configuration, and never written to `targets.yaml`, project
+files, logs, or diagnostics. A generated private key stays under
+`<Rho home>/ssh/<target-id>/` with restricted permissions; only its path is
+recorded locally, while its public key is added to the remote account after an
+explicit user action.
+
 ## When Rho can access the network
 
 After local startup becomes ready, Rho automatically contacts the fixed Rho

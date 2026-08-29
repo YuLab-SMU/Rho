@@ -9,6 +9,7 @@ pub(crate) mod environment;
 pub(crate) mod evidence;
 pub(crate) mod plugins;
 pub(crate) mod project_session;
+pub(crate) mod remote_connection;
 pub(crate) mod render;
 pub(crate) mod resource_monitor;
 pub(crate) mod runs;

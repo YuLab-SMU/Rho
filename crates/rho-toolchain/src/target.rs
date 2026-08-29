@@ -25,6 +25,8 @@ pub enum ComputeHost {
         port: u16,
         host_fingerprint: String,
         remote_root: String,
+        #[serde(default)]
+        identity_file: Option<String>,
     },
 }
 
@@ -107,6 +109,7 @@ impl ComputeTarget {
                 port,
                 host_fingerprint,
                 remote_root,
+                identity_file,
             } => {
                 validate_token("SSH host", host, 255)?;
                 if let Some(username) = username {
@@ -133,6 +136,20 @@ impl ComputeTarget {
                     return Err(ToolchainError::InvalidTarget(
                         "SSH remote_root is invalid".to_string(),
                     ));
+                }
+                if let Some(identity_file) = identity_file {
+                    let path = Path::new(identity_file);
+                    if !path.is_absolute()
+                        || identity_file.len() > 1024
+                        || identity_file.chars().any(char::is_control)
+                        || path
+                            .components()
+                            .any(|component| component == std::path::Component::ParentDir)
+                    {
+                        return Err(ToolchainError::InvalidTarget(
+                            "SSH identity_file must be an absolute normalized path".to_string(),
+                        ));
+                    }
                 }
             }
         }
@@ -299,6 +316,13 @@ pub fn load_target_registry(rho_home: &Path) -> Result<TargetRegistryDocument, T
     })
 }
 
+pub fn validate_compute_target(
+    target_id: &str,
+    target: &ComputeTarget,
+) -> Result<(), ToolchainError> {
+    target.validate(target_id)
+}
+
 pub fn validate_target_id(value: &str) -> Result<(), ToolchainError> {
     if value.is_empty()
         || value.len() > 128
@@ -375,6 +399,7 @@ targets:
       port: 22
       host_fingerprint: SHA256:abcdefghijklmnopqrstuvwxyz0123456789ABCDE
       remote_root: /data/projects
+      identity_file: /home/scientist/.ssh/rho_lab
     isolation:
       kind: docker
       engine: docker
@@ -387,6 +412,11 @@ targets:
         let target = document.registry.resolve("lab-gpu").unwrap();
         assert_eq!(target.host_kind(), "ssh");
         assert_eq!(target.isolation_kind(), "docker");
+        assert!(matches!(
+            &target.host,
+            ComputeHost::Ssh { identity_file: Some(path), .. }
+                if path == "/home/scientist/.ssh/rho_lab"
+        ));
         assert!(document.registry.resolve("local").is_ok());
     }
 

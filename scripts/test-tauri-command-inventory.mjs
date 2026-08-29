@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "df8a6adfd37df9837125d90c96e1122f858a84f2561f86a982eb5d82fb27dfe7";
+const EXPECTED_HANDLER_DIGEST = "8a6172406a13ecc1f55671ccbe389f3378ef4c43bc349e4ecbd50c22cd63a625";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [
@@ -52,6 +52,11 @@ const ENVIRONMENT_COMMANDS = [
 
 const TOOLCHAIN_COMMANDS = ["toolchain_doctor"];
 const RESOURCE_MONITOR_COMMANDS = ["resource_monitor_snapshot"];
+const REMOTE_CONNECTION_COMMANDS = [
+  "compute_target_list",
+  "configure_ssh_target",
+  "remote_connection_probe",
+];
 
 const EDITOR_COMMANDS = [
   "editor_discover_chunks",
@@ -334,6 +339,16 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Resource monitor command module ownership changed",
   );
 
+  const remoteConnectionSource = sources.find(
+    ({ name }) => name.endsWith("commands/remote_connection.rs"),
+  );
+  assert.ok(remoteConnectionSource, "Remote connection command module is missing");
+  assert.deepEqual(
+    commandDefinitions([remoteConnectionSource]).map(({ name }) => name).sort(),
+    REMOTE_CONNECTION_COMMANDS,
+    "Remote connection command module ownership changed",
+  );
+
   const editorSource = sources.find(({ name }) => name.endsWith("commands/editor.rs"));
   assert.ok(editorSource, "Editor command module is missing");
   assert.deepEqual(
@@ -441,6 +456,9 @@ function fixtures() {
   const resourceMonitorHandlers = RESOURCE_MONITOR_COMMANDS.map(
     (command) => `  commands::resource_monitor::${command},`,
   ).join("\n");
+  const remoteConnectionHandlers = REMOTE_CONNECTION_COMMANDS.map(
+    (command) => `  commands::remote_connection::${command},`,
+  ).join("\n");
   const editorHandlers = EDITOR_COMMANDS.map(
     (command) => `  commands::editor::${command},`,
   ).join("\n");
@@ -485,6 +503,7 @@ ${evidenceHandlers}
 ${environmentHandlers}
 ${toolchainHandlers}
 ${resourceMonitorHandlers}
+${remoteConnectionHandlers}
 ${editorHandlers}
 ${projectHandlers}
 ${agentLlmHandlers}
@@ -522,6 +541,9 @@ ${runtimeControlHandlers}
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
       { name: "commands/resource_monitor.rs", text: RESOURCE_MONITOR_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
+      { name: "commands/remote_connection.rs", text: REMOTE_CONNECTION_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
       { name: "commands/editor.rs", text: EDITOR_COMMANDS.map(
@@ -566,6 +588,7 @@ ${runtimeControlHandlers}
       ...ENVIRONMENT_COMMANDS,
       ...TOOLCHAIN_COMMANDS,
       ...RESOURCE_MONITOR_COMMANDS,
+      ...REMOTE_CONNECTION_COMMANDS,
       ...EDITOR_COMMANDS,
       ...PROJECT_COMMANDS,
       ...AGENT_LLM_COMMANDS,
