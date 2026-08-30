@@ -178,9 +178,20 @@ pub(crate) async fn agent_context_preview(
         return Err("Agent Conversation identity cannot be empty".to_string());
     }
     let resolved_model = if task_kind == "problem_repair" {
-        agent_llm::resolve_model_for_task(&config.data_dir, model_id.as_deref(), &mode, &task_kind)
+        agent_llm::resolve_model_for_task(
+            &config.data_dir,
+            &config.rscript,
+            model_id.as_deref(),
+            &mode,
+            &task_kind,
+        )
     } else {
-        agent_llm::resolve_model_for_turn(&config.data_dir, model_id.as_deref(), &mode)
+        agent_llm::resolve_model_for_turn(
+            &config.data_dir,
+            &config.rscript,
+            model_id.as_deref(),
+            &mode,
+        )
     }
     .map_err(display_error)?;
     let explicit_context = resolve_agent_explicit_context(&state, runtime_output_context.as_ref())

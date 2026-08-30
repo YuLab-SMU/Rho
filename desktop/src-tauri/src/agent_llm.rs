@@ -1690,7 +1690,18 @@ pub fn connect_provider(
         let discovered = discovery
             .models
             .iter()
-            .find(|model| matches!(model.model_type.value.as_str(), "language" | "unknown"))
+            .filter(|model| matches!(model.model_type.value.as_str(), "language" | "unknown"))
+            .min_by_key(|model| {
+                let tool_calling = model
+                    .capabilities
+                    .get("function_call")
+                    .is_some_and(|value| value.value == "yes");
+                match (model.model_type.value.as_str(), tool_calling) {
+                    ("language", true) => 0,
+                    ("language", false) => 1,
+                    _ => 2,
+                }
+            })
             .context("The Provider returned no language model. No Provider settings were saved.")?;
         if bootstrapping {
             settings.models.clear();
@@ -2127,7 +2138,8 @@ pub fn delete_model(_data_dir: &Path, request: &DeleteModelRequest) -> Result<Ag
 }
 
 pub fn save_capability_route(
-    _data_dir: &Path,
+    data_dir: &Path,
+    rscript: &Path,
     expected_revision: u64,
     expected_config_snapshot_id: &str,
     route: AgentCapabilityRoute,
@@ -2143,7 +2155,8 @@ pub fn save_capability_route(
         .as_ref()
         .map(config_to_settings)
         .context("Create config.yaml before selecting a model.")?;
-    validate_route_candidate(&settings, &route, true)?;
+    apply_cached_catalog(data_dir, rscript, &mut settings);
+    validate_route_candidate(&settings, &route, route.capability != "agent.chat")?;
     if let Some(slot) = settings
         .capability_routes
         .iter_mut()
@@ -2287,7 +2300,7 @@ pub fn settings_view(
         ));
     }
     if let Ok(entries) = catalog_cached(data_dir, rscript) {
-        project_catalog_capacity(&mut settings, &entries);
+        apply_catalog_evidence(&mut settings, &entries);
     }
     let statuses = credential_status_map(
         &settings.providers,
@@ -2330,7 +2343,7 @@ pub fn settings_view_from_settings(
         ));
     }
     if let Ok(entries) = catalog_cached(data_dir, rscript) {
-        project_catalog_capacity(&mut settings, &entries);
+        apply_catalog_evidence(&mut settings, &entries);
     }
     let statuses = credential_status_map(
         &settings.providers,
@@ -2385,9 +2398,27 @@ pub fn clear_session_credentials() {
     credential_session().clear();
 }
 
-pub fn catalog(data_dir: &Path, rscript: &Path) -> Result<Vec<AgentCatalogEntry>> {
-    let settings = load_settings(data_dir)?;
-    let probe_environment_names = provider_probe_environment_names(&settings);
+fn catalog_sensitive_environment_names() -> Vec<String> {
+    let mut names = std::env::vars_os()
+        .filter_map(|(name, _)| name.into_string().ok())
+        .filter(|name| {
+            let upper = name.to_ascii_uppercase();
+            ["API_KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"]
+                .iter()
+                .any(|marker| upper.contains(marker))
+        })
+        .take(256)
+        .collect::<Vec<_>>();
+    names.sort();
+    names.dedup();
+    names
+}
+
+pub fn catalog(_data_dir: &Path, rscript: &Path) -> Result<Vec<AgentCatalogEntry>> {
+    // Catalog metadata is public package data and must be available before the
+    // first Provider exists. Run the probe without inherited credential-like
+    // environment values instead of coupling it to config.yaml.
+    let probe_environment_names = catalog_sensitive_environment_names();
     let script = r#"
 if (!requireNamespace("aisdk", quietly = TRUE)) {
   stop("aisdk is unavailable")
@@ -2547,33 +2578,61 @@ fn provider_catalog_key(provider: &AgentProviderProfile) -> String {
         .to_ascii_lowercase()
 }
 
-/// Presentation-only projection: models still at the durable conservative
-/// default show the catalog capacity facts when an exact Provider/model-ID
-/// catalog match carries both values. Durable settings are never rewritten.
-fn project_catalog_capacity(settings: &mut AgentLlmSettings, entries: &[AgentCatalogEntry]) {
+fn evidence_priority(source: &str) -> u8 {
+    match source {
+        "user_declared" => 4,
+        "provider_response" => 3,
+        "aisdk_catalog" | "catalog" => 2,
+        _ => 0,
+    }
+}
+
+/// Merge reviewed aisdk model facts into an effective settings snapshot.
+/// Durable user declarations and live Provider evidence win; catalog evidence
+/// fills or refreshes only lower-authority facts. This same merge is used by
+/// Settings, Agent readiness, connection tests, and execution admission.
+fn apply_catalog_evidence(settings: &mut AgentLlmSettings, entries: &[AgentCatalogEntry]) {
     let provider_keys = settings
         .providers
         .iter()
         .map(|provider| (provider.id.clone(), provider_catalog_key(provider)))
         .collect::<HashMap<_, _>>();
     for model in &mut settings.models {
-        if model.context_capacity_source != "conservative_default" {
-            continue;
-        }
         let Some(provider_key) = provider_keys.get(&model.provider_id) else {
             continue;
         };
         let Some(entry) = catalog_entry_for_model(provider_key, &model.model_id, entries) else {
             continue;
         };
-        let (Some(context_window), Some(max_output)) =
-            (entry.context_window_tokens, entry.max_output_tokens)
-        else {
-            continue;
-        };
-        model.context_window_tokens = context_window;
-        model.reserved_output_tokens = max_output;
-        model.context_capacity_source = "catalog".to_string();
+        if evidence_priority(&entry.model_type.source)
+            >= evidence_priority(&model.model_type.source)
+        {
+            model.model_type = entry.model_type.clone();
+        }
+        for (name, catalog_value) in &entry.capabilities {
+            let replace = model.capabilities.get(name).is_none_or(|current| {
+                evidence_priority(&catalog_value.source) >= evidence_priority(&current.source)
+            });
+            if replace {
+                model
+                    .capabilities
+                    .insert(name.clone(), catalog_value.clone());
+            }
+        }
+        if model.context_capacity_source == "conservative_default"
+            && let (Some(context_window), Some(max_output)) =
+                (entry.context_window_tokens, entry.max_output_tokens)
+        {
+            model.context_window_tokens = context_window;
+            model.reserved_output_tokens = max_output;
+            model.context_capacity_source = "catalog".to_string();
+        }
+    }
+}
+
+fn apply_cached_catalog(data_dir: &Path, rscript: &Path, settings: &mut AgentLlmSettings) {
+    if let Ok(entries) = catalog_cached(data_dir, rscript) {
+        apply_catalog_evidence(settings, &entries);
     }
 }
 
@@ -3160,11 +3219,12 @@ pub fn test_model(
             ConfigMutationPolicy::DurableYaml,
         )?
     };
-    let settings = initial
+    let mut settings = initial
         .config
         .as_ref()
         .map(config_to_settings)
         .context("Create config.yaml before testing a model.")?;
+    apply_cached_catalog(data_dir, rscript, &mut settings);
     validate_settings(&settings)?;
     let test_model = settings
         .models
@@ -3172,8 +3232,8 @@ pub fn test_model(
         .find(|model| model.id == request.model_id)
         .with_context(|| format!("Unknown model: {}", request.model_id))?;
     ensure!(
-        test_model.model_type.value == "language",
-        "Only language models use the text connection test. Image and embedding probes are not installed."
+        matches!(test_model.model_type.value.as_str(), "language" | "unknown"),
+        "Only language or not-yet-classified models use the text connection test. Image and embedding probes are not installed."
     );
     let resolved = resolve_model_with_settings(&settings, Some(&request.model_id))?;
     let probe_environment_names = provider_probe_environment_names(&settings);
@@ -3216,6 +3276,7 @@ pub fn test_model(
         .as_ref()
         .map(config_to_settings)
         .context("The canonical model configuration disappeared during the connection test.")?;
+    apply_cached_catalog(data_dir, rscript, &mut latest_settings);
     validate_settings(&latest_settings)?;
     let latest_resolved = resolve_model_with_settings(&latest_settings, Some(&request.model_id))?;
     ensure!(
@@ -3232,20 +3293,24 @@ pub fn test_model(
 
 pub fn resolve_model_for_turn(
     data_dir: &Path,
+    rscript: &Path,
     requested_model_id: Option<&str>,
     mode: &str,
 ) -> Result<ResolvedAgentModel> {
-    let settings = load_settings(data_dir)?;
+    let mut settings = load_settings(data_dir)?;
+    apply_cached_catalog(data_dir, rscript, &mut settings);
     resolve_model_for_turn_with_settings(&settings, requested_model_id, mode)
 }
 
 pub fn resolve_model_for_task(
     data_dir: &Path,
+    rscript: &Path,
     requested_model_id: Option<&str>,
     mode: &str,
     task_kind: &str,
 ) -> Result<ResolvedAgentModel> {
-    let settings = load_settings(data_dir)?;
+    let mut settings = load_settings(data_dir)?;
+    apply_cached_catalog(data_dir, rscript, &mut settings);
     resolve_model_for_task_with_settings(&settings, requested_model_id, mode, task_kind)
 }
 
@@ -3258,7 +3323,8 @@ pub fn resolve_model_and_credential_for_turn(
 ) -> Result<(ResolvedAgentModel, Option<(String, String)>)> {
     let _guard = settings_mutation_guard();
     let loaded = load_v6_document(data_dir)?;
-    let settings = config_to_settings(&loaded.config);
+    let mut settings = config_to_settings(&loaded.config);
+    apply_cached_catalog(data_dir, rscript, &mut settings);
     validate_settings(&settings)?;
     let credential_store = ConfigCredentialStore::from_config(&loaded.config);
     resolve_model_and_credential_for_turn_with_store(
@@ -3282,7 +3348,8 @@ pub fn resolve_model_and_credential_for_task(
 ) -> Result<(ResolvedAgentModel, Option<(String, String)>)> {
     let _guard = settings_mutation_guard();
     let loaded = load_v6_document(data_dir)?;
-    let settings = config_to_settings(&loaded.config);
+    let mut settings = config_to_settings(&loaded.config);
+    apply_cached_catalog(data_dir, rscript, &mut settings);
     validate_settings(&settings)?;
     let credential_store = ConfigCredentialStore::from_config(&loaded.config);
     resolve_model_and_credential_for_task_with_store(
@@ -4006,6 +4073,19 @@ fn build_capability_route_view(
         .and_then(|provider| statuses.get(&provider.id))
         .map(|status| status.status.clone())
         .unwrap_or_else(|| "unavailable".to_string());
+    let consumer_status = if !matches!(capability, "agent.chat" | "agent.act") {
+        "not_installed"
+    } else if model.is_none() {
+        "unassigned"
+    } else if !matches!(credential_status.as_str(), "detected" | "not_required") {
+        "needs_credential"
+    } else if compatibility == "incompatible" {
+        "incompatible"
+    } else if capability == "agent.act" && compatibility == "needs_review" {
+        "needs_capability_evidence"
+    } else {
+        "ready"
+    };
     AgentCapabilityRouteView {
         capability: capability.to_string(),
         label: label.to_string(),
@@ -4019,11 +4099,7 @@ fn build_capability_route_view(
         inherited_from,
         compatibility: compatibility.to_string(),
         credential_status,
-        consumer_status: if matches!(capability, "agent.chat" | "agent.act") {
-            "available".to_string()
-        } else {
-            "not_installed".to_string()
-        },
+        consumer_status: consumer_status.to_string(),
     }
 }
 
@@ -4153,6 +4229,9 @@ fn update_model_after_test(
         error_class: result.error_class.clone(),
         message: Some(result.message.clone()),
     });
+    if result.status == "ready" && result.model_resolved && model.model_type.value == "unknown" {
+        model.model_type = capability_value("language", "provider_response");
+    }
     for (name, value) in [
         ("function_call", result.capabilities.tool_calling.as_str()),
         ("reasoning", result.capabilities.reasoning.as_str()),
@@ -5961,6 +6040,39 @@ mod tests {
             !write_attempted.get(),
             "an invalid whole-document route state must be rejected before persistence"
         );
+    }
+
+    #[test]
+    fn catalog_evidence_repairs_unknown_agent_metadata_for_every_consumer() {
+        let mut settings = routed_settings();
+        settings.models[0].model_type = capability_value("unknown", "unknown");
+        settings.models[0].capabilities = unknown_capabilities();
+        settings.models[0].context_window_tokens = CONSERVATIVE_CONTEXT_WINDOW_TOKENS;
+        settings.models[0].reserved_output_tokens = CONSERVATIVE_RESERVED_OUTPUT_TOKENS;
+        settings.models[0].context_capacity_source = "conservative_default".to_string();
+        let mut capabilities = unknown_capabilities();
+        capabilities.insert(
+            "function_call".to_string(),
+            capability_value("yes", "aisdk_catalog"),
+        );
+        apply_catalog_evidence(
+            &mut settings,
+            &[AgentCatalogEntry {
+                provider: "openai".to_string(),
+                id: "route-invariant-model".to_string(),
+                display_name: "Catalog model".to_string(),
+                description: None,
+                model_type: capability_value("language", "aisdk_catalog"),
+                capabilities,
+                context_window_tokens: Some(128_000),
+                max_output_tokens: Some(8_192),
+            }],
+        );
+        assert_eq!(settings.models[0].model_type.value, "language");
+        assert_eq!(settings.models[0].model_type.source, "aisdk_catalog");
+        assert_eq!(model_function_call(&settings.models[0]), "yes");
+        assert_eq!(settings.models[0].context_window_tokens, 128_000);
+        resolve_model_for_turn_with_settings(&settings, None, "act").unwrap();
     }
 
     #[test]

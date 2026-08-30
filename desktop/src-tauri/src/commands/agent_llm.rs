@@ -257,6 +257,7 @@ pub(crate) async fn agent_llm_select_model(
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::save_capability_route(
         &config.data_dir,
+        &config.rscript,
         request.expected_revision,
         &request.expected_config_snapshot_id,
         AgentCapabilityRoute {
@@ -285,6 +286,7 @@ pub(crate) async fn agent_llm_save_capability_route(
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::save_capability_route(
         &config.data_dir,
+        &config.rscript,
         request.expected_revision,
         &request.expected_config_snapshot_id,
         request.route,

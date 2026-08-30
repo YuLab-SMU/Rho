@@ -294,7 +294,12 @@ pub(crate) async fn smoke_test(include_agent: bool) -> Result<Value> {
         let conversation_id = format!("conversation_{turn_id}");
         let prompt =
             "请检查 rho_desktop_smoke 对象，告诉我它有多少行和多少列。不要修改工作区。".to_string();
-        let resolved_model = agent_llm::resolve_model_for_turn(&config.data_dir, None, "ask")?;
+        let resolved_model = agent_llm::resolve_model_for_turn(
+            &config.data_dir,
+            &config.rscript,
+            None,
+            "ask",
+        )?;
         let agent_project_root;
         {
             let context_guard = context.lock().await;
