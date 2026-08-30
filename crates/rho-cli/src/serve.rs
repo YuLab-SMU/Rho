@@ -14,7 +14,7 @@ fn parse_request(stream: &mut TcpStream) -> Option<(String, String, HashMap<Stri
     let mut reader = BufReader::new(stream.try_clone().ok()?);
     let mut request_line = String::new();
     reader.read_line(&mut request_line).ok()?;
-    let parts: Vec<&str> = request_line.trim().split_whitespace().collect();
+    let parts: Vec<&str> = request_line.split_whitespace().collect();
     if parts.len() < 2 || parts[0] != "GET" {
         return None;
     }
@@ -109,11 +109,11 @@ pub fn run_serve(store_path: &str, project: &str) -> Result<()> {
         };
 
         // Reject non-loopback
-        if let Ok(peer) = stream.peer_addr() {
-            if !peer.ip().is_loopback() {
-                write_response(&mut stream, 403, "text/plain", "forbidden: loopback only");
-                continue;
-            }
+        if let Ok(peer) = stream.peer_addr()
+            && !peer.ip().is_loopback()
+        {
+            write_response(&mut stream, 403, "text/plain", "forbidden: loopback only");
+            continue;
         }
 
         let (path, _body, headers) = match parse_request(&mut stream) {

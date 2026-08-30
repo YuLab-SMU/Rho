@@ -1715,6 +1715,7 @@ mod tests {
 
     // --- Helpers ---
 
+    #[allow(clippy::too_many_arguments)]
     fn make_run(
         store: &mut Store,
         project_root: &str,

@@ -381,7 +381,7 @@ mod tests {
         let resp = WorkbenchSuccess::new("proj_01", proj);
         let json = serde_json::to_string(&resp).unwrap();
         let decoded: WorkbenchSuccess<ProjectSummary> = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded.ok, true);
+        assert!(decoded.ok);
         assert_eq!(decoded.project_id, "proj_01");
         assert_eq!(decoded.data.total_run_count, 5);
     }
@@ -402,7 +402,7 @@ mod tests {
         };
         let json = serde_json::to_string(&err).unwrap();
         let decoded: WorkbenchError = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded.ok, false);
+        assert!(!decoded.ok);
         assert_eq!(
             decoded.error.code,
             WorkbenchErrorCode::RecordProjectMismatch

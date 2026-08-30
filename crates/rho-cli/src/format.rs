@@ -85,15 +85,15 @@ pub fn print_run_detail(detail: &RunDetail) {
             println!("    ... (truncated)");
         }
     }
-    if let Some(ref out) = detail.stdout_preview {
-        if !out.is_empty() {
-            println!("  Output:");
-            for line in out.lines().take(20) {
-                println!("    {}", line);
-            }
-            if detail.stdout_truncated {
-                println!("    ... (truncated)");
-            }
+    if let Some(ref out) = detail.stdout_preview
+        && !out.is_empty()
+    {
+        println!("  Output:");
+        for line in out.lines().take(20) {
+            println!("    {}", line);
+        }
+        if detail.stdout_truncated {
+            println!("    ... (truncated)");
         }
     }
     if !detail.warnings.is_empty() {

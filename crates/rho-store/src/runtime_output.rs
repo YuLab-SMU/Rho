@@ -2745,7 +2745,11 @@ mod tests {
             reason_code: None,
         };
         let items = store
-            .record_agent_turn_context_items("D:/projects/A", "turn.a", &[draft.clone()])
+            .record_agent_turn_context_items(
+                "D:/projects/A",
+                "turn.a",
+                std::slice::from_ref(&draft),
+            )
             .unwrap();
         assert_eq!(items.len(), 1);
         assert!(
