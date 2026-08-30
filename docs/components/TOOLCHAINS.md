@@ -23,11 +23,16 @@ lockfile = "uv.lock"
 ```
 
 Package names are not duplicated into `rho.toml`: renv and `renv.lock` own the
-R project library, while pyproject and `uv.lock` own Python dependencies. For an
-unmanaged R project, Environment → Toolchains displays the already detected
-startup R and offers one explicit automatic setup action. After confirmation,
-Rho initializes renv, snapshots the project library, and writes `rho.toml`
-against the exact startup R; users never need to author the file manually.
+R project library, while pyproject and `uv.lock` own Python dependencies. When
+an opened project contains R source but has no toolchain contract, desktop
+startup initializes renv, installs the required `jsonlite` and `pak` support,
+snapshots the project library, writes a schema-2 local `rho.toml` against the
+exact startup R, and then retries Workspace admission. There is no manual setup
+command or configuration-file step. A failed local Doctor triggers one
+journaled restore/repair and admission retry. A malformed `rho.toml` is first
+preserved under `.rho/toolchain/recovery/` before Rho rebuilds the local
+contract; valid non-local contracts remain fail-closed rather than being
+silently replaced.
 
 ## Compute targets
 
@@ -119,9 +124,11 @@ Sync, Lock, and package plan construction and target adaptation require that
 admission and reject stale or wrong-mode evidence. The desktop caches only the
 managed project's admitted Workspace realization, revalidates its config and
 target binding before every Run and auxiliary Live process admission, and
-fails closed if `rho.toml` or `targets.yaml` changes. Desktop Workspace R is
-currently local Ark only: an admitted Docker, Conda, or SSH Workspace is
-reported as unsupported instead of being silently launched against local R.
+fails closed if `rho.toml` or `targets.yaml` changes. Equivalent Rscript entry
+points from the same canonical R home are accepted only when the admitted and
+desktop exact versions also match. Desktop Workspace R is currently local Ark
+only: an admitted Docker, Conda, or SSH Workspace is reported as unsupported
+instead of being silently launched against local R.
 
 Environment → Connections is the no-terminal setup path. The primary form asks
 only for address, username, port, and a one-time password. Rho pins the
@@ -175,8 +182,8 @@ modes.
 
 ## Durable effects and receipts
 
-Every explicit sync, lock, or R package-install sequence is recorded before
-spawn under:
+Every automatic initialization or repair, and every explicit sync, lock, or R
+package-install sequence, is recorded before spawn under:
 
 ```text
 .rho/toolchain/operations/<operation-id>/operation.json
