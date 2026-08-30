@@ -1,10 +1,15 @@
+use std::collections::BTreeMap;
+use std::path::Path;
+
 use anyhow::{Context, Result, bail, ensure};
 use rho_toolchain::{
-    DoctorStatus, TargetAdmission, TargetAdmissionMode, admit_target, doctor_for_target,
-    load_target_registry, load_toolchain_config, monitor_target_resource,
+    CommandSpec, DoctorStatus, OperationKind, TargetAdmission, TargetAdmissionMode, admit_target,
+    doctor_for_target, execute_journaled_operation, load_target_registry, load_toolchain_config,
+    monitor_target_resource,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
+use uuid::Uuid;
 
 use crate::AppState;
 use crate::application_state::ResourceGovernanceCache;
@@ -15,6 +20,11 @@ pub(crate) struct ToolchainDoctorCheckView {
     pub(crate) id: String,
     pub(crate) status: String,
     pub(crate) detail: String,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+pub(crate) struct ToolchainInitializeRequest {
+    confirmed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -172,6 +182,83 @@ pub(crate) async fn require_target_admission(
     Ok(Some(admission))
 }
 
+fn initialize_project_toolchain(
+    project_root: &Path,
+    rscript: &Path,
+    version: &str,
+    rho_home: &Path,
+) -> Result<()> {
+    let source = format!(
+        "schema = 2\n\n[runtime.r]\nversion = {quoted}\nmanager = \"rig\"\nenvironment = \"renv\"\nlockfile = \"renv.lock\"\ninstaller = \"pak\"\n\n[compute]\ndefault_target = \"local\"\nrequired_capabilities = [\"cpu\"]\n",
+        quoted = serde_json::to_string(version)?,
+    );
+    crate::project::atomic_write(&project_root.join("rho.toml"), source.as_bytes())?;
+    let config = load_toolchain_config(project_root)?;
+    let targets = load_target_registry(rho_home)?;
+    let project = serde_json::to_string(&project_root.to_string_lossy().as_ref())?;
+    let expression = format!(
+        "if (!requireNamespace('renv', quietly=TRUE)) quit(status=41); renv::init(project={project}, bare=TRUE, restart=FALSE); renv::snapshot(project={project}, prompt=FALSE)"
+    );
+    execute_journaled_operation(
+        &config,
+        &format!("initialize-{}", Uuid::new_v4().simple()),
+        OperationKind::Sync,
+        &[CommandSpec {
+            program: rscript.to_path_buf(),
+            args: vec!["--vanilla".to_string(), "-e".to_string(), expression],
+            cwd: project_root.to_path_buf(),
+            env: BTreeMap::new(),
+        }],
+        &targets,
+        true,
+    )?;
+    Ok(())
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub(crate) async fn toolchain_initialize(
+    request: ToolchainInitializeRequest,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if !request.confirmed {
+        return Err("Project environment setup requires explicit confirmation".to_string());
+    }
+    let project_root = state.project_root.read().await.clone();
+    if project_root.join("rho.toml").exists() {
+        return Err("rho.toml already exists; refresh Toolchains instead".to_string());
+    }
+    let runtime = runtime_config(&state).map_err(crate::display_error)?;
+    let version = runtime
+        .r_version
+        .split_whitespace()
+        .find(|value| {
+            value
+                .chars()
+                .next()
+                .is_some_and(|character| character.is_ascii_digit())
+        })
+        .unwrap_or(runtime.r_version.as_str())
+        .trim()
+        .to_string();
+    rho_toolchain::ExactVersion::parse(&version).map_err(crate::display_error)?;
+    let root_for_task = project_root.clone();
+    let rscript = runtime.rscript.clone();
+    let rho_home = crate::agent_llm::agent_config::rho_home().map_err(crate::display_error)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        initialize_project_toolchain(&root_for_task, &rscript, &version, &rho_home)
+    })
+    .await
+    .map_err(|error| format!("Toolchain initialization task failed: {error}"))?
+    .map_err(crate::display_error)?;
+    if *state.project_root.read().await != project_root {
+        return Err("Toolchain initialization became stale after a project switch".to_string());
+    }
+    *state.target_admission.write().await = None;
+    *state.resource_governance.write().await = None;
+    Ok(())
+}
+
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn toolchain_doctor(
@@ -179,6 +266,7 @@ pub(crate) async fn toolchain_doctor(
 ) -> Result<ToolchainDoctorView, String> {
     let project_root = state.project_root.read().await.clone();
     if !project_root.join("rho.toml").exists() {
+        let runtime = runtime_config(&state).ok();
         return Ok(ToolchainDoctorView {
             status: "unmanaged".to_string(),
             configured: false,
@@ -187,15 +275,34 @@ pub(crate) async fn toolchain_doctor(
             target_registry_sha256: None,
             host_kind: "local".to_string(),
             isolation_kind: "native".to_string(),
-            r_version: None,
-            rscript: None,
+            r_version: runtime.as_ref().map(|runtime| runtime.r_version.clone()),
+            rscript: runtime
+                .as_ref()
+                .map(|runtime| runtime.rscript.to_string_lossy().into_owned()),
             python_version: None,
             python: None,
-            checks: vec![ToolchainDoctorCheckView {
-                id: "rho.toml".to_string(),
-                status: "unmanaged".to_string(),
-                detail: "No rho.toml; the current project runtime remains unmanaged.".to_string(),
-            }],
+            checks: vec![
+                ToolchainDoctorCheckView {
+                    id: "workspace-r".to_string(),
+                    status: if runtime.is_some() { "ready" } else { "failed" }.to_string(),
+                    detail: runtime.as_ref().map_or_else(
+                        || "The startup R runtime is unavailable.".to_string(),
+                        |runtime| {
+                            format!(
+                                "Detected R {} at {}",
+                                runtime.r_version,
+                                runtime.rscript.display()
+                            )
+                        },
+                    ),
+                },
+                ToolchainDoctorCheckView {
+                    id: "rho.toml".to_string(),
+                    status: "unmanaged".to_string(),
+                    detail: "No rho.toml yet; Rho can initialize this project automatically."
+                        .to_string(),
+                },
+            ],
         });
     }
     let rho_home = crate::agent_llm::agent_config::rho_home().map_err(crate::display_error)?;
@@ -264,4 +371,36 @@ pub(crate) async fn toolchain_doctor(
         return Err("Toolchain Doctor result is stale after a project switch".to_string());
     }
     Ok(view)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn automatic_setup_journals_renv_before_reporting_managed_state() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let project = tempfile::tempdir().unwrap();
+        let rho_home = tempfile::tempdir().unwrap();
+        let rscript = project.path().join("fake-rscript");
+        std::fs::write(
+            &rscript,
+            "#!/bin/sh\nmkdir -p renv\ntouch .Rprofile renv.lock renv/activate.R\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&rscript, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+        initialize_project_toolchain(project.path(), &rscript, "4.5.2", rho_home.path()).unwrap();
+        let config = load_toolchain_config(project.path()).unwrap();
+        assert_eq!(config.config.schema, 2);
+        assert_eq!(
+            config.config.runtime.r.unwrap().version.to_string(),
+            "4.5.2"
+        );
+        assert!(project.path().join("renv.lock").is_file());
+        let operations = project.path().join(".rho/toolchain/operations");
+        assert_eq!(std::fs::read_dir(operations).unwrap().count(), 1);
+    }
 }

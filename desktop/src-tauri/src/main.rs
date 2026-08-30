@@ -319,6 +319,7 @@ fn main() {
             commands::environment::list_installed_packages,
             commands::environment::list_lockfile_packages,
             commands::toolchain::toolchain_doctor,
+            commands::toolchain::toolchain_initialize,
             commands::resource_monitor::resource_monitor_snapshot,
             commands::remote_connection::compute_target_list,
             commands::remote_connection::remote_connection_probe,

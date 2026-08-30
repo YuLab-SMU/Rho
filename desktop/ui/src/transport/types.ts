@@ -51,6 +51,7 @@ import type {
   SshConnectionProbeRequest,
   SshConnectionProbeView,
   ToolchainDoctorView,
+  ToolchainInitializeRequest,
 } from "./environment";
 import type { HistoryReadTransport } from "./history";
 
@@ -418,6 +419,7 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   subscribeAgentInvalidated(listener: () => void): Unsubscribe;
   loadDomainSurface(surfaceId: string): Promise<DomainSurfaceData>;
   toolchainDoctor(): Promise<ToolchainDoctorView>;
+  initializeToolchain(request: ToolchainInitializeRequest): Promise<void>;
   resourceMonitorSnapshot(): Promise<ResourceMonitorView>;
   computeTargetList(): Promise<ComputeTargetListView>;
   remoteConnectionProbe(request: SshConnectionProbeRequest): Promise<SshConnectionProbeView>;

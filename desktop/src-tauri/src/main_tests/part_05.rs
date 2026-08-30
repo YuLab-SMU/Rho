@@ -977,6 +977,7 @@
                 crate::commands::environment::list_installed_packages,
                 crate::commands::environment::list_environment_operation_requests,
                 crate::commands::toolchain::toolchain_doctor,
+                crate::commands::toolchain::toolchain_initialize,
                 crate::commands::resource_monitor::resource_monitor_snapshot,
                 crate::commands::remote_connection::compute_target_list,
                 crate::commands::remote_connection::remote_connection_probe,

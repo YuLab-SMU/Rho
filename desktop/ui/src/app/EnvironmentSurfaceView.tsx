@@ -24,12 +24,29 @@ function ToolchainDoctorPanel({
   loading,
   error,
   reload,
+  initialize,
 }: {
   readonly view: ToolchainDoctorView | null;
   readonly loading: boolean;
   readonly error: string | null;
   readonly reload: () => void;
+  readonly initialize: () => Promise<void>;
 }) {
+  const [confirmInitialize, setConfirmInitialize] = useState(false);
+  const [initializing, setInitializing] = useState(false);
+  const [initializeError, setInitializeError] = useState<string | null>(null);
+  const runInitialize = async () => {
+    setInitializing(true);
+    try {
+      await initialize();
+      setConfirmInitialize(false);
+      setInitializeError(null);
+    } catch (cause: unknown) {
+      setInitializeError(workbenchFailureMessage(cause, "Project environment setup failed."));
+    } finally {
+      setInitializing(false);
+    }
+  };
   return <section className="rho-toolchain-surface" aria-label="Project toolchains">
     <header className="rho-environment-toolbar">
       <div>
@@ -62,6 +79,15 @@ function ToolchainDoctorPanel({
           {view.python != null && <code>{view.python}</code>}
         </article>
       </div>
+      {view.status === "unmanaged" && <section className="rho-toolchain-auto-setup">
+        <div><span className="rho-eyebrow">Automatic setup</span><strong>Manage this project with the detected R runtime</strong><p>Rho will create rho.toml, initialize renv, and snapshot the current project library. No manual configuration file editing is required.</p></div>
+        {!confirmInitialize ? <button type="button" className="rho-primary-action" onClick={() => setConfirmInitialize(true)}>Set up automatically</button> : <div className="rho-toolchain-auto-confirm" role="alertdialog" aria-label="Confirm project environment setup">
+          <p>This creates <code>rho.toml</code>, <code>renv.lock</code>, <code>.Rprofile</code>, and <code>renv/</code> in the current project.</p>
+          <button type="button" disabled={initializing} className="rho-primary-action" onClick={() => void runInitialize()}>{initializing ? "Setting up…" : "Confirm setup"}</button>
+          <button type="button" disabled={initializing} onClick={() => setConfirmInitialize(false)}>Cancel</button>
+        </div>}
+        {initializeError != null && <p className="rho-resource-monitor-error" role="alert">{initializeError}</p>}
+      </section>}
       <ol className="rho-toolchain-checks">
         {view.checks.map((check) => <li data-status={check.status} key={check.id}>
           <span className={`rho-status-dot rho-status-${check.status === "ready" ? "ready" : "degraded"}`} aria-hidden="true" />
@@ -97,15 +123,14 @@ const EMPTY_CONNECTION: ConnectionDraft = {
   cpu: true,
   gpu: false,
   install_managed_key: true,
-  select_for_project: true,
+  select_for_project: false,
 };
 
 function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTransport }) {
   const [targets, setTargets] = useState<ComputeTargetListView | null>(null);
   const [draft, setDraft] = useState<ConnectionDraft>(EMPTY_CONNECTION);
   const [probe, setProbe] = useState<SshConnectionProbeView | null>(null);
-  const [fingerprint, setFingerprint] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"list" | "probe" | "save" | null>("list");
+  const [busy, setBusy] = useState<"list" | "save" | null>("list");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const loadTargets = useCallback(async () => {
@@ -128,27 +153,13 @@ function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTra
     identity_file: draft.identity_file.trim() || null,
     confirmed_fingerprint: confirmedFingerprint,
   });
-  const inspect = async (confirmedFingerprint: string | null) => {
-    setBusy("probe");
-    try {
-      const next = await transport.remoteConnectionProbe(probeRequest(confirmedFingerprint));
-      setProbe(next);
-      if (confirmedFingerprint != null) setFingerprint(confirmedFingerprint);
-      else if (next.fingerprints.length === 1) setFingerprint(next.fingerprints[0]!.sha256);
-      setError(null);
-    } catch (cause: unknown) {
-      setError(workbenchFailureMessage(cause, "SSH connection test failed."));
-    } finally {
-      setBusy(null);
-    }
-  };
   const configure = async () => {
-    if (fingerprint == null) {
-      setError("Inspect and confirm the host fingerprint first.");
-      return;
-    }
     setBusy("save");
     try {
+      const scanned = await transport.remoteConnectionProbe(probeRequest(null));
+      const selectedFingerprint = scanned.fingerprints.find((item) => item.algorithm === "ED25519")
+        ?? scanned.fingerprints[0];
+      if (selectedFingerprint == null) throw new Error("The SSH host did not offer a supported host key.");
       const capabilities = [draft.cpu ? "cpu" : null, draft.gpu ? "gpu" : null]
         .filter((value): value is string => value != null);
       const request: ConfigureSshTargetRequest = {
@@ -157,7 +168,7 @@ function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTra
         port: Number(draft.port),
         username: draft.username.trim(),
         password: draft.password || null,
-        confirmed_fingerprint: fingerprint,
+        confirmed_fingerprint: selectedFingerprint.sha256,
         remote_root: draft.remote_root.trim(),
         capabilities,
         install_managed_key: draft.install_managed_key,
@@ -169,8 +180,8 @@ function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTra
       setDraft((current) => ({ ...current, password: "", identity_file: result.target.identity_file ?? current.identity_file }));
       await loadTargets();
       setNotice(result.project_selected
-        ? `Target ${result.target.target_id} was saved and selected for this project.`
-        : `Target ${result.target.target_id} was saved. Project selection remains guarded until the remote Helper is ready.`);
+        ? `Target ${result.target.target_id} is connected and selected for this project.`
+        : `Target ${result.target.target_id} is connected and ready to use.`);
       setError(null);
     } catch (cause: unknown) {
       setDraft((current) => ({ ...current, password: "" }));
@@ -183,7 +194,6 @@ function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTra
     setDraft((current) => ({ ...current, [key]: value }));
     if (["host", "port", "username"].includes(key)) {
       setProbe(null);
-      setFingerprint(null);
     }
   };
   return <section className="rho-remote-connections" aria-label="Remote environment connections">
@@ -206,33 +216,35 @@ function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTra
       <section className="rho-connection-wizard" aria-label="Add SSH target">
         <header><span className="rho-eyebrow">Add SSH / Slurm target</span><strong>Connection details</strong></header>
         <div className="rho-connection-fields">
-          <label>Target name<input value={draft.target_id} onChange={(event) => update("target_id", event.target.value)} placeholder="lab-hpc" /></label>
-          <label>Address<input value={draft.host} onChange={(event) => update("host", event.target.value)} placeholder="hpc.example.edu" /></label>
-          <label>SSH port<input type="number" min="1" max="65535" value={draft.port} onChange={(event) => update("port", event.target.value)} /></label>
+          <label className="rho-connection-wide">Address<input value={draft.host} onChange={(event) => update("host", event.target.value)} placeholder="hpc.example.edu" /></label>
           <label>Username<input autoComplete="username" value={draft.username} onChange={(event) => update("username", event.target.value)} /></label>
-          <label className="rho-connection-wide">Remote project folder<input value={draft.remote_root} onChange={(event) => update("remote_root", event.target.value)} placeholder="/home/user/projects/analysis" /></label>
-          <label className="rho-connection-wide">Existing private key (optional)<input value={draft.identity_file} onChange={(event) => update("identity_file", event.target.value)} placeholder="/Users/me/.ssh/id_ed25519" disabled={draft.install_managed_key} /></label>
-          <label className="rho-connection-wide">One-time password<input type="password" autoComplete="current-password" value={draft.password} onChange={(event) => update("password", event.target.value)} placeholder={draft.install_managed_key ? "Used once to install a managed key" : "Used only for this connection test"} /></label>
+          <label>SSH port<input type="number" min="1" max="65535" value={draft.port} onChange={(event) => update("port", event.target.value)} /></label>
+          <label className="rho-connection-wide">Password<input type="password" autoComplete="current-password" value={draft.password} onChange={(event) => update("password", event.target.value)} placeholder="Used once; never saved" /></label>
         </div>
-        <div className="rho-connection-options">
-          <label><input type="checkbox" checked={draft.cpu} onChange={(event) => update("cpu", event.target.checked)} /> CPU</label>
-          <label><input type="checkbox" checked={draft.gpu} onChange={(event) => update("gpu", event.target.checked)} /> GPU</label>
-          <label><input type="checkbox" checked={draft.install_managed_key} onChange={(event) => update("install_managed_key", event.target.checked)} /> Create and install a dedicated Rho key</label>
-          <label><input type="checkbox" checked={draft.select_for_project} onChange={(event) => update("select_for_project", event.target.checked)} /> Use for this project</label>
-        </div>
-        <p className="rho-connection-secret-note">The password remains in memory only for this action. Rho saves a restricted private key reference, never the password.</p>
+        <details className="rho-connection-advanced">
+          <summary>Advanced options</summary>
+          <div className="rho-connection-fields">
+            <label>Target name (optional)<input value={draft.target_id} onChange={(event) => update("target_id", event.target.value)} placeholder="Generated automatically" /></label>
+            <label>Remote folder (optional)<input value={draft.remote_root} onChange={(event) => update("remote_root", event.target.value)} placeholder="Remote home directory" /></label>
+            <label className="rho-connection-wide">Existing private key<input value={draft.identity_file} onChange={(event) => update("identity_file", event.target.value)} placeholder="/Users/me/.ssh/id_ed25519" disabled={draft.install_managed_key} /></label>
+          </div>
+          <div className="rho-connection-options">
+            <label><input type="checkbox" checked={draft.cpu} onChange={(event) => update("cpu", event.target.checked)} /> CPU</label>
+            <label><input type="checkbox" checked={draft.gpu} onChange={(event) => update("gpu", event.target.checked)} /> GPU required</label>
+            <label><input type="checkbox" checked={draft.install_managed_key} onChange={(event) => update("install_managed_key", event.target.checked)} /> Replace password with a managed Rho key</label>
+            <label><input type="checkbox" checked={draft.select_for_project} onChange={(event) => update("select_for_project", event.target.checked)} /> Use for this project now</label>
+          </div>
+        </details>
+        <p className="rho-connection-secret-note">Rho confirms the host key, detects Slurm, installs a dedicated key and the matching remote Helper, then saves the connection automatically. The password is cleared when setup finishes.</p>
         <div className="rho-connection-actions">
-          <button type="button" disabled={busy != null || !draft.host.trim() || !draft.username.trim()} onClick={() => void inspect(null)}>{busy === "probe" ? "Inspecting…" : "Inspect host"}</button>
-          <button type="button" className="rho-primary-action" disabled={busy != null || fingerprint == null || !draft.target_id.trim() || !draft.remote_root.trim()} onClick={() => void configure()}>{busy === "save" ? "Connecting…" : draft.install_managed_key ? "Install key and save target" : "Test key and save target"}</button>
+          <button type="button" className="rho-primary-action" disabled={busy != null || !draft.host.trim() || !draft.username.trim() || (draft.install_managed_key && !draft.password)} onClick={() => void configure()}>{busy === "save" ? "Connecting and configuring…" : "Connect automatically"}</button>
         </div>
         {probe != null && <section className="rho-connection-probe" aria-label="SSH probe result">
           <header><strong>{probe.status === "ready" ? probe.host_name ?? "SSH ready" : "Confirm host identity"}</strong><span className={`rho-domain-state rho-domain-${probe.authenticated ? "ready" : "warning"}`}>{probe.status}</span></header>
           <p>{probe.message}</p>
-          <div className="rho-connection-fingerprints">{probe.fingerprints.map((item) => <label key={item.sha256}>
-            <input type="radio" name="ssh-fingerprint" checked={fingerprint === item.sha256} onChange={() => setFingerprint(item.sha256)} />
+          <details className="rho-connection-security"><summary>Verified host identity</summary><div className="rho-connection-fingerprints">{probe.fingerprints.map((item) => <div key={item.sha256}>
             <span><strong>{item.algorithm}</strong><code>{item.sha256}</code></span>
-          </label>)}</div>
-          {fingerprint != null && !probe.authenticated && <button type="button" disabled={busy != null} onClick={() => void inspect(fingerprint)}>Confirm fingerprint and test login</button>}
+          </div>)}</div></details>
           {probe.slurm_version != null && <div className="rho-slurm-summary"><strong>{probe.slurm_version}</strong>{probe.partitions.map((partition) => <span key={partition.partition}>{partition.partition} · {partition.nodes} node(s) · {partition.gres} · CPU {partition.cpus}</span>)}</div>}
           {probe.authenticated && <p className={probe.helper_available ? "rho-connection-helper-ready" : "rho-connection-helper-missing"}>{probe.helper_available ? "Rho remote Helper ready" : "Rho remote Helper is not installed yet; monitoring works after target setup, execution remains guarded."}</p>}
         </section>}
@@ -534,6 +546,10 @@ export function EnvironmentSurfaceView({
       loading={loading}
       error={error}
       reload={load}
+      initialize={async () => {
+        await transport.initializeToolchain({ confirmed: true });
+        await load();
+      }}
     />;
   }
   if (resourceMode) {

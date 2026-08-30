@@ -289,6 +289,22 @@ describe("Studio foundation app", () => {
     });
   }
 
+  async function invokePaletteCommand(container: HTMLElement, label: string) {
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "k", metaKey: true }));
+      await settle();
+      const search = container.querySelector<HTMLInputElement>("[aria-label='Search commands']")!;
+      search.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      setValue.call(search, label);
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-command-results button")]
+        .find((button) => button.textContent?.includes(label))!.click();
+      await settle();
+    });
+  }
+
   async function openSurfaceMenu(surface: Element) {
     const instanceId = (surface as HTMLElement).dataset.instanceId;
     const actionsHost = [...document.querySelectorAll<HTMLElement>("[data-rho-surface-actions-host]")]
@@ -376,12 +392,9 @@ describe("Studio foundation app", () => {
     const customizer = bar.querySelector<HTMLElement>(".rho-toolbar-customizer")!;
     expect(customizer.textContent).toContain("Rho menu");
     expect(customizer.textContent).toContain("Studio / Vibe");
-    expect(customizer.textContent).toContain("Project context");
-    expect(customizer.textContent).toContain("Scene selector");
     expect(customizer.textContent).toContain("Command search");
-    expect(customizer.textContent).toContain("Project action");
-    expect(customizer.textContent).toContain("Runtime status");
     expect(customizer.textContent).toContain("Compose");
+    expect(customizer.querySelectorAll("[data-toolbar-option-id]")).toHaveLength(2);
     await act(async () => {
       pointer(document.body, "pointerdown", 500, 500);
       await settle();
@@ -3343,11 +3356,7 @@ describe("Studio foundation app", () => {
         ...defaultToolbarLayout(),
         order: [
           "compose",
-          "runtime_status",
-          "project_action",
           "command_search",
-          "scene_selector",
-          "project_context",
         ],
       },
       "compose",
@@ -3374,7 +3383,7 @@ describe("Studio foundation app", () => {
     const { container } = await renderApp(transport);
     await openToolbarCustomizer(container);
     persist.mockClear();
-    const projectRow = container.querySelector<HTMLElement>("[data-toolbar-option-id='project_context']")!;
+    const projectRow = container.querySelector<HTMLElement>("[data-toolbar-option-id='command_search']")!;
     const composeRow = container.querySelector<HTMLElement>("[data-toolbar-option-id='compose']")!;
     Object.defineProperty(projectRow, "getBoundingClientRect", { configurable: true, value: () => rect(0, 100, 240, 40) });
     hitTest(projectRow);
@@ -3399,7 +3408,7 @@ describe("Studio foundation app", () => {
     installPointerCapture();
     const { container } = await renderApp();
     await openToolbarCustomizer(container);
-    const projectRow = container.querySelector<HTMLElement>("[data-toolbar-option-id='project_context']")!;
+    const projectRow = container.querySelector<HTMLElement>("[data-toolbar-option-id='command_search']")!;
     const composeRow = container.querySelector<HTMLElement>("[data-toolbar-option-id='compose']")!;
     Object.defineProperty(projectRow, "getBoundingClientRect", { configurable: true, value: () => rect(0, 100, 240, 40) });
     hitTest(projectRow);
@@ -3453,7 +3462,7 @@ describe("Studio foundation app", () => {
     const firstLayout = setToolbarComponentVisible(defaultToolbarLayout(), "compose", true);
     saveToolbarLayout(window.localStorage, first.profile.project_id, firstLayout);
     const secondProjectId = `project:mock:${encodeURIComponent(secondPath)}`;
-    const secondLayout = setToolbarComponentVisible(defaultToolbarLayout(), "runtime_status", true);
+    const secondLayout = setToolbarComponentVisible(defaultToolbarLayout(), "command_search", true);
     saveToolbarLayout(window.localStorage, secondProjectId, secondLayout);
     saveProjectHistory(window.localStorage, { version: 1, paths: [firstPath, secondPath] });
     const { container } = await renderApp(transport);
@@ -3464,7 +3473,7 @@ describe("Studio foundation app", () => {
       for (let index = 0; index < 20; index += 1) await Promise.resolve();
     });
     expect(container.querySelector("[data-toolbar-component='compose']")).toBeNull();
-    expect(container.querySelector("[data-toolbar-component='runtime_status']")).not.toBeNull();
+    expect(container.querySelector("[data-toolbar-component='command_search']")).not.toBeNull();
   });
 
   it("renders a recursive asymmetric scene while Agent degradation stays isolated", async () => {
@@ -4024,12 +4033,8 @@ describe("Studio foundation app", () => {
     expect(emerged.querySelector(".rho-console-composer textarea")).not.toBeNull();
     expect(container.querySelector(".rho-action-error")).toBeNull();
 
-    await showToolbarComponent(container, "Scene selector");
-    await act(async () => {
-      container.querySelector<HTMLElement>(".rho-rail-popover summary")!.click();
-      await settle();
-    });
-    const undo = [...container.querySelectorAll<HTMLButtonElement>(".rho-rail-popover button")]
+    await openInspector(container);
+    const undo = [...container.querySelectorAll<HTMLButtonElement>(".rho-inspector-actions button")]
       .find((button) => button.textContent === "Undo")!;
     await act(async () => {
       undo.click();
@@ -6167,14 +6172,7 @@ describe("Studio foundation app", () => {
 
   it("runs repeatable Check commands into independent typed result Surfaces", async () => {
     const { container } = await renderApp();
-    await showToolbarComponent(container, "Project action");
-    const check = container.querySelector<HTMLButtonElement>(".rho-command-projection button");
-    expect(check?.getAttribute("aria-label")).toBe("Check project");
-    await act(async () => {
-      check!.click();
-      await settle();
-      await settle();
-    });
+    await invokePaletteCommand(container, "Check project");
     expect(container.querySelectorAll(".rho-check-result")).toHaveLength(1);
     expect(container.querySelector(".rho-check-outcome")?.textContent).toContain("2 findings to review");
     expect(container.querySelector(".rho-check-result-meta summary")?.textContent).toBe("Result details");
@@ -6184,11 +6182,7 @@ describe("Studio foundation app", () => {
     expect(container.textContent).toContain("Workspace rule pack · org.example.project-checks · g3");
     expect(container.querySelector(".rho-check-evidence button")?.textContent).toContain("analysis.R:2:1");
 
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>(".rho-command-projection button")!.click();
-      await settle();
-      await settle();
-    });
+    await invokePaletteCommand(container, "Check project");
     const results = [...container.querySelectorAll<HTMLElement>(".rho-check-result")];
     expect(results).toHaveLength(2);
     expect(new Set(results.map((result) => result.dataset.resultId)).size).toBe(2);
@@ -6196,11 +6190,7 @@ describe("Studio foundation app", () => {
 
   it("keeps dirty-source Check rejection actionable without breaking the workspace", async () => {
     const { container } = await renderApp(createMockUiKernelTransport("?check=dirty"));
-    await showToolbarComponent(container, "Project action");
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>(".rho-command-projection button")!.click();
-      await settle();
-    });
+    await invokePaletteCommand(container, "Check project");
     expect(container.querySelector("[role='alert']")?.textContent).toContain(
       "Save modified source files before checking: analysis.R",
     );

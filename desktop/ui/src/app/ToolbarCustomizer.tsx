@@ -15,11 +15,7 @@ import type {
 const FIXED_COMPONENTS = ["Rho menu", "Studio / Vibe"] as const;
 
 const OPTIONAL_LABELS: Readonly<Record<ToolbarComponentId, string>> = {
-  project_context: "Project context",
-  scene_selector: "Scene selector",
   command_search: "Command search",
-  project_action: "Project action",
-  runtime_status: "Runtime status",
   compose: "Compose",
 };
 

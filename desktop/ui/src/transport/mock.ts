@@ -2931,6 +2931,47 @@ export function createMockUiKernelTransport(
     async loadAgentLlmSettings() {
       return structuredClone(agentLlmSettings);
     },
+    async saveProvider(request) {
+      assertAgentConfigGate(request);
+      const existing = agentLlmSettings.providers.some((provider) => provider.id === request.provider.id);
+      const projected = {
+        ...structuredClone(request.provider),
+        credential_status: "not_checked",
+        credential_effective_source: "not_configured",
+        env_shadows_file: false,
+        session_credential_present: false,
+        config_file_credential_present: false,
+        effective_base_url: request.provider.base_url,
+        base_url_source: request.provider.base_url == null ? "provider_default" : "configured",
+      };
+      agentLlmSettings = {
+        ...agentLlmSettings,
+        revision: agentLlmSettings.revision + 1,
+        config_store: {
+          ...agentLlmSettings.config_store,
+          status: "loaded",
+          config_snapshot_id: nextAgentConfigSnapshotId(),
+        },
+        providers: existing
+          ? agentLlmSettings.providers.map((provider) => provider.id === projected.id ? projected : provider)
+          : [...agentLlmSettings.providers, projected],
+      };
+      return structuredClone(agentLlmSettings);
+    },
+    async deleteProvider(request) {
+      assertAgentConfigGate(request);
+      agentLlmSettings = {
+        ...agentLlmSettings,
+        revision: agentLlmSettings.revision + 1,
+        config_store: {
+          ...agentLlmSettings.config_store,
+          config_snapshot_id: nextAgentConfigSnapshotId(),
+        },
+        providers: agentLlmSettings.providers.filter((provider) => provider.id !== request.providerId),
+        models: agentLlmSettings.models.filter((model) => model.provider_id !== request.providerId),
+      };
+      return structuredClone(agentLlmSettings);
+    },
     async discoverProviderModels(providerId) {
       const provider = agentLlmSettings.providers.find((candidate) => candidate.id === providerId);
       if (provider == null) throw new Error("Provider changed while models were refreshing.");
@@ -3411,6 +3452,9 @@ export function createMockUiKernelTransport(
     async listEvidenceClaims(limit = 100) {
       return structuredClone(typedEvidenceRecords().slice(0, Math.max(0, limit)));
     },
+    async initializeToolchain() {
+      return undefined;
+    },
     async toolchainDoctor() {
       return {
         status: "ready",
@@ -3505,6 +3549,7 @@ export function createMockUiKernelTransport(
           fingerprints,
           authenticated: false,
           host_name: null,
+          home_directory: null,
           slurm_version: null,
           partitions: [],
           helper_available: false,
@@ -3516,6 +3561,7 @@ export function createMockUiKernelTransport(
         fingerprints,
         authenticated: true,
         host_name: "master",
+        home_directory: "/home/scientist",
         slurm_version: "slurm 19.05.2",
         partitions: [{ partition: "gpu_batch", available: "up", nodes: "1", gres: "gpu:3", cpus: "2/46/0/48" }],
         helper_available: false,

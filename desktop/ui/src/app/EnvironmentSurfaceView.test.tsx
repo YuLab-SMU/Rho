@@ -133,18 +133,58 @@ describe("Environment resource governance", () => {
     expect(host.querySelector("progress")?.getAttribute("value")).toBe("9500");
   });
 
+  it("shows detected startup R and initializes an unmanaged project without config editing", async () => {
+    let configured = false;
+    const initialize = vi.fn(async () => { configured = true; });
+    const transport = {
+      toolchainDoctor: vi.fn(async () => configured ? {
+        status: "ready", configured: true, rho_toml_sha256: "a".repeat(64), target_id: "local",
+        target_registry_sha256: null, host_kind: "local", isolation_kind: "native",
+        r_version: "4.5.2", rscript: "/opt/R/4.5.2/bin/Rscript", python_version: null, python: null, checks: [],
+      } : {
+        status: "unmanaged", configured: false, rho_toml_sha256: null, target_id: "local",
+        target_registry_sha256: null, host_kind: "local", isolation_kind: "native",
+        r_version: "4.5.2", rscript: "/opt/R/4.5.2/bin/Rscript", python_version: null, python: null,
+        checks: [{ id: "workspace-r", status: "ready", detail: "Detected R 4.5.2" }],
+      }),
+      initializeToolchain: initialize,
+      subscribeInvalidated: vi.fn(() => () => undefined),
+    } as unknown as UiKernelTransport;
+    const instance = { ...resourceSurface(), mode_id: "toolchains" };
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () => {
+      root.render(<EnvironmentSurfaceView instance={instance} transport={transport} persist={vi.fn()} reportError={vi.fn()} />);
+      await settle();
+    });
+    expect(host.textContent).toContain("R 4.5.2");
+    expect(host.textContent).toContain("No manual configuration file editing is required");
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Set up automatically")!.click();
+      await settle();
+      [...host.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Confirm setup")!.click();
+      await settle();
+    });
+    expect(initialize).toHaveBeenCalledWith({ confirmed: true });
+    expect(host.textContent).toContain("Exact project environments are ready");
+  });
+
   it("configures an SSH Slurm target without requiring a terminal", async () => {
     const probe = vi.fn(async (request: { readonly confirmed_fingerprint: string | null }) => request.confirmed_fingerprint == null
       ? {
           status: "host_key_confirmation_required", fingerprints: [{ algorithm: "ED25519", sha256: "SHA256:test" }],
-          authenticated: false, host_name: null, slurm_version: null, partitions: [], helper_available: false,
+          authenticated: false, host_name: null, home_directory: null, slurm_version: null, partitions: [], helper_available: false,
           message: "Confirm one discovered host fingerprint before authentication.",
         }
       : {
           status: "ready", fingerprints: [{ algorithm: "ED25519", sha256: "SHA256:test" }],
-          authenticated: true, host_name: "master", slurm_version: "slurm 19.05.2",
+          authenticated: true, host_name: "master", home_directory: "/home/user", slurm_version: "slurm 19.05.2",
           partitions: [{ partition: "gpu_batch", available: "up", nodes: "1", gres: "gpu:3", cpus: "2/46/0/48" }],
-          helper_available: false, message: "SSH is ready.",
+          helper_available: true, message: "SSH and the Rho remote Helper are ready.",
         });
     const configure = vi.fn(async () => ({
       target: {
@@ -183,30 +223,18 @@ describe("Environment resource governance", () => {
         await settle();
       });
     };
-    await enter("Target name", "lab-hpc");
     await enter("Address", "172.16.153.230");
     await enter("SSH port", "2329");
     await enter("Username", "user");
-    await enter("Remote project folder", "/project");
-    await enter("One-time password", "one-time-secret");
+    await enter("Password", "one-time-secret");
     await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Inspect host")!.click();
-      await settle();
-    });
-    expect(host.textContent).toContain("Confirm host identity");
-    await act(async () => {
-      host.querySelector<HTMLInputElement>("input[name='ssh-fingerprint']")!.click();
       [...host.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Confirm fingerprint and test login")!.click();
+        .find((button) => button.textContent === "Connect automatically")!.click();
       await settle();
     });
     expect(host.textContent).toContain("slurm 19.05.2");
     expect(host.textContent).toContain("gpu_batch · 1 node(s) · gpu:3");
-    await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Install key and save target")!.click();
-      await settle();
-    });
+    expect(host.textContent).toContain("Rho remote Helper ready");
     expect(configure).toHaveBeenCalledOnce();
     expect(host.querySelector<HTMLInputElement>("input[type='password']")?.value).toBe("");
   });

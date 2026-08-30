@@ -1,10 +1,13 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::Write;
+use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail, ensure};
+use flate2::Compression;
+use flate2::write::GzEncoder;
+use include_dir::{Dir, include_dir};
 use rho_toolchain::{
     ComputeHost, ComputeIsolation, ComputeTarget, LOCAL_TARGET_ID, load_target_registry,
     load_toolchain_config, validate_compute_target, validate_target_id,
@@ -18,6 +21,34 @@ use zeroize::Zeroizing;
 use crate::AppState;
 
 const MAX_SSH_OUTPUT_BYTES: usize = 1024 * 1024;
+const REMOTE_HELPER_SOURCE: Dir<'_> =
+    include_dir!("$CARGO_MANIFEST_DIR/../../crates/rho-toolchain/src");
+const REMOTE_HELPER_MANIFEST: &str = r#"[package]
+name = "rho-toolchain-remote"
+version = "0.4.1"
+edition = "2024"
+rust-version = "1.97"
+license = "AGPL-3.0-only"
+
+[lib]
+name = "rho_toolchain"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rho-toolchain-helper"
+path = "src/bin/rho-toolchain-helper.rs"
+
+[dependencies]
+chrono = { version = "=0.4.45", features = ["serde"] }
+semver = { version = "=1.0.28", features = ["serde"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+serde_norway = "=0.9.42"
+sha2 = "=0.10.9"
+sysinfo = { version = "=0.39.6", default-features = false, features = ["disk", "system"] }
+thiserror = "=2.0.18"
+toml = "=0.8.2"
+"#;
 
 #[derive(Deserialize, specta::Type)]
 pub(crate) struct SshConnectionProbeRequest {
@@ -50,6 +81,7 @@ pub(crate) struct SshConnectionProbeView {
     fingerprints: Vec<SshHostFingerprintView>,
     authenticated: bool,
     host_name: Option<String>,
+    home_directory: Option<String>,
     slurm_version: Option<String>,
     partitions: Vec<SlurmPartitionView>,
     helper_available: bool,
@@ -208,6 +240,15 @@ fn run_ssh(
     scan: &ScannedHost,
     remote_command: &str,
 ) -> Result<Vec<u8>> {
+    run_ssh_with_input(request, scan, remote_command, None)
+}
+
+fn run_ssh_with_input(
+    request: &SshConnectionProbeRequest,
+    scan: &ScannedHost,
+    remote_command: &str,
+    input: Option<&[u8]>,
+) -> Result<Vec<u8>> {
     let username = bounded_token("SSH username", &request.username, 128)?;
     let host = bounded_token("SSH host", &request.host, 255)?;
     let destination = format!("{username}@{host}");
@@ -252,17 +293,29 @@ fn run_ssh(
     } else {
         command.args(["-o", "BatchMode=yes"]);
     }
-    let output = command
+    let mut child = command
         .arg("-p")
         .arg(request.port.to_string())
         .arg("--")
         .arg(destination)
         .arg(remote_command)
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
+        .spawn()
         .context("starting SSH connection")?;
+    if let Some(input) = input {
+        child
+            .stdin
+            .as_mut()
+            .context("opening remote installer input")?
+            .write_all(input)?;
+    }
+    let output = child.wait_with_output()?;
     ensure!(
         output.stdout.len() <= MAX_SSH_OUTPUT_BYTES && output.stderr.len() <= MAX_SSH_OUTPUT_BYTES,
         "SSH output exceeded its safety bound"
@@ -274,11 +327,12 @@ fn run_ssh(
 }
 
 fn static_probe_command() -> &'static str {
-    "printf 'RHO_HOST\\t%s\\n' \"$(hostname)\"; if command -v sinfo >/dev/null 2>&1; then printf 'RHO_SLURM\\t%s\\n' \"$(sinfo --version | head -1)\"; sinfo -h -o 'RHO_PARTITION|%P|%a|%D|%G|%C' | head -32; fi; if command -v rho-toolchain-helper >/dev/null 2>&1; then printf 'RHO_HELPER\\tready\\n'; else printf 'RHO_HELPER\\tmissing\\n'; fi"
+    "printf 'RHO_HOST\\t%s\\n' \"$(hostname)\"; printf 'RHO_HOME\\t%s\\n' \"$HOME\"; if command -v sinfo >/dev/null 2>&1; then printf 'RHO_SLURM\\t%s\\n' \"$(sinfo --version | head -1)\"; sinfo -h -o 'RHO_PARTITION|%P|%a|%D|%G|%C' | head -32; fi; if command -v rho-toolchain-helper >/dev/null 2>&1 || [ -x \"$HOME/.local/bin/rho-toolchain-helper\" ]; then printf 'RHO_HELPER\\tready\\n'; else printf 'RHO_HELPER\\tmissing\\n'; fi"
 }
 
 fn parse_probe(scan: &ScannedHost, output: &[u8]) -> SshConnectionProbeView {
     let mut host_name = None;
+    let mut home_directory = None;
     let mut slurm_version = None;
     let mut helper_available = false;
     let mut partitions = Vec::new();
@@ -290,6 +344,7 @@ fn parse_probe(scan: &ScannedHost, output: &[u8]) -> SshConnectionProbeView {
         };
         match fields.as_slice() {
             ["RHO_HOST", value] => host_name = Some((*value).to_string()),
+            ["RHO_HOME", value] => home_directory = Some((*value).to_string()),
             ["RHO_SLURM", value] => slurm_version = Some((*value).to_string()),
             ["RHO_HELPER", "ready"] => helper_available = true,
             ["RHO_PARTITION", partition, available, nodes, gres, cpus] => {
@@ -309,6 +364,7 @@ fn parse_probe(scan: &ScannedHost, output: &[u8]) -> SshConnectionProbeView {
         fingerprints: scan.fingerprints.clone(),
         authenticated: true,
         host_name,
+        home_directory,
         slurm_version,
         partitions,
         helper_available,
@@ -332,6 +388,7 @@ fn probe_connection(request: &SshConnectionProbeRequest) -> Result<SshConnection
             fingerprints: scan.fingerprints,
             authenticated: false,
             host_name: None,
+            home_directory: None,
             slurm_version: None,
             partitions: Vec::new(),
             helper_available: false,
@@ -416,6 +473,56 @@ fn install_public_key(
         key = shell_single_quote(public_key),
     );
     run_ssh(request, scan, &remote_command)?;
+    Ok(())
+}
+
+fn append_embedded_source(
+    directory: &Dir<'_>,
+    builder: &mut tar::Builder<GzEncoder<Vec<u8>>>,
+) -> Result<()> {
+    for file in directory.files() {
+        let bytes = file.contents();
+        let mut header = tar::Header::new_gnu();
+        header.set_mode(0o644);
+        header.set_size(bytes.len() as u64);
+        header.set_cksum();
+        builder.append_data(
+            &mut header,
+            Path::new("src").join(file.path()),
+            Cursor::new(bytes),
+        )?;
+    }
+    for child in directory.dirs() {
+        append_embedded_source(child, builder)?;
+    }
+    Ok(())
+}
+
+fn remote_helper_archive() -> Result<Vec<u8>> {
+    let encoder = GzEncoder::new(Vec::new(), Compression::default());
+    let mut builder = tar::Builder::new(encoder);
+    append_embedded_source(&REMOTE_HELPER_SOURCE, &mut builder)?;
+    let mut header = tar::Header::new_gnu();
+    header.set_mode(0o644);
+    header.set_size(REMOTE_HELPER_MANIFEST.len() as u64);
+    header.set_cksum();
+    builder.append_data(
+        &mut header,
+        "Cargo.toml",
+        Cursor::new(REMOTE_HELPER_MANIFEST.as_bytes()),
+    )?;
+    let encoder = builder.into_inner()?;
+    Ok(encoder.finish()?)
+}
+
+fn install_remote_helper(request: &SshConnectionProbeRequest, scan: &ScannedHost) -> Result<()> {
+    let archive = remote_helper_archive()?;
+    let command = "set -eu; command -v cargo >/dev/null 2>&1; build=\"$HOME/.rho/helper-build\"; rm -rf \"$build\"; mkdir -p \"$build\"; tar -xzf - -C \"$build\"; cd \"$build\"; cargo build --release --quiet >build.log 2>&1 || { tail -40 build.log >&2; exit 41; }; mkdir -p \"$HOME/.local/bin\"; install -m 755 target/release/rho-toolchain-helper \"$HOME/.local/bin/rho-toolchain-helper\"; rm -rf \"$build\"; printf 'RHO_HELPER_INSTALLED\\n'";
+    let output = run_ssh_with_input(request, scan, command, Some(&archive))?;
+    ensure!(
+        String::from_utf8_lossy(&output).contains("RHO_HELPER_INSTALLED"),
+        "Remote Helper installation did not report committed state"
+    );
     Ok(())
 }
 
@@ -554,15 +661,46 @@ pub(crate) async fn configure_ssh_target(
     let project_root = state.project_root.read().await.clone();
     let rho_home = crate::agent_llm::agent_config::rho_home().map_err(crate::display_error)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let target_id = bounded_token("Target ID", &request.target_id, 128)?;
-        validate_target_id(&target_id)?;
         let host = bounded_token("SSH host", &request.host, 255)?;
+        let existing_target_id = load_target_registry(&rho_home).ok().and_then(|registry| {
+            registry
+                .registry
+                .targets
+                .into_iter()
+                .find_map(|(target_id, target)| {
+                    matches!(
+                        target.host,
+                        ComputeHost::Ssh {
+                            host: target_host,
+                            username,
+                            port,
+                            ..
+                        } if target_host == host
+                            && username.as_deref() == Some(request.username.trim())
+                            && port == request.port
+                    )
+                    .then_some(target_id)
+                })
+        });
+        let target_id = if request.target_id.trim().is_empty() {
+            existing_target_id.unwrap_or_else(|| {
+                let generated = host
+                    .chars()
+                    .map(|value| {
+                        if value.is_ascii_alphanumeric() {
+                            value
+                        } else {
+                            '-'
+                        }
+                    })
+                    .collect::<String>();
+                format!("ssh-{}", generated.trim_matches('-'))
+            })
+        } else {
+            bounded_token("Target ID", &request.target_id, 128)?
+        };
+        validate_target_id(&target_id)?;
         let username = bounded_token("SSH username", &request.username, 128)?;
-        let remote_root = bounded_token("Remote project root", &request.remote_root, 1024)?;
-        ensure!(
-            remote_root.starts_with('/'),
-            "Remote project root must be absolute"
-        );
         let scan = scan_host(&host, request.port)?;
         ensure!(
             scan.fingerprints
@@ -595,10 +733,30 @@ pub(crate) async fn configure_ssh_target(
             identity_file: identity_file.clone(),
             confirmed_fingerprint: Some(request.confirmed_fingerprint.clone()),
         };
-        let probe = probe_connection(&probe_request)?;
+        let mut probe = probe_connection(&probe_request)?;
         ensure!(
             probe.authenticated,
             "Managed-key SSH authentication did not become ready"
+        );
+        if !probe.helper_available {
+            install_remote_helper(&probe_request, &scan)?;
+            probe = probe_connection(&probe_request)?;
+        }
+        ensure!(
+            probe.helper_available,
+            "Rho remote Helper installation did not become ready"
+        );
+        let remote_root = if request.remote_root.trim().is_empty() {
+            probe
+                .home_directory
+                .clone()
+                .context("Remote account home directory was not detected")?
+        } else {
+            bounded_token("Remote project root", &request.remote_root, 1024)?
+        };
+        ensure!(
+            remote_root.starts_with('/'),
+            "Remote project root must be absolute"
         );
         let target = write_target_registry(
             &rho_home,
@@ -616,7 +774,7 @@ pub(crate) async fn configure_ssh_target(
                 capabilities: request.capabilities.clone(),
             },
         )?;
-        let project_selected = request.select_for_project && probe.helper_available;
+        let project_selected = request.select_for_project;
         if project_selected {
             select_project_target(&project_root, &target_id, &request.capabilities)?;
         }
@@ -721,6 +879,50 @@ mod tests {
         assert!(view.host_name.is_some());
         assert!(view.slurm_version.is_some());
         assert!(!view.partitions.is_empty());
+    }
+
+    #[test]
+    fn embedded_remote_helper_archive_contains_exact_build_inputs() {
+        let archive = remote_helper_archive().unwrap();
+        let decoder = flate2::read::GzDecoder::new(archive.as_slice());
+        let mut entries = tar::Archive::new(decoder)
+            .entries()
+            .unwrap()
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        entries.sort();
+        assert!(entries.contains(&"Cargo.toml".to_string()));
+        assert!(entries.contains(&"src/lib.rs".to_string()));
+        assert!(entries.contains(&"src/bin/rho-toolchain-helper.rs".to_string()));
+    }
+
+    #[test]
+    #[ignore = "installs the exact embedded Helper on an explicitly supplied live SSH account"]
+    fn live_remote_helper_install() {
+        let host = std::env::var("RHO_TEST_SSH_HOST").unwrap();
+        let username = std::env::var("RHO_TEST_SSH_USERNAME").unwrap();
+        let identity_file = std::env::var("RHO_TEST_SSH_IDENTITY").unwrap();
+        let fingerprint = std::env::var("RHO_TEST_SSH_FINGERPRINT").unwrap();
+        let port = std::env::var("RHO_TEST_SSH_PORT").unwrap().parse().unwrap();
+        let request = SshConnectionProbeRequest {
+            host: host.clone(),
+            port,
+            username,
+            password: None,
+            identity_file: Some(identity_file),
+            confirmed_fingerprint: Some(fingerprint),
+        };
+        let scan = scan_host(&host, port).unwrap();
+        install_remote_helper(&request, &scan).unwrap();
+        let view = probe_connection(&request).unwrap();
+        assert!(view.helper_available);
     }
 
     #[test]

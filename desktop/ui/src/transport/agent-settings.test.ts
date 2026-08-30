@@ -120,6 +120,21 @@ describe("Agent settings generated transport", () => {
     );
 
     await expect(transport.loadAgentLlmSettings()).resolves.toBe(settings);
+    const provider = {
+      id: "provider:new", display_name: "New Provider", kind: "openai", registered_provider_id: null,
+      api_key_env: "NEW_API_KEY", api_key_required: true, base_url: null, base_url_env: null,
+      wire_api: null, disable_stream_options: null,
+    };
+    await expect(transport.saveProvider({
+      provider,
+      expectedRevision: 9,
+      expectedConfigSnapshotId: "config-snapshot:9",
+    })).resolves.toBe(settings);
+    await expect(transport.deleteProvider({
+      providerId: provider.id,
+      expectedRevision: 9,
+      expectedConfigSnapshotId: "config-snapshot:9",
+    })).resolves.toBe(settings);
     await expect(transport.repairAgentConfigPermissions({
       expectedConfigPath: settings.config_store.config_path!,
       expectedRevision: settings.revision,
@@ -168,6 +183,16 @@ describe("Agent settings generated transport", () => {
     })).resolves.toBe(settings);
     expect(calls).toEqual([
       { command: "agent_llm_settings" },
+      { command: "agent_llm_save_provider", args: { request: {
+        provider,
+        expectedRevision: 9,
+        expectedConfigSnapshotId: "config-snapshot:9",
+      } } },
+      { command: "agent_llm_delete_provider", args: { request: {
+        providerId: provider.id,
+        expectedRevision: 9,
+        expectedConfigSnapshotId: "config-snapshot:9",
+      } } },
       {
         command: "agent_llm_repair_config_permissions",
         args: { request: {

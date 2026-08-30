@@ -18,7 +18,9 @@ Important runtime owners include:
 - `runtime_registry`, `studio_runtime`, `surface_runtime`, and `ui_profile` for
   desktop workbench state;
 - `agent_llm` and Agent commands for model settings, selection, tests, and
-  credential projection;
+  credential projection. Provider setup asks for service and API key (plus a
+  Base URL only for compatible services), creates config automatically, and
+  performs model discovery before exposing advanced controls;
 - `agent_config` for the canonical `<Rho home>/config.yaml` model registry,
   atomic mutation, and permission checks. `RHO_HOME` overrides discovery;
   otherwise an existing `~/.rho` wins over the XDG variant, and new installs
@@ -29,9 +31,10 @@ Important runtime owners include:
   Workspace startup admits the exact local/native R realization before Ark
   launch; Runtime Run and auxiliary Live entry points revalidate the cached
   config/registry binding and recent resource-governance observation before
-  persistence or process dispatch. Environment → Connections provides host-key
-  confirmation, one-time password/key bootstrap, target persistence, project
-  selection, and Slurm discovery without requiring a terminal. Environment → Resources refreshes bounded
+  persistence or process dispatch. Environment → Connections asks for four
+  essential login fields, then automates host-key pinning, Slurm discovery,
+  dedicated-key bootstrap, exact remote Helper deployment, target persistence,
+  and optional project selection without requiring a terminal. Environment → Resources refreshes bounded
   local/SSH device telemetry across native, Docker, and Conda target identities
   every 15 seconds while that view is open. The workbench taskbar reuses the
   same typed Environment read surface as a three-metric CPU/RAM/disk panel,
@@ -50,7 +53,9 @@ Controllers under `app/controllers/` serialize project, Surface, Console, and
 Studio mutations. The compact left rail keeps Studio/Vibe/Compose captions
 hidden until hover or keyboard focus, exposes one tools button for every placed
 component, and folds the former top Rho menu into the bottom-pinned rail menu
-alongside toolbar customization.
+alongside a deliberately small toolbar customization surface: only Command
+Search and Compose remain optional; redundant project, scene, action, and
+runtime projections are removed.
 Component tools provide focus, mode, runtime, duplicate, and close actions.
 Exact Plot links from Console or History open the durable Plot identity, while
 the general Plots view includes both current-session and historical project

@@ -1,9 +1,5 @@
 export const TOOLBAR_COMPONENT_IDS = [
-  "project_context",
-  "scene_selector",
   "command_search",
-  "project_action",
-  "runtime_status",
   "compose",
 ] as const;
 

@@ -9,6 +9,7 @@ import type {
   UiKernelTransport,
 } from "../transport";
 import { buildAddedModelProfile } from "../transport";
+import type { AgentProviderProfile } from "../transport/agent-settings";
 import { ModelOptionsDialog } from "./ModelOptionsDialog";
 import { SurfaceTaskState } from "./SurfaceTaskState";
 import {
@@ -71,6 +72,43 @@ type Feedback =
 
 type ProviderView = AgentLlmSettingsView["providers"][number];
 type CredentialWriteTarget = "config_file" | "session";
+type ProviderPresetId = "openai" | "anthropic" | "gemini" | "deepseek" | "openrouter" | "local" | "custom";
+
+interface ProviderConnectDraft {
+  readonly preset: ProviderPresetId;
+  readonly displayName: string;
+  readonly baseUrl: string;
+  readonly apiKey: string;
+}
+
+const PROVIDER_PRESETS: Readonly<Record<ProviderPresetId, {
+  readonly label: string;
+  readonly kind: AgentProviderProfile["kind"];
+  readonly registeredProviderId: string | null;
+  readonly apiKeyEnv: string | null;
+  readonly apiKeyRequired: boolean;
+  readonly defaultBaseUrl: string;
+  readonly wireApi: string | null;
+}>> = {
+  openai: { label: "OpenAI", kind: "openai", registeredProviderId: null, apiKeyEnv: "OPENAI_API_KEY", apiKeyRequired: true, defaultBaseUrl: "", wireApi: null },
+  anthropic: { label: "Anthropic", kind: "anthropic", registeredProviderId: null, apiKeyEnv: "ANTHROPIC_API_KEY", apiKeyRequired: true, defaultBaseUrl: "", wireApi: null },
+  gemini: { label: "Google Gemini", kind: "gemini", registeredProviderId: null, apiKeyEnv: "GEMINI_API_KEY", apiKeyRequired: true, defaultBaseUrl: "", wireApi: null },
+  deepseek: { label: "DeepSeek", kind: "registered", registeredProviderId: "deepseek", apiKeyEnv: "DEEPSEEK_API_KEY", apiKeyRequired: true, defaultBaseUrl: "", wireApi: null },
+  openrouter: { label: "OpenRouter", kind: "registered", registeredProviderId: "openrouter", apiKeyEnv: "OPENROUTER_API_KEY", apiKeyRequired: true, defaultBaseUrl: "", wireApi: null },
+  local: { label: "Local OpenAI-compatible", kind: "local_openai_compatible", registeredProviderId: null, apiKeyEnv: null, apiKeyRequired: false, defaultBaseUrl: "http://127.0.0.1:11434/v1", wireApi: "chat_completions" },
+  custom: { label: "Custom OpenAI-compatible", kind: "openai_compatible", registeredProviderId: null, apiKeyEnv: "RHO_CUSTOM_API_KEY", apiKeyRequired: true, defaultBaseUrl: "", wireApi: "chat_completions" },
+};
+
+function matchesCompatibleProvider(kind: string): boolean {
+  return kind === "openai_compatible" || kind === "local_openai_compatible";
+}
+
+const EMPTY_PROVIDER_CONNECT: ProviderConnectDraft = {
+  preset: "openai",
+  displayName: "",
+  baseUrl: "",
+  apiKey: "",
+};
 
 const FIXED_CREDENTIAL_MASK = "••••••••••••••••";
 
@@ -187,7 +225,7 @@ function configStoreDetail(store: AgentLlmSettingsView["config_store"]): string 
     case "loaded":
       return "Provider settings and saved API keys use this canonical file.";
     case "missing":
-      return "No configuration file was found. Create or paste config.yaml at this exact path, then refresh.";
+      return "Rho will create the configuration automatically when the first Provider is connected.";
     case "malformed":
       return store.detail ?? "The configuration file is not valid V6 YAML. Fix it, then refresh.";
     case "unsupported_schema_version":
@@ -195,7 +233,7 @@ function configStoreDetail(store: AgentLlmSettingsView["config_store"]): string 
         ? "The configuration file uses an unsupported schema version."
         : `Schema version ${store.found_schema_version} is not supported; Rho expects version 6.`;
     case "home_unavailable":
-      return "Rho could not resolve a user home for config.yaml.";
+      return "Rho could not resolve device-local settings storage. Choose a valid Rho Home, then retry.";
     default:
       return store.detail ?? "The configuration file is unavailable.";
   }
@@ -243,6 +281,8 @@ function ProvidersSettingsModule({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [manualAddOpen, setManualAddOpen] = useState(false);
   const [manualAddDraft, setManualAddDraft] = useState({ modelId: "", displayName: "" });
+  const [providerConnectOpen, setProviderConnectOpen] = useState(false);
+  const [providerConnectDraft, setProviderConnectDraft] = useState<ProviderConnectDraft>(EMPTY_PROVIDER_CONNECT);
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const draftInput = useRef<HTMLInputElement>(null);
   const automaticRefreshProvider = useRef<string | null>(null);
@@ -638,8 +678,101 @@ function ProvidersSettingsModule({
     }
   };
 
+  const connectProvider = async () => {
+    if (feedback.status === "working") return;
+    const preset = PROVIDER_PRESETS[providerConnectDraft.preset];
+    const baseId = providerConnectDraft.preset === "local" ? "local" : providerConnectDraft.preset;
+    let providerId = baseId;
+    for (let suffix = 2; view.providers.some((candidate) => candidate.id === providerId); suffix += 1) {
+      providerId = `${baseId}-${suffix}`;
+    }
+    const configuredBaseUrl = providerConnectDraft.baseUrl.trim() || preset.defaultBaseUrl;
+    if (matchesCompatibleProvider(preset.kind) && configuredBaseUrl === "") {
+      setFeedback({ status: "error", message: "Enter the Provider base URL." });
+      return;
+    }
+    if (preset.apiKeyRequired && providerConnectDraft.apiKey.trim() === "") {
+      setFeedback({ status: "error", message: "Enter the Provider API key." });
+      return;
+    }
+    const profile: AgentProviderProfile = {
+      id: providerId,
+      display_name: providerConnectDraft.displayName.trim() || preset.label,
+      kind: preset.kind,
+      registered_provider_id: preset.registeredProviderId,
+      api_key_env: preset.apiKeyEnv,
+      api_key_required: preset.apiKeyRequired,
+      base_url: configuredBaseUrl || null,
+      base_url_env: null,
+      wire_api: preset.wireApi,
+      disable_stream_options: null,
+    };
+    setFeedback({ status: "working", message: `Connecting ${profile.display_name}…` });
+    try {
+      let next = await transport.saveProvider({
+        provider: profile,
+        expectedRevision: view.revision,
+        expectedConfigSnapshotId: view.config_store.config_snapshot_id,
+      });
+      if (preset.apiKeyRequired) {
+        next = await transport.saveProviderCredential({
+          providerId,
+          credential: providerConnectDraft.apiKey.trim(),
+          target: "session",
+          confirmReplace: false,
+          expectedRevision: next.revision,
+          expectedConfigSnapshotId: next.config_store.config_snapshot_id,
+        });
+      }
+      applyView(next);
+      setPage({ kind: "provider", providerId });
+      setProviderConnectDraft(EMPTY_PROVIDER_CONNECT);
+      setProviderConnectOpen(false);
+      try {
+        const response = await transport.discoverProviderModels(providerId);
+        setDiscovery({ status: "complete", response });
+        setFeedback({
+          status: response.status === "ready" ? "success" : "error",
+          message: response.status === "ready"
+            ? `${profile.display_name} connected · ${response.models.length} models detected automatically.`
+            : response.message,
+        });
+      } catch (error: unknown) {
+        setFeedback({ status: "error", message: boundedMessage(error, "Provider saved, but automatic model detection failed.") });
+      }
+    } catch (error: unknown) {
+      setProviderConnectDraft((current) => ({ ...current, apiKey: "" }));
+      await reloadDurableTruth(boundedMessage(error, "The Provider could not be connected."));
+    }
+  };
+
   let detailContent: ReactNode;
-  if (provider == null || page.kind === "overview") {
+  if (providerConnectOpen) {
+    const preset = PROVIDER_PRESETS[providerConnectDraft.preset];
+    const showBaseUrl = matchesCompatibleProvider(preset.kind);
+    detailContent = <form className="rho-settings-connect-provider" onSubmit={(event) => { event.preventDefault(); void connectProvider(); }}>
+      <header className="rho-settings-detail-heading">
+        <div><span className="rho-eyebrow">Provider setup</span><h2>Connect a model service</h2><p>Enter the essentials. Rho will create the configuration and detect available models.</p></div>
+      </header>
+      <label>Service<select value={providerConnectDraft.preset} onChange={(event) => {
+        const nextPreset = event.target.value as ProviderPresetId;
+        setProviderConnectDraft((current) => ({
+          ...current,
+          preset: nextPreset,
+          baseUrl: PROVIDER_PRESETS[nextPreset].defaultBaseUrl,
+          apiKey: "",
+        }));
+      }}>{Object.entries(PROVIDER_PRESETS).map(([id, definition]) => <option value={id} key={id}>{definition.label}</option>)}</select></label>
+      <label>Display name (optional)<input value={providerConnectDraft.displayName} placeholder={preset.label} onChange={(event) => setProviderConnectDraft((current) => ({ ...current, displayName: event.target.value }))} /></label>
+      {showBaseUrl && <label>Base URL<input type="url" required value={providerConnectDraft.baseUrl} placeholder="https://api.example.com/v1" onChange={(event) => setProviderConnectDraft((current) => ({ ...current, baseUrl: event.target.value }))} /></label>}
+      {preset.apiKeyRequired && <label>API key<input type="password" required autoComplete="new-password" value={providerConnectDraft.apiKey} onChange={(event) => setProviderConnectDraft((current) => ({ ...current, apiKey: event.target.value }))} /></label>}
+      <p className="rho-settings-connect-note">The API key is used for this session. Rho automatically creates config.yaml, verifies the connection, and discovers models; advanced settings remain available after setup.</p>
+      <div className="rho-settings-connect-actions">
+        <button type="submit" className="rho-primary-action" disabled={feedback.status === "working"}>{feedback.status === "working" ? "Connecting…" : "Connect & detect models"}</button>
+        <button type="button" onClick={() => { setProviderConnectOpen(false); setProviderConnectDraft(EMPTY_PROVIDER_CONNECT); }}>Cancel</button>
+      </div>
+    </form>;
+  } else if (provider == null || page.kind === "overview") {
     detailContent = <SurfaceTaskState
       tone="empty"
       title="Select a Provider"
@@ -971,15 +1104,15 @@ function ProvidersSettingsModule({
     <div className="rho-settings-providers-list">
       <header className="rho-settings-module-heading">
         <div><span className="rho-eyebrow">Settings</span><h2>Providers</h2></div>
-        <button type="button" onClick={refresh}>Refresh</button>
+        <div className="rho-settings-module-heading-actions">
+          <button type="button" className="rho-primary-action" onClick={() => { setProviderConnectOpen(true); setPage({ kind: "overview" }); }}>+ Provider</button>
+          <button type="button" onClick={refresh}>Refresh</button>
+        </div>
       </header>
-      <section className={`rho-settings-config-store rho-settings-config-store-${view.config_store.status}`} aria-label="Rho model configuration">
-        <header>
-          <div><strong>config.yaml</strong><code>{view.config_store.config_path ?? "Path unavailable"}</code></div>
-          <span>{configStoreStatusLabel(view.config_store.status)}</span>
-        </header>
+      <details className={`rho-settings-config-store rho-settings-config-store-${view.config_store.status}`} aria-label="Rho model configuration" open={view.config_store.permission_issues.length > 0 || undefined}>
+        <summary><strong>Configuration storage</strong><span>{configStoreStatusLabel(view.config_store.status)}</span></summary>
+        <code>{view.config_store.config_path ?? "Path unavailable"}</code>
         <p>{configStoreDetail(view.config_store)}</p>
-        <p><strong>Plaintext:</strong> API keys saved to this file are readable by anyone who can read the file.</p>
         {view.config_store.permission_issues.length > 0 && <div className="rho-settings-config-permissions" role="alert">
           <strong>Loose permissions detected</strong>
           <ul>{view.config_store.permission_issues.map((issue) => <li key={`${issue.subject}:${issue.path}`}>
@@ -991,16 +1124,14 @@ function ProvidersSettingsModule({
             onClick={() => void repairConfigPermissions()}
           >Repair permissions</button>
         </div>}
-      </section>
+      </details>
       {view.providers.length === 0 ? (
         <SurfaceTaskState
           tone={view.config_store.status === "malformed" || view.config_store.status === "unsupported_schema_version" ? "attention" : "empty"}
           title="No Providers"
-          detail={view.config_store.config_path == null
-            ? "No canonical model configuration is available."
-            : `Add Provider is not available in this iteration. Edit ${view.config_store.config_path}, then refresh.`}
+          detail="Connect a service with only its name and API key. Rho creates configuration and detects models automatically."
           role="status"
-        />
+        ><button type="button" className="rho-primary-action" onClick={() => setProviderConnectOpen(true)}>Connect Provider</button></SurfaceTaskState>
       ) : <div className="rho-settings-row-list" aria-label="Configured Providers">
         {view.providers.map((item) => {
           const modelCount = view.models.filter((model) => model.provider_id === item.id).length;

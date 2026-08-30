@@ -125,10 +125,11 @@ describe("Provider-first Settings Surface", () => {
     expect(container.querySelector("input[type='password']")).toBeNull();
   });
 
-  it("shows the canonical path and plaintext boundary without exposing its snapshot token", async () => {
+  it("keeps storage implementation secondary without exposing its snapshot token", async () => {
     const { container } = await renderSettings();
+    expect(container.textContent).toContain("Configuration storage");
     expect(container.textContent).toContain("/mock/home/.rho/config.yaml");
-    expect(container.textContent).toContain("API keys saved to this file are readable");
+    expect(container.textContent).not.toContain("API keys saved to this file are readable");
     expect(container.textContent).not.toContain("mock-config-snapshot-1");
   });
 
@@ -151,6 +152,86 @@ describe("Provider-first Settings Surface", () => {
       expect(container.textContent).not.toContain("Providers unavailable");
       if (state.detail != null) expect(container.textContent).toContain(state.detail);
     }
+  });
+
+  it("connects a Provider from essential fields and detects models automatically", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    const empty: AgentLlmSettingsView = {
+      ...base,
+      providers: [],
+      models: [],
+      config_store: { ...base.config_store, status: "missing" },
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(empty));
+    transport.saveProvider = vi.fn(async (request) => ({
+      ...empty,
+      revision: 1,
+      config_store: { ...empty.config_store, status: "loaded", config_snapshot_id: "provider-saved" },
+      providers: [{
+        ...request.provider,
+        credential_status: "not_checked",
+        credential_effective_source: "not_configured",
+        env_shadows_file: false,
+        session_credential_present: false,
+        config_file_credential_present: false,
+        effective_base_url: "https://api.deepseek.com",
+        base_url_source: "provider_default",
+      }],
+    }));
+    transport.saveProviderCredential = vi.fn(async () => ({
+      ...await transport.saveProvider({
+        provider: {
+          id: "deepseek", display_name: "DeepSeek", kind: "registered", registered_provider_id: "deepseek",
+          api_key_env: "DEEPSEEK_API_KEY", api_key_required: true, base_url: null, base_url_env: null,
+          wire_api: null, disable_stream_options: null,
+        },
+        expectedRevision: 0,
+        expectedConfigSnapshotId: "mock",
+      }),
+      revision: 1,
+      config_store: { ...empty.config_store, status: "loaded", config_snapshot_id: "credential-saved" },
+      providers: [{
+        id: "deepseek", display_name: "DeepSeek", kind: "registered", registered_provider_id: "deepseek",
+        api_key_env: "DEEPSEEK_API_KEY", api_key_required: true, base_url: null, base_url_env: null,
+        wire_api: null, disable_stream_options: null, credential_status: "detected",
+        credential_effective_source: "session", env_shadows_file: false,
+        session_credential_present: true, config_file_credential_present: false,
+        effective_base_url: "https://api.deepseek.com", base_url_source: "provider_default",
+      }],
+    }));
+    transport.discoverProviderModels = vi.fn(async () => ({
+      status: "ready", provider_id: "deepseek", models: [{
+        id: "deepseek-chat", display_name: "DeepSeek Chat",
+        model_type: { value: "language", source: "provider_response" }, capabilities: {},
+      }], truncated: false, message: "Loaded models.", error_class: null,
+    }));
+    const { container } = await renderSettings({ transport });
+    expect(container.textContent).toContain("Rho will create the configuration automatically");
+    await click(button(container, "Connect Provider"));
+    const select = container.querySelector<HTMLSelectElement>(".rho-settings-connect-provider select")!;
+    await act(async () => {
+      select.value = "deepseek";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await settle();
+    });
+    const keyInput = container.querySelector<HTMLInputElement>(".rho-settings-connect-provider input[type='password']")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(keyInput, "session-secret");
+      keyInput.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+    });
+    await click(button(container, "Connect & detect models"));
+    expect(transport.saveProvider).toHaveBeenCalledWith(expect.objectContaining({
+      provider: expect.objectContaining({ kind: "registered", registered_provider_id: "deepseek" }),
+    }));
+    expect(transport.saveProviderCredential).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "deepseek", target: "session", credential: "session-secret",
+    }));
+    expect(transport.discoverProviderModels).toHaveBeenCalledWith("deepseek");
+    expect(container.textContent).toContain("1 models detected automatically");
+    expect(container.textContent).toContain("DeepSeek");
   });
 
   it("repairs only the projected config path and reloads the returned permission truth", async () => {

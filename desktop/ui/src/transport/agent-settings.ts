@@ -9,6 +9,9 @@ import {
   type AgentModelCapabilityDeclarationRequest as AgentModelCapabilityDeclarationRequestWire,
   type AgentModelDiscoveryResponse as AgentModelDiscoveryResponseWire,
   type AgentModelProfile as AgentModelProfileWire,
+  type AgentProviderProfile as AgentProviderProfileWire,
+  type AgentProviderSaveRequest as AgentProviderSaveRequestWire,
+  type DeleteProviderRequest as DeleteProviderRequestWire,
   type AgentModelProfileView as AgentModelProfileViewWire,
   type AgentModelSaveRequest as AgentModelSaveRequestWire,
   type AgentModelTestRequest as AgentModelTestRequestWire,
@@ -31,6 +34,9 @@ export type AgentModelDiscoveryResponse = DeepReadonly<AgentModelDiscoveryRespon
 export type AgentContextCapacityRequest = DeepReadonly<AgentContextCapacityRequestWire>;
 export type AgentConfigPermissionRepairRequest = DeepReadonly<AgentConfigPermissionRepairRequestWire>;
 export type AgentModelProfile = AgentModelProfileWire;
+export type AgentProviderProfile = AgentProviderProfileWire;
+export type AgentProviderSaveRequest = AgentProviderSaveRequestWire;
+export type DeleteProviderRequest = DeleteProviderRequestWire;
 export type AgentModelCapabilityDeclarationRequest = AgentModelCapabilityDeclarationRequestWire;
 export type AgentLlmCredentialWriteRequest = AgentLlmCredentialWriteRequestWire;
 export type AgentLlmSelectRequest = AgentLlmSelectRequestWire;
@@ -109,6 +115,8 @@ export interface AgentSettingsTransport {
   repairAgentConfigPermissions(
     request: AgentConfigPermissionRepairRequest,
   ): Promise<AgentLlmSettingsView>;
+  saveProvider(request: AgentProviderSaveRequest): Promise<AgentLlmSettingsView>;
+  deleteProvider(request: DeleteProviderRequest): Promise<AgentLlmSettingsView>;
   selectAgentChatModel(request: AgentLlmSelectRequest): Promise<AgentLlmSettingsView>;
   setAgentContextCapacity(
     request: AgentContextCapacityRequest,
@@ -137,6 +145,8 @@ export function createTauriAgentSettingsTransport(
     loadAgentLlmSettings: () => commands.agentLlmSettings(),
     repairAgentConfigPermissions: (request) =>
       commands.agentLlmRepairConfigPermissions(request),
+    saveProvider: (request) => commands.agentLlmSaveProvider(request),
+    deleteProvider: (request) => commands.agentLlmDeleteProvider(request),
     selectAgentChatModel: (request) => commands.agentLlmSelectModel(request),
     setAgentContextCapacity: (request) => commands.agentLlmSetContextCapacity(request),
     saveProviderCredential: (request) => commands.agentLlmSetCredential(request),

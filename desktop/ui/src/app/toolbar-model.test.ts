@@ -23,11 +23,7 @@ describe("toolbar preference model", () => {
   it("defaults to the fixed skeleton with every optional component ordered and hidden", () => {
     const layout = defaultToolbarLayout();
     expect(layout.order).toEqual([
-      "project_context",
-      "scene_selector",
       "command_search",
-      "project_action",
-      "runtime_status",
       "compose",
     ]);
     expect(layout.visible).toEqual([]);
@@ -35,7 +31,7 @@ describe("toolbar preference model", () => {
 
   it("toggles visibility and reorders without losing disabled components", () => {
     const visible = setToolbarComponentVisible(defaultToolbarLayout(), "compose", true);
-    const reordered = reorderToolbarComponent(visible, "compose", "project_context", "before");
+    const reordered = reorderToolbarComponent(visible, "compose", "command_search", "before");
     expect(reordered.order[0]).toBe("compose");
     expect(reordered.visible).toEqual(["compose"]);
     expect(defaultToolbarLayout().visible).toEqual([]);
@@ -63,11 +59,11 @@ describe("toolbar preference model", () => {
   it("persists exact layouts under isolated project keys", () => {
     const target = storage();
     const first = setToolbarComponentVisible(defaultToolbarLayout(), "compose", true);
-    const second = setToolbarComponentVisible(defaultToolbarLayout(), "runtime_status", true);
+    const second = setToolbarComponentVisible(defaultToolbarLayout(), "command_search", true);
     saveToolbarLayout(target, "project:a", first);
     saveToolbarLayout(target, "project:b", second);
     expect(loadToolbarLayout(target, "project:a").layout.visible).toEqual(["compose"]);
-    expect(loadToolbarLayout(target, "project:b").layout.visible).toEqual(["runtime_status"]);
+    expect(loadToolbarLayout(target, "project:b").layout.visible).toEqual(["command_search"]);
     expect(target.setItem).toHaveBeenCalledTimes(2);
   });
 

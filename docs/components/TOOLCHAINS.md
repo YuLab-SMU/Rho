@@ -23,7 +23,11 @@ lockfile = "uv.lock"
 ```
 
 Package names are not duplicated into `rho.toml`: renv and `renv.lock` own the
-R project library, while pyproject and `uv.lock` own Python dependencies.
+R project library, while pyproject and `uv.lock` own Python dependencies. For an
+unmanaged R project, Environment → Toolchains displays the already detected
+startup R and offers one explicit automatic setup action. After confirmation,
+Rho initializes renv, snapshots the project library, and writes `rho.toml`
+against the exact startup R; users never need to author the file manually.
 
 ## Compute targets
 
@@ -119,13 +123,16 @@ fails closed if `rho.toml` or `targets.yaml` changes. Desktop Workspace R is
 currently local Ark only: an admitted Docker, Conda, or SSH Workspace is
 reported as unsupported instead of being silently launched against local R.
 
-Environment → Connections is the no-terminal setup path. It discovers and
-requires explicit confirmation of the offered SHA-256 host key, tests password
-or existing-key authentication, detects Slurm and bounded partition facts,
-reports remote Helper readiness, atomically updates `targets.yaml`, and can
-select the target in the current `rho.toml` without discarding unrelated TOML
-formatting. The one-time password is cleared after the operation and is never
-returned to the frontend or included in errors.
+Environment → Connections is the no-terminal setup path. The primary form asks
+only for address, username, port, and a one-time password. Rho pins the
+preferred offered Ed25519 host key, detects the remote home and Slurm partition
+facts, creates and installs a dedicated key, uploads the exact embedded Helper
+source, builds it on the remote host with pinned dependencies, atomically
+updates `targets.yaml`, and optionally selects the target in the current
+`rho.toml` without discarding unrelated TOML formatting. Target name, remote
+folder, capabilities, existing-key use, and immediate project selection remain
+collapsed advanced options. The password is cleared after the operation and is
+never returned to the frontend or included in errors.
 
 Resource governance observes up to 16 registered target environments per
 refresh and keeps target identity separate from physical device identity, so

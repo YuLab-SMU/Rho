@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "8a6172406a13ecc1f55671ccbe389f3378ef4c43bc349e4ecbd50c22cd63a625";
+const EXPECTED_HANDLER_DIGEST = "a6e462c68780d5c0746794055c70c62a3e7735096e9b364c0e54705a50443426";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [
@@ -50,7 +50,7 @@ const ENVIRONMENT_COMMANDS = [
   "respond_environment_operation",
 ];
 
-const TOOLCHAIN_COMMANDS = ["toolchain_doctor"];
+const TOOLCHAIN_COMMANDS = ["toolchain_doctor", "toolchain_initialize"];
 const RESOURCE_MONITOR_COMMANDS = ["resource_monitor_snapshot"];
 const REMOTE_CONNECTION_COMMANDS = [
   "compute_target_list",

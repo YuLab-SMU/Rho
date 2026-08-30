@@ -592,7 +592,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     };
   }, []);
   const instances = useMemo(() => new Map(surfaces?.catalog.instances.map((instance) => [instance.instance_id, instance]) ?? []), [surfaces]);
-  const primaryCommands = useMemo(() => snapshot == null ? [] : commandsForPlacement(snapshot, "primary_candidate"), [snapshot]);
   const paletteCommands = useMemo(() => snapshot == null ? [] : commandsForPlacement(snapshot, "palette").filter((command) => {
     const query = commandQuery.trim().toLocaleLowerCase();
     return query.length === 0 || command.definition.label.toLocaleLowerCase().includes(query) ||
@@ -654,10 +653,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   };
   const commit = (edit: SceneEdit) => {
     return studioMutationController.commit(edit);
-  };
-  const profileRevisionRequest = () => profile == null ? null : {
-    project_id: profile.project_id,
-    expected_profile_revision: profile.revision,
   };
   const assertRenderedActionScope = (): ProjectActionScope => {
     const scope = renderedActionScope;
@@ -1432,22 +1427,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       await setWorkspaceModeReconciled("vibe");
     })
   );
-  const selectVibePage = (pageId: string): Promise<void> => runVibeTransition(async () => {
-    await prepareVibeReturnPoint();
-    const latest = currentProfileSnapshot().profile;
-    if (!latest.vibe_pages.some((page) => page.page_id === pageId)) {
-      throw new Error("The selected Vibe Page is unavailable.");
-    }
-    if (latest.active_vibe_page_id === pageId) return;
-    vibeReturnPointRef.current = null;
-    await profileStore.selectPage({
-      target: {
-        project_id: latest.project_id,
-        expected_profile_revision: latest.revision,
-      },
-      page_id: pageId,
-    });
-  });
   const exportCurrentVibePage = async (pageId: string) => {
     const latest = currentProfileSnapshot().profile;
     const page = latest.vibe_pages.find((candidate) => candidate.page_id === pageId);
@@ -2469,15 +2448,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const RailSearchIcon = () => (
     <svg {...railIconProps}><circle cx="7" cy="7" r="4" /><path d="m10 10 3.5 3.5" /></svg>
   );
-  const RailFolderIcon = () => (
-    <svg {...railIconProps}><path d="M2 4.5a1 1 0 0 1 1-1h3l1.5 2h5.5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-7Z" /></svg>
-  );
-  const RailLayersIcon = () => (
-    <svg {...railIconProps}><path d="m8 2 6 3-6 3-6-3 6-3Z" /><path d="m2 8.5 6 3 6-3" /></svg>
-  );
-  const RailPlayIcon = () => (
-    <svg {...railIconProps}><path d="M5 3.5v9l7-4.5-7-4.5Z" /></svg>
-  );
   const RailComposeIcon = () => (
     <svg {...railIconProps}><rect x="2" y="2.5" width="12" height="11" rx="1" /><path d="M9.5 2.5v11" /></svg>
   );
@@ -2493,82 +2463,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const renderToolbarComponent = (componentId: ToolbarComponentId) => {
     let content: ReactNode;
     switch (componentId) {
-      case "project_context":
-        content = (
-          <button
-            type="button"
-            className="rho-rail-btn"
-            title={snapshot?.project.display_path ?? ""}
-            aria-label={`Project ${snapshot?.project.display_label ?? "menu"}`}
-            onClick={() => {
-              setToolbarCustomizerOpen(false);
-              if (rhoMenuRef.current != null) rhoMenuRef.current.open = true;
-            }}
-          ><RailFolderIcon /></button>
-        );
-        break;
-      case "scene_selector":
-        content = (
-          <details className="rho-rail-popover">
-            <summary
-              className="rho-rail-btn"
-              aria-label={profile?.active_mode === "vibe" ? "Vibe Pages" : "Studio Scenes"}
-              title={profile?.active_mode === "vibe" ? "Vibe Pages" : "Studio Scenes"}
-            ><RailLayersIcon /></summary>
-            <div className="rho-rail-popover-panel">
-              {profile?.active_mode === "vibe" ? (
-                <select
-                  aria-label="Active Vibe Page"
-                  value={profile.active_vibe_page_id ?? ""}
-                  disabled={vibeTransitionBusy}
-                  onChange={(event) => {
-                    run(selectVibePage(event.target.value), "vibe.select_page");
-                  }}
-                >{profile.vibe_pages.map((page) => <option value={page.page_id} key={page.page_id}>{page.label}</option>)}</select>
-              ) : (
-                <select
-                  aria-label="Active Studio Scene"
-                  value={profile?.active_studio_scene_id ?? ""}
-                  onChange={(event) => {
-                    const target = profileRevisionRequest();
-                    if (target != null) run(profileStore.selectScene({ target, scene_id: event.target.value }));
-                  }}
-                >{profile?.studio_scenes.map((scene) => <option value={scene.scene_id} key={scene.scene_id}>{scene.label}</option>)}</select>
-              )}
-              {profile?.active_mode !== "vibe" && (
-                <>
-                  <button type="button" disabled={profile == null || studio == null} onClick={() => {
-                    const target = profileRevisionRequest();
-                    const scene = profile?.studio_scenes.find((candidate) => candidate.scene_id === profile.active_studio_scene_id);
-                    if (target != null && scene != null) run(profileStore.duplicateScene({ target, scene_id: scene.scene_id, label: `${scene.label} copy` }));
-                  }}>Duplicate</button>
-                  <button type="button" disabled={profile == null || studio == null} onClick={() => {
-                    const target = profileRevisionRequest();
-                    if (target != null && profile?.active_studio_scene_id != null) run(profileStore.saveScene({ target, scene_id: profile.active_studio_scene_id }));
-                  }}>Save</button>
-                  <button type="button" disabled={profile == null} onClick={() => {
-                    const target = profileRevisionRequest();
-                    const scene = profile?.studio_scenes.find((candidate) => candidate.scene_id === profile.active_studio_scene_id);
-                    const label = scene == null ? null : window.prompt("Scene name", scene.label)?.trim();
-                    if (target != null && scene != null && label) run(profileStore.renameScene({ target, scene_id: scene.scene_id, label }));
-                  }}>Rename</button>
-                  <button type="button" disabled={(profile?.studio_scenes.length ?? 0) < 2} onClick={() => {
-                    const target = profileRevisionRequest();
-                    if (target != null && profile?.active_studio_scene_id != null) run(profileStore.deleteScene({ target, scene_id: profile.active_studio_scene_id }));
-                  }}>Delete</button>
-                  <button type="button" disabled={profile == null} onClick={() => {
-                    const target = profileRevisionRequest();
-                    if (target != null && profile?.active_studio_scene_id != null) run(profileStore.resetScene({ target, scene_id: profile.active_studio_scene_id }));
-                  }}>Reset to Rho Studio</button>
-                  <span className="rho-menu-separator" />
-                  <button type="button" disabled={!studio?.can_undo} onClick={() => void studioMutationController.undo()}>Undo</button>
-                  <button type="button" disabled={!studio?.can_redo} onClick={() => void studioMutationController.redo()}>Redo</button>
-                </>
-              )}
-            </div>
-          </details>
-        );
-        break;
       case "command_search":
         content = (
           <button
@@ -2581,21 +2475,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
               setCommandSearchTransient(true);
             }}
           ><RailSearchIcon /></button>
-        );
-        break;
-      case "project_action":
-        content = (
-          <div className="rho-command-projection" aria-label="Primary contextual command">
-            {primaryCommands.filter((command) => command.availability.state === "available" && command.definition.command_id === "rho.check.run").slice(0, 1).map((command) => <button type="button" className="rho-rail-btn" title={command.definition.label} aria-label={command.definition.label} onClick={() => run(invokeCommand(command.definition.command_id))} key={command.definition.command_id}><RailPlayIcon /></button>)}
-          </div>
-        );
-        break;
-      case "runtime_status":
-        content = (
-          <div
-            className="rho-foundation-status"
-            title={snapshot?.health.workspace.label ?? "Connecting"}
-          ><span className={`rho-status-dot rho-status-${snapshot?.context.workspace_health ?? state.status}`} /></div>
         );
         break;
       case "compose":
@@ -2938,6 +2817,8 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
               <details className="rho-compose-layout">
                 <summary><span>Layout structure</span><span>Advanced</span></summary>
                 <div className="rho-inspector-actions">
+                  <button type="button" disabled={!studio.can_undo} onClick={() => void studioMutationController.undo()}>Undo</button>
+                  <button type="button" disabled={!studio.can_redo} onClick={() => void studioMutationController.redo()}>Redo</button>
                   <button type="button" onClick={() => commit({ kind: "normalize" })}>Normalize</button>
                   {studio.scene.root.kind === "container" && <button type="button" onClick={() => commit({ kind: "distribute_container", container_node_id: studio.scene.root.node_id })}>Distribute</button>}
                 </div>
