@@ -5284,9 +5284,8 @@ describe("Studio foundation app", () => {
     expect(runAgent.mock.calls[0]?.[0].context_plan_digest).toBeNull();
   });
 
-  it("keeps model context capacity focused by default and saves a revision-bound user declaration", async () => {
+  it("keeps model configuration in Settings and deep-links there from Agent", async () => {
     const transport = createMockUiKernelTransport();
-    const saveCapacity = vi.spyOn(transport, "setAgentContextCapacity");
     const ready = structuredClone(await transport.loadSnapshot());
     (ready.health as { agent: typeof ready.health.agent }).agent = {
       state: "ready",
@@ -5301,41 +5300,14 @@ describe("Studio foundation app", () => {
 
     await act(async () => {
       [...agent.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Context")!.click();
+        .find((button) => button.textContent === "Models")!.click();
       await settle();
     });
-    const capacity = agent.querySelector<HTMLFormElement>(".rho-agent-capacity")!;
-    expect(capacity.textContent).toContain("conservative default");
-    const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-    await act(async () => {
-      const context = capacity.querySelector<HTMLInputElement>("[aria-label='Context window tokens']")!;
-      const reserve = capacity.querySelector<HTMLInputElement>("[aria-label='Reserved output tokens']")!;
-      setInput.call(context, "131072");
-      context.dispatchEvent(new Event("input", { bubbles: true }));
-      setInput.call(reserve, "8192");
-      reserve.dispatchEvent(new Event("input", { bubbles: true }));
-      capacity.querySelector<HTMLButtonElement>("button[type='submit']")!.click();
-      await settle();
-    });
-    expect(saveCapacity).toHaveBeenCalledWith({
-      modelId: "mock-profile",
-      expectedRevision: 1,
-      expectedConfigSnapshotId: "mock-config-snapshot-1",
-      contextWindowTokens: 131_072,
-      reservedOutputTokens: 8_192,
-    });
-    expect(capacity.textContent).toContain("user declared");
-
-    const composer = agent.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
-    const setTextarea = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
-    await act(async () => {
-      setTextarea.call(composer, "Review the context budget");
-      composer.dispatchEvent(new Event("input", { bubbles: true }));
-      [...agent.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Review context")!.click();
-      await settle();
-    });
-    expect(agent.querySelector(".rho-agent-context-preview")?.textContent).toContain("122,880 tokens");
+    const settings = container.querySelector<HTMLElement>("[data-surface-id='rho.settings']")!;
+    expect(settings).not.toBeNull();
+    expect(settings.textContent).toContain("Mock Provider · Model");
+    expect(settings.textContent).toContain("mock-model");
+    expect(settings.textContent).toContain("What this model can do");
   });
 
   it("exposes Console busy state with a reachable Stop control", async () => {

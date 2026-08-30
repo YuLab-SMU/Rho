@@ -142,7 +142,7 @@ interface SurfaceViewProps {
   ) => Promise<{ readonly response: AgentFileMutationResponse; readonly beforeContent: string }>;
   readonly undoAgentFileProposal: (request: AgentFileUndoState) => Promise<void>;
   readonly openNavigatorFile: (descriptor: ResourceDescriptor) => Promise<void>;
-  readonly openSurfaceById: (surfaceId: string) => void;
+  readonly openSurfaceById: (surfaceId: string, viewStateOverride?: unknown) => void;
   readonly openPlot: (plotId: string) => void;
   readonly agentRuntimeOutputContext: RuntimeOutputReference | null;
   readonly setAgentRuntimeOutputContext: (reference: RuntimeOutputReference | null) => boolean;
@@ -840,6 +840,11 @@ export function SurfaceView({
           reportError={reportError}
           runtimeOutputContext={agentRuntimeOutputContext}
           setRuntimeOutputContext={setAgentRuntimeOutputContext}
+          openModelSettings={(providerId, modelId) => openSurfaceById("rho.settings", {
+            module_id: "providers",
+            provider_id: providerId,
+            model_id: modelId,
+          })}
         />
       )}
       {instance.surface_id === "rho.navigator" && (

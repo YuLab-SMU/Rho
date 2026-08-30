@@ -1127,6 +1127,11 @@
   .rho-settings-model-facts code { color: var(--rho-ink); font-size: var(--rho-text-ui); }
   .rho-settings-capability-list strong { color: var(--rho-ink-2); font-size: var(--rho-text-ui); font-weight: var(--rho-weight-medium); }
   .rho-settings-capability-list small { color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  .rho-settings-capability-summary { display: flex; flex-wrap: wrap; gap: var(--rho-space-2); }
+  .rho-settings-capability-summary > span { padding: var(--rho-space-1) var(--rho-space-3); border-radius: var(--rho-radius-pill); color: var(--rho-ok); background: var(--rho-ok-tint); font-size: var(--rho-text-caption); font-weight: var(--rho-weight-semibold); }
+  .rho-settings-capability-evidence { margin-top: var(--rho-space-3); padding-top: var(--rho-space-3); border-top: var(--rho-border); }
+  .rho-settings-capability-evidence > summary { cursor: pointer; color: var(--rho-ink-2); font-size: var(--rho-text-ui); font-weight: var(--rho-weight-medium); }
+  .rho-settings-capability-evidence[open] > summary { margin-bottom: var(--rho-space-4); }
   .rho-settings-connection-block {
     display: grid;
     min-width: 0;
@@ -1207,19 +1212,6 @@
     background: var(--rho-paper);
     font-size: var(--rho-text-ui);
   }
-  .rho-agent-capacity {
-    display: grid;
-    grid-template-columns: minmax(8rem, 1fr) repeat(2, minmax(7rem, 0.7fr)) auto;
-    align-items: end;
-    gap: var(--rho-space-2);
-    padding: var(--rho-space-3);
-    border-bottom: var(--rho-border);
-    background: var(--rho-panel);
-  }
-  .rho-agent-capacity > label { display: grid; gap: var(--rho-space-1); min-width: 0; color: var(--rho-muted); font-size: var(--rho-text-caption); }
-  .rho-agent-capacity select, .rho-agent-capacity input { min-width: 0; min-height: var(--rho-target-min); padding: var(--rho-space-2); border: var(--rho-border); border-radius: var(--rho-radius-1); color: var(--rho-ink); background: var(--rho-paper); }
-  .rho-agent-capacity > div { display: flex; align-items: center; gap: var(--rho-space-1); }
-  .rho-agent-capacity > div small { max-width: 8rem; overflow: hidden; color: var(--rho-muted); text-overflow: ellipsis; text-transform: capitalize; white-space: nowrap; }
   .rho-agent-degraded {
     padding: var(--rho-space-3) var(--rho-space-4);
     border-bottom: var(--rho-border);

@@ -889,13 +889,19 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const openNavigatorFile = async (descriptor: ResourceDescriptor) => {
     await openResource(descriptor, "rho.file-source", "source", navigatorPlacement());
   };
-  const openSurfaceByIdAsync = async (surfaceId: string) => {
+  const openSurfaceByIdAsync = async (surfaceId: string, viewStateOverride?: unknown) => {
     const existing = surfaces?.catalog.instances.find((candidate) => candidate.surface_id === surfaceId);
     const factory = surfaces?.catalog.factories.find((candidate) => candidate.definition.surface_id === surfaceId);
     const placement = existing == null || studio == null
       ? null
       : findLayoutPlacement(studio.scene.root, existing.instance_id);
     if (existing != null && placement != null) {
+      if (viewStateOverride !== undefined) {
+        await surfaceMutationController.update(existing.instance_id, {
+          kind: "set_view_state",
+          view_state: viewStateOverride,
+        });
+      }
       if (placement.kind === "stack" && !placement.active) {
         await commit({ kind: "set_stack_active", stack_node_id: placement.nodeId, instance_id: existing.instance_id });
       } else {
@@ -912,6 +918,12 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       studio?.scene.root.kind === "container" &&
       studio.unplaced_instance_ids.includes(existing.instance_id)
     ) {
+      if (viewStateOverride !== undefined) {
+        await surfaceMutationController.update(existing.instance_id, {
+          kind: "set_view_state",
+          view_state: viewStateOverride,
+        });
+      }
       await commit({
         kind: "insert_surface",
         target_container_node_id: studio.scene.root.node_id,
@@ -923,9 +935,11 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       });
       return;
     }
-    await openFactory(factory);
+    await openFactory(factory, viewStateOverride);
   };
-  const openSurfaceById = (surfaceId: string) => { run(openSurfaceByIdAsync(surfaceId)); };
+  const openSurfaceById = (surfaceId: string, viewStateOverride?: unknown) => {
+    run(openSurfaceByIdAsync(surfaceId, viewStateOverride));
+  };
   const focusAutomationInstance = (instanceId: string): Promise<boolean> => {
     const placement = studio == null ? null : findLayoutPlacement(studio.scene.root, instanceId);
     if (placement != null && placement.kind === "stack" && !placement.active) {

@@ -11,6 +11,7 @@ import { createMockUiKernelTransport } from "../transport/mock";
 import {
   SettingsSurfaceView,
   settingsModuleFromViewState,
+  settingsProviderTargetFromViewState,
 } from "./SettingsSurfaceView";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
@@ -113,6 +114,9 @@ describe("Provider-first Settings Surface", () => {
     expect(settingsModuleFromViewState({ module_id: "models" })).toBe("providers");
     expect(settingsModuleFromViewState({ module_id: "workspace-secret" })).toBe("providers");
     expect(settingsModuleFromViewState(null)).toBe("providers");
+    expect(settingsProviderTargetFromViewState({ provider_id: "provider", model_id: "model" }))
+      .toEqual({ providerId: "provider", modelId: "model" });
+    expect(settingsProviderTargetFromViewState(null)).toEqual({ providerId: null, modelId: null });
 
     const { container } = await renderSettings({ viewState: { module_id: "models" } });
     expect([...container.querySelectorAll("[role='tab']")].map((tab) => tab.textContent)).toEqual([
@@ -123,6 +127,15 @@ describe("Provider-first Settings Surface", () => {
     expect(container.textContent).not.toContain("Capability routes");
     expect(container.textContent).not.toContain("Use for Chat");
     expect(container.querySelector("input[type='password']")).toBeNull();
+  });
+
+  it("opens a Provider model directly from a cross-Surface settings link", async () => {
+    const { container } = await renderSettings({
+      viewState: { module_id: "providers", provider_id: "mock-provider", model_id: "mock-profile" },
+    });
+    expect(container.textContent).toContain("Mock Provider · Model");
+    expect(container.textContent).toContain("mock-model");
+    expect(container.textContent).toContain("What this model can do");
   });
 
   it("keeps storage implementation secondary without exposing its snapshot token", async () => {
@@ -493,8 +506,8 @@ describe("Provider-first Settings Surface", () => {
     expect(container.textContent).toContain("function call");
     expect(container.textContent).toContain("yes");
     expect(container.textContent).toContain("Reviewed catalog evidence");
-    expect(container.textContent).toContain("Capability evidence");
-    expect(container.textContent).toContain("Read only");
+    expect(container.textContent).toContain("What this model can do");
+    expect(container.textContent).toContain("Technical evidence");
 
     await click(container.querySelector<HTMLButtonElement>(".rho-settings-back")!);
     expect(container.textContent).toContain("Mock model");
@@ -1107,7 +1120,7 @@ describe("Provider-first Settings Surface", () => {
     }));
     expect(container.textContent).toContain("Reassign or remove this model's capability routes before deleting it.");
     expect(container.textContent).toContain("Saved settings were reloaded.");
-    expect(container.textContent).toContain("Capability evidence");
+    expect(container.textContent).toContain("What this model can do");
   });
 
   it("presents catalog-projected capacity as reported model facts", async () => {

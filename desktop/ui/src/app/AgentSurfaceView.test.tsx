@@ -132,6 +132,7 @@ describe("Studio Agent Surface", () => {
     ) => Promise<void>;
     readonly runtimeOutputContext?: RuntimeOutputReference | null;
     readonly reportError?: (error: unknown) => void;
+    readonly openModelSettings?: (providerId: string | null, modelId: string | null) => void;
   } = {}) {
     const transport = options.transport ?? createMockUiKernelTransport();
     const surfaces = await transport.loadSurfaces();
@@ -218,6 +219,7 @@ describe("Studio Agent Surface", () => {
             ? options.runtimeOutputContext ?? null
             : overrides.runtimeOutputContext}
           setRuntimeOutputContext={setRuntimeOutputContext}
+          openModelSettings={options.openModelSettings ?? vi.fn()}
         />);
         await settle();
       });
@@ -377,55 +379,13 @@ describe("Studio Agent Surface", () => {
       .toContain("Auto-approve is available in Act mode");
   });
 
-  it("keeps context capacity behind its disclosure and rejects fractional token counts", async () => {
-    const transport = createMockUiKernelTransport();
-    const { container, reportError } = await renderAgent({ transport });
+  it("keeps model configuration in Settings instead of duplicating it inside Agent", async () => {
+    const openModelSettings = vi.fn();
+    const { container } = await renderAgent({ openModelSettings });
     expect(container.querySelector(".rho-agent-capacity")).toBeNull();
-
-    const toggle = [...container.querySelectorAll(".rho-agent-toolbar button")]
-      .find((button) => button.textContent === "Context")!;
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    await click(toggle);
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    const form = container.querySelector<HTMLFormElement>(".rho-agent-capacity")!;
-    const contextInput = form.querySelector<HTMLInputElement>("input[aria-label='Context window tokens']")!;
-    expect(contextInput.value).toBe("32768");
-
-    await typeInput(contextInput, "32768.5");
-    await act(async () => {
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-      await settle();
-    });
-    expect(reportError).toHaveBeenCalledWith(expect.objectContaining({
-      message: "Context capacity must use whole token counts.",
-    }));
-  });
-
-  it("saves context capacity through the existing revision-checked path", async () => {
-    const transport = createMockUiKernelTransport();
-    const setCapacity = vi.fn(transport.setAgentContextCapacity.bind(transport));
-    transport.setAgentContextCapacity = setCapacity;
-    const { container } = await renderAgent({ transport });
-
-    const toggle = [...container.querySelectorAll(".rho-agent-toolbar button")]
-      .find((button) => button.textContent === "Context")!;
-    await click(toggle);
-    const form = container.querySelector<HTMLFormElement>(".rho-agent-capacity")!;
-    const contextInput = form.querySelector<HTMLInputElement>("input[aria-label='Context window tokens']")!;
-    const reserveInput = form.querySelector<HTMLInputElement>("input[aria-label='Reserved output tokens']")!;
-    await typeInput(contextInput, "65536");
-    await typeInput(reserveInput, "8192");
-    await act(async () => {
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-      await settle();
-    });
-    expect(setCapacity).toHaveBeenCalledWith({
-      modelId: "mock-profile",
-      expectedRevision: 1,
-      expectedConfigSnapshotId: "mock-config-snapshot-1",
-      contextWindowTokens: 65_536,
-      reservedOutputTokens: 8_192,
-    });
+    await click([...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar button")]
+      .find((button) => button.textContent === "Models")!);
+    expect(openModelSettings).toHaveBeenCalledWith("mock-provider", "mock-profile");
   });
 
   it("switches the chat model through the revision-checked route and clears the reviewed preview", async () => {
@@ -484,6 +444,39 @@ describe("Studio Agent Surface", () => {
     expect(container.querySelector(".rho-agent-context-preview")).toBeNull();
   });
 
+  it("keeps an unclassified chat model usable and routes setup actions to its Settings detail", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    const unknownModel = {
+      ...base.models[0]!,
+      model_type: { value: "unknown", source: "unknown" },
+      capabilities: Object.fromEntries(Object.keys(base.models[0]!.capabilities)
+        .map((name) => [name, { value: "unknown", source: "unknown" }])),
+      act_enabled: false,
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone({
+      ...base,
+      models: [unknownModel],
+      selected_model: { ...base.selected_model!, tool_calling: "unknown", act_enabled: false },
+      capability_routes: base.capability_routes.map((route) => route.capability === "agent.act"
+        ? { ...route, compatibility: "needs_review", consumer_status: "needs_capability_evidence" }
+        : route),
+    }));
+    const openModelSettings = vi.fn();
+    const { container } = await renderAgent({ transport, openModelSettings });
+
+    const menu = container.querySelector<HTMLDetailsElement>(".rho-agent-model-menu")!;
+    await click(menu.querySelector("summary")!);
+    expect(menu.textContent).toContain("Mock model");
+    expect(menu.textContent).not.toContain("No chat model is configured");
+    await click(menu.querySelector<HTMLButtonElement>(".rho-agent-manage-models")!);
+    expect(openModelSettings).toHaveBeenCalledWith("mock-provider", "mock-profile");
+
+    await click([...container.querySelectorAll<HTMLButtonElement>(".rho-agent-mode button")]
+      .find((button) => button.textContent === "act")!);
+    expect(openModelSettings).toHaveBeenLastCalledWith("mock-provider", "mock-profile");
+  });
+
   it("offers search, provider groups, and per-row metadata in a long model menu", async () => {
     const transport = createMockUiKernelTransport();
     const base = await transport.loadAgentLlmSettings();
@@ -515,25 +508,25 @@ describe("Studio Agent Surface", () => {
     const active = menu.querySelector("div[role='menu'] button[aria-checked='true']")!;
     expect(active.querySelector(".rho-agent-model-check")!.textContent).toBe("✓");
     expect(active.querySelector(".rho-agent-model-id")!.textContent).toBe("mock-model");
-    expect(active.querySelector("small")!.textContent).toBe("33k context · ready");
+    expect(active.querySelector("small")!.textContent).toBe("33k context · Tools ready");
 
     // Search filters across name, id, and provider; groups re-render.
     await typeInput(search, "third");
-    const filtered = [...menu.querySelectorAll("div[role='menu'] button")];
+    const filtered = [...menu.querySelectorAll("div[role='menu'] button[role='menuitemradio']")];
     expect(filtered.length).toBe(3);
     expect(filtered.every((button) => button.textContent!.includes("Extra model"))).toBe(true);
     expect([...menu.querySelectorAll(".rho-agent-model-group-label")].map((label) => label.textContent))
       .toEqual(["Third Provider"]);
 
     await typeInput(search, "does-not-exist");
-    expect([...menu.querySelectorAll("div[role='menu'] button")].length).toBe(0);
+    expect([...menu.querySelectorAll("div[role='menu'] button[role='menuitemradio']")].length).toBe(0);
     expect(menu.textContent).toContain("No model matches the search.");
 
     // Closing the menu resets the query.
     await act(async () => { menu.open = false; await settle(); });
     await click(menu.querySelector("summary")!);
     expect(menu.querySelector<HTMLInputElement>(".rho-agent-model-search")!.value).toBe("");
-    expect([...menu.querySelectorAll("div[role='menu'] button")].length).toBe(8);
+    expect([...menu.querySelectorAll("div[role='menu'] button[role='menuitemradio']")].length).toBe(8);
   });
 
   it("admits Stop once and blocks same-event view snapshots", async () => {

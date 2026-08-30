@@ -11,6 +11,7 @@ import type {
 import { buildAddedModelProfile } from "../transport";
 import type { AgentProviderProfile } from "../transport/agent-settings";
 import { ModelOptionsDialog } from "./ModelOptionsDialog";
+import { announceAgentSettingsChanged, subscribeAgentSettingsChanged } from "./agent/settings-events";
 import { SurfaceTaskState } from "./SurfaceTaskState";
 import {
   SURFACE_CAPABILITY_GROUPS,
@@ -49,6 +50,24 @@ export function settingsModuleFromViewState(viewState: unknown): SettingsModuleI
   return typeof moduleId === "string" && SETTINGS_MODULE_IDS.has(moduleId as SettingsModuleId)
     ? moduleId as SettingsModuleId
     : "providers";
+}
+
+export interface SettingsProviderTarget {
+  readonly providerId: string | null;
+  readonly modelId: string | null;
+}
+
+export function settingsProviderTargetFromViewState(viewState: unknown): SettingsProviderTarget {
+  if (typeof viewState !== "object" || viewState == null) {
+    return { providerId: null, modelId: null };
+  }
+  const providerId = "provider_id" in viewState && typeof viewState.provider_id === "string"
+    ? viewState.provider_id
+    : null;
+  const modelId = "model_id" in viewState && typeof viewState.model_id === "string"
+    ? viewState.model_id
+    : null;
+  return { providerId, modelId };
 }
 
 type SettingsLoadState =
@@ -282,11 +301,13 @@ function ProvidersSettingsModule({
   transport,
   applyView,
   refresh,
+  target,
 }: {
   readonly view: AgentLlmSettingsView;
   readonly transport: UiKernelTransport;
   readonly applyView: (view: AgentLlmSettingsView) => void;
   readonly refresh: () => void;
+  readonly target: SettingsProviderTarget;
 }) {
   const [page, setPage] = useState<ProviderPage>({ kind: "overview" });
   const [feedback, setFeedback] = useState<Feedback>({ status: "idle", message: null });
@@ -314,9 +335,23 @@ function ProvidersSettingsModule({
   const automaticTestModelId = provider == null ? null : view.models.find((model) =>
     model.provider_id === provider.id
       && model.enabled
-      && model.model_type.value === "language"
+      && ["language", "unknown"].includes(model.model_type.value)
       && model.last_test == null
   )?.id ?? null;
+
+  useEffect(() => {
+    if (target.providerId == null) return;
+    const targetProvider = view.providers.find((candidate) => candidate.id === target.providerId);
+    if (targetProvider == null) return;
+    const targetModel = target.modelId == null ? null : view.models.find((candidate) =>
+      candidate.id === target.modelId && candidate.provider_id === targetProvider.id
+    ) ?? null;
+    setProviderConnectOpen(false);
+    setProviderEditDraft(null);
+    setPage(targetModel == null
+      ? { kind: "provider", providerId: targetProvider.id }
+      : { kind: "model", providerId: targetProvider.id, modelId: targetModel.id, remote: false });
+  }, [target.modelId, target.providerId, view.models, view.providers]);
 
   useEffect(() => {
     if (page.kind !== "overview" && provider == null) {
@@ -889,6 +924,12 @@ function ProvidersSettingsModule({
       const detailType = configuredModel?.model_type ?? remoteModel?.model_type ?? null;
       const detailCapabilities = configuredModel?.capabilities ?? remoteModel?.capabilities ?? {};
       const capabilityEntries = Object.entries(detailCapabilities).sort(([left], [right]) => left.localeCompare(right));
+      const capabilityFacts = capabilityEntries.map(([name, capability]) => ({
+        name,
+        presentation: capabilityPresentation(capability),
+      }));
+      const availableCapabilities = capabilityFacts.filter((fact) => fact.presentation.value === "yes");
+      const knownCapabilityCount = capabilityFacts.filter((fact) => fact.presentation.value !== "Unknown").length;
       const lastTest = configuredModel?.last_test ?? null;
       const reportedCapacity = configuredModel != null
         && configuredModel.context_capacity_source !== "conservative_default";
@@ -924,7 +965,7 @@ function ProvidersSettingsModule({
         <section className="rho-settings-provider-block" aria-labelledby="rho-settings-model-test-heading">
           <header>
             <div><span className="rho-eyebrow">Connection</span><h3 id="rho-settings-model-test-heading">Latest test</h3></div>
-            {configuredModel != null && <button type="button" disabled={!saved || testingModelId != null || configuredModel.model_type.value !== "language"} onClick={() => void testModel(configuredModel.id)}>Test model</button>}
+            {configuredModel != null && <button type="button" disabled={!saved || testingModelId != null || ["image", "embedding"].includes(configuredModel.model_type.value)} onClick={() => void testModel(configuredModel.id)}>Test model</button>}
           </header>
           {configuredModel == null ? <p>This model was discovered from the Provider and is not configured in Rho.</p> : lastTest == null ? <p>This model has not been connection-tested.</p> : <dl className="rho-settings-model-facts">
             <div><dt>Status</dt><dd>{readable(lastTest.status)}</dd></div>
@@ -934,13 +975,16 @@ function ProvidersSettingsModule({
           </dl>}
         </section>
         <section className="rho-settings-provider-block" aria-labelledby="rho-settings-model-capabilities-heading">
-          <header><div><span className="rho-eyebrow">Model evidence</span><h3 id="rho-settings-model-capabilities-heading">Capability evidence</h3></div><span>Read only</span></header>
-          {capabilityEntries.length === 0 ? <p>No capability metadata is available.</p> : <dl className="rho-settings-capability-list">
-            {capabilityEntries.map(([name, capability]) => {
-              const presentation = capabilityPresentation(capability);
-              return <div key={name}><dt>{readable(name)}</dt><dd><strong>{presentation.value}</strong><small>{presentation.source}</small></dd></div>;
-            })}
-          </dl>}
+          <header><div><span className="rho-eyebrow">Capabilities</span><h3 id="rho-settings-model-capabilities-heading">What this model can do</h3></div><span>{knownCapabilityCount} verified facts</span></header>
+          {availableCapabilities.length === 0 ? <p>No additional capability has been verified yet. Test the model or use Edit only when catalog and Provider evidence are unavailable.</p> : <div className="rho-settings-capability-summary">
+            {availableCapabilities.map((fact) => <span key={fact.name}>{readable(fact.name)}</span>)}
+          </div>}
+          {capabilityFacts.length > 0 && <details className="rho-settings-capability-evidence">
+            <summary>Technical evidence</summary>
+            <dl className="rho-settings-capability-list">
+              {capabilityFacts.map(({ name, presentation }) => <div key={name}><dt>{readable(name)}</dt><dd><strong>{presentation.value}</strong><small>{presentation.source}</small></dd></div>)}
+            </dl>
+          </details>}
         </section>
         {configuredModel != null && <section className="rho-settings-provider-block rho-settings-danger-zone" aria-labelledby="rho-settings-model-delete-heading">
           <header><div><span className="rho-eyebrow">Danger</span><h3 id="rho-settings-model-delete-heading">Delete this model</h3></div></header>
@@ -1084,7 +1128,7 @@ function ProvidersSettingsModule({
                   <strong>{modelAvailability(model)}</strong>
                   <div>
                     <button type="button" onClick={() => navigate({ kind: "model", providerId: provider.id, modelId: model.id, remote: false })}>Details</button>
-                    <button type="button" disabled={!saved || testingModelId != null || model.model_type.value !== "language"} onClick={() => void testModel(model.id)}>Test</button>
+                    <button type="button" disabled={!saved || testingModelId != null || ["image", "embedding"].includes(model.model_type.value)} onClick={() => void testModel(model.id)}>Test</button>
                   </div>
                 </div>
               </article>)}
@@ -1304,6 +1348,14 @@ export function SettingsSurfaceView({
   );
   const [settingsState, setSettingsState] = useState<SettingsLoadState>({ status: "loading" });
   const generation = useRef(0);
+  const providerTarget = useMemo(
+    () => settingsProviderTargetFromViewState(instance.view_state),
+    [instance.surface_revision, instance.view_state],
+  );
+
+  useEffect(() => {
+    setActiveModule(settingsModuleFromViewState(instance.view_state));
+  }, [instance.surface_revision, instance.view_state]);
 
   const reload = useCallback(() => {
     const current = generation.current + 1;
@@ -1322,6 +1374,9 @@ export function SettingsSurfaceView({
     reload();
     return () => { generation.current += 1; };
   }, [reload]);
+  useEffect(() => subscribeAgentSettingsChanged((source) => {
+    if (source !== "settings") reload();
+  }), [reload]);
 
   let providerContent;
   if (settingsState.status === "loading") {
@@ -1332,8 +1387,12 @@ export function SettingsSurfaceView({
     providerContent = <ProvidersSettingsModule
       view={settingsState.view}
       transport={transport}
-      applyView={(view) => setSettingsState({ status: "ready", view })}
+      applyView={(view) => {
+        setSettingsState({ status: "ready", view });
+        announceAgentSettingsChanged("settings");
+      }}
       refresh={reload}
+      target={providerTarget}
     />;
   }
 

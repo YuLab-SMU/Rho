@@ -16,6 +16,7 @@ import type {
   UiKernelTransport,
 } from "../transport";
 import { computeLineDiff } from "./agent/diff";
+import { announceAgentSettingsChanged, subscribeAgentSettingsChanged } from "./agent/settings-events";
 import {
   agentStudioPresentationKey,
   parseAgentStudioPresentation,
@@ -182,6 +183,12 @@ function formatContextTokens(tokens: number): string {
   return String(tokens);
 }
 
+function modelReadinessLabel(model: AgentLlmSettingsView["models"][number]): string {
+  if (model.act_enabled) return "Tools ready";
+  if (model.model_type.value === "unknown") return "Capabilities unverified";
+  return model.selector_status.replaceAll("_", " ");
+}
+
 function agentErrorMessage(error: unknown): string {
   return error instanceof Error && error.message.trim() !== ""
     ? error.message
@@ -295,6 +302,7 @@ export function AgentSurfaceView({
   reportError,
   runtimeOutputContext,
   setRuntimeOutputContext,
+  openModelSettings,
 }: {
   readonly instance: SurfaceInstance;
   readonly transport: UiKernelTransport;
@@ -323,6 +331,7 @@ export function AgentSurfaceView({
   readonly reportError: (error: unknown) => void;
   readonly runtimeOutputContext: RuntimeOutputReference | null;
   readonly setRuntimeOutputContext: (reference: RuntimeOutputReference | null) => void;
+  readonly openModelSettings: (providerId: string | null, modelId: string | null) => void;
 }) {
   const [view, setView] = useState(() => initialAgentSurfaceState(instance));
   const viewRef = useRef(view);
@@ -342,11 +351,8 @@ export function AgentSurfaceView({
     readonly plan: AgentContextPlanPreview;
   } | null>(null);
   const [contextReviewBusy, setContextReviewBusy] = useState(false);
-  const [capacityOpen, setCapacityOpen] = useState(false);
-  const [capacityBusy, setCapacityBusy] = useState(false);
   const [llmSettings, setLlmSettings] = useState<AgentLlmSettingsView | null>(null);
-  const [capacityModelId, setCapacityModelId] = useState("");
-  const [capacityDraft, setCapacityDraft] = useState({ context: "", reserve: "" });
+  const llmSettingsGenerationRef = useRef(0);
   const [modelSwitchBusy, setModelSwitchBusy] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
   const [queue, setQueue] = useState<readonly AgentQueueItem[]>([]);
@@ -691,13 +697,24 @@ export function AgentSurfaceView({
     return () => { active = false; };
   }, [health?.state, reportError, transport]);
 
-  useEffect(() => {
-    let active = true;
+  const reloadLlmSettings = useCallback(() => {
+    const generation = llmSettingsGenerationRef.current + 1;
+    llmSettingsGenerationRef.current = generation;
     void transport.loadAgentLlmSettings()
-      .then((settings) => { if (active) setLlmSettings(settings); })
-      .catch((error: unknown) => { if (active) reportError(error); });
-    return () => { active = false; };
+      .then((settings) => {
+        if (llmSettingsGenerationRef.current === generation) setLlmSettings(settings);
+      })
+      .catch((error: unknown) => {
+        if (llmSettingsGenerationRef.current === generation) reportError(error);
+      });
   }, [reportError, transport]);
+  useEffect(() => {
+    reloadLlmSettings();
+    return () => { llmSettingsGenerationRef.current += 1; };
+  }, [reloadLlmSettings]);
+  useEffect(() => subscribeAgentSettingsChanged((source) => {
+    if (source !== "agent") reloadLlmSettings();
+  }), [reloadLlmSettings]);
 
   const viewStateWriteBlocked = busy || contextReviewBusy;
   const commitView = (
@@ -713,64 +730,6 @@ export function AgentSurfaceView({
     setView(next);
     if (durable) void persist(next).catch(reportError);
   };
-  const selectCapacityModel = (modelId: string, settings = llmSettings) => {
-    const model = settings?.models.find((candidate) => candidate.id === modelId);
-    setCapacityModelId(modelId);
-    setCapacityDraft({
-      context: model == null ? "" : String(model.context_window_tokens),
-      reserve: model == null ? "" : String(model.reserved_output_tokens),
-    });
-  };
-  const loadContextCapacity = async () => {
-    const activationVersion = activationVersionRef.current;
-    const mutation = beginMutation("agent-context-capacity-load");
-    if (mutation == null) return;
-    setCapacityBusy(true);
-    try {
-      const settings = await transport.loadAgentLlmSettings();
-      if (!activationIsCurrent(activationVersion)) return;
-      setLlmSettings(settings);
-      const model = settings.models.find((candidate) => candidate.id === settings.selected_model_id)
-        ?? settings.models[0];
-      selectCapacityModel(model?.id ?? "", settings);
-    } catch (error: unknown) {
-      if (activationIsCurrent(activationVersion)) reportError(error);
-    } finally {
-      if (activationIsCurrent(activationVersion)) setCapacityBusy(false);
-      endMutation(mutation);
-    }
-  };
-  const saveContextCapacity = async () => {
-    if (llmSettings == null || capacityBusy) return;
-    const contextWindow = Number(capacityDraft.context);
-    const reservedOutput = Number(capacityDraft.reserve);
-    if (!Number.isSafeInteger(contextWindow) || !Number.isSafeInteger(reservedOutput)) {
-      reportError(new Error("Context capacity must use whole token counts."));
-      return;
-    }
-    const activationVersion = activationVersionRef.current;
-    const mutation = beginMutation("agent-context-capacity-save");
-    if (mutation == null) return;
-    setCapacityBusy(true);
-    try {
-      const settings = await transport.setAgentContextCapacity({
-        modelId: capacityModelId,
-        expectedRevision: llmSettings.revision,
-        expectedConfigSnapshotId: llmSettings.config_store.config_snapshot_id,
-        contextWindowTokens: contextWindow,
-        reservedOutputTokens: reservedOutput,
-      });
-      if (!activationIsCurrent(activationVersion)) return;
-      setLlmSettings(settings);
-      selectCapacityModel(capacityModelId, settings);
-      setContextPreview(null);
-    } catch (error: unknown) {
-      if (activationIsCurrent(activationVersion)) reportError(error);
-    } finally {
-      if (activationIsCurrent(activationVersion)) setCapacityBusy(false);
-      endMutation(mutation);
-    }
-  };
   const selectChatModel = async (modelId: string) => {
     if (llmSettings == null || modelSwitchBusy) return;
     const activationVersion = activationVersionRef.current;
@@ -785,6 +744,7 @@ export function AgentSurfaceView({
       });
       if (!activationIsCurrent(activationVersion)) return;
       setLlmSettings(settings);
+      announceAgentSettingsChanged("agent");
       setContextPreview(null);
     } catch (error: unknown) {
       if (activationIsCurrent(activationVersion)) reportError(error);
@@ -1012,7 +972,7 @@ export function AgentSurfaceView({
     const current = viewRef.current;
     const runtimeSnapshot = runtimeOutputContextRef.current;
     const prompt = current.composer.trim();
-    if (!prompt || contextReviewBusy || busy || health?.state !== "ready" ||
+    if (!prompt || contextReviewBusy || busy || health?.state !== "ready" || !modeReady ||
         !conversationRequestIsAvailable(current)) return;
     const mutation = beginMutation("agent-context-review");
     if (mutation == null) return;
@@ -1041,7 +1001,7 @@ export function AgentSurfaceView({
     const current = viewRef.current;
     const runtimeSnapshot = runtimeOutputContextRef.current;
     const prompt = current.composer.trim();
-    if (!prompt || busy || health?.state !== "ready" || !conversationRequestIsAvailable(current)) return;
+    if (!prompt || busy || health?.state !== "ready" || !modeReady || !conversationRequestIsAvailable(current)) return;
     const currentContextPlanKey = buildContextPlanKey(current, runtimeSnapshot);
     const reviewedPlan = contextPreview?.key === currentContextPlanKey ? contextPreview.plan : null;
     if (runtimeSnapshot != null && reviewedPlan == null) {
@@ -1258,12 +1218,18 @@ export function AgentSurfaceView({
   }, [details, presentStudio, turns, view.studio_presentations]);
   const displayMode = instance.mode_id ?? "conversation";
   const chatRoute = llmSettings?.capability_routes.find((route) => route.capability === "agent.chat");
+  const actRoute = llmSettings?.capability_routes.find((route) => route.capability === "agent.act");
   const chatModelLabel = chatRoute?.model_display_name
     ?? llmSettings?.selected_model?.display_name
-    ?? (llmSettings == null ? "Loading model…" : "Chat model");
-  const switchableModels = (llmSettings?.models ?? [])
-    .filter((model) => model.enabled && model.model_type.value === "language");
+    ?? (llmSettings == null ? "Loading model…" : "Set up a model");
   const activeChatModelId = chatRoute?.model_id ?? llmSettings?.selected_model_id ?? null;
+  const activeChatModel = llmSettings?.models.find((model) => model.id === activeChatModelId) ?? null;
+  const activeProviderId = activeChatModel?.provider_id ?? null;
+  const chatReady = chatRoute?.consumer_status === "ready";
+  const actReady = actRoute?.consumer_status === "ready";
+  const modeReady = view.mode === "act" ? actReady : chatReady;
+  const switchableModels = (llmSettings?.models ?? [])
+    .filter((model) => model.enabled && ["language", "unknown"].includes(model.model_type.value));
   const normalizedModelQuery = modelQuery.trim().toLowerCase();
   const filteredModels = normalizedModelQuery === "" ? switchableModels : switchableModels.filter((model) =>
     model.display_name.toLowerCase().includes(normalizedModelQuery) ||
@@ -1275,6 +1241,12 @@ export function AgentSurfaceView({
     if (group == null) modelGroups.set(model.provider_display_name, [model]);
     else group.push(model);
   }
+  const setupIssue = llmSettings == null ? null
+    : llmSettings.models.length === 0 ? "Connect a model service to start using Agent."
+      : chatRoute?.consumer_status === "needs_credential" ? "Add the Provider API key to use this model."
+        : !chatReady ? "Choose a usable chat model in Provider Settings."
+          : view.mode === "act" && !actReady ? "Act needs a model with verified tool calling."
+            : null;
   const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
   const currentQueue = view.conversation_id == null
     ? []
@@ -1396,6 +1368,10 @@ export function AgentSurfaceView({
           </details>
         </div>
       )}
+      {setupIssue != null && <div className="rho-agent-model-setup" role="status">
+        <div><strong>Model setup needs attention</strong><span>{setupIssue}</span></div>
+        <button type="button" onClick={() => openModelSettings(activeProviderId, activeChatModelId)}>Open Provider Settings</button>
+      </div>}
       <header className="rho-agent-toolbar">
         <select
           aria-label={`Conversation for ${instance.instance_id}`}
@@ -1417,50 +1393,10 @@ export function AgentSurfaceView({
           ))}
         </select>
         <button type="button" className="rho-agent-toolbar-action" disabled={busy} onClick={() => void newConversation()}>New</button>
-        <button type="button" className="rho-agent-toolbar-action" aria-expanded={capacityOpen} disabled={busy} onClick={() => {
-          if (mutationRef.current != null) return;
-          const next = !capacityOpen;
-          setCapacityOpen(next);
-          if (next) void loadContextCapacity();
-        }}>Context</button>
+        <button type="button" className="rho-agent-toolbar-action" disabled={busy} onClick={() => {
+          openModelSettings(activeProviderId, activeChatModelId);
+        }}>Models</button>
       </header>
-      {capacityOpen && <form className="rho-agent-capacity" aria-label="Agent model context capacity" onSubmit={(event) => {
-        event.preventDefault();
-        void saveContextCapacity();
-      }}>
-        {llmSettings == null ? <span>{capacityBusy ? "Loading model capacity…" : "Model capacity is unavailable."}</span> : <>
-          <label>Model
-            <select value={capacityModelId} disabled={busy || capacityBusy} onChange={(event) => {
-              if (mutationRef.current == null) selectCapacityModel(event.target.value);
-            }}>
-              {llmSettings.models.map((model) => <option value={model.id} key={model.id}>{model.display_name}</option>)}
-            </select>
-          </label>
-          <label>Context window
-            <input aria-label="Context window tokens" type="number" min="4096" step="1" disabled={busy || capacityBusy} value={capacityDraft.context} onChange={(event) => {
-              if (mutationRef.current == null) setCapacityDraft({ ...capacityDraft, context: event.target.value });
-            }} />
-          </label>
-          <label>Reserve for reply
-            <input aria-label="Reserved output tokens" type="number" min="256" step="1" disabled={busy || capacityBusy} value={capacityDraft.reserve} onChange={(event) => {
-              if (mutationRef.current == null) setCapacityDraft({ ...capacityDraft, reserve: event.target.value });
-            }} />
-          </label>
-          <div>
-            <small>{llmSettings.models.find((model) => model.id === capacityModelId)?.context_capacity_source.replaceAll("_", " ")}</small>
-            <small>{(() => {
-              const model = llmSettings.models.find((item) => item.id === capacityModelId);
-              const provider = model == null ? null : llmSettings.providers.find((item) => item.id === model.provider_id);
-              if (provider == null) return null;
-              const source = provider.credential_effective_source.replaceAll("_", " ");
-              const status = provider.credential_status.replaceAll("_", " ");
-              return `credential: ${status} · source: ${source}`;
-            })()}</small>
-            <button type="button" disabled={busy || capacityBusy} onClick={() => void loadContextCapacity()}>Reload</button>
-            <button type="submit" className="rho-primary-action" disabled={busy || capacityBusy || !capacityModelId}>{capacityBusy ? "Saving…" : "Save"}</button>
-          </div>
-        </>}
-      </form>}
       {displayMode === "activity" && activeTurn != null && stopActiveTurn != null && (
         <AgentRunningRow
           status={activeTurn.status}
@@ -1791,7 +1727,7 @@ export function AgentSurfaceView({
             placeholder="Ask Rho about this project…"
           />
           <div className="rho-agent-context-controls">
-            <button type="button" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !view.composer.trim()} onClick={() => void reviewContext()}>
+            <button type="button" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !modeReady || !view.composer.trim()} onClick={() => void reviewContext()}>
               {contextReviewBusy ? "Reviewing…" : "Review context"}
             </button>
             <div className="rho-agent-mode" role="group" aria-label="Agent mode">
@@ -1801,11 +1737,18 @@ export function AgentSurfaceView({
                   aria-pressed={view.mode === mode}
                   disabled={viewStateWriteBlocked}
                   key={mode}
-                  onClick={() => commitView((current) => ({
-                    ...current,
-                    mode,
-                    auto_approve: mode === "act" ? current.auto_approve : false,
-                  }))}
+                  title={mode === "act" && !actReady ? "Choose a tool-capable model in Provider Settings" : undefined}
+                  onClick={() => {
+                    if (mode === "act" && !actReady) {
+                      openModelSettings(activeProviderId, activeChatModelId);
+                      return;
+                    }
+                    commitView((current) => ({
+                      ...current,
+                      mode,
+                      auto_approve: mode === "act" ? current.auto_approve : false,
+                    }));
+                  }}
                 >{mode}</button>
               ))}
             </div>
@@ -1877,7 +1820,7 @@ export function AgentSurfaceView({
                     onChange={(event) => setModelQuery(event.target.value)}
                   />
                 )}
-                {switchableModels.length === 0 && <span className="rho-agent-model-empty">No language model is available.</span>}
+                {switchableModels.length === 0 && <span className="rho-agent-model-empty">No chat model is configured.</span>}
                 {switchableModels.length > 0 && filteredModels.length === 0 && (
                   <span className="rho-agent-model-empty">No model matches the search.</span>
                 )}
@@ -1903,15 +1846,19 @@ export function AgentSurfaceView({
                             <span className="rho-agent-model-name">{model.display_name}</span>
                             <code className="rho-agent-model-id">{model.model_id}</code>
                           </span>
-                          <small>{formatContextTokens(model.context_window_tokens)} context · {model.selector_status.replaceAll("_", " ")}</small>
+                          <small>{formatContextTokens(model.context_window_tokens)} context · {modelReadinessLabel(model)}</small>
                         </button>
                       );
                     })}
                   </div>
                 ))}
+                <button type="button" className="rho-agent-manage-models" onClick={(event) => {
+                  event.currentTarget.closest("details")!.open = false;
+                  openModelSettings(activeProviderId, activeChatModelId);
+                }}>Manage models…</button>
               </div>
             </details>
-            <button type="button" className="rho-primary-action" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !view.composer.trim()} onClick={() => void submit()}>
+            <button type="button" className="rho-primary-action" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !modeReady || !view.composer.trim()} onClick={() => void submit()}>
               {busy ? "Working…" : runtimeOutputContext != null && contextPreview?.key !== contextPlanKey ? "Review before send" : "Send"}
             </button>
           </div>

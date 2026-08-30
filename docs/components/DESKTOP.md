@@ -20,10 +20,14 @@ Important runtime owners include:
 - `agent_llm` and Agent commands for model settings, selection, tests, and
   credential projection. Provider setup asks for service and API key (plus a
   Base URL only for compatible services), validates the session credential,
-  discovers models, and atomically creates config with the first usable
-  language model and Chat route. Failed discovery leaves no half-configured
-  Provider. Existing Providers expose an in-app endpoint/name editor while
-  credential and model controls remain separate;
+  discovers models, and atomically creates config with the best usable
+  tool-capable language model and Chat route. Failed discovery leaves no
+  half-configured Provider. Effective model facts are merged once for every
+  consumer with precedence user declaration → live Provider evidence →
+  reviewed `aisdk::list_models()` catalog → unknown; Settings, Agent readiness,
+  tests, context preview, and execution therefore cannot disagree. Existing
+  Providers expose an in-app endpoint/name editor while credential and model
+  controls remain separate;
 - `agent_config` for the canonical `<Rho home>/config.yaml` model registry,
   atomic mutation, and permission checks. `RHO_HOME` overrides discovery;
   otherwise an existing `~/.rho` wins over the XDG variant, and new installs
@@ -64,7 +68,13 @@ alongside a deliberately small toolbar customization surface: only Command
 Search and Compose remain optional; redundant project, scene, action, and
 runtime projections are removed.
 Component tools provide focus, mode, runtime, duplicate, and close actions.
-Exact Plot links from Console or History open the durable Plot identity, while
+Agent owns conversation, mode, permissions, and quick model switching; all
+model configuration remains in Settings. Its Models action, model menu, and
+readiness repair actions deep-link to the exact Provider/model Settings page,
+and Settings mutations refresh every mounted Agent view. Unknown model type is
+still usable for Chat and can be connection-tested, while Act remains guarded
+until effective tool-calling evidence is `yes`. Exact Plot links from Console
+or History open the durable Plot identity, while
 the general Plots view includes both current-session and historical project
 plots. A completed Agent turn may emit one bounded Studio presentation request.
 The Agent Surface preserves the current Scene, creates a
