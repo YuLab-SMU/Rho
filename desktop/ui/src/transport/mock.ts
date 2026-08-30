@@ -3452,9 +3452,6 @@ export function createMockUiKernelTransport(
     async listEvidenceClaims(limit = 100) {
       return structuredClone(typedEvidenceRecords().slice(0, Math.max(0, limit)));
     },
-    async initializeToolchain() {
-      return undefined;
-    },
     async toolchainDoctor() {
       return {
         status: "ready",

@@ -9,7 +9,6 @@ import {
   type SshConnectionProbeRequest as SshConnectionProbeRequestWire,
   type SshConnectionProbeView as SshConnectionProbeViewWire,
   type ToolchainDoctorView as ToolchainDoctorViewWire,
-  type ToolchainInitializeRequest as ToolchainInitializeRequestWire,
 } from "./generated/environment";
 
 type DeepReadonly<T> = T extends (...args: never[]) => unknown
@@ -29,7 +28,6 @@ export type SshConnectionProbeRequest = DeepReadonly<SshConnectionProbeRequestWi
 export type SshConnectionProbeView = DeepReadonly<SshConnectionProbeViewWire>;
 export type ConfigureSshTargetRequest = DeepReadonly<ConfigureSshTargetRequestWire>;
 export type ConfigureSshTargetView = DeepReadonly<ConfigureSshTargetViewWire>;
-export type ToolchainInitializeRequest = DeepReadonly<ToolchainInitializeRequestWire>;
 
 export interface EnvironmentReadTransport {
   listInstalledPackages(limit?: number): Promise<unknown>;
@@ -38,7 +36,6 @@ export interface EnvironmentReadTransport {
     status?: string | null,
   ): Promise<readonly EnvironmentOperationRequestSummary[]>;
   toolchainDoctor(): Promise<ToolchainDoctorView>;
-  initializeToolchain(request: ToolchainInitializeRequest): Promise<void>;
   resourceMonitorSnapshot(): Promise<ResourceMonitorView>;
   computeTargetList(): Promise<ComputeTargetListView>;
   remoteConnectionProbe(request: SshConnectionProbeRequest): Promise<SshConnectionProbeView>;
@@ -54,7 +51,6 @@ export function createTauriEnvironmentReadTransport(
     listEnvironmentOperationRequests: (limit, status) =>
       commands.listEnvironmentOperationRequests(limit ?? null, status ?? null),
     toolchainDoctor: () => commands.toolchainDoctor(),
-    initializeToolchain: (request) => commands.toolchainInitialize(request).then(() => undefined),
     resourceMonitorSnapshot: () => commands.resourceMonitorSnapshot(),
     computeTargetList: () => commands.computeTargetList(),
     remoteConnectionProbe: (request) => commands.remoteConnectionProbe(request),

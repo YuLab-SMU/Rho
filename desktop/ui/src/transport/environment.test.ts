@@ -12,8 +12,6 @@ describe("Environment generated read transport", () => {
           ? { packages: [] }
           : command === "toolchain_doctor"
             ? { status: "ready", configured: true, checks: [] }
-            : command === "toolchain_initialize"
-              ? null
             : command === "resource_monitor_snapshot"
               ? { status: "healthy", selected_target_id: "local", targets: [] }
               : command === "compute_target_list"
@@ -29,7 +27,6 @@ describe("Environment generated read transport", () => {
     await expect(transport.listInstalledPackages(200)).resolves.toEqual({ packages: [] });
     await expect(transport.listEnvironmentOperationRequests(50)).resolves.toEqual([]);
     await expect(transport.toolchainDoctor()).resolves.toMatchObject({ status: "ready" });
-    await expect(transport.initializeToolchain({ confirmed: true })).resolves.toBeUndefined();
     await expect(transport.resourceMonitorSnapshot()).resolves.toMatchObject({ status: "healthy" });
     await expect(transport.computeTargetList()).resolves.toMatchObject({ selected_target_id: "local" });
     const probeRequest = {
@@ -51,7 +48,6 @@ describe("Environment generated read transport", () => {
         args: { limit: 50, status: null },
       },
       { command: "toolchain_doctor" },
-      { command: "toolchain_initialize", args: { request: { confirmed: true } } },
       { command: "resource_monitor_snapshot" },
       { command: "compute_target_list" },
       { command: "remote_connection_probe", args: { request: probeRequest } },

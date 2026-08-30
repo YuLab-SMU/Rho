@@ -12,7 +12,6 @@ export const createEnvironmentCommands = (__TAURI_INVOKE: EnvironmentInvoke) => 
 	listInstalledPackages: (limit: number | null) => __TAURI_INVOKE<InstalledPackageInventory>("list_installed_packages", { limit }),
 	listEnvironmentOperationRequests: (limit: number | null, status: string | null) => __TAURI_INVOKE<EnvironmentOperationRequestSummary[]>("list_environment_operation_requests", { limit, status }),
 	toolchainDoctor: () => __TAURI_INVOKE<ToolchainDoctorView>("toolchain_doctor"),
-	toolchainInitialize: (request: ToolchainInitializeRequest) => __TAURI_INVOKE<null>("toolchain_initialize", { request }),
 	resourceMonitorSnapshot: () => __TAURI_INVOKE<ResourceMonitorView>("resource_monitor_snapshot"),
 	computeTargetList: () => __TAURI_INVOKE<ComputeTargetListView>("compute_target_list"),
 	remoteConnectionProbe: (request: SshConnectionProbeRequest) => __TAURI_INVOKE<SshConnectionProbeView>("remote_connection_probe", { request }),
@@ -198,8 +197,4 @@ export type ToolchainDoctorView = {
 	python_version: string | null,
 	python: string | null,
 	checks: ToolchainDoctorCheckView[],
-};
-
-export type ToolchainInitializeRequest = {
-	confirmed: boolean,
 };

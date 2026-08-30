@@ -133,46 +133,6 @@ describe("Environment resource governance", () => {
     expect(host.querySelector("progress")?.getAttribute("value")).toBe("9500");
   });
 
-  it("shows detected startup R and initializes an unmanaged project without config editing", async () => {
-    let configured = false;
-    const initialize = vi.fn(async () => { configured = true; });
-    const transport = {
-      toolchainDoctor: vi.fn(async () => configured ? {
-        status: "ready", configured: true, rho_toml_sha256: "a".repeat(64), target_id: "local",
-        target_registry_sha256: null, host_kind: "local", isolation_kind: "native",
-        r_version: "4.5.2", rscript: "/opt/R/4.5.2/bin/Rscript", python_version: null, python: null, checks: [],
-      } : {
-        status: "unmanaged", configured: false, rho_toml_sha256: null, target_id: "local",
-        target_registry_sha256: null, host_kind: "local", isolation_kind: "native",
-        r_version: "4.5.2", rscript: "/opt/R/4.5.2/bin/Rscript", python_version: null, python: null,
-        checks: [{ id: "workspace-r", status: "ready", detail: "Detected R 4.5.2" }],
-      }),
-      initializeToolchain: initialize,
-      subscribeInvalidated: vi.fn(() => () => undefined),
-    } as unknown as UiKernelTransport;
-    const instance = { ...resourceSurface(), mode_id: "toolchains" };
-    const host = document.createElement("div");
-    document.body.append(host);
-    const root = createRoot(host);
-    roots.push(root);
-    await act(async () => {
-      root.render(<EnvironmentSurfaceView instance={instance} transport={transport} persist={vi.fn()} reportError={vi.fn()} />);
-      await settle();
-    });
-    expect(host.textContent).toContain("R 4.5.2");
-    expect(host.textContent).toContain("No manual configuration file editing is required");
-    await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Set up automatically")!.click();
-      await settle();
-      [...host.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Confirm setup")!.click();
-      await settle();
-    });
-    expect(initialize).toHaveBeenCalledWith({ confirmed: true });
-    expect(host.textContent).toContain("Exact project environments are ready");
-  });
-
   it("configures an SSH Slurm target without requiring a terminal", async () => {
     const probe = vi.fn(async (request: { readonly confirmed_fingerprint: string | null }) => request.confirmed_fingerprint == null
       ? {

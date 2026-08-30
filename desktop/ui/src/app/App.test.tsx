@@ -3494,7 +3494,10 @@ describe("Studio foundation app", () => {
     expect(container.textContent).toContain("2 tabs");
     expect(container.querySelectorAll(".dv-split-view-container")).toHaveLength(4);
     expect(container.querySelectorAll(".dv-sash[role='separator']")).toHaveLength(3);
-    expect(container.querySelectorAll(".rho-inventory-item")).toHaveLength(5);
+    expect(container.querySelector(".rho-layout-mini-map")).not.toBeNull();
+    expect(container.querySelector(".rho-layout-mini-map [data-focused='true']")).not.toBeNull();
+    expect(container.querySelector<HTMLDetailsElement>(".rho-recent-closed")?.open).toBe(false);
+    expect(container.querySelector(".rho-recent-closed")?.textContent).toContain("Recently closed views");
     expect(container.querySelector("[data-surface-id='rho.agent']")?.textContent).toContain("Project direction");
     const agent = container.querySelector("[data-surface-id='rho.agent']");
     expect(agent?.textContent).toContain("aisdk");
@@ -6205,12 +6208,15 @@ describe("Studio foundation app", () => {
   it("keeps instance-local state when a sibling placement closes", async () => {
     const { container } = await renderApp();
     await openInspector(container);
+    const developer = container.querySelector<HTMLDetailsElement>(".rho-developer-components")!;
+    await act(async () => {
+      developer.querySelector<HTMLElement>("summary")!.click();
+      await settle();
+    });
     for (let index = 0; index < 2; index += 1) {
-      const item = [...container.querySelectorAll<HTMLElement>(".rho-inventory-item")]
-        .find((candidate) => candidate.textContent?.includes("rho.surface-playground"));
-      if (item == null) throw new Error("playground inventory item is missing");
+      const factory = container.querySelector<HTMLElement>("[data-surface-factory='rho.surface-playground']")!;
       await act(async () => {
-        item.querySelector<HTMLButtonElement>("button")!.click();
+        factory.querySelector<HTMLButtonElement>("button")!.click();
         await settle();
       });
     }
@@ -6938,8 +6944,13 @@ describe("Studio foundation app", () => {
     });
     expect(secondEditor.value).toBe("shared <- TRUE\n");
 
-    const previewItem = [...container.querySelectorAll<HTMLElement>(".rho-inventory-item")]
-      .find((item) => item.textContent?.includes("rho.file-preview"))!;
+    const closedViews = container.querySelector<HTMLDetailsElement>(".rho-recent-closed")!;
+    await act(async () => {
+      closedViews.querySelector<HTMLElement>("summary")!.click();
+      await settle();
+    });
+    const previewItem = [...closedViews.querySelectorAll<HTMLElement>(".rho-recent-closed-item")]
+      .find((item) => item.textContent?.includes("File preview"))!;
     await act(async () => {
       previewItem.querySelector<HTMLButtonElement>("button")!.click();
       for (let index = 0; index < 8; index += 1) await Promise.resolve();

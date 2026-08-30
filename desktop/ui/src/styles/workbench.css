@@ -696,6 +696,16 @@
   .rho-agent-health strong { display: block; font-size: var(--rho-text-ui); }
   .rho-agent-health small { display: block; margin-top: var(--rho-space-1); color: var(--rho-ink-2); font-size: var(--rho-text-caption); line-height: 1.4; }
   .rho-inspector-actions { display: flex; gap: var(--rho-space-2); margin-top: var(--rho-space-4); }
+  .rho-layout-mini-map { display: grid; min-height: 8rem; place-items: stretch; margin-top: var(--rho-space-3); padding: var(--rho-space-2); overflow: hidden; border: var(--rho-border); border-radius: var(--rho-radius-2); background: var(--rho-paper); }
+  .rho-layout-mini-container { display: flex; min-width: 0; min-height: 0; gap: var(--rho-space-1); padding: var(--rho-space-1); border: 1px dashed var(--rho-line); border-radius: var(--rho-radius-1); transition: gap var(--rho-motion-base) var(--rho-ease-out); }
+  .rho-layout-mini-horizontal { flex-direction: row; }
+  .rho-layout-mini-vertical { flex-direction: column; }
+  .rho-layout-mini-container > * { min-width: var(--rho-space-5); min-height: var(--rho-space-5); flex: 1 1 0; }
+  .rho-layout-mini-surface, .rho-layout-mini-stack > span { display: grid; place-items: center; border: var(--rho-border); border-radius: var(--rho-radius-1); color: var(--rho-muted); background: var(--rho-panel); font: var(--rho-weight-semibold) var(--rho-text-caption)/1 var(--rho-font-mono); transition: color var(--rho-motion-fast) var(--rho-ease-out), background var(--rho-motion-fast) var(--rho-ease-out), transform var(--rho-motion-fast) var(--rho-ease-out); }
+  .rho-layout-mini-surface[data-focused="true"], .rho-layout-mini-stack > span[data-focused="true"] { color: var(--rho-accent-ink); background: var(--rho-accent-tint-strong); transform: scale(1.03); animation: rho-layout-focus-pulse 1.8s var(--rho-ease-out) infinite alternate; }
+  .rho-layout-mini-stack { position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--rho-space-5), 1fr)); gap: 2px; padding: var(--rho-space-1); border: var(--rho-border); border-radius: var(--rho-radius-1); background: var(--rho-paper); }
+  @keyframes rho-layout-focus-pulse { from { box-shadow: 0 0 0 0 transparent; } to { box-shadow: 0 0 0 2px var(--rho-accent-tint-strong); } }
+  @media (prefers-reduced-motion: reduce) { .rho-layout-mini-surface[data-focused="true"], .rho-layout-mini-stack > span[data-focused="true"] { animation: none; } }
   .rho-layout-outline, .rho-layout-outline ol { margin: var(--rho-space-4) 0 0; padding-left: var(--rho-space-5); color: var(--rho-ink-2); font-size: var(--rho-text-ui); }
   .rho-layout-outline li { margin: var(--rho-space-2) 0; }
   .rho-layout-outline code { overflow-wrap: anywhere; font-family: var(--rho-font-mono); font-size: var(--rho-text-caption); }
@@ -745,6 +755,13 @@
   .rho-inventory-item strong, .rho-inventory-item small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rho-inventory-item strong { font-size: var(--rho-text-ui); }
   .rho-inventory-item small { margin-top: var(--rho-space-1); color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  .rho-recent-closed { margin-top: var(--rho-space-4); padding-top: var(--rho-space-3); border-top: var(--rho-border); }
+  .rho-recent-closed > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--rho-space-3); cursor: pointer; color: var(--rho-ink); font-size: var(--rho-text-ui); font-weight: var(--rho-weight-semibold); }
+  .rho-recent-closed > p { color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  .rho-recent-closed-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--rho-space-3); padding: var(--rho-space-2) 0; border-top: var(--rho-border); }
+  .rho-recent-closed-item > div { display: grid; min-width: 0; gap: var(--rho-space-1); }
+  .rho-recent-closed-item strong, .rho-recent-closed-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rho-recent-closed-item small { color: var(--rho-muted); font-size: var(--rho-text-caption); }
 
   .rho-surface-catalog-heading, .rho-resource-inventory-heading, .rho-runtime-inventory-heading {
     display: flex;

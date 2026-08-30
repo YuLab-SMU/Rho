@@ -129,6 +129,34 @@ function layoutInstanceIds(node: LayoutNode): string[] {
   }
 }
 
+function LayoutMiniMap({
+  node,
+  instances,
+  focusedInstanceId,
+}: {
+  readonly node: LayoutNode;
+  readonly instances: ReadonlyMap<string, SurfaceInstance>;
+  readonly focusedInstanceId: string | null;
+}) {
+  if (node.kind === "surface") {
+    const instance = instances.get(node.instance_id);
+    return <span
+      className="rho-layout-mini-surface"
+      data-focused={node.instance_id === focusedInstanceId || undefined}
+      title={instance == null ? node.instance_id : surfaceDisplayLabel(instance.surface_id)}
+    >{instance == null ? "?" : surfaceRailGlyph(instance.surface_id)}</span>;
+  }
+  if (node.kind === "stack") {
+    return <span className="rho-layout-mini-stack">{node.instances.slice(0, 4).map((instanceId) => {
+      const instance = instances.get(instanceId);
+      return <span data-focused={instanceId === focusedInstanceId || undefined} key={instanceId}>{instance == null ? "?" : surfaceRailGlyph(instance.surface_id)}</span>;
+    })}</span>;
+  }
+  return <span className={`rho-layout-mini-container rho-layout-mini-${node.axis}`}>
+    {node.children.map((child) => <LayoutMiniMap node={child.child} instances={instances} focusedInstanceId={focusedInstanceId} key={child.child.node_id} />)}
+  </span>;
+}
+
 function surfaceRailGlyph(surfaceId: string): string {
   switch (surfaceId) {
     case "rho.navigator": return "N";
@@ -2535,6 +2563,12 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     : [...new Set(layoutInstanceIds(studio.scene.root))]
       .map((instanceId) => instances.get(instanceId))
       .filter((instance): instance is SurfaceInstance => instance != null && instance.lifecycle_state === "active");
+  const recentlyClosedViews = studio == null ? [] : studio.unplaced_instance_ids
+    .map((instanceId) => instances.get(instanceId))
+    .filter((instance): instance is SurfaceInstance => instance != null)
+    .filter((instance, index, values) => values.findIndex((candidate) =>
+      candidate.surface_id === instance.surface_id && candidate.mode_id === instance.mode_id
+    ) === index);
   const renderComponentFactory = (factory: SurfaceFactoryRegistration, developer = false) => {
     const surfaceId = factory.definition.surface_id;
     const label = surfaceId.startsWith("rho.")
@@ -2822,6 +2856,13 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                   <button type="button" onClick={() => commit({ kind: "normalize" })}>Normalize</button>
                   {studio.scene.root.kind === "container" && <button type="button" onClick={() => commit({ kind: "distribute_container", container_node_id: studio.scene.root.node_id })}>Distribute</button>}
                 </div>
+                <div className="rho-layout-mini-map" role="img" aria-label="Current workspace layout preview">
+                  <LayoutMiniMap
+                    node={studio.scene.root}
+                    instances={instances}
+                    focusedInstanceId={studio.scene.focused_surface_instance_id}
+                  />
+                </div>
                 <ol className="rho-layout-outline"><li><NodeOutline node={studio.scene.root} commit={commit} /></li></ol>
               </details>
               {surfaces != null && (
@@ -2850,31 +2891,31 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                   </details>}
                 </section>
               )}
-              {studio.unplaced_instance_ids.length > 0 && <section className="rho-inventory">
-                <span className="rho-eyebrow">Unplaced instances</span>
-                {studio.unplaced_instance_ids.map((id) => {
-                  const instance = instances.get(id);
-                  return (
-                    <div key={id} className="rho-inventory-item">
-                      <div><strong>{instance?.surface_id ?? id}</strong><small>{instance?.mode_id ?? "default"}</small></div>
-                      <button
-                        type="button"
-                        disabled={studio.scene.root.kind !== "container"}
-                        onClick={() => {
-                          if (studio.scene.root.kind !== "container") return;
-                          commit({
-                            kind: "insert_surface",
-                            target_container_node_id: studio.scene.root.node_id,
-                            child_index: studio.scene.root.children.length,
-                            instance_id: id,
-                            basis: instance?.surface_id === "rho.status" ? { kind: "intrinsic" } : { kind: "fraction", weight: 1 },
-                          });
-                        }}
-                      >Place</button>
-                    </div>
+              {recentlyClosedViews.length > 0 && <details className="rho-recent-closed">
+                <summary><span>Recently closed views</span><span>{recentlyClosedViews.length}</span></summary>
+                <p>Restore a view with its previous mode and local state.</p>
+                {recentlyClosedViews.map((instance) => {
+                  const factory = surfaces?.catalog.factories.find(
+                    (candidate) => candidate.definition.surface_id === instance.surface_id,
                   );
+                  const mode = factory?.definition.modes.find(
+                    (candidate) => candidate.mode_id === instance.mode_id,
+                  )?.label;
+                  return <div className="rho-recent-closed-item" key={`${instance.surface_id}:${instance.mode_id ?? "default"}`}>
+                    <div><strong>{surfaceDisplayLabel(instance.surface_id)}</strong><small>{mode ?? "Default view"}</small></div>
+                    <button type="button" disabled={studio.scene.root.kind !== "container"} onClick={() => {
+                      if (studio.scene.root.kind !== "container") return;
+                      commit({
+                        kind: "insert_surface",
+                        target_container_node_id: studio.scene.root.node_id,
+                        child_index: studio.scene.root.children.length,
+                        instance_id: instance.instance_id,
+                        basis: instance.surface_id === "rho.status" ? { kind: "intrinsic" } : { kind: "fraction", weight: 1 },
+                      });
+                    }}>Restore</button>
+                  </div>;
                 })}
-              </section>}
+              </details>}
             </>
           )}
           {resources != null && (

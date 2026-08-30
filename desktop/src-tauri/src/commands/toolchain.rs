@@ -7,7 +7,7 @@ use rho_toolchain::{
     doctor_for_target, execute_journaled_operation, load_target_registry, load_toolchain_config,
     monitor_target_resource,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::State;
 use uuid::Uuid;
 
@@ -20,11 +20,6 @@ pub(crate) struct ToolchainDoctorCheckView {
     pub(crate) id: String,
     pub(crate) status: String,
     pub(crate) detail: String,
-}
-
-#[derive(Debug, Clone, Deserialize, specta::Type)]
-pub(crate) struct ToolchainInitializeRequest {
-    confirmed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -43,21 +38,148 @@ pub(crate) struct ToolchainDoctorView {
     pub(crate) checks: Vec<ToolchainDoctorCheckView>,
 }
 
+fn project_contains_r_source(project_root: &Path) -> Result<bool> {
+    let mut pending = vec![project_root.to_path_buf()];
+    let mut inspected = 0usize;
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(directory)? {
+            let entry = entry?;
+            inspected += 1;
+            if inspected > 2_000 {
+                return Ok(false);
+            }
+            let path = entry.path();
+            let file_type = entry.file_type()?;
+            if file_type.is_symlink() {
+                continue;
+            }
+            if file_type.is_dir() {
+                let name = entry.file_name();
+                if !matches!(
+                    name.to_str(),
+                    Some(".git" | ".rho" | "renv" | ".venv" | "node_modules" | "target")
+                ) {
+                    pending.push(path);
+                }
+            } else if file_type.is_file()
+                && path
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|value| value.eq_ignore_ascii_case("r"))
+            {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn r_home_from_rscript(rscript: &Path) -> Result<std::path::PathBuf> {
+    let canonical = rscript
+        .canonicalize()
+        .context("resolving the Workspace Rscript")?;
+    let mut home = canonical
+        .parent()
+        .context("Workspace Rscript has no parent directory")?;
+    while home
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| matches!(value.to_ascii_lowercase().as_str(), "bin" | "x64" | "i386"))
+    {
+        home = home
+            .parent()
+            .context("Workspace Rscript has an incomplete installation path")?;
+    }
+    Ok(home.to_path_buf())
+}
+
+fn runtime_exact_version(runtime: &crate::startup_runtime::RuntimeConfig) -> Result<String> {
+    let version = runtime
+        .r_version
+        .split_whitespace()
+        .find(|value| {
+            value
+                .chars()
+                .next()
+                .is_some_and(|character| character.is_ascii_digit())
+        })
+        .unwrap_or(runtime.r_version.as_str())
+        .trim()
+        .to_string();
+    rho_toolchain::ExactVersion::parse(&version)?;
+    Ok(version)
+}
+
+fn archive_invalid_toolchain_config(project_root: &Path) -> Result<()> {
+    let source = project_root.join("rho.toml");
+    if !source.exists() {
+        return Ok(());
+    }
+    let recovery = project_root.join(".rho/toolchain/recovery");
+    std::fs::create_dir_all(&recovery)?;
+    std::fs::rename(
+        source,
+        recovery.join(format!("rho-{}.toml", Uuid::new_v4().simple())),
+    )?;
+    Ok(())
+}
+
+async fn local_toolchain_requires_repair(project_root: &Path, rho_home: &Path) -> Result<bool> {
+    let root = project_root.to_path_buf();
+    let home = rho_home.to_path_buf();
+    let report = tauri::async_runtime::spawn_blocking(move || {
+        let targets = load_target_registry(&home)?;
+        doctor_for_target(&root, &targets)
+    })
+    .await
+    .context("automatic project environment diagnosis task failed")??;
+    Ok(report.status != DoctorStatus::Ready
+        || report
+            .checks
+            .iter()
+            .any(|check| check.status != DoctorStatus::Ready))
+}
+
 pub(crate) async fn prepare_workspace_target_admission_for(
     state: &AppState,
     project_root: &std::path::Path,
 ) -> Result<Option<TargetAdmission>> {
     if !project_root.join("rho.toml").exists() {
-        return Ok(None);
+        if !project_contains_r_source(project_root)? {
+            return Ok(None);
+        }
+        initialize_project_automatically(state, project_root).await?;
     }
+    let admit = |rho_home: std::path::PathBuf, root: std::path::PathBuf| async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            let targets = load_target_registry(&rho_home)?;
+            admit_target(&root, &targets, TargetAdmissionMode::Workspace)
+        })
+        .await
+        .context("Workspace Target Admission task failed")?
+        .map_err(anyhow::Error::from)
+    };
     let rho_home = crate::agent_llm::agent_config::rho_home()?;
-    let root_for_task = project_root.to_path_buf();
-    let admission = tauri::async_runtime::spawn_blocking(move || {
-        let targets = load_target_registry(&rho_home)?;
-        admit_target(&root_for_task, &targets, TargetAdmissionMode::Workspace)
-    })
-    .await
-    .context("Workspace Target Admission task failed")??;
+    let admission = match admit(rho_home.clone(), project_root.to_path_buf()).await {
+        Ok(admission) => admission,
+        Err(error) => match load_toolchain_config(project_root) {
+            Ok(config) => {
+                if config.config.compute.default_target != rho_toolchain::LOCAL_TARGET_ID
+                    || config.config.runtime.r.is_none()
+                    || !local_toolchain_requires_repair(project_root, &rho_home).await?
+                {
+                    return Err(error);
+                }
+                repair_project_automatically(state, project_root).await?;
+                admit(rho_home, project_root.to_path_buf()).await?
+            }
+            Err(_) => {
+                archive_invalid_toolchain_config(project_root)?;
+                initialize_project_automatically(state, project_root).await?;
+                admit(rho_home, project_root.to_path_buf()).await?
+            }
+        },
+    };
     if admission.host_kind() != "local" || admission.isolation_kind() != "native" {
         bail!(
             "Workspace Target Admission selected {}/{}; this desktop build cannot substitute the local Ark runtime for that target",
@@ -66,20 +188,28 @@ pub(crate) async fn prepare_workspace_target_admission_for(
         );
     }
     let runtime = runtime_config(state)?;
-    let admitted_rscript = admission
-        .doctor_report()
-        .rscript
-        .as_ref()
-        .context("Workspace Target Admission omitted the configured Rscript")?
-        .canonicalize()
-        .context("resolving the admitted Workspace Rscript")?;
-    let runtime_rscript = runtime
-        .rscript
-        .canonicalize()
-        .context("resolving the desktop Workspace Rscript")?;
+    let runtime_version = runtime_exact_version(&runtime)?;
     ensure!(
-        admitted_rscript == runtime_rscript,
-        "Workspace Target Admission resolved another Rscript; restart Rho with the rho.toml runtime"
+        admission.doctor_report().r_version.as_deref() == Some(runtime_version.as_str()),
+        "Workspace Target Admission resolved R {}, but desktop R {} is active",
+        admission
+            .doctor_report()
+            .r_version
+            .as_deref()
+            .unwrap_or("unknown"),
+        runtime_version
+    );
+    let admitted_r_home = r_home_from_rscript(
+        admission
+            .doctor_report()
+            .rscript
+            .as_deref()
+            .context("Workspace Target Admission omitted the configured Rscript")?,
+    )?;
+    let runtime_r_home = r_home_from_rscript(&runtime.rscript)?;
+    ensure!(
+        admitted_r_home == runtime_r_home,
+        "Workspace Target Admission resolved another R installation; restart Rho with the rho.toml runtime"
     );
     Ok(Some(admission))
 }
@@ -197,7 +327,7 @@ fn initialize_project_toolchain(
     let targets = load_target_registry(rho_home)?;
     let project = serde_json::to_string(&project_root.to_string_lossy().as_ref())?;
     let expression = format!(
-        "if (!requireNamespace('renv', quietly=TRUE)) quit(status=41); renv::init(project={project}, bare=TRUE, restart=FALSE); renv::snapshot(project={project}, prompt=FALSE)"
+        "if (!requireNamespace('renv', quietly=TRUE)) quit(status=41); renv::init(project={project}, bare=TRUE, restart=FALSE); renv::install(c('jsonlite', 'pak'), project={project}); renv::snapshot(project={project}, prompt=FALSE)"
     );
     execute_journaled_operation(
         &config,
@@ -215,47 +345,71 @@ fn initialize_project_toolchain(
     Ok(())
 }
 
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-pub(crate) async fn toolchain_initialize(
-    request: ToolchainInitializeRequest,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    if !request.confirmed {
-        return Err("Project environment setup requires explicit confirmation".to_string());
-    }
-    let project_root = state.project_root.read().await.clone();
-    if project_root.join("rho.toml").exists() {
-        return Err("rho.toml already exists; refresh Toolchains instead".to_string());
-    }
-    let runtime = runtime_config(&state).map_err(crate::display_error)?;
-    let version = runtime
-        .r_version
-        .split_whitespace()
-        .find(|value| {
-            value
-                .chars()
-                .next()
-                .is_some_and(|character| character.is_ascii_digit())
-        })
-        .unwrap_or(runtime.r_version.as_str())
-        .trim()
-        .to_string();
-    rho_toolchain::ExactVersion::parse(&version).map_err(crate::display_error)?;
-    let root_for_task = project_root.clone();
-    let rscript = runtime.rscript.clone();
-    let rho_home = crate::agent_llm::agent_config::rho_home().map_err(crate::display_error)?;
+fn repair_local_project_toolchain(
+    project_root: &Path,
+    rscript: &Path,
+    rho_home: &Path,
+) -> Result<()> {
+    let config = load_toolchain_config(project_root)?;
+    ensure!(
+        config.config.compute.default_target == rho_toolchain::LOCAL_TARGET_ID,
+        "Automatic repair applies only to the local target"
+    );
+    ensure!(
+        config.config.runtime.r.is_some(),
+        "Automatic repair requires the managed R runtime"
+    );
+    let targets = load_target_registry(rho_home)?;
+    let project = serde_json::to_string(&project_root.to_string_lossy().as_ref())?;
+    let expression = format!(
+        "if (!requireNamespace('renv', quietly=TRUE)) quit(status=41); renv::load(project={project}, quiet=TRUE); renv::restore(project={project}, prompt=FALSE); renv::install(c('jsonlite', 'pak')); renv::snapshot(project={project}, prompt=FALSE)"
+    );
+    execute_journaled_operation(
+        &config,
+        &format!("repair-{}", Uuid::new_v4().simple()),
+        OperationKind::Sync,
+        &[CommandSpec {
+            program: rscript.to_path_buf(),
+            args: vec!["--vanilla".to_string(), "-e".to_string(), expression],
+            cwd: project_root.to_path_buf(),
+            env: BTreeMap::new(),
+        }],
+        &targets,
+        true,
+    )?;
+    Ok(())
+}
+
+async fn initialize_project_automatically(state: &AppState, project_root: &Path) -> Result<()> {
+    let runtime = runtime_config(state)?;
+    let version = runtime_exact_version(&runtime)?;
+    let rho_home = crate::agent_llm::agent_config::rho_home()?;
+    let root = project_root.to_path_buf();
+    let rscript = runtime.rscript;
     tauri::async_runtime::spawn_blocking(move || {
-        initialize_project_toolchain(&root_for_task, &rscript, &version, &rho_home)
+        initialize_project_toolchain(&root, &rscript, &version, &rho_home)
     })
     .await
-    .map_err(|error| format!("Toolchain initialization task failed: {error}"))?
-    .map_err(crate::display_error)?;
-    if *state.project_root.read().await != project_root {
-        return Err("Toolchain initialization became stale after a project switch".to_string());
+    .context("automatic project environment setup task failed")??;
+    Ok(())
+}
+
+async fn repair_project_automatically(state: &AppState, project_root: &Path) -> Result<()> {
+    let config = load_toolchain_config(project_root)?;
+    if config.config.compute.default_target != rho_toolchain::LOCAL_TARGET_ID
+        || config.config.runtime.r.is_none()
+    {
+        bail!("Automatic repair is unavailable for this target");
     }
-    *state.target_admission.write().await = None;
-    *state.resource_governance.write().await = None;
+    let runtime = runtime_config(state)?;
+    let rho_home = crate::agent_llm::agent_config::rho_home()?;
+    let root = project_root.to_path_buf();
+    let rscript = runtime.rscript;
+    tauri::async_runtime::spawn_blocking(move || {
+        repair_local_project_toolchain(&root, &rscript, &rho_home)
+    })
+    .await
+    .context("automatic project environment repair task failed")??;
     Ok(())
 }
 
@@ -379,6 +533,52 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn automatic_setup_discovery_does_not_follow_project_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let project = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("outside.R"), "x <- 1").unwrap();
+        symlink(outside.path(), project.path().join("linked")).unwrap();
+        assert!(!project_contains_r_source(project.path()).unwrap());
+        std::fs::write(project.path().join("analysis.R"), "x <- 1").unwrap();
+        assert!(project_contains_r_source(project.path()).unwrap());
+    }
+
+    #[test]
+    fn invalid_toolchain_config_is_preserved_before_automatic_rebuild() {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join("rho.toml"), "not valid toml = [").unwrap();
+        archive_invalid_toolchain_config(project.path()).unwrap();
+        assert!(!project.path().join("rho.toml").exists());
+        let recovery = project.path().join(".rho/toolchain/recovery");
+        let archived = std::fs::read_dir(recovery)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        assert_eq!(
+            std::fs::read_to_string(archived).unwrap(),
+            "not valid toml = ["
+        );
+    }
+
+    #[test]
+    fn rscript_paths_with_and_without_bin_resolve_to_the_same_r_home() {
+        let directory = tempfile::tempdir().unwrap();
+        let home = directory.path().join("R");
+        std::fs::create_dir_all(home.join("bin")).unwrap();
+        std::fs::write(home.join("Rscript"), "").unwrap();
+        std::fs::write(home.join("bin/Rscript"), "").unwrap();
+        assert_eq!(
+            r_home_from_rscript(&home.join("Rscript")).unwrap(),
+            r_home_from_rscript(&home.join("bin/Rscript")).unwrap()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn automatic_setup_journals_renv_before_reporting_managed_state() {
         use std::os::unix::fs::PermissionsExt;
 
@@ -387,7 +587,7 @@ mod tests {
         let rscript = project.path().join("fake-rscript");
         std::fs::write(
             &rscript,
-            "#!/bin/sh\nmkdir -p renv\ntouch .Rprofile renv.lock renv/activate.R\n",
+            "#!/bin/sh\nprintf '%s' \"$*\" > invocation.txt\nmkdir -p renv\ntouch .Rprofile renv.lock renv/activate.R\n",
         )
         .unwrap();
         std::fs::set_permissions(&rscript, std::fs::Permissions::from_mode(0o700)).unwrap();
@@ -401,6 +601,14 @@ mod tests {
         );
         assert!(project.path().join("renv.lock").is_file());
         let operations = project.path().join(".rho/toolchain/operations");
-        assert_eq!(std::fs::read_dir(operations).unwrap().count(), 1);
+        assert_eq!(std::fs::read_dir(&operations).unwrap().count(), 1);
+
+        repair_local_project_toolchain(project.path(), &rscript, rho_home.path()).unwrap();
+        assert_eq!(std::fs::read_dir(operations).unwrap().count(), 2);
+        assert!(
+            std::fs::read_to_string(project.path().join("invocation.txt"))
+                .unwrap()
+                .contains("renv::load")
+        );
     }
 }

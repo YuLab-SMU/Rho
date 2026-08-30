@@ -24,29 +24,12 @@ function ToolchainDoctorPanel({
   loading,
   error,
   reload,
-  initialize,
 }: {
   readonly view: ToolchainDoctorView | null;
   readonly loading: boolean;
   readonly error: string | null;
   readonly reload: () => void;
-  readonly initialize: () => Promise<void>;
 }) {
-  const [confirmInitialize, setConfirmInitialize] = useState(false);
-  const [initializing, setInitializing] = useState(false);
-  const [initializeError, setInitializeError] = useState<string | null>(null);
-  const runInitialize = async () => {
-    setInitializing(true);
-    try {
-      await initialize();
-      setConfirmInitialize(false);
-      setInitializeError(null);
-    } catch (cause: unknown) {
-      setInitializeError(workbenchFailureMessage(cause, "Project environment setup failed."));
-    } finally {
-      setInitializing(false);
-    }
-  };
   return <section className="rho-toolchain-surface" aria-label="Project toolchains">
     <header className="rho-environment-toolbar">
       <div>
@@ -79,15 +62,6 @@ function ToolchainDoctorPanel({
           {view.python != null && <code>{view.python}</code>}
         </article>
       </div>
-      {view.status === "unmanaged" && <section className="rho-toolchain-auto-setup">
-        <div><span className="rho-eyebrow">Automatic setup</span><strong>Manage this project with the detected R runtime</strong><p>Rho will create rho.toml, initialize renv, and snapshot the current project library. No manual configuration file editing is required.</p></div>
-        {!confirmInitialize ? <button type="button" className="rho-primary-action" onClick={() => setConfirmInitialize(true)}>Set up automatically</button> : <div className="rho-toolchain-auto-confirm" role="alertdialog" aria-label="Confirm project environment setup">
-          <p>This creates <code>rho.toml</code>, <code>renv.lock</code>, <code>.Rprofile</code>, and <code>renv/</code> in the current project.</p>
-          <button type="button" disabled={initializing} className="rho-primary-action" onClick={() => void runInitialize()}>{initializing ? "Setting up…" : "Confirm setup"}</button>
-          <button type="button" disabled={initializing} onClick={() => setConfirmInitialize(false)}>Cancel</button>
-        </div>}
-        {initializeError != null && <p className="rho-resource-monitor-error" role="alert">{initializeError}</p>}
-      </section>}
       <ol className="rho-toolchain-checks">
         {view.checks.map((check) => <li data-status={check.status} key={check.id}>
           <span className={`rho-status-dot rho-status-${check.status === "ready" ? "ready" : "degraded"}`} aria-hidden="true" />
@@ -546,10 +520,6 @@ export function EnvironmentSurfaceView({
       loading={loading}
       error={error}
       reload={load}
-      initialize={async () => {
-        await transport.initializeToolchain({ confirmed: true });
-        await load();
-      }}
     />;
   }
   if (resourceMode) {
