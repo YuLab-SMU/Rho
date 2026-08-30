@@ -1,16 +1,18 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use include_dir::{Dir, include_dir};
 use rho_toolchain::{
-    ComputeHost, ComputeIsolation, ComputeTarget, LOCAL_TARGET_ID, load_target_registry,
-    load_toolchain_config, validate_compute_target, validate_target_id,
+    ComputeHost, ComputeIsolation, ComputeTarget, LOCAL_TARGET_ID, REMOTE_HELPER_BUILD_ID,
+    load_target_registry, load_toolchain_config, validate_compute_target, validate_target_id,
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -21,6 +23,12 @@ use zeroize::Zeroizing;
 use crate::AppState;
 
 const MAX_SSH_OUTPUT_BYTES: usize = 1024 * 1024;
+const MAX_AUTO_UPDATED_HELPERS: usize = 16;
+const REMOTE_HELPER_RETRY_INTERVAL: Duration = Duration::from_secs(60);
+static CURRENT_REMOTE_HELPERS: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static REMOTE_HELPER_ATTEMPTS: LazyLock<Mutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 const REMOTE_HELPER_SOURCE: Dir<'_> =
     include_dir!("$CARGO_MANIFEST_DIR/../../crates/rho-toolchain/src");
 const REMOTE_HELPER_MANIFEST: &str = r#"[package]
@@ -327,14 +335,20 @@ fn run_ssh_with_input(
 }
 
 fn static_probe_command() -> &'static str {
-    "printf 'RHO_HOST\\t%s\\n' \"$(hostname)\"; printf 'RHO_HOME\\t%s\\n' \"$HOME\"; if command -v sinfo >/dev/null 2>&1; then printf 'RHO_SLURM\\t%s\\n' \"$(sinfo --version | head -1)\"; sinfo -h -o 'RHO_PARTITION|%P|%a|%D|%G|%C' | head -32; fi; if command -v rho-toolchain-helper >/dev/null 2>&1 || [ -x \"$HOME/.local/bin/rho-toolchain-helper\" ]; then printf 'RHO_HELPER\\tready\\n'; else printf 'RHO_HELPER\\tmissing\\n'; fi"
+    "printf 'RHO_HOST\\t%s\\n' \"$(hostname)\"; printf 'RHO_HOME\\t%s\\n' \"$HOME\"; if command -v sinfo >/dev/null 2>&1; then printf 'RHO_SLURM\\t%s\\n' \"$(sinfo --version | head -1)\"; sinfo -h -o 'RHO_PARTITION|%P|%a|%D|%G|%C' | head -32; fi; helper=''; if command -v rho-toolchain-helper >/dev/null 2>&1; then helper=$(command -v rho-toolchain-helper); elif [ -x \"$HOME/.local/bin/rho-toolchain-helper\" ]; then helper=\"$HOME/.local/bin/rho-toolchain-helper\"; fi; if [ -n \"$helper\" ]; then printf 'RHO_HELPER\\tready\\n'; printf 'RHO_HELPER_BUILD\\t%s\\n' \"$(\"$helper\" --version 2>/dev/null | head -1)\"; else printf 'RHO_HELPER\\tmissing\\n'; fi"
 }
 
-fn parse_probe(scan: &ScannedHost, output: &[u8]) -> SshConnectionProbeView {
+struct ParsedProbe {
+    view: SshConnectionProbeView,
+    helper_build_id: Option<String>,
+}
+
+fn parse_probe_details(scan: &ScannedHost, output: &[u8]) -> ParsedProbe {
     let mut host_name = None;
     let mut home_directory = None;
     let mut slurm_version = None;
     let mut helper_available = false;
+    let mut helper_build_id = None;
     let mut partitions = Vec::new();
     for line in String::from_utf8_lossy(output).lines() {
         let fields = if line.starts_with("RHO_PARTITION|") {
@@ -347,6 +361,9 @@ fn parse_probe(scan: &ScannedHost, output: &[u8]) -> SshConnectionProbeView {
             ["RHO_HOME", value] => home_directory = Some((*value).to_string()),
             ["RHO_SLURM", value] => slurm_version = Some((*value).to_string()),
             ["RHO_HELPER", "ready"] => helper_available = true,
+            ["RHO_HELPER_BUILD", value] if !value.is_empty() => {
+                helper_build_id = Some((*value).to_string());
+            }
             ["RHO_PARTITION", partition, available, nodes, gres, cpus] => {
                 partitions.push(SlurmPartitionView {
                     partition: partition.trim_end_matches('*').to_string(),
@@ -359,21 +376,28 @@ fn parse_probe(scan: &ScannedHost, output: &[u8]) -> SshConnectionProbeView {
             _ => {}
         }
     }
-    SshConnectionProbeView {
-        status: "ready".to_string(),
-        fingerprints: scan.fingerprints.clone(),
-        authenticated: true,
-        host_name,
-        home_directory,
-        slurm_version,
-        partitions,
-        helper_available,
-        message: if helper_available {
-            "SSH and the Rho remote Helper are ready.".to_string()
-        } else {
-            "SSH is ready. Install the Rho remote Helper before remote execution.".to_string()
+    ParsedProbe {
+        view: SshConnectionProbeView {
+            status: "ready".to_string(),
+            fingerprints: scan.fingerprints.clone(),
+            authenticated: true,
+            host_name,
+            home_directory,
+            slurm_version,
+            partitions,
+            helper_available,
+            message: if helper_available {
+                "SSH and the Rho remote Helper are ready.".to_string()
+            } else {
+                "SSH is ready. Install the Rho remote Helper before remote execution.".to_string()
+            },
         },
+        helper_build_id,
     }
+}
+
+fn parse_probe(scan: &ScannedHost, output: &[u8]) -> SshConnectionProbeView {
+    parse_probe_details(scan, output).view
 }
 
 fn probe_connection(request: &SshConnectionProbeRequest) -> Result<SshConnectionProbeView> {
@@ -524,6 +548,99 @@ fn install_remote_helper(request: &SshConnectionProbeRequest, scan: &ScannedHost
         "Remote Helper installation did not report committed state"
     );
     Ok(())
+}
+
+fn ensure_remote_helper_current(target_id: &str, target: &ComputeTarget) -> Result<()> {
+    let ComputeHost::Ssh {
+        host,
+        username,
+        port,
+        host_fingerprint,
+        identity_file,
+        ..
+    } = &target.host
+    else {
+        return Ok(());
+    };
+    let identity_file = identity_file
+        .as_ref()
+        .context("Configured SSH identity is unavailable")?;
+    let username = username
+        .as_ref()
+        .context("Configured SSH username is unavailable")?;
+    let cache_key = format!(
+        "{target_id}\u{0}{username}\u{0}{host}\u{0}{port}\u{0}{host_fingerprint}\u{0}{identity_file}\u{0}{REMOTE_HELPER_BUILD_ID}"
+    );
+    if CURRENT_REMOTE_HELPERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .contains(&cache_key)
+    {
+        return Ok(());
+    }
+    let now = Instant::now();
+    let mut attempts = REMOTE_HELPER_ATTEMPTS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if attempts
+        .get(&cache_key)
+        .is_some_and(|attempt| now.duration_since(*attempt) < REMOTE_HELPER_RETRY_INTERVAL)
+    {
+        return Ok(());
+    }
+    attempts.insert(cache_key.clone(), now);
+    drop(attempts);
+    let scan = scan_host(host, *port)?;
+    ensure!(
+        scan.fingerprints
+            .iter()
+            .any(|value| value.sha256 == *host_fingerprint),
+        "Configured SSH host fingerprint is no longer offered"
+    );
+    let request = SshConnectionProbeRequest {
+        host: host.clone(),
+        port: *port,
+        username: username.clone(),
+        password: None,
+        identity_file: Some(identity_file.clone()),
+        confirmed_fingerprint: Some(host_fingerprint.clone()),
+    };
+    let output = run_ssh(&request, &scan, static_probe_command())?;
+    let mut details = parse_probe_details(&scan, &output);
+    if details.helper_build_id.as_deref() != Some(REMOTE_HELPER_BUILD_ID) {
+        install_remote_helper(&request, &scan)?;
+        let output = run_ssh(&request, &scan, static_probe_command())?;
+        details = parse_probe_details(&scan, &output);
+    }
+    ensure!(
+        details.view.helper_available
+            && details.helper_build_id.as_deref() == Some(REMOTE_HELPER_BUILD_ID),
+        "The configured Rho remote Helper could not be updated"
+    );
+    CURRENT_REMOTE_HELPERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(cache_key);
+    Ok(())
+}
+
+pub(crate) fn ensure_configured_remote_helpers(rho_home: &Path) -> Result<()> {
+    let registry = load_target_registry(rho_home)?;
+    let mut first_error = None;
+    for (target_id, target) in registry
+        .registry
+        .targets
+        .iter()
+        .filter(|(_, target)| matches!(target.host, ComputeHost::Ssh { .. }))
+        .take(MAX_AUTO_UPDATED_HELPERS)
+    {
+        if let Err(error) = ensure_remote_helper_current(target_id, target)
+            && first_error.is_none()
+        {
+            first_error = Some(error);
+        }
+    }
+    first_error.map_or(Ok(()), Err)
 }
 
 fn write_target_registry(
@@ -718,7 +835,13 @@ pub(crate) async fn configure_ssh_target(
                 identity_file: None,
                 confirmed_fingerprint: Some(request.confirmed_fingerprint.clone()),
             };
-            install_public_key(&bootstrap, &scan, &identity)?;
+            if bootstrap
+                .password
+                .as_deref()
+                .is_some_and(|value| !value.is_empty())
+            {
+                install_public_key(&bootstrap, &scan, &identity)?;
+            }
             Some(identity.to_string_lossy().into_owned())
         } else {
             request
@@ -733,19 +856,23 @@ pub(crate) async fn configure_ssh_target(
             identity_file: identity_file.clone(),
             confirmed_fingerprint: Some(request.confirmed_fingerprint.clone()),
         };
-        let mut probe = probe_connection(&probe_request)?;
+        let output = run_ssh(&probe_request, &scan, static_probe_command())?;
+        let mut details = parse_probe_details(&scan, &output);
         ensure!(
-            probe.authenticated,
+            details.view.authenticated,
             "Managed-key SSH authentication did not become ready"
         );
-        if !probe.helper_available {
+        if details.helper_build_id.as_deref() != Some(REMOTE_HELPER_BUILD_ID) {
             install_remote_helper(&probe_request, &scan)?;
-            probe = probe_connection(&probe_request)?;
+            let output = run_ssh(&probe_request, &scan, static_probe_command())?;
+            details = parse_probe_details(&scan, &output);
         }
         ensure!(
-            probe.helper_available,
+            details.view.helper_available
+                && details.helper_build_id.as_deref() == Some(REMOTE_HELPER_BUILD_ID),
             "Rho remote Helper installation did not become ready"
         );
+        let probe = details.view;
         let remote_root = if request.remote_root.trim().is_empty() {
             probe
                 .home_directory
@@ -810,14 +937,21 @@ mod tests {
                 sha256: "SHA256:test".to_string(),
             }],
         };
-        let view = parse_probe(
+        let parsed = parse_probe_details(
             &scan,
-            b"RHO_HOST\tmaster\nRHO_SLURM\tslurm 19.05.2\nRHO_PARTITION|gpu_batch*|up|1|gpu:3|2/46/0/48\nRHO_HELPER\tmissing\n",
+            format!(
+                "RHO_HOST\tmaster\nRHO_SLURM\tslurm 19.05.2\nRHO_PARTITION|gpu_batch*|up|1|gpu:3|2/46/0/48\nRHO_HELPER\tready\nRHO_HELPER_BUILD\t{REMOTE_HELPER_BUILD_ID}\n"
+            )
+            .as_bytes(),
         );
-        assert!(view.authenticated);
-        assert_eq!(view.host_name.as_deref(), Some("master"));
-        assert_eq!(view.partitions[0].partition, "gpu_batch");
-        assert!(!view.helper_available);
+        assert!(parsed.view.authenticated);
+        assert_eq!(parsed.view.host_name.as_deref(), Some("master"));
+        assert_eq!(parsed.view.partitions[0].partition, "gpu_batch");
+        assert!(parsed.view.helper_available);
+        assert_eq!(
+            parsed.helper_build_id.as_deref(),
+            Some(REMOTE_HELPER_BUILD_ID)
+        );
     }
 
     #[test]

@@ -886,6 +886,7 @@
   .rho-settings-connect-provider { display: grid; width: min(34rem, 100%); gap: var(--rho-space-4); }
   .rho-settings-connect-provider > label { display: grid; gap: var(--rho-space-2); color: var(--rho-ink-2); font-size: var(--rho-text-ui); font-weight: var(--rho-weight-semibold); }
   .rho-settings-connect-provider input, .rho-settings-connect-provider select { width: 100%; min-width: 0; }
+  .rho-settings-edit-provider { width: 100%; margin-bottom: var(--rho-space-4); padding: var(--rho-space-4); border: var(--rho-border); border-radius: var(--rho-radius-2); background: var(--rho-paper); }
   .rho-settings-connect-note { margin: 0; padding: var(--rho-space-3); border-left: 3px solid var(--rho-accent); color: var(--rho-ink-2); background: var(--rho-panel); font-size: var(--rho-text-caption); line-height: 1.5; }
   .rho-settings-connect-actions { display: flex; flex-wrap: wrap; gap: var(--rho-space-2); }
 
@@ -1488,6 +1489,8 @@
   .rho-connection-target-list > header, .rho-connection-wizard > header, .rho-connection-probe > header { display: flex; align-items: center; justify-content: space-between; gap: var(--rho-space-3); margin-bottom: var(--rho-space-3); }
   .rho-connection-target-list > article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--rho-space-1) var(--rho-space-2); padding: var(--rho-space-3) 0; border-top: var(--rho-border); }
   .rho-connection-target-list > article > div { display: grid; min-width: 0; gap: var(--rho-space-1); }
+  .rho-connection-target-list > article[data-editing="true"] { margin-inline: calc(-1 * var(--rho-space-2)); padding-inline: var(--rho-space-2); border-radius: var(--rho-radius-1); background: var(--rho-accent-tint); }
+  .rho-connection-target-list > article > .rho-connection-target-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--rho-space-2); }
   .rho-connection-target-list > article strong, .rho-connection-target-list > article small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rho-connection-target-list > article small, .rho-connection-target-list > article p { color: var(--rho-muted); font-size: var(--rho-text-caption); }
   .rho-connection-target-list > article p { grid-column: 1 / -1; margin: var(--rho-space-1) 0 0; overflow-wrap: anywhere; }

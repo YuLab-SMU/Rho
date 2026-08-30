@@ -164,47 +164,29 @@ describe("Provider-first Settings Surface", () => {
       config_store: { ...base.config_store, status: "missing" },
     };
     transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(empty));
-    transport.saveProvider = vi.fn(async (request) => ({
-      ...empty,
-      revision: 1,
-      config_store: { ...empty.config_store, status: "loaded", config_snapshot_id: "provider-saved" },
-      providers: [{
-        ...request.provider,
-        credential_status: "not_checked",
-        credential_effective_source: "not_configured",
-        env_shadows_file: false,
-        session_credential_present: false,
-        config_file_credential_present: false,
-        effective_base_url: "https://api.deepseek.com",
-        base_url_source: "provider_default",
-      }],
-    }));
-    transport.saveProviderCredential = vi.fn(async () => ({
-      ...await transport.saveProvider({
-        provider: {
-          id: "deepseek", display_name: "DeepSeek", kind: "registered", registered_provider_id: "deepseek",
-          api_key_env: "DEEPSEEK_API_KEY", api_key_required: true, base_url: null, base_url_env: null,
-          wire_api: null, disable_stream_options: null,
-        },
-        expectedRevision: 0,
-        expectedConfigSnapshotId: "mock",
-      }),
-      revision: 1,
-      config_store: { ...empty.config_store, status: "loaded", config_snapshot_id: "credential-saved" },
-      providers: [{
-        id: "deepseek", display_name: "DeepSeek", kind: "registered", registered_provider_id: "deepseek",
-        api_key_env: "DEEPSEEK_API_KEY", api_key_required: true, base_url: null, base_url_env: null,
-        wire_api: null, disable_stream_options: null, credential_status: "detected",
-        credential_effective_source: "session", env_shadows_file: false,
-        session_credential_present: true, config_file_credential_present: false,
-        effective_base_url: "https://api.deepseek.com", base_url_source: "provider_default",
-      }],
-    }));
-    transport.discoverProviderModels = vi.fn(async () => ({
+    const discovery = {
       status: "ready", provider_id: "deepseek", models: [{
         id: "deepseek-chat", display_name: "DeepSeek Chat",
         model_type: { value: "language", source: "provider_response" }, capabilities: {},
       }], truncated: false, message: "Loaded models.", error_class: null,
+    } as const;
+    transport.connectProvider = vi.fn(async (request) => ({
+      settings: {
+        ...empty,
+        revision: 1,
+        config_store: { ...empty.config_store, status: "loaded", config_snapshot_id: "provider-connected" },
+        providers: [{
+          ...request.provider,
+          credential_status: "detected", credential_effective_source: "session", env_shadows_file: false,
+          session_credential_present: true, config_file_credential_present: false,
+          effective_base_url: "https://api.deepseek.com", base_url_source: "provider_default",
+        }],
+        models: [{
+          ...base.models[0]!, id: "model-deepseek-chat", provider_id: "deepseek", display_name: "DeepSeek Chat",
+          model_id: "deepseek-chat", selected: true,
+        }],
+      },
+      discovery,
     }));
     const { container } = await renderSettings({ transport });
     expect(container.textContent).toContain("Rho will create the configuration automatically");
@@ -223,15 +205,31 @@ describe("Provider-first Settings Surface", () => {
       await settle();
     });
     await click(button(container, "Connect & detect models"));
-    expect(transport.saveProvider).toHaveBeenCalledWith(expect.objectContaining({
+    expect(transport.connectProvider).toHaveBeenCalledWith(expect.objectContaining({
       provider: expect.objectContaining({ kind: "registered", registered_provider_id: "deepseek" }),
+      apiKey: "session-secret",
     }));
-    expect(transport.saveProviderCredential).toHaveBeenCalledWith(expect.objectContaining({
-      providerId: "deepseek", target: "session", credential: "session-secret",
-    }));
-    expect(transport.discoverProviderModels).toHaveBeenCalledWith("deepseek");
-    expect(container.textContent).toContain("1 models detected automatically");
+    expect(container.textContent).toContain("1 model detected automatically");
     expect(container.textContent).toContain("DeepSeek");
+  });
+
+  it("edits a configured Provider without recreating its models or credential", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.saveProvider = vi.fn(transport.saveProvider.bind(transport));
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Edit"));
+    const form = container.querySelector<HTMLFormElement>(".rho-settings-edit-provider")!;
+    const displayName = [...form.querySelectorAll<HTMLInputElement>("input")]
+      .find((input) => input.closest("label")?.textContent?.startsWith("Display name"))!;
+    await inputValue(displayName, "Renamed Provider");
+    await click(button(form, "Save & verify"));
+    expect(transport.saveProvider).toHaveBeenCalledWith(expect.objectContaining({
+      provider: expect.objectContaining({ display_name: "Renamed Provider" }),
+    }));
+    const saved = vi.mocked(transport.saveProvider).mock.calls[0]![0].provider as unknown as Record<string, unknown>;
+    expect(saved).not.toHaveProperty("credential_status");
+    expect(container.textContent).toContain("Renamed Provider");
   });
 
   it("repairs only the projected config path and reloads the returned permission truth", async () => {

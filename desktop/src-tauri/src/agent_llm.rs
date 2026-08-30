@@ -53,6 +53,8 @@ const MAX_CREDENTIAL_AUDIT_BYTES: usize = 256 * 1024;
 const CREDENTIAL_AUDIT_KEEP_BYTES: usize = 128 * 1024;
 const MAX_CREDENTIAL_AUDIT_RECOVERY_BYTES: usize = 4 * 1024 * 1024;
 const MAX_CREDENTIAL_AUDIT_ROW_BYTES: usize = 8 * 1024;
+const CONSERVATIVE_CONTEXT_WINDOW_TOKENS: u64 = 32_768;
+const CONSERVATIVE_RESERVED_OUTPUT_TOKENS: u64 = 4_096;
 
 static SETTINGS_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static CREDENTIAL_SESSION: OnceLock<CredentialSession> = OnceLock::new();
@@ -871,6 +873,16 @@ pub struct AgentProviderSaveRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentProviderConnectRequest {
+    pub provider: AgentProviderProfile,
+    pub api_key: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentLlmCredentialDeleteRequest {
     pub provider_id: String,
     pub target: AgentCredentialWriteTarget,
@@ -1539,6 +1551,179 @@ pub fn load_settings(data_dir: &Path) -> Result<AgentLlmSettings> {
     let settings = config_to_settings(&loaded.config);
     validate_settings(&settings)?;
     Ok(settings)
+}
+
+fn onboarding_model_id(settings: &AgentLlmSettings, provider_id: &str, model_id: &str) -> String {
+    let preferred = format!("model-{model_id}");
+    if preferred.chars().count() <= MAX_ID_LENGTH
+        && !settings.models.iter().any(|model| model.id == preferred)
+    {
+        return preferred;
+    }
+    let provider_stem = provider_id.chars().take(88).collect::<String>();
+    for suffix in 1_u16..=u16::MAX {
+        let candidate = format!("model-{provider_stem}-{suffix}");
+        if !settings.models.iter().any(|model| model.id == candidate) {
+            return candidate;
+        }
+    }
+    unreachable!("bounded provider model IDs cannot exhaust u16 suffixes")
+}
+
+fn onboarding_model_profile(
+    settings: &AgentLlmSettings,
+    provider_id: &str,
+    discovered: &AgentDiscoveredModel,
+) -> AgentModelProfile {
+    let capabilities = capability_names()
+        .iter()
+        .map(|name| {
+            (
+                (*name).to_string(),
+                discovered
+                    .capabilities
+                    .get(*name)
+                    .cloned()
+                    .unwrap_or_else(|| capability_value("unknown", "unknown")),
+            )
+        })
+        .collect();
+    AgentModelProfile {
+        id: onboarding_model_id(settings, provider_id, &discovered.id),
+        provider_id: provider_id.to_string(),
+        display_name: discovered.display_name.clone(),
+        model_id: discovered.id.clone(),
+        enabled: true,
+        model_type: discovered.model_type.clone(),
+        capabilities,
+        context_window_tokens: CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
+        reserved_output_tokens: CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
+        context_capacity_source: "conservative_default".to_string(),
+        last_test: None,
+    }
+}
+
+fn bootstrap_model(provider_id: &str) -> AgentModelProfile {
+    AgentModelProfile {
+        id: "rho-provider-bootstrap-model".to_string(),
+        provider_id: provider_id.to_string(),
+        display_name: "Provider bootstrap".to_string(),
+        model_id: "rho-provider-bootstrap".to_string(),
+        enabled: true,
+        model_type: capability_value("unknown", "unknown"),
+        capabilities: capability_names()
+            .iter()
+            .map(|name| ((*name).to_string(), capability_value("unknown", "unknown")))
+            .collect(),
+        context_window_tokens: CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
+        reserved_output_tokens: CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
+        context_capacity_source: "conservative_default".to_string(),
+        last_test: None,
+    }
+}
+
+pub fn connect_provider(
+    data_dir: &Path,
+    rscript: &Path,
+    r_environ_user: Option<&Path>,
+    request: &AgentProviderConnectRequest,
+) -> Result<(AgentLlmSettings, AgentModelDiscoveryResponse)> {
+    let _provider_op_lock = credential_operation_lock(&request.provider.id);
+    let _guard = settings_mutation_guard();
+    validate_provider(&request.provider)?;
+    let mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    let credential_config = mutation.config.clone().unwrap_or_else(empty_config);
+    let credential_store = ConfigCredentialStore::from_config(&credential_config);
+    let mut settings = config_to_settings(&credential_config);
+    ensure!(
+        !settings
+            .providers
+            .iter()
+            .any(|provider| provider.id == request.provider.id),
+        "This Provider already exists. Open it and choose Edit instead."
+    );
+    let credential = (!request.api_key.is_empty()).then_some(request.api_key.as_str());
+    if request.provider.api_key_required {
+        let credential = credential.context("Enter an API key before connecting the Provider.")?;
+        validate_resolved_credential(credential)?;
+        credential_session().set_session_credential(&request.provider.id, credential);
+    }
+    let result = (|| {
+        settings.providers.push(request.provider.clone());
+        let bootstrapping = settings.models.is_empty();
+        if bootstrapping {
+            let model = bootstrap_model(&request.provider.id);
+            settings.capability_routes = vec![AgentCapabilityRoute {
+                capability: "agent.chat".to_string(),
+                model_id: model.id.clone(),
+                model_type: "language".to_string(),
+                required_model_capabilities: Vec::new(),
+            }];
+            settings.models.push(model);
+        }
+        validate_settings(&settings)?;
+        let client = model_discovery_client()?;
+        let mut discovery = discover_models_with_store(
+            data_dir,
+            &settings,
+            &request.provider.id,
+            &credential_store,
+            Some(rscript),
+            r_environ_user,
+            &client,
+        )?;
+        if discovery.status == "ready"
+            && !discovery.models.is_empty()
+            && let Ok(entries) = catalog_cached(data_dir, rscript)
+        {
+            enrich_discovered_models(&request.provider, &mut discovery.models, &entries);
+        }
+        ensure!(
+            discovery.status == "ready",
+            "{} No Provider settings were saved.",
+            discovery.message
+        );
+        let discovered = discovery
+            .models
+            .iter()
+            .find(|model| matches!(model.model_type.value.as_str(), "language" | "unknown"))
+            .context("The Provider returned no language model. No Provider settings were saved.")?;
+        if bootstrapping {
+            settings.models.clear();
+            settings.capability_routes.clear();
+        }
+        let model = onboarding_model_profile(&settings, &request.provider.id, discovered);
+        if bootstrapping {
+            settings.capability_routes.push(AgentCapabilityRoute {
+                capability: "agent.chat".to_string(),
+                model_id: model.id.clone(),
+                model_type: "language".to_string(),
+                required_model_capabilities: Vec::new(),
+            });
+        }
+        settings.models.push(model);
+        increment_revision(&mut settings)?;
+        validate_settings(&settings)?;
+        commit_settings_mutation(mutation, &settings)?;
+        Ok((settings, discovery))
+    })();
+    if result.is_err() && request.provider.api_key_required {
+        credential_session().clear_session_credential(&request.provider.id);
+    } else if result.is_ok() && request.provider.api_key_required {
+        record_credential_audit(
+            data_dir,
+            "credential_set",
+            &request.provider.id,
+            CREDENTIAL_SOURCE_SESSION,
+            "ok",
+            None,
+        );
+    }
+    result
 }
 
 pub fn save_provider(
@@ -5775,6 +5960,49 @@ mod tests {
         assert!(
             !write_attempted.get(),
             "an invalid whole-document route state must be rejected before persistence"
+        );
+    }
+
+    #[test]
+    fn provider_onboarding_builds_a_complete_first_model_and_chat_route() {
+        let provider = AgentProviderProfile {
+            id: "deepseek".to_string(),
+            display_name: "DeepSeek".to_string(),
+            kind: "registered".to_string(),
+            registered_provider_id: Some("deepseek".to_string()),
+            api_key_env: Some("DEEPSEEK_API_KEY".to_string()),
+            api_key_required: true,
+            base_url: None,
+            base_url_env: None,
+            wire_api: None,
+            disable_stream_options: None,
+        };
+        let discovered = AgentDiscoveredModel {
+            id: "deepseek-chat".to_string(),
+            display_name: "DeepSeek Chat".to_string(),
+            model_type: capability_value("language", "provider_response"),
+            capabilities: BTreeMap::new(),
+        };
+        let mut settings = AgentLlmSettings {
+            schema_version: SETTINGS_SCHEMA_VERSION,
+            revision: 1,
+            providers: vec![provider],
+            models: Vec::new(),
+            capability_routes: Vec::new(),
+        };
+        let model = onboarding_model_profile(&settings, "deepseek", &discovered);
+        settings.capability_routes.push(AgentCapabilityRoute {
+            capability: "agent.chat".to_string(),
+            model_id: model.id.clone(),
+            model_type: "language".to_string(),
+            required_model_capabilities: Vec::new(),
+        });
+        settings.models.push(model);
+        validate_settings(&settings).unwrap();
+        assert_eq!(settings.models[0].id, "model-deepseek-chat");
+        assert_eq!(
+            settings.models[0].capabilities.len(),
+            capability_names().len()
         );
     }
 

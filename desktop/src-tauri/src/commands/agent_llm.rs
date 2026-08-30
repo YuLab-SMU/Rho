@@ -5,10 +5,11 @@ use crate::agent_llm::{
     AgentContextCapacityRequest, AgentLlmCredentialDeleteRequest, AgentLlmCredentialRevealView,
     AgentLlmCredentialWriteRequest, AgentLlmSettingsView, AgentModelCapabilitiesRequest,
     AgentModelCapabilityDeclarationRequest, AgentModelDiscoveryResponse, AgentModelSaveRequest,
-    AgentModelTestRequest, AgentProviderSaveRequest, DeleteModelRequest, DeleteProviderRequest,
+    AgentModelTestRequest, AgentProviderConnectRequest, AgentProviderSaveRequest,
+    DeleteModelRequest, DeleteProviderRequest,
 };
 use crate::startup_runtime::{display_error, runtime_config, write_startup_log};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tauri::State;
 
@@ -49,6 +50,41 @@ pub(crate) async fn agent_llm_settings(
             Err(display_error(error))
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+pub(crate) struct AgentProviderConnectView {
+    settings: AgentLlmSettingsView,
+    discovery: AgentModelDiscoveryResponse,
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub(crate) async fn agent_llm_connect_provider(
+    request: AgentProviderConnectRequest,
+    state: State<'_, AppState>,
+) -> Result<AgentProviderConnectView, String> {
+    let config = runtime_config(&state).map_err(display_error)?;
+    let data_dir = config.data_dir.clone();
+    let rscript = config.rscript.clone();
+    let r_environ_user = config.r_environ_user.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let (settings, discovery) =
+            service::connect_provider(&data_dir, &rscript, r_environ_user.as_deref(), &request)?;
+        let settings = service::settings_view_from_settings(
+            &data_dir,
+            &rscript,
+            r_environ_user.as_deref(),
+            settings,
+        )?;
+        Ok::<_, anyhow::Error>(AgentProviderConnectView {
+            settings,
+            discovery,
+        })
+    })
+    .await
+    .map_err(display_error)?
+    .map_err(display_error)
 }
 
 #[cfg_attr(test, specta::specta)]

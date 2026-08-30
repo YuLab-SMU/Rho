@@ -19,8 +19,11 @@ Important runtime owners include:
   desktop workbench state;
 - `agent_llm` and Agent commands for model settings, selection, tests, and
   credential projection. Provider setup asks for service and API key (plus a
-  Base URL only for compatible services), creates config automatically, and
-  performs model discovery before exposing advanced controls;
+  Base URL only for compatible services), validates the session credential,
+  discovers models, and atomically creates config with the first usable
+  language model and Chat route. Failed discovery leaves no half-configured
+  Provider. Existing Providers expose an in-app endpoint/name editor while
+  credential and model controls remain separate;
 - `agent_config` for the canonical `<Rho home>/config.yaml` model registry,
   atomic mutation, and permission checks. `RHO_HOME` overrides discovery;
   otherwise an existing `~/.rho` wins over the XDG variant, and new installs
@@ -34,9 +37,13 @@ Important runtime owners include:
   persistence or process dispatch. Environment → Connections asks for four
   essential login fields, then automates host-key pinning, Slurm discovery,
   dedicated-key bootstrap, exact remote Helper deployment, target persistence,
-  and optional project selection without requiring a terminal. Environment → Resources refreshes bounded
-  local/SSH device telemetry across native, Docker, and Conda target identities
-  every 15 seconds while that view is open. The workbench taskbar reuses the
+  and optional project selection without requiring a terminal. Configured SSH
+  targets can be edited and reverified with their existing key. Helper build
+  identities are checked and stale Helpers are upgraded with bounded retries.
+  Environment → Resources refreshes bounded local/SSH device telemetry across
+  native, Docker, and Conda target identities every 15 seconds while that view
+  is open. Remote host telemetry measures the configured filesystem directly;
+  it does not require a synchronized remote `rho.toml`. The workbench taskbar reuses the
   same typed Environment read surface as a three-metric CPU/RAM/disk panel,
   refreshes every 10 seconds, and expands to device, runtime, operation, and
   admission detail with direct Environment Resources and Diagnostics actions.

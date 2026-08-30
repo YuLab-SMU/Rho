@@ -2931,6 +2931,57 @@ export function createMockUiKernelTransport(
     async loadAgentLlmSettings() {
       return structuredClone(agentLlmSettings);
     },
+    async connectProvider(request) {
+      assertAgentConfigGate(request);
+      const modelId = request.provider.registered_provider_id === "deepseek" ? "deepseek-chat" : "default-model";
+      const template = agentLlmSettings.models[0];
+      if (template == null) throw new Error("Mock Provider onboarding requires a model template.");
+      const model = {
+        ...structuredClone(template),
+        id: `model-${modelId}`,
+        provider_id: request.provider.id,
+        display_name: modelId === "deepseek-chat" ? "DeepSeek Chat" : "Default model",
+        model_id: modelId,
+        selected: agentLlmSettings.models.length === 0,
+      };
+      const projected = {
+        ...structuredClone(request.provider),
+        credential_status: request.provider.api_key_required ? "detected" : "not_required",
+        credential_effective_source: request.provider.api_key_required ? "session" : "not_configured",
+        env_shadows_file: false,
+        session_credential_present: request.provider.api_key_required,
+        config_file_credential_present: false,
+        effective_base_url: request.provider.base_url,
+        base_url_source: request.provider.base_url == null ? "provider_default" : "configured",
+      };
+      agentLlmSettings = {
+        ...agentLlmSettings,
+        revision: agentLlmSettings.revision + 1,
+        config_store: {
+          ...agentLlmSettings.config_store,
+          status: "loaded",
+          config_snapshot_id: nextAgentConfigSnapshotId(),
+        },
+        providers: [...agentLlmSettings.providers, projected],
+        models: [...agentLlmSettings.models, model],
+      };
+      return {
+        settings: structuredClone(agentLlmSettings),
+        discovery: {
+          status: "ready",
+          provider_id: request.provider.id,
+          models: [{
+            id: modelId,
+            display_name: model.display_name,
+            model_type: structuredClone(model.model_type),
+            capabilities: structuredClone(model.capabilities),
+          }],
+          truncated: false,
+          message: "Loaded 1 available model.",
+          error_class: null,
+        },
+      };
+    },
     async saveProvider(request) {
       assertAgentConfigGate(request);
       const existing = agentLlmSettings.providers.some((provider) => provider.id === request.provider.id);

@@ -125,6 +125,12 @@ describe("Agent settings generated transport", () => {
       api_key_env: "NEW_API_KEY", api_key_required: true, base_url: null, base_url_env: null,
       wire_api: null, disable_stream_options: null,
     };
+    await expect(transport.connectProvider({
+      provider,
+      apiKey: "session-secret",
+      expectedRevision: 9,
+      expectedConfigSnapshotId: "config-snapshot:9",
+    })).resolves.toBe(settings);
     await expect(transport.saveProvider({
       provider,
       expectedRevision: 9,
@@ -183,6 +189,12 @@ describe("Agent settings generated transport", () => {
     })).resolves.toBe(settings);
     expect(calls).toEqual([
       { command: "agent_llm_settings" },
+      { command: "agent_llm_connect_provider", args: { request: {
+        provider,
+        apiKey: "session-secret",
+        expectedRevision: 9,
+        expectedConfigSnapshotId: "config-snapshot:9",
+      } } },
       { command: "agent_llm_save_provider", args: { request: {
         provider,
         expectedRevision: 9,

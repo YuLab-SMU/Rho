@@ -12,6 +12,7 @@ const generatedPath = path.join(
   "desktop/ui/src/transport/generated/agent-settings.ts",
 );
 const commandNames = [
+  "agent_llm_connect_provider",
   "agent_llm_declare_model_capability",
   "agent_llm_declare_model_capabilities",
   "agent_llm_delete_capability_route",

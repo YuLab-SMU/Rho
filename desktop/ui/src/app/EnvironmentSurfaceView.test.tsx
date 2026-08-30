@@ -199,6 +199,51 @@ describe("Environment resource governance", () => {
     expect(host.querySelector<HTMLInputElement>("input[type='password']")?.value).toBe("");
   });
 
+  it("edits a configured SSH target with its existing key and no password", async () => {
+    const remote = {
+      target_id: "lab-hpc", selected: false, host_kind: "ssh", host: "hpc.example.edu", port: 2329,
+      username: "scientist", remote_root: "/data/project", isolation_kind: "native", capabilities: ["cpu"],
+      identity_file: "/rho/ssh/lab-hpc/id_ed25519", identity_available: true,
+    };
+    const probe = {
+      status: "ready", fingerprints: [{ algorithm: "ED25519", sha256: "SHA256:test" }],
+      authenticated: true, host_name: "master", home_directory: "/home/scientist", slurm_version: "slurm 19.05.2",
+      partitions: [], helper_available: true, message: "SSH and the Rho remote Helper are ready.",
+    };
+    const configure = vi.fn(async () => ({ target: remote, probe, project_selected: false }));
+    const transport = {
+      computeTargetList: vi.fn(async () => ({ selected_target_id: "local", targets_yaml: "/rho/targets.yaml", targets: [remote] })),
+      remoteConnectionProbe: vi.fn(async () => ({ ...probe, authenticated: false, status: "host_key_confirmation_required" })),
+      configureSshTarget: configure,
+      subscribeInvalidated: vi.fn(() => () => undefined),
+    } as unknown as UiKernelTransport;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () => {
+      root.render(<EnvironmentSurfaceView instance={{ ...resourceSurface(), mode_id: "connections" }} transport={transport} persist={vi.fn()} reportError={vi.fn()} />);
+      await settle();
+    });
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>("[data-target-id='lab-hpc'] button")!.click();
+      await settle();
+    });
+    expect(host.textContent).toContain("Edit SSH / Slurm target");
+    expect(host.querySelector<HTMLInputElement>("input[disabled][value='lab-hpc']")).not.toBeNull();
+    expect(host.querySelector<HTMLInputElement>("input[type='password']")?.value).toBe("");
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Save & verify")!.click();
+      await settle();
+    });
+    expect(configure).toHaveBeenCalledWith(expect.objectContaining({
+      target_id: "lab-hpc",
+      identity_file: "/rho/ssh/lab-hpc/id_ed25519",
+      install_managed_key: false,
+      password: null,
+    }));
+  });
+
   it("turns the status bar into a live three-metric Environment panel", async () => {
     const transport = {
       resourceMonitorSnapshot: vi.fn(async () => snapshot),

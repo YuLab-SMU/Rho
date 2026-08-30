@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "8a6172406a13ecc1f55671ccbe389f3378ef4c43bc349e4ecbd50c22cd63a625";
+const EXPECTED_HANDLER_DIGEST = "733b89c93b9bf3c77140000d0f77d89fac2ff50a13d12856d09b5dbcc604cc62";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [
@@ -87,6 +87,7 @@ const PROJECT_COMMANDS = [
 const AGENT_LLM_COMMANDS = [
   "agent_llm_cancel_test",
   "agent_llm_catalog",
+  "agent_llm_connect_provider",
   "agent_llm_declare_model_capabilities",
   "agent_llm_declare_model_capability",
   "agent_llm_delete_capability_route",

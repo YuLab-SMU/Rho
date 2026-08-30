@@ -81,6 +81,12 @@ interface ProviderConnectDraft {
   readonly apiKey: string;
 }
 
+interface ProviderEditDraft {
+  readonly providerId: string;
+  readonly displayName: string;
+  readonly baseUrl: string;
+}
+
 const PROVIDER_PRESETS: Readonly<Record<ProviderPresetId, {
   readonly label: string;
   readonly kind: AgentProviderProfile["kind"];
@@ -165,6 +171,21 @@ function formatCheckedAt(value: string): string {
 
 function formatLatency(value: number | null): string {
   return value == null ? "—" : `${value} ms`;
+}
+
+function providerProfile(provider: ProviderView): AgentProviderProfile {
+  return {
+    id: provider.id,
+    display_name: provider.display_name,
+    kind: provider.kind,
+    registered_provider_id: provider.registered_provider_id,
+    api_key_env: provider.api_key_env,
+    api_key_required: provider.api_key_required,
+    base_url: provider.base_url,
+    base_url_env: provider.base_url_env,
+    wire_api: provider.wire_api,
+    disable_stream_options: provider.disable_stream_options,
+  };
 }
 
 function providerReadiness(provider: ProviderView): string {
@@ -283,6 +304,7 @@ function ProvidersSettingsModule({
   const [manualAddDraft, setManualAddDraft] = useState({ modelId: "", displayName: "" });
   const [providerConnectOpen, setProviderConnectOpen] = useState(false);
   const [providerConnectDraft, setProviderConnectDraft] = useState<ProviderConnectDraft>(EMPTY_PROVIDER_CONNECT);
+  const [providerEditDraft, setProviderEditDraft] = useState<ProviderEditDraft | null>(null);
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const draftInput = useRef<HTMLInputElement>(null);
   const automaticRefreshProvider = useRef<string | null>(null);
@@ -323,6 +345,12 @@ function ProvidersSettingsModule({
   }, [credentialMode]);
 
   useEffect(() => {
+    if (revealedCredential == null) return;
+    const timeout = window.setTimeout(() => setRevealedCredential(null), 15_000);
+    return () => window.clearTimeout(timeout);
+  }, [revealedCredential]);
+
+  useEffect(() => {
     if (credentialMode != null) draftInput.current?.focus();
   }, [credentialMode]);
 
@@ -340,6 +368,7 @@ function ProvidersSettingsModule({
     setModelOptionsOpen(false);
     setConfirmingDelete(false);
     setModelMutation(null);
+    setProviderEditDraft(null);
     if (!returningFromModel) {
       setManualAddOpen(false);
       setManualAddDraft({ modelId: "", displayName: "" });
@@ -709,40 +738,64 @@ function ProvidersSettingsModule({
     };
     setFeedback({ status: "working", message: `Connecting ${profile.display_name}…` });
     try {
-      let next = await transport.saveProvider({
+      const result = await transport.connectProvider({
         provider: profile,
+        apiKey: preset.apiKeyRequired ? providerConnectDraft.apiKey.trim() : "",
         expectedRevision: view.revision,
         expectedConfigSnapshotId: view.config_store.config_snapshot_id,
       });
-      if (preset.apiKeyRequired) {
-        next = await transport.saveProviderCredential({
-          providerId,
-          credential: providerConnectDraft.apiKey.trim(),
-          target: "session",
-          confirmReplace: false,
-          expectedRevision: next.revision,
-          expectedConfigSnapshotId: next.config_store.config_snapshot_id,
-        });
-      }
-      applyView(next);
+      applyView(result.settings);
+      setDiscovery({ status: "complete", response: result.discovery });
+      automaticRefreshProvider.current = providerId;
       setPage({ kind: "provider", providerId });
       setProviderConnectDraft(EMPTY_PROVIDER_CONNECT);
       setProviderConnectOpen(false);
-      try {
-        const response = await transport.discoverProviderModels(providerId);
-        setDiscovery({ status: "complete", response });
-        setFeedback({
-          status: response.status === "ready" ? "success" : "error",
-          message: response.status === "ready"
-            ? `${profile.display_name} connected · ${response.models.length} models detected automatically.`
-            : response.message,
-        });
-      } catch (error: unknown) {
-        setFeedback({ status: "error", message: boundedMessage(error, "Provider saved, but automatic model detection failed.") });
-      }
+      setFeedback({
+        status: "success",
+        message: `${profile.display_name} connected · ${result.discovery.models.length} model${result.discovery.models.length === 1 ? "" : "s"} detected automatically.`,
+      });
     } catch (error: unknown) {
       setProviderConnectDraft((current) => ({ ...current, apiKey: "" }));
       await reloadDurableTruth(boundedMessage(error, "The Provider could not be connected."));
+    }
+  };
+
+  const saveProviderEdit = async (target: ProviderView) => {
+    if (providerEditDraft == null || feedback.status === "working") return;
+    const displayName = providerEditDraft.displayName.trim();
+    const baseUrl = providerEditDraft.baseUrl.trim();
+    if (displayName === "") {
+      setFeedback({ status: "error", message: "Enter a Provider display name." });
+      return;
+    }
+    if (matchesCompatibleProvider(target.kind) && baseUrl === "") {
+      setFeedback({ status: "error", message: "Enter the Provider base URL." });
+      return;
+    }
+    setFeedback({ status: "working", message: `Saving ${displayName}…` });
+    let next: AgentLlmSettingsView;
+    try {
+      next = await transport.saveProvider({
+        provider: { ...providerProfile(target), display_name: displayName, base_url: baseUrl || null },
+        expectedRevision: view.revision,
+        expectedConfigSnapshotId: view.config_store.config_snapshot_id,
+      });
+    } catch (error: unknown) {
+      await reloadDurableTruth(boundedMessage(error, "The Provider could not be updated."));
+      return;
+    }
+    applyView(next);
+    setProviderEditDraft(null);
+    automaticRefreshProvider.current = target.id;
+    try {
+      const response = await transport.discoverProviderModels(target.id);
+      setDiscovery({ status: "complete", response });
+      setFeedback({
+        status: response.status === "ready" ? "success" : "error",
+        message: response.status === "ready" ? `${displayName} was updated and verified.` : `${displayName} was updated. ${response.message}`,
+      });
+    } catch (error: unknown) {
+      setFeedback({ status: "error", message: `${displayName} was updated. ${boundedMessage(error, "Models could not be refreshed.")}` });
     }
   };
 
@@ -925,8 +978,21 @@ function ProvidersSettingsModule({
       detailContent = <div className="rho-settings-provider-detail">
         <header className="rho-settings-detail-heading">
           <div><span className="rho-eyebrow">Provider</span><h2>{provider.display_name}</h2><p>{provider.kind}</p></div>
-          <strong>{providerReadiness(provider)}</strong>
+          <div className="rho-settings-detail-heading-actions"><strong>{providerReadiness(provider)}</strong><button type="button" onClick={() => setProviderEditDraft({
+            providerId: provider.id,
+            displayName: provider.display_name,
+            baseUrl: provider.base_url ?? "",
+          })}>Edit</button></div>
         </header>
+        {providerEditDraft?.providerId === provider.id && <form className="rho-settings-connect-provider rho-settings-edit-provider" onSubmit={(event) => { event.preventDefault(); void saveProviderEdit(provider); }}>
+          <label>Service<input value={provider.registered_provider_id ?? readable(provider.kind)} disabled /></label>
+          <label>Display name<input required value={providerEditDraft.displayName} onChange={(event) => setProviderEditDraft((current) => current == null ? null : { ...current, displayName: event.target.value })} /></label>
+          <label>Base URL {matchesCompatibleProvider(provider.kind) ? "" : "(optional)"}<input type="url" required={matchesCompatibleProvider(provider.kind)} value={providerEditDraft.baseUrl} placeholder={provider.effective_base_url ?? "Provider default"} onChange={(event) => setProviderEditDraft((current) => current == null ? null : { ...current, baseUrl: event.target.value })} /></label>
+          <div className="rho-settings-connect-actions">
+            <button type="submit" className="rho-primary-action" disabled={feedback.status === "working"}>{feedback.status === "working" ? "Saving…" : "Save & verify"}</button>
+            <button type="button" disabled={feedback.status === "working"} onClick={() => setProviderEditDraft(null)}>Cancel</button>
+          </div>
+        </form>}
         <section className="rho-settings-provider-health" aria-label="Provider health">
           <div><span>Connection</span><strong>{connectionState}</strong><small>{latestTest == null ? "Not tested yet" : `Checked ${formatCheckedAt(latestTest.checked_at)}`}</small></div>
           <div><span>Latency</span><strong>{formatLatency(latestTest?.latency_ms ?? null)}</strong><small>{latestModel?.display_name ?? "Run a model test"}</small></div>

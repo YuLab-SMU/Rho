@@ -9,6 +9,8 @@ import {
   type AgentModelCapabilityDeclarationRequest as AgentModelCapabilityDeclarationRequestWire,
   type AgentModelDiscoveryResponse as AgentModelDiscoveryResponseWire,
   type AgentModelProfile as AgentModelProfileWire,
+  type AgentProviderConnectRequest as AgentProviderConnectRequestWire,
+  type AgentProviderConnectView as AgentProviderConnectViewWire,
   type AgentProviderProfile as AgentProviderProfileWire,
   type AgentProviderSaveRequest as AgentProviderSaveRequestWire,
   type DeleteProviderRequest as DeleteProviderRequestWire,
@@ -34,6 +36,8 @@ export type AgentModelDiscoveryResponse = DeepReadonly<AgentModelDiscoveryRespon
 export type AgentContextCapacityRequest = DeepReadonly<AgentContextCapacityRequestWire>;
 export type AgentConfigPermissionRepairRequest = DeepReadonly<AgentConfigPermissionRepairRequestWire>;
 export type AgentModelProfile = AgentModelProfileWire;
+export type AgentProviderConnectRequest = AgentProviderConnectRequestWire;
+export type AgentProviderConnectView = DeepReadonly<AgentProviderConnectViewWire>;
 export type AgentProviderProfile = AgentProviderProfileWire;
 export type AgentProviderSaveRequest = AgentProviderSaveRequestWire;
 export type DeleteProviderRequest = DeleteProviderRequestWire;
@@ -115,6 +119,7 @@ export interface AgentSettingsTransport {
   repairAgentConfigPermissions(
     request: AgentConfigPermissionRepairRequest,
   ): Promise<AgentLlmSettingsView>;
+  connectProvider(request: AgentProviderConnectRequest): Promise<AgentProviderConnectView>;
   saveProvider(request: AgentProviderSaveRequest): Promise<AgentLlmSettingsView>;
   deleteProvider(request: DeleteProviderRequest): Promise<AgentLlmSettingsView>;
   selectAgentChatModel(request: AgentLlmSelectRequest): Promise<AgentLlmSettingsView>;
@@ -145,6 +150,7 @@ export function createTauriAgentSettingsTransport(
     loadAgentLlmSettings: () => commands.agentLlmSettings(),
     repairAgentConfigPermissions: (request) =>
       commands.agentLlmRepairConfigPermissions(request),
+    connectProvider: (request) => commands.agentLlmConnectProvider(request),
     saveProvider: (request) => commands.agentLlmSaveProvider(request),
     deleteProvider: (request) => commands.agentLlmDeleteProvider(request),
     selectAgentChatModel: (request) => commands.agentLlmSelectModel(request),

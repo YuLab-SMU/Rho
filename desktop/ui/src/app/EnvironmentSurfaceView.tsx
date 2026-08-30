@@ -103,6 +103,7 @@ const EMPTY_CONNECTION: ConnectionDraft = {
 function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTransport }) {
   const [targets, setTargets] = useState<ComputeTargetListView | null>(null);
   const [draft, setDraft] = useState<ConnectionDraft>(EMPTY_CONNECTION);
+  const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
   const [probe, setProbe] = useState<SshConnectionProbeView | null>(null);
   const [busy, setBusy] = useState<"list" | "save" | null>("list");
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +152,8 @@ function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTra
       };
       const result = await transport.configureSshTarget(request);
       setProbe(result.probe);
-      setDraft((current) => ({ ...current, password: "", identity_file: result.target.identity_file ?? current.identity_file }));
+      setDraft(EMPTY_CONNECTION);
+      setEditingTargetId(null);
       await loadTargets();
       setNotice(result.project_selected
         ? `Target ${result.target.target_id} is connected and selected for this project.`
@@ -170,6 +172,32 @@ function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTra
       setProbe(null);
     }
   };
+  const editTarget = (target: ComputeTargetListView["targets"][number]) => {
+    if (target.host_kind !== "ssh") return;
+    setEditingTargetId(target.target_id);
+    setDraft({
+      target_id: target.target_id,
+      host: target.host ?? "",
+      port: String(target.port ?? 22),
+      username: target.username ?? "",
+      password: "",
+      remote_root: target.remote_root ?? "",
+      identity_file: target.identity_file ?? "",
+      cpu: target.capabilities.includes("cpu"),
+      gpu: target.capabilities.includes("gpu"),
+      install_managed_key: !target.identity_available,
+      select_for_project: target.selected,
+    });
+    setProbe(null);
+    setNotice(null);
+    setError(null);
+  };
+  const cancelEdit = () => {
+    setEditingTargetId(null);
+    setDraft(EMPTY_CONNECTION);
+    setProbe(null);
+    setError(null);
+  };
   return <section className="rho-remote-connections" aria-label="Remote environment connections">
     <header className="rho-environment-toolbar">
       <div><strong>Remote connections</strong><small>Connect SSH and Slurm environments without storing passwords.</small></div>
@@ -180,38 +208,42 @@ function RemoteConnectionsPanel({ transport }: { readonly transport: UiKernelTra
       {notice != null && <p className="rho-connection-notice" role="status"><strong>Connection saved.</strong> {notice}</p>}
       <section className="rho-connection-target-list" aria-label="Configured targets">
         <header><span className="rho-eyebrow">Configured targets</span><strong>{targets?.targets.length ?? 0}</strong></header>
-        {targets?.targets.map((target) => <article data-target-id={target.target_id} key={target.target_id}>
+        {targets?.targets.map((target) => <article data-target-id={target.target_id} data-editing={editingTargetId === target.target_id || undefined} key={target.target_id}>
           <div><strong>{target.target_id}</strong><small>{target.host_kind === "ssh" ? `${target.username ?? "user"}@${target.host}:${target.port}` : "This device"}</small></div>
-          <span className={`rho-domain-state rho-domain-${target.selected ? "ready" : target.identity_available ? "current" : "warning"}`}>{target.selected ? "selected" : target.identity_available ? "ready" : "key missing"}</span>
+          <div className="rho-connection-target-actions">
+            <span className={`rho-domain-state rho-domain-${target.selected ? "ready" : target.identity_available ? "current" : "warning"}`}>{target.selected ? "selected" : target.identity_available ? "ready" : "key missing"}</span>
+            {target.host_kind === "ssh" && <button type="button" onClick={() => editTarget(target)}>Edit</button>}
+          </div>
           <p>{target.isolation_kind} · {target.capabilities.join(", ") || "no capabilities"}{target.remote_root == null ? "" : ` · ${target.remote_root}`}</p>
         </article>)}
         {busy === "list" && targets == null && <SurfaceTaskState tone="loading" title="Loading connections…" detail="Reading the device-local target registry." role="status" busy />}
       </section>
-      <section className="rho-connection-wizard" aria-label="Add SSH target">
-        <header><span className="rho-eyebrow">Add SSH / Slurm target</span><strong>Connection details</strong></header>
+      <section className="rho-connection-wizard" aria-label={editingTargetId == null ? "Add SSH target" : "Edit SSH target"}>
+        <header><span className="rho-eyebrow">{editingTargetId == null ? "Add SSH / Slurm target" : "Edit SSH / Slurm target"}</span><strong>{editingTargetId == null ? "Connection details" : editingTargetId}</strong></header>
         <div className="rho-connection-fields">
           <label className="rho-connection-wide">Address<input value={draft.host} onChange={(event) => update("host", event.target.value)} placeholder="hpc.example.edu" /></label>
           <label>Username<input autoComplete="username" value={draft.username} onChange={(event) => update("username", event.target.value)} /></label>
           <label>SSH port<input type="number" min="1" max="65535" value={draft.port} onChange={(event) => update("port", event.target.value)} /></label>
-          <label className="rho-connection-wide">Password<input type="password" autoComplete="current-password" value={draft.password} onChange={(event) => update("password", event.target.value)} placeholder="Used once; never saved" /></label>
+          <label className="rho-connection-wide">Password {editingTargetId != null && "(optional)"}<input type="password" autoComplete="current-password" value={draft.password} onChange={(event) => update("password", event.target.value)} placeholder={editingTargetId == null ? "Used once; never saved" : "Only needed to replace the SSH key"} /></label>
         </div>
         <details className="rho-connection-advanced">
           <summary>Advanced options</summary>
           <div className="rho-connection-fields">
-            <label>Target name (optional)<input value={draft.target_id} onChange={(event) => update("target_id", event.target.value)} placeholder="Generated automatically" /></label>
+            <label>Target name {editingTargetId == null && "(optional)"}<input value={draft.target_id} onChange={(event) => update("target_id", event.target.value)} placeholder="Generated automatically" disabled={editingTargetId != null} /></label>
             <label>Remote folder (optional)<input value={draft.remote_root} onChange={(event) => update("remote_root", event.target.value)} placeholder="Remote home directory" /></label>
             <label className="rho-connection-wide">Existing private key<input value={draft.identity_file} onChange={(event) => update("identity_file", event.target.value)} placeholder="/Users/me/.ssh/id_ed25519" disabled={draft.install_managed_key} /></label>
           </div>
           <div className="rho-connection-options">
             <label><input type="checkbox" checked={draft.cpu} onChange={(event) => update("cpu", event.target.checked)} /> CPU</label>
             <label><input type="checkbox" checked={draft.gpu} onChange={(event) => update("gpu", event.target.checked)} /> GPU required</label>
-            <label><input type="checkbox" checked={draft.install_managed_key} onChange={(event) => update("install_managed_key", event.target.checked)} /> Replace password with a managed Rho key</label>
+            <label><input type="checkbox" checked={draft.install_managed_key} onChange={(event) => update("install_managed_key", event.target.checked)} /> Install or repair a managed Rho key</label>
             <label><input type="checkbox" checked={draft.select_for_project} onChange={(event) => update("select_for_project", event.target.checked)} /> Use for this project now</label>
           </div>
         </details>
         <p className="rho-connection-secret-note">Rho confirms the host key, detects Slurm, installs a dedicated key and the matching remote Helper, then saves the connection automatically. The password is cleared when setup finishes.</p>
         <div className="rho-connection-actions">
-          <button type="button" className="rho-primary-action" disabled={busy != null || !draft.host.trim() || !draft.username.trim() || (draft.install_managed_key && !draft.password)} onClick={() => void configure()}>{busy === "save" ? "Connecting and configuring…" : "Connect automatically"}</button>
+          <button type="button" className="rho-primary-action" disabled={busy != null || !draft.host.trim() || !draft.username.trim() || (draft.install_managed_key && !draft.password && !draft.identity_file)} onClick={() => void configure()}>{busy === "save" ? "Connecting and configuring…" : editingTargetId == null ? "Connect automatically" : "Save & verify"}</button>
+          {editingTargetId != null && <button type="button" disabled={busy != null} onClick={cancelEdit}>Cancel edit</button>}
         </div>
         {probe != null && <section className="rho-connection-probe" aria-label="SSH probe result">
           <header><strong>{probe.status === "ready" ? probe.host_name ?? "SSH ready" : "Confirm host identity"}</strong><span className={`rho-domain-state rho-domain-${probe.authenticated ? "ready" : "warning"}`}>{probe.status}</span></header>

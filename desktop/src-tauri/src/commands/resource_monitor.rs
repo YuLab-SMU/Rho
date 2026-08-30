@@ -173,6 +173,10 @@ pub(crate) async fn resource_monitor_snapshot(
     let rho_home = crate::agent_llm::agent_config::rho_home().map_err(crate::display_error)?;
     let expected_root = project_root.clone();
     let snapshot = tauri::async_runtime::spawn_blocking(move || {
+        // Read-only monitoring requires the current embedded Helper behavior,
+        // but upgrading an unreachable secondary target must not hide local
+        // telemetry or the remaining fleet.
+        let _ = super::remote_connection::ensure_configured_remote_helpers(&rho_home);
         let targets = load_target_registry(&rho_home)?;
         monitor_project_resources(&project_root, &targets)
     })

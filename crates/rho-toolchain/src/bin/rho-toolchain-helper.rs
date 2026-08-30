@@ -4,10 +4,10 @@ use std::path::Path;
 
 use rho_toolchain::{
     ComputeTarget, EnvironmentReceiptMode, OperationJournal, OperationKind, OperationStatus,
-    RemoteEffectPayload, RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse,
-    RemoteInspectPayload, TargetRegistry, TargetRegistryDocument, doctor_local_realization,
-    execute_journaled_operation, inspect_local_resources, load_toolchain_config,
-    read_operation_journal, write_environment_receipt,
+    REMOTE_HELPER_BUILD_ID, RemoteEffectPayload, RemoteHelperOperation, RemoteHelperRequest,
+    RemoteHelperResponse, RemoteInspectPayload, TargetRegistry, TargetRegistryDocument,
+    doctor_local_realization, execute_journaled_operation, inspect_local_resources,
+    load_toolchain_config, read_operation_journal, write_environment_receipt,
 };
 
 const MAX_REQUEST_FRAME_BYTES: u64 = 1024 * 1024;
@@ -205,13 +205,10 @@ fn inspect_resources(request: &RemoteHelperRequest) -> RemoteHelperResponse {
                 "resource inspection payload must be empty".to_string(),
             ));
         }
-        let config = load_toolchain_config(Path::new(&request.project_root))?;
-        if config.sha256 != request.rho_toml_sha256 {
-            return Err(rho_toolchain::ToolchainError::InvalidConfig(
-                "remote project identity changed before resource inspection".to_string(),
-            ));
-        }
-        inspect_local_resources(&config.project_root)
+        // Resource telemetry is host-level and read-only. The configured
+        // remote root identifies which filesystem to measure; it does not
+        // require a synchronized project contract merely to observe capacity.
+        inspect_local_resources(Path::new(&request.project_root))
     })();
     match result {
         Ok(snapshot) => RemoteHelperResponse {
@@ -238,7 +235,12 @@ fn inspect_resources(request: &RemoteHelperRequest) -> RemoteHelperResponse {
 }
 
 fn main() {
-    if std::env::args().nth(1).as_deref() != Some("--stdio") {
+    let mode = std::env::args().nth(1);
+    if mode.as_deref() == Some("--version") {
+        println!("{REMOTE_HELPER_BUILD_ID}");
+        return;
+    }
+    if mode.as_deref() != Some("--stdio") {
         eprintln!("rho-toolchain-helper requires --stdio");
         std::process::exit(2);
     }
@@ -297,4 +299,26 @@ fn main() {
         std::process::exit(2);
     }
     std::io::stdout().write_all(&encoded).unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resource_inspection_does_not_require_a_remote_project_config() {
+        let directory = tempfile::tempdir().unwrap();
+        let response = inspect_resources(&RemoteHelperRequest {
+            protocol: 1,
+            request_id: "resources-test".to_string(),
+            target_id: "remote".to_string(),
+            project_root: directory.path().to_string_lossy().into_owned(),
+            rho_toml_sha256: "a".repeat(64),
+            target_registry_sha256: "b".repeat(64),
+            operation: RemoteHelperOperation::InspectResources,
+            payload: serde_json::json!({}),
+        });
+        assert!(response.ok, "{:?}", response.error);
+        assert_eq!(response.status, "completed");
+    }
 }

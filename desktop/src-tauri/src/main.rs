@@ -369,6 +369,7 @@ fn main() {
             commands::agent_execution::run_agent,
             commands::agent_execution::agent_context_preview,
             commands::agent_llm::agent_llm_settings,
+            commands::agent_llm::agent_llm_connect_provider,
             commands::agent_llm::agent_llm_save_provider,
             commands::agent_llm::agent_llm_delete_provider,
             commands::agent_llm::agent_llm_set_credential,

@@ -20,6 +20,10 @@ mod target;
 
 use std::path::PathBuf;
 
+/// Build identity used by Desktop to upgrade an installed remote Helper when
+/// its read-only protocol behavior changes without changing the wire schema.
+pub const REMOTE_HELPER_BUILD_ID: &str = "rho-toolchain-helper-1-resource-v2";
+
 pub use adapter::adapt_plan_for_target;
 pub use admission::{TargetAdmission, TargetAdmissionMode, admit_target};
 pub use command::{

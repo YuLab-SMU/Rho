@@ -76,7 +76,9 @@ Environment → Connections may use a password once, through a temporary
 askpass bridge, to install a dedicated Ed25519 public key. The private key is
 stored with restricted permissions under `<Rho home>/ssh/<target-id>/`; only
 its absolute `identity_file` reference is recorded in `targets.yaml`. Existing
-operator-managed keys can be referenced instead.
+operator-managed keys can be referenced instead. A configured SSH target can
+be reopened in the same form, edited, and reverified with its existing key;
+changing metadata does not require the one-time password again.
 
 Doctor resolves the project target before probing runtimes. Local/native uses
 the implemented rig/renv/pak/uv path. Local Docker/Podman Doctor inspects the
@@ -92,7 +94,9 @@ image instead. Local Conda Doctor now hashes the exact stdout from
 rig/Rscript, renv/pak/jsonlite, uv lock, `.venv`, and exact Python checks through
 `conda run --no-capture-output --name <environment>`. Conda Run/Live preserves
 the original command environment. SSH uses `rho-toolchain-helper --stdio` as a
-bounded JSON endpoint on the remote host. Target-aware Doctor validates the
+bounded JSON endpoint on the remote host. The Helper publishes an exact build
+identity; Desktop probes it and automatically upgrades stale embedded builds
+with a bounded retry interval. Target-aware Doctor validates the
 returned project `rho.toml` digest and adopts only matching runtime checks into
 the local report. Remote requests carry an explicitly confirmed, bounded,
 ordered command vector. Run/Live requires exactly one command plus the complete
@@ -139,13 +143,18 @@ updates `targets.yaml`, and optionally selects the target in the current
 `rho.toml` without discarding unrelated TOML formatting. Target name, remote
 folder, capabilities, existing-key use, and immediate project selection remain
 collapsed advanced options. The password is cleared after the operation and is
-never returned to the frontend or included in errors.
+never returned to the frontend or included in errors. Editing a target keeps
+its ID stable and uses the already configured private key unless the operator
+explicitly requests key repair.
 
 Resource governance observes up to 16 registered target environments per
 refresh and keeps target identity separate from physical device identity, so
 local native, Docker, and Conda environments can share one device while SSH
-targets report their remote device through the authenticated Helper. CPU,
-memory, the project filesystem, and bounded `nvidia-smi` GPU telemetry are
+targets report their remote device through the authenticated Helper. The
+read-only resource operation measures the configured remote filesystem without
+requiring a copied `rho.toml`; project config/digest checks remain mandatory for
+Doctor and execution effects. CPU, memory, the project filesystem, and bounded
+`nvidia-smi` GPU telemetry are
 classified as healthy, warning, critical, or unavailable. Memory below 10%
 available, project storage below 5% available, critical pressure on a
 GPU-capable target selected for required GPU work, or missing telemetry for

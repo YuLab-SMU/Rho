@@ -10,6 +10,7 @@ export type AgentSettingsInvoke = <T>(
 /** Commands */
 export const createAgentSettingsCommands = (__TAURI_INVOKE: AgentSettingsInvoke) => ({
 	agentLlmSettings: () => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_settings"),
+	agentLlmConnectProvider: (request: AgentProviderConnectRequest) => __TAURI_INVOKE<AgentProviderConnectView>("agent_llm_connect_provider", { request }),
 	agentLlmSaveProvider: (request: AgentProviderSaveRequest) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_save_provider", { request }),
 	agentLlmDeleteProvider: (request: DeleteProviderRequest) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_delete_provider", { request }),
 	agentLlmDiscoverModels: (providerId: string) => __TAURI_INVOKE<AgentModelDiscoveryResponse>("agent_llm_discover_models", { providerId }),
@@ -240,6 +241,18 @@ export type AgentModelTestResult = {
 	latency_ms: number | null,
 	error_class: string | null,
 	message: string | null,
+};
+
+export type AgentProviderConnectRequest = {
+	provider: AgentProviderProfile,
+	apiKey: string,
+	expectedRevision: number,
+	expectedConfigSnapshotId: string,
+};
+
+export type AgentProviderConnectView = {
+	settings: AgentLlmSettingsView,
+	discovery: AgentModelDiscoveryResponse,
 };
 
 export type AgentProviderProfile = {

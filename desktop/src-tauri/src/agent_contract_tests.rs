@@ -524,6 +524,7 @@ fn agent_settings_typescript_export() {
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
             crate::commands::agent_llm::agent_llm_settings,
+            crate::commands::agent_llm::agent_llm_connect_provider,
             crate::commands::agent_llm::agent_llm_save_provider,
             crate::commands::agent_llm::agent_llm_delete_provider,
             crate::commands::agent_llm::agent_llm_discover_models,
