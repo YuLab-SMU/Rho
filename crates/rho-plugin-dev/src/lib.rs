@@ -5,12 +5,15 @@
 //! result contracts. It owns no product runtime, permission, Store lifecycle,
 //! desktop, install, or release authority.
 
+pub mod package_cache;
+
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
+use package_cache::PluginPackageCache;
 use rho_extension_runtime::{
     ActivationGeneration, ContributionKind, GuestStep, HOST_PROTOCOL_VERSION, HostFrame,
     HostInstanceId, HostMessage, HostRequestId, HostResponse, MANIFEST_NAME, MAX_MANIFEST_BYTES,
@@ -18,7 +21,6 @@ use rho_extension_runtime::{
     SurfaceDocumentV1, ViewerDocumentV1, WasmHostIdentity, WasmPluginHost, WorkspacePluginManifest,
     WorkspacePluginPackageSnapshot, discover_workspace_plugins, snapshot_workspace_plugin_package,
 };
-use rho_server::plugin_package_cache::PluginPackageCache;
 use rho_ui_contract::{CHECK_PROJECT_SNAPSHOT_CONTRACT, CheckRulePackOutputV1};
 use serde::Serialize;
 use serde_json::json;

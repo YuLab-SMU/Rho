@@ -1058,3 +1058,137 @@ rho_run_aisdk_turn <- function(session,
   )
   invisible(result)
 }
+
+# Canonical provider boundary -------------------------------------------------
+# These functions expose only provider-neutral capability and event facts to
+# the Rust Agent Host. They deliberately do not expose aisdk session objects,
+# private reasoning, credentials, or provider-specific event names.
+
+#' Describe the First-party Agent Provider Boundary
+#' @export
+rho_agent_provider_snapshot <- function() {
+  list(
+    provider_kind = "first_party",
+    protocol_version = "rho.agent-provider.v1",
+    supports_resume = TRUE,
+    supports_cancel = TRUE,
+    capability_ids = c(
+      "workspace.inspect",
+      "workspace.run_r",
+      "project.apply_patch",
+      "network.fetch",
+      "artifact.commit"
+    )
+  )
+}
+
+rho_agent_scalar_text <- function(value, field, maximum = 4096L) {
+  if (!is.character(value) || length(value) != 1L || is.na(value) || !nzchar(value)) {
+    stop(sprintf("Provider event `%s` must be one non-empty string.", field))
+  }
+  if (nchar(value, type = "bytes") > maximum) {
+    stop(sprintf("Provider event `%s` exceeds its byte bound.", field))
+  }
+  value
+}
+
+rho_agent_tool_capability <- function(tool) {
+  switch(
+    tool,
+    get_workspace_snapshot = "workspace.inspect",
+    inspect_r_object = "workspace.inspect",
+    read_conversation_turn = "workspace.inspect",
+    read_runtime_output = "workspace.inspect",
+    run_r = "workspace.run_r",
+    propose_file_edit = "project.apply_patch",
+    network_fetch = "network.fetch",
+    commit_artifact = "artifact.commit",
+    NULL
+  )
+}
+
+#' Translate One aisdk Event into the Canonical Agent Event Vocabulary
+#' @export
+rho_translate_aisdk_event <- function(event) {
+  if (!is.list(event)) stop("Provider event must be an object.")
+  type <- rho_agent_scalar_text(event$type, "type", maximum = 64L)
+
+  # Provider-private reasoning is neither projected nor persisted.
+  if (type %in% c("private_thinking", "thinking_text", "reasoning_delta")) return(NULL)
+
+  switch(
+    type,
+    text_delta = {
+      text <- event$text
+      if (!is.character(text) || length(text) != 1L || is.na(text)) {
+        stop("Provider event `text` must be one string.")
+      }
+      if (nchar(text, type = "bytes") > 128L * 1024L) {
+        stop("Provider event `text` exceeds its byte bound.")
+      }
+      cursor <- event$cursor
+      if (!is.numeric(cursor) || length(cursor) != 1L || is.na(cursor) || cursor < 0) {
+        stop("Provider event `cursor` must be one non-negative number.")
+      }
+      list(kind = "message_delta", cursor = as.integer(cursor), text = text)
+    },
+    mission_plan = {
+      plan_id <- rho_agent_scalar_text(event$mission_id, "mission_id", maximum = 256L)
+      steps <- unlist(event$steps %||% character(), use.names = FALSE)
+      if (!is.character(steps) || anyNA(steps)) stop("Provider plan steps must be strings.")
+      if (length(steps) > 64L) stop("Provider plan exceeds its step bound.")
+      if (any(nchar(steps, type = "bytes") > 16L * 1024L)) {
+        stop("Provider plan step exceeds its byte bound.")
+      }
+      list(kind = "plan_replaced", plan_id = plan_id, steps = as.list(steps))
+    },
+    tool_request = {
+      tool <- rho_agent_scalar_text(event$tool, "tool", maximum = 128L)
+      call_id <- rho_agent_scalar_text(event$call_id, "call_id", maximum = 128L)
+      capability <- rho_agent_tool_capability(tool)
+      if (is.null(capability)) stop(sprintf("Provider tool `%s` has no canonical capability.", tool))
+      arguments <- event$arguments %||% list()
+      if (!is.list(arguments)) stop("Provider tool arguments must be an object.")
+      encoded <- jsonlite::toJSON(arguments, auto_unbox = TRUE, null = "null")
+      if (nchar(encoded, type = "bytes") > 128L * 1024L) {
+        stop("Provider tool arguments exceed their byte bound.")
+      }
+      safe_call_id <- gsub("[^A-Za-z0-9_-]", "_", call_id)
+      list(
+        kind = "effect_requested",
+        capability_id = capability,
+        operation_id = paste0("operation_aisdk_", safe_call_id),
+        arguments = arguments
+      )
+    },
+    complete = list(kind = "turn_terminal", outcome = "completed"),
+    cancelled = list(kind = "turn_terminal", outcome = "cancelled"),
+    failed = list(
+      kind = "turn_terminal",
+      outcome = "failed",
+      error = rho_agent_scalar_text(event$error %||% "Provider failed", "error", maximum = 16L * 1024L)
+    ),
+    stop(sprintf("Unsupported provider event type `%s`.", type))
+  )
+}
+
+#' Construct the Exact Environment for the First-party Provider Child
+#' @export
+rho_agent_child_environment <- function(values = character()) {
+  if (length(values) == 0L) return(character())
+  if (!is.character(values) || is.null(names(values)) || anyNA(values) || any(!nzchar(names(values)))) {
+    stop("Provider child environment must be a named character vector.")
+  }
+  allowlist <- c(
+    "AISDK_PROVIDER_TOKEN",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "SSL_CERT_FILE"
+  )
+  denied <- setdiff(names(values), allowlist)
+  if (length(denied)) {
+    stop(sprintf("Provider child environment key `%s` is not allowlisted.", denied[[1L]]))
+  }
+  values
+}

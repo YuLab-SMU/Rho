@@ -1,89 +1,48 @@
 # Desktop application
 
-The desktop is a Tauri application with a React RSR frontend.
+The desktop is a deliberately thin Tauri shell around provider-neutral
+Workbench contracts.
 
 ## Backend
 
-`desktop/src-tauri/src/main.rs` constructs `AppState`, registers commands, and
-coordinates startup and shutdown. Commands are grouped under
-`desktop/src-tauri/src/commands/`; durable or long-lived behavior is delegated
-to stores, registries, project transition code, or the server coordinator.
+`desktop/src-tauri/src/main.rs` creates the clean composition root and registers
+only current Workbench and Jobs commands. `application_state.rs` owns the
+Broker-bearing state; authority-bearing services are never serialized to the
+renderer. Commands under `commands/agent/` and `commands/jobs/` authenticate
+and validate bounded request envelopes, delegate through the current port, and
+validate the response. They do not copy policy or Provider state machines.
 
-Important runtime owners include:
-
-- `application_*`, `startup_runtime`, and `workspace_lifecycle` for process
-  admission and recovery;
-- `project`, `project_transition`, and `resource_registry` for project and file
-  identity;
-- `runtime_registry`, `studio_runtime`, `surface_runtime`, and `ui_profile` for
-  desktop workbench state;
-- `agent_llm` and Agent commands for model settings, selection, tests, and
-  credential projection. Provider setup asks for service and API key (plus a
-  Base URL only for compatible services), validates the session credential,
-  discovers models, and atomically creates config with the best usable
-  tool-capable language model and Chat route. Failed discovery leaves no
-  half-configured Provider. Effective model facts are merged once for every
-  consumer with precedence user declaration → live Provider evidence →
-  reviewed `aisdk::list_models()` catalog → unknown; Settings, Agent readiness,
-  tests, context preview, and execution therefore cannot disagree. Existing
-  Providers expose an in-app endpoint/name editor while credential and model
-  controls remain separate;
-- `agent_config` for the canonical `<Rho home>/config.yaml` model registry,
-  atomic mutation, and permission checks. `RHO_HOME` overrides discovery;
-  otherwise an existing `~/.rho` wins over the XDG variant, and new installs
-  default to `~/.rho`. Credentials resolve session → environment → config
-  literal without a second vault authority;
-- `commands/toolchain.rs` for the read-only project Toolchain Doctor projected
-  in Environment → Toolchains and the managed-project Target Admission cache.
-  Workspace startup admits the exact local/native R realization before Ark
-  launch; Runtime Run and auxiliary Live entry points revalidate the cached
-  config/registry binding and recent resource-governance observation before
-  persistence or process dispatch. Environment → Connections asks for four
-  essential login fields, then automates host-key pinning, Slurm discovery,
-  dedicated-key bootstrap, exact remote Helper deployment, target persistence,
-  and optional project selection without requiring a terminal. Configured SSH
-  targets can be edited and reverified with their existing key. Helper build
-  identities are checked and stale Helpers are upgraded with bounded retries.
-  Environment → Resources refreshes bounded local/SSH device telemetry across
-  native, Docker, and Conda target identities every 15 seconds while that view
-  is open. Remote host telemetry measures the configured filesystem directly;
-  it does not require a synchronized remote `rho.toml`. The workbench taskbar reuses the
-  same typed Environment read surface as a three-metric CPU/RAM/disk panel,
-  refreshes every 10 seconds, and expands to device, runtime, operation, and
-  admission detail with direct Environment Resources and Diagnostics actions.
-  External sync/lock authority remains in `rho-toolchain`.
+Reconnect returns a durable snapshot, a hot cursor, and an explicit gap. It
+never replays complete token history. Command results distinguish `accepted`,
+`committed`, `uncertain`, and `rejected`; a transport acknowledgement is not a
+success claim.
 
 ## Frontend
 
-`desktop/ui/src/main.tsx` mounts `App`. The startup controller must reach a
-ready state before `WorkbenchApp` is mounted. Views consume typed transport
-facets under `transport/`; generated files in `transport/generated/` mirror
-Rust commands. `transport/mock.ts` supports deterministic browser development.
+`desktop/ui/src/main.tsx` mounts the current `App`. The Agent workbench under
+`app/agent/` presents:
 
-Controllers under `app/controllers/` serialize project, Surface, Console, and
-Studio mutations. The compact left rail keeps Studio/Vibe/Compose captions
-hidden until hover or keyboard focus, exposes one tools button for every placed
-component, and folds the former top Rho menu into the bottom-pinned rail menu
-alongside a deliberately small toolbar customization surface: only Command
-Search and Compose remain optional; redundant project, scene, action, and
-runtime projections are removed.
-Component tools provide focus, mode, runtime, duplicate, and close actions.
-Agent owns conversation, mode, permissions, and quick model switching; all
-model configuration remains in Settings. Its Models action, model menu, and
-readiness repair actions deep-link to the exact Provider/model Settings page,
-and Settings mutations refresh every mounted Agent view. Unknown model type is
-still usable for Chat and can be connection-tested, while Act remains guarded
-until effective tool-calling evidence is `yes`. Exact Plot links from Console
-or History open the durable Plot identity, while
-the general Plots view includes both current-session and historical project
-plots. A completed Agent turn may emit one bounded Studio presentation request.
-The Agent Surface preserves the current Scene, creates a
-separate result Scene, and opens only validated project files, a Console pinned
-to the exact Agent execution, Plots, and Environment views through the same
-revision-checked mutation paths
-used by human actions. This handoff never writes Vibe content; Vibe remains the
-narrative flow workspace. CSS is composed from the tokenized files under
-`ui/src/styles/`; `foundation.css` only orders those layers.
+- Goal and provider-owned Current Work;
+- bounded live Activity with cursor/gap recovery;
+- exact one-use Approval effects, destination, revision, and risk;
+- independent Job cards and controlled-patch reconciliation;
+- revision, artifact, recovery, and policy context.
 
-`desktop/dist/` is generated output. Change `desktop/ui/`, rebuild it, and do
-not document generated bundles as source.
+`app/jobs/` renders Rho-owned Local/OCI/SSH/Slurm truth: queue and process state,
+requested versus effective resources, bounded logs, cancellation request versus
+process-tree confirmation, scheduler reconciliation, and CAS artifact status.
+Agent Plans and Provider sessions cannot alter Job identity or timeline.
+
+Provider controls are generated from a neutral capability and option schema.
+Unsupported Plan, resume, model, reasoning, or config controls do not exist;
+there is no Provider-name branch in React. External observers display their
+read-only and continuity limitations. Permission posture and data-egress policy
+remain Rho settings across Provider switches.
+
+Rust facets in `rho-ui-contract`, TypeScript contracts under `contracts/`, the
+Tauri command surface, and browser mock handlers move together. UI fixtures
+exclude ACP methods, private reasoning, raw project payloads, host paths, and
+plaintext secrets. Styles live in tokenized files under `ui/src/styles/`;
+`foundation.css` only composes layers.
+
+`desktop/dist/` is generated output, not source.

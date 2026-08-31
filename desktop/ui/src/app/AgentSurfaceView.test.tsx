@@ -348,7 +348,7 @@ describe("Studio Agent Surface", () => {
     const { container } = await renderAgent({ transport });
     const empty = container.querySelector(".rho-agent-empty")!;
     expect(empty.textContent).toContain("Ready for the first turn");
-    expect(empty.textContent).toContain("composer");
+    expect(empty.textContent).toContain("Describe the goal");
     expect(container.querySelector(".rho-agent-composer textarea")).not.toBeNull();
 
     const chip = empty.querySelector<HTMLButtonElement>(".rho-agent-suggestions button")!;
@@ -357,26 +357,20 @@ describe("Studio Agent Surface", () => {
     expect(container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!.value).toBe(suggestion);
   });
 
-  it("switches Ask/Plan/Act, persists mode, and resets auto-approve outside Act", async () => {
+  it("uses one autonomous goal loop and persists only the permission posture", async () => {
     const { container, persist } = await renderAgent();
-    const modeButton = (label: string) => [...container.querySelectorAll(".rho-agent-mode button")]
-      .find((button) => button.textContent === label)!;
-
-    await click(modeButton("act"));
-    expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "act", auto_approve: false }));
-    expect(modeButton("act").getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector(".rho-agent-mode")).toBeNull();
+    expect(container.querySelector(".rho-agent-autonomous-badge")!.textContent)
+      .toContain("Autonomous goal loop");
 
     const posture = container.querySelector<HTMLDetailsElement>(".rho-agent-posture-menu")!;
     await click(posture.querySelector("summary")!);
     const autoApprove = posture.querySelector<HTMLButtonElement>(".rho-agent-auto-approve")!;
     await click(autoApprove);
-    expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "act", auto_approve: true }));
-
-    await click(modeButton("ask"));
-    expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "ask", auto_approve: false }));
-    expect(container.querySelector(".rho-agent-auto-approve")).toBeNull();
-    expect(container.querySelector(".rho-agent-posture-note")!.textContent)
-      .toContain("Auto-approve is available in Act mode");
+    expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({
+      mode: "act",
+      auto_approve: true,
+    }));
   });
 
   it("keeps model configuration in Settings instead of duplicating it inside Agent", async () => {
@@ -472,9 +466,8 @@ describe("Studio Agent Surface", () => {
     await click(menu.querySelector<HTMLButtonElement>(".rho-agent-manage-models")!);
     expect(openModelSettings).toHaveBeenCalledWith("mock-provider", "mock-profile");
 
-    await click([...container.querySelectorAll<HTMLButtonElement>(".rho-agent-mode button")]
-      .find((button) => button.textContent === "act")!);
-    expect(openModelSettings).toHaveBeenLastCalledWith("mock-provider", "mock-profile");
+    expect(container.querySelector(".rho-agent-model-setup")!.textContent)
+      .toContain("Autonomous work needs a model with verified tool calling");
   });
 
   it("offers search, provider groups, and per-row metadata in a long model menu", async () => {
@@ -548,18 +541,14 @@ describe("Studio Agent Surface", () => {
     const statusRow = container.querySelector(".rho-agent-composer .rho-agent-running")!;
     expect(statusRow.textContent).toContain("Agent running");
     const stop = [...statusRow.querySelectorAll("button")].find((button) => button.textContent === "Stop")!;
-    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
-      .find((button) => button.textContent === "plan")!;
     await act(async () => {
       stop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       stop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
     });
     expect(cancelAgentTurn).toHaveBeenCalledWith("agent-turn:mock-running");
     expect(cancelAgentTurn).toHaveBeenCalledOnce();
     expect(stop.disabled).toBe(true);
-    expect(plan.disabled).toBe(true);
     expect(persist).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -612,12 +601,9 @@ describe("Studio Agent Surface", () => {
     expect(container.querySelector(".rho-agent-file-proposal")).toBeNull();
 
     const approve = [...approval.querySelectorAll("button")].find((button) => button.textContent === "Approve")!;
-    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
-      .find((button) => button.textContent === "plan")!;
     await act(async () => {
       approve.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       approve.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
     });
     expect(respondAgentApproval).toHaveBeenCalledWith({
@@ -627,7 +613,6 @@ describe("Studio Agent Surface", () => {
     });
     expect(respondAgentApproval).toHaveBeenCalledOnce();
     expect(approve.disabled).toBe(true);
-    expect(plan.disabled).toBe(true);
     expect(persist).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -695,18 +680,14 @@ describe("Studio Agent Surface", () => {
     const retry = [...container.querySelectorAll<HTMLButtonElement>(
       '[data-turn-id="agent-turn:retry-guard"] footer button',
     )].find((button) => button.textContent === "Retry")!;
-    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
-      .find((button) => button.textContent === "plan")!;
 
     await act(async () => {
       retry.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       retry.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
     });
     expect(retryAgentTurn).toHaveBeenCalledOnce();
     expect(retry.disabled).toBe(true);
-    expect(plan.disabled).toBe(true);
     expect(persist).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -809,19 +790,15 @@ describe("Studio Agent Surface", () => {
       .find((button) => button.textContent === "Apply")!;
     const reject = [...proposal.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent === "Reject")!;
-    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
-      .find((button) => button.textContent === "plan")!;
 
     await act(async () => {
       apply.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       apply.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       reject.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
     });
     expect(applyFileProposal).toHaveBeenCalledOnce();
     expect(apply.disabled).toBe(true);
-    expect(plan.disabled).toBe(true);
     expect(reject.disabled).toBe(true);
     expect(persist).not.toHaveBeenCalled();
 
@@ -836,13 +813,11 @@ describe("Studio Agent Surface", () => {
     await act(async () => {
       undo.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       undo.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       reject.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
     });
     expect(undoFileProposal).toHaveBeenCalledOnce();
     expect(undo.disabled).toBe(true);
-    expect(plan.disabled).toBe(true);
     expect(reject.disabled).toBe(true);
     expect(persist).not.toHaveBeenCalled();
 
@@ -857,7 +832,7 @@ describe("Studio Agent Surface", () => {
     const transport = createMockUiKernelTransport();
     const preview = await transport.previewAgentContext({
       prompt: "Review this context once",
-      mode: "ask",
+      mode: "act",
       task_kind: "agent_turn",
       model_id: null,
       editor_context: null,
@@ -874,22 +849,18 @@ describe("Studio Agent Surface", () => {
     );
     const review = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-context-controls button")]
       .find((button) => button.textContent === "Review context")!;
-    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
-      .find((button) => button.textContent === "plan")!;
     const reject = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-file-proposal button")]
       .find((button) => button.textContent === "Reject")!;
 
     await act(async () => {
       review.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       review.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       reject.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
     });
 
     expect(previewAgentContext).toHaveBeenCalledOnce();
     expect(review.disabled).toBe(true);
-    expect(plan.disabled).toBe(true);
     expect(reject.disabled).toBe(true);
     expect(persist).not.toHaveBeenCalled();
 
@@ -897,8 +868,7 @@ describe("Studio Agent Surface", () => {
       previewGate.resolve(preview);
       await settle();
     });
-    expect(container.querySelector<HTMLButtonElement>('.rho-agent-mode button[aria-pressed="true"]')!.textContent)
-      .toBe("ask");
+    expect(container.querySelector(".rho-agent-mode")).toBeNull();
     expect(container.querySelector(".rho-agent-file-outcome")).toBeNull();
     expect(persist).not.toHaveBeenCalled();
   });
@@ -925,7 +895,7 @@ describe("Studio Agent Surface", () => {
       composer: "What changed since yesterday?",
     }), {
       prompt: "What changed since yesterday?",
-      mode: "ask",
+      mode: "act",
       task_kind: "agent_turn",
       model_id: null,
       auto_approve: false,
@@ -1325,9 +1295,6 @@ describe("Studio Agent Surface", () => {
       return { ...current, conversation_id: request.conversation_id, composer: "" };
     });
     const { container } = await renderAgent({ runConversation, transport });
-    const modeButton = (label: string) => [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-mode button")]
-      .find((button) => button.textContent === label)!;
-    await click(modeButton("act"));
     const posture = container.querySelector<HTMLDetailsElement>(".rho-agent-posture-menu")!;
     await click(posture.querySelector("summary")!);
     await click(posture.querySelector(".rho-agent-auto-approve")!);
@@ -1852,11 +1819,11 @@ describe("Studio Agent Surface", () => {
     expect(runConversation).toHaveBeenCalledWith(expect.objectContaining({
       conversation_id: preferredConversation.conversation_id,
       composer: "Wait for the bounded list",
-      mode: "ask",
+      mode: "act",
     }), expect.objectContaining({
       conversation_id: preferredConversation.conversation_id,
       prompt: "Wait for the bounded list",
-      mode: "ask",
+      mode: "act",
     }), expect.any(Function));
   });
 
@@ -2392,8 +2359,6 @@ describe("Studio Agent Surface", () => {
     const picker = container.querySelector<HTMLSelectElement>(
       'select[aria-label="Conversation for surface-instance:agent-test"]',
     )!;
-    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
-      .find((button) => button.textContent === "plan")!;
     const autoApprove = container.querySelector<HTMLButtonElement>(".rho-agent-auto-approve")!;
     const suggestion = container.querySelector<HTMLButtonElement>(".rho-agent-suggestions button")!;
     const newButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
@@ -2405,7 +2370,6 @@ describe("Studio Agent Surface", () => {
       picker.dispatchEvent(new Event("change", { bubbles: true }));
       picker.dispatchEvent(new Event("change", { bubbles: true }));
       newButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       autoApprove.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       suggestion.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
@@ -2418,7 +2382,6 @@ describe("Studio Agent Surface", () => {
       mode: "act",
       auto_approve: true,
     }));
-    expect(plan.disabled).toBe(true);
     expect(autoApprove.disabled).toBe(true);
     expect(suggestion.disabled).toBe(true);
 
@@ -2428,8 +2391,7 @@ describe("Studio Agent Surface", () => {
     });
 
     expect(picker.value).toBe(selectedConversation.conversation_id);
-    expect(container.querySelector<HTMLButtonElement>('.rho-agent-mode button[aria-pressed="true"]')!.textContent)
-      .toBe("act");
+    expect(container.querySelector(".rho-agent-mode")).toBeNull();
     expect(persist).toHaveBeenCalledOnce();
   });
 
@@ -2452,8 +2414,6 @@ describe("Studio Agent Surface", () => {
     const { container } = await renderAgent({ createConversation, persist, runConversation, transport });
     const newButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
       .find((button) => button.textContent === "New")!;
-    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
-      .find((button) => button.textContent === "plan")!;
     const reject = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-file-proposal button")]
       .find((button) => button.textContent === "Reject")!;
     const textarea = container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
@@ -2466,18 +2426,16 @@ describe("Studio Agent Surface", () => {
       newButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       newButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       reject.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
     });
 
     expect(createConversation).toHaveBeenCalledWith(expect.objectContaining({
       conversation_id: oldConversation.conversation_id,
-      mode: "ask",
+      mode: "act",
     }));
     expect(createConversation).toHaveBeenCalledOnce();
     expect(runConversation).not.toHaveBeenCalled();
-    expect(plan.disabled).toBe(true);
     expect(reject.disabled).toBe(true);
     expect(persist).not.toHaveBeenCalled();
 
@@ -2485,7 +2443,7 @@ describe("Studio Agent Surface", () => {
     await act(async () => {
       createGate.resolve({
         conversation_id: createdConversation.conversation_id,
-        mode: "ask",
+        mode: "act",
         composer: "",
         auto_approve: false,
         file_decisions: {},
@@ -2496,8 +2454,7 @@ describe("Studio Agent Surface", () => {
     expect(container.querySelector<HTMLSelectElement>(
       'select[aria-label="Conversation for surface-instance:agent-test"]',
     )!.value).toBe(createdConversation.conversation_id);
-    expect(container.querySelector<HTMLButtonElement>('.rho-agent-mode button[aria-pressed="true"]')!.textContent)
-      .toBe("ask");
+    expect(container.querySelector(".rho-agent-mode")).toBeNull();
     expect(persist).not.toHaveBeenCalled();
   });
 
@@ -2548,8 +2505,6 @@ describe("Studio Agent Surface", () => {
     const send = container.querySelector<HTMLButtonElement>(
       ".rho-agent-context-controls .rho-primary-action",
     )!;
-    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
-      .find((button) => button.textContent === "plan")!;
     const newButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
       .find((button) => button.textContent === "New")!;
 
@@ -2557,27 +2512,25 @@ describe("Studio Agent Surface", () => {
       send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       newButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
     });
 
     expect(runConversation).toHaveBeenCalledWith(expect.objectContaining({
       conversation_id: oldConversation.conversation_id,
-      mode: "ask",
+      mode: "act",
     }), expect.objectContaining({
       conversation_id: oldConversation.conversation_id,
-      mode: "ask",
+      mode: "act",
     }), expect.any(Function));
     expect(runConversation).toHaveBeenCalledOnce();
     expect(createConversation).not.toHaveBeenCalled();
-    expect(plan.disabled).toBe(true);
     expect(persist).not.toHaveBeenCalled();
 
     conversations = [sentConversation, oldConversation];
     await act(async () => {
       runGate.resolve({
         conversation_id: sentConversation.conversation_id,
-        mode: "ask",
+        mode: "act",
         composer: "",
         auto_approve: false,
         file_decisions: {},
@@ -2588,8 +2541,7 @@ describe("Studio Agent Surface", () => {
     expect(container.querySelector<HTMLSelectElement>(
       'select[aria-label="Conversation for surface-instance:agent-test"]',
     )!.value).toBe(sentConversation.conversation_id);
-    expect(container.querySelector<HTMLButtonElement>('.rho-agent-mode button[aria-pressed="true"]')!.textContent)
-      .toBe("ask");
+    expect(container.querySelector(".rho-agent-mode")).toBeNull();
     expect(persist).not.toHaveBeenCalled();
   });
 
@@ -2807,20 +2759,16 @@ describe("Studio Agent Surface", () => {
     expect(diagnostics.querySelector("pre")!.textContent).toContain("aisdk");
     const send = container.querySelector<HTMLButtonElement>(".rho-agent-context-controls .rho-primary-action")!;
     expect(send.disabled).toBe(true);
-    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
-      .find((button) => button.textContent === "plan")!;
     const reject = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-file-proposal button")]
       .find((button) => button.textContent === "Reject")!;
     await act(async () => {
       retry.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       retry.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       reject.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
     });
     expect(retryAgentRuntime).toHaveBeenCalledOnce();
     expect(retry.disabled).toBe(true);
-    expect(plan.disabled).toBe(true);
     expect(reject.disabled).toBe(true);
     expect(persist).not.toHaveBeenCalled();
 

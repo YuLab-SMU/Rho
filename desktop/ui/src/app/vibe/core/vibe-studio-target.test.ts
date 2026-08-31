@@ -46,7 +46,7 @@ describe("Vibe exact Studio target mapping", () => {
       modeId: "conversation",
       viewState: {
         conversation_id: "conversation:4",
-        mode: "ask",
+        mode: "act",
         composer: "",
         auto_approve: false,
       },

@@ -13,11 +13,17 @@
     "development.lanes": {
       "command": ["node", "scripts/test-dev-lanes.mjs"]
     },
+    "development.test-runner": {
+      "command": ["node", "scripts/test-test-command-runner.mjs"]
+    },
     "development.integration": {
       "command": ["node", "scripts/test-worktree-integration.mjs"]
     },
     "frontend": {
       "command": ["npm", "--prefix", "desktop", "run", "rsr:check"]
+    },
+    "frontend.contracts": {
+      "command": ["npm", "--prefix", "desktop", "run", "rsr:check:contracts"]
     },
     "r.agent": {
       "command": ["Rscript", "-e", "testthat::test_local('r/rho.agent')"]
@@ -37,17 +43,35 @@
     "release.updater": {
       "command": ["node", "scripts/tauri-native-updater.mjs", "--test", "true"]
     },
+    "rust.architecture": {
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "120", "--label", "rust architecture", "--", "cargo", "test", "-p", "rho-architecture-tests", "--locked"]
+    },
+    "rust.agent": {
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust agent", "--", "cargo", "test", "-p", "rho-agent-host", "-p", "rho-control-plane", "-p", "rho-event-hub", "-p", "rho-test-support", "-p", "rho-telemetry", "--locked", "--", "--test-threads=1"]
+    },
+    "rust.desktop": {
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "600", "--label", "rust desktop", "--", "cargo", "test", "-p", "rho-desktop", "-p", "rho-ui-contract", "--locked"]
+    },
+    "rust.execution": {
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust execution", "--", "cargo", "test", "-p", "rho-artifact-store", "-p", "rho-execution", "-p", "rho-runner", "-p", "rho-sandbox", "-p", "rho-secret-broker", "-p", "rho-workspace", "--locked", "--", "--test-threads=1"]
+    },
     "rust.extensions": {
-      "command": ["cargo", "test", "-p", "rho-extension-runtime", "-p", "rho-plugin-dev", "--locked"]
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "300", "--label", "rust extensions", "--", "cargo", "test", "-p", "rho-extension-runtime", "-p", "rho-plugin-dev", "--locked"]
+    },
+    "rust.kernel": {
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust kernel", "--", "cargo", "test", "-p", "rho-kernel", "--locked"]
+    },
+    "rust.public": {
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "120", "--label", "rust public interfaces", "--", "cargo", "test", "-p", "rho-cli", "-p", "rho-mcp", "--locked"]
     },
     "rust.store": {
-      "command": ["cargo", "test", "-p", "rho-store", "--locked"]
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "300", "--label", "rust store", "--", "cargo", "test", "-p", "rho-store", "--locked", "--", "--test-threads=1"]
     },
     "rust.toolchain": {
-      "command": ["cargo", "test", "-p", "rho-toolchain", "--locked"]
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust toolchain", "--", "cargo", "test", "-p", "rho-toolchain", "--locked"]
     },
     "rust.workspace": {
-      "command": ["cargo", "test", "--workspace", "--locked"]
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "900", "--label", "rust workspace", "--", "cargo", "test", "--workspace", "--locked", "--", "--test-threads=1"]
     }
   },
   "areas": {
@@ -66,83 +90,132 @@
     },
     "development": {
       "sources": [
+        ".gitignore",
+        "crates/rho-architecture-tests/**",
+        "scripts/check-clean-agent-cut.mjs",
         "scripts/dev-checkpoint.mjs",
         "scripts/dev-lanes.mjs",
         "scripts/path-ownership.mjs",
+        "scripts/run-fuzz-targets.mjs",
+        "scripts/run-test-command.mjs",
         "scripts/test-dev-checkpoint.mjs",
         "scripts/test-dev-lanes.mjs",
-        "scripts/test-worktree-integration.mjs"
+        "scripts/test-test-command-runner.mjs",
+        "scripts/test-worktree-integration.mjs",
+        "fuzz/**",
+        "test/chaos/**",
+        "test/control-plane/**",
+        "test/performance/**",
+        "test/remote-cluster/**",
+        "test/security/**"
       ],
-      "checks": ["development.checkpoint", "development.integration", "development.lanes"]
+      "checks": [
+        "development.checkpoint",
+        "development.integration",
+        "development.lanes",
+        "development.test-runner",
+        "rust.architecture"
+      ]
     },
-    "desktop": {
+    "desktop-ui": {
       "sources": [
         "desktop/package-lock.json",
         "desktop/package.json",
-        "desktop/src-tauri/**",
         "desktop/ui/**",
-        "crates/rho-ui-contract/**",
         "scripts/accept-rsr-exact-app.mjs",
-        "scripts/generate-*-bindings.mjs",
-        "scripts/generate-rsr-contract-fixtures.mjs",
         "scripts/rsr-*",
         "scripts/run-rsr-debug.mjs",
         "scripts/serve-desktop-preview.mjs",
-        "scripts/test-*-bindings.mjs",
-        "scripts/test-compat-*.mjs",
-        "scripts/test-desktop-platform-config.mjs",
-        "scripts/test-generated-transport-boundary.mjs",
         "scripts/test-rsr-*.mjs",
-        "scripts/test-tauri-command-inventory.mjs",
+        "scripts/test-test-tiers.mjs",
         "scripts/test-visual-acceptance.mjs",
         "scripts/visual-acceptance.mjs",
         "scripts/visual-acceptance/**",
         "test/acceptance-project/**"
       ],
-      "checks": ["frontend", "rust.workspace"]
+      "checks": ["frontend"]
+    },
+    "desktop": {
+      "sources": [
+        "desktop/src-tauri/**",
+        "crates/rho-ui-contract/**",
+        "scripts/generate-*-bindings.mjs",
+        "scripts/generate-rsr-contract-fixtures.mjs",
+        "scripts/test-*-bindings.mjs",
+        "scripts/test-*config*.mjs",
+        "scripts/test-agent-credential-authority.mjs",
+        "scripts/test-generated-bindings.mjs",
+        "scripts/test-generated-transport-boundary.mjs",
+        "scripts/test-tauri-command-inventory.mjs"
+      ],
+      "checks": ["frontend.contracts", "rust.desktop"]
+    },
+    "agent-runtime": {
+      "sources": [
+        "crates/rho-agent-host/**",
+        "crates/rho-control-plane/**",
+        "crates/rho-event-hub/**",
+        "crates/rho-test-support/**",
+        "crates/rho-telemetry/**"
+      ],
+      "checks": ["rust.agent"]
+    },
+    "execution-runtime": {
+      "sources": [
+        "crates/rho-artifact-store/**",
+        "crates/rho-execution/**",
+        "crates/rho-runner/**",
+        "crates/rho-sandbox/**",
+        "crates/rho-secret-broker/**",
+        "crates/rho-workspace/**"
+      ],
+      "checks": ["rust.execution"]
+    },
+    "public-interfaces": {
+      "sources": [
+        "crates/rho-cli/**",
+        "crates/rho-mcp/**"
+      ],
+      "checks": ["rust.public"]
     },
     "persistence-and-interfaces": {
       "sources": [
         "Cargo.lock",
         "Cargo.toml",
-        "crates/rho-cli/**",
-        "crates/rho-core/**",
-        "crates/rho-mcp/**",
         "crates/rho-protocol/**",
-        "crates/rho-server/**",
         "crates/rho-store/**",
         "rust-toolchain.toml"
       ],
       "checks": ["rust.store", "rust.workspace"]
     },
+    "r-agent": {
+      "sources": [
+        "r/rho.agent/**"
+      ],
+      "checks": ["r.agent"]
+    },
     "r-runtime": {
       "sources": [
-        "crates/rho-agent-transport/**",
         "crates/rho-kernel/**",
-        "r/rho.agent/**",
         "r/rho.bridge/**",
         "test/environment-demo/**"
       ],
-      "checks": ["r.agent", "r.bridge", "rust.workspace"]
+      "checks": ["r.bridge", "rust.kernel"]
     },
     "extensions": {
       "sources": [
         "crates/rho-extension-runtime/**",
         "crates/rho-plugin-dev/**",
-        "desktop/src-tauri/src/internal_extensions/**",
-        "desktop/src-tauri/src/internal_extensions.rs",
-        "desktop/src-tauri/src/plugin_surface_runtime.rs",
-        "desktop/src-tauri/src/workspace_plugins/**",
         "examples/workspace-plugin-*/**",
         "scripts/test-extension-*.mjs"
       ],
-      "checks": ["rust.extensions", "rust.workspace"]
+      "checks": ["rust.extensions"]
     },
     "toolchains": {
       "sources": [
         "crates/rho-toolchain/**"
       ],
-      "checks": ["rust.toolchain", "rust.workspace"]
+      "checks": ["rust.toolchain"]
     },
     "release": {
       "sources": [
@@ -161,6 +234,10 @@
         "desktop/package.json",
         "desktop/src-tauri/tauri.conf.json",
         "runtime/**",
+        "scripts/audit-final-rebuild.mjs",
+        "scripts/verify-clean-source-snapshot.mjs",
+        "scripts/verify-production-workbench-integration.mjs",
+        "scripts/test-production-invariants.mjs",
         "scripts/bootstrap-*",
         "scripts/build-*.sh",
         "scripts/build-*.ps1",
@@ -175,7 +252,8 @@
         "scripts/generate-update-site.mjs",
         "scripts/test-release-metadata.ps1",
         "scripts/test-desktop-platform-config.mjs",
-        "scripts/test-license-contract.mjs"
+        "scripts/test-license-contract.mjs",
+        "test/release/**"
       ],
       "checks": ["release.candidate", "release.signing", "release.site", "release.updater"]
     }

@@ -117,6 +117,6 @@ describe("Agent turn detail generated transport", () => {
   it("keeps browser/mock mode assignable to the narrow turn-detail facet", async () => {
     const transport: AgentTurnDetailTransport = createMockUiKernelTransport();
     await expect(transport.getAgentTurnDetail("agent-turn:mock-1"))
-      .resolves.toMatchObject({ turn: { mode: "ask" }, context_items: [] });
+      .resolves.toMatchObject({ turn: { mode: "act" }, context_items: [] });
   });
 });

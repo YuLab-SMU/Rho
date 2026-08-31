@@ -1,0 +1,73 @@
+{
+  "schema": "rho.provider-matrix.live.v1",
+  "generated_at_policy": "live probe; timestamp intentionally omitted for deterministic diff",
+  "providers": [
+    {
+      "provider_id": "opencode",
+      "executable_name": "opencode",
+      "executable_sha256": "sha256:45922f63cf068f5c72d44cf18d1cde9816f359668258608b0272e54c304106c1",
+      "version": "1.18.5",
+      "protocol": "acp/1",
+      "live_probe_passed": true,
+      "support_tier": "observer_only",
+      "observed": {
+        "streaming": true,
+        "plan": false,
+        "permission_hint": true,
+        "resume": true,
+        "close": true,
+        "list": true,
+        "config": false,
+        "mcp": true,
+        "filesystem": false,
+        "terminal": false
+      }
+    },
+    {
+      "provider_id": "pi",
+      "executable_name": "pi",
+      "executable_sha256": "sha256:5406c369954516fb56879d685e082ff9095cd6e06e41af406f394942377fd4bf",
+      "version": "0.84.4",
+      "protocol": "unsupported",
+      "live_probe_passed": false,
+      "support_tier": "unsupported",
+      "commercial": false,
+      "observed": {
+        "streaming": false,
+        "plan": false,
+        "permission_hint": false,
+        "resume": false,
+        "close": false,
+        "list": false,
+        "config": false,
+        "mcp": false,
+        "filesystem": false,
+        "terminal": false
+      },
+      "reason": "No stable local stdio ACP v1 initialize behavior; not exposed to Rho"
+    },
+    {
+      "provider_id": "claude_code",
+      "executable_name": "claude",
+      "executable_sha256": "sha256:013a1cf17df5ff1dcc189d5d6fd3fdd5f097ddc3cd41aa9992e99805574febbe",
+      "version": "2.1.226 (Claude Code)",
+      "protocol": "unsupported",
+      "live_probe_passed": false,
+      "support_tier": "unsupported",
+      "commercial": true,
+      "observed": {
+        "streaming": false,
+        "plan": false,
+        "permission_hint": false,
+        "resume": false,
+        "close": false,
+        "list": false,
+        "config": false,
+        "mcp": false,
+        "filesystem": false,
+        "terminal": false
+      },
+      "reason": "No stable local stdio ACP v1 initialize behavior; not exposed to Rho"
+    }
+  ]
+}

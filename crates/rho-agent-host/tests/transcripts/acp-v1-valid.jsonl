@@ -1,0 +1,6 @@
+{"jsonrpc":"2.0","method":"initialized","params":{"protocolVersion":"1","providerVersion":"observer-1.2.3","supportsResume":true,"supportsCancel":true}}
+{"jsonrpc":"2.0","method":"session/created","params":{"sessionId":"external_session_1"}}
+{"jsonrpc":"2.0","method":"session/update","params":{"updateType":"message_delta","cursor":1,"text":"observed revision 42"}}
+{"jsonrpc":"2.0","method":"session/update","params":{"updateType":"plan","planId":"provider_plan_1"}}
+{"jsonrpc":"2.0","method":"session/update","params":{"updateType":"tool_request","tool":"inspect_workspace","callId":"inspect_1","arguments":{"query":"objects"}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"updateType":"terminal","outcome":"completed"}}

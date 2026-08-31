@@ -6,12 +6,24 @@ members = [
   "crates/rho-plugin-dev",
   "crates/rho-protocol",
   "crates/rho-store",
+  "crates/rho-artifact-store",
+  "crates/rho-secret-broker",
+  "crates/rho-sandbox",
+  "crates/rho-event-hub",
+  "crates/rho-execution",
+  "crates/rho-control-plane",
+  "crates/rho-agent-host",
+  "crates/rho-workspace",
+  "crates/rho-runner",
+  "crates/rho-test-support",
+  "crates/rho-telemetry",
+  "crates/rho-architecture-tests",
   "crates/rho-kernel",
   "crates/rho-agent-transport",
   "crates/rho-core",
+  "crates/rho-server",
   "crates/rho-cli",
   "crates/rho-mcp",
-  "crates/rho-server",
   "crates/rho-updater-verifier",
   "crates/rho-toolchain",
   "desktop/src-tauri",
@@ -52,7 +64,7 @@ toml_edit = "0.22.27"
 tokio = { version = "1.0", features = ["full"] }
 tokio-rusqlite = "=0.7.0"
 tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
-uuid = { version = "1.18", features = ["v4", "serde"] }
+uuid = { version = "1.18", features = ["v4", "v7", "serde"] }
 wasmtime = { version = "=38.0.4", default-features = false, features = ["component-model", "cranelift", "runtime", "std"] }
 wat = { version = "=1.257.1", default-features = false, features = ["component-model"] }
 wit-component = { version = "=0.239.0", default-features = false }

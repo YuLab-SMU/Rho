@@ -633,7 +633,7 @@ try {
         && durable.surfaceRevision > surfaceRevision
         && exactTurn instanceof HTMLElement
         && exactTurn.textContent?.includes(prompt)
-        && exactTurn.textContent?.includes(`Mock ask response for: ${prompt}`)
+        && exactTurn.textContent?.includes(`Mock act response for: ${prompt}`)
         && newButton instanceof HTMLButtonElement
         && !newButton.disabled;
     }, {

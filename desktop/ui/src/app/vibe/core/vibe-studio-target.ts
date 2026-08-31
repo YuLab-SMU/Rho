@@ -63,7 +63,7 @@ export function exactAgentSurfaceRequest(
     modeId: compose ? "composer" : "conversation",
     viewState: {
       conversation_id: id,
-      mode: "ask",
+      mode: "act",
       composer: "",
       auto_approve: false,
     },

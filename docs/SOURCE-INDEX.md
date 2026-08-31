@@ -4,6 +4,24 @@
 
 Generated from `governance/source-map.json` and `governance/registry.json`. Edit the JSON sources and regenerate.
 
+## `agent-runtime`
+
+Documentation:
+
+- None.
+
+Sources:
+
+- `crates/rho-agent-host/**`
+- `crates/rho-control-plane/**`
+- `crates/rho-event-hub/**`
+- `crates/rho-telemetry/**`
+- `crates/rho-test-support/**`
+
+Checks:
+
+- `rust.agent`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust agent","--","cargo","test","-p","rho-agent-host","-p","rho-control-plane","-p","rho-event-hub","-p","rho-test-support","-p","rho-telemetry","--locked","--","--test-threads=1"]`
+
 ## `desktop`
 
 Documentation:
@@ -13,22 +31,38 @@ Documentation:
 Sources:
 
 - `crates/rho-ui-contract/**`
-- `desktop/package-lock.json`
-- `desktop/package.json`
 - `desktop/src-tauri/**`
-- `desktop/ui/**`
-- `scripts/accept-rsr-exact-app.mjs`
 - `scripts/generate-*-bindings.mjs`
 - `scripts/generate-rsr-contract-fixtures.mjs`
+- `scripts/test-*-bindings.mjs`
+- `scripts/test-*config*.mjs`
+- `scripts/test-agent-credential-authority.mjs`
+- `scripts/test-generated-bindings.mjs`
+- `scripts/test-generated-transport-boundary.mjs`
+- `scripts/test-tauri-command-inventory.mjs`
+
+Checks:
+
+- `frontend.contracts`: `["npm","--prefix","desktop","run","rsr:check:contracts"]`
+- `rust.desktop`: `["node","scripts/run-test-command.mjs","--timeout-seconds","600","--label","rust desktop","--","cargo","test","-p","rho-desktop","-p","rho-ui-contract","--locked"]`
+
+## `desktop-ui`
+
+Documentation:
+
+- None.
+
+Sources:
+
+- `desktop/package-lock.json`
+- `desktop/package.json`
+- `desktop/ui/**`
+- `scripts/accept-rsr-exact-app.mjs`
 - `scripts/rsr-*`
 - `scripts/run-rsr-debug.mjs`
 - `scripts/serve-desktop-preview.mjs`
-- `scripts/test-*-bindings.mjs`
-- `scripts/test-compat-*.mjs`
-- `scripts/test-desktop-platform-config.mjs`
-- `scripts/test-generated-transport-boundary.mjs`
 - `scripts/test-rsr-*.mjs`
-- `scripts/test-tauri-command-inventory.mjs`
+- `scripts/test-test-tiers.mjs`
 - `scripts/test-visual-acceptance.mjs`
 - `scripts/visual-acceptance.mjs`
 - `scripts/visual-acceptance/**`
@@ -37,7 +71,6 @@ Sources:
 Checks:
 
 - `frontend`: `["npm","--prefix","desktop","run","rsr:check"]`
-- `rust.workspace`: `["cargo","test","--workspace","--locked"]`
 
 ## `development`
 
@@ -47,18 +80,32 @@ Documentation:
 
 Sources:
 
+- `.gitignore`
+- `crates/rho-architecture-tests/**`
+- `fuzz/**`
+- `scripts/check-clean-agent-cut.mjs`
 - `scripts/dev-checkpoint.mjs`
 - `scripts/dev-lanes.mjs`
 - `scripts/path-ownership.mjs`
+- `scripts/run-fuzz-targets.mjs`
+- `scripts/run-test-command.mjs`
 - `scripts/test-dev-checkpoint.mjs`
 - `scripts/test-dev-lanes.mjs`
+- `scripts/test-test-command-runner.mjs`
 - `scripts/test-worktree-integration.mjs`
+- `test/chaos/**`
+- `test/control-plane/**`
+- `test/performance/**`
+- `test/remote-cluster/**`
+- `test/security/**`
 
 Checks:
 
 - `development.checkpoint`: `["node","scripts/test-dev-checkpoint.mjs"]`
 - `development.integration`: `["node","scripts/test-worktree-integration.mjs"]`
 - `development.lanes`: `["node","scripts/test-dev-lanes.mjs"]`
+- `development.test-runner`: `["node","scripts/test-test-command-runner.mjs"]`
+- `rust.architecture`: `["node","scripts/run-test-command.mjs","--timeout-seconds","120","--label","rust architecture","--","cargo","test","-p","rho-architecture-tests","--locked"]`
 
 ## `documentation`
 
@@ -82,6 +129,25 @@ Checks:
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
 
+## `execution-runtime`
+
+Documentation:
+
+- None.
+
+Sources:
+
+- `crates/rho-artifact-store/**`
+- `crates/rho-execution/**`
+- `crates/rho-runner/**`
+- `crates/rho-sandbox/**`
+- `crates/rho-secret-broker/**`
+- `crates/rho-workspace/**`
+
+Checks:
+
+- `rust.execution`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust execution","--","cargo","test","-p","rho-artifact-store","-p","rho-execution","-p","rho-runner","-p","rho-sandbox","-p","rho-secret-broker","-p","rho-workspace","--locked","--","--test-threads=1"]`
+
 ## `extensions`
 
 Documentation:
@@ -92,17 +158,12 @@ Sources:
 
 - `crates/rho-extension-runtime/**`
 - `crates/rho-plugin-dev/**`
-- `desktop/src-tauri/src/internal_extensions.rs`
-- `desktop/src-tauri/src/internal_extensions/**`
-- `desktop/src-tauri/src/plugin_surface_runtime.rs`
-- `desktop/src-tauri/src/workspace_plugins/**`
 - `examples/workspace-plugin-*/**`
 - `scripts/test-extension-*.mjs`
 
 Checks:
 
-- `rust.extensions`: `["cargo","test","-p","rho-extension-runtime","-p","rho-plugin-dev","--locked"]`
-- `rust.workspace`: `["cargo","test","--workspace","--locked"]`
+- `rust.extensions`: `["node","scripts/run-test-command.mjs","--timeout-seconds","300","--label","rust extensions","--","cargo","test","-p","rho-extension-runtime","-p","rho-plugin-dev","--locked"]`
 
 ## `persistence-and-interfaces`
 
@@ -114,18 +175,43 @@ Sources:
 
 - `Cargo.lock`
 - `Cargo.toml`
-- `crates/rho-cli/**`
-- `crates/rho-core/**`
-- `crates/rho-mcp/**`
 - `crates/rho-protocol/**`
-- `crates/rho-server/**`
 - `crates/rho-store/**`
 - `rust-toolchain.toml`
 
 Checks:
 
-- `rust.store`: `["cargo","test","-p","rho-store","--locked"]`
-- `rust.workspace`: `["cargo","test","--workspace","--locked"]`
+- `rust.store`: `["node","scripts/run-test-command.mjs","--timeout-seconds","300","--label","rust store","--","cargo","test","-p","rho-store","--locked","--","--test-threads=1"]`
+- `rust.workspace`: `["node","scripts/run-test-command.mjs","--timeout-seconds","900","--label","rust workspace","--","cargo","test","--workspace","--locked","--","--test-threads=1"]`
+
+## `public-interfaces`
+
+Documentation:
+
+- None.
+
+Sources:
+
+- `crates/rho-cli/**`
+- `crates/rho-mcp/**`
+
+Checks:
+
+- `rust.public`: `["node","scripts/run-test-command.mjs","--timeout-seconds","120","--label","rust public interfaces","--","cargo","test","-p","rho-cli","-p","rho-mcp","--locked"]`
+
+## `r-agent`
+
+Documentation:
+
+- None.
+
+Sources:
+
+- `r/rho.agent/**`
+
+Checks:
+
+- `r.agent`: `["Rscript","-e","testthat::test_local('r/rho.agent')"]`
 
 ## `r-runtime`
 
@@ -135,17 +221,14 @@ Documentation:
 
 Sources:
 
-- `crates/rho-agent-transport/**`
 - `crates/rho-kernel/**`
-- `r/rho.agent/**`
 - `r/rho.bridge/**`
 - `test/environment-demo/**`
 
 Checks:
 
-- `r.agent`: `["Rscript","-e","testthat::test_local('r/rho.agent')"]`
 - `r.bridge`: `["Rscript","-e","testthat::test_local('r/rho.bridge')"]`
-- `rust.workspace`: `["cargo","test","--workspace","--locked"]`
+- `rust.kernel`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust kernel","--","cargo","test","-p","rho-kernel","--locked"]`
 
 ## `release`
 
@@ -177,6 +260,7 @@ Sources:
 - `scripts/*release*.mjs`
 - `scripts/*signpath*.mjs`
 - `scripts/*updater*.mjs`
+- `scripts/audit-final-rebuild.mjs`
 - `scripts/bootstrap-*`
 - `scripts/build-*.ps1`
 - `scripts/build-*.sh`
@@ -184,7 +268,11 @@ Sources:
 - `scripts/prepare-runtime-resources.*`
 - `scripts/test-desktop-platform-config.mjs`
 - `scripts/test-license-contract.mjs`
+- `scripts/test-production-invariants.mjs`
 - `scripts/test-release-metadata.ps1`
+- `scripts/verify-clean-source-snapshot.mjs`
+- `scripts/verify-production-workbench-integration.mjs`
+- `test/release/**`
 
 Checks:
 
@@ -205,5 +293,4 @@ Sources:
 
 Checks:
 
-- `rust.toolchain`: `["cargo","test","-p","rho-toolchain","--locked"]`
-- `rust.workspace`: `["cargo","test","--workspace","--locked"]`
+- `rust.toolchain`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust toolchain","--","cargo","test","-p","rho-toolchain","--locked"]`

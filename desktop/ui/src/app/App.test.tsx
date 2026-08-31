@@ -1708,7 +1708,7 @@ describe("Studio foundation app", () => {
         !queueIsBlocked
         && request.target.instance_id === initialAgent.instance_id
         && request.mutation.kind === "set_view_state"
-        && (request.mutation.view_state as { mode?: unknown }).mode === "plan"
+        && (request.mutation.view_state as { auto_approve?: unknown }).auto_approve === true
       ) {
         queueIsBlocked = true;
         await queueGate;
@@ -1727,9 +1727,7 @@ describe("Studio foundation app", () => {
     const initialPicker = currentPicker();
 
     await act(async () => {
-      [...currentAgent().querySelectorAll<HTMLButtonElement>(".rho-agent-mode button")]
-        .find((button) => button.textContent === "plan")!
-        .click();
+      currentAgent().querySelector<HTMLButtonElement>(".rho-agent-auto-approve")!.click();
       await vi.waitFor(() => expect(queueIsBlocked).toBe(true));
     });
     await act(async () => {
@@ -5687,7 +5685,7 @@ describe("Studio foundation app", () => {
       instance_disposition: "new_instance",
       view_state: expect.objectContaining({
         conversation_id: "agent-conversation:mock-shared",
-        mode: "ask",
+        mode: "act",
         composer: "",
         auto_approve: false,
       }),
@@ -6377,37 +6375,24 @@ describe("Studio foundation app", () => {
     });
     for (const agent of agents) {
       expect(agent.textContent).toContain("Compare both views");
-      expect(agent.textContent).toContain("Mock ask response");
+      expect(agent.textContent).toContain("Mock act response");
     }
   });
 
-  it("keeps completed Agent metadata quiet and reveals Act-only approval deliberately", async () => {
+  it("keeps completed Agent metadata quiet and exposes Broker posture without workflow modes", async () => {
     const { container } = await renderApp();
     const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
     const completed = agent.querySelector<HTMLElement>(".rho-agent-turn-completed")!;
     expect(completed.querySelector(":scope > header > code")).toBeNull();
     expect(completed.querySelector(":scope > header > .rho-agent-turn-status")).toBeNull();
     expect(completed.querySelector(".rho-agent-turn-meta summary")?.textContent).toBe("Details");
-    expect(agent.querySelector(".rho-agent-auto-approve")).toBeNull();
-    expect(agent.querySelector(".rho-agent-mode-hint")?.textContent).toBe("Ask about this project");
-
-    const actButton = [...agent.querySelectorAll<HTMLButtonElement>(".rho-agent-mode button")]
-      .find((button) => button.textContent === "act")!;
-    await act(async () => {
-      actButton.click();
-      await settle();
-    });
+    expect(agent.querySelector(".rho-agent-mode")).toBeNull();
     expect(agent.querySelector(".rho-agent-auto-approve")?.textContent)
       .toContain("Auto-approve project tools for this conversation");
-    expect(agent.querySelector(".rho-agent-mode-hint")?.textContent).toBe("Work with project tools");
-
-    const askButton = [...agent.querySelectorAll<HTMLButtonElement>(".rho-agent-mode button")]
-      .find((button) => button.textContent === "ask")!;
-    await act(async () => {
-      askButton.click();
-      await settle();
-    });
-    expect(agent.querySelector(".rho-agent-auto-approve")).toBeNull();
+    expect(agent.querySelector(".rho-agent-mode-hint")?.textContent)
+      .toBe("Observe → plan → request effect → re-observe");
+    expect(agent.querySelector(".rho-agent-overview")?.textContent)
+      .toContain("Goal-driven scientific work");
   });
 
   it("makes read-only Toolchain Doctor the primary Environment view", async () => {

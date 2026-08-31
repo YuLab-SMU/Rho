@@ -1,0 +1,49 @@
+{
+  "schema": "rho.fuzz.report.v1",
+  "profile": "ci_short",
+  "sanitizer": "address",
+  "effect_ports_available": false,
+  "targets": [
+    {
+      "target": "acp_frame",
+      "passed": true,
+      "status": 0,
+      "runs": 2000,
+      "max_time_seconds": 30,
+      "max_length": 262145,
+      "elapsed_ms": 30276,
+      "crash_artifacts": []
+    },
+    {
+      "target": "patch_manifest",
+      "passed": true,
+      "status": 0,
+      "runs": 2000,
+      "max_time_seconds": 30,
+      "max_length": 524289,
+      "elapsed_ms": 925,
+      "crash_artifacts": []
+    },
+    {
+      "target": "execution_spec",
+      "passed": true,
+      "status": 0,
+      "runs": 2000,
+      "max_time_seconds": 30,
+      "max_length": 524289,
+      "elapsed_ms": 1024,
+      "crash_artifacts": []
+    },
+    {
+      "target": "canonical_event",
+      "passed": true,
+      "status": 0,
+      "runs": 2000,
+      "max_time_seconds": 30,
+      "max_length": 1048576,
+      "elapsed_ms": 7517,
+      "crash_artifacts": []
+    }
+  ],
+  "passed": true
+}

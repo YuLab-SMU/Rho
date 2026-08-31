@@ -1,0 +1,29 @@
+{
+  "schema": "rho.release.clean-snapshot-gate.v1",
+  "result": "pass",
+  "temporary_commit": "e8ec2eab73421ef7ef6f5e4c1c2b39d9f4fc1dcb",
+  "tracked_source_files": 1670,
+  "clean_status": true,
+  "checks": [
+    {
+      "name": "rust_workspace",
+      "passed": true
+    },
+    {
+      "name": "frontend",
+      "passed": true
+    },
+    {
+      "name": "r_runtimes",
+      "passed": true
+    },
+    {
+      "name": "governance",
+      "passed": true
+    },
+    {
+      "name": "candidate",
+      "passed": true
+    }
+  ]
+}

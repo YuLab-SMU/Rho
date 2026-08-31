@@ -3,11 +3,11 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use rho_plugin_dev::package_cache::PluginPackageCache;
 use rho_plugin_dev::{
     build_project, check_project, compare_component, smoke_command, smoke_surface, smoke_tool,
     smoke_viewer, snapshot_component,
 };
-use rho_server::plugin_package_cache::PluginPackageCache;
 
 const PLUGIN_ID: &str = "org.yulab.rho.local-hello";
 const COMMAND_ID: &str = "ui.command.local_hello";

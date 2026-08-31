@@ -1,0 +1,17 @@
+[package]
+name = "rho-secret-broker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rho-protocol = { path = "../rho-protocol" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

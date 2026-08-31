@@ -1,0 +1,1 @@
+ACP coverage-guided target: `../../../fuzz/fuzz_targets/acp_frame.rs`; seeds come from `tests/transcripts/`. The target invokes only the bounded codec and has no Executor, secret, network, or Store port.

@@ -1,0 +1,52 @@
+{
+  "schema": "rho.control-plane.external-observer-golden.v1",
+  "scenario_id": "external-observer",
+  "provider": {
+    "name": "rho-observer-acp",
+    "version": "1.2.3",
+    "protocol": "1",
+    "executable": "test/control-plane/providers/rho-observer-acp-1.2.3.mjs",
+    "capabilities": [
+      "workspace.inspect",
+      "workspace.inspect_object",
+      "snapshot.read",
+      "history.errors"
+    ]
+  },
+  "goal": "Inspect differential-expression result at the admitted Workspace revision",
+  "logical_session_id": "session_external_observer",
+  "workspace_revision": {
+    "workspace_id": "workspace_main",
+    "kernel_instance_id": "kernel_a",
+    "state_revision": 843,
+    "project_revision": 15
+  },
+  "expected_transcript_types": ["message_delta", "tool_request", "terminal"],
+  "attacks": [
+    { "capability": "workspace.run_r", "expected": "external_observer_read_only" },
+    { "capability": "project.apply_patch", "expected": "external_observer_read_only" },
+    { "capability": "shell.execute", "expected": "external_observer_unknown_capability" },
+    { "capability": "secret.resolve", "expected": "external_observer_unknown_capability" },
+    { "capability": "network.fetch", "expected": "external_observer_read_only" },
+    { "capability": "host.filesystem", "expected": "external_observer_unknown_capability" }
+  ],
+  "failure_matrix": [
+    "malformed_frame",
+    "slow_stream",
+    "duplicate_terminal",
+    "provider_crash",
+    "cancel_resume_race",
+    "close_race",
+    "provider_switch"
+  ],
+  "expected": {
+    "read_only": true,
+    "mutation_side_effect_count": 0,
+    "raw_path_exposed": false,
+    "workspace_socket_exposed": false,
+    "general_environment_exposed": false,
+    "logical_session_recovered": true,
+    "control_plane_truth_changed_by_crash": false,
+    "provider_special_case_in_workbench_schema": false
+  }
+}

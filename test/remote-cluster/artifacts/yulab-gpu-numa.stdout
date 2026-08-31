@@ -1,0 +1,11 @@
+gnode01
+CUDA_VISIBLE_DEVICES=0
+NVIDIA A100-SXM4-80GB, GPU-1519c32a-2977-edba-222a-a01c0278fd08
+NVIDIA A100-SXM4-80GB, GPU-f12eaccd-8c93-8511-83b4-44df940deacf
+NVIDIA A100 80GB PCIe, GPU-03009fb2-dbf1-f2c0-82ff-5010c998d7fe
+policy: default
+preferred node: current
+physcpubind: 2
+cpubind: 0
+nodebind: 0
+membind: 0 1

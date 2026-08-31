@@ -1,30 +1,33 @@
 # R runtimes
 
-Rho uses two separate R roles.
+Rho has one authoritative interactive R role and one non-authoritative
+first-party Provider adapter.
 
 ## Workspace R
 
-Ark hosts the persistent Workspace R session. `rho-kernel` speaks the kernel
-protocol, while the server workspace lane and desktop runtime commands manage
-identity, execution ordering, interruption, and output projection.
+The Workspace bridge is owned by `rho-workspace` and `r/rho.bridge`. Every
+request binds project, Workspace, kernel instance, expected state/project
+revision, execution, operation, and Broker lease. Mutation concurrency is one;
+while busy, callers receive only bounded status/stream observations. R errors
+are terminal observations rather than rollback claims, and arbitrary or
+uncertain evaluation advances revision truth as required.
 
-`r/rho.bridge` is loaded into that session. It provides bounded helpers for
-execution, inspection, completion, formatting, linting, package/environment
-queries, and scientific targets. Callers pass an explicit project root when a
-result is project-owned.
+Bridge helpers receive the normalized project root explicitly. Output,
+conditions, and object summaries have byte/item limits. Project file mutation
+is not a Workspace side channel; it uses the sandbox patch and Broker commit
+path.
 
-## Agent R
+## First-party Provider adapter
 
-`r/rho.agent` is a separate process adapter around `aisdk`. It exchanges
-authenticated framed messages through `rho-agent-transport` and the server
-Agent coordinator. The Rust side owns admission, project/revision context,
-approvals, file proposals, persistence, and redacted public outcomes.
+`r/rho.agent` contains bounded translation helpers for the first-party aisdk
+adapter. It maps visible deltas, provider plans, canonical capability requests,
+and terminal events. Private reasoning is discarded. Child environment keys
+are an exact allowlist supplied by the Secret Broker.
 
-The two roles do not share process authority: Agent orchestration can request
-work, but Workspace R remains the executor for the live scientific session.
-`present_in_studio` is a pure Agent tool that emits a bounded declarative
-handoff referencing committed result identities. It does not mutate UI,
-scientific state, or Vibe content; the desktop validates and applies the
-handoff through its Surface, Studio, and profile owners after the turn
-completes. Package APIs are documented by their `DESCRIPTION`, `NAMESPACE`, and
-generated Rd files beside the source.
+Provider lifecycle, logical sessions, cancellation, quotas, and event
+normalization are owned by `rho-agent-host`; effects still enter
+`rho-control-plane`. The R adapter has no Store, Workspace mutation, project
+path, approval, or secret-resolution handle.
+
+Package APIs are defined by `DESCRIPTION`, `NAMESPACE`, source, and adjacent
+tests.

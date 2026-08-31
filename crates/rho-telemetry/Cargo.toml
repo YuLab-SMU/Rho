@@ -1,0 +1,12 @@
+[package]
+name = "rho-telemetry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rho-protocol = { path = "../rho-protocol" }
+serde.workspace = true
+thiserror.workspace = true

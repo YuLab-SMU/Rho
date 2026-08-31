@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
@@ -20,9 +22,11 @@ mod artifact;
 mod artifact_repository;
 mod audit;
 mod audit_repository;
+pub mod checkpoints;
 mod compare;
 mod environment;
 mod environment_repository;
+pub mod events;
 mod evidence;
 mod executor;
 mod migration;
@@ -33,12 +37,18 @@ mod plugin_permission;
 mod plugin_permission_service;
 mod project;
 mod project_transition_repository;
+pub mod projections;
+pub mod provider_sessions;
 mod query;
+pub mod revisions;
 mod run;
 mod run_repository;
 mod runtime_output;
 mod runtime_output_contract;
 mod runtime_output_repository;
+mod semantic_schema;
+pub mod transactions;
+pub mod verification;
 mod workbench;
 
 pub use agent::{
@@ -57,6 +67,7 @@ pub use artifact_repository::{
 };
 pub use audit::*;
 pub use audit_repository::{AuditRepository, AuditRepositoryError};
+pub use checkpoints::*;
 pub use compare::{
     CompareField, CompareFieldEntry, CompareRunsResponse, CompareSection, CompareSummary,
 };
@@ -94,7 +105,9 @@ pub use project::{
     PlotPayloadPruneResult, ProjectRetentionSummary, RetentionPolicy, RetentionScopeSummary,
 };
 pub use project_transition_repository::{ProjectTransitionRepository, ProjectTransitionSnapshot};
+pub use provider_sessions::*;
 pub use query::ProjectQueryService;
+pub use revisions::*;
 pub use run::{ProblemSummary, RunDetail, RunDraft, RunErrorRange, RunFinish, RunSummary};
 pub use run_repository::{RunCancelOutcome, RunRepository};
 pub use runtime_output::{
@@ -110,6 +123,9 @@ pub use runtime_output_contract::{
     RuntimeOutputReferenceKind, RuntimeOutputState, RuntimeOutputStorageKind,
 };
 pub use runtime_output_repository::{RuntimeOutputPolicySnapshot, RuntimeOutputRepository};
+pub use semantic_schema::*;
+pub use transactions::*;
+pub use verification::*;
 
 pub fn normalize_project_root(root: &str) -> String {
     let normalized = root.replace('\\', "/");

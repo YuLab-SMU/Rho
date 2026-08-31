@@ -147,11 +147,7 @@ jobs:
           Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
           Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
           npm ci --prefix desktop
-          npm --prefix desktop run rsr:check
-          Get-ChildItem -LiteralPath scripts -Filter "test-*.mjs" | Sort-Object Name | ForEach-Object {
-            & node $_.FullName
-            if ($LASTEXITCODE -ne 0) { throw "Failed deterministic test: $($_.Name)" }
-          }
+          npm --prefix desktop run rsr:release
 
       - name: Build and smoke-test unsigned Windows executable
         shell: pwsh
@@ -972,8 +968,7 @@ jobs:
           Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
           Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
           npm ci --prefix desktop
-          npm --prefix desktop run rsr:check
-          for test_script in scripts/test-*.mjs; do node "$test_script"; done
+          npm --prefix desktop run rsr:release
 
       - name: Import temporary Developer ID credentials
         shell: bash
@@ -1497,8 +1492,7 @@ jobs:
           Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
           Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
           npm ci --prefix desktop
-          npm --prefix desktop run rsr:check
-          for test_script in scripts/test-*.mjs; do node "$test_script"; done
+          npm --prefix desktop run rsr:release
 
       - name: Build AppRun-patched and final-signed Linux AppImage
         id: build

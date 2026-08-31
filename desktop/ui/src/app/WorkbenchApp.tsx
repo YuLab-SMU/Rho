@@ -972,7 +972,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         }
       : null;
     const defaultViewState = definition.surface_id === "rho.agent"
-      ? { conversation_id: null, mode: "ask", composer: "", auto_approve: false }
+      ? { conversation_id: null, mode: "act", composer: "", auto_approve: false }
       : definition.surface_id === "rho.console"
         ? { draft: "", history: [], history_cursor: null, filter: "", scroll_top: 0, outputs: [] }
         : {};
@@ -1491,7 +1491,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         const conversation = await pluginTransport.createAgentConversation();
         await openFactory(factory, {
           conversation_id: conversation.conversation_id,
-          mode: "ask",
+          mode: "act",
           composer: "",
           auto_approve: false,
         }, lease);

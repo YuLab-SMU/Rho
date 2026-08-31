@@ -1,0 +1,78 @@
+{
+  "schema": "rho.control-plane.scenario.v1",
+  "scenario_id": "golden_path_skeleton",
+  "status": "runnable",
+  "determinism": {
+    "fake_clock": { "base_unix_ms": 1780000000000, "tick_ms": 50 },
+    "deterministic_ids": {
+      "operation_id": "operation_golden_path",
+      "correlation_id": "correlation_golden_path",
+      "trace_id": "trace_golden_path"
+    },
+    "forbidden": ["sleep", "random_port", "real_cloud_provider"]
+  },
+  "provider_transcript": [
+    "message_delta",
+    "plan_replaced",
+    "capability_requested",
+    "turn_completed"
+  ],
+  "probes": {
+    "workspace": ["sce@842/15", "de_result@843/15"],
+    "executor": ["job_workspace_run_1:succeeded"],
+    "store_snapshot": "machine_comparable_json"
+  },
+  "steps": [
+    "goal_submitted",
+    "observe",
+    "plan",
+    "approval_requested",
+    "execute",
+    "revision_transition",
+    "reobserve",
+    "artifact_committed",
+    "crash_injected",
+    "recover"
+  ],
+  "fault_hooks": [
+    { "boundary": "durable_append", "timing": "before" },
+    { "boundary": "durable_append", "timing": "after" },
+    { "boundary": "projection_commit", "timing": "before" },
+    { "boundary": "projection_commit", "timing": "after" },
+    { "boundary": "blob_rename", "timing": "before" },
+    { "boundary": "blob_rename", "timing": "after" },
+    { "boundary": "process_spawn", "timing": "before" },
+    { "boundary": "process_spawn", "timing": "after" },
+    { "boundary": "submit_ack", "timing": "before" },
+    { "boundary": "submit_ack", "timing": "after" },
+    { "boundary": "stream_cursor", "timing": "before" },
+    { "boundary": "stream_cursor", "timing": "after" }
+  ],
+  "adversarial_fixtures": [
+    {
+      "scenario_id": "malicious_project",
+      "status": "expected_failure",
+      "skip_reason": "fixture declared before implementation package owns adapter behavior"
+    },
+    {
+      "scenario_id": "stale_observation",
+      "status": "expected_failure",
+      "skip_reason": "fixture declared before implementation package owns adapter behavior"
+    },
+    {
+      "scenario_id": "duplicate_operation",
+      "status": "expected_failure",
+      "skip_reason": "fixture declared before implementation package owns adapter behavior"
+    },
+    {
+      "scenario_id": "slow_consumer",
+      "status": "expected_failure",
+      "skip_reason": "fixture declared before implementation package owns adapter behavior"
+    },
+    {
+      "scenario_id": "malformed_frame",
+      "status": "expected_failure",
+      "skip_reason": "fixture declared before implementation package owns adapter behavior"
+    }
+  ]
+}

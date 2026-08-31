@@ -1,0 +1,28 @@
+name: Rho parser fuzz
+
+on:
+  pull_request:
+    paths:
+      - "fuzz/**"
+      - "crates/rho-agent-host/src/protocol/**"
+      - "crates/rho-protocol/src/**"
+      - "crates/rho-sandbox/src/**"
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - run: cargo install cargo-fuzz --locked
+      - name: Bounded parser fuzz
+        env:
+          RHO_FUZZ_LONG: ${{ github.event_name == 'schedule' && '1' || '0' }}
+        run: node scripts/run-fuzz-targets.mjs

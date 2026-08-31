@@ -1,0 +1,71 @@
+{
+  "schema": "rho.control-plane.final-golden.v1",
+  "result": "pass",
+  "path": [
+    "goal",
+    "autonomous_agent",
+    "revision_bound_observation",
+    "policy_approval",
+    "workspace_or_job_execution",
+    "revision_artifact_provenance",
+    "crash_reconnect_reconcile",
+    "provider_switch_same_truth"
+  ],
+  "authoritative_truth": {
+    "workspace_revision": {
+      "state_revision": 843,
+      "project_revision": 15
+    },
+    "controlled_project_revision": 5,
+    "local_job_contract": {
+      "job_survives_agent_or_renderer_exit": true,
+      "plan_or_provider_switch_changes_job_truth": false,
+      "cancel_requested_distinct_from_confirmed": true,
+      "missing_process_guessed_failed": false,
+      "non_idempotent_unknown_replayed": false,
+      "artifact_open_before_cas_commit": false,
+      "required_artifacts_gate_product_success": true,
+      "interactive_workspace_revision_changed": false
+    },
+    "remote_scheduler_jobs": [
+      {
+        "id": "normal",
+        "job_id": "28655",
+        "state": "COMPLETED",
+        "node": "cnode01",
+        "spec_digest": "sha256:023dbcd2e1e2a859c4353f5a1530597a7ea17783c98e458fa6bb42433ffae662"
+      },
+      {
+        "id": "failure",
+        "job_id": "28656",
+        "state": "FAILED",
+        "node": "cnode01",
+        "spec_digest": "sha256:95c485c58cc6892e85d212eb9eb3c18d8ac352b7f4ef98f60f69e5c8b3e3bba2"
+      },
+      {
+        "id": "timeout",
+        "job_id": "28657",
+        "state": "TIMEOUT",
+        "node": "cnode01",
+        "spec_digest": "sha256:23e67186b40d2a51183985a4de9835ecd17c5ff79004ed3c3ae951717c729260"
+      },
+      {
+        "id": "gpu_numa",
+        "job_id": "28658",
+        "state": "COMPLETED",
+        "node": "gnode01",
+        "spec_digest": "sha256:685af2057ec1c4e1c2a3677204ba8c91a3e682eba6105e13d7d80156378c3fce"
+      }
+    ],
+    "artifact_digest": "sha256:7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"
+  },
+  "provider_switch": {
+    "first_party": "pass",
+    "external_observer": "pass",
+    "schema_changed": false,
+    "authority_changed": false
+  },
+  "chaos_cases": 10,
+  "security_cases": 14,
+  "errors": []
+}

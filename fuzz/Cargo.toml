@@ -1,0 +1,45 @@
+[package]
+name = "rho-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rho-agent-host = { path = "../crates/rho-agent-host" }
+rho-protocol = { path = "../crates/rho-protocol" }
+serde_json = "1.0"
+
+[[bin]]
+name = "acp_frame"
+path = "fuzz_targets/acp_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "patch_manifest"
+path = "fuzz_targets/patch_manifest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "execution_spec"
+path = "fuzz_targets/execution_spec.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "canonical_event"
+path = "fuzz_targets/canonical_event.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]

@@ -2,7 +2,7 @@
 
 // Two-speed local validation for Rho development:
 // - quick: explicit focused UI/Rust checks for the implementation loop;
-// - rsr-final: the existing RSR matrix split into resumable named gates.
+// - rsr-final: the pre-handoff RSR matrix split into resumable named gates.
 // Final evidence is reusable only while the repository fingerprint and gate
 // command are unchanged. State lives under ignored target/.
 
@@ -49,12 +49,16 @@ function sha256(value) {
 
 export function repositoryFingerprint(root) {
   const hash = createHash("sha256");
-  hash.update("rho-dev-checkpoint-v2\0");
+  hash.update("rho-dev-checkpoint-v3\0");
   const files = commandOutput(
     "git",
     ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
     root,
-  ).split("\0").filter(Boolean).sort();
+  ).split("\0")
+    .filter(Boolean)
+    .filter((relative) => !relative.split("/").includes("target"))
+    .filter((relative) => !relative.startsWith("desktop/dist/"))
+    .sort();
   for (const relative of files) {
     const absolute = path.join(root, relative);
     hash.update(`path\0${relative}\0`);
@@ -75,15 +79,15 @@ export function repositoryFingerprint(root) {
   return hash.digest("hex");
 }
 
-export function parseRsrCheckScripts(packageJson) {
-  const command = packageJson?.scripts?.["rsr:check"];
+export function parseRsrCheckScripts(packageJson, scriptName = "rsr:check") {
+  const command = packageJson?.scripts?.[scriptName];
   if (typeof command !== "string" || command.trim() === "") {
-    throw new CheckpointError("desktop/package.json must define a non-empty rsr:check script");
+    throw new CheckpointError(`desktop/package.json must define a non-empty ${scriptName} script`);
   }
   return command.split(/\s*&&\s*/u).map((segment) => {
     const match = /^npm run ([A-Za-z0-9:_-]+)$/u.exec(segment.trim());
     if (match == null) {
-      throw new CheckpointError(`unsupported rsr:check segment: ${segment.trim()}`);
+      throw new CheckpointError(`unsupported ${scriptName} segment: ${segment.trim()}`);
     }
     return match[1];
   });
@@ -95,7 +99,7 @@ function gate(name, program, args) {
 
 export function buildRsrGates(root, { stableUi = false } = {}) {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "desktop", "package.json"), "utf8"));
-  const gates = parseRsrCheckScripts(packageJson).map((script) => {
+  const gates = parseRsrCheckScripts(packageJson, "rsr:check:full").map((script) => {
     const args = ["--prefix", "desktop", "run", script];
     if (stableUi && script === "rsr:test") args.push("--", "--maxWorkers=1");
     return gate(script, "npm", args);
@@ -109,7 +113,7 @@ export function commandDigest(item) {
 }
 
 export function planGates(gates, state, fingerprint) {
-  const reusable = state?.schema_version === 2 && state.repository_fingerprint === fingerprint;
+  const reusable = state?.schema_version === 3 && state.repository_fingerprint === fingerprint;
   return gates.map((item) => {
     const digest = commandDigest(item);
     const completed = reusable && state.completed?.[item.name]?.command_sha256 === digest;
@@ -206,7 +210,7 @@ function writeState(root, state) {
 
 function freshState(fingerprint) {
   return {
-    schema_version: 2,
+    schema_version: 3,
     repository_fingerprint: fingerprint,
     started_at: new Date().toISOString(),
     completed: {},
@@ -239,7 +243,7 @@ function runQuick(root, options) {
 function runRsrFinal(root, options) {
   const fingerprint = repositoryFingerprint(root);
   const previous = loadState(root);
-  const state = previous?.schema_version === 2 && previous.repository_fingerprint === fingerprint
+  const state = previous?.schema_version === 3 && previous.repository_fingerprint === fingerprint
     ? previous
     : freshState(fingerprint);
   if (previous != null && previous.repository_fingerprint !== fingerprint) {
@@ -300,8 +304,9 @@ Quick selectors:
   --cargo-check <package>           Run cargo check for one package (repeatable)
   --cargo-test <package>[=<filter>] Run a focused Cargo test (repeatable)
 
-rsr-final resumes successful rsr:check gates only for the exact unchanged
-repository snapshot. --stable-ui serializes the broad Vitest gate.`;
+rsr-final resumes successful rsr:check:full gates only for the exact unchanged
+source snapshot. Ignored build artifacts do not invalidate evidence;
+--stable-ui serializes the broad Vitest gate.`;
 }
 
 function parseArguments(argv) {

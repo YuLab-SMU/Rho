@@ -1342,13 +1342,6 @@
     background: var(--rho-paper);
     box-shadow: 0 -10px 30px rgb(32 36 44 / 7%);
   }
-  .rho-agent-mode { display: flex; gap: var(--rho-space-1); }
-  .rho-agent-mode button { flex: 1 1 0; text-transform: capitalize; }
-  .rho-agent-mode button[aria-pressed="true"] {
-    border-color: var(--rho-inverse);
-    color: var(--rho-on-inverse);
-    background: var(--rho-inverse);
-  }
   .rho-agent-mode-hint { align-self: center; color: var(--rho-muted); font-size: var(--rho-text-caption); text-align: right; }
   .rho-agent-composer textarea {
     grid-column: 1;

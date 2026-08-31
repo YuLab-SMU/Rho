@@ -353,7 +353,7 @@ export function createMockUiKernelTransport(
     resource_binding: null,
     runtime_binding: null,
     view_group_id: null,
-    view_state: { conversation_id: "agent-conversation:mock-shared", mode: "ask", composer: "", auto_approve: false },
+    view_state: { conversation_id: "agent-conversation:mock-shared", mode: "act", composer: "", auto_approve: false },
     lifecycle_state: "active",
   };
   (surfaces.catalog.instances as unknown as SurfaceInstance[]).push(mockAgentInstance);
@@ -909,7 +909,7 @@ export function createMockUiKernelTransport(
     turn_count: 1,
     status: "completed",
     latest_turn_id: "agent-turn:mock-1",
-    latest_mode: "ask",
+    latest_mode: "act",
     latest_prompt_preview: "What should we inspect first?",
     terminal_reason: "completed",
     pending_request_id: null,
@@ -918,7 +918,7 @@ export function createMockUiKernelTransport(
     turn_id: "agent-turn:mock-1",
     conversation_id: "agent-conversation:mock-shared",
     project_root: agentProjectRoot,
-    mode: "ask",
+    mode: "act",
     status: "completed",
     started_at: agentNow,
     finished_at: agentNow,

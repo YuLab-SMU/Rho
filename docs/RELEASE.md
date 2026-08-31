@@ -29,6 +29,14 @@ installing, publishing, and updating are separate observable operations; report
 their actual result and artifact hash. A green source test does not imply an
 installed or published release.
 
+Provider and runner installation is also explicit. Signed metadata binds
+package ID, semver, channel, source origin, size, SHA-256, protocol, capability
+tier, and acknowledged permissions. Bytes stage into a version directory and
+an atomic active pointer changes only after verification. Rollback, mirror,
+truncation, and partial activation fail closed; the prior active version remains
+bootable. A staged runner cannot activate while jobs are running or its protocol
+is incompatible. Runtime job protocols contain no self-update command.
+
 Current legal and trust information lives at the repository root:
 [license](../LICENSE), [third-party notices](../LICENSES.md),
 [privacy](../PRIVACY.md), [security](../SECURITY.md), and

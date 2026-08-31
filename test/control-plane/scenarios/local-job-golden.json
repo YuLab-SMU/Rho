@@ -1,0 +1,30 @@
+{
+  "schema": "rho.control-plane.local-job.v1",
+  "scenario_id": "local-job",
+  "matrix": [
+    "local_success",
+    "local_nonzero_failure",
+    "local_signal",
+    "local_timeout",
+    "local_cancel_tree",
+    "local_output_flood",
+    "crash_after_intent",
+    "crash_after_spawn",
+    "crash_after_handle",
+    "crash_after_exit",
+    "crash_during_collect",
+    "restart_reconcile",
+    "oci_success_contract",
+    "oci_daemon_disconnect"
+  ],
+  "expected": {
+    "job_survives_agent_or_renderer_exit": true,
+    "plan_or_provider_switch_changes_job_truth": false,
+    "cancel_requested_distinct_from_confirmed": true,
+    "missing_process_guessed_failed": false,
+    "non_idempotent_unknown_replayed": false,
+    "artifact_open_before_cas_commit": false,
+    "required_artifacts_gate_product_success": true,
+    "interactive_workspace_revision_changed": false
+  }
+}

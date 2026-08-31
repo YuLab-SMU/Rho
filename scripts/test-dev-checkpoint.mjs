@@ -38,10 +38,13 @@ try {
   git(temporary, ["init", "-b", "main"]);
   git(temporary, ["config", "user.name", "Rho checkpoint fixture"]);
   git(temporary, ["config", "user.email", "rho-fixture@example.invalid"]);
-  write(temporary, ".gitignore", "/target/\n");
+  write(temporary, ".gitignore", "target/\n");
   write(temporary, "tracked.txt", "baseline\n");
   write(temporary, "desktop/package.json", JSON.stringify({
-    scripts: { "rsr:check": "npm run rsr:typecheck && npm run rsr:test && npm run rsr:build" },
+    scripts: {
+      "rsr:check": "npm run rsr:typecheck && npm run rsr:test:fast",
+      "rsr:check:full": "npm run rsr:typecheck && npm run rsr:test && npm run rsr:build",
+    },
   }));
   write(temporary, "desktop/ui/src/example.test.ts", "export {};\n");
   git(temporary, ["add", "."]);
@@ -63,7 +66,12 @@ try {
   assert.equal(repositoryFingerprint(temporary), baseline, "fingerprints describe content, not commit history");
 
   write(temporary, "target/ignored.txt", "ignored\n");
-  assert.equal(repositoryFingerprint(temporary), baseline, "ignored evidence must not invalidate a checkpoint");
+  write(temporary, "test/probe/target/release/probe", "nested ignored artifact\n");
+  assert.equal(
+    repositoryFingerprint(temporary),
+    baseline,
+    "root and nested build artifacts must not invalidate a checkpoint",
+  );
   write(temporary, "tracked.txt", "changed\n");
   assert.notEqual(repositoryFingerprint(temporary), baseline, "tracked changes invalidate a checkpoint");
   write(temporary, "tracked.txt", "baseline\n");
@@ -82,7 +90,7 @@ try {
   assert.equal(commandDigest(parallel[2]), commandDigest(stable[2]));
 
   const state = {
-    schema_version: 2,
+    schema_version: 3,
     repository_fingerprint: baseline,
     completed: Object.fromEntries(parallel.map((item) => [
       item.name,

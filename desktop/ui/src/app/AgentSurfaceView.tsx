@@ -149,12 +149,13 @@ function initialAgentSurfaceState(instance: SurfaceInstance): AgentSurfaceViewSt
   const candidate = typeof instance.view_state === "object" && instance.view_state != null
     ? instance.view_state as Record<string, unknown>
     : {};
-  const mode = candidate.mode;
   return {
     conversation_id: typeof candidate.conversation_id === "string"
       ? candidate.conversation_id
       : null,
-    mode: mode === "plan" || mode === "act" ? mode : "ask",
+    // One autonomous goal loop replaces the former user-selected Ask/Plan/Act modes.
+    // The legacy transport still calls this value `act` until its wire contract is retired.
+    mode: "act",
     composer: typeof candidate.composer === "string" ? candidate.composer : "",
     auto_approve: candidate.auto_approve === true,
     file_decisions: typeof candidate.file_decisions === "object" && candidate.file_decisions != null
@@ -194,12 +195,6 @@ function agentErrorMessage(error: unknown): string {
     ? error.message
     : "The conversation list could not be refreshed.";
 }
-
-const AGENT_MODE_HINTS: Readonly<Record<AgentMode, string>> = {
-  ask: "Ask about this project",
-  plan: "Shape a reviewable approach",
-  act: "Work with project tools",
-};
 
 const AGENT_SUGGESTIONS: readonly string[] = [
   "Summarize this project's structure",
@@ -286,7 +281,7 @@ const POSTURE_OPTIONS = [{
 }, {
   id: "auto",
   label: "Auto-approve project tools for this conversation",
-  hint: "Applies in Act mode. The broker still evaluates every action and asks when required.",
+  hint: "The Broker still evaluates every effect and asks whenever policy requires it.",
 }] as const;
 export function AgentSurfaceView({
   instance,
@@ -1013,7 +1008,7 @@ export function AgentSurfaceView({
       mode: current.mode,
       task_kind: "agent_turn",
       model_id: null,
-      auto_approve: current.mode === "act" && current.auto_approve,
+      auto_approve: current.auto_approve,
       editor_context: null,
       conversation_id: current.conversation_id,
       runtime_output_context: runtimeSnapshot,
@@ -1227,7 +1222,7 @@ export function AgentSurfaceView({
   const activeProviderId = activeChatModel?.provider_id ?? null;
   const chatReady = chatRoute?.consumer_status === "ready";
   const actReady = actRoute?.consumer_status === "ready";
-  const modeReady = view.mode === "act" ? actReady : chatReady;
+  const modeReady = actReady;
   const switchableModels = (llmSettings?.models ?? [])
     .filter((model) => model.enabled && ["language", "unknown"].includes(model.model_type.value));
   const normalizedModelQuery = modelQuery.trim().toLowerCase();
@@ -1245,7 +1240,7 @@ export function AgentSurfaceView({
     : llmSettings.models.length === 0 ? "Connect a model service to start using Agent."
       : chatRoute?.consumer_status === "needs_credential" ? "Add the Provider API key to use this model."
         : !chatReady ? "Choose a usable chat model in Provider Settings."
-          : view.mode === "act" && !actReady ? "Act needs a model with verified tool calling."
+          : !actReady ? "Autonomous work needs a model with verified tool calling."
             : null;
   const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
   const currentQueue = view.conversation_id == null
@@ -1397,6 +1392,18 @@ export function AgentSurfaceView({
           openModelSettings(activeProviderId, activeChatModelId);
         }}>Models</button>
       </header>
+      <section className="rho-agent-overview" aria-label="Agent status and policy">
+        <div>
+          <span className="rho-agent-section-label">Autonomous Agent</span>
+          <strong>Goal-driven scientific work</strong>
+          <p>Rho observes current context, plans internally, requests governed effects, and re-observes committed results.</p>
+        </div>
+        <dl>
+          <div><dt>Provider</dt><dd>{chatModelLabel}</dd></div>
+          <div><dt>Permission</dt><dd>{postureLabel}</dd></div>
+          <div><dt>State</dt><dd>{activeTurn == null ? "Ready" : agentTurnStatusLabel(activeTurn.status)}</dd></div>
+        </dl>
+      </section>
       {displayMode === "activity" && activeTurn != null && stopActiveTurn != null && (
         <AgentRunningRow
           status={activeTurn.status}
@@ -1407,6 +1414,10 @@ export function AgentSurfaceView({
       )}
       {displayMode !== "composer" && (
         <div className="rho-agent-timeline" aria-busy={loading}>
+          <header className="rho-agent-current-work-header">
+            <div><span className="rho-agent-section-label">Current Work</span><strong>{activeTurn == null ? "Conversation" : activeTurn.prompt_preview}</strong></div>
+            <span>{turns.length} {turns.length === 1 ? "turn" : "turns"}</span>
+          </header>
           {loading && <p className="rho-agent-loading">Loading conversation…</p>}
           {!loading && refreshError != null && <div className="rho-agent-empty" role="alert">
             <strong>Conversation refresh failed</strong>
@@ -1425,7 +1436,7 @@ export function AgentSurfaceView({
               ? "Choose No conversation or a listed conversation before reviewing context or sending."
               : view.conversation_id == null
                 ? "Write below and send; Rho opens a conversation and keeps the thread, run state, and decisions here."
-                : "Choose Ask, Plan, or Act, then use the composer below."}</span>
+                : "Describe the goal below; Rho will observe, plan, request effects, and re-observe as needed."}</span>
             <div className="rho-agent-suggestions">
               {AGENT_SUGGESTIONS.map((suggestion) => (
                 <button
@@ -1460,10 +1471,10 @@ export function AgentSurfaceView({
             return (
               <article className={`rho-agent-turn rho-agent-turn-${turn.status}`} data-turn-id={turn.turn_id} key={turn.turn_id}>
                 <header>
-                  <strong>{turn.mode}</strong>
+                  <strong>Agent turn</strong>
                   {turn.status !== "completed" && <span className={`rho-agent-turn-status rho-agent-turn-status-${turn.status}`}>{agentTurnStatusLabel(turn.status)}</span>}
                   <details className="rho-agent-turn-meta">
-                    <summary aria-label={`Details for ${turn.mode} turn`}>Details</summary>
+                    <summary aria-label="Details for Agent turn">Details</summary>
                     <div><span>Status</span><strong>{turn.status}</strong><span>Model</span><code>{turn.model}</code></div>
                   </details>
                 </header>
@@ -1724,33 +1735,14 @@ export function AgentSurfaceView({
                 void submit();
               }
             }}
-            placeholder="Ask Rho about this project…"
+            placeholder="Describe the scientific goal…"
           />
           <div className="rho-agent-context-controls">
             <button type="button" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !modeReady || !view.composer.trim()} onClick={() => void reviewContext()}>
               {contextReviewBusy ? "Reviewing…" : "Review context"}
             </button>
-            <div className="rho-agent-mode" role="group" aria-label="Agent mode">
-              {(["ask", "plan", "act"] as const).map((mode) => (
-                <button
-                  type="button"
-                  aria-pressed={view.mode === mode}
-                  disabled={viewStateWriteBlocked}
-                  key={mode}
-                  title={mode === "act" && !actReady ? "Choose a tool-capable model in Provider Settings" : undefined}
-                  onClick={() => {
-                    if (mode === "act" && !actReady) {
-                      openModelSettings(activeProviderId, activeChatModelId);
-                      return;
-                    }
-                    commitView((current) => ({
-                      ...current,
-                      mode,
-                      auto_approve: mode === "act" ? current.auto_approve : false,
-                    }));
-                  }}
-                >{mode}</button>
-              ))}
+            <div className="rho-agent-autonomous-badge" role="status">
+              Autonomous goal loop
             </div>
             <details className="rho-agent-posture-menu">
               <summary
@@ -1761,21 +1753,7 @@ export function AgentSurfaceView({
                 }}
               ><span>{postureLabel}</span></summary>
               <div role="menu" aria-label="Permission posture choices">
-                {view.mode !== "act" ? (<>
-                  <div className="rho-agent-posture-option">
-                    <button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked="true"
-                      disabled={viewStateWriteBlocked}
-                      onClick={(event) => {
-                        event.currentTarget.closest("details")!.open = false;
-                      }}
-                    >Ask every time</button>
-                    <small>Every tool action waits for your approval.</small>
-                  </div>
-                  <p className="rho-agent-posture-note">Auto-approve is available in Act mode.</p>
-                </>) : POSTURE_OPTIONS.map((option) => {
+                {POSTURE_OPTIONS.map((option) => {
                   const active = (option.id === "auto") === view.auto_approve;
                   return (
                     <div className="rho-agent-posture-option" key={option.id}>
@@ -1796,7 +1774,7 @@ export function AgentSurfaceView({
                 })}
               </div>
             </details>
-            <small className="rho-agent-mode-hint">{AGENT_MODE_HINTS[view.mode]}</small>
+            <small className="rho-agent-mode-hint">Observe → plan → request effect → re-observe</small>
             <details className="rho-agent-model-menu">
               <summary aria-label={`Chat model: ${chatModelLabel}`} aria-busy={modelSwitchBusy} aria-disabled={busy || modelSwitchBusy} onClick={(event) => {
                 if (mutationRef.current != null || busy || modelSwitchBusy) {

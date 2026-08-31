@@ -1,0 +1,314 @@
+@layer surfaces {
+  .rho-agent-vnext {
+    display: grid;
+    gap: var(--rho-space-5);
+    padding: var(--rho-space-5);
+    color: var(--rho-ink);
+    background: var(--rho-canvas);
+    font: var(--rho-weight-regular) var(--rho-text-body) / 1.5 var(--rho-font-ui);
+  }
+
+  .rho-agent-vnext h1,
+  .rho-agent-vnext h2,
+  .rho-agent-vnext p {
+    margin: 0;
+  }
+
+  .rho-agent-vnext h1 {
+    font-size: var(--rho-text-head);
+  }
+
+  .rho-agent-vnext h2 {
+    font-size: var(--rho-text-title);
+  }
+
+  .rho-agent-vnext__goal,
+  .rho-agent-vnext__activity > header,
+  .rho-agent-vnext article > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--rho-space-4);
+  }
+
+  .rho-agent-vnext__goal,
+  .rho-agent-vnext__work,
+  .rho-agent-vnext__activity,
+  .rho-agent-vnext__approvals,
+  .rho-agent-vnext__jobs,
+  .rho-agent-vnext__context,
+  .rho-agent-vnext__outputs {
+    padding: var(--rho-space-4);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-2);
+    background: var(--rho-paper);
+  }
+
+  .rho-agent-vnext__layout {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr);
+    gap: var(--rho-space-5);
+  }
+
+  .rho-agent-vnext__work,
+  .rho-agent-vnext__activity,
+  .rho-agent-vnext__approvals,
+  .rho-agent-vnext__jobs,
+  .rho-agent-vnext__context,
+  .rho-agent-vnext__outputs,
+  .rho-agent-vnext__messages,
+  .rho-agent-vnext__plan ol,
+  .rho-agent-vnext__activity ol {
+    display: grid;
+    gap: var(--rho-space-3);
+  }
+
+  .rho-agent-vnext__activity ol,
+  .rho-agent-vnext__plan ol {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  .rho-agent-vnext__activity {
+    max-block-size: min(42rem, 70vh);
+    overflow: auto;
+  }
+
+  .rho-agent-vnext__message,
+  .rho-agent-vnext__provider,
+  .rho-agent-vnext__plan,
+  .rho-agent-vnext__approval,
+  .rho-agent-vnext__job,
+  .rho-agent-vnext__artifact,
+  .rho-agent-vnext__recovery,
+  .rho-agent-vnext__activity-row {
+    display: grid;
+    gap: var(--rho-space-3);
+    padding: var(--rho-space-4);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-panel);
+    overflow-wrap: anywhere;
+  }
+
+  .rho-agent-vnext__plan li,
+  .rho-agent-vnext__activity-row > div,
+  .rho-agent-vnext__actions,
+  .rho-agent-vnext__approval dl > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--rho-space-3);
+  }
+
+  .rho-agent-vnext__provider,
+  .rho-agent-vnext__provider-features,
+  .rho-agent-vnext__provider dl {
+    display: grid;
+    gap: var(--rho-space-3);
+  }
+
+  .rho-agent-vnext__provider-features label {
+    display: grid;
+    gap: var(--rho-space-2);
+  }
+
+  .rho-agent-vnext__provider-features select,
+  .rho-agent-vnext__provider-features input {
+    min-block-size: var(--rho-target-preferred);
+    padding-inline: var(--rho-space-3);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    color: var(--rho-ink);
+    background: var(--rho-paper);
+    font: inherit;
+  }
+
+  .rho-agent-vnext__provider dl,
+  .rho-agent-vnext__approval dl {
+    display: grid;
+    gap: var(--rho-space-2);
+    margin: 0;
+  }
+
+  .rho-agent-vnext__provider dl > div,
+  .rho-agent-vnext__approval dl > div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--rho-space-3);
+  }
+
+  .rho-agent-vnext__provider dt,
+  .rho-agent-vnext__approval dt {
+    color: var(--rho-muted);
+  }
+
+  .rho-agent-vnext__provider dd,
+  .rho-agent-vnext__approval dd {
+    margin: 0;
+    text-align: end;
+  }
+
+  .rho-agent-vnext__approval pre,
+  .rho-agent-vnext__artifact code {
+    max-inline-size: 100%;
+    padding: var(--rho-space-3);
+    overflow: auto;
+    border-radius: var(--rho-radius-xs);
+    background: var(--rho-fill);
+    font: var(--rho-weight-regular) var(--rho-text-caption) / 1.5 var(--rho-font-mono);
+  }
+
+  .rho-agent-vnext button {
+    min-block-size: var(--rho-target-preferred);
+    padding-inline: var(--rho-space-4);
+    border: var(--rho-border-strong);
+    border-radius: var(--rho-radius-1);
+    color: var(--rho-on-inverse);
+    background: var(--rho-inverse);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .rho-agent-vnext button:focus-visible {
+    outline: var(--rho-focus-ring);
+    outline-offset: var(--rho-space-2);
+    box-shadow: var(--rho-shadow-focus);
+  }
+
+  .rho-agent-vnext__status {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: var(--rho-control-small);
+    padding-inline: var(--rho-space-3);
+    border-radius: var(--rho-radius-pill);
+    color: var(--rho-ink-2);
+    background: var(--rho-fill);
+    font-size: var(--rho-text-caption);
+    white-space: nowrap;
+  }
+
+  .rho-agent-vnext__eyebrow {
+    color: var(--rho-muted);
+    font-size: var(--rho-text-caption);
+    font-weight: var(--rho-weight-semibold);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .rho-agent-vnext__recovery {
+    border-color: var(--rho-warn);
+    background: var(--rho-warn-tint);
+  }
+
+  .rho-agent-vnext__job[data-state="uncertain"],
+  .rho-agent-vnext__job[data-state="reconciling"] {
+    border-color: var(--rho-warn);
+  }
+
+  .rho-agent-vnext__job[data-state="failed"] {
+    border-color: var(--rho-danger);
+    background: var(--rho-danger-tint);
+  }
+
+  .rho-jobs {
+    display: grid;
+    gap: var(--rho-space-4);
+    margin: var(--rho-space-5);
+    padding: var(--rho-space-4);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-2);
+    background: var(--rho-paper);
+  }
+
+  .rho-jobs > header,
+  .rho-jobs__card > header,
+  .rho-jobs__cancel,
+  .rho-jobs__terminal {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--rho-space-3);
+  }
+
+  .rho-jobs__list,
+  .rho-jobs__card,
+  .rho-jobs__logs,
+  .rho-jobs__artifacts {
+    display: grid;
+    gap: var(--rho-space-3);
+  }
+
+  .rho-jobs__card {
+    padding: var(--rho-space-4);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-panel);
+  }
+
+  .rho-jobs__card dl {
+    display: grid;
+    gap: var(--rho-space-2);
+    margin: 0;
+  }
+
+  .rho-jobs__card dl > div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--rho-space-3);
+  }
+
+  .rho-jobs table {
+    inline-size: 100%;
+    border-collapse: collapse;
+    font-size: var(--rho-text-caption);
+  }
+
+  .rho-jobs th,
+  .rho-jobs td {
+    padding: var(--rho-space-2);
+    border-bottom: var(--rho-border);
+    text-align: start;
+  }
+
+  .rho-jobs pre {
+    max-block-size: 12rem;
+    margin: 0;
+    padding: var(--rho-space-3);
+    overflow: auto;
+    border-radius: var(--rho-radius-xs);
+    background: var(--rho-fill);
+    font: var(--rho-weight-regular) var(--rho-text-caption) / 1.5 var(--rho-font-mono);
+  }
+
+  .rho-jobs__card[data-state="uncertain"],
+  .rho-jobs__card[data-state="reconciling"] {
+    border-color: var(--rho-warn);
+  }
+
+  .rho-jobs__card[data-state="failed"] {
+    border-color: var(--rho-danger);
+  }
+
+  @media (max-width: 48rem) {
+    .rho-agent-vnext {
+      padding: var(--rho-space-3);
+    }
+
+    .rho-agent-vnext__layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .rho-agent-vnext__activity {
+      max-block-size: 24rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rho-agent-vnext * {
+      scroll-behavior: auto;
+      transition-duration: 0s;
+    }
+  }
+}

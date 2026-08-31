@@ -1,4 +1,39 @@
+#![forbid(unsafe_code)]
+
+pub mod agent;
+pub mod artifacts;
+pub mod capabilities;
+pub mod data_classification;
+pub mod events;
+pub mod execution;
+pub mod ids;
+pub mod operation;
+pub mod patches;
+pub mod policy;
+pub mod remote_cas;
+pub mod results;
+pub mod revisions;
+pub mod secrets;
+pub mod taxonomy;
+pub mod versioning;
 pub mod workbench;
+
+pub use agent::*;
+pub use artifacts::*;
+pub use capabilities::*;
+pub use data_classification::*;
+pub use events::*;
+pub use execution::*;
+pub use ids::*;
+pub use operation::*;
+pub use patches::*;
+pub use policy::*;
+pub use remote_cas::*;
+pub use results::*;
+pub use revisions::*;
+pub use secrets::*;
+pub use taxonomy::*;
+pub use versioning::*;
 
 use std::io::{Read, Write};
 

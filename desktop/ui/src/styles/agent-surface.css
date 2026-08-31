@@ -27,6 +27,36 @@
   section.rho-agent-surface .rho-agent-model-setup span { color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
   section.rho-agent-surface .rho-agent-model-setup button { flex: 0 0 auto; min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); }
 
+  section.rho-agent-surface .rho-agent-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.42fr);
+    gap: var(--rho-space-5);
+    margin: var(--rho-space-3);
+    padding: var(--rho-space-4);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-2);
+    background: var(--rho-paper);
+    box-shadow: var(--rho-shadow-raised);
+  }
+  section.rho-agent-surface .rho-agent-overview > div { display: grid; align-content: start; gap: var(--rho-space-1); }
+  section.rho-agent-surface .rho-agent-overview > div > strong { font-size: var(--rho-text-head); }
+  section.rho-agent-surface .rho-agent-overview p { max-width: 48rem; margin: 0; color: var(--rho-ink-2); font-size: var(--rho-text-ui); }
+  section.rho-agent-surface .rho-agent-overview dl { display: grid; align-content: start; gap: var(--rho-space-2); margin: 0; }
+  section.rho-agent-surface .rho-agent-overview dl > div { display: flex; justify-content: space-between; gap: var(--rho-space-3); }
+  section.rho-agent-surface .rho-agent-overview dt { color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  section.rho-agent-surface .rho-agent-overview dd { margin: 0; overflow: hidden; font-size: var(--rho-text-caption); font-weight: var(--rho-weight-medium); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+
+  section.rho-agent-surface .rho-agent-current-work-header {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: var(--rho-space-3);
+    padding: var(--rho-space-1) var(--rho-space-1) var(--rho-space-2);
+  }
+  section.rho-agent-surface .rho-agent-current-work-header > div { display: grid; min-width: 0; gap: var(--rho-space-1); }
+  section.rho-agent-surface .rho-agent-current-work-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  section.rho-agent-surface .rho-agent-current-work-header > span { flex: 0 0 auto; color: var(--rho-muted); font-size: var(--rho-text-caption); }
+
   /* --- Timeline: reading order and truthful state copy ----------------------- */
   section.rho-agent-surface .rho-agent-loading { margin: 0; padding: var(--rho-space-2) var(--rho-space-1); color: var(--rho-muted); font-size: var(--rho-text-ui); }
 
@@ -229,24 +259,15 @@
   section.rho-agent-surface .rho-agent-context-controls > button:first-child:not(.rho-primary-action):active:not(:disabled) { background: var(--rho-fill-2); }
   section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { margin-left: auto; font-size: var(--rho-text-ui); }
 
-  /* Segmented Ask/Plan/Act, aligned with the Studio mode-switch language. */
-  section.rho-agent-surface .rho-agent-mode { flex: 0 0 auto; gap: 0; padding: var(--rho-space-1); border: 0; border-radius: var(--rho-radius-2); background: var(--rho-fill); }
-  section.rho-agent-surface .rho-agent-mode button {
+  section.rho-agent-surface .rho-agent-autonomous-badge {
     flex: 0 0 auto;
     min-height: var(--rho-control-small);
     padding: var(--rho-space-1) var(--rho-space-3);
-    border-color: transparent;
-    color: var(--rho-ink-2);
-    background: transparent;
+    border-radius: var(--rho-radius-pill);
+    color: var(--rho-on-inverse);
+    background: var(--rho-inverse);
     font-size: var(--rho-text-caption);
-  }
-  section.rho-agent-surface .rho-agent-mode button:hover:not(:disabled) { border-color: transparent; color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
-  section.rho-agent-surface .rho-agent-mode button[aria-pressed="true"] {
-    border-color: transparent;
-    color: var(--rho-accent-ink);
     font-weight: var(--rho-weight-semibold);
-    background: var(--rho-paper);
-    box-shadow: var(--rho-shadow-raised);
   }
   section.rho-agent-surface .rho-agent-mode-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--rho-muted); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -400,6 +421,7 @@
   /* --- Narrow surfaces -------------------------------------------------------- */
   @container (max-width: 420px) {
     section.rho-agent-surface .rho-agent-toolbar { flex-wrap: wrap; }
+    section.rho-agent-surface .rho-agent-overview { grid-template-columns: minmax(0, 1fr); }
     section.rho-agent-surface .rho-agent-toolbar select { flex: 1 1 100%; }
     section.rho-agent-surface .rho-agent-turn { padding: var(--rho-space-3); }
     section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { margin-left: 0; }

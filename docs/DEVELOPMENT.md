@@ -50,9 +50,43 @@ Prefer one or two short-lived feature worktrees and one integration checkout.
 Checkpoint unfinished work in a clearly named branch before switching tasks;
 never rely on an unexplained dirty directory as the handoff.
 
+## Replacement programs
+
+Large clean replacements keep temporary scope and status with their working
+issue or branch. No replacement ledger is part of the current architecture.
+Once a program closes, delete its temporary dashboard and describe only the
+implementation and executable checks that remain.
+
+## Test tiers
+
+Use the narrowest tier that can falsify the change:
+
+| Tier | Command | Purpose |
+| --- | --- | --- |
+| Focused | `npm --prefix desktop run rsr:test -- <file>` or `cargo test -p <crate> <filter> --locked` | one component, contract, or regression while editing |
+| UI inner loop | `npm --prefix desktop run rsr:check` | type/lint, static binding inventory, transport contracts, and fast unit tests |
+| Desktop contracts | `npm --prefix desktop run rsr:check:contracts` | generated Rust/TypeScript facets and acceptance contracts after an IPC change |
+| Pre-handoff | `npm --prefix desktop run rsr:check:full` | all Vitest suites, generated bindings, governance, and production build |
+| Acceptance | `npm --prefix desktop run rsr:acceptance` | browser, broad interaction, and visual harnesses |
+| Release | `npm --prefix desktop run rsr:release` | pre-handoff plus production/security invariants, acceptance, and release contracts |
+
+`App.test.tsx`, `AgentSurfaceView.test.tsx`, and `src/acceptance/**` are excluded
+from the inner-loop Vitest configuration. They remain available directly and
+run in the pre-handoff tier. Generated binding checks have one fast static
+inventory and one consolidated full gate; the domain-specific scripts remain
+available for focused IPC work. `scripts/dev-checkpoint.mjs rsr-final` resumes
+the pre-handoff gates, not acceptance or release evidence.
+
+Every test has one active reason to exist: invariant, external contract,
+minimal regression, integrated acceptance, or release evidence. A test that
+only proves an old implementation is gone must be promoted to a durable
+invariant or deleted. Do not preserve obsolete interaction flow by bending a
+new architecture around it.
+
 ## Feedback and evidence
 
-Tests should report the smallest useful reproduction. Local ledgers and visual
-artifacts belong under ignored `target/`. A handoff says exactly which commands
-ran and their results; prose never upgrades `not run` into success. Git commits
-record the evolution, so current documentation does not repeat it.
+Tests should report the smallest useful reproduction. Cargo `target/`
+directories at any depth, local ledgers, and visual artifacts are ignored and
+do not participate in checkpoint fingerprints. A handoff says exactly which
+commands ran and their results; prose never upgrades `not run` into success.
+Git commits record the evolution, so current documentation does not repeat it.

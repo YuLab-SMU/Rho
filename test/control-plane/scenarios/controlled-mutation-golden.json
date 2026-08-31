@@ -1,0 +1,45 @@
+{
+  "schema": "rho.control-plane.controlled-mutation.v1",
+  "scenario_id": "controlled-mutation",
+  "security_profile": {
+    "profile_id": "linux-ci-verified-security-profile",
+    "platform": "linux",
+    "provider_id": "provider_external_observer",
+    "provider_executable_digest": "sha256:295bef2269c2c20c7a7b51a21638886a2d5cb0e5d48e6379c21763b888e23787",
+    "required_guarantees": [
+      "filesystem_isolation",
+      "network_deny",
+      "process_tree_control",
+      "memory_limit",
+      "cpu_limit",
+      "process_limit",
+      "handle_isolation"
+    ],
+    "corpus_passed": true
+  },
+  "steps": [
+    "goal_submitted",
+    "observe_project_revision_4",
+    "provider_requests_project_apply_patch",
+    "broker_policy_asks_exact_patch",
+    "user_approves_once",
+    "sandbox_staging_sealed",
+    "journaled_project_commit",
+    "project_revision_5",
+    "agent_reobserves_revision_5",
+    "turn_completed"
+  ],
+  "expected": {
+    "capability_advertised_when_verified": true,
+    "capability_advertised_when_disabled": false,
+    "direct_api_disabled_profile_denied": true,
+    "provider_permission_required_for_authority": false,
+    "broker_approval_required": true,
+    "base_project_revision": 4,
+    "resulting_project_revision": 5,
+    "reobserve_required": true,
+    "authoritative_project_mounted_in_sandbox": false,
+    "host_terminal_available": false,
+    "direct_write_bypass_count": 0
+  }
+}

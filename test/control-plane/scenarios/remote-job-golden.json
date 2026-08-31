@@ -1,0 +1,16 @@
+{
+  "schema": "rho.control-plane.remote-job.v1",
+  "scenario_id": "remote-job",
+  "required_cluster_cases": ["normal", "failure", "timeout", "gpu_numa"],
+  "required_truth": {
+    "two_ssh_sessions": true,
+    "scheduler_accounting_authoritative": true,
+    "output_digest_end_to_end": true,
+    "login_node_computation": false,
+    "remote_database_present": false,
+    "duplicate_submit_effect_count": 0,
+    "disconnect_is_terminal": false,
+    "job_survives_desktop_agent_exit": true,
+    "local_oci_ssh_slurm_ui_schema_same": true
+  }
+}

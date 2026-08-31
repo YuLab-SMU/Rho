@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "execution_id": "execution_golden_v1",
+  "operation_id": "operation_golden_v1",
+  "idempotency_key": "idempotency_operation_golden_v1",
+  "executor": "local_process",
+  "argv": ["Rscript", "analysis.R"],
+  "working_set": {
+    "manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "inputs": [],
+    "relative_working_directory": "analysis"
+  },
+  "environment": {
+    "manifest_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "project_profile_id": "environment_profile_default"
+  },
+  "network": "deny",
+  "resources": {
+    "cpu_cores": 2,
+    "memory_bytes": 1073741824,
+    "wall_time_seconds": 600,
+    "gpu_count": 0,
+    "partition": "cpu",
+    "account": "rho_test"
+  },
+  "expected_outputs": [
+    {"path_hint": "results/summary.json", "required": true}
+  ],
+  "provenance": {
+    "requested_by": "user_main",
+    "capability_id": "execution.run",
+    "policy_decision_id": "policy_decision_golden",
+    "source_revision": "workspace_main/kernel_a/8/3"
+  },
+  "retry_class": "non_idempotent",
+  "prepare_semantics": "safe_to_retry_before_spawn",
+  "submit_semantics": "query_operation_marker_after_ack_loss"
+}
