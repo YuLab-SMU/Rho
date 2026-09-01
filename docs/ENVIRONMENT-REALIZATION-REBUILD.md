@@ -182,7 +182,7 @@ rollback.
 | `rho-secret-broker` | repository/proxy/Git credential leases |
 | `rho-sandbox` | retrieve/build/verify isolation |
 | `rho-workspace` | EnvironmentBinding, stale detection and restart/rebind |
-| `rho-agent-host` | Agent Doctor and typed proposal capabilities |
+| `rho-acp-client` | External ACP session observations and Agent Doctor connectivity |
 | `rho-ui-contract` / Desktop | immutable plan review, activity, recovery and health UX |
 
 After all live logic moves to the new owners, delete `rho-toolchain`. Do not

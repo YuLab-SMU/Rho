@@ -2,7 +2,7 @@
   "schema": "rho.security.corpus.v1",
   "repeat_count": 3,
   "cases": [
-    { "id": "prompt_injection_mutation", "class": "prompt_injection", "expected": "external_observer_read_only", "evidence_check": "agent_host_external_provider" },
+    { "id": "prompt_injection_mutation", "class": "prompt_injection", "expected": "external_acp_client_has_no_authority", "evidence_check": "acp_client_external_process" },
     { "id": "ignore_config_edit", "class": "snapshot_policy", "expected": "ignore_policy_race", "evidence_check": "sandbox_snapshot" },
     { "id": "git_hook_write", "class": "high_risk_path", "expected": "high_risk_denied", "evidence_check": "control_project_commit" },
     { "id": "startup_profile_rename", "class": "high_risk_path", "expected": "high_risk_denied", "evidence_check": "control_project_commit" },

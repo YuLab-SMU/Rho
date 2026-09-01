@@ -12,7 +12,7 @@ Documentation:
 
 Sources:
 
-- `crates/rho-agent-host/**`
+- `crates/rho-acp-client/**`
 - `crates/rho-control-plane/**`
 - `crates/rho-event-hub/**`
 - `crates/rho-telemetry/**`
@@ -20,7 +20,7 @@ Sources:
 
 Checks:
 
-- `rust.agent`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust agent","--","cargo","test","-p","rho-agent-host","-p","rho-control-plane","-p","rho-event-hub","-p","rho-test-support","-p","rho-telemetry","--locked","--","--test-threads=1"]`
+- `rust.agent`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust agent","--","cargo","test","-p","rho-acp-client","-p","rho-control-plane","-p","rho-event-hub","-p","rho-test-support","-p","rho-telemetry","--locked","--","--test-threads=1"]`
 
 ## `desktop`
 

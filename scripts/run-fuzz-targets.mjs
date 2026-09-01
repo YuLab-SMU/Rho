@@ -9,7 +9,6 @@ const long = process.env.RHO_FUZZ_LONG === "1";
 const runs = long ? 100_000 : 2_000;
 const maxTime = long ? 900 : 30;
 const targets = [
-  ["acp_frame", 262_145],
   ["patch_manifest", 524_289],
   ["execution_spec", 524_289],
   ["canonical_event", 1_048_576],

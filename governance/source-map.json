@@ -53,7 +53,7 @@
       "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "120", "--label", "rust architecture", "--", "cargo", "test", "-p", "rho-architecture-tests", "--locked"]
     },
     "rust.agent": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust agent", "--", "cargo", "test", "-p", "rho-agent-host", "-p", "rho-control-plane", "-p", "rho-event-hub", "-p", "rho-test-support", "-p", "rho-telemetry", "--locked", "--", "--test-threads=1"]
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust agent", "--", "cargo", "test", "-p", "rho-acp-client", "-p", "rho-control-plane", "-p", "rho-event-hub", "-p", "rho-test-support", "-p", "rho-telemetry", "--locked", "--", "--test-threads=1"]
     },
     "rust.desktop": {
       "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "600", "--label", "rust desktop", "--", "cargo", "test", "-p", "rho-desktop", "-p", "rho-ui-contract", "--locked"]
@@ -164,7 +164,7 @@
     },
     "agent-runtime": {
       "sources": [
-        "crates/rho-agent-host/**",
+        "crates/rho-acp-client/**",
         "crates/rho-control-plane/**",
         "crates/rho-event-hub/**",
         "crates/rho-test-support/**",

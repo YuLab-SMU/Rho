@@ -22,7 +22,8 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::io::AsyncReadExt;
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
+
+mod transport;
 
 pub const MAX_ACP_EVENT_BYTES: usize = 128 * 1024;
 pub const MAX_ACP_STDERR_BYTES: usize = 16 * 1024;
@@ -200,7 +201,7 @@ pub async fn run_external_acp_turn(spec: AcpProcessSpec, prompt: String) -> Resu
     let event_sink = Arc::clone(&events);
     let text_sink = Arc::clone(&final_text);
     let denied_sink = Arc::clone(&denied);
-    let transport = agent_client_protocol::ByteStreams::new(stdin.compat_write(), stdout.compat());
+    let transport = transport::acp_transport(stdin, stdout);
     let working_directory = spec.sandbox.working_directory.clone();
 
     let turn = Client

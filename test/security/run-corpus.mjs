@@ -42,11 +42,11 @@ for (let repeat = 0; repeat < corpus.repeat_count; repeat += 1) {
 checks.push(run("control-plane", ["test", "-p", "rho-control-plane", "--locked", "--quiet"]));
 checks.push(run("secret-broker", ["test", "-p", "rho-secret-broker", "--locked", "--quiet"]));
 checks.push(
-  run("external-provider", [
+  run("acp-client", [
     "test",
     "-p",
-    "rho-agent-host",
-    "external_provider",
+    "rho-acp-client",
+    "boundary",
     "--locked",
     "--quiet",
   ]),
@@ -85,7 +85,7 @@ for (const name of ["project", "workspace", "database", "cas", "outside"]) {
 if (after.network !== null) errors.push("network_sink_touched");
 
 const evidenceChecks = new Set([
-  "agent_host_external_provider",
+  "acp_client_external_process",
   "sandbox_snapshot",
   "sandbox_snapshot_staging",
   "sandbox_process",

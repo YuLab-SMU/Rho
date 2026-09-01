@@ -35,7 +35,7 @@
       "sha256": "sha256:46c0ac3df8910590fc64ad7123b8b2aaf865dc3fc799c5ddfc774e5160df8580"
     },
     "provider_matrix": {
-      "path": "crates/rho-agent-host/tests/providers/live-matrix.json",
+      "path": "crates/rho-acp-client/tests/providers/live-matrix.json",
       "bytes": 2193,
       "sha256": "sha256:59f5e82b02c9cceb3012f1bc579301f601ec1088452f4a9e7cbf75f8775c4fd2"
     },

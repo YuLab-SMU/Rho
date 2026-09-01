@@ -4156,20 +4156,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-agent-host"
-version = "0.4.1-dev.22"
-dependencies = [
- "rho-control-plane",
- "rho-protocol",
- "semver",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "rho-agent-transport"
 version = "0.4.1-dev.22"
 dependencies = [

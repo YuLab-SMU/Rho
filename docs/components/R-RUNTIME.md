@@ -24,10 +24,10 @@ adapter. It maps visible deltas, provider plans, canonical capability requests,
 and terminal events. Private reasoning is discarded. Child environment keys
 are an exact allowlist supplied by the Secret Broker.
 
-Provider lifecycle, logical sessions, cancellation, quotas, and event
-normalization are owned by `rho-agent-host`; effects still enter
-`rho-control-plane`. The R adapter has no Store, Workspace mutation, project
-path, approval, or secret-resolution handle.
+External Agent lifecycle, model loops, tools, and sessions are not implemented
+by Rho. `rho-acp-client` connects to an installed ACP Agent and projects only
+public protocol events; effects still enter `rho-control-plane`. The R adapter
+is legacy and is removed after the ACP client cutover.
 
 Package APIs are defined by `DESCRIPTION`, `NAMESPACE`, source, and adjacent
 tests.

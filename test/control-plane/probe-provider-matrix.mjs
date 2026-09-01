@@ -1,80 +1,43 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, realpath, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 
 const root = process.cwd();
 const providers = [];
-
-const opencode = await executable("opencode");
-const initialize = JSON.stringify({
-  jsonrpc: "2.0",
-  id: 1,
-  method: "initialize",
-  params: { protocolVersion: 1, clientCapabilities: {} },
-});
-const opencodeProbe = spawnSync(
-  opencode.path,
-  ["acp", "--pure", "--cwd", "/tmp"],
-  { input: `${initialize}\n`, encoding: "utf8", timeout: 15_000 },
-);
-let opencodeInitialize = null;
-try {
-  opencodeInitialize = JSON.parse(opencodeProbe.stdout.trim());
-} catch {}
-providers.push({
-  provider_id: "opencode",
-  executable_name: "opencode",
-  executable_sha256: opencode.digest,
-  version: run(opencode.path, ["--version"]).trim(),
-  protocol: opencodeInitialize?.result?.protocolVersion === 1 ? "acp/1" : "unsupported",
-  live_probe_passed: opencodeProbe.status === 0 && opencodeInitialize?.result?.protocolVersion === 1,
-  support_tier: "observer_only",
-  observed: {
-    streaming: true,
-    plan: false,
-    permission_hint: true,
-    resume: Boolean(opencodeInitialize?.result?.agentCapabilities?.sessionCapabilities?.resume),
-    close: Boolean(opencodeInitialize?.result?.agentCapabilities?.sessionCapabilities?.close),
-    list: Boolean(opencodeInitialize?.result?.agentCapabilities?.sessionCapabilities?.list),
-    config: false,
-    mcp: Boolean(opencodeInitialize?.result?.agentCapabilities?.mcpCapabilities),
-    filesystem: false,
-    terminal: false,
-  },
-});
-
-for (const [providerId, command, commercial] of [
-  ["pi", "pi", false],
-  ["claude_code", "claude", true],
+for (const [providerId, command, args, commercial] of [
+  ["opencode", "opencode", ["acp", "--pure", "--cwd", "/tmp"], false],
+  ["codex_acp", "codex-acp", [], true],
+  ["claude_code_acp", "claude-code-acp", [], true],
 ]) {
   const executableInfo = await executable(command);
-  const help = run(executableInfo.path, ["--help"]);
-  const version = run(executableInfo.path, ["--version"]).trim();
-  const exposesAcp = /\bacp\b/i.test(help) && !/no acp/i.test(help);
+  const initialized = await probeInitialize(executableInfo.path, args);
+  const capabilities = initialized?.result?.agentCapabilities ?? {};
+  const session = capabilities.sessionCapabilities ?? {};
+  const ready = initialized?.result?.protocolVersion === 1;
   providers.push({
     provider_id: providerId,
     executable_name: command,
     executable_sha256: executableInfo.digest,
-    version,
-    protocol: exposesAcp ? "acp/1-unverified" : "unsupported",
-    live_probe_passed: false,
-    support_tier: "unsupported",
+    version: initialized?.result?.agentInfo?.version ?? "unreported",
+    protocol: ready ? "acp/1" : "unsupported",
+    live_probe_passed: ready,
+    support_tier: ready ? "observer_only" : "unsupported",
     commercial,
     observed: {
-      streaming: false,
-      plan: false,
-      permission_hint: false,
-      resume: false,
-      close: false,
-      list: false,
-      config: false,
-      mcp: false,
+      streaming: ready,
+      plan: ready,
+      permission_hint: ready,
+      resume: Boolean(session.resume),
+      close: Boolean(session.close),
+      list: Boolean(session.list),
+      config: Boolean(capabilities.sessionCapabilities),
+      mcp: Boolean(capabilities.mcpCapabilities),
       filesystem: false,
       terminal: false,
     },
-    reason: "No stable local stdio ACP v1 initialize behavior; not exposed to Rho",
+    ...(ready ? {} : { reason: "ACP v1 initialize did not return a valid response" }),
   });
 }
 
@@ -85,11 +48,53 @@ const fixture = {
 };
 const destination = path.join(
   root,
-  "crates/rho-agent-host/tests/providers/live-matrix.json",
+  "crates/rho-acp-client/tests/providers/live-matrix.json",
 );
 await mkdir(path.dirname(destination), { recursive: true });
 await writeFile(destination, `${JSON.stringify(fixture, null, 2)}\n`);
 console.log(`Provider matrix probe passed: ${providers.length} providers; ${destination}`);
+
+async function probeInitialize(command, args) {
+  return await new Promise((resolve) => {
+    const child = spawn(command, args, { stdio: ["pipe", "pipe", "ignore"] });
+    let buffer = "";
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill("SIGTERM");
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), 15_000);
+    child.on("error", () => finish(null));
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      buffer += chunk;
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        try {
+          const message = JSON.parse(line);
+          if (message.id === 1) return finish(message);
+        } catch {}
+      }
+    });
+    child.stdin.end(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: 1,
+        clientCapabilities: {
+          fs: { readTextFile: false, writeTextFile: false },
+          terminal: false,
+        },
+        clientInfo: { name: "rho-acp-probe", version: "1" },
+      },
+    })}\n`);
+  });
+}
 
 async function executable(command) {
   const found = run("which", [command]).trim();

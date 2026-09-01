@@ -76,7 +76,7 @@
     },
     {
       "edge": "ACP -> remote execution",
-      "current_source": "crates/rho-agent-host/src/protocol/acp",
+      "current_source": "crates/rho-acp-client/src",
       "replacement_owner": "rho-runner over structured ExecutionSpec via rho-execution SSH/Slurm adapters",
       "delete_work_package": "P7-01",
       "compatibility_allowed": false

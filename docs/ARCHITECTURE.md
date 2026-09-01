@@ -11,7 +11,7 @@ Tauri admission commands ── rho-control-plane Broker
   │                            ├─ deterministic policy / information flow
   │                            ├─ exact one-use approval leases
   │                            └─ capability registry
-  ├─ rho-agent-host ── first-party adapter or isolated ACP v1 observer
+  ├─ rho-acp-client ── client for external ACP Agents; no Agent implementation
   ├─ rho-workspace ── authenticated serial Workspace R bridge
   ├─ rho-environment ── Runtime / Library / Profile / immutable plan semantics
   ├─ rho-execution ── Local / OCI / SSH runner / Slurm
@@ -64,13 +64,13 @@ remote: framed SSH → digest-pinned rho-runner → Slurm → remote CAS
 
 ## Agent boundary
 
-`rho-agent-host` exposes one canonical Provider contract. The first-party
-adapter and external ACP observer use the same logical session, turn, event,
-and capability shapes. ACP wire DTOs terminate inside
-`protocol/acp/v1`; private reasoning and raw frames do not enter UI or Store.
-External providers are observers unless a platform/provider profile has all
-sandbox guarantees plus a passing security-corpus digest. A Provider switch
-changes model context, not Conversation, Job, Revision, or Artifact identity.
+`rho-acp-client` speaks the standard Agent Client Protocol to external Agents
+such as Codex ACP or Claude Code ACP. Rho does not implement their model loop,
+tool harness, planning, or session runtime. Private reasoning and raw frames do
+not enter UI or Store. External Agents work only inside disposable project
+snapshots; a Provider permission response is never Rho authority. A Provider
+switch changes Agent context, not Conversation, Job, Revision, or Artifact
+identity.
 
 ## Containment and controlled mutation
 
@@ -108,7 +108,7 @@ lifecycle.
 | Semantic events and projections | `crates/rho-store` |
 | Claims, graph links, gaps, traces and snapshots | `crates/rho-evidence-graph` |
 | Capability, policy, Broker, commits | `crates/rho-control-plane` |
-| Provider runtime / ACP / supervision | `crates/rho-agent-host` |
+| External ACP client boundary | `crates/rho-acp-client` |
 | Hot bounded stream | `crates/rho-event-hub` |
 | Workspace R revision bridge | `crates/rho-workspace`, `r/rho.bridge` |
 | Environment realization | `crates/rho-environment`, `r/rho.environment` |

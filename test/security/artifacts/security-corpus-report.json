@@ -32,8 +32,8 @@
     {
       "id": "prompt_injection_mutation",
       "class": "prompt_injection",
-      "expected": "external_observer_read_only",
-      "evidence_check": "agent_host_external_provider",
+      "expected": "external_acp_client_has_no_authority",
+      "evidence_check": "acp_client_external_process",
       "result": "pass",
       "unauthorized_effect_count": 0,
       "security_event_priority": "p0",
@@ -232,7 +232,7 @@
       "status": 0
     },
     {
-      "name": "external-provider",
+      "name": "acp-client",
       "repeat": null,
       "passed": true,
       "status": 0

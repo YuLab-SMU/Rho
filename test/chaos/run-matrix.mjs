@@ -12,7 +12,7 @@ for (const [name, command, args, env = {}] of [
   ["cas_faults", "cargo", ["test", "-p", "rho-artifact-store", "fault", "--locked", "--quiet"]],
   ["runner_failures", "cargo", ["test", "-p", "rho-runner", "failure", "--locked", "--quiet"]],
   ["remote_reconcile", "cargo", ["test", "-p", "rho-execution", "remote_reconcile", "--locked", "--quiet"]],
-  ["provider_matrix", "cargo", ["test", "-p", "rho-agent-host", "provider_matrix", "--locked", "--quiet"]],
+  ["provider_matrix", "cargo", ["test", "-p", "rho-acp-client", "provider_matrix", "--locked", "--quiet"]],
   ["sandbox", "cargo", ["test", "-p", "rho-sandbox", "--locked", "--quiet"]],
   ["frontend", npmCommand(), ["--prefix", "desktop", "run", "rsr:test"]],
   ["first_party", "node", ["test/control-plane/run-golden.mjs", "first-party"], { RHO_GOLDEN_SKIP_BUILD: "1" }],

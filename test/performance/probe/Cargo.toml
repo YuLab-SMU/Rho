@@ -5,7 +5,6 @@ edition = "2024"
 publish = false
 
 [dependencies]
-rho-agent-host = { path = "../../../crates/rho-agent-host" }
 rho-artifact-store = { path = "../../../crates/rho-artifact-store" }
 rho-control-plane = { path = "../../../crates/rho-control-plane" }
 rho-event-hub = { path = "../../../crates/rho-event-hub" }

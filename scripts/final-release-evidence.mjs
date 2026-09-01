@@ -10,7 +10,7 @@ const artifacts = {
   stable_rollback_binary: "target/release/rho-desktop-stable",
   runner_binary: "target/release/rho-runner",
   frontend_manifest: "desktop/dist/asset-manifest.json",
-  provider_matrix: "crates/rho-agent-host/tests/providers/live-matrix.json",
+  provider_matrix: "crates/rho-acp-client/tests/providers/live-matrix.json",
   final_golden: "test/control-plane/artifacts/final-golden-report.json",
   chaos: "test/chaos/artifacts/full-chaos-report.json",
   security: "test/security/artifacts/security-corpus-report.json",

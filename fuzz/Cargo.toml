@@ -9,16 +9,8 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-rho-agent-host = { path = "../crates/rho-agent-host" }
 rho-protocol = { path = "../crates/rho-protocol" }
 serde_json = "1.0"
-
-[[bin]]
-name = "acp_frame"
-path = "fuzz_targets/acp_frame.rs"
-test = false
-doc = false
-bench = false
 
 [[bin]]
 name = "patch_manifest"

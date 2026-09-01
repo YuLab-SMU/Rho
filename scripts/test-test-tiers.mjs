@@ -75,7 +75,7 @@ const sourceMap = validateDocumentationMap(root);
 const checksFor = (file) => documentationImpact(sourceMap, [file]).checks.map(({ id }) => id);
 assert.deepEqual(checksFor("desktop/ui/src/app/App.tsx"), ["frontend"]);
 assert.deepEqual(checksFor("desktop/src-tauri/src/main.rs"), ["frontend.contracts", "rust.desktop"]);
-assert.deepEqual(checksFor("crates/rho-agent-host/src/lib.rs"), ["rust.agent"]);
+assert.deepEqual(checksFor("crates/rho-acp-client/src/lib.rs"), ["rust.agent"]);
 assert.deepEqual(checksFor("crates/rho-execution/src/lib.rs"), ["rust.execution"]);
 
 console.log("Test tiers keep focused feedback separate from integration, acceptance, and release evidence");
