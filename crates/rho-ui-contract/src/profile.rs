@@ -11,7 +11,7 @@ use crate::{
     validate_json_value, validate_label, validate_text, validate_unique,
 };
 
-pub const PROJECT_UI_PROFILE_SCHEMA_VERSION: u16 = 3;
+pub const PROJECT_UI_PROFILE_SCHEMA_VERSION: u16 = 4;
 pub const PROJECT_UI_PROFILE_SNAPSHOT_CONTRACT: &str = "rho.ui.project-profile.snapshot.v1";
 pub const MAX_UI_PROFILE_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_UI_PROFILE_SCENES: usize = 32;

@@ -59,7 +59,7 @@ export type ProjectUiProfile = Omit<
   DeepReadonly<ProjectUiProfileV1>,
   "schema_version"
 > & {
-  readonly schema_version: 3;
+  readonly schema_version: 4;
 };
 
 export type StudioScenePreset = DeepReadonly<StudioScenePresetV1>;
@@ -105,7 +105,7 @@ function checkedProfileSnapshot(snapshot: ProjectUiProfileSnapshotV1): ProjectUi
   if (
     snapshot.contract !== "rho.ui.project-profile.snapshot.v1" ||
     snapshot.contract_major !== 1 ||
-    snapshot.profile.schema_version !== 3
+    snapshot.profile.schema_version !== 4
   ) {
     throw new Error("UI Profile returned an unsupported contract version.");
   }

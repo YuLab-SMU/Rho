@@ -2266,7 +2266,7 @@
     "contract": "rho.ui.project-profile.snapshot.v1",
     "contract_major": 1,
     "profile": {
-      "schema_version": 3,
+      "schema_version": 4,
       "project_id": "project:fixture",
       "revision": 5,
       "active_mode": "studio",

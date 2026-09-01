@@ -580,7 +580,7 @@ fn default_surface_specs(
             instance_id: next_instance_id(),
             surface_id: factory.definition.surface_id.clone(),
             origin: factory.definition.origin.clone(),
-            mode_id: Some(rho_ui_contract::SurfaceModeId::new("packages").unwrap()),
+            mode_id: Some(rho_ui_contract::SurfaceModeId::new("health").unwrap()),
             resource_binding: None,
             runtime_attachment_intent: None,
             view_group_id: None,
@@ -1344,6 +1344,35 @@ mod tests {
     }
 
     #[test]
+    fn default_environment_surface_uses_a_registered_health_mode() {
+        let project = ProjectId::new("project:environment-default").unwrap();
+        let mut environment = factory("rho.environment");
+        environment.definition.modes = ["health", "plans", "activity"]
+            .into_iter()
+            .map(|mode| SurfaceModeV1 {
+                mode_id: rho_ui_contract::SurfaceModeId::new(mode).unwrap(),
+                label: mode.to_string(),
+                interaction_kind: SurfaceInteractionKindV1::ReadOnly,
+            })
+            .collect();
+        let profile =
+            default_profile_seed(&project, &[environment.clone()], &runtimes(&project)).unwrap();
+        let spec = profile
+            .surface_instance_specs
+            .iter()
+            .find(|spec| spec.surface_id.as_str() == "rho.environment")
+            .unwrap();
+        assert_eq!(spec.mode_id.as_ref().unwrap().as_str(), "health");
+        assert!(
+            environment
+                .definition
+                .modes
+                .iter()
+                .any(|mode| { Some(&mode.mode_id) == spec.mode_id.as_ref() })
+        );
+    }
+
+    #[test]
     fn retired_artifacts_component_is_pruned_without_losing_durable_artifact_references() {
         let project = ProjectId::new("project:retired-artifacts").unwrap();
         let mut profile =
@@ -1555,7 +1584,8 @@ mod tests {
             profile: seed,
         })
         .unwrap();
-        obsolete["profile"]["schema_version"] = json!(1);
+        let obsolete_schema = u64::from(PROJECT_UI_PROFILE_SCHEMA_VERSION - 1);
+        obsolete["profile"]["schema_version"] = json!(obsolete_schema);
         let obsolete_bytes = serde_json::to_vec_pretty(&obsolete).unwrap();
         std::fs::write(store.path(&root), &obsolete_bytes).unwrap();
 
@@ -1571,7 +1601,7 @@ mod tests {
         assert_eq!(loaded.status, UiProfileLoadStatusV1::Created);
         assert!(loaded.recovery_detail.unwrap().contains("Rebuilt"));
         assert_eq!(
-            std::fs::read(store.obsolete_path(&root, 1)).unwrap(),
+            std::fs::read(store.obsolete_path(&root, obsolete_schema)).unwrap(),
             obsolete_bytes
         );
         assert!(

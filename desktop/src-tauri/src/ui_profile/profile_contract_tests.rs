@@ -70,7 +70,7 @@ fn profile_ipc_serialization_matches_generated_contract() {
         snapshot_json["contract"],
         "rho.ui.project-profile.snapshot.v1"
     );
-    assert_eq!(snapshot_json["profile"]["schema_version"], 3);
+    assert_eq!(snapshot_json["profile"]["schema_version"], 4);
     assert_eq!(requests["set_mode"]["mode"], "vibe");
     assert_eq!(requests["page_mutation"]["mutation"]["kind"], "set_focus");
     assert!(requests["page_mutation"]["mutation"]["block_id"].is_null());
