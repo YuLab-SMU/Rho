@@ -187,6 +187,8 @@ pub(crate) fn prepare_runtime_files_with_rscript(
         rscript,
         r_version,
         r_home,
+        r_libs,
+        path_sep,
         process_path,
         r_profile_user,
         r_environ_user,

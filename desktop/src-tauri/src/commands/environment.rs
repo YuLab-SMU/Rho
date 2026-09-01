@@ -4,6 +4,7 @@ use rho_control_plane::{
     EnvironmentOperationCoordinator,
 };
 use rho_core::ExecutionOrigin;
+use rho_environment::{ProjectEnvironmentMode, classify_project_environment};
 use rho_protocol::EnvironmentIncidentV1;
 use rho_server::coordinator::dispatch_workspace_request;
 use rho_server::workspace_lane::WorkspaceBrokerState;
@@ -14,6 +15,7 @@ use rho_ui_contract::{
     EnvironmentBindingViewV1, EnvironmentCheckpointViewV1, EnvironmentHealthStatusViewV1,
     EnvironmentHealthViewV1, EnvironmentIncidentViewV1, EnvironmentOperationViewV1,
     EnvironmentPlanActionViewV1, EnvironmentPlanReviewViewV1, EnvironmentWorkspaceViewV1,
+    LocalEnvironmentObservationViewV1,
 };
 use rho_workspace::{
     WorkspaceEnvironmentObservation, WorkspaceEnvironmentProbeObservation,
@@ -27,6 +29,7 @@ use tauri::State;
 use crate::application_state::{
     active_context, active_session, run_store_executor_service, store_executor,
 };
+use crate::startup_runtime::runtime_config;
 use crate::{AppState, display_error};
 
 fn enum_text(value: &impl Serialize) -> String {
@@ -34,6 +37,71 @@ fn enum_text(value: &impl Serialize) -> String {
         .ok()
         .and_then(|value| value.as_str().map(str::to_string))
         .unwrap_or_else(|| "unknown".to_string())
+}
+
+const MAX_RENV_LOCK_OBSERVATION_BYTES: u64 = 16 * 1024 * 1024;
+
+fn sha256_json(value: &impl Serialize) -> Result<String, String> {
+    let bytes = serde_json::to_vec(value).map_err(display_error)?;
+    Ok(format!("sha256:{:x}", Sha256::digest(bytes)))
+}
+
+fn bounded_file_digest(path: &std::path::Path) -> Option<String> {
+    let metadata = std::fs::metadata(path).ok()?;
+    if !metadata.is_file() || metadata.len() > MAX_RENV_LOCK_OBSERVATION_BYTES {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    Some(format!("sha256:{:x}", Sha256::digest(bytes)))
+}
+
+fn local_environment_observation_from_probe(
+    project_root: &std::path::Path,
+    rscript: &std::path::Path,
+    r_home: &str,
+    r_version: &str,
+    r_libs: &str,
+    path_sep: &str,
+) -> Result<LocalEnvironmentObservationViewV1, String> {
+    let libraries = r_libs
+        .split(path_sep)
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .collect::<Vec<_>>();
+    let mode = classify_project_environment(project_root, false);
+    let project_mode = match mode {
+        ProjectEnvironmentMode::NativeUser => "native_user",
+        ProjectEnvironmentMode::ProjectRenv => "project_renv",
+    };
+    let runtime_selection_digest = sha256_json(&serde_json::json!({
+        "rscript": rscript.to_string_lossy(),
+        "r_home": r_home,
+        "version": r_version,
+    }))?;
+    let library_stack_digest = sha256_json(&libraries)?;
+    let lockfile_digest = (mode == ProjectEnvironmentMode::ProjectRenv)
+        .then(|| bounded_file_digest(&project_root.join("renv.lock")))
+        .flatten();
+    let observation_digest = sha256_json(&serde_json::json!({
+        "project_mode": project_mode,
+        "runtime_selection_digest": runtime_selection_digest,
+        "library_stack_digest": library_stack_digest,
+        "lockfile_digest": lockfile_digest.as_deref(),
+        "coverage": "runtime_and_library_paths",
+    }))?;
+    Ok(LocalEnvironmentObservationViewV1 {
+        project_mode: project_mode.to_string(),
+        runtime_version: r_version.to_string(),
+        runtime_selection_digest,
+        library_stack_digest,
+        library_count: u32::try_from(libraries.len()).unwrap_or(u32::MAX),
+        lockfile_digest,
+        coverage: "runtime_and_library_paths".to_string(),
+        package_inventory_status: "not_captured".to_string(),
+        externally_mutable: true,
+        source: "startup_runtime_probe".to_string(),
+        observation_digest,
+    })
 }
 
 fn environment_binding_view(state: &EnvironmentStateProjection) -> EnvironmentBindingViewV1 {
@@ -350,7 +418,25 @@ pub(crate) async fn environment_health_for_state(
     .map_err(display_error)?;
     let gate = sync_workspace_environment_gate(state, &project_root, authority.as_ref()).await?;
     let (workspace_id, kernel_instance_id) = workspace_identity(state).await;
+    let local_observation = runtime_config(state)
+        .ok()
+        .map(|config| {
+            local_environment_observation_from_probe(
+                &root,
+                &config.rscript,
+                &config.r_home,
+                &config.r_version,
+                &config.r_libs,
+                &config.path_sep,
+            )
+        })
+        .transpose()?;
     let status = match gate.phase {
+        rho_workspace::WorkspaceEnvironmentPhase::Unbound
+            if workspace_id.is_some() && local_observation.is_some() =>
+        {
+            EnvironmentHealthStatusViewV1::LocalReady
+        }
         rho_workspace::WorkspaceEnvironmentPhase::Unbound => EnvironmentHealthStatusViewV1::Unbound,
         rho_workspace::WorkspaceEnvironmentPhase::Active => EnvironmentHealthStatusViewV1::Realized,
         rho_workspace::WorkspaceEnvironmentPhase::RestartRequired => {
@@ -371,12 +457,24 @@ pub(crate) async fn environment_health_for_state(
             .push("Workspace R is not running; live activation cannot be observed.".to_string());
     }
     if authority.is_none() {
-        limitations
-            .push("No verified Environment receipt is recorded for this project.".to_string());
+        limitations.push(
+            "No formal Environment mutation receipt is recorded; the local observation is externally mutable."
+                .to_string(),
+        );
+    }
+    if local_observation
+        .as_ref()
+        .is_some_and(|observation| observation.package_inventory_status == "not_captured")
+    {
+        limitations.push(
+            "Package inventory is not covered by the startup Runtime and library-path observation."
+                .to_string(),
+        );
     }
     Ok(EnvironmentHealthViewV1 {
         status,
         binding: authority.as_ref().map(environment_binding_view),
+        local_observation,
         workspace: EnvironmentWorkspaceViewV1 {
             phase: enum_text(&gate.phase),
             workspace_id,
@@ -637,6 +735,41 @@ pub(crate) async fn environment_reobserve(
 #[cfg(test)]
 mod environment_realization_tests {
     use super::*;
+
+    #[test]
+    fn local_observation_classifies_native_and_renv_without_claiming_package_inventory() {
+        let project = tempfile::tempdir().unwrap();
+        let native = local_environment_observation_from_probe(
+            project.path(),
+            std::path::Path::new("/opt/R/bin/Rscript"),
+            "/opt/R/lib/R",
+            "R version 4.6.1",
+            "/users/test/R/library:/opt/R/library",
+            ":",
+        )
+        .unwrap();
+        assert_eq!(native.project_mode, "native_user");
+        assert_eq!(native.library_count, 2);
+        assert_eq!(native.coverage, "runtime_and_library_paths");
+        assert_eq!(native.package_inventory_status, "not_captured");
+        assert!(native.externally_mutable);
+        assert!(native.lockfile_digest.is_none());
+        assert!(native.observation_digest.starts_with("sha256:"));
+
+        std::fs::write(project.path().join("renv.lock"), b"{\"R\":{}}\n").unwrap();
+        let renv = local_environment_observation_from_probe(
+            project.path(),
+            std::path::Path::new("/opt/R/bin/Rscript"),
+            "/opt/R/lib/R",
+            "R version 4.6.1",
+            "/users/test/R/library:/opt/R/library",
+            ":",
+        )
+        .unwrap();
+        assert_eq!(renv.project_mode, "project_renv");
+        assert!(renv.lockfile_digest.is_some());
+        assert_ne!(renv.observation_digest, native.observation_digest);
+    }
 
     #[test]
     fn workspace_inventory_observation_uses_explicit_digest_and_detects_namespace_failure() {

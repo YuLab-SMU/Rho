@@ -7,10 +7,26 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum EnvironmentHealthStatusViewV1 {
     Unbound,
+    LocalReady,
     Realized,
     RestartRequired,
     ObservationRequired,
     BlockedByIncident,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+pub struct LocalEnvironmentObservationViewV1 {
+    pub project_mode: String,
+    pub runtime_version: String,
+    pub runtime_selection_digest: String,
+    pub library_stack_digest: String,
+    pub library_count: u32,
+    pub lockfile_digest: Option<String>,
+    pub coverage: String,
+    pub package_inventory_status: String,
+    pub externally_mutable: bool,
+    pub source: String,
+    pub observation_digest: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
@@ -109,6 +125,7 @@ pub struct EnvironmentWorkspaceViewV1 {
 pub struct EnvironmentHealthViewV1 {
     pub status: EnvironmentHealthStatusViewV1,
     pub binding: Option<EnvironmentBindingViewV1>,
+    pub local_observation: Option<LocalEnvironmentObservationViewV1>,
     pub workspace: EnvironmentWorkspaceViewV1,
     pub pending_plan: Option<EnvironmentPlanReviewViewV1>,
     pub latest_operation: Option<EnvironmentOperationViewV1>,

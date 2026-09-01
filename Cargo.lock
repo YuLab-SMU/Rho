@@ -4135,6 +4135,7 @@ dependencies = [
  "rfd",
  "rho-control-plane",
  "rho-core",
+ "rho-environment",
  "rho-evidence-graph",
  "rho-extension-runtime",
  "rho-kernel",

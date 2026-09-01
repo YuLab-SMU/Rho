@@ -32,6 +32,8 @@ pub(crate) struct RuntimeConfig {
     pub(crate) rscript: PathBuf,
     pub(crate) r_version: String,
     pub(crate) r_home: String,
+    pub(crate) r_libs: String,
+    pub(crate) path_sep: String,
     pub(crate) process_path: OsString,
     pub(crate) r_profile_user: Option<PathBuf>,
     pub(crate) r_environ_user: Option<PathBuf>,

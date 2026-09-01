@@ -1147,6 +1147,8 @@
             rscript: Path::new("Rscript").to_path_buf(),
             r_version: "R version 4.6.1".to_string(),
             r_home: "C:/R".to_string(),
+            r_libs: "C:/Users/test/R/library;C:/R/library".to_string(),
+            path_sep: ";".to_string(),
             process_path: std::env::var_os("PATH").unwrap_or_default(),
             r_profile_user: None,
             r_environ_user: None,

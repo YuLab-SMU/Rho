@@ -36,11 +36,12 @@ export type EnvironmentCheckpointViewV1 = {
 	digest: string | null,
 };
 
-export type EnvironmentHealthStatusViewV1 = "unbound" | "realized" | "restart_required" | "observation_required" | "blocked_by_incident";
+export type EnvironmentHealthStatusViewV1 = "unbound" | "local_ready" | "realized" | "restart_required" | "observation_required" | "blocked_by_incident";
 
 export type EnvironmentHealthViewV1 = {
 	status: EnvironmentHealthStatusViewV1,
 	binding: EnvironmentBindingViewV1 | null,
+	local_observation: LocalEnvironmentObservationViewV1 | null,
 	workspace: EnvironmentWorkspaceViewV1,
 	pending_plan: EnvironmentPlanReviewViewV1 | null,
 	latest_operation: EnvironmentOperationViewV1 | null,
@@ -109,4 +110,18 @@ export type EnvironmentWorkspaceViewV1 = {
 	pending_receipt_digest: string | null,
 	restart_required: boolean,
 	reobserve_required: boolean,
+};
+
+export type LocalEnvironmentObservationViewV1 = {
+	project_mode: string,
+	runtime_version: string,
+	runtime_selection_digest: string,
+	library_stack_digest: string,
+	library_count: number,
+	lockfile_digest: string | null,
+	coverage: string,
+	package_inventory_status: string,
+	externally_mutable: boolean,
+	source: string,
+	observation_digest: string,
 };

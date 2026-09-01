@@ -24,6 +24,7 @@ rho-core = { path = "../../crates/rho-core" }
 rho-control-plane = { path = "../../crates/rho-control-plane" }
 rho-extension-runtime = { path = "../../crates/rho-extension-runtime" }
 rho-evidence-graph = { path = "../../crates/rho-evidence-graph" }
+rho-environment = { path = "../../crates/rho-environment" }
 rho-kernel = { path = "../../crates/rho-kernel" }
 rho-protocol = { path = "../../crates/rho-protocol" }
 rho-server = { path = "../../crates/rho-server" }
