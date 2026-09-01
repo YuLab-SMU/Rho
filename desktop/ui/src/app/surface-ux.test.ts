@@ -18,7 +18,7 @@ const EXPECTED_FIRST_PARTY = [
   "rho.evidence-gaps", "rho.evidence-graph", "rho.file-preview", "rho.file-source",
   "rho.git", "rho.help", "rho.jobs", "rho.logs", "rho.navigator",
   "rho.plots", "rho.problems", "rho.revisions",
-  "rho.runs", "rho.settings", "rho.status", "rho.surface-playground",
+  "rho.runs", "rho.runtimes", "rho.settings", "rho.status", "rho.surface-playground",
 ];
 
 describe("Surface UX contract", () => {
@@ -42,13 +42,14 @@ describe("Surface UX contract", () => {
     for (const surfaceId of factoryIds) expect(FIRST_PARTY_SURFACE_UX[surfaceId]).toBeDefined();
   });
 
-  it("keeps only eight stable workbench components in the primary catalog", () => {
+  it("keeps nine stable workbench components in the primary catalog", () => {
     const primary = EXPECTED_FIRST_PARTY.filter(
       (surfaceId) => surfaceCatalogPolicy(surfaceId).visibility === "primary",
     );
     expect(primary).toEqual([
       "rho.agent", "rho.console", "rho.environment", "rho.file-source", "rho.git",
       "rho.navigator", "rho.plots", "rho.runs",
+      "rho.runtimes",
     ]);
     expect(surfaceCatalogPolicy("rho.check-result")).toMatchObject({
       visibility: "contextual",
@@ -72,6 +73,7 @@ describe("Surface UX contract", () => {
       "rho.navigator",
       "rho.file-source",
       "rho.console",
+      "rho.runtimes",
       "rho.plots",
       "rho.runs",
       "rho.agent",
@@ -90,6 +92,9 @@ describe("Surface UX contract", () => {
     }
     expect(surfaceCatalogPolicy("rho.console").handoffTargets).toEqual([
       "rho.plots", "rho.runs",
+    ]);
+    expect(surfaceCatalogPolicy("rho.runtimes").handoffTargets).toEqual([
+      "rho.console", "rho.environment",
     ]);
     expect(surfaceCatalogPolicy("rho.agent").handoffTargets).toEqual([
       "rho.file-source", "rho.console", "rho.plots", "rho.runs",

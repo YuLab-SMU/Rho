@@ -74,6 +74,11 @@ export function ConsoleSurface({
   readonly interruptRuntime: (runtime: RuntimeDescriptor) => Promise<void>;
   readonly runtimeRecovering: boolean;
 }) {
+  const attachableRuntimes = runtimes?.instances.filter((candidate) =>
+    candidate.attach_capabilities.includes("console.attach")
+  ) ?? [];
+  const primaryRuntimes = attachableRuntimes.filter((candidate) => candidate.primary_scientific_runtime);
+  const auxiliaryRuntimes = attachableRuntimes.filter((candidate) => !candidate.primary_scientific_runtime);
   return (
     <div className="rho-console-surface">
       <div className="rho-console-toolbar">
@@ -117,17 +122,27 @@ export function ConsoleSurface({
               }}
             >
               <option value="">Attach runtime…</option>
-              {runtimes?.instances.filter((candidate) =>
-                candidate.attach_capabilities.includes("console.attach")
-              ).map((candidate) => (
-                <option value={candidate.runtime_instance_id} key={candidate.runtime_instance_id}>
-                  {candidate.display_label}
-                </option>
-              ))}
+              {primaryRuntimes.length > 0 && <optgroup label="Primary">
+                {primaryRuntimes.map((candidate) => <option value={candidate.runtime_instance_id} key={candidate.runtime_instance_id}>
+                  {candidate.display_label} · {candidate.status}
+                </option>)}
+              </optgroup>}
+              {auxiliaryRuntimes.length > 0 && <optgroup label="Auxiliary">
+                {auxiliaryRuntimes.map((candidate) => <option value={candidate.runtime_instance_id} key={candidate.runtime_instance_id}>
+                  {candidate.display_label} · {candidate.status}
+                </option>)}
+              </optgroup>}
             </select>
             <span className={`rho-runtime-state rho-runtime-${attached?.status ?? "unbound"}`}>
               runtime: {attached?.status ?? "unbound"}
             </span>
+            <button
+              type="button"
+              className="rho-icon-btn rho-console-runtime-center"
+              aria-label="Open Runtime Center"
+              title="Create, switch, and manage Runtime processes"
+              onClick={() => openSurfaceById("rho.runtimes")}
+            ><span aria-hidden="true">R+</span></button>
             {transcriptOutputs.length > 0 && (
               <button
                 type="button"

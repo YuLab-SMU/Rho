@@ -136,6 +136,7 @@ const FIRST_PARTY_SURFACE_IDS: &[&str] = &[
     "rho.agent",
     "rho.settings",
     "rho.environment",
+    "rho.runtimes",
     "rho.navigator",
     "rho.claims",
     "rho.evidence-graph",
@@ -392,6 +393,18 @@ impl InternalPlugin for CoreWorkbenchPlugin {
                     ],
                     false,
                 ),
+                {
+                    let mut definition = first_party_surface_definition(
+                        "rho.runtimes",
+                        "Runtime Center",
+                        "Inspect and manage the project-owned Workspace R and explicit auxiliary Runtime processes without changing Environment truth.",
+                        &[("overview", "Overview", interactive)],
+                        false,
+                    );
+                    definition.instance_policy =
+                        rho_ui_contract::SurfaceInstancePolicyV1::Singleton;
+                    definition
+                },
                 first_party_surface_definition(
                     "rho.navigator",
                     "Navigator",

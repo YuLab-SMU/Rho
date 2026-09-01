@@ -176,6 +176,7 @@ export type {
   RuntimeExecutionDeleteResult,
   RuntimeOutputPageRequest,
   RuntimeInstanceRequest,
+  RuntimeProviderRegistration,
   RuntimeRegistrySnapshot,
   ResourceBinding,
   ResourceContent,

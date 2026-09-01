@@ -318,6 +318,7 @@
     font-size: var(--rho-text-ui);
   }
   .rho-console-runtime-bar button { flex: 0 0 auto; min-height: var(--rho-target-min); }
+  .rho-console-runtime-center > span { font: var(--rho-weight-semibold) var(--rho-text-caption)/1 var(--rho-font-mono); }
   .rho-console-search-toggle { margin-inline-start: auto; }
   .rho-console-filterbar {
     display: grid;

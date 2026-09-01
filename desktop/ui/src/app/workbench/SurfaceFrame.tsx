@@ -24,11 +24,16 @@ import type {
   RunAgentRequest,
   RuntimeOutputSearchResult,
   RuntimeRegistrySnapshot,
+  RuntimeProviderRegistration,
   SurfaceInstance,
   SurfaceFactoryRegistration,
   UiKernelTransport,
 } from "../../transport";
 import { AgentSurface } from "../agent/AgentSurface";
+import {
+  RuntimeCenterSurface,
+  type RuntimeConsoleAttachment,
+} from "../authority/RuntimeCenterSurface";
 import type {
   AgentFileProposal,
   AgentFileProposalReview,
@@ -108,6 +113,14 @@ interface SurfaceFrameProps {
   readonly loadRuntimeOutputPageBefore: (executionId: string, beforeSequence: number) => Promise<RuntimeOutputPage>;
   readonly interruptRuntime: (runtime: RuntimeDescriptor) => Promise<void>;
   readonly restartRuntime: (runtime: RuntimeDescriptor) => Promise<void>;
+  readonly stopRuntime: (runtime: RuntimeDescriptor) => Promise<void>;
+  readonly createRuntime: (
+    provider: RuntimeProviderRegistration,
+    label: string | null,
+    openConsole: boolean,
+  ) => Promise<void>;
+  readonly openRuntimeConsole: (runtime: RuntimeDescriptor, createAnother: boolean) => Promise<void>;
+  readonly runtimeConsoleAttachments: readonly RuntimeConsoleAttachment[];
   readonly persistConsole: (viewState: ConsolePersistentViewState) => Promise<void>;
   readonly registerConsoleExecution: (endpoint: ConsoleExecutionEndpoint) => () => void;
   readonly markConsolePreferred: (instanceId: string) => void;
@@ -186,7 +199,8 @@ export function SurfaceFrame({
   runtimes, attachRuntime, detachRuntime, startRuntimeExecution, followRuntimeOutput,
   listRuntimeExecutions, loadRuntimeOutputPage, interruptRuntime,
   loadRuntimeOutputPageBefore,
-  restartRuntime, persistConsole, registerConsoleExecution, markConsolePreferred,
+  restartRuntime, stopRuntime, createRuntime, openRuntimeConsole, runtimeConsoleAttachments,
+  persistConsole, registerConsoleExecution, markConsolePreferred,
   resources, activeFileResourceId, readResource, updateResourceDraft, withFileMutation,
   reloadResource, renameResource, deleteResource,
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
@@ -595,6 +609,18 @@ export function SurfaceFrame({
             provider_id: providerId,
             model_id: modelId,
           })}
+        />
+      )}
+      {instance.surface_id === "rho.runtimes" && (
+        <RuntimeCenterSurface
+          snapshot={runtimes}
+          consoleAttachments={runtimeConsoleAttachments}
+          createRuntime={createRuntime}
+          openConsole={openRuntimeConsole}
+          interruptRuntime={interruptRuntime}
+          restartRuntime={restartRuntime}
+          stopRuntime={stopRuntime}
+          reportError={reportError}
         />
       )}
       {instance.surface_id === "rho.navigator" && (

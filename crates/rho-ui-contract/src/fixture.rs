@@ -310,6 +310,16 @@ fn definition(
     }
 }
 
+fn singleton_definition(
+    surface_id: &str,
+    label: &str,
+    modes: &[(&str, &str)],
+) -> SurfaceDefinitionV1 {
+    let mut value = definition(surface_id, label, modes, false);
+    value.instance_policy = SurfaceInstancePolicyV1::Singleton;
+    value
+}
+
 fn instance(
     id: &str,
     surface: &str,
@@ -705,6 +715,11 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                 false,
             ),
             definition("rho.console", "Console", &[], false),
+            singleton_definition(
+                "rho.runtimes",
+                "Runtime Center",
+                &[("overview", "Overview")],
+            ),
             definition("rho.status", "Runtime status", &[], true),
             definition("rho.check-result", "Check result", &[], false),
             definition(
@@ -792,6 +807,11 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                         false,
                     ),
                     definition("rho.console", "Console", &[], false),
+                    singleton_definition(
+                        "rho.runtimes",
+                        "Runtime Center",
+                        &[("overview", "Overview")],
+                    ),
                     definition("rho.status", "Runtime status", &[], true),
                     definition("rho.check-result", "Check result", &[], false),
                     definition(

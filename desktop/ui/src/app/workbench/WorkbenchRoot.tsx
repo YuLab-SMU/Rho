@@ -23,6 +23,7 @@ import type {
   ProjectSwitchResponse,
   ResourceDescriptor,
   RuntimeDescriptor,
+  RuntimeProviderRegistration,
   RuntimeOutputReference,
   LayoutBasis,
   SceneEdit,
@@ -781,6 +782,44 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
       return commit({ kind: "set_stack_active", stack_node_id: placement.nodeId, instance_id: instanceId });
     }
     return commit({ kind: "set_focus", instance_id: instanceId });
+  };
+  const openRuntimeConsole = async (
+    runtime: RuntimeDescriptor,
+    createAnother: boolean,
+  ): Promise<void> => {
+    if (!createAnother && surfaces != null && studio != null) {
+      const existing = surfaces.catalog.instances.find((candidate) =>
+        candidate.surface_id === "rho.console"
+        && candidate.runtime_binding?.runtime_instance_id === runtime.runtime_instance_id
+        && findLayoutPlacement(studio.scene.root, candidate.instance_id) != null
+      );
+      if (existing != null) {
+        await focusAutomationInstance(existing.instance_id);
+        return;
+      }
+    }
+    await openConsole(runtime);
+  };
+  const createAuxiliaryRuntime = async (
+    provider: RuntimeProviderRegistration,
+    label: string | null,
+    openDedicatedConsole: boolean,
+  ): Promise<void> => {
+    if (runtimes == null) throw new Error("Runtime Registry is unavailable.");
+    const before = new Set(runtimes.instances.map((runtime) => runtime.runtime_instance_id));
+    const next = await runtimeStore.create({
+      project_id: runtimes.project_id,
+      runtime_provider_id: provider.definition.runtime_provider_id,
+      expected_project_revision: runtimes.project_revision,
+      expected_snapshot_revision: runtimes.snapshot_revision,
+      display_label: label,
+    });
+    const created = next.instances.find((runtime) => !before.has(runtime.runtime_instance_id));
+    if (created == null) throw new Error("Runtime Registry did not return the new auxiliary Runtime.");
+    if (openDedicatedConsole) {
+      await store.settled();
+      await openConsole(created);
+    }
   };
   const openFactory = async (
     factory: SurfaceFactoryRegistration,
@@ -1573,6 +1612,14 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
               ? activePage?.page_revision ?? null
               : null,
           };
+    const runtimeConsoleAttachments = surfaces?.catalog.instances.flatMap((candidate) =>
+      candidate.surface_id === "rho.console" && candidate.runtime_binding != null
+        ? [{
+            console_instance_id: candidate.instance_id,
+            runtime_instance_id: candidate.runtime_binding.runtime_instance_id,
+          }]
+        : []
+    ) ?? [];
     return <SurfaceFrame
       key={`${hostScope.epoch}:${instance.project_id}:${instance.instance_id}:${instance.activation_generation}`}
       instance={instance}
@@ -1730,6 +1777,13 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
         if (runtimes == null) return;
         await runtimeStore.restart(runtimeRequest(runtime, runtimes.project_revision));
       }}
+      stopRuntime={async (runtime) => {
+        if (runtimes == null) return;
+        await runtimeStore.stop(runtimeRequest(runtime, runtimes.project_revision));
+      }}
+      createRuntime={createAuxiliaryRuntime}
+      openRuntimeConsole={openRuntimeConsole}
+      runtimeConsoleAttachments={runtimeConsoleAttachments}
       persistConsole={async (viewState) => {
         await surfaceMutationController.update(instance.instance_id, {
           kind: "set_view_state",
@@ -2789,41 +2843,10 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
           )}
           {runtimes != null && (
             <details className="rho-compose-advanced">
-              <summary><span>Runtime controls</span><span>{runtimes.instances.length}</span></summary>
-              <section className="rho-runtime-inventory">
-              <div className="rho-runtime-inventory-heading">
-                <span className="rho-eyebrow">Runtime registry</span>
-                {runtimes.providers.some((provider) => provider.definition.create_supported) && (
-                  <button type="button" onClick={() => {
-                    const provider = runtimes.providers.find((candidate) => candidate.definition.create_supported);
-                    if (provider == null) return;
-                    run(runtimeStore.create({
-                      project_id: runtimes.project_id,
-                      runtime_provider_id: provider.definition.runtime_provider_id,
-                      expected_project_revision: runtimes.project_revision,
-                      expected_snapshot_revision: runtimes.snapshot_revision,
-                      display_label: null,
-                    }));
-                  }}>+ Runtime</button>
-                )}
-              </div>
-              {runtimes.instances.map((runtime) => (
-                <article className="rho-runtime-card" data-runtime-id={runtime.runtime_instance_id} key={runtime.runtime_instance_id}>
-                  <div>
-                    <span className={`rho-runtime-dot rho-runtime-${runtime.status}`} />
-                    <strong>{runtime.display_label}</strong>
-                    <small>{runtime.runtime_instance_id} · gen {runtime.activation_generation}</small>
-                  </div>
-                  <div className="rho-runtime-actions">
-                    <button type="button" onClick={() => run(openConsole(runtime))}>Console</button>
-                    <button type="button" onClick={() => run(runtimeStore.interrupt(runtimeRequest(runtime, runtimes.project_revision)))}>Interrupt</button>
-                    <button type="button" onClick={() => run(runtimeStore.restart(runtimeRequest(runtime, runtimes.project_revision)))}>Restart</button>
-                    {!runtime.primary_scientific_runtime && (
-                      <button type="button" onClick={() => run(runtimeStore.stop(runtimeRequest(runtime, runtimes.project_revision)))}>Stop</button>
-                    )}
-                  </div>
-                </article>
-              ))}
+              <summary><span>Runtime processes</span><span>{runtimes.instances.length}</span></summary>
+              <section className="rho-runtime-compose-entry">
+                <p>Create auxiliary R processes, open dedicated Consoles, and manage concurrent execution from one place.</p>
+                <button type="button" onClick={() => openSurfaceById("rho.runtimes")}>Open Runtime Center</button>
               </section>
             </details>
           )}

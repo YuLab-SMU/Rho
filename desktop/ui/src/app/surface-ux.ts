@@ -72,8 +72,12 @@ export const FIRST_PARTY_SURFACE_CATALOG: Readonly<Record<string, SurfaceCatalog
     visibility: "primary", capabilityGroup: "workspace_r", flowStage: "run", composeOrder: 20,
     handoffTargets: ["rho.plots", "rho.runs"],
   },
+  "rho.runtimes": {
+    visibility: "primary", capabilityGroup: "workspace_r", flowStage: "run", composeOrder: 21,
+    handoffTargets: ["rho.console", "rho.environment"],
+  },
   "rho.status": {
-    visibility: "internal", capabilityGroup: "workspace_r", flowStage: "run", composeOrder: 21,
+    visibility: "internal", capabilityGroup: "workspace_r", flowStage: "run", composeOrder: 22,
     handoffTargets: [],
   },
   "rho.plots": {
@@ -180,6 +184,11 @@ export const FIRST_PARTY_SURFACE_UX: Readonly<Record<string, SurfaceUxProfile>> 
     label: "R Console", primaryTask: "Run R code and inspect results", defaultFocus: "Code composer",
     primaryAction: "Run", actionBudget: 2, areaRole: "support", narrowBehavior: "retain",
     emptyState: "Ready for R code.",
+  },
+  "rho.runtimes": {
+    label: "Runtime Center", primaryTask: "Create, inspect, and manage project Runtime processes", defaultFocus: "Runtime list",
+    primaryAction: "New Runtime", actionBudget: 3, areaRole: "support", narrowBehavior: "stack",
+    emptyState: "Workspace R appears after project startup.",
   },
   "rho.environment": {
     label: "Environment", primaryTask: "Review verified realization, Workspace activation, exact plans, activity, and incidents", defaultFocus: "Authority health",

@@ -4650,7 +4650,8 @@ describe("Studio foundation app", () => {
     const runtime = consoleView.querySelector<HTMLSelectElement>("[aria-label^='Runtime for']")!;
     const composer = consoleView.querySelector<HTMLTextAreaElement>("textarea")!;
 
-    expect(runtime.selectedOptions[0]?.textContent).toBe("Workspace R");
+    expect(runtime.selectedOptions[0]?.textContent).toBe("Workspace R · ready");
+    expect(consoleView.querySelector("[aria-label='Open Runtime Center']")).not.toBeNull();
     expect(consoleView.querySelector(".rho-runtime-state")?.textContent).toBe("runtime: ready");
     expect(consoleView.querySelector(".rho-console-empty")?.textContent).toContain("Ready for R code");
     expect(consoleView.querySelector("[aria-label^='Filter output']")).toBeNull();
@@ -4676,6 +4677,25 @@ describe("Studio foundation app", () => {
     });
     expect(restart).toHaveBeenCalledOnce();
     expect(document.activeElement?.getAttribute("aria-label")).toBe("More actions for R Console");
+  });
+
+  it("opens the Runtime Center from Console without exposing lifecycle cards in Compose", async () => {
+    const { container } = await renderApp();
+    const consoleView = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    await act(async () => {
+      consoleView.querySelector<HTMLButtonElement>("[aria-label='Open Runtime Center']")!.click();
+      await settle();
+    });
+    const center = container.querySelector<HTMLElement>("[data-surface-id='rho.runtimes']")!;
+    expect(center).not.toBeNull();
+    expect(center.textContent).toContain("Workspace R");
+    expect(center.textContent).toContain("New Runtime");
+    expect(center.textContent).toContain("executions serialize per Runtime");
+
+    await openInspector(container);
+    const compose = container.querySelector<HTMLElement>(".rho-studio-inspector")!;
+    expect(compose.textContent).toContain("Open Runtime Center");
+    expect(compose.querySelector(".rho-runtime-card")).toBeNull();
   });
 
   it("groups consecutive Console commands by Workspace and separates commands from output", async () => {

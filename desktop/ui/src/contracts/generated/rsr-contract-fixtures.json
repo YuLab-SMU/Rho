@@ -153,6 +153,46 @@
       }
     },
     {
+      "surface_id": "rho.runtimes",
+      "contract_major": 1,
+      "label": "Runtime Center",
+      "purpose": "Render the Runtime Center capability as an independent Rho Surface.",
+      "renderer_kind": "trusted_host",
+      "scope": "project",
+      "instance_policy": "singleton",
+      "instance_quota_class": "standard",
+      "resource_kinds": [],
+      "modes": [
+        {
+          "mode_id": "overview",
+          "label": "Overview",
+          "interaction_kind": "interactive"
+        }
+      ],
+      "sizing_hints": {
+        "min_inline": 240,
+        "min_block": 120,
+        "ideal_inline": 640,
+        "ideal_block": 420,
+        "max_inline": null,
+        "max_block": null,
+        "stretch_inline": true,
+        "stretch_block": true,
+        "presentation_classes": [
+          "full",
+          "compact"
+        ]
+      },
+      "accepted_contexts": [
+        "project"
+      ],
+      "commands": [],
+      "origin": {
+        "kind": "application",
+        "component_id": "rho.runtimes"
+      }
+    },
+    {
       "surface_id": "rho.status",
       "contract_major": 1,
       "label": "Runtime status",
@@ -1709,6 +1749,49 @@
             "origin": {
               "kind": "application",
               "component_id": "rho.console"
+            }
+          },
+          "activation_generation": 1
+        },
+        {
+          "definition": {
+            "surface_id": "rho.runtimes",
+            "contract_major": 1,
+            "label": "Runtime Center",
+            "purpose": "Render the Runtime Center capability as an independent Rho Surface.",
+            "renderer_kind": "trusted_host",
+            "scope": "project",
+            "instance_policy": "singleton",
+            "instance_quota_class": "standard",
+            "resource_kinds": [],
+            "modes": [
+              {
+                "mode_id": "overview",
+                "label": "Overview",
+                "interaction_kind": "interactive"
+              }
+            ],
+            "sizing_hints": {
+              "min_inline": 240,
+              "min_block": 120,
+              "ideal_inline": 640,
+              "ideal_block": 420,
+              "max_inline": null,
+              "max_block": null,
+              "stretch_inline": true,
+              "stretch_block": true,
+              "presentation_classes": [
+                "full",
+                "compact"
+              ]
+            },
+            "accepted_contexts": [
+              "project"
+            ],
+            "commands": [],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.runtimes"
             }
           },
           "activation_generation": 1

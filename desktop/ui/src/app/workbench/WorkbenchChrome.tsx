@@ -18,6 +18,7 @@ export function surfaceRailGlyph(surfaceId: string): string {
     case "rho.file-source": return "R";
     case "rho.file-preview": return "P";
     case "rho.console": return ">_";
+    case "rho.runtimes": return "R+";
     case "rho.plots": return "▧";
     case "rho.runs": return "↺";
     case "rho.jobs": return "◷";
@@ -39,6 +40,7 @@ export function surfaceToolHints(surfaceId: string): readonly string[] {
   switch (surfaceId) {
     case "rho.file-source": return ["Run the current expression from the Source toolbar", "Save or reload from the component header"];
     case "rho.console": return ["Return runs code", "Shift+Return inserts a new line"];
+    case "rho.runtimes": return ["Create isolated auxiliary R processes", "Use separate Runtimes for concurrent executions"];
     case "rho.navigator": return ["Switch between Files and History", "Search the current project tree"];
     case "rho.plots": return ["Browse current and historical project plots", "Use exact Plot links from Console or History"];
     case "rho.environment": return ["Inspect Authority health, exact plans, activity, and incidents"];

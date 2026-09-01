@@ -730,12 +730,12 @@
   .rho-compose-layout > summary span:last-child, .rho-compose-advanced > summary span:last-child { color: var(--rho-muted); font-size: var(--rho-text-caption); font-weight: var(--rho-weight-regular); }
   .rho-compose-layout[open] > summary, .rho-compose-advanced[open] > summary { color: var(--rho-ink); }
 
-  .rho-inventory, .rho-surface-catalog, .rho-resource-inventory, .rho-runtime-inventory {
+  .rho-inventory, .rho-surface-catalog, .rho-resource-inventory {
     margin-top: var(--rho-space-6);
     padding-top: var(--rho-space-4);
     border-top: var(--rho-border);
   }
-  .rho-compose-advanced .rho-resource-inventory, .rho-compose-advanced .rho-runtime-inventory { margin-top: var(--rho-space-3); padding-top: 0; border-top: 0; }
+  .rho-compose-advanced .rho-resource-inventory { margin-top: var(--rho-space-3); padding-top: 0; border-top: 0; }
   .rho-inventory > p { color: var(--rho-muted); font-size: var(--rho-text-ui); }
   .rho-inventory-item {
     display: flex;
@@ -760,7 +760,7 @@
   .rho-recent-closed-item strong, .rho-recent-closed-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rho-recent-closed-item small { color: var(--rho-muted); font-size: var(--rho-text-caption); }
 
-  .rho-surface-catalog-heading, .rho-resource-inventory-heading, .rho-runtime-inventory-heading {
+  .rho-surface-catalog-heading, .rho-resource-inventory-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -825,17 +825,14 @@
   .rho-resource-open-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--rho-space-1); margin-top: var(--rho-space-2); }
   .rho-resource-open-actions button { min-height: 24px; padding: var(--rho-space-1); font-size: var(--rho-text-caption); }
 
-  .rho-runtime-card { margin-top: var(--rho-space-2); padding: var(--rho-space-3); border: var(--rho-border); border-radius: var(--rho-radius-1); background: var(--rho-paper); }
-  .rho-runtime-card > div:first-child { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--rho-space-1) var(--rho-space-2); }
-  .rho-runtime-card strong { overflow: hidden; font-size: var(--rho-text-ui); text-overflow: ellipsis; white-space: nowrap; }
-  .rho-runtime-card small { grid-column: 2; overflow: hidden; color: var(--rho-muted); font-size: var(--rho-text-caption); text-overflow: ellipsis; white-space: nowrap; }
   .rho-runtime-dot { grid-row: 1 / span 2; display: inline-block; width: 8px; aspect-ratio: 1; border-radius: 50%; background: var(--rho-muted); }
   .rho-runtime-dot.rho-runtime-ready { background: var(--rho-ok); }
   .rho-runtime-dot.rho-runtime-busy, .rho-runtime-dot.rho-runtime-interrupting,
   .rho-runtime-dot.rho-runtime-restarting, .rho-runtime-dot.rho-runtime-starting { background: var(--rho-warn); }
   .rho-runtime-dot.rho-runtime-failed, .rho-runtime-dot.rho-runtime-stopped { background: var(--rho-danger); }
-  .rho-runtime-actions { display: flex; flex-wrap: wrap; gap: var(--rho-space-1); margin-top: var(--rho-space-2); }
-  .rho-runtime-actions button { flex: 1 1 auto; min-height: 24px; padding: var(--rho-space-1) var(--rho-space-2); font-size: var(--rho-text-caption); }
+  .rho-runtime-compose-entry { display: grid; gap: var(--rho-space-3); margin-top: var(--rho-space-3); }
+  .rho-runtime-compose-entry p { margin: 0; color: var(--rho-muted); font-size: var(--rho-text-caption); line-height: 1.45; }
+  .rho-runtime-compose-entry button { justify-self: start; }
 
   /* --- Canvas ---------------------------------------------------------------- */
   .rho-studio-canvas { position: relative; min-width: 0; min-height: 0; padding: var(--rho-workspace-gap); overflow: hidden; background: var(--rho-canvas); }
