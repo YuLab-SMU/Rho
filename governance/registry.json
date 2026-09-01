@@ -38,10 +38,10 @@
       "area": "extensions"
     },
     {
-      "id": "TOOLCHAINS",
-      "title": "Toolchains and project environments",
-      "document": "docs/components/TOOLCHAINS.md",
-      "area": "toolchains"
+      "id": "ENVIRONMENT",
+      "title": "Environment realization",
+      "document": "docs/components/ENVIRONMENT.md",
+      "area": "environment"
     },
     {
       "id": "RELEASE",

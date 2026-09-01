@@ -83,10 +83,12 @@ Sources:
 - `.gitignore`
 - `crates/rho-architecture-tests/**`
 - `fuzz/**`
+- `programs/rho-rebuild/**`
 - `scripts/check-clean-agent-cut.mjs`
 - `scripts/dev-checkpoint.mjs`
 - `scripts/dev-lanes.mjs`
 - `scripts/path-ownership.mjs`
+- `scripts/rebuild-ledger.mjs`
 - `scripts/run-fuzz-targets.mjs`
 - `scripts/run-test-command.mjs`
 - `scripts/test-dev-checkpoint.mjs`
@@ -104,6 +106,7 @@ Checks:
 - `development.checkpoint`: `["node","scripts/test-dev-checkpoint.mjs"]`
 - `development.integration`: `["node","scripts/test-worktree-integration.mjs"]`
 - `development.lanes`: `["node","scripts/test-dev-lanes.mjs"]`
+- `development.rebuild-ledger`: `["node","scripts/rebuild-ledger.mjs","validate"]`
 - `development.test-runner`: `["node","scripts/test-test-command-runner.mjs"]`
 - `rust.architecture`: `["node","scripts/run-test-command.mjs","--timeout-seconds","120","--label","rust architecture","--","cargo","test","-p","rho-architecture-tests","--locked"]`
 
@@ -128,6 +131,32 @@ Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
+
+## `environment`
+
+Documentation:
+
+- [Environment realization](<components/ENVIRONMENT.md>) — `ENVIRONMENT`
+
+Sources:
+
+- `crates/rho-control-plane/src/environment_operation.rs`
+- `crates/rho-environment/**`
+- `crates/rho-execution/src/remote_reconcile/**`
+- `crates/rho-execution/src/slurm/**`
+- `crates/rho-protocol/src/environment.rs`
+- `crates/rho-protocol/src/execution.rs`
+- `crates/rho-runner/**`
+- `crates/rho-store/src/environment_realization.rs`
+- `crates/rho-workspace/src/environment.rs`
+- `r/rho.environment/**`
+- `test/remote-cluster/**`
+
+Checks:
+
+- `r.environment`: `["Rscript","-e","testthat::test_local('r/rho.environment')"]`
+- `rust.environment`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust environment","--","cargo","test","-p","rho-environment","--locked"]`
+- `rust.execution`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust execution","--","cargo","test","-p","rho-artifact-store","-p","rho-execution","-p","rho-runner","-p","rho-sandbox","-p","rho-secret-broker","-p","rho-workspace","--locked","--","--test-threads=1"]`
 
 ## `execution-runtime`
 
@@ -173,14 +202,18 @@ Documentation:
 
 Sources:
 
+- `.cargo/**`
 - `Cargo.lock`
 - `Cargo.toml`
+- `crates/rho-evidence-graph/**`
 - `crates/rho-protocol/**`
+- `crates/rho-server/**`
 - `crates/rho-store/**`
 - `rust-toolchain.toml`
 
 Checks:
 
+- `rust.evidence-graph`: `["node","scripts/run-test-command.mjs","--timeout-seconds","300","--label","rust evidence graph","--","cargo","test","-p","rho-evidence-graph","--locked","--","--test-threads=1"]`
 - `rust.store`: `["node","scripts/run-test-command.mjs","--timeout-seconds","300","--label","rust store","--","cargo","test","-p","rho-store","--locked","--","--test-threads=1"]`
 - `rust.workspace`: `["node","scripts/run-test-command.mjs","--timeout-seconds","900","--label","rust workspace","--","cargo","test","--workspace","--locked","--","--test-threads=1"]`
 
@@ -238,6 +271,7 @@ Documentation:
 
 Sources:
 
+- `.cargo/**`
 - `.github/CODEOWNERS`
 - `.github/release-notes/**`
 - `.github/workflows/**`
@@ -280,17 +314,3 @@ Checks:
 - `release.signing`: `["node","scripts/test-signpath-candidate-workflow.mjs"]`
 - `release.site`: `["node","scripts/generate-update-site.mjs","--test","true"]`
 - `release.updater`: `["node","scripts/tauri-native-updater.mjs","--test","true"]`
-
-## `toolchains`
-
-Documentation:
-
-- [Toolchains and project environments](<components/TOOLCHAINS.md>) — `TOOLCHAINS`
-
-Sources:
-
-- `crates/rho-toolchain/**`
-
-Checks:
-
-- `rust.toolchain`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust toolchain","--","cargo","test","-p","rho-toolchain","--locked"]`

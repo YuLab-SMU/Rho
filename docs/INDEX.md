@@ -16,6 +16,10 @@ Generated from `governance/registry.json`. Edit the JSON source and regenerate.
 
 - [Documentation map](<README.md>) — `DOCS`
 
+## `environment`
+
+- [Environment realization](<components/ENVIRONMENT.md>) — `ENVIRONMENT`
+
 ## `extensions`
 
 - [Extension and plugin runtime](<components/EXTENSIONS.md>) — `EXTENSIONS`
@@ -31,7 +35,3 @@ Generated from `governance/registry.json`. Edit the JSON source and regenerate.
 ## `release`
 
 - [Build and release operations](<RELEASE.md>) — `RELEASE`
-
-## `toolchains`
-
-- [Toolchains and project environments](<components/TOOLCHAINS.md>) — `TOOLCHAINS`

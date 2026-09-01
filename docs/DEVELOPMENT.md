@@ -70,9 +70,9 @@ Use the narrowest tier that can falsify the change:
 | Acceptance | `npm --prefix desktop run rsr:acceptance` | browser, broad interaction, and visual harnesses |
 | Release | `npm --prefix desktop run rsr:release` | pre-handoff plus production/security invariants, acceptance, and release contracts |
 
-`App.test.tsx`, `AgentSurfaceView.test.tsx`, and `src/acceptance/**` are excluded
-from the inner-loop Vitest configuration. They remain available directly and
-run in the pre-handoff tier. Generated binding checks have one fast static
+`App.test.tsx` and `src/acceptance/**` are excluded from the inner-loop Vitest
+configuration. They remain available directly and run in the pre-handoff tier.
+Generated binding checks have one fast static
 inventory and one consolidated full gate; the domain-specific scripts remain
 available for focused IPC work. `scripts/dev-checkpoint.mjs rsr-final` resumes
 the pre-handoff gates, not acceptance or release evidence.

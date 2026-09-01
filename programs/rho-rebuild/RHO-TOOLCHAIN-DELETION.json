@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "completed_at": "2026-09-01",
+  "source_crate": "rho-toolchain",
+  "policy": "migrate live ownership, then delete the crate; no forwarding compatibility crate",
+  "modules": [
+    {"path":"src/config.rs","replacement":"rho-protocol Environment contracts plus rho-environment profile parsing","package":"ENV-01/ENV-02"},
+    {"path":"src/rig.rs","replacement":"rho-environment local RuntimeProvider","package":"ENV-05"},
+    {"path":"src/doctor.rs","replacement":"rho-environment observation and verification providers","package":"ENV-05"},
+    {"path":"src/adapter.rs","replacement":"rho-environment provider SPI","package":"ENV-02"},
+    {"path":"src/command.rs","replacement":"MaterializedPackagePlan plus rho-execution request adaptation","package":"ENV-07/ENV-09"},
+    {"path":"src/receipt.rs","replacement":"rho-protocol receipt plus rho-store desired/realization projections","package":"ENV-01/ENV-03"},
+    {"path":"src/admission.rs","replacement":"rho-control-plane Environment capability admission","package":"ENV-04"},
+    {"path":"src/target.rs","replacement":"rho-environment ExecutionProfile providers","package":"ENV-05/ENV-13"},
+    {"path":"src/journal.rs","replacement":"rho-execution checkpoints plus rho-store operation projection","package":"ENV-03/ENV-09"},
+    {"path":"src/monitor.rs","replacement":"rho-execution process/resource observation","package":"ENV-09"},
+    {"path":"src/remote.rs","replacement":"rho-runner protocol plus rho-execution SSH/Slurm adapters","package":"ENV-12/ENV-13"},
+    {"path":"src/remote_mirror.rs","replacement":"rho-store remote operation projection and rho-execution reconcile","package":"ENV-12/ENV-13"},
+    {"path":"src/bin/rho-toolchain-helper.rs","replacement":"rho-runner Environment operation plus fixed r/rho.environment helper","package":"ENV-12"},
+    {"path":"src/lib.rs","replacement":"deleted after every public consumer imports its actual owner","package":"ENV-15"}
+  ],
+  "deletion_exit": [
+    "no Cargo.toml depends on rho-toolchain",
+    "crates/rho-toolchain does not exist",
+    "no source alias or re-export retains ToolchainPlan, ToolchainConfigDocument, TargetAdmission or EnvironmentReceipt",
+    "current project and operation receipts remain readable through canonical Environment projections"
+  ],
+  "evidence": [
+    "crates/rho-toolchain is absent and Cargo.toml/Cargo.lock contain no rho-toolchain package",
+    "desktop toolchain/resource-monitor/remote-helper commands and legacy Environment Surface are absent",
+    "Agent and rho.bridge expose no direct live-Workspace renv mutation tool",
+    "Store schema v19 contains immutable plan reviews and canonical operation journals but no environment_operation_requests table",
+    "generated Environment transport contains only environment_health and environment_reobserve",
+    "architecture deletion guard passed"
+  ]
+}

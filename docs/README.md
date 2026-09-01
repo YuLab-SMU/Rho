@@ -10,7 +10,7 @@ source or a reproducible run is wrong and should be corrected or deleted.
   persistence, and interfaces.
 - [Development](DEVELOPMENT.md) — the fast edit–run–inspect–commit loop.
 - [Desktop](components/DESKTOP.md), [R runtimes](components/R-RUNTIME.md),
-  [toolchains](components/TOOLCHAINS.md), and [extensions](components/EXTENSIONS.md)
+  [Environment realization](components/ENVIRONMENT.md), and [extensions](components/EXTENSIONS.md)
   — deeper implementation maps.
 - [Documentation index](INDEX.md) — generated list of current pages.
 - [Source index](SOURCE-INDEX.md) — generated paths and checks by

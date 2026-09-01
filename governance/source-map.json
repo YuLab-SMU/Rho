@@ -19,6 +19,9 @@
     "development.integration": {
       "command": ["node", "scripts/test-worktree-integration.mjs"]
     },
+    "development.rebuild-ledger": {
+      "command": ["node", "scripts/rebuild-ledger.mjs", "validate"]
+    },
     "frontend": {
       "command": ["npm", "--prefix", "desktop", "run", "rsr:check"]
     },
@@ -30,6 +33,9 @@
     },
     "r.bridge": {
       "command": ["Rscript", "-e", "testthat::test_local('r/rho.bridge')"]
+    },
+    "r.environment": {
+      "command": ["Rscript", "-e", "testthat::test_local('r/rho.environment')"]
     },
     "release.candidate": {
       "command": ["node", "scripts/candidate-release.mjs", "--test", "true"]
@@ -55,6 +61,12 @@
     "rust.execution": {
       "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust execution", "--", "cargo", "test", "-p", "rho-artifact-store", "-p", "rho-execution", "-p", "rho-runner", "-p", "rho-sandbox", "-p", "rho-secret-broker", "-p", "rho-workspace", "--locked", "--", "--test-threads=1"]
     },
+    "rust.evidence-graph": {
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "300", "--label", "rust evidence graph", "--", "cargo", "test", "-p", "rho-evidence-graph", "--locked", "--", "--test-threads=1"]
+    },
+    "rust.environment": {
+      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust environment", "--", "cargo", "test", "-p", "rho-environment", "--locked"]
+    },
     "rust.extensions": {
       "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "300", "--label", "rust extensions", "--", "cargo", "test", "-p", "rho-extension-runtime", "-p", "rho-plugin-dev", "--locked"]
     },
@@ -66,9 +78,6 @@
     },
     "rust.store": {
       "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "300", "--label", "rust store", "--", "cargo", "test", "-p", "rho-store", "--locked", "--", "--test-threads=1"]
-    },
-    "rust.toolchain": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust toolchain", "--", "cargo", "test", "-p", "rho-toolchain", "--locked"]
     },
     "rust.workspace": {
       "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "900", "--label", "rust workspace", "--", "cargo", "test", "--workspace", "--locked", "--", "--test-threads=1"]
@@ -92,10 +101,12 @@
       "sources": [
         ".gitignore",
         "crates/rho-architecture-tests/**",
+        "programs/rho-rebuild/**",
         "scripts/check-clean-agent-cut.mjs",
         "scripts/dev-checkpoint.mjs",
         "scripts/dev-lanes.mjs",
         "scripts/path-ownership.mjs",
+        "scripts/rebuild-ledger.mjs",
         "scripts/run-fuzz-targets.mjs",
         "scripts/run-test-command.mjs",
         "scripts/test-dev-checkpoint.mjs",
@@ -113,6 +124,7 @@
         "development.checkpoint",
         "development.integration",
         "development.lanes",
+        "development.rebuild-ledger",
         "development.test-runner",
         "rust.architecture"
       ]
@@ -180,13 +192,16 @@
     },
     "persistence-and-interfaces": {
       "sources": [
+        ".cargo/**",
         "Cargo.lock",
         "Cargo.toml",
+        "crates/rho-evidence-graph/**",
         "crates/rho-protocol/**",
+        "crates/rho-server/**",
         "crates/rho-store/**",
         "rust-toolchain.toml"
       ],
-      "checks": ["rust.store", "rust.workspace"]
+      "checks": ["rust.evidence-graph", "rust.store", "rust.workspace"]
     },
     "r-agent": {
       "sources": [
@@ -211,14 +226,25 @@
       ],
       "checks": ["rust.extensions"]
     },
-    "toolchains": {
+    "environment": {
       "sources": [
-        "crates/rho-toolchain/**"
+        "crates/rho-protocol/src/environment.rs",
+        "crates/rho-protocol/src/execution.rs",
+        "crates/rho-environment/**",
+        "crates/rho-control-plane/src/environment_operation.rs",
+        "crates/rho-store/src/environment_realization.rs",
+        "crates/rho-execution/src/remote_reconcile/**",
+        "crates/rho-execution/src/slurm/**",
+        "crates/rho-runner/**",
+        "crates/rho-workspace/src/environment.rs",
+        "r/rho.environment/**",
+        "test/remote-cluster/**"
       ],
-      "checks": ["rust.toolchain"]
+      "checks": ["r.environment", "rust.environment", "rust.execution"]
     },
     "release": {
       "sources": [
+        ".cargo/**",
         ".github/CODEOWNERS",
         ".github/release-notes/**",
         ".github/workflows/**",
