@@ -24,6 +24,8 @@
     background: var(--rho-panel);
   }
   .rho-authority-surface > header strong { font-size: var(--rho-text-body); font-weight: var(--rho-weight-semibold); }
+  .rho-authority-surface > header > div { display: grid; min-width: 0; gap: var(--rho-space-1); }
+  .rho-authority-surface > header > div small { color: var(--rho-muted); font-size: var(--rho-text-caption); }
   .rho-authority-surface > header button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); }
 
   .rho-authority-records {
@@ -101,6 +103,41 @@
   .rho-authority-status-pending > span::before,
   .rho-authority-status-running > span::before { background: var(--rho-warn); }
   .rho-authority-status code { max-width: 16rem; overflow: hidden; color: var(--rho-muted); font-size: var(--rho-text-caption); text-overflow: ellipsis; white-space: nowrap; }
+
+  .rho-results-empty { margin: 0; padding: var(--rho-space-5); color: var(--rho-muted); font-size: var(--rho-text-ui); }
+  .rho-plots-results .rho-authority-records {
+    grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr));
+    gap: var(--rho-space-3);
+    padding: var(--rho-space-3);
+    background: var(--rho-panel);
+  }
+  .rho-authority-records .rho-plot-record {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: var(--rho-space-3);
+    padding: var(--rho-space-3);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-paper);
+  }
+  .rho-authority-records .rho-plot-record::before { display: none; }
+  .rho-plot-record > .rho-domain-output-image,
+  .rho-plot-record > .rho-domain-output-preview {
+    grid-column: 1;
+    width: 100%;
+    max-height: 20rem;
+    margin: 0;
+    object-fit: contain;
+  }
+  .rho-plot-record-copy { display: grid; min-width: 0; gap: var(--rho-space-1); }
+  .rho-plot-record-copy strong { overflow: hidden; font-size: var(--rho-text-body); text-overflow: ellipsis; white-space: nowrap; }
+  .rho-plot-record-copy small { overflow: hidden; color: var(--rho-muted); font-family: var(--rho-font-mono); font-size: var(--rho-text-caption); text-overflow: ellipsis; white-space: nowrap; }
+  .rho-plot-record-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--rho-space-2); }
+  .rho-plot-record-footer > span { display: flex; align-items: center; gap: var(--rho-space-2); color: var(--rho-ink-2); font-size: var(--rho-text-caption); font-weight: var(--rho-weight-semibold); }
+  .rho-plot-record-footer > span::before { width: 7px; height: 7px; border-radius: 50%; content: ""; background: var(--rho-warn); }
+  .rho-plot-record-footer > .rho-result-authority-ready::before { background: var(--rho-ok); }
+  .rho-plot-record-footer button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); }
 
   .rho-environment-health {
     container-type: inline-size;

@@ -24,6 +24,7 @@ import type {
   ResourceDescriptor,
   RuntimeDescriptor,
   RuntimeOutputReference,
+  LayoutBasis,
   SceneEdit,
   SurfaceInstance,
   SurfaceFactoryRegistration,
@@ -142,6 +143,21 @@ interface WorkbenchRootProps {
 interface ScopedActionError {
   readonly message: string;
   readonly scope: ProjectActionScope;
+}
+
+function surfacePlacementBasis(surfaceId: string, quotaClass: string): LayoutBasis {
+  if (quotaClass === "strip") return { kind: "intrinsic" };
+  if (surfaceId === "rho.plots") {
+    return { kind: "minmax", min_logical_pixels: 360, max_logical_pixels: 600, weight: 2 };
+  }
+  const role = surfaceUxProfile(surfaceId).areaRole;
+  if (role === "primary") {
+    return { kind: "minmax", min_logical_pixels: 480, max_logical_pixels: 1_600, weight: 4 };
+  }
+  if (role === "support") {
+    return { kind: "minmax", min_logical_pixels: 320, max_logical_pixels: 900, weight: 2 };
+  }
+  return { kind: "minmax", min_logical_pixels: 380, max_logical_pixels: 720, weight: 2 };
 }
 
 function boundedFailureMessage(error: unknown, fallback: string): string {
@@ -731,9 +747,10 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
         target_container_node_id: studio.scene.root.node_id,
         child_index: studio.scene.root.children.length,
         instance_id: existing.instance_id,
-        basis: factory.definition.instance_quota_class === "strip"
-          ? { kind: "intrinsic" }
-          : { kind: "minmax", min_logical_pixels: 220, max_logical_pixels: 1_200, weight: 1 },
+        basis: surfacePlacementBasis(
+          factory.definition.surface_id,
+          factory.definition.instance_quota_class,
+        ),
       });
       return;
     }
@@ -803,9 +820,7 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
           target_container_node_id: studio.scene.root.node_id,
           child_index: studio.scene.root.children.length,
           instance_id: created.instance_id,
-          basis: definition.instance_quota_class === "strip"
-            ? { kind: "intrinsic" }
-            : { kind: "minmax", min_logical_pixels: 220, max_logical_pixels: 1_200, weight: 1 },
+          basis: surfacePlacementBasis(definition.surface_id, definition.instance_quota_class),
         },
       }, lease);
       return created;
