@@ -129,6 +129,7 @@ export function NavigatorSurfaceView({
   instance,
   transport,
   resources,
+  activeResourceId,
   openFile,
   persist,
   reportError,
@@ -137,6 +138,7 @@ export function NavigatorSurfaceView({
   readonly instance: SurfaceInstance;
   readonly transport: UiKernelTransport;
   readonly resources: ResourceRegistrySnapshot | null;
+  readonly activeResourceId: string | null;
   readonly openFile: (descriptor: ResourceDescriptor) => Promise<void>;
   readonly persist: (viewState: unknown) => Promise<void>;
   readonly reportError: (error: unknown) => void;
@@ -150,7 +152,6 @@ export function NavigatorSurfaceView({
   const [tab, setTab] = useState<NavigatorTab>(initialTab);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
   const [domain, setDomain] = useState<DomainSurfaceData | null>(null);
   const [recent, setRecent] = useState<DomainSurfaceData | null>(null);
@@ -274,11 +275,9 @@ export function NavigatorSurfaceView({
             : <FileTreeRows
                 nodes={visibleFiles}
                 depth={0}
-                selectedPath={selectedFile}
+                selectedPath={activeResourceId}
                 openFile={(descriptor) => {
-                  void openFile(descriptor)
-                    .then(() => setSelectedFile(descriptor.resource_id))
-                    .catch(reportError);
+                  void openFile(descriptor).catch(reportError);
                 }}
               />
         )}

@@ -438,6 +438,22 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
     };
   }, []);
   const instances = useMemo(() => new Map(surfaces?.catalog.instances.map((instance) => [instance.instance_id, instance]) ?? []), [surfaces]);
+  const activeFileResourceId = useMemo(() => {
+    if (studio == null) return null;
+    const ordered = layoutInstanceIds(studio.scene.root)
+      .map((instanceId) => instances.get(instanceId))
+      .filter((candidate): candidate is SurfaceInstance => candidate != null);
+    const focused = studio.scene.focused_surface_instance_id == null
+      ? null
+      : instances.get(studio.scene.focused_surface_instance_id) ?? null;
+    const file = focused?.resource_binding != null
+      ? focused
+      : ordered.find((candidate) =>
+          candidate.resource_binding != null
+          && (candidate.surface_id === "rho.file-source" || candidate.surface_id === "rho.file-preview")
+        ) ?? null;
+    return file?.resource_binding?.resource_id ?? null;
+  }, [instances, studio]);
   const paletteCommands = useMemo(() => snapshot == null ? [] : commandsForPlacement(snapshot, "palette").filter((command) => {
     const query = commandQuery.trim().toLocaleLowerCase();
     return query.length === 0 || command.definition.label.toLocaleLowerCase().includes(query) ||
@@ -1723,6 +1739,7 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
       registerConsoleExecution={registerConsoleExecution}
       markConsolePreferred={markConsolePreferred}
       resources={resources}
+      activeFileResourceId={activeFileResourceId}
       readResource={async (descriptor, consistency, resourceRevision) => {
         if (resources == null) throw new Error("Resource Registry is not ready.");
         return resourceStore.read({

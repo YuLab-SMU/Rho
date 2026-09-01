@@ -112,6 +112,7 @@ interface SurfaceFrameProps {
   readonly registerConsoleExecution: (endpoint: ConsoleExecutionEndpoint) => () => void;
   readonly markConsolePreferred: (instanceId: string) => void;
   readonly resources: ResourceRegistrySnapshot | null;
+  readonly activeFileResourceId: string | null;
   readonly readResource: FileResourceViewProps["read"];
   readonly updateResourceDraft: FileResourceViewProps["updateDraft"];
   readonly withFileMutation: FileResourceViewProps["withMutation"];
@@ -186,7 +187,7 @@ export function SurfaceFrame({
   listRuntimeExecutions, loadRuntimeOutputPage, interruptRuntime,
   loadRuntimeOutputPageBefore,
   restartRuntime, persistConsole, registerConsoleExecution, markConsolePreferred,
-  resources, readResource, updateResourceDraft, withFileMutation,
+  resources, activeFileResourceId, readResource, updateResourceDraft, withFileMutation,
   reloadResource, renameResource, deleteResource,
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
   pluginTransport, surfaceFactories, pluginDocumentRequest, projectRevision, openFindingReference,
@@ -601,6 +602,7 @@ export function SurfaceFrame({
           instance={instance}
           transport={pluginTransport}
           resources={resources}
+          activeResourceId={activeFileResourceId}
           openFile={openNavigatorFile}
           persist={persistSurfaceViewState}
           reportError={reportError}
