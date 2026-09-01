@@ -90,7 +90,7 @@ export function ClaimsSurface({ ports, initialClaimId, openTrace, reportError }:
     </form>}
     {error != null && <SurfaceTaskState tone="error" title="Claims unavailable" detail={error} role="alert" />}
     {error == null && claims.length === 0 && <SurfaceTaskState tone="empty" title="No claims yet" detail="Create a draft claim, then explicitly promote it when its links are ready." role="status" />}
-    <div className="rho-claims-layout">
+    {claims.length > 0 && <div className="rho-claims-layout">
       <div className="rho-evidence-node-grid">
         {claims.map((claim) => <div key={claim.node_id}>
           <EvidenceNodeCard node={claim} selected={selected === claim.node_id} onSelect={() => setSelected(claim.node_id)} />
@@ -101,6 +101,6 @@ export function ClaimsSurface({ ports, initialClaimId, openTrace, reportError }:
         </div>)}
       </div>
       {selected != null && <ClaimTracePanel claimId={selected} ports={ports} reportError={reportError} />}
-    </div>
+    </div>}
   </section>;
 }

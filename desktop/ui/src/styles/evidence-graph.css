@@ -19,6 +19,7 @@
     flex-direction: column;
     overflow: hidden;
   }
+  .rho-claims-surface > .rho-task-state { flex: 1 1 auto; }
   .rho-claim-trace {
     gap: var(--rho-space-5);
     padding: var(--rho-space-5);
