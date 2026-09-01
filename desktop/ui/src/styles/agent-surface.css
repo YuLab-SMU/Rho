@@ -58,6 +58,9 @@
   section.rho-agent-surface .rho-agent-environment-doctor ul { display: grid; gap: var(--rho-space-1); margin: 0; padding-inline-start: var(--rho-space-5); }
   section.rho-agent-surface .rho-agent-environment-doctor li { display: grid; gap: var(--rho-space-1); }
   section.rho-agent-surface .rho-agent-environment-uncertainty { color: var(--rho-warn); }
+  section.rho-agent-surface .rho-agent-environment-doctor[data-state="unbound"],
+  section.rho-agent-surface .rho-agent-environment-doctor[data-state="ready"] { gap: var(--rho-space-1); padding-block: var(--rho-space-2); }
+  section.rho-agent-surface .rho-agent-environment-doctor[data-state="unbound"] > header > span { color: var(--rho-muted); font-size: var(--rho-text-caption); }
 
   section.rho-agent-surface .rho-agent-current-work-header {
     position: sticky;
@@ -206,7 +209,7 @@
   section.rho-agent-surface .rho-agent-activity .rho-agent-code-review > summary:hover { color: var(--rho-ink); }
 
   /* Empty state: a centered greeting block with the truthful how-to copy. */
-  section.rho-agent-surface .rho-agent-empty { justify-items: center; padding: var(--rho-space-7) var(--rho-space-5); text-align: center; }
+  section.rho-agent-surface .rho-agent-empty { justify-items: center; padding: var(--rho-space-6) var(--rho-space-5); text-align: center; }
   section.rho-agent-surface .rho-agent-empty strong { font-size: var(--rho-text-head); font-weight: var(--rho-weight-medium); }
   section.rho-agent-surface .rho-agent-empty > span { max-width: 26rem; }
 
@@ -246,6 +249,7 @@
     background: transparent;
   }
   section.rho-agent-surface .rho-agent-composer textarea:focus-visible { outline: none; }
+  section.rho-agent-surface .rho-agent-composer-idle textarea { min-height: 3rem; max-height: 7rem; padding-block: var(--rho-space-2); }
 
   /* Final prose is the conclusion of the turn; graph-backed evidence remains
      adjacent but visually subordinate and never impersonates authority. */
@@ -305,9 +309,10 @@
     flex: 0 0 auto;
     min-height: var(--rho-control-small);
     padding: var(--rho-space-1) var(--rho-space-3);
-    border-radius: var(--rho-radius-pill);
-    color: var(--rho-on-inverse);
-    background: var(--rho-inverse);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    color: var(--rho-ink-2);
+    background: var(--rho-fill);
     font-size: var(--rho-text-caption);
     font-weight: var(--rho-weight-semibold);
   }

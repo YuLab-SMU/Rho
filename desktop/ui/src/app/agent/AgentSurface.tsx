@@ -1211,6 +1211,10 @@ export function AgentSurface({
     `Provider health:   ${runtimeDiagnostics.provider_health}`,
     "Workspace R remains independent and available when healthy.",
   ].join("\n");
+  const idleConversation = !loading
+    && refreshError == null
+    && turns.length === 0
+    && activeTurn == null;
 
   return (
     <section className={`rho-agent-surface rho-agent-${displayMode}`}>
@@ -1277,7 +1281,7 @@ export function AgentSurface({
           openModelSettings(activeProviderId, activeChatModelId);
         }}>Models</button>
       </header>
-      <section className="rho-agent-overview" aria-label="Agent status and policy">
+      {!idleConversation && <section className="rho-agent-overview" aria-label="Agent status and policy">
         <div>
           <span className="rho-agent-section-label">Autonomous Agent</span>
           <strong>Goal-driven scientific work</strong>
@@ -1288,7 +1292,7 @@ export function AgentSurface({
           <div><dt>Permission</dt><dd>{postureLabel}</dd></div>
           <div><dt>State</dt><dd>{activeTurn == null ? "Ready" : agentTurnStatusLabel(activeTurn.status)}</dd></div>
         </dl>
-      </section>
+      </section>}
       <AgentEnvironmentPanel port={environmentPort} reportError={reportError} />
       {displayMode === "activity" && activeTurn != null && stopActiveTurn != null && (
         <AgentRunningRow
@@ -1300,7 +1304,7 @@ export function AgentSurface({
       )}
       {displayMode !== "composer" && (
         <div className="rho-agent-timeline" aria-busy={loading}>
-          <AgentCurrentWork prompt={activeTurn?.prompt_preview ?? null} turnCount={turns.length} />
+          {!idleConversation && <AgentCurrentWork prompt={activeTurn?.prompt_preview ?? null} turnCount={turns.length} />}
           {loading && <p className="rho-agent-loading">Loading conversation…</p>}
           {!loading && refreshError != null && <div className="rho-agent-empty" role="alert">
             <strong>Conversation refresh failed</strong>
@@ -1314,12 +1318,10 @@ export function AgentSurface({
           {!loading && refreshError == null && turns.length === 0 && <div className="rho-agent-empty" role="status">
             <strong>{selectedConversationUnavailable
               ? "Selected conversation unavailable"
-              : view.conversation_id == null ? "No conversation yet" : "Ready for the first turn"}</strong>
+              : "Start with a scientific goal"}</strong>
             <span>{selectedConversationUnavailable
               ? "Choose No conversation or a listed conversation before reviewing context or sending."
-              : view.conversation_id == null
-                ? "Write below and send; Rho opens a conversation and keeps the thread, run state, and decisions here."
-                : "Describe the goal below; Rho will observe, plan, request effects, and re-observe as needed."}</span>
+              : "Write below; Rho reviews project context before it plans or requests governed effects."}</span>
             <div className="rho-agent-suggestions">
               {AGENT_SUGGESTIONS.map((suggestion) => (
                 <button
@@ -1539,7 +1541,7 @@ export function AgentSurface({
         </div>
       )}
       {displayMode !== "activity" && (
-        <div className="rho-agent-composer">
+        <div className={`rho-agent-composer ${idleConversation ? "rho-agent-composer-idle" : ""}`}>
           {activeTurn != null && stopActiveTurn != null && (
             <AgentRunningRow
               status={activeTurn.status}
@@ -1607,8 +1609,8 @@ export function AgentSurface({
             <button type="button" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !modeReady || !view.composer.trim()} onClick={() => void reviewContext()}>
               {contextReviewBusy ? "Reviewing…" : "Review context"}
             </button>
-            <div className="rho-agent-autonomous-badge" role="status">
-              Autonomous goal loop
+            <div className="rho-agent-autonomous-badge" role="status" title="Observe, plan, request governed effects, then re-observe">
+              Governed agent
             </div>
             <details className="rho-agent-posture-menu">
               <summary
@@ -1640,7 +1642,7 @@ export function AgentSurface({
                 })}
               </div>
             </details>
-            <small className="rho-agent-mode-hint">Observe → plan → request effect → re-observe</small>
+            {!idleConversation && <small className="rho-agent-mode-hint">Observe → plan → request effect → re-observe</small>}
             <details className="rho-agent-model-menu">
               <summary aria-label={`Chat model: ${chatModelLabel}`} aria-busy={modelSwitchBusy} aria-disabled={busy || modelSwitchBusy} onClick={(event) => {
                 if (mutationRef.current != null || busy || modelSwitchBusy) {

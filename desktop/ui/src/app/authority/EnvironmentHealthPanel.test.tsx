@@ -103,6 +103,16 @@ describe("Environment Authority and Agent Doctor", () => {
     expect(host.textContent).toContain("cannot install directly");
   });
 
+  it("separates a running Workspace R from a missing verified Environment binding", async () => {
+    const base = mockEnvironmentHealth();
+    const unbound = { ...base, binding: null, incidents: [] } as const;
+    const host = await render(<AgentEnvironmentPanel port={port(unbound)} reportError={vi.fn()} />);
+    expect(host.textContent).toContain("No verified Environment binding");
+    expect(host.textContent).toContain(`Workspace R: ${base.workspace.phase.replaceAll("_", " ")}`);
+    expect(host.textContent).toContain("may be running");
+    expect(host.textContent).not.toContain("No open Environment incident");
+  });
+
   it("recovers from an unavailable Authority projection without exposing local paths", async () => {
     let available = false;
     const environment = port();
