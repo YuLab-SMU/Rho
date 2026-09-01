@@ -69,4 +69,9 @@
     :where(p, span, strong, small, code, pre, td, th) {
     overflow-wrap: anywhere;
   }
+
+  /* `small` defaults to 0.8em, which lands at 10px under the 12px UI size and
+     below the 11px floor the scale declares. Anchor it to the caption token so
+     the element carries emphasis, not an off-scale size. */
+  small { font-size: var(--rho-text-caption); }
 }

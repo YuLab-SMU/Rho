@@ -7,6 +7,12 @@
 @layer reset, tokens, base, components, workbench, surfaces;
 
 @layer surfaces {
+  /* The surface owns a base size so an element nobody styled inherits the body
+     token instead of the 16px document default, which reads as a stray size
+     next to the 11/12/13px scale around it. */
+  section.rho-agent-surface { font-size: var(--rho-text-body); }
+  section.rho-agent-surface :where(strong, b) { font-weight: var(--rho-weight-semibold); }
+
   /* --- Toolbar: conversation context + quiet secondary actions --------------- */
   section.rho-agent-surface .rho-agent-toolbar { align-items: center; }
   section.rho-agent-surface .rho-agent-toolbar-action {
