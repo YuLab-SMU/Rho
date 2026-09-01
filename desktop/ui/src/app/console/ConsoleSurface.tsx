@@ -126,7 +126,7 @@ export function ConsoleSurface({
               ))}
             </select>
             <span className={`rho-runtime-state rho-runtime-${attached?.status ?? "unbound"}`}>
-              {attached?.status ?? "unbound"}
+              runtime: {attached?.status ?? "unbound"}
             </span>
             {transcriptOutputs.length > 0 && (
               <button
@@ -255,20 +255,18 @@ export function ConsoleSurface({
                   candidate.runtime_instance_id === output.runtime_instance_id
                 )?.display_label ?? "R runtime"
               }</span>}
+              <span className="rho-console-execution-label">Execution #{ordinal}</span>
               {(() => {
                 const stateLabel = `${output.status ?? "completed"}${output.output_state != null && !["collecting", "complete"].includes(output.output_state)
                   ? ` · ${output.output_state}`
                   : ""}`;
-                /* A completed execution is the norm; only attention states earn a
-                   label, but the slot keeps the header layout stable. */
                 return (
                   <span className={`rho-console-entry-state rho-console-entry-state-${output.status ?? "completed"}`}>
-                    {stateLabel === "completed" ? "" : stateLabel}
+                    runtime: {stateLabel}
                   </span>
                 );
               })()}
-              <span>#{ordinal}</span>
-              <button type="button" onClick={() => openSurfaceById("rho.runs")}>Open in History</button>
+              <button type="button" onClick={() => openSurfaceById("rho.runs")}>Run record</button>
             </header>
             <code className="rho-console-command"><span aria-hidden="true">&gt;</span> {output.code}</code>
             <div className="rho-console-results">
@@ -281,7 +279,7 @@ export function ConsoleSurface({
                     className="rho-runtime-output-reference"
                     data-reference-id={result.reference.id}
                     onClick={() => openPlot(result.reference!.id)}
-                  >Open Plot</button>}
+                  >Open plot artifact</button>}
                 </div>
               ))}
             </div>

@@ -4650,7 +4650,7 @@ describe("Studio foundation app", () => {
     const composer = consoleView.querySelector<HTMLTextAreaElement>("textarea")!;
 
     expect(runtime.selectedOptions[0]?.textContent).toBe("Workspace R");
-    expect(consoleView.querySelector(".rho-runtime-state")?.textContent).toBe("ready");
+    expect(consoleView.querySelector(".rho-runtime-state")?.textContent).toBe("runtime: ready");
     expect(consoleView.querySelector(".rho-console-empty")?.textContent).toContain("Ready for R code");
     expect(consoleView.querySelector("[aria-label^='Filter output']")).toBeNull();
     expect(consoleView.querySelector("[aria-label='Filter Console output']")).toBeNull();

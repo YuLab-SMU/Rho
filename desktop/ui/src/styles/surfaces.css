@@ -378,9 +378,9 @@
   .rho-console-entry { margin-bottom: var(--rho-space-4); padding-bottom: var(--rho-space-3); border-bottom: 1px solid var(--rho-line); }
   .rho-console-entry:last-child { border-bottom: 0; }
   .rho-console-entry header {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     align-items: center;
-    justify-content: space-between;
     gap: var(--rho-space-3);
     margin-bottom: var(--rho-space-2);
     color: var(--rho-muted);
@@ -388,6 +388,7 @@
     font-size: var(--rho-text-caption);
   }
   .rho-console-workspace-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rho-console-execution-label { color: var(--rho-ink-2); font-weight: var(--rho-weight-semibold); white-space: nowrap; }
   .rho-console-entry header button {
     min-height: auto;
     padding: 0;
@@ -396,11 +397,10 @@
     background: transparent;
     font: inherit;
     text-decoration: underline;
-    opacity: 0;
+    opacity: 0.72;
   }
-  /* Per-entry actions stay quiet until the entry is inspected. */
   .rho-console-entry:hover header button, .rho-console-entry:focus-within header button { opacity: 1; }
-  .rho-console-entry-state { margin-inline-start: auto; color: var(--rho-muted); text-transform: capitalize; }
+  .rho-console-entry-state { color: var(--rho-muted); text-transform: capitalize; white-space: nowrap; }
   .rho-console-entry-state-failed { color: var(--rho-danger); }
   .rho-console-entry-state-interrupted { color: var(--rho-warn); }
   .rho-console-jump-latest {
@@ -420,6 +420,8 @@
     border-inline-start: 3px solid var(--rho-accent);
     border-radius: var(--rho-radius-1);
     background: var(--rho-accent-tint);
+    font-weight: var(--rho-weight-regular);
+    line-height: 1.45;
   }
   .rho-console-entry > .rho-console-command > span { color: var(--rho-accent-ink); }
   .rho-console-results { display: grid; gap: var(--rho-space-2); margin-top: var(--rho-space-2); }
@@ -610,6 +612,11 @@
     .rho-runtime-history-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
     .rho-runtime-history-summary { grid-column: 1 / -1; }
     .rho-runtime-history-toolbar label { grid-row: auto; }
+  }
+  @container (max-width: 520px) {
+    .rho-console-entry header { grid-template-columns: minmax(0, 1fr) auto; gap: var(--rho-space-1) var(--rho-space-3); }
+    .rho-console-entry-state { grid-column: 1; }
+    .rho-console-entry header button { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
   }
   .rho-console-stop {
     border-color: var(--rho-inverse) !important;
