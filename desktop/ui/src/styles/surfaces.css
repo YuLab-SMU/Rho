@@ -14,7 +14,7 @@
     min-height: 0;
     overflow: auto;
     border: var(--rho-border);
-    border-radius: var(--rho-radius-2);
+    border-radius: var(--rho-radius-1);
     background: var(--rho-paper);
   }
   .rho-surface-focused { border-color: var(--rho-accent); box-shadow: var(--rho-shadow-focus); }
@@ -75,9 +75,10 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--rho-space-2);
-    min-height: var(--rho-target-min);
-    padding: 0 var(--rho-space-2);
+    min-height: var(--rho-surface-header-height);
+    padding: 0 var(--rho-space-3);
     border-bottom: var(--rho-border);
+    background: var(--rho-panel);
   }
   .rho-surface-chrome strong { display: block; overflow: hidden; font-size: var(--rho-text-ui); font-weight: var(--rho-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
   .rho-surface-actions { display: flex; align-items: center; gap: var(--rho-space-1); }
@@ -171,10 +172,10 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: var(--rho-space-2);
-    padding: var(--rho-space-2);
+    gap: var(--rho-space-3);
+    padding: 0 var(--rho-space-3);
     border-bottom: var(--rho-border);
-    background: var(--rho-paper);
+    background: var(--rho-panel);
   }
   .rho-navigator-tabs {
     display: flex;
@@ -182,26 +183,27 @@
     flex-wrap: wrap;
     min-width: 0;
     align-content: flex-start;
-    gap: var(--rho-space-1);
-    padding: var(--rho-space-1);
-    border-radius: var(--rho-radius-2);
-    background: var(--rho-fill);
+    gap: var(--rho-space-4);
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
   }
   .rho-navigator-tabs button {
+    position: relative;
     flex: 1 1 auto;
-    min-height: var(--rho-target-min);
-    padding: var(--rho-space-2) var(--rho-space-3);
+    min-height: var(--rho-surface-header-height);
+    padding: var(--rho-space-2) 0;
     border: 0;
-    border-radius: var(--rho-radius-1);
+    border-radius: 0;
     color: var(--rho-muted);
     background: transparent;
   }
-  .rho-navigator-tabs button:hover:not(:disabled) { color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
+  .rho-navigator-tabs button:hover:not(:disabled) { color: var(--rho-accent-ink); background: transparent; box-shadow: none; }
   .rho-navigator-tabs button[aria-selected="true"] {
     color: var(--rho-accent-ink);
     font-weight: var(--rho-weight-semibold);
-    background: var(--rho-paper);
-    box-shadow: var(--rho-shadow-raised);
+    background: transparent;
+    box-shadow: inset 0 -2px 0 var(--rho-ink);
   }
   .rho-navigator-search-toggle { flex: 0 0 auto; align-self: center; }
   .rho-navigator-search {
@@ -211,7 +213,7 @@
     background: var(--rho-paper);
   }
   .rho-navigator-search input { width: 100%; min-width: 0; }
-  .rho-navigator-body { min-width: 0; min-height: 0; flex: 1 1 auto; padding: var(--rho-space-2) var(--rho-space-1); overflow: auto; }
+  .rho-navigator-body { min-width: 0; min-height: 0; flex: 1 1 auto; padding: var(--rho-space-2) 0; overflow: auto; }
   .rho-navigator .rho-nav-row { padding-inline-start: calc(var(--rho-space-3) + var(--rho-nav-depth) * var(--rho-space-4)); }
   .rho-nav-empty { margin: 0; padding: var(--rho-space-3) var(--rho-space-4); color: var(--rho-muted); font-size: var(--rho-text-ui); }
   .rho-nav-folder {
@@ -293,7 +295,7 @@
     font-family: var(--rho-font-mono);
     font-size: var(--rho-text-ui);
   }
-  .rho-console-toolbar { min-width: 0; border-bottom: var(--rho-border); background: var(--rho-paper); }
+  .rho-console-toolbar { min-width: 0; border-bottom: var(--rho-border); background: var(--rho-panel); }
   .rho-console-runtime-bar {
     display: flex;
     align-items: center;
@@ -459,7 +461,7 @@
     gap: var(--rho-space-2);
     padding: var(--rho-space-3);
     border-top: var(--rho-border);
-    background: var(--rho-paper);
+    background: var(--rho-panel);
   }
   .rho-console-input-row {
     display: grid;
@@ -468,7 +470,7 @@
     align-items: stretch;
     border: var(--rho-border);
     border-radius: var(--rho-radius-2);
-    background: var(--rho-panel);
+    background: var(--rho-paper);
     box-shadow: var(--rho-shadow-raised);
     transition: border-color var(--rho-motion-fast) var(--rho-ease-out), box-shadow var(--rho-motion-fast) var(--rho-ease-out);
   }

@@ -310,15 +310,28 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--rho-space-2);
+    gap: var(--rho-space-3);
     width: var(--rho-rail-width);
-    padding: var(--rho-space-3) var(--rho-space-2);
-    border-right: var(--rho-border);
+    padding: var(--rho-space-3) 6px var(--rho-space-2);
+    border-right: 1px solid rgb(255 255 255 / 8%);
     color: var(--rho-rail-text);
     background: var(--rho-rail);
-    box-shadow: 2px 0 10px rgb(27 27 27 / 4%);
+    box-shadow: 3px 0 16px rgb(18 22 19 / 12%);
   }
   .rho-mark-word { color: var(--rho-rail-text); letter-spacing: -0.03em; }
+  .rho-rail-brand {
+    display: grid;
+    width: 100%;
+    height: var(--rho-space-7);
+    place-items: center;
+    border-bottom: 1px solid rgb(255 255 255 / 10%);
+    color: var(--rho-rail-text);
+  }
+  .rho-rail-brand span {
+    font-size: var(--rho-text-body);
+    font-weight: var(--rho-weight-semibold);
+    letter-spacing: -0.04em;
+  }
 
   /* Icon-only rail buttons, with an optional caption underneath. Selection
      uses neutral fill and elevation so the monochrome palette stays intact. */
@@ -327,7 +340,7 @@
     place-items: center;
     padding: 0;
     border: 0;
-    border-radius: var(--rho-radius-2);
+    border-radius: var(--rho-radius-1);
     color: var(--rho-rail-muted);
     background: transparent;
     cursor: pointer;
@@ -371,10 +384,10 @@
     box-shadow: none;
   }
   .rho-rail-btn[aria-pressed="true"], .rho-rail-choice[aria-pressed="true"] {
-    border-radius: var(--rho-radius-2);
-    color: var(--rho-accent-ink);
-    background: var(--rho-accent-tint-strong);
-    box-shadow: var(--rho-shadow-raised);
+    border-radius: var(--rho-radius-1);
+    color: var(--rho-rail-text);
+    background: var(--rho-rail-fill);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 6%);
   }
 
   .rho-toolbar-anchor, .rho-toolbar-lane, .rho-toolbar-slot {
@@ -389,7 +402,7 @@
     justify-content: flex-end;
     min-height: 0;
     padding-top: var(--rho-space-2);
-    border-top: var(--rho-border);
+    border-top: 1px solid rgb(255 255 255 / 10%);
   }
   .rho-toolbar-lane {
     flex: 0 1 auto;
@@ -410,6 +423,8 @@
     width: 100%;
     padding: 0;
     border: 0;
+    border-bottom: 1px solid rgb(255 255 255 / 10%);
+    padding-bottom: var(--rho-space-3);
     background: transparent;
   }
   .rho-studio-bar .rho-mode-switch button {
@@ -424,10 +439,19 @@
   .rho-studio-bar .rho-mode-switch button:hover:not(:disabled) { color: var(--rho-rail-text); background: var(--rho-rail-fill); box-shadow: none; }
   .rho-studio-bar .rho-mode-switch button[aria-pressed="true"] {
     border-color: transparent;
-    border-radius: var(--rho-radius-2);
-    color: var(--rho-accent-ink);
-    background: var(--rho-accent-tint-strong);
-    box-shadow: var(--rho-shadow-raised);
+    border-radius: var(--rho-radius-1);
+    color: var(--rho-rail-text);
+    background: var(--rho-rail-fill);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 6%);
+  }
+  .rho-studio-bar .rho-mode-switch button[aria-pressed="true"]::before {
+    position: absolute;
+    left: -6px;
+    width: 2px;
+    height: var(--rho-space-5);
+    border-radius: 0 var(--rho-radius-pill) var(--rho-radius-pill) 0;
+    content: "";
+    background: var(--rho-paper);
   }
 
   /* The Rho wordmark stays, compact. */
@@ -458,7 +482,7 @@
     gap: var(--rho-space-1);
     width: 100%;
     padding: var(--rho-space-2) 0;
-    border-top: var(--rho-border);
+    border-top: 1px solid rgb(255 255 255 / 10%);
   }
   .rho-plugin-icon {
     position: relative;
@@ -468,7 +492,7 @@
     place-items: center;
     padding: 0;
     border: 0;
-    border-radius: var(--rho-radius-2);
+    border-radius: var(--rho-radius-1);
     color: var(--rho-rail-muted);
     background: var(--rho-rail-fill);
     font-size: var(--rho-text-title);
@@ -496,7 +520,7 @@
     width: 100%;
     overflow-y: auto;
     padding: var(--rho-space-2) 0;
-    border-top: var(--rho-border);
+    border-top: 1px solid rgb(255 255 255 / 10%);
     scrollbar-width: none;
   }
   .rho-open-surface-rail::-webkit-scrollbar { display: none; }
@@ -509,14 +533,14 @@
     place-items: center;
     padding: 0;
     border-color: transparent;
-    border-radius: var(--rho-radius-2);
+    border-radius: var(--rho-radius-1);
     color: var(--rho-rail-muted);
     background: transparent;
   }
   .rho-open-surface-tool .rho-menu-popover > .rho-icon-btn:hover,
   .rho-open-surface-tool .rho-menu-popover > .rho-icon-btn[aria-expanded="true"] { color: var(--rho-rail-text); background: var(--rho-rail-fill); }
-  .rho-open-surface-tool[data-focused="true"] .rho-menu-popover > .rho-icon-btn { color: var(--rho-accent-ink); background: var(--rho-accent-tint-strong); box-shadow: var(--rho-shadow-raised); }
-  .rho-open-surface-tool[data-focused="true"]::before { position: absolute; left: calc(-1 * var(--rho-space-2)); width: 3px; height: var(--rho-space-5); border-radius: var(--rho-radius-pill); content: ""; background: var(--rho-accent); }
+  .rho-open-surface-tool[data-focused="true"] .rho-menu-popover > .rho-icon-btn { color: var(--rho-rail-text); background: var(--rho-rail-fill); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 6%); }
+  .rho-open-surface-tool[data-focused="true"]::before { position: absolute; left: -6px; width: 2px; height: var(--rho-space-5); border-radius: 0 var(--rho-radius-pill) var(--rho-radius-pill) 0; content: ""; background: var(--rho-paper); }
   .rho-open-surface-glyph { font: var(--rho-weight-semibold) var(--rho-text-caption)/1 var(--rho-font-mono); letter-spacing: -0.04em; }
   .rho-surface-tool-panel { width: min(18rem, calc(100vw - var(--rho-rail-width) - 2 * var(--rho-space-4))); }
   .rho-surface-tool-panel .rho-surface-tool-label { padding: var(--rho-space-1) var(--rho-space-3); color: var(--rho-muted); font-size: var(--rho-text-caption); font-weight: var(--rho-weight-semibold); }
@@ -615,14 +639,14 @@
   .rho-statusbar {
     display: flex;
     align-items: center;
-    gap: var(--rho-space-5);
+    gap: var(--rho-space-4);
     min-height: var(--rho-statusbar-height);
     padding: 0 var(--rho-space-4);
     border-top: var(--rho-border);
     color: var(--rho-ink-2);
-    background: var(--rho-paper);
-    box-shadow: 0 -6px 18px rgb(32 36 44 / 4%);
-    font-size: var(--rho-text-ui);
+    background: var(--rho-panel);
+    box-shadow: none;
+    font-size: var(--rho-text-caption);
     overflow: visible;
   }
   .rho-statusbar-item { display: flex; min-width: 0; align-items: center; gap: var(--rho-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -814,7 +838,7 @@
   .rho-runtime-actions button { flex: 1 1 auto; min-height: 24px; padding: var(--rho-space-1) var(--rho-space-2); font-size: var(--rho-text-caption); }
 
   /* --- Canvas ---------------------------------------------------------------- */
-  .rho-studio-canvas { position: relative; min-width: 0; min-height: 0; padding: calc(var(--rho-space-3) + var(--rho-space-1)); overflow: hidden; }
+  .rho-studio-canvas { position: relative; min-width: 0; min-height: 0; padding: var(--rho-workspace-gap); overflow: hidden; background: var(--rho-canvas); }
   .rho-canvas-vibe { padding: 0; overflow: auto; background: var(--rho-canvas); }
   .rho-studio-loading { display: grid; height: 100%; place-items: center; color: var(--rho-muted); font-size: var(--rho-text-body); }
   .rho-action-error {
@@ -924,26 +948,41 @@
   .rho-dockview-scene .dv-groupview {
     overflow: hidden;
     border: var(--rho-border);
-    border-radius: var(--rho-radius-2);
+    border-radius: var(--rho-radius-1);
     background: var(--rho-paper);
-    box-shadow: var(--rho-shadow-raised);
-    transition: box-shadow var(--rho-motion-base) var(--rho-ease-out);
+    box-shadow: none;
+    transition: border-color var(--rho-motion-base) var(--rho-ease-out), box-shadow var(--rho-motion-base) var(--rho-ease-out);
   }
-  .rho-dockview-scene .dv-groupview.dv-active-group { box-shadow: var(--rho-shadow-panel); }
+  .rho-dockview-scene .dv-groupview.dv-active-group {
+    border-color: color-mix(in srgb, var(--rho-line-strong) 56%, var(--rho-line));
+    box-shadow: 0 3px 12px rgb(32 36 33 / 7%);
+  }
   .rho-dockview-scene .dv-tabs-and-actions-container {
-    min-height: var(--rho-target-preferred);
-    padding: var(--rho-space-1);
+    min-height: var(--rho-surface-header-height);
+    padding: 0 var(--rho-space-2);
     border-bottom: var(--rho-border);
     background: var(--rho-panel);
   }
   .rho-dockview-scene .dv-tab {
-    margin-inline-end: var(--rho-space-1);
+    position: relative;
+    margin-inline-end: var(--rho-space-3);
     border: 0;
-    border-radius: var(--rho-radius-1);
+    border-radius: 0;
     transition: color var(--rho-motion-fast) var(--rho-ease-out), background-color var(--rho-motion-fast) var(--rho-ease-out);
   }
-  .rho-dockview-scene .dv-tab:hover { color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
-  .rho-dockview-scene .dv-tab.dv-active-tab { color: var(--rho-accent-ink); background: var(--rho-paper); box-shadow: var(--rho-shadow-raised); }
+  .rho-dockview-scene .dv-tab::after {
+    position: absolute;
+    right: var(--rho-space-2);
+    bottom: 0;
+    left: var(--rho-space-2);
+    height: 2px;
+    border-radius: var(--rho-radius-pill) var(--rho-radius-pill) 0 0;
+    content: "";
+    background: transparent;
+  }
+  .rho-dockview-scene .dv-tab:hover { color: var(--rho-accent-ink); background: var(--rho-fill); }
+  .rho-dockview-scene .dv-tab.dv-active-tab { color: var(--rho-accent-ink); background: transparent; box-shadow: none; }
+  .rho-dockview-scene .dv-tab.dv-active-tab::after { background: var(--rho-ink); }
   .rho-dockview-surface-actions-host {
     display: flex;
     min-width: 0;
@@ -990,16 +1029,17 @@
   .rho-collapse-rail {
     position: absolute;
     z-index: 7;
+    top: calc(var(--rho-surface-header-height) + var(--rho-space-3));
     right: var(--rho-space-2);
-    bottom: var(--rho-space-2);
     display: flex;
     flex-wrap: wrap;
     gap: var(--rho-space-1);
     padding: var(--rho-space-1);
     border: var(--rho-border);
-    border-radius: var(--rho-radius-2);
-    background: var(--rho-paper);
-    box-shadow: var(--rho-shadow-float);
+    border-radius: var(--rho-radius-1);
+    background: color-mix(in srgb, var(--rho-paper) 94%, transparent);
+    box-shadow: var(--rho-shadow-raised);
+    backdrop-filter: blur(8px);
   }
   .rho-collapse-restore {
     display: inline-flex;
@@ -1007,7 +1047,7 @@
     max-width: min(16rem, calc(100vw - var(--rho-space-7)));
     min-height: var(--rho-control-small);
     gap: var(--rho-space-1);
-    padding: 0 var(--rho-space-2);
+    padding: 0 var(--rho-space-3);
     color: var(--rho-ink-2);
     font-size: var(--rho-text-caption);
   }

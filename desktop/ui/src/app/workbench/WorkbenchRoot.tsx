@@ -2539,6 +2539,9 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
             </div>
           </details>
         </div>
+        <div className="rho-rail-brand" aria-hidden="true">
+          <span>Rho</span>
+        </div>
         <div className="rho-mode-switch" aria-label="Workspace mode">
           {(["studio", "vibe"] as const).map((mode) => (
             <button

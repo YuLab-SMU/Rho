@@ -9,19 +9,19 @@
     font-synthesis: none;
     text-rendering: optimizeLegibility;
 
-    /* Original ink-on-paper palette. Interaction is expressed through shape,
-       weight, and neutral tone rather than introducing a brand accent. */
-    --rho-ink: #1b1b1b;
-    --rho-ink-2: #4a4a4a;
-    --rho-muted: #767676;
-    --rho-line: #d9d9d9;
-    --rho-line-strong: #1b1b1b;
-    --rho-paper: #ffffff;
-    --rho-panel: #fafafa;
-    --rho-canvas: #f0f0f0;
-    --rho-fill: #efefef;
-    --rho-fill-2: #e4e4e4;
-    --rho-inverse: #1b1b1b;
+    /* Quiet instrument palette. The dark tool rail anchors navigation while
+       work surfaces stay warm-neutral and preserve status color for facts. */
+    --rho-ink: #202421;
+    --rho-ink-2: #4e5550;
+    --rho-muted: #747c76;
+    --rho-line: #d8ddd8;
+    --rho-line-strong: #4b534d;
+    --rho-paper: #fbfcfb;
+    --rho-panel: #f4f6f4;
+    --rho-canvas: #e9ece9;
+    --rho-fill: #edf0ed;
+    --rho-fill-2: #e1e6e1;
+    --rho-inverse: #202421;
     --rho-on-inverse: #ffffff;
 
     /* Neutral interaction aliases keep one shape system without adding color. */
@@ -31,10 +31,10 @@
     --rho-accent-tint: var(--rho-fill);
     --rho-accent-tint-strong: var(--rho-fill-2);
     --rho-selection: var(--rho-fill-2);
-    --rho-rail: var(--rho-panel);
-    --rho-rail-fill: var(--rho-fill);
-    --rho-rail-text: var(--rho-ink);
-    --rho-rail-muted: var(--rho-muted);
+    --rho-rail: #222724;
+    --rho-rail-fill: #343b36;
+    --rho-rail-text: #f4f6f4;
+    --rho-rail-muted: #aab2ac;
 
     /* Status semantics only; never the sole carrier of meaning. */
     --rho-ok: #1e7f4f;
@@ -70,19 +70,19 @@
     --rho-space-8: 48px;
 
     /* Shape: soft containers, compact controls, pill states. */
-    --rho-radius-xs: 4px;
-    --rho-radius-1: 7px;
-    --rho-radius-2: 12px;
-    --rho-radius-3: 18px;
+    --rho-radius-xs: 3px;
+    --rho-radius-1: 5px;
+    --rho-radius-2: 8px;
+    --rho-radius-3: 12px;
     --rho-radius-pill: 999px;
     --rho-border: 1px solid var(--rho-line);
     --rho-border-strong: 1px solid var(--rho-line-strong);
 
     /* Elevation separates editable work from the canvas. */
-    --rho-shadow-raised: 0 1px 2px rgb(32 36 44 / 5%), 0 5px 16px rgb(32 36 44 / 5%);
-    --rho-shadow-panel: 0 12px 34px rgb(32 36 44 / 9%);
-    --rho-shadow-float: 0 22px 56px rgb(32 36 44 / 18%);
-    --rho-shadow-focus: 0 0 0 3px rgb(27 27 27 / 12%);
+    --rho-shadow-raised: 0 1px 2px rgb(32 36 33 / 7%);
+    --rho-shadow-panel: 0 7px 20px rgb(32 36 33 / 8%);
+    --rho-shadow-float: 0 18px 48px rgb(32 36 33 / 18%);
+    --rho-shadow-focus: 0 0 0 2px rgb(32 36 33 / 13%);
 
     /* Motion only explains focus, selection, and spatial change. */
     --rho-motion-fast: 120ms;
@@ -99,8 +99,10 @@
 
     /* Frame geometry (UI-design sheet 1). */
     --rho-bar-height: 56px;
-    --rho-rail-width: 4.5rem;
-    --rho-statusbar-height: 28px;
+    --rho-rail-width: 3.5rem;
+    --rho-statusbar-height: 24px;
+    --rho-surface-header-height: 34px;
+    --rho-workspace-gap: 6px;
     --rho-nav-min: 240px;
     --rho-nav-max: 340px;
     --rho-context-min: 340px;
