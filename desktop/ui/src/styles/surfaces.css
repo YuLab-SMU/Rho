@@ -1301,7 +1301,7 @@
   .rho-agent-turn-meta > div strong { font-weight: var(--rho-weight-semibold); letter-spacing: 0; text-transform: capitalize; }
   .rho-agent-turn-meta > div code { min-width: 0; overflow: hidden; color: var(--rho-ink-2); text-overflow: ellipsis; white-space: nowrap; }
   .rho-agent-prompt { margin: var(--rho-space-2) 0 0; color: var(--rho-ink-2); font-size: var(--rho-text-ui); }
-  .rho-agent-answer { margin: var(--rho-space-2) 0 0; color: var(--rho-ink); font-size: var(--rho-text-body); line-height: 1.55; white-space: pre-wrap; }
+  .rho-agent-answer { margin: var(--rho-space-2) 0 0; color: var(--rho-ink); font-size: var(--rho-text-body); line-height: 1.55; }
   .rho-agent-turn-error { color: var(--rho-danger); font-size: var(--rho-text-ui); }
   .rho-agent-turn > footer { display: flex; justify-content: flex-end; gap: var(--rho-space-1); margin-top: var(--rho-space-2); }
   .rho-agent-turn > footer button { min-height: 24px; padding: var(--rho-space-1) var(--rho-space-2); font-size: var(--rho-text-caption); }

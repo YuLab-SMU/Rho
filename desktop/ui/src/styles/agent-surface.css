@@ -299,6 +299,61 @@
   /* Continuous prose reads tighter than the mixed content around it. */
   section.rho-agent-surface .rho-agent-answer,
   section.rho-agent-surface .rho-agent-goal .rho-agent-prompt { max-width: var(--rho-agent-prose); }
+
+  /* Rendered Markdown stays inside the surface type scale: a model heading is
+     structure, not permission to introduce a new size. */
+  section.rho-agent-surface .rho-agent-answer > :first-child { margin-top: 0; }
+  section.rho-agent-surface .rho-agent-answer > :last-child { margin-bottom: 0; }
+  section.rho-agent-surface .rho-agent-answer p,
+  section.rho-agent-surface .rho-agent-answer ul,
+  section.rho-agent-surface .rho-agent-answer ol,
+  section.rho-agent-surface .rho-agent-answer blockquote,
+  section.rho-agent-surface .rho-agent-answer pre,
+  section.rho-agent-surface .rho-agent-answer table { margin: var(--rho-space-3) 0; }
+  section.rho-agent-surface .rho-agent-answer h1,
+  section.rho-agent-surface .rho-agent-answer h2,
+  section.rho-agent-surface .rho-agent-answer h3,
+  section.rho-agent-surface .rho-agent-answer h4,
+  section.rho-agent-surface .rho-agent-answer h5,
+  section.rho-agent-surface .rho-agent-answer h6 {
+    margin: var(--rho-space-4) 0 var(--rho-space-2);
+    font-size: var(--rho-text-body);
+    font-weight: var(--rho-weight-semibold);
+  }
+  section.rho-agent-surface .rho-agent-answer h1,
+  section.rho-agent-surface .rho-agent-answer h2 { font-size: var(--rho-text-title); }
+  section.rho-agent-surface .rho-agent-answer ul,
+  section.rho-agent-surface .rho-agent-answer ol { padding-inline-start: var(--rho-space-6); }
+  section.rho-agent-surface .rho-agent-answer li { margin: var(--rho-space-1) 0; }
+  section.rho-agent-surface .rho-agent-answer li > p { margin: 0; }
+  section.rho-agent-surface .rho-agent-answer code {
+    padding: 0 var(--rho-space-1);
+    border-radius: var(--rho-radius-xs);
+    background: var(--rho-fill);
+    font-family: var(--rho-font-mono);
+    font-size: var(--rho-text-ui);
+  }
+  section.rho-agent-surface .rho-agent-answer pre {
+    max-width: 100%;
+    padding: var(--rho-space-3);
+    overflow-x: auto;
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-panel);
+  }
+  section.rho-agent-surface .rho-agent-answer pre code { padding: 0; background: none; }
+  section.rho-agent-surface .rho-agent-answer blockquote {
+    padding-left: var(--rho-space-4);
+    border-left: 3px solid var(--rho-line);
+    color: var(--rho-ink-2);
+  }
+  section.rho-agent-surface .rho-agent-answer hr { margin: var(--rho-space-4) 0; border: 0; border-top: var(--rho-border); }
+  section.rho-agent-surface .rho-agent-answer table { border-collapse: collapse; font-size: var(--rho-text-ui); }
+  section.rho-agent-surface .rho-agent-answer th,
+  section.rho-agent-surface .rho-agent-answer td { padding: var(--rho-space-1) var(--rho-space-3); border: var(--rho-border); text-align: left; }
+  /* Inert by construction: the anchor carries no href, so it must not look
+     clickable while still showing where the model pointed. */
+  section.rho-agent-surface .rho-agent-md-link { color: var(--rho-ink); text-decoration: underline dotted; }
   section.rho-agent-surface .rho-agent-evidence-composition {
     margin-top: var(--rho-space-3);
     gap: var(--rho-space-3);
