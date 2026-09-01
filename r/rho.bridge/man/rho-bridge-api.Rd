@@ -1,8 +1,6 @@
 \name{rho-bridge-api}
 \alias{rho_execute}
 \alias{rho_environment_evidence}
-\alias{rho_environment_operation}
-\alias{rho_environment_status_preview}
 \alias{rho_get_last_execution}
 \alias{rho_inspect_data_object}
 \alias{rho_inspect_object}
@@ -14,15 +12,6 @@
 rho_execute(code, envir = .GlobalEnv, max_output_chars = 16000L)
 
 rho_environment_evidence(project_dir = getwd(), package_limit = 10000L)
-
-rho_environment_operation(
-  operation,
-  project_dir = getwd(),
-  repositories = NULL,
-  bioconductor = NULL
-)
-
-rho_environment_status_preview(project_dir = getwd(), diff_limit = 50L)
 
 rho_get_last_execution()
 
@@ -59,8 +48,8 @@ rho_workspace_snapshot(envir = .GlobalEnv, object_limit = 200L)
 }
 \description{
 Bounded bridge functions used by the Rho broker to inspect the authoritative
-Workspace R session, preview environment state, run reviewed environment
-operations, and serve paged data viewer requests.
+Workspace R session, capture read-only environment evidence, and serve paged
+data viewer requests.
 }
 \details{
 These exported functions form the desktop-to-workspace contract for the local

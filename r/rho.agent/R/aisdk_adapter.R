@@ -10,12 +10,10 @@ rho_agent_tool_request_type <- function(tool_name) {
   switch(
     tool_name,
     run_r = "workspace.execute",
-    initialize_project_environment = "environment.initialize",
-    restore_project_environment = "environment.restore",
-    snapshot_project_environment = "environment.snapshot",
-    install_project_package = "environment.package_install",
-    update_project_package = "environment.package_update",
-    remove_project_package = "environment.package_remove",
+    inspect_environment = "environment.inspect",
+    explain_environment_incident = "environment.explain_incident",
+    propose_environment_change = "environment.propose_change",
+    inspect_environment_operation = "environment.operation.inspect",
     NULL
   )
 }
@@ -280,73 +278,57 @@ rho_create_workspace_tools <- function(plugin_tools = list()) {
       meta = list(validate_arguments = TRUE, rho_approval = "required")
     ),
     aisdk::tool(
-      name = "initialize_project_environment",
+      name = "inspect_environment",
       description = paste(
-        "Initialize renv for the active project through the reviewed broker workflow.",
-        "This is a project mutation and always requires a fresh visible confirmation."
-      ),
-      parameters = aisdk::z_empty_object(),
-      execute = function(args) rho_broker_tool_request("environment.initialize", args),
-      meta = list(validate_arguments = TRUE, rho_approval = "required")
-    ),
-    aisdk::tool(
-      name = "restore_project_environment",
-      description = paste(
-        "Restore the active project's environment from renv.lock through the reviewed broker workflow.",
-        "This is a project mutation and always requires a fresh visible confirmation."
-      ),
-      parameters = aisdk::z_empty_object(),
-      execute = function(args) rho_broker_tool_request("environment.restore", args),
-      meta = list(validate_arguments = TRUE, rho_approval = "required")
-    ),
-    aisdk::tool(
-      name = "snapshot_project_environment",
-      description = paste(
-        "Write the active project's renv.lock through the reviewed broker workflow.",
-        "This is a project mutation and always requires a fresh visible confirmation."
-      ),
-      parameters = aisdk::z_empty_object(),
-      execute = function(args) rho_broker_tool_request("environment.snapshot", args),
-      meta = list(validate_arguments = TRUE, rho_approval = "required")
-    ),
-    aisdk::tool(
-      name = "install_project_package",
-      description = paste(
-        "Install one named R package into the active project's renv library.",
-        "The broker previews the exact project library and repositories and requires a fresh visible confirmation."
+        "Read the active project's authoritative Environment state, latest operation and incidents.",
+        "This reports what receipts exist; it does not decide whether a scientific claim is true."
       ),
       parameters = aisdk::z_object(
-        package = aisdk::z_string("One R package name", min_length = 1L, max_length = 128L),
-        .required = "package"
+        environment_id = aisdk::z_string("Optional exact Environment identity", min_length = 1L, max_length = 512L)
       ),
-      execute = function(args) rho_broker_tool_request("environment.package_install", args),
-      meta = list(validate_arguments = TRUE, rho_approval = "required")
+      execute = function(args) rho_broker_tool_request("environment.inspect", args),
+      meta = list(validate_arguments = TRUE, rho_approval = "automatic")
     ),
     aisdk::tool(
-      name = "update_project_package",
+      name = "explain_environment_incident",
       description = paste(
-        "Update one installed R package in the active project's renv library.",
-        "The broker previews the exact project library and repositories and requires a fresh visible confirmation."
+        "Read one recorded Environment incident and its current Authority state.",
+        "The tool explains observations without installing packages or changing the project."
       ),
       parameters = aisdk::z_object(
-        package = aisdk::z_string("One R package name", min_length = 1L, max_length = 128L),
-        .required = "package"
+        incident_id = aisdk::z_string("Exact Environment incident identity", min_length = 1L, max_length = 512L),
+        .required = "incident_id"
       ),
-      execute = function(args) rho_broker_tool_request("environment.package_update", args),
-      meta = list(validate_arguments = TRUE, rho_approval = "required")
+      execute = function(args) rho_broker_tool_request("environment.explain_incident", args),
+      meta = list(validate_arguments = TRUE, rho_approval = "automatic")
     ),
     aisdk::tool(
-      name = "remove_project_package",
+      name = "propose_environment_change",
       description = paste(
-        "Remove one R package from the active project's renv library.",
-        "This destructive action requires a fresh broker preview and visible confirmation."
+        "Propose an Environment change intent against an exact verified Environment identity.",
+        "The result is not a materialized plan and performs no mutation."
       ),
       parameters = aisdk::z_object(
-        package = aisdk::z_string("One R package name", min_length = 1L, max_length = 128L),
-        .required = "package"
+        environment_id = aisdk::z_string("Exact Environment identity", min_length = 1L, max_length = 512L),
+        intent = aisdk::z_enum(c(
+          "restore_locked", "add_dependency", "install_user_package", "install_unlocked",
+          "adopt_project_environment", "repair_core", "update_dependency", "remove_dependency"
+        )),
+        subject = aisdk::z_string("Package or Environment subject", min_length = 1L, max_length = 512L),
+        .required = c("environment_id", "intent", "subject")
       ),
-      execute = function(args) rho_broker_tool_request("environment.package_remove", args),
-      meta = list(validate_arguments = TRUE, rho_approval = "required")
+      execute = function(args) rho_broker_tool_request("environment.propose_change", args),
+      meta = list(validate_arguments = TRUE, rho_approval = "automatic")
+    ),
+    aisdk::tool(
+      name = "inspect_environment_operation",
+      description = "Read one exact immutable Environment operation journal and its checkpoints.",
+      parameters = aisdk::z_object(
+        operation_id = aisdk::z_string("Exact Environment operation identity", min_length = 1L, max_length = 512L),
+        .required = "operation_id"
+      ),
+      execute = function(args) rho_broker_tool_request("environment.operation.inspect", args),
+      meta = list(validate_arguments = TRUE, rho_approval = "automatic")
     ),
     aisdk::tool(
       name = "propose_file_edit",
@@ -504,12 +486,7 @@ rho_tool_result_preview <- function(tool, value) {
   if (identical(tool, "get_workspace_snapshot") && is.list(parsed)) {
     return(rho_workspace_snapshot_preview(parsed))
   }
-  if (tool %in% c(
-    "run_r",
-    "initialize_project_environment",
-    "restore_project_environment",
-    "snapshot_project_environment"
-  )) {
+  if (identical(tool, "run_r")) {
     return(rho_run_r_preview(parsed))
   }
   rho_compact_event_value(parsed)

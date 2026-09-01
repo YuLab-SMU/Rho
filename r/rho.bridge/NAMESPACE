@@ -1,8 +1,5 @@
 export(rho_execute)
 export(rho_environment_evidence)
-export(rho_environment_operation)
-export(rho_environment_package_preview)
-export(rho_environment_status_preview)
 export(rho_function_help)
 export(rho_function_documentation)
 export(rho_format_r_source)

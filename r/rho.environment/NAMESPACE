@@ -1,0 +1,7 @@
+export(rho_environment_dispatch)
+export(rho_environment_observe)
+export(rho_environment_pak_install)
+export(rho_environment_pak_sysreqs)
+export(rho_environment_renv_plan)
+export(rho_environment_renv_restore)
+export(rho_environment_renv_snapshot_candidate)

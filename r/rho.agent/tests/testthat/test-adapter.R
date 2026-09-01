@@ -29,12 +29,10 @@ test_that("aisdk workspace tools target the broker boundary", {
       "read_conversation_turn",
       "read_runtime_output",
       "run_r",
-      "initialize_project_environment",
-      "restore_project_environment",
-      "snapshot_project_environment",
-      "install_project_package",
-      "update_project_package",
-      "remove_project_package",
+      "inspect_environment",
+      "explain_environment_incident",
+      "propose_environment_change",
+      "inspect_environment_operation",
       "propose_file_edit",
       "present_in_studio"
     )
@@ -46,13 +44,13 @@ test_that("aisdk workspace tools target the broker boundary", {
   expect_identical(approvals[["get_workspace_snapshot"]], "automatic")
   expect_identical(approvals[["read_conversation_turn"]], "automatic")
   expect_identical(approvals[["read_runtime_output"]], "automatic")
+  expect_identical(approvals[["inspect_environment"]], "automatic")
+  expect_identical(approvals[["explain_environment_incident"]], "automatic")
+  expect_identical(approvals[["propose_environment_change"]], "automatic")
+  expect_identical(approvals[["inspect_environment_operation"]], "automatic")
   expect_identical(approvals[["propose_file_edit"]], "automatic")
   expect_identical(approvals[["present_in_studio"]], "automatic")
-  expect_true(all(approvals[c(
-    "run_r", "initialize_project_environment", "restore_project_environment",
-    "snapshot_project_environment", "install_project_package",
-    "update_project_package", "remove_project_package"
-  )] == "required"))
+  expect_identical(approvals[["run_r"]], "required")
 })
 
 test_that("Manifest V2 plugin tools use bounded aisdk schemas and labelled origin", {
@@ -392,32 +390,24 @@ test_that("approved mutation request id is consumed by the next run_r call", {
   expect_null(.rho_agent_state$pending_approval)
 })
 
-test_that("approved environment request injects canonical broker arguments", {
-  captured <- NULL
-  local_mocked_bindings(
-    rho_agent_request = function(type, payload, ...) {
-      captured <<- list(type = type, payload = payload)
-      list(ok = TRUE)
-    },
-    .package = "rho.agent"
+test_that("environment tools map only to read and proposal capabilities", {
+  expect_identical(
+    rho.agent:::rho_agent_tool_request_type("inspect_environment"),
+    "environment.inspect"
   )
-  .rho_agent_state$pending_approval <- list(
-    request_id = "env_req_1",
-    request_type = "environment.snapshot",
-    arguments = list(
-      operation = "snapshot",
-      project_root = "D:/Rho",
-      repositories = NULL,
-      bioconductor = NULL
-    )
+  expect_identical(
+    rho.agent:::rho_agent_tool_request_type("explain_environment_incident"),
+    "environment.explain_incident"
   )
-
-  rho.agent:::rho_broker_tool_request("environment.snapshot", list())
-
-  expect_identical(captured$type, "environment.snapshot")
-  expect_identical(captured$payload$approval_request_id, "env_req_1")
-  expect_identical(captured$payload$arguments$project_root, "D:/Rho")
-  expect_null(.rho_agent_state$pending_approval)
+  expect_identical(
+    rho.agent:::rho_agent_tool_request_type("propose_environment_change"),
+    "environment.propose_change"
+  )
+  expect_identical(
+    rho.agent:::rho_agent_tool_request_type("inspect_environment_operation"),
+    "environment.operation.inspect"
+  )
+  expect_null(rho.agent:::rho_agent_tool_request_type("install_project_package"))
 })
 
 test_that("aisdk session is marked as a Rho desktop session", {

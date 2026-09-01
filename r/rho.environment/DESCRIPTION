@@ -1,0 +1,21 @@
+Package: rho.environment
+Title: Fixed R Environment Realization Helper
+Version: 0.1.0
+Authors@R: c(
+    person("Rho", "Contributors", email = "rho@example.com", role = c("aut", "cre", "cph")),
+    person("YuLab-SMU", role = "cph")
+    )
+Description: Fixed, non-interactive observation, planning, realization and
+    verification calls for renv and pak. The package is invoked only by an
+    admitted Rho helper process and does not own approval or process execution.
+License: AGPL-3
+Encoding: UTF-8
+RoxygenNote: 7.3.3
+Imports:
+    jsonlite,
+    utils
+Suggests:
+    pak,
+    renv,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
