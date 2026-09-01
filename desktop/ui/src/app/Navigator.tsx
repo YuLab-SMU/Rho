@@ -76,10 +76,12 @@ function filterFileTree(nodes: readonly FileNode[], query: string): FileNode[] {
 function FileTreeRows({
   nodes,
   depth,
+  selectedPath,
   openFile,
 }: {
   readonly nodes: readonly FileNode[];
   readonly depth: number;
+  readonly selectedPath: string | null;
   readonly openFile: (descriptor: ResourceDescriptor) => void;
 }) {
   return <>
@@ -88,13 +90,14 @@ function FileTreeRows({
         <summary className="rho-nav-row rho-nav-folder" style={{ "--rho-nav-depth": depth } as CSSProperties}>
           <span className="rho-nav-row-label">{node.name}/</span>
         </summary>
-        <FileTreeRows nodes={node.children} depth={depth + 1} openFile={openFile} />
+        <FileTreeRows nodes={node.children} depth={depth + 1} selectedPath={selectedPath} openFile={openFile} />
       </details>
     ) : (
       <button
         type="button"
         className="rho-nav-row"
         data-nav-file={node.path}
+        aria-current={selectedPath === node.path ? "page" : undefined}
         disabled={node.descriptor.status !== "ready"}
         key={node.path}
         onClick={() => openFile(node.descriptor!)}
@@ -147,6 +150,7 @@ export function NavigatorSurfaceView({
   const [tab, setTab] = useState<NavigatorTab>(initialTab);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
   const [domain, setDomain] = useState<DomainSurfaceData | null>(null);
   const [recent, setRecent] = useState<DomainSurfaceData | null>(null);
@@ -267,7 +271,16 @@ export function NavigatorSurfaceView({
         {tab === "files" && (
           visibleFiles.length === 0
             ? <p className="rho-nav-empty">{files.length === 0 ? "No project files resolved yet." : "No files match this search."}</p>
-            : <FileTreeRows nodes={visibleFiles} depth={0} openFile={(descriptor) => void openFile(descriptor).catch(reportError)} />
+            : <FileTreeRows
+                nodes={visibleFiles}
+                depth={0}
+                selectedPath={selectedFile}
+                openFile={(descriptor) => {
+                  void openFile(descriptor)
+                    .then(() => setSelectedFile(descriptor.resource_id))
+                    .catch(reportError);
+                }}
+              />
         )}
         {tab === "runs" && <DomainRows data={domain} emptyLabel="No history yet." />}
       </div>

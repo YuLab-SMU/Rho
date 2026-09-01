@@ -4555,6 +4555,7 @@ describe("Studio foundation app", () => {
     });
     expect(container.querySelectorAll("[data-surface-id='rho.file-source']").length)
       .toBeGreaterThan(before);
+    expect(fileRow!.getAttribute("aria-current")).toBe("page");
   });
 
   it("uses Navigator height for files until search or recent output is requested", async () => {

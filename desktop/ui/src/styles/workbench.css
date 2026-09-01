@@ -441,8 +441,8 @@
     border-color: transparent;
     border-radius: var(--rho-radius-1);
     color: var(--rho-rail-text);
-    background: var(--rho-rail-fill);
-    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 6%);
+    background: transparent;
+    box-shadow: none;
   }
   .rho-studio-bar .rho-mode-switch button[aria-pressed="true"]::before {
     position: absolute;
@@ -982,7 +982,8 @@
   }
   .rho-dockview-scene .dv-tab:hover { color: var(--rho-accent-ink); background: var(--rho-fill); }
   .rho-dockview-scene .dv-tab.dv-active-tab { color: var(--rho-accent-ink); background: transparent; box-shadow: none; }
-  .rho-dockview-scene .dv-tab.dv-active-tab::after { background: var(--rho-ink); }
+  .rho-dockview-scene .dv-tab.dv-active-tab::after { background: color-mix(in srgb, var(--rho-line-strong) 45%, var(--rho-line)); }
+  .rho-dockview-scene .dv-groupview.dv-active-group .dv-tab.dv-active-tab::after { background: var(--rho-ink); }
   .rho-dockview-surface-actions-host {
     display: flex;
     min-width: 0;

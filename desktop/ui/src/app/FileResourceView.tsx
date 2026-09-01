@@ -256,13 +256,19 @@ export function FileResourceView({
             type="button"
             className={`rho-file-save ${dirty ? "rho-primary-action" : ""}`.trim()}
             disabled={!dirty || savePending}
+            title={!dirty ? "No unsaved changes" : savePending ? "Saving current document" : "Save current document"}
             aria-busy={savePending || undefined}
             onPointerDown={(event) => { event.preventDefault(); }}
             onMouseDown={(event) => { event.preventDefault(); }}
             onBlur={commitDraftAfterLeavingWorkflowActions}
             onClick={() => void saveCurrent().catch(reportError)}
           >{savePending ? "Saving…" : "Save"}</button>
-          <button type="button" className="rho-file-reload" onClick={() => void reloadCurrent().catch(reportError)}>
+          <button
+            type="button"
+            className="rho-file-reload"
+            title={dirty ? "Discard local edits and reload the authoritative file" : "Reload the authoritative file"}
+            onClick={() => void reloadCurrent().catch(reportError)}
+          >
             {dirty ? "Discard & reload" : "Reload"}
           </button>
         </>}
