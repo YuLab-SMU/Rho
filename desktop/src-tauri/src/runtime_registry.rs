@@ -11,7 +11,6 @@ use rho_store::{
     RuntimeOutputPayload, RuntimeOutputPolicy, RuntimeOutputPolicySnapshot,
     RuntimeOutputPolicyUpdate, RuntimeOutputPruneResult, RuntimeOutputSearchResult,
 };
-use rho_toolchain::TargetAdmissionMode;
 use rho_ui_contract::{
     RSR_CONTRACT_MAJOR, RUNTIME_REGISTRY_SNAPSHOT_CONTRACT, RuntimeAttachmentRequestV1,
     RuntimeCreateRequestV1, RuntimeDescriptorV1, RuntimeDetachRequestV1, RuntimeExecuteRequestV1,
@@ -816,7 +815,7 @@ async fn launch_auxiliary(
     state: &AppState,
     entry: &RuntimeEntry,
 ) -> Result<Arc<RwLock<ArkSession>>> {
-    crate::commands::toolchain::require_target_admission(state, TargetAdmissionMode::Live).await?;
+    crate::commands::environment::require_environment_execution_ready(state).await?;
     let config = crate::startup_runtime::runtime_config(state)?;
     let mut launch = ArkLaunchConfig::new(&config.kernelspec);
     launch.session_name = entry.descriptor.runtime_instance_id.to_string();
@@ -857,7 +856,7 @@ pub(crate) async fn runtime_create(
     let _project_transition = state.project_transition_gate.lock().await;
     let _operation = state.runtime_registry.operation_gate.lock().await;
     prepare(&app, &state).await.map_err(display_error)?;
-    crate::commands::toolchain::require_target_admission(&state, TargetAdmissionMode::Live)
+    crate::commands::environment::require_environment_execution_ready(&state)
         .await
         .map_err(display_error)?;
     let (starting, entry) = state
@@ -1181,7 +1180,7 @@ async fn admit_runtime_execution(
 ) -> Result<(RuntimeEntry, RuntimeExecutionLease)> {
     request.validate()?;
     let _project_transition = state.project_transition_gate.lock().await;
-    crate::commands::toolchain::require_target_admission(state, TargetAdmissionMode::Run).await?;
+    crate::commands::environment::require_environment_execution_ready(state).await?;
     prepare(app, state).await?;
     crate::commands::workspace::validate_runtime_execute_source(request, state).await?;
     let admitted = {

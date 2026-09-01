@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock as SyncRwLock};
-use std::time::Instant;
 
 use anyhow::{Context, Result, anyhow};
 use rho_extension_runtime::ExtensionHost;
@@ -26,15 +25,31 @@ use crate::{
     surface_runtime, ui_profile, ui_runtime, workbench_projection, workspace_plugins,
 };
 
-#[derive(Clone)]
-pub(crate) struct ResourceGovernanceCache {
-    pub(crate) project_root: PathBuf,
-    pub(crate) rho_toml_sha256: String,
-    pub(crate) target_registry_sha256: Option<String>,
-    pub(crate) target_id: String,
-    pub(crate) observed_at: Instant,
-    pub(crate) admission_allowed: bool,
-    pub(crate) reasons: Vec<String>,
+pub(crate) struct WorkspaceEnvironmentRuntime {
+    project_root: Option<String>,
+    gate: rho_workspace::WorkspaceEnvironmentGate,
+}
+
+impl Default for WorkspaceEnvironmentRuntime {
+    fn default() -> Self {
+        Self {
+            project_root: None,
+            gate: rho_workspace::WorkspaceEnvironmentGate::new(None),
+        }
+    }
+}
+
+impl WorkspaceEnvironmentRuntime {
+    pub(crate) fn for_project(
+        &mut self,
+        project_root: &str,
+    ) -> &mut rho_workspace::WorkspaceEnvironmentGate {
+        if self.project_root.as_deref() != Some(project_root) {
+            self.project_root = Some(project_root.to_string());
+            self.gate = rho_workspace::WorkspaceEnvironmentGate::new(None);
+        }
+        &mut self.gate
+    }
 }
 
 pub(crate) struct AppState {
@@ -45,14 +60,13 @@ pub(crate) struct AppState {
     pub(crate) startup: SyncRwLock<StartupView>,
     pub(crate) project_store: ProjectSessionStore,
     pub(crate) project_root: RwLock<PathBuf>,
-    pub(crate) target_admission: RwLock<Option<rho_toolchain::TargetAdmission>>,
-    pub(crate) resource_governance: RwLock<Option<ResourceGovernanceCache>>,
     pub(crate) project_watcher: Mutex<Option<ProjectWatcherControl>>,
     pub(crate) session: RwLock<Option<Arc<ArkSession>>>,
     pub(crate) context: Mutex<Option<Arc<WorkspaceBrokerLane>>>,
     pub(crate) store_executor: OnceCell<StoreExecutor>,
+    pub(crate) evidence_graph: rho_evidence_graph::ProjectGraphManager,
     pub(crate) approvals: Arc<PendingApprovalRegistry>,
-    pub(crate) environment_approvals: Arc<PendingApprovalRegistry>,
+    pub(crate) workspace_environment: Mutex<WorkspaceEnvironmentRuntime>,
     pub(crate) project_transition_gate: Arc<Mutex<()>>,
     pub(crate) extension_host: Arc<ExtensionHost>,
     pub(crate) plugin_permissions: Arc<workspace_plugins::PendingPluginPermissionRegistry>,

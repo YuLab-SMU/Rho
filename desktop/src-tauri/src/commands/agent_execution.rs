@@ -513,7 +513,6 @@ async fn start_agent_turn(
     }
 
     let approvals = state.approvals.clone();
-    let environment_approvals = state.environment_approvals.clone();
     let workspace_lane = state.agent_workspace_lane.clone();
     let rscript = config.rscript.clone();
     let process_path = config.process_path.clone();
@@ -561,7 +560,6 @@ async fn start_agent_turn(
             task_conversation_id,
             workspace_lane,
             approvals,
-            environment_approvals,
             auto_approve,
             editor_context,
             explicit_context,
@@ -866,7 +864,6 @@ pub(crate) async fn interrupt_all_agent_tasks(
     message: &str,
 ) -> Result<usize> {
     state.approvals.cancel_all(message).await;
-    state.environment_approvals.cancel_all(message).await;
     let tasks = {
         let mut tasks = state.agent_tasks.lock().await;
         tasks.drain().collect::<Vec<_>>()
@@ -899,13 +896,6 @@ pub(crate) async fn interrupt_all_agent_tasks(
         }
         agent_store
             .interrupt_approvals(
-                turn_id.clone(),
-                message.to_string(),
-                terminal_reason.to_string(),
-            )
-            .await?;
-        agent_store
-            .interrupt_environment_operations(
                 turn_id.clone(),
                 message.to_string(),
                 terminal_reason.to_string(),
@@ -1010,10 +1000,6 @@ pub(crate) async fn cancel_agent_turn_state(
         .approvals
         .cancel_turn(&turn_id, "Agent turn cancelled by the user.")
         .await;
-    let cancelled_environment_approvals = state
-        .environment_approvals
-        .cancel_turn(&turn_id, "Agent turn cancelled by the user.")
-        .await;
     let cancelled_file_mutations = state.agent_file_mutations.cancel_queued_turn(&turn_id);
     let active_workspace_run = state.agent_workspace_lane.cancel_turn(&turn_id);
     let mut joined_after_interrupt = false;
@@ -1072,14 +1058,6 @@ pub(crate) async fn cancel_agent_turn_state(
             .await
             .map_err(display_error)?;
         agent_store
-            .interrupt_environment_operations(
-                turn_id.clone(),
-                "Agent turn cancelled by the user.".to_string(),
-                "user_cancelled".to_string(),
-            )
-            .await
-            .map_err(display_error)?;
-        agent_store
             .append_turn_event(AgentTurnEventDraft {
                 turn_id: turn_id.clone(),
                 event_type: "agent.cancelled".to_string(),
@@ -1091,7 +1069,6 @@ pub(crate) async fn cancel_agent_turn_state(
                 code: None,
                 details_json: serde_json::to_string(&json!({
                     "cancelled_approval_waiters": cancelled_approvals,
-                    "cancelled_environment_waiters": cancelled_environment_approvals,
                     "cancelled_file_mutations": cancelled_file_mutations,
                     "workspace_run_id": active_workspace_run
                 }))

@@ -355,7 +355,6 @@ pub(crate) async fn smoke_test(include_agent: bool) -> Result<Value> {
             conversation_id,
             Arc::new(AgentWorkspaceLane::default()),
             Arc::new(PendingApprovalRegistry::default()),
-            Arc::new(PendingApprovalRegistry::default()),
             false,
             None,
             None,

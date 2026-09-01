@@ -76,6 +76,12 @@ pub(crate) async fn restart_workspace_locked(state: &AppState) -> Result<Workspa
         let root = state.project_root.read().await.clone();
         normalize_project_root(root.to_string_lossy().as_ref())
     };
+    let previous_kernel_instance_id = state
+        .context
+        .lock()
+        .await
+        .clone()
+        .map(|context| context.identity().kernel_instance_id.clone());
     teardown_workspace_plugins_for_boundary(
         state,
         &current_project_root,
@@ -158,6 +164,40 @@ pub(crate) async fn restart_workspace_locked(state: &AppState) -> Result<Workspa
     let status = finalize_workspace_start(state, true)
         .await
         .map_err(display_error)?;
+    let next_kernel_instance_id = state
+        .context
+        .lock()
+        .await
+        .clone()
+        .map(|context| context.identity().kernel_instance_id.clone());
+    if let (Some(previous_kernel), Some(next_kernel)) =
+        (previous_kernel_instance_id, next_kernel_instance_id)
+    {
+        match super::environment::record_environment_workspace_restart(
+            state,
+            &previous_kernel,
+            &next_kernel,
+        )
+        .await
+        {
+            Ok(true) => {
+                if let Err(error) = super::environment::reobserve_environment_for_state(state).await
+                {
+                    write_startup_event(json!({
+                        "kind": "environment_reobservation_failed",
+                        "kernel_instance_id": next_kernel,
+                        "error": error,
+                    }));
+                }
+            }
+            Ok(false) => {}
+            Err(error) => write_startup_event(json!({
+                "kind": "environment_restart_binding_failed",
+                "kernel_instance_id": next_kernel,
+                "error": error,
+            })),
+        }
+    }
     if !render_job_ids.is_empty() {
         let reconciled = store_executor(state)
             .await

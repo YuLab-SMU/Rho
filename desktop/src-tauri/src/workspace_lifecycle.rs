@@ -8,7 +8,6 @@ use rho_kernel::{ArkLaunchConfig, ArkSession};
 use rho_server::coordinator::bootstrap_bridge;
 use rho_server::workspace_lane::WorkspaceBrokerLane;
 use rho_store::{MigrationOutcome, StoreExecutor, StoreExecutorError, normalize_project_root};
-use rho_toolchain::TargetAdmissionMode;
 use serde_json::{Value, json};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
@@ -54,8 +53,8 @@ async fn recover_workspace_store(executor: &StoreExecutor, project_root: String)
             .recover_incomplete_approvals()
             .context("recovering incomplete approvals after desktop restart")?;
         store
-            .recover_incomplete_environment_operations()
-            .context("recovering incomplete environment operations after desktop restart")?;
+            .recover_environment_operations_after_restart(&project_root)
+            .context("marking incomplete Environment journals for reconciliation")?;
         store
             .recover_pending_plugin_permission_requests(&project_root, "broker_restart")
             .context("recovering pending workspace plugin permission requests")?;
@@ -351,15 +350,12 @@ pub(crate) async fn monitor_workspace_plugin_heartbeats(app: AppHandle) {
 pub(crate) async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     let config = runtime_config(state)?;
     if let Some(session) = state.session.read().await.clone() {
-        crate::commands::toolchain::require_target_admission(state, TargetAdmissionMode::Workspace)
-            .await?;
+        crate::commands::environment::require_environment_execution_ready(state).await?;
         let context = state.context.lock().await.clone();
         let identity = context.map(|context| context.identity());
         return status_from(&config, &session, identity.as_deref());
     }
 
-    let target_admission =
-        crate::commands::toolchain::prepare_workspace_target_admission(state).await?;
     let session = Arc::new(
         ArkSession::launch(&ArkLaunchConfig::new(&config.kernelspec))
             .await
@@ -465,7 +461,6 @@ pub(crate) async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus>
     }
     *state.context.lock().await = Some(context);
     *state.session.write().await = Some(session);
-    *state.target_admission.write().await = target_admission;
     Ok(status)
 }
 

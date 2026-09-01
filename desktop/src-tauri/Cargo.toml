@@ -16,19 +16,20 @@ chrono.workspace = true
 dirs = "6"
 libc.workspace = true
 flate2 = "1"
-include_dir.workspace = true
 minisign-verify = "0.2"
 notify = "8.2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 rand.workspace = true
 rho-core = { path = "../../crates/rho-core" }
+rho-control-plane = { path = "../../crates/rho-control-plane" }
 rho-extension-runtime = { path = "../../crates/rho-extension-runtime" }
+rho-evidence-graph = { path = "../../crates/rho-evidence-graph" }
 rho-kernel = { path = "../../crates/rho-kernel" }
 rho-protocol = { path = "../../crates/rho-protocol" }
 rho-server = { path = "../../crates/rho-server" }
 rho-store = { path = "../../crates/rho-store" }
-rho-toolchain = { path = "../../crates/rho-toolchain" }
 rho-ui-contract = { path = "../../crates/rho-ui-contract" }
+rho-workspace = { path = "../../crates/rho-workspace" }
 rfd = "0.15"
 serde.workspace = true
 serde_json.workspace = true
@@ -39,7 +40,6 @@ specta.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2.10.1"
 tempfile.workspace = true
-toml_edit.workspace = true
 tar = "0.4"
 tokio.workspace = true
 uuid.workspace = true

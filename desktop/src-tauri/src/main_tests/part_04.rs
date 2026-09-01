@@ -66,7 +66,7 @@
                 .registry()
                 .resolve_application_surfaces()
                 .unwrap();
-            assert_eq!(surfaces.factories().len(), 17);
+            assert_eq!(surfaces.factories().len(), 23);
             assert_eq!(
                 surfaces
                     .factories()
@@ -83,13 +83,19 @@
                     "rho.settings",
                     "rho.environment",
                     "rho.navigator",
-                    "rho.evidence",
+                    "rho.claims",
+                    "rho.evidence-graph",
+                    "rho.evidence-gaps",
+                    "rho.claim-trace",
                     "rho.git",
                     "rho.runs",
+                    "rho.jobs",
+                    "rho.artifacts",
+                    "rho.approvals",
+                    "rho.revisions",
                     "rho.problems",
                     "rho.plots",
                     "rho.logs",
-                    "rho.render-jobs",
                     "rho.help",
                 ])
             );
@@ -580,6 +586,15 @@
             })
             .await
             .unwrap();
+            let graph_project_a = crate::evidence_graph_runtime::project_id_for_root(&project_a)
+                .unwrap();
+            assert!(
+                candidate
+                    .evidence_graph
+                    .health(&project_a, &graph_project_a)
+                    .unwrap()
+                    .available
+            );
             assert_run_summaries_equal(
                 list_runs_with_state(None, &candidate).await.unwrap(),
                 &expected_a,
@@ -603,6 +618,19 @@
             })
             .await
             .unwrap();
+            assert!(matches!(
+                candidate.evidence_graph.health(&project_a, &graph_project_a),
+                Err(rho_evidence_graph::GraphError::ProjectMismatch)
+            ));
+            let graph_project_b = crate::evidence_graph_runtime::project_id_for_root(&project_b)
+                .unwrap();
+            assert!(
+                candidate
+                    .evidence_graph
+                    .health(&project_b, &graph_project_b)
+                    .unwrap()
+                    .available
+            );
             assert_run_summaries_equal(
                 list_runs_with_state(None, &candidate).await.unwrap(),
                 &expected_b,
@@ -640,6 +668,133 @@
             assert_run_summaries_equal(
                 list_runs_with_state(None, &restarted).await.unwrap(),
                 &expected_a,
+            );
+        });
+    }
+
+    #[test]
+    fn corrupt_evidence_sidecar_does_not_downgrade_a_committed_project_switch() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let previous = tempdir.path().join("previous-project");
+            let target = tempdir.path().join("target-project");
+            std::fs::create_dir_all(&previous).unwrap();
+            std::fs::create_dir_all(target.join(".rho")).unwrap();
+            std::fs::write(target.join(".rho/evidence.lbdb"), b"corrupt sidecar").unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            Store::open(&store_path).unwrap();
+            let state = test_app_state(tempdir.path(), &previous, &store_path);
+            state
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+
+            let response = switch_project_with_watcher_factory(
+                target.clone(),
+                None,
+                &state,
+                |_| Ok(ProjectWatcherControl::noop()),
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(response.status, "ready");
+            assert_eq!(*state.project_root.read().await, target);
+            let project_id = crate::evidence_graph_runtime::project_id_for_root(&target).unwrap();
+            let health = state.evidence_graph.health(&target, &project_id).unwrap();
+            assert!(!health.available);
+            assert_eq!(
+                health.error_code.as_deref(),
+                Some("GRAPH_ENGINE_UNAVAILABLE")
+            );
+        });
+    }
+
+    #[test]
+    fn committed_store_receipts_reconcile_into_the_exact_project_graph() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project = tempdir.path().join("receipt-project");
+            std::fs::create_dir_all(&project).unwrap();
+            let normalized = normalize_project_root(project.to_string_lossy().as_ref());
+            let store_path = tempdir.path().join("rho.sqlite");
+            let mut store = Store::open(&store_path).unwrap();
+            create_run_fixture(&mut store, &normalized, "run:receipt", "x <- 1");
+            drop(store);
+            let state = test_app_state(tempdir.path(), &project, &store_path);
+            state
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+
+            let response = switch_project_with_watcher_factory(
+                project.clone(),
+                None,
+                &state,
+                |_| Ok(ProjectWatcherControl::noop()),
+            )
+            .await
+            .unwrap();
+            assert_eq!(response.status, "ready");
+
+            let project_id = crate::evidence_graph_runtime::project_id_for_root(&project).unwrap();
+            let reference = rho_protocol::AuthorityRefV1::new(
+                project_id.clone(),
+                rho_protocol::AuthorityKindV1::Run,
+                "run:receipt",
+            )
+            .unwrap();
+            let node = state
+                .evidence_graph
+                .with_graph(&project, &project_id, |graph| {
+                    graph.get_authority_node(&reference)
+                })
+                .unwrap();
+            assert_eq!(node.kind, rho_evidence_graph::NodeKind::Run);
+            assert_eq!(
+                node.payload["cached_observation"]["status"],
+                "succeeded"
+            );
+            let view = state
+                .evidence_graph
+                .with_graph(&project, &project_id, |graph| {
+                    let node = graph.get_authority_node(&reference)?;
+                    Ok(crate::evidence_graph_runtime::project_node(graph, node)
+                        .expect("graph node must project"))
+                })
+                .unwrap();
+            assert_eq!(
+                view.authority_ref.as_ref().map(|value| value.authority_id.as_str()),
+                Some("run:receipt")
+            );
+            let encoded = serde_json::to_value(&view).unwrap();
+            assert!(encoded.get("authority_status").is_none());
+            assert!(encoded.get("authority_observed_at").is_none());
+
+            let context = crate::evidence_graph_runtime::active_graph_context(&state)
+                .await
+                .unwrap();
+            let observations = crate::evidence_graph_runtime::resolve_authority_observations(
+                &state,
+                &context,
+                &[reference],
+            )
+            .await
+            .unwrap();
+            assert_eq!(observations.len(), 1);
+            assert_eq!(
+                observations[0].status,
+                rho_protocol::AuthorityStatusV1::Succeeded
+            );
+            assert!(
+                state
+                    .evidence_graph
+                    .health(&project, &project_id)
+                    .unwrap()
+                    .graph
+                    .unwrap()
+                    .authority_cursor
+                    > 0
             );
         });
     }

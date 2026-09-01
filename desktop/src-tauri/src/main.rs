@@ -7,6 +7,7 @@ mod application_state;
 mod check_runtime;
 mod commands;
 mod digest;
+mod evidence_graph_runtime;
 mod git;
 mod git_commands;
 mod git_review;
@@ -173,14 +174,15 @@ fn main() {
                 }),
                 project_store,
                 project_root: RwLock::new(default_project_root()),
-                target_admission: RwLock::new(None),
-                resource_governance: RwLock::new(None),
                 project_watcher: Mutex::new(None),
                 session: RwLock::new(None),
                 context: Mutex::new(None),
                 store_executor: tokio::sync::OnceCell::new(),
+                evidence_graph: rho_evidence_graph::ProjectGraphManager::default(),
                 approvals: Arc::new(PendingApprovalRegistry::default()),
-                environment_approvals: Arc::new(PendingApprovalRegistry::default()),
+                workspace_environment: Mutex::new(
+                    crate::application_state::WorkspaceEnvironmentRuntime::default(),
+                ),
                 project_transition_gate: Arc::new(Mutex::new(())),
                 extension_host,
                 plugin_permissions: crate::workspace_plugins::PendingPluginPermissionRegistry::new(
@@ -247,6 +249,23 @@ fn main() {
             plugin_surface_runtime::plugin_surface_event,
             check_runtime::check_project_run,
             check_runtime::check_result,
+            commands::evidence_graph::evidence_graph_health,
+            commands::authority::authority_resolve_refs,
+            commands::authority::authority_list_receipts,
+            commands::evidence_graph::evidence_list_claims,
+            commands::evidence_graph::evidence_get_claim_trace,
+            commands::evidence_graph::evidence_get_subgraph,
+            commands::evidence_graph::evidence_list_gaps,
+            commands::evidence_graph::evidence_trace_artifact,
+            commands::evidence_graph::evidence_list_agent_turn,
+            commands::evidence_graph::evidence_create_draft_claim,
+            commands::evidence_graph::evidence_revise_draft_claim,
+            commands::evidence_graph::evidence_create_draft_link,
+            commands::evidence_graph::evidence_retire_draft,
+            commands::evidence_graph::evidence_promote_draft,
+            commands::evidence_graph::evidence_retire_promoted,
+            commands::evidence_graph::evidence_refresh,
+            commands::evidence_graph::evidence_snapshot,
             studio_runtime::studio_scene,
             studio_runtime::studio_apply,
             studio_runtime::studio_undo,
@@ -312,17 +331,8 @@ fn main() {
             commands::render::render_document_job,
             commands::render::render_job_status,
             commands::render::cancel_render_job,
-            commands::environment::request_environment_operation_preview,
-            commands::environment::list_environment_operation_requests,
-            commands::environment::get_environment_operation_request,
-            commands::environment::respond_environment_operation,
-            commands::environment::list_installed_packages,
-            commands::environment::list_lockfile_packages,
-            commands::toolchain::toolchain_doctor,
-            commands::resource_monitor::resource_monitor_snapshot,
-            commands::remote_connection::compute_target_list,
-            commands::remote_connection::remote_connection_probe,
-            commands::remote_connection::configure_ssh_target,
+            commands::environment::environment_health,
+            commands::environment::environment_reobserve,
             commands::plugins::list_workspace_plugins,
             commands::plugins::get_workspace_plugin_transition,
             commands::plugins::request_workspace_plugin_enable,
@@ -416,15 +426,6 @@ fn main() {
             git_commands::git_list_conflicts,
             git_commands::git_resolve_conflict,
             commands::runtime_control::targets_status,
-            commands::evidence::resolve_doi,
-            commands::evidence::create_evidence_entry,
-            commands::evidence::list_evidence_entries,
-            commands::evidence::get_evidence_entry,
-            commands::evidence::delete_evidence_entry,
-            commands::evidence::create_evidence_claim,
-            commands::evidence::list_evidence_claims,
-            commands::evidence::review_evidence_claim,
-            commands::evidence::delete_evidence_claim,
         ])
         .build(tauri::generate_context!());
     match run_result {

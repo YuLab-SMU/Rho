@@ -856,22 +856,6 @@
                     project_revision: 1,
                 })
                 .unwrap();
-            store
-                .create_environment_operation_request(&EnvironmentOperationRequestDraft {
-                    request_id: "environment-shutdown-a".to_string(),
-                    turn_id: Some("turn-shutdown-a".to_string()),
-                    source: "agent".to_string(),
-                    request_name: "environment.snapshot".to_string(),
-                    project_root: normalized_root.clone(),
-                    arguments_json: "{}".to_string(),
-                    preview_json: "{}".to_string(),
-                    preview_sha256: "shutdown-preview".to_string(),
-                    workspace_id: "ws-test".to_string(),
-                    state_revision: 1,
-                    project_revision: 1,
-                    before_snapshot_id: None,
-                })
-                .unwrap();
             drop(store);
 
             let state = test_app_state(tempdir.path(), &project_root, &store_path);
@@ -927,15 +911,6 @@
             assert_eq!(first.approvals[0].status, "interrupted");
             assert_eq!(
                 first.approvals[0].continuation_outcome.as_deref(),
-                Some("desktop_shutdown")
-            );
-            let environment = store
-                .get_environment_operation_request(&normalized_root, "environment-shutdown-a")
-                .unwrap()
-                .unwrap();
-            assert_eq!(environment.status, "interrupted");
-            assert_eq!(
-                environment.terminal_outcome.as_deref(),
                 Some("desktop_shutdown")
             );
             drop(store);
@@ -1040,42 +1015,192 @@
     }
 
     #[test]
-    fn project_switch_preflight_blocks_environment_operation() {
+    fn project_switch_preflight_blocks_canonical_environment_operation() {
+        let durable = rho_store::ProjectTransitionSnapshot {
+            active_project_root: "/projects/a".to_string(),
+            active_run_id: None,
+            waiting_approvals: Vec::new(),
+            environment_operation: Some(rho_store::EnvironmentOperationActivity {
+                operation_id: "environment-operation-1".to_string(),
+                status: "reconcile_required".to_string(),
+            }),
+        };
+        let blocker = environment_operation_switch_blocker(&durable).unwrap();
+        assert_eq!(blocker.kind, ProjectSwitchBlockerKind::EnvironmentOperation);
+        assert_eq!(
+            blocker.request_id.as_deref(),
+            Some("environment-operation-1")
+        );
+        assert_eq!(
+            blocker.operation_status.as_deref(),
+            Some("reconcile_required")
+        );
+    }
+
+    #[test]
+    fn desktop_environment_apply_commits_receipt_and_stages_workspace_restart() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
             let tempdir = TempDir::new().unwrap();
-            let project_root = tempdir.path().join("project-a");
+            let project_root = tempdir.path().join("project-environment-apply");
+            let target_library = tempdir.path().join("user-library");
             std::fs::create_dir_all(&project_root).unwrap();
+            std::fs::create_dir_all(&target_library).unwrap();
+            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
             let store_path = tempdir.path().join("rho.sqlite");
             let mut store = Store::open(&store_path).unwrap();
-            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
             store.set_project_root(Some(&normalized_root)).unwrap();
-            store
-                .create_environment_operation_request(&EnvironmentOperationRequestDraft {
-                    request_id: "env-req-1".to_string(),
-                    turn_id: None,
-                    source: "direct".to_string(),
-                    request_name: "renv::restore".to_string(),
-                    project_root: normalized_root.clone(),
-                    arguments_json: "{}".to_string(),
-                    preview_json: "{}".to_string(),
-                    preview_sha256: "sha".to_string(),
-                    workspace_id: "ws-1".to_string(),
-                    state_revision: 1,
-                    project_revision: 1,
-                    before_snapshot_id: None,
-                })
-                .unwrap();
+            drop(store);
             let state = test_app_state(tempdir.path(), &project_root, &store_path);
-            let _receiver = state
-                .environment_approvals
-                .register("env-req-1".to_string(), None)
-                .await;
+            let mut workspace_broker = rho_core::BrokerState::new("workspace_policy");
+            for _ in 0..4 {
+                let request = rho_core::ExecutionRequest::new(
+                    rho_core::ExecutionOrigin::System,
+                    rho_protocol::OperationClass::StateCapable,
+                    rho_protocol::ExpectedWorkspace::default(),
+                    "fixture",
+                );
+                workspace_broker.complete(&request);
+            }
+            workspace_broker.project_changed();
+            workspace_broker.project_changed();
+            let lane_executor = StoreExecutor::open(tempdir.path().join("lane.sqlite"))
+                .await
+                .unwrap();
+            *state.context.lock().await = Some(Arc::new(WorkspaceBrokerLane::new(
+                workspace_broker,
+                lane_executor,
+            )));
+            let workspace = state.context.lock().await.as_ref().unwrap().identity();
+            let plan = desktop_environment_plan_fixture(
+                &normalized_root,
+                target_library.to_string_lossy().as_ref(),
+                2,
+            );
+            let review = crate::commands::environment::stage_environment_plan_for_review(
+                &state,
+                plan.clone(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                review.pending_plan.as_ref().map(|plan| plan.plan_id.as_str()),
+                Some(plan.plan_id.as_str())
+            );
+            assert!(review.latest_operation.is_none());
+            let operation_id =
+                rho_protocol::OperationId::new("operation_desktop_environment_apply").unwrap();
+            let capability = rho_protocol::CapabilityId::new(
+                rho_protocol::ENVIRONMENT_REQUEST_APPLY_PLAN_CAPABILITY,
+            )
+            .unwrap();
+            let mut context =
+                rho_control_plane::policy_context_fixture(capability, operation_id.clone());
+            let expected = rho_protocol::ExpectedRevisions {
+                workspace_id: rho_protocol::WorkspaceId::new(workspace.workspace_id.clone())
+                    .unwrap(),
+                kernel_instance_id: rho_protocol::KernelInstanceId::new(
+                    workspace.kernel_instance_id.clone(),
+                )
+                .unwrap(),
+                state_revision: rho_protocol::StateRevision(workspace.state_revision),
+                project_revision: rho_protocol::ProjectRevision(workspace.project_revision),
+            };
+            context.expected_revisions = expected.clone();
+            context.input.operation.expected_revisions = expected.clone();
+            context.input.workspace_id = expected.workspace_id.clone();
+            let arguments = rho_control_plane::environment_plan_arguments(&plan, &expected);
+            context.input.arguments = arguments.clone();
+            context.input.destination = rho_protocol::DestinationClass::LocalWorkspace;
+            let semantic_path = tempdir.path().join("environment-semantic.sqlite");
+            let (mut semantic, _) = rho_store::SemanticStore::open_app_local(
+                tempdir.path(),
+                &semantic_path,
+            )
+            .unwrap();
+            let mut broker = rho_control_plane::BrokerAdmission::new(
+                rho_control_plane::CapabilityRegistry::canonical().unwrap(),
+                rho_protocol::StreamId::new("stream_desktop_environment_apply").unwrap(),
+            );
+            let outcome = broker
+                .admit(
+                    &mut semantic,
+                    rho_control_plane::AdmissionRequest {
+                        context,
+                        normalized_arguments: arguments.clone(),
+                        now_ms: 1_000,
+                    },
+                )
+                .unwrap();
+            let rho_control_plane::BrokerAdmissionOutcome::Ask {
+                approval_binding, ..
+            } = outcome
+            else {
+                panic!("Environment mutation must require exact approval")
+            };
+            let lease = broker
+                .lease_from_approval(
+                    &approval_binding.approval_id,
+                    &arguments,
+                    &expected,
+                    rho_protocol::DestinationClass::LocalWorkspace,
+                    1_001,
+                )
+                .unwrap();
+            let health = crate::commands::environment::apply_environment_plan_with_ports(
+                &state,
+                lease,
+                rho_control_plane::EnvironmentApplyRequest {
+                    project_root: normalized_root.clone(),
+                    plan,
+                    expected_revisions: expected,
+                    destination: rho_protocol::DestinationClass::LocalWorkspace,
+                    now_ms: 1_002,
+                },
+                DesktopEnvironmentExecutionFixture,
+                DesktopEnvironmentVerifierFixture {
+                    project_root: normalized_root.clone(),
+                    operation_id,
+                },
+            )
+            .await
+            .unwrap();
 
-            let blocker = project_switch_blocker(&state).await.unwrap().unwrap();
-            assert_eq!(blocker.kind, ProjectSwitchBlockerKind::EnvironmentOperation);
-            assert_eq!(blocker.request_id.as_deref(), Some("env-req-1"));
-            assert_eq!(blocker.operation_status.as_deref(), Some("requested"));
+            assert_eq!(
+                health.status,
+                rho_ui_contract::EnvironmentHealthStatusViewV1::RestartRequired
+            );
+            assert!(health.workspace.restart_required);
+            assert!(health.pending_plan.is_none());
+            assert_eq!(
+                health
+                    .latest_operation
+                    .as_ref()
+                    .map(|operation| operation.status.as_str()),
+                Some("succeeded")
+            );
+            let authority = Store::open(&store_path)
+                .unwrap()
+                .current_environment_state(&normalized_root)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                authority.receipt.plan_id.as_str(),
+                health
+                    .latest_operation
+                    .as_ref()
+                    .unwrap()
+                    .plan
+                    .plan_id
+            );
+            assert_eq!(
+                authority.binding.receipt_digest.as_str(),
+                health
+                    .workspace
+                    .pending_receipt_digest
+                    .as_deref()
+                    .unwrap()
+            );
         });
     }
 

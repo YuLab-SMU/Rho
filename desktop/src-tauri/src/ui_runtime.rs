@@ -365,14 +365,6 @@ async fn active_operations(state: &AppState, project_root: &str) -> Vec<ActiveOp
             state: ActiveOperationStateV1::Waiting,
         });
     }
-    let environment_count = state.environment_approvals.count().await;
-    if environment_count > 0 {
-        operations.push(ActiveOperationV1 {
-            operation_id: OperationId::new("approval:environment").unwrap(),
-            label: format!("Environment approvals waiting ({environment_count})"),
-            state: ActiveOperationStateV1::Waiting,
-        });
-    }
     operations.sort_by(|left, right| left.operation_id.cmp(&right.operation_id));
     operations.truncate(rho_ui_contract::MAX_ACTIVE_OPERATIONS);
     operations

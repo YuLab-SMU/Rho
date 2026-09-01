@@ -201,8 +201,6 @@ where
         .project_transition_repository()
         .active_project_root()
         .await?;
-    let next_target_admission =
-        crate::commands::toolchain::prepare_workspace_target_admission_for(state, &root).await?;
     let mut prepared_extension =
         prepare_extension_project_candidate(state, &normalized_root).await?;
 
@@ -319,8 +317,40 @@ where
     }
 
     *state.project_root.write().await = root.clone();
-    *state.target_admission.write().await = next_target_admission;
-    *state.resource_governance.write().await = None;
+    let evidence_graph_ready =
+        match crate::evidence_graph_runtime::activate_project_graph(state, &root) {
+            Ok(health) if !health.available => {
+                write_startup_event(json!({
+                    "kind": "evidence_graph_unavailable",
+                    "project_root": normalized_root,
+                    "project_id": health.project_id,
+                    "reason_code": health.error_code,
+                    "message": health.message,
+                }));
+                false
+            }
+            Ok(_) => true,
+            Err(error) => {
+                write_startup_event(json!({
+                    "kind": "evidence_graph_unavailable",
+                    "project_root": normalized_root,
+                    "reason_code": "GRAPH_PROJECT_IDENTITY_FAILED",
+                    "message": bounded_diagnostic(&error.to_string()),
+                }));
+                false
+            }
+        };
+    if evidence_graph_ready
+        && let Err(error) =
+            crate::commands::evidence_graph::refresh_evidence_graph_for_state(state).await
+    {
+        write_startup_event(json!({
+            "kind": "evidence_graph_reconciliation_failed",
+            "project_root": normalized_root,
+            "reason_code": "GRAPH_RECONCILIATION_FAILED",
+            "message": bounded_diagnostic(&error),
+        }));
+    }
     let mut watcher = state.project_watcher.lock().await;
     let previous_watcher = watcher.replace(next_watcher);
     drop(watcher);
@@ -485,7 +515,6 @@ pub(crate) async fn project_switch_blocker(
         normalize_project_root(root.to_string_lossy().as_ref())
     };
     let approval_count = state.approvals.count().await;
-    let environment_approval_count = state.environment_approvals.count().await;
     let durable = store_executor(state)
         .await?
         .project_transition_repository()
@@ -581,9 +610,7 @@ pub(crate) async fn project_switch_blocker(
         }));
     }
 
-    if let Some(blocker) =
-        environment_operation_switch_blocker(&durable, environment_approval_count)
-    {
+    if let Some(blocker) = environment_operation_switch_blocker(&durable) {
         return Ok(Some(blocker));
     }
 
@@ -592,44 +619,24 @@ pub(crate) async fn project_switch_blocker(
 
 pub(crate) fn environment_operation_switch_blocker(
     durable: &ProjectTransitionSnapshot,
-    environment_approval_count: usize,
 ) -> Option<ProjectSwitchBlocker> {
-    if let Some(status) = durable.environment_status.as_deref() {
-        let message = match status {
-            "running" => {
-                "Wait for the active direct environment operation to finish before switching projects."
+    if let Some(operation) = durable.environment_operation.as_ref() {
+        let message = match operation.status.as_str() {
+            "uncertain" | "reconcile_required" => {
+                "Reconcile the Environment operation before switching projects."
             }
-            _ => "Resolve the direct environment operation decision before switching projects.",
+            _ => {
+                "Wait for the Environment operation to reach a truthful terminal state before switching projects."
+            }
         };
         return Some(ProjectSwitchBlocker {
             kind: ProjectSwitchBlockerKind::EnvironmentOperation,
             message: message.to_string(),
-            pending_count: environment_approval_count.max(durable.environment_requests.len()),
-            run_id: durable
-                .environment_requests
-                .first()
-                .and_then(|request| request.run_id.clone()),
-            turn_id: durable
-                .environment_requests
-                .first()
-                .and_then(|request| request.turn_id.clone()),
-            request_id: durable
-                .environment_requests
-                .first()
-                .map(|request| request.request_id.clone()),
-            operation_status: Some(status.to_string()),
-        });
-    }
-    if environment_approval_count > 0 {
-        return Some(ProjectSwitchBlocker {
-            kind: ProjectSwitchBlockerKind::EnvironmentOperation,
-            message: "Resolve the direct environment operation decision before switching projects."
-                .to_string(),
-            pending_count: environment_approval_count,
+            pending_count: 1,
             run_id: None,
             turn_id: None,
-            request_id: None,
-            operation_status: Some("requested".to_string()),
+            request_id: Some(operation.operation_id.clone()),
+            operation_status: Some(operation.status.clone()),
         });
     }
     None

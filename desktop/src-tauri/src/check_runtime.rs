@@ -3,16 +3,16 @@ use std::sync::{Mutex as StdMutex, MutexGuard};
 
 use anyhow::{Context, Result, anyhow, ensure};
 use rho_store::{
-    AuditEvidence, AuditFinding, AuditLimits, AuditResponse, AuditSeverity, AuditStatus,
+    AuditFinding, AuditLimits, AuditReference, AuditResponse, AuditSeverity, AuditStatus,
     CurrentProjectAuditSnapshot, audit_current_project_snapshot,
     capture_current_project_audit_snapshot,
 };
 use rho_ui_contract::{
     ApplicationComponentId, CHECK_PROJECT_SNAPSHOT_CONTRACT, CHECK_RESULT_CONTRACT,
-    CheckCoverageV1, CheckEvidenceV1, CheckFindingV1, CheckProjectSnapshotV1, CheckResultId,
-    CheckResultStatusV1, CheckResultV1, CheckRuleId, CheckRulePackOutputV1, CheckSeverityV1,
-    CheckSnapshotFileV1, CheckSnapshotId, MAX_CHECK_RESULT_BYTES, MAX_CHECK_RESULT_EVIDENCE,
-    MAX_CHECK_RESULT_FINDINGS, PackageDigest, PluginId, ProjectId, SurfaceOriginV1, Validate,
+    CheckCoverageV1, CheckFindingV1, CheckProjectSnapshotV1, CheckResultId, CheckResultStatusV1,
+    CheckResultV1, CheckRuleId, CheckRulePackOutputV1, CheckSeverityV1, CheckSnapshotFileV1,
+    CheckSnapshotId, FindingReferenceV1, MAX_CHECK_RESULT_BYTES, MAX_CHECK_RESULT_FINDINGS,
+    MAX_CHECK_RESULT_REFERENCES, PackageDigest, PluginId, ProjectId, SurfaceOriginV1, Validate,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -215,69 +215,69 @@ fn bounded_limitation(value: impl AsRef<str>) -> String {
         .collect()
 }
 
-fn evidence_from_audit(evidence: AuditEvidence) -> CheckEvidenceV1 {
-    if let (Some(path), Some(line)) = (evidence.path.clone(), evidence.line) {
-        return CheckEvidenceV1::SourceRange {
+fn reference_from_audit(reference: AuditReference) -> FindingReferenceV1 {
+    if let (Some(path), Some(line)) = (reference.path.clone(), reference.line) {
+        return FindingReferenceV1::SourceRange {
             path,
             line,
-            column: evidence.column,
-            excerpt: evidence.excerpt,
+            column: reference.column,
+            excerpt: reference.excerpt,
         };
     }
-    if let Some(path) = evidence.path {
-        return CheckEvidenceV1::ProjectFile { path };
+    if let Some(path) = reference.path {
+        return FindingReferenceV1::ProjectFile { path };
     }
-    if let Some(run_id) = evidence.run_id {
-        return CheckEvidenceV1::RunRef { run_id };
+    if let Some(run_id) = reference.run_id {
+        return FindingReferenceV1::RunRef { run_id };
     }
-    if let Some(snapshot_id) = evidence.snapshot_id {
-        return CheckEvidenceV1::EnvironmentRef { snapshot_id };
+    if let Some(snapshot_id) = reference.snapshot_id {
+        return FindingReferenceV1::EnvironmentRef { snapshot_id };
     }
-    CheckEvidenceV1::Note {
-        text: evidence
+    FindingReferenceV1::Note {
+        text: reference
             .excerpt
-            .unwrap_or_else(|| "Core rule returned no navigable evidence.".to_string()),
+            .unwrap_or_else(|| "Core rule returned no navigable reference.".to_string()),
     }
 }
 
 fn core_rule_presentation(rule_id: &str) -> (&'static str, &'static str, &'static str) {
     match rule_id {
-        "rho.repro.v1.evidence.run.env_snapshot_missing" => (
+        "rho.repro.v1.provenance.run.env_snapshot_missing" => (
             "Environment was not recorded",
             "A run has no saved record of the R and package environment used.",
             "Rerun important work after confirming the project environment.",
         ),
-        "rho.repro.v1.evidence.run.source_revision_missing" => (
+        "rho.repro.v1.provenance.run.source_revision_missing" => (
             "Source version was not recorded",
             "A run is not linked to the saved source version that produced it.",
             "Open the related run and confirm which code was executed.",
         ),
-        "rho.repro.v1.evidence.artifact.producing_run_missing" => (
+        "rho.repro.v1.provenance.artifact.producing_run_missing" => (
             "Saved output has no producing run",
             "A saved output is not linked to the run that created it.",
             "Regenerate the output from a recorded run when provenance matters.",
         ),
-        "rho.repro.v1.evidence.artifact.provenance_incomplete" => (
+        "rho.repro.v1.provenance.artifact.provenance_incomplete" => (
             "Saved output has incomplete history",
             "A saved output is missing source or environment information.",
             "Review the output and regenerate it from the current project if needed.",
         ),
-        "rho.repro.v1.evidence.artifact.file_missing" => (
+        "rho.repro.v1.provenance.artifact.file_missing" => (
             "Saved output file is missing",
             "The output remains in project history, but its file is no longer available.",
             "Restore the file or regenerate the output.",
         ),
-        "rho.repro.v1.evidence.env.snapshot_incomplete" => (
+        "rho.repro.v1.provenance.env.snapshot_incomplete" => (
             "Environment record is incomplete",
             "A recorded environment does not contain all information needed for review.",
-            "Refresh the project environment evidence before sharing results.",
+            "Refresh the project environment reference before sharing results.",
         ),
-        "rho.repro.v1.evidence.env.lockfile_drift" => (
+        "rho.repro.v1.provenance.env.lockfile_drift" => (
             "Package lockfile has changed",
             "The recorded environment no longer matches the project lockfile.",
             "Review Environment and update or restore the lockfile intentionally.",
         ),
-        "rho.repro.v1.evidence.env.lockfile_missing" => (
+        "rho.repro.v1.provenance.env.lockfile_missing" => (
             "Package lockfile is missing",
             "The project has no renv.lock file to record package versions.",
             "Initialize renv when the project needs a reproducible package environment.",
@@ -355,7 +355,7 @@ fn core_rule_presentation(rule_id: &str) -> (&'static str, &'static str, &'stati
         _ => (
             "Review needed",
             "A bounded project rule found something that may affect reproducibility.",
-            "Review the linked evidence before relying on this result.",
+            "Review the linked reference before relying on this result.",
         ),
     }
 }
@@ -378,16 +378,16 @@ fn finding_from_audit(finding: AuditFinding) -> Result<CheckFindingV1> {
         title: title.to_string(),
         summary: summary.to_string(),
         remediation: remediation.to_string(),
-        evidence: finding
-            .evidence
+        references: finding
+            .references
             .into_iter()
-            .map(evidence_from_audit)
+            .map(reference_from_audit)
             .collect(),
         limitations: finding.limitations,
     })
 }
 
-fn validate_plugin_evidence(
+fn validate_plugin_references(
     snapshot: &CheckProjectSnapshotV1,
     finding: &rho_ui_contract::PluginCheckFindingV1,
 ) -> Result<()> {
@@ -396,18 +396,19 @@ fn validate_plugin_evidence(
         .iter()
         .map(|file| file.path.as_str())
         .collect::<BTreeSet<_>>();
-    for evidence in &finding.evidence {
-        match evidence {
-            CheckEvidenceV1::SourceRange { path, .. } | CheckEvidenceV1::ProjectFile { path } => {
+    for reference in &finding.references {
+        match reference {
+            FindingReferenceV1::SourceRange { path, .. }
+            | FindingReferenceV1::ProjectFile { path } => {
                 ensure!(
                     paths.contains(path.as_str()),
                     "workspace Check rule referenced a file outside its immutable snapshot"
                 )
             }
-            CheckEvidenceV1::Note { .. } => {}
-            CheckEvidenceV1::RunRef { .. } | CheckEvidenceV1::EnvironmentRef { .. } => {
+            FindingReferenceV1::Note { .. } => {}
+            FindingReferenceV1::RunRef { .. } | FindingReferenceV1::EnvironmentRef { .. } => {
                 return Err(anyhow!(
-                    "workspace Check rule cannot invent Run or Environment evidence"
+                    "workspace Check rule cannot invent Run or Environment reference"
                 ));
             }
         }
@@ -469,16 +470,16 @@ fn build_result(
         aggregate_truncated = true;
         limitations.push("Check findings exceeded the aggregate result budget.".to_string());
     }
-    let mut remaining_evidence = MAX_CHECK_RESULT_EVIDENCE;
+    let mut remaining_references = MAX_CHECK_RESULT_REFERENCES;
     for finding in &mut findings {
-        if finding.evidence.len() > remaining_evidence {
-            finding.evidence.truncate(remaining_evidence);
+        if finding.references.len() > remaining_references {
+            finding.references.truncate(remaining_references);
             aggregate_truncated = true;
         }
-        remaining_evidence = remaining_evidence.saturating_sub(finding.evidence.len());
+        remaining_references = remaining_references.saturating_sub(finding.references.len());
     }
     if aggregate_truncated {
-        limitations.push("Check evidence was truncated to its aggregate budget.".to_string());
+        limitations.push("Check reference was truncated to its aggregate budget.".to_string());
     }
     limitations = limitations
         .into_iter()
@@ -656,10 +657,11 @@ pub(crate) async fn check_project_run(
                         ));
                         continue;
                     }
-                    if let Err(error) = validate_plugin_evidence(&plugin_input_snapshot, &finding) {
+                    if let Err(error) = validate_plugin_references(&plugin_input_snapshot, &finding)
+                    {
                         plugin_failures += 1;
                         limitations.push(bounded_limitation(format!(
-                            "Workspace rule pack {} returned invalid evidence: {error}.",
+                            "Workspace rule pack {} returned invalid references: {error}.",
                             registration.contribution_id
                         )));
                         continue;
@@ -823,7 +825,7 @@ mod tests {
             title: "Random result may change".to_string(),
             summary: "Random-number generation has no nearby fixed seed.".to_string(),
             remediation: "Set a deliberate seed before the analysis.".to_string(),
-            evidence: vec![CheckEvidenceV1::SourceRange {
+            references: vec![FindingReferenceV1::SourceRange {
                 path: "analysis.R".to_string(),
                 line: 2,
                 column: Some(4),
@@ -852,10 +854,10 @@ mod tests {
         );
         assert_eq!(response["result"]["findings"][0]["severity"], "warning");
         assert_eq!(
-            response["result"]["findings"][0]["evidence"][0]["kind"],
+            response["result"]["findings"][0]["reference"][0]["kind"],
             "source_range"
         );
-        assert_eq!(response["result"]["findings"][0]["evidence"][0]["line"], 2);
+        assert_eq!(response["result"]["findings"][0]["reference"][0]["line"], 2);
         assert_eq!(run_request["expected_project_revision"], 1);
         assert_eq!(result_request["result_id"], "check-result:7");
     }

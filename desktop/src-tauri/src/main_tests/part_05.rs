@@ -974,31 +974,12 @@
             .expect("RHO_ENVIRONMENT_BINDINGS_PATH must name the generated file");
         tauri_specta::Builder::<tauri::Wry>::new()
             .commands(tauri_specta::collect_commands![
-                crate::commands::environment::list_installed_packages,
-                crate::commands::environment::list_environment_operation_requests,
-                crate::commands::toolchain::toolchain_doctor,
-                crate::commands::resource_monitor::resource_monitor_snapshot,
-                crate::commands::remote_connection::compute_target_list,
-                crate::commands::remote_connection::remote_connection_probe,
-                crate::commands::remote_connection::configure_ssh_target,
+                crate::commands::environment::environment_health,
+                crate::commands::environment::environment_reobserve,
             ])
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
             .expect("Environment TypeScript export must succeed");
-    }
-
-    #[test]
-    #[ignore = "writes the requested generated TypeScript contract"]
-    fn evidence_typescript_export() {
-        let output_path = std::env::var_os("RHO_EVIDENCE_BINDINGS_PATH")
-            .expect("RHO_EVIDENCE_BINDINGS_PATH must name the generated file");
-        tauri_specta::Builder::<tauri::Wry>::new()
-            .commands(tauri_specta::collect_commands![
-                crate::commands::evidence::list_evidence_claims,
-            ])
-            .error_handling(tauri_specta::ErrorHandlingMode::Throw)
-            .export(specta_typescript::Typescript::default(), output_path)
-            .expect("Evidence TypeScript export must succeed");
     }
 
     #[test]

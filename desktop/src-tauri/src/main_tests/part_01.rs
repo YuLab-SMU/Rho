@@ -16,7 +16,7 @@
         find_executable_on_path, finish_render_job, interrupt_all_agent_tasks, load_runtime_cache,
         locate_ark_from_candidates, locate_rscript, parse_r_runtime_probe,
         persist_agent_file_mutation_event_to_store, persist_workspace_identity,
-        project_switch_blocker, r_architecture_supported, reconcile_render_job,
+        environment_operation_switch_blocker, project_switch_blocker, r_architecture_supported, reconcile_render_job,
         recover_incomplete_agent_file_mutations, render_job_is_terminal, run_r_probe,
         runtime_file_signature, save_runtime_cache, shutdown_application, store_executor,
         switch_project_with_watcher_factory, text_sha256, undo_agent_file_edit_state,
@@ -29,8 +29,6 @@
         ensure_artifact_export_target, has_png_signature,
     };
     use crate::commands::editor::editor_format_result;
-    use crate::commands::environment::lockfile_inventory_arguments;
-    use crate::commands::evidence::source_claim_snapshot;
     use crate::commands::project_session::safe_delete_project_file;
     use crate::commands::runs::{
         audit_reproducibility_with_state, list_runs_with_state, retry_run_arguments,
@@ -54,11 +52,12 @@
     use rho_server::workspace_lane::WorkspaceBrokerLane;
     use rho_store::{
         AgentConversationDraft, AgentTurnDraft, AgentTurnEventDraft, AgentTurnFinish,
-        ApprovalRequestDraft, ArtifactRecordSummary, EnvironmentOperationRequestDraft,
-        EvidenceEntryDraft, PlotArtifactDraft, RunDraft, RunFinish, Store, StoreExecutor,
+        ApprovalRequestDraft, ArtifactRecordSummary,
+        PlotArtifactDraft, RunDraft, RunFinish, Store, StoreExecutor,
         normalize_project_root,
     };
     use serde_json::json;
+    use sha2::Digest as _;
     use std::collections::HashMap;
     use std::future::Future;
     use std::path::{Path, PathBuf};
@@ -69,6 +68,229 @@
     use std::time::Duration;
     use tempfile::TempDir;
     use tokio::sync::{Mutex, RwLock, Semaphore, oneshot};
+
+    fn desktop_environment_plan_fixture(
+        project_root: &str,
+        target_library: &str,
+        project_revision: u64,
+    ) -> rho_protocol::MaterializedPackagePlanV1 {
+        use rho_protocol::*;
+
+        let digest = |value: char| {
+            AuthorityDigest::new(format!("sha256:{}", value.to_string().repeat(64))).unwrap()
+        };
+        let environment_id = EnvironmentId::new("environment_test_local").unwrap();
+        MaterializedPackagePlanV1::new(MaterializedPackagePlanBodyV1 {
+            contract_version: ENVIRONMENT_CONTRACT_VERSION,
+            environment: EnvironmentIdentityV1 {
+                environment_id: environment_id.clone(),
+                role: EnvironmentRoleV1::NativeUser,
+                project_id: Some(ProjectId::new("project_test_local").unwrap()),
+                target_id: "local".to_string(),
+                execution_profile_id: ExecutionProfileId::new("execution_profile_test_local")
+                    .unwrap(),
+            },
+            expected_before: ExpectedEnvironmentStateV1 {
+                environment_id,
+                desired_revision: EnvironmentDesiredRevisionId::new("env_desired_test_before")
+                    .unwrap(),
+                realization_revision: EnvironmentRealizationRevisionId::new(
+                    "env_realized_test_before",
+                )
+                .unwrap(),
+                project_revision: Some(project_revision),
+                repository_profile_digest: digest('a'),
+            },
+            intent: PackageIntentV1::InstallUserPackage,
+            runtime: RuntimeRealizationV1 {
+                runtime_id: RuntimeRealizationId::new("runtime_realization_test_local").unwrap(),
+                requirement: RuntimeRequirementV1 {
+                    distribution: RuntimeDistributionV1::R,
+                    exact_version: "4.5.2".to_string(),
+                    platform: std::env::consts::OS.to_string(),
+                    architecture: std::env::consts::ARCH.to_string(),
+                },
+                ownership: RuntimeOwnershipV1::System,
+                support_tier: RuntimeSupportTierV1::Verified,
+                executable: "/usr/local/bin/Rscript".to_string(),
+                runtime_home: "/usr/local/lib/R".to_string(),
+                executable_digest: digest('b'),
+                build_fingerprint: digest('c'),
+                compiler_fingerprint: None,
+            },
+            library_stack: LibraryStackV1::new(vec![LibraryLayerV1 {
+                layer_id: LibraryLayerId::new("library_user_test_local").unwrap(),
+                kind: LibraryLayerKindV1::User,
+                owner: LibraryOwnerV1::User,
+                mutability: LibraryMutabilityV1::UserWritable,
+                canonical_path: target_library.to_string(),
+                priority: 1,
+                filesystem_identity: format!("test:{project_root}:user-library"),
+            }])
+            .unwrap(),
+            repository_profile: RepositoryProfileV1 {
+                profile_id: RepositoryProfileId::new("repository_profile_test_local").unwrap(),
+                repositories: vec![RepositoryEndpointV1 {
+                    name: "fixture".to_string(),
+                    url: "file:///fixtures/mini-cran".to_string(),
+                    priority: 1,
+                }],
+                bioconductor_version: None,
+                snapshot: None,
+                binary_preference: "source".to_string(),
+                source_fallback_policy: "deny".to_string(),
+                offline_policy: "offline".to_string(),
+                proxy_profile_ref: None,
+                trust_bundle_ref: None,
+                credential_refs: Vec::new(),
+                allowed_origins: vec!["file://".to_string()],
+            },
+            package_actions: vec![PackageActionV1 {
+                package: "rhofixture".to_string(),
+                kind: PackageActionKindV1::Install,
+                from_version: None,
+                to_version: Some("1.0.0".to_string()),
+                source: "file:///fixtures/mini-cran/rhofixture_1.0.0.tar.gz".to_string(),
+                repository: Some("fixture".to_string()),
+                form: PackageFormV1::Source,
+                artifact_digest: digest('e'),
+                artifact_byte_size: 42,
+            }],
+            native_requirement_actions: Vec::new(),
+            toolchain_actions: Vec::new(),
+            lockfile_action: None,
+            artifact_digests: vec![digest('e')],
+            network_intents: Vec::new(),
+            secret_requirements: Vec::new(),
+            verification_probes: vec![EnvironmentVerificationProbeV1 {
+                probe_id: "probe_namespace_rhofixture".to_string(),
+                kind: "namespace_load".to_string(),
+                expected: "rhofixture@1.0.0".to_string(),
+            }],
+            restart_required: true,
+            expires_at: "2099-01-01T00:00:00Z".to_string(),
+        })
+        .unwrap()
+    }
+
+    struct DesktopEnvironmentExecutionFixture;
+
+    impl rho_control_plane::EnvironmentExecutionPort for DesktopEnvironmentExecutionFixture {
+        fn execute<C: rho_store::StoreConnection>(
+            &mut self,
+            _plan: &rho_protocol::MaterializedPackagePlanV1,
+            _store: &mut rho_store::Store<C>,
+            _project_root: &str,
+            _operation_id: &str,
+        ) -> Result<rho_control_plane::EnvironmentExecutionOutcome, String> {
+            Ok(rho_control_plane::EnvironmentExecutionOutcome::Succeeded {
+                execution_id: rho_protocol::ExecutionId::new(
+                    "execution_desktop_environment_fixture",
+                )
+                .unwrap(),
+            })
+        }
+
+        fn reconcile<C: rho_store::StoreConnection>(
+            &mut self,
+            _plan: &rho_protocol::MaterializedPackagePlanV1,
+            _store: &mut rho_store::Store<C>,
+            _project_root: &str,
+            _operation_id: &str,
+        ) -> Result<Option<rho_control_plane::EnvironmentExecutionOutcome>, String> {
+            Ok(None)
+        }
+    }
+
+    struct DesktopEnvironmentVerifierFixture {
+        project_root: String,
+        operation_id: rho_protocol::OperationId,
+    }
+
+    impl rho_control_plane::EnvironmentCommitVerifier for DesktopEnvironmentVerifierFixture {
+        fn verify(
+            &mut self,
+            plan: &rho_protocol::MaterializedPackagePlanV1,
+            execution_id: &rho_protocol::ExecutionId,
+        ) -> Result<rho_store::EnvironmentStateCommit, String> {
+            let digest = |value: char| {
+                rho_protocol::AuthorityDigest::new(format!(
+                    "sha256:{}",
+                    value.to_string().repeat(64)
+                ))
+                .unwrap()
+            };
+            let desired = rho_protocol::EnvironmentDesiredRevisionV1 {
+                revision_id: rho_protocol::EnvironmentDesiredRevisionId::new(
+                    "env_desired_desktop_after",
+                )
+                .unwrap(),
+                core_manifest_digest: None,
+                renv_lock_digest: None,
+                repository_profile_digest: plan
+                    .body
+                    .expected_before
+                    .repository_profile_digest
+                    .clone(),
+                execution_profile_digest: digest('6'),
+                ownership_policy_digest: digest('7'),
+            };
+            let realization = rho_protocol::EnvironmentRealizationRevisionV1 {
+                revision_id: rho_protocol::EnvironmentRealizationRevisionId::new(
+                    "env_realized_desktop_after",
+                )
+                .unwrap(),
+                runtime_id: plan.body.runtime.runtime_id.clone(),
+                library_stack_digest: plan.body.library_stack.effective_digest.clone(),
+                package_inventory_digest: digest('8'),
+                native_fingerprint: digest('9'),
+                target_realization_digest: digest('0'),
+            };
+            let receipt = rho_protocol::EnvironmentOperationReceiptV1 {
+                receipt_id: rho_protocol::EnvironmentReceiptId::new(
+                    "environment_receipt_desktop",
+                )
+                .unwrap(),
+                operation_id: self.operation_id.clone(),
+                plan_id: plan.plan_id.clone(),
+                actor_id: "desktop_user".to_string(),
+                approval_effect_digest: digest('1'),
+                desired_before: plan.body.expected_before.desired_revision.clone(),
+                desired_after: Some(desired.revision_id.clone()),
+                realization_before: plan.body.expected_before.realization_revision.clone(),
+                realization_after: Some(realization.revision_id.clone()),
+                checkpoints: vec![rho_protocol::EnvironmentCheckpointV1 {
+                    name: "namespace_verified".to_string(),
+                    reached_at: "2026-09-01T12:00:00Z".to_string(),
+                    digest: Some(digest('2')),
+                }],
+                execution_refs: vec![execution_id.clone()],
+                verification_refs: vec!["namespace:rhofixture@1.0.0".to_string()],
+                outcome: rho_protocol::EnvironmentOperationOutcomeV1::Succeeded,
+                partial_effects_possible: false,
+                restart_required: true,
+                recorded_at: "2026-09-01T12:00:01Z".to_string(),
+            };
+            let receipt_digest = rho_protocol::AuthorityDigest::new(format!(
+                "sha256:{:x}",
+                sha2::Sha256::digest(serde_json::to_vec(&receipt).unwrap())
+            ))
+            .unwrap();
+            Ok(rho_store::EnvironmentStateCommit {
+                project_root: self.project_root.clone(),
+                environment: plan.body.environment.clone(),
+                desired: desired.clone(),
+                realization: realization.clone(),
+                receipt,
+                binding: rho_protocol::WorkspaceEnvironmentBindingV1 {
+                    environment_id: plan.body.environment.environment_id.clone(),
+                    desired_revision: desired.revision_id,
+                    realization_revision: realization.revision_id,
+                    receipt_digest,
+                },
+            })
+        }
+    }
 
     struct DelayedRunHistoryHandler {
         started: Arc<Semaphore>,
@@ -754,7 +976,10 @@
     fn retries_only_scientific_workspace_execution() {
         assert!(run_is_retryable("workspace.execute", "user"));
         assert!(run_is_retryable("workspace.execute", "agent"));
-        assert!(!run_is_retryable("environment.restore", "user"));
+        assert!(!run_is_retryable(
+            "environment.request_apply_plan",
+            "user"
+        ));
         assert!(!run_is_retryable("workspace.set_project_root", "system"));
         assert!(!run_is_retryable("workspace.bootstrap", "system"));
     }
@@ -782,42 +1007,6 @@
         assert_eq!(retried["document_version"], original["document_version"]);
         assert_eq!(retried["parent_run_id"], "failed_run");
         assert!(retry_run_arguments("[]", "failed_run").is_err());
-    }
-
-    #[test]
-    fn source_claim_snapshot_is_bounded_and_content_bound() {
-        let directory = TempDir::new().unwrap();
-        let project_path = directory.path().join("project");
-        std::fs::create_dir_all(project_path.join("reports")).unwrap();
-        let project = project_path.canonicalize().unwrap();
-        std::fs::write(project.join("reports/demo.qmd"), "one\ntwo\nthree\n").unwrap();
-
-        let (digest, excerpt) = source_claim_snapshot(&project, "reports/demo.qmd", 2, 3).unwrap();
-        assert_eq!(digest.len(), 64);
-        assert_eq!(excerpt, "two\nthree");
-        assert!(source_claim_snapshot(&project, "../outside.qmd", 1, 1).is_err());
-        assert!(source_claim_snapshot(&project, "reports/demo.qmd", 0, 1).is_err());
-        assert!(source_claim_snapshot(&project, "reports/demo.qmd", 1, 201).is_err());
-
-        std::fs::write(
-            project.join("reports/demo.qmd"),
-            "one\ntwo changed\nthree\n",
-        )
-        .unwrap();
-        let changed = source_claim_snapshot(&project, "reports/demo.qmd", 2, 3).unwrap();
-        assert_ne!(changed.0, digest);
-        assert_ne!(changed.1, excerpt);
-    }
-
-    #[test]
-    fn lockfile_inventory_arguments_normalize_root_and_clamp_limit() {
-        let root = Path::new("C:\\projects\\rho-lockfile");
-        let low = lockfile_inventory_arguments(root, Some(0));
-        let high = lockfile_inventory_arguments(root, Some(900));
-
-        assert_eq!(low["project_root"], "C:/projects/rho-lockfile");
-        assert_eq!(low["limit"], 1);
-        assert_eq!(high["limit"], 500);
     }
 
     #[test]
@@ -1055,14 +1244,15 @@
             }),
             project_store: ProjectSessionStore::new(data_dir.to_path_buf()).unwrap(),
             project_root: RwLock::new(project_root.to_path_buf()),
-            target_admission: RwLock::new(None),
-            resource_governance: RwLock::new(None),
             project_watcher: Mutex::new(None),
             session: RwLock::new(None),
             context: Mutex::new(None),
             store_executor: tokio::sync::OnceCell::new(),
+            evidence_graph: rho_evidence_graph::ProjectGraphManager::default(),
             approvals: Arc::new(PendingApprovalRegistry::default()),
-            environment_approvals: Arc::new(PendingApprovalRegistry::default()),
+            workspace_environment: Mutex::new(
+                crate::application_state::WorkspaceEnvironmentRuntime::default(),
+            ),
             project_transition_gate: Arc::new(Mutex::new(())),
             extension_host,
             plugin_permissions: crate::workspace_plugins::PendingPluginPermissionRegistry::new(),
@@ -1088,57 +1278,6 @@
             workbench_projection:
                 crate::workbench_projection::WorkbenchProjectionState::default(),
         }
-    }
-
-    #[tokio::test]
-    async fn evidence_store_executor_is_shared_and_project_isolated() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let project_a = tempdir.path().join("project-a");
-        let project_b = tempdir.path().join("project-b");
-        std::fs::create_dir_all(&project_a).unwrap();
-        std::fs::create_dir_all(&project_b).unwrap();
-        let store_path = tempdir.path().join("rho.sqlite");
-        let state = test_app_state(tempdir.path(), &project_a, &store_path);
-
-        let first = store_executor(&state).await.unwrap();
-        let first_address = std::ptr::from_ref(first);
-        first
-            .create_evidence_entry(EvidenceEntryDraft {
-                project_root: normalize_project_root(project_a.to_string_lossy().as_ref()),
-                title: "Project A evidence".to_string(),
-                notes: String::new(),
-                doi: None,
-                run_id: None,
-                artifact_id: None,
-            })
-            .await
-            .unwrap();
-
-        let second = store_executor(&state).await.unwrap();
-        assert_eq!(first_address, std::ptr::from_ref(second));
-        assert_eq!(
-            second
-                .list_evidence_entries(
-                    normalize_project_root(project_a.to_string_lossy().as_ref()),
-                    None,
-                    None,
-                )
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
-        assert!(
-            second
-                .list_evidence_entries(
-                    normalize_project_root(project_b.to_string_lossy().as_ref()),
-                    None,
-                    None,
-                )
-                .await
-                .unwrap()
-                .is_empty()
-        );
     }
 
     #[tokio::test]

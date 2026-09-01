@@ -10,7 +10,6 @@ use rho_store::{
     AuditLimits, AuditResponse, AuditScope, CompareRunsResponse, ProblemSummary, RunDetail,
     RunSummary,
 };
-use rho_toolchain::TargetAdmissionMode;
 use serde::Serialize;
 use serde_json::{Value, json};
 use tauri::State;
@@ -224,7 +223,7 @@ pub(crate) async fn retry_run(
 ) -> Result<RunRetryResult, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    crate::commands::toolchain::require_target_admission(&state, TargetAdmissionMode::Run)
+    crate::commands::environment::require_environment_execution_ready(&state)
         .await
         .map_err(display_error)?;
     let session = active_session(&state).await.map_err(display_error)?;
