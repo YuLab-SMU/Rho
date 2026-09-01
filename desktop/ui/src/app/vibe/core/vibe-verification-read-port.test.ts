@@ -83,10 +83,13 @@ function facets(overrides: Partial<VibeVerificationReadFacets> = {}) {
     makePlot({ plot_id: "plot-unrelated" }),
     makePlot(),
   ]);
-  const listEvidenceClaims = vi.fn(async () => [
-    makeEvidence({ claim_id: "claim-unrelated" }),
-    makeEvidence(),
-  ]);
+  const listClaims = vi.fn(async () => ({
+    contract: "rho.ui.evidence-graph.v1" as const,
+    project_id: TEST_PROJECT_ID,
+    items: [makeEvidence({ node_id: "claim-unrelated" }), makeEvidence()],
+    next_cursor: null,
+    has_more: false,
+  }));
   const loadCheckResult = vi.fn(async () => makeCheck());
   const readPlotArtifact = vi.fn(async () => makePlotView());
   const transport = {
@@ -94,7 +97,7 @@ function facets(overrides: Partial<VibeVerificationReadFacets> = {}) {
     listRuns,
     listArtifactRecords,
     listPlotArtifacts,
-    listEvidenceClaims,
+    listClaims,
     loadCheckResult,
     readPlotArtifact,
     subscribeWorkbenchInvalidated: vi.fn((listener: () => void) => {
@@ -114,7 +117,7 @@ function facets(overrides: Partial<VibeVerificationReadFacets> = {}) {
     listRuns,
     listArtifactRecords,
     listPlotArtifacts,
-    listEvidenceClaims,
+    listClaims,
     loadCheckResult,
     readPlotArtifact,
     workbenchUnsubscribe,
@@ -151,9 +154,9 @@ describe("Vibe typed verification read port", () => {
       VIBE_VERIFICATION_READ_LIMIT,
       false,
     );
-    expect(fixture.transport.listEvidenceClaims).toHaveBeenCalledWith(
-      VIBE_VERIFICATION_READ_LIMIT,
-    );
+    expect(fixture.transport.listClaims).toHaveBeenCalledWith({
+      limit: VIBE_VERIFICATION_READ_LIMIT,
+    });
     expect(fixture.loadDomainSurface).not.toHaveBeenCalled();
   });
 

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 
-import type { UiKernelTransport } from "../transport/types";
+import type { HistoryReadTransport } from "../transport/history";
 
 export function PlotThumbnail({ plotId, transport, className = "rho-domain-output-image" }: {
   readonly plotId: string;
-  readonly transport: UiKernelTransport;
+  readonly transport: Pick<HistoryReadTransport, "readPlotArtifact">;
   readonly className?: string;
 }) {
   const [source, setSource] = useState<string | null>(null);

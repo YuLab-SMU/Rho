@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { CheckEvidence, CheckResult, SurfaceInstance, UiKernelTransport } from "../transport";
+import type { CheckResult, FindingReference, SurfaceInstance, UiKernelTransport } from "../transport";
 import { formatHistoryTime } from "./time-format";
 import { SurfaceTaskState } from "./SurfaceTaskState";
 
@@ -15,13 +15,13 @@ function checkOriginLabel(finding: CheckResult["findings"][number]): string {
   return `Workspace rule pack · ${finding.origin.plugin_id} · g${finding.activation_generation}`;
 }
 
-function evidenceLabel(evidence: CheckEvidence): string {
-  switch (evidence.kind) {
-    case "source_range": return `${evidence.path}:${evidence.line}${evidence.column == null ? "" : `:${evidence.column}`}`;
-    case "project_file": return evidence.path;
-    case "run_ref": return `Run ${evidence.run_id}`;
-    case "environment_ref": return `Environment ${evidence.snapshot_id}`;
-    case "note": return evidence.text;
+function referenceLabel(reference: FindingReference): string {
+  switch (reference.kind) {
+    case "source_range": return `${reference.path}:${reference.line}${reference.column == null ? "" : `:${reference.column}`}`;
+    case "project_file": return reference.path;
+    case "run_ref": return `Run ${reference.run_id}`;
+    case "environment_ref": return `Environment ${reference.snapshot_id}`;
+    case "note": return reference.text;
   }
 }
 
@@ -29,13 +29,13 @@ export function CheckResultView({
   instance,
   projectRevision,
   transport,
-  openEvidence,
+  openReference,
   reportError,
 }: {
   readonly instance: SurfaceInstance;
   readonly projectRevision: number;
   readonly transport: UiKernelTransport;
-  readonly openEvidence: (path: string) => Promise<void>;
+  readonly openReference: (path: string) => Promise<void>;
   readonly reportError: (error: unknown) => void;
 }) {
   const resultId = checkResultId(instance);
@@ -103,12 +103,12 @@ export function CheckResultView({
             <h3>{finding.title}</h3>
             <p>{finding.summary}</p>
             <div className="rho-check-remediation"><strong>Next step</strong><span>{finding.remediation}</span></div>
-            <div className="rho-check-evidence">
-              {finding.evidence.map((evidence, evidenceIndex) => {
-                const path = evidence.kind === "source_range" || evidence.kind === "project_file" ? evidence.path : null;
+            <div className="rho-check-references">
+              {finding.references.map((reference, referenceIndex) => {
+                const path = reference.kind === "source_range" || reference.kind === "project_file" ? reference.path : null;
                 return path == null
-                  ? <span key={evidenceIndex}>{evidenceLabel(evidence)}</span>
-                  : <button type="button" onClick={() => void openEvidence(path).catch(reportError)} key={evidenceIndex}>{evidenceLabel(evidence)}</button>;
+                  ? <span key={referenceIndex}>{referenceLabel(reference)}</span>
+                  : <button type="button" onClick={() => void openReference(path).catch(reportError)} key={referenceIndex}>{referenceLabel(reference)}</button>;
               })}
             </div>
             <details className="rho-check-rule-meta"><summary>Rule details</summary><div><span>{checkOriginLabel(finding)}</span><code>{finding.rule_id} · v{finding.rule_version}</code></div></details>

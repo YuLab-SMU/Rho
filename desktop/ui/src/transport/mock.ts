@@ -92,7 +92,8 @@ import type {
 import { MODEL_CAPABILITY_NAMES } from "./agent-settings";
 import type { AgentTurnEventFrame } from "./agent-events";
 import { INVALIDATION_TOPICS } from "./invalidation-contract";
-import type { EvidenceClaim } from "./evidence";
+import { createMockEvidenceGraphTransport } from "./evidence-graph.mock";
+import { createMockAuthorityTransport } from "./authority.mock";
 import type {
   ArtifactRecordSummary,
   PlotArtifactSummary,
@@ -290,15 +291,20 @@ export function createMockUiKernelTransport(
   const firstPartyFactorySpecs = [
     ["rho.agent", "Agent", [["conversation", "Conversation"], ["activity", "Activity"], ["composer", "Composer"]], false],
     ["rho.settings", "Settings", [["settings", "Settings"]], false],
-    ["rho.environment", "Environment", [["toolchains", "Toolchains"], ["connections", "Connections"], ["resources", "Resources"], ["packages", "Packages"], ["requests", "Requests"]], false],
+    ["rho.environment", "Environment", [["health", "Health"], ["plans", "Plans"], ["activity", "Activity"]], false],
     ["rho.navigator", "Navigator", [["files", "Files"], ["runs", "History"]], false],
-    ["rho.evidence", "Evidence", [["claims", "Claims"]], false],
+    ["rho.claims", "Claims", [["claims", "Claims"]], false],
+    ["rho.evidence-graph", "Evidence graph", [["graph", "Graph"]], false],
+    ["rho.evidence-gaps", "Evidence gaps", [["gaps", "Gaps"]], false],
     ["rho.git", "Git", [["changes", "Changes"], ["history", "History"]], false],
     ["rho.runs", "History", [["history", "History"]], false],
+    ["rho.jobs", "Jobs", [["queue", "Queue"]], false],
+    ["rho.artifacts", "Artifacts", [["list", "List"]], false],
+    ["rho.approvals", "Approvals", [["list", "List"]], false],
+    ["rho.revisions", "Revisions", [["current", "Current"]], false],
     ["rho.problems", "Problems", [["list", "List"]], true],
     ["rho.plots", "Plots", [["gallery", "Gallery"], ["single", "Single"]], false],
     ["rho.logs", "Logs", [["stream", "Stream"]], true],
-    ["rho.render-jobs", "Render jobs", [["queue", "Queue"]], false],
     ["rho.help", "Help", [["context", "Context"], ["search", "Search"]], false],
   ] as const;
   for (const [surfaceId, label, modes, strip] of firstPartyFactorySpecs) {
@@ -680,24 +686,6 @@ export function createMockUiKernelTransport(
     payload_json: "{}",
     provenance_complete: true,
     created_at: "2026-08-23T06:00:03Z",
-  }];
-  const typedEvidenceRecords = (): readonly EvidenceClaim[] => [{
-    claim_id: "claim:1",
-    project_root: current.project.display_path,
-    kind: "source_statement",
-    summary: "The analysis records a fixed random seed before sampling.",
-    anchor_kind: "source_range",
-    source_path: "analysis.R",
-    start_line: 1,
-    start_column: 1,
-    end_line: 2,
-    end_column: 24,
-    source_sha256: "a".repeat(64),
-    source_excerpt: "set.seed(42)",
-    artifact_id: null,
-    linked_evidence_ids: [1],
-    created_at: "2026-08-23T06:00:03Z",
-    updated_at: "2026-08-23T06:00:03Z",
   }];
   const runtimeExecutionRecords: RuntimeExecution[] = [];
   const runtimeOutputChunks = new Map<string, readonly RuntimeOutputChunk[]>();
@@ -1559,8 +1547,12 @@ export function createMockUiKernelTransport(
     };
     return structuredClone(agentLlmSettings);
   };
+  const evidenceGraphTransport = createMockEvidenceGraphTransport();
+  const authorityTransport = createMockAuthorityTransport();
   return {
     source: "mock",
+    ...authorityTransport,
+    ...evidenceGraphTransport,
     async prepareWorkspace(
       chooseRscript = false,
       onProgress?: WorkspacePreparationProgressListener,
@@ -1989,7 +1981,7 @@ export function createMockUiKernelTransport(
           title: "Random result may change",
           summary: "Random-number generation was found without a nearby fixed seed.",
           remediation: "Set a deliberate seed before the random analysis.",
-          evidence: [{
+          references: [{
             kind: "source_range",
             path: "analysis.R",
             line: 2,
@@ -2011,7 +2003,7 @@ export function createMockUiKernelTransport(
           title: "Project metadata can be clearer",
           summary: "The workspace rule pack found a project-specific convention to review.",
           remediation: "Review the project README before sharing this analysis.",
-          evidence: [{ kind: "note", text: "README metadata review" }],
+          references: [{ kind: "note", text: "README metadata review" }],
           limitations: [],
         }],
         coverage: {
@@ -3514,162 +3506,89 @@ export function createMockUiKernelTransport(
     async listPlotArtifacts(limit = 100) {
       return structuredClone(typedPlotRecords().slice(0, Math.max(0, limit)));
     },
-    async listEvidenceClaims(limit = 100) {
-      return structuredClone(typedEvidenceRecords().slice(0, Math.max(0, limit)));
-    },
-    async toolchainDoctor() {
+    async environmentHealth() {
       return {
-        status: "ready",
-        configured: true,
-        rho_toml_sha256: "f".repeat(64),
-        target_id: "local",
-        target_registry_sha256: null,
-        host_kind: "local",
-        isolation_kind: "native",
-        r_version: "4.5.2",
-        rscript: "/opt/R/4.5.2/bin/Rscript",
-        python_version: "3.12",
-        python: "/project/.venv/bin/python",
-        checks: [
-          { id: "rig", status: "ready", detail: "exact R 4.5.2 resolved" },
-          { id: "renv", status: "ready", detail: "project library ready" },
-          { id: "uv", status: "ready", detail: "Python 3.12 environment ready" },
-        ],
-      };
-    },
-    async resourceMonitorSnapshot() {
-      return {
-        status: "healthy",
-        selected_target_id: "local",
-        observed_at: agentNow,
-        configured: true,
-        rho_toml_sha256: "f".repeat(64),
-        target_registry_sha256: null,
-        thresholds: {
-          cpu_warning_basis_points: 8500,
-          cpu_critical_basis_points: 9500,
-          memory_available_warning_basis_points: 2000,
-          memory_available_critical_basis_points: 1000,
-          disk_available_warning_basis_points: 1500,
-          disk_available_critical_basis_points: 500,
-          gpu_warning_basis_points: 9000,
-          gpu_critical_basis_points: 9800,
-        },
-        targets: [{
+        status: "realized" as const,
+        binding: {
+          environment_id: "environment:mock",
+          role: "native_user",
           target_id: "local",
-          selected: true,
-          host_kind: "local",
-          isolation_kind: "native",
-          environment_identity: "native",
-          capabilities: ["cpu"],
-          status: "healthy",
-          admission_allowed: true,
-          governance_reasons: ["All observed governed resources are within threshold"],
-          device: {
-            device_id: "device-mock",
-            host_name: "Mock workstation",
-            operating_system: "macos",
-            architecture: "aarch64",
-            observed_at: agentNow,
-            cpu_logical_count: 12,
-            metrics: [
-              { resource_id: "device-mock:cpu", kind: "cpu", label: "CPU", unit: "percent", capacity: "12", available: null, utilization_basis_points: 3200, pressure: "healthy", detail: "12 logical processors" },
-              { resource_id: "device-mock:memory", kind: "memory", label: "Memory", unit: "bytes", capacity: "34359738368", available: "21474836480", utilization_basis_points: 3750, pressure: "healthy", detail: "20 GiB available" },
-              { resource_id: "device-mock:disk", kind: "disk", label: "Project disk", unit: "bytes", capacity: "1000000000000", available: "600000000000", utilization_basis_points: 4000, pressure: "healthy", detail: "600 GB available" },
-            ],
+          runtime_id: "runtime:mock-r-4.5.2",
+          runtime_ownership: "system",
+          runtime_support_tier: "verified",
+          desired_revision: "environment-desired:mock",
+          realization_revision: "environment-realization:mock",
+          receipt_id: "environment-receipt:mock",
+          receipt_digest: `sha256:${"a".repeat(64)}`,
+          receipt_outcome: "succeeded",
+          receipt_restart_required: true,
+          updated_at: agentNow,
+        },
+        workspace: {
+          phase: "active",
+          workspace_id: "workspace:mock",
+          kernel_instance_id: "kernel:mock",
+          active_receipt_digest: `sha256:${"a".repeat(64)}`,
+          pending_receipt_digest: null,
+          restart_required: false,
+          reobserve_required: false,
+        },
+        pending_plan: null,
+        latest_operation: {
+          operation_id: "operation:environment-mock",
+          status: "succeeded",
+          reason: null,
+          checkpoints: ["admitted", "executed", "verified", "committed"].map((name) => ({
+            name,
+            reached_at: agentNow,
+            digest: name === "committed" ? `sha256:${"a".repeat(64)}` : null,
+          })),
+          plan: {
+            plan_id: `environment_plan_${"b".repeat(64)}`,
+            intent: "install_user_package",
+            environment_id: "environment:mock",
+            expected_desired_revision: "environment-desired:before",
+            expected_realization_revision: "environment-realization:before",
+            runtime_id: "runtime:mock-r-4.5.2",
+            runtime_version: "4.5.2",
+            runtime_ownership: "system",
+            runtime_support_tier: "verified",
+            library_stack_digest: `sha256:${"d".repeat(64)}`,
+            target_library_kind: "user",
+            target_library_path: "/Users/rho/R/library",
+            package_actions: [{
+              package: "DESeq2",
+              action: "install",
+              version: "1.50.0",
+              source: "file:///fixtures/DESeq2.tar.gz",
+              artifact_digest: `sha256:${"c".repeat(64)}`,
+              artifact_byte_size: 42,
+            }],
+            native_actions: [],
+            toolchain_actions: [],
+            network_intents: [],
+            secret_requirements: [],
+            verification_probes: ["probe_namespace_deseq2:namespace_load=DESeq2@1.50.0"],
+            restart_required: true,
+            expires_at: agentNow,
           },
-          error: null,
-        }],
-        total_targets: 1,
-        truncated: false,
-      };
-    },
-    async computeTargetList() {
-      return {
-        selected_target_id: "local",
-        targets_yaml: "/mock/.rho/targets.yaml",
-        targets: [{
-          target_id: "local",
-          selected: true,
-          host_kind: "local",
-          host: null,
-          port: null,
-          username: null,
-          remote_root: null,
-          isolation_kind: "native",
-          capabilities: ["cpu"],
-          identity_file: null,
-          identity_available: true,
-        }],
-      };
-    },
-    async remoteConnectionProbe(request) {
-      const fingerprints = [{ algorithm: "ED25519", sha256: "SHA256:mock-host-key" }];
-      if (request.confirmed_fingerprint == null) {
-        return {
-          status: "host_key_confirmation_required",
-          fingerprints,
-          authenticated: false,
-          host_name: null,
-          home_directory: null,
-          slurm_version: null,
-          partitions: [],
-          helper_available: false,
-          message: "Confirm one discovered host fingerprint before authentication.",
-        };
-      }
-      return {
-        status: "ready",
-        fingerprints,
-        authenticated: true,
-        host_name: "master",
-        home_directory: "/home/scientist",
-        slurm_version: "slurm 19.05.2",
-        partitions: [{ partition: "gpu_batch", available: "up", nodes: "1", gres: "gpu:3", cpus: "2/46/0/48" }],
-        helper_available: false,
-        message: "SSH is ready. Install the Rho remote Helper before remote execution.",
-      };
-    },
-    async configureSshTarget(request) {
-      const probe = await this.remoteConnectionProbe({
-        host: request.host,
-        port: request.port,
-        username: request.username,
-        password: null,
-        identity_file: request.identity_file,
-        confirmed_fingerprint: request.confirmed_fingerprint,
-      });
-      return {
-        target: {
-          target_id: request.target_id,
-          selected: request.select_for_project,
-          host_kind: "ssh",
-          host: request.host,
-          port: request.port,
-          username: request.username,
-          remote_root: request.remote_root,
-          isolation_kind: "native",
-          capabilities: request.capabilities,
-          identity_file: request.install_managed_key ? `/mock/.rho/ssh/${request.target_id}/id_ed25519` : request.identity_file,
-          identity_available: true,
+          created_at: agentNow,
+          updated_at: agentNow,
         },
-        probe,
-        project_selected: request.select_for_project,
+        incidents: [],
+        limitations: [
+          "Authority realization and live Workspace activation are reported separately.",
+        ],
+        observed_at: agentNow,
       };
+    },
+    async reobserveEnvironment() {
+      return this.environmentHealth();
     },
     async loadDomainSurface(surfaceId) {
       const fixtures: Readonly<Record<string, DomainSurfaceData["items"]>> = {
-        "rho.environment": [
-          { id: "package:rho", title: "rho", subtitle: "0.4.1-dev.13", status: "installed", detail: "Project library" },
-          { id: "package:aisdk", title: "aisdk", subtitle: "required >= 1.5.0", status: "incompatible", detail: "Installed 1.4.12 in Agent R" },
-        ],
-        "rho.evidence": [{ id: "claim:1", title: "Analysis uses a fixed seed", subtitle: "analysis.R:1-2", status: "current", detail: "Source-backed evidence claim" }],
         "rho.git": [{ id: "git:main", title: "main", subtitle: "2 modified · 1 staged", status: "dirty", detail: "Local project repository" }],
-        "rho.runs": runtimeHistoryItems,
-        "rho.problems": [{ id: "problem:seed", title: "Random result may change", subtitle: "analysis.R:2", status: "warning", detail: "Set a deliberate seed." }],
-        "rho.plots": [{ id: "plot:mock-1", title: "QC plot", subtitle: "image/png", status: "ready", detail: "Runtime plot artifact" }],
         "rho.logs": [{ id: "log:startup", title: "Desktop shell ready", subtitle: agentNow, status: "info", detail: "Surface Runtime initialized." }],
-        "rho.render-jobs": [{ id: "render:mock-1", title: "analysis.qmd → html", subtitle: "Quarto", status: "completed", detail: "Output analysis.html" }],
         "rho.help": [{ id: "rho.command.search", title: "Search commands", subtitle: "Command Registry", status: "available", detail: "Find every contextual command." }],
       };
       const items = fixtures[surfaceId] ?? [];

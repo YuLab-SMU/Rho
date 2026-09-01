@@ -216,7 +216,7 @@ describe("Vibe verification region", () => {
         references: [checkReference],
       }]),
       evidence: source([{
-        record: makeEvidence({ linked_evidence_ids: [] }),
+        record: makeEvidence({ promotion_state: "draft" }),
         references: [evidenceReference],
       }]),
     });

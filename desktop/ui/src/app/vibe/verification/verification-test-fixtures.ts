@@ -1,5 +1,5 @@
 import type { CheckResult } from "../../../transport/check";
-import type { EvidenceClaim } from "../../../transport/evidence";
+import type { EvidenceNode } from "../../../transport/evidence-graph";
 import type {
   ArtifactRecordSummary,
   PlotArtifactSummary,
@@ -126,22 +126,18 @@ export function makePlotView(overrides: Partial<PlotImageView> = {}): PlotImageV
   };
 }
 
-export function makeEvidence(overrides: Partial<EvidenceClaim> = {}): EvidenceClaim {
+export function makeEvidence(overrides: Partial<EvidenceNode> = {}): EvidenceNode {
   return {
-    claim_id: "claim-cluster-identity",
-    project_root: TEST_PROJECT_ROOT,
-    kind: "result",
+    node_id: "claim-cluster-identity",
+    kind: "claim",
+    stable_key: "claim-cluster-identity",
+    label: "Cluster contrast",
     summary: "Cluster 3 and cluster 7 differ in the recorded contrast output.",
-    anchor_kind: "source_range",
-    source_path: "analysis/cluster_contrast.R",
-    start_line: 42,
-    start_column: 1,
-    end_line: 48,
-    end_column: 1,
-    source_sha256: "abc123",
-    source_excerpt: "contrast <- ...",
-    artifact_id: "artifact-differential-expression",
-    linked_evidence_ids: [18, 22],
+    claim_kind: "scientific_claim",
+    data_class: "project_internal",
+    promotion_state: "promoted",
+    status: "active",
+    authority_ref: null,
     created_at: "2026-08-27T03:15:00Z",
     updated_at: "2026-08-27T03:15:00Z",
     ...overrides,

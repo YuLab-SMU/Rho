@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import type { ReactNode } from "react";
 
@@ -16,32 +15,28 @@ import {
   WorkbenchProjectionStore,
   commandsForPlacement,
   createUiKernelTransport,
-} from "../transport";
-import type { WorkbenchMutationLease } from "../transport/workbench-store";
+} from "../../transport";
+import type { WorkbenchMutationLease } from "../../transport/workbench-store";
 import type {
   AgentTurnSummary,
   PluginSurfaceDocumentRequest,
   ProjectSwitchResponse,
-  LayoutNode,
   ResourceDescriptor,
-  ResourceTarget,
   RuntimeDescriptor,
   RuntimeOutputReference,
-  RuntimeInstanceRequest,
   SceneEdit,
   SurfaceInstance,
   SurfaceFactoryRegistration,
-  SurfaceInstanceRequest,
   UiKernelTransport,
-} from "../transport";
+} from "../../transport";
 import {
   VibeWorkspaceSurface,
   type VibeReturnPoint,
   type VibeWorkspaceSurfaceHandle,
-} from "./vibe/core/VibeWorkspaceSurface";
+} from "../vibe/core/VibeWorkspaceSurface";
 import {
   createVibeVerificationReadPort,
-} from "./vibe/core/vibe-verification-read-port";
+} from "../vibe/core/vibe-verification-read-port";
 import {
   exactAgentSurfaceRequest,
   exactSurfaceInstance,
@@ -49,141 +44,98 @@ import {
   type OpenVibeTargetInStudioIntent,
   type VibeExactSurfaceRequest,
   type VibeStudioTarget,
-} from "./vibe/core/vibe-studio-target";
+} from "../vibe/core/vibe-studio-target";
 import {
   blockForId,
   exactReferencesForBlock,
   sameVibeExactReferences,
-} from "./vibe/core/vibe-workspace-model";
-import { vibeFailureMessage } from "./vibe/core/vibe-failure";
+} from "../vibe/core/vibe-workspace-model";
+import { vibeFailureMessage } from "../vibe/core/vibe-failure";
 import {
   createVerificationAdapter,
   type VerificationScope,
-} from "./vibe/verification";
-import { EnvironmentTaskbarPanel } from "./EnvironmentSurfaceView";
-import type { FileMutationWorkflow } from "./FileResourceView";
-import { MenuPopover } from "./MenuPopover";
-import { SurfaceView } from "./SurfaceView";
-import type { SourceExecutionSubmission } from "./source-execution";
-import { ToolbarCustomizer } from "./ToolbarCustomizer";
+} from "../vibe/verification";
+import { MenuPopover } from "../MenuPopover";
+import { SurfaceFrame } from "./SurfaceFrame";
+import type { SourceExecutionSubmission } from "../source-execution";
+import { ToolbarCustomizer } from "../ToolbarCustomizer";
 import {
   loadProjectHistory,
   rememberProjectPath,
   saveProjectHistory,
-} from "./project-history";
-import type { ProjectHistoryLoad } from "./project-history";
+} from "../project-history";
+import type { ProjectHistoryLoad } from "../project-history";
 import {
   defaultToolbarLayout,
   loadToolbarLayout,
   saveToolbarLayout,
-} from "./toolbar-model";
-import { workbenchFailureMessage } from "./workbench-failure";
-import { workbenchOperationTrace } from "./operation-trace";
-import { installAcceptanceAutomation } from "../acceptance/automation";
-import type { AutomationHost } from "../acceptance/automation";
-import { ConsoleExecutionRouter } from "./controllers/console-execution-router";
-import type { ConsoleExecutionEndpoint } from "./controllers/console-execution-router";
-import { useConsoleProjectActivation } from "./controllers/console-project-activation";
-import { ProjectSwitchController } from "./controllers/project-switch-controller";
+} from "../toolbar-model";
+import { workbenchFailureMessage } from "../workbench-failure";
+import { workbenchOperationTrace } from "../operation-trace";
+import { installAcceptanceAutomation } from "../../acceptance/automation";
+import type { AutomationHost } from "../../acceptance/automation";
+import { ConsoleExecutionRouter } from "../controllers/console-execution-router";
+import type { ConsoleExecutionEndpoint } from "../controllers/console-execution-router";
+import { useConsoleProjectActivation } from "../controllers/console-project-activation";
+import { ProjectSwitchController } from "../controllers/project-switch-controller";
 import {
   ProjectTransitionEpochController,
   type ProjectActionScope,
   type ProjectActivationScope,
   type ProjectTransitionEpochToken,
-} from "./controllers/project-transition-epoch-controller";
+} from "../controllers/project-transition-epoch-controller";
 import {
   consolePinnedExecutionId,
   type ConsoleViewState,
-} from "./controllers/console-instance-controller";
-import { ConsoleRequirementController } from "./controllers/console-requirement-controller";
-import { StudioMutationController } from "./controllers/studio-mutation-controller";
-import { type AgentStudioPresentation } from "./agent/studio-presentation";
+} from "../controllers/console-instance-controller";
+import { ConsoleRequirementController } from "../controllers/console-requirement-controller";
+import { StudioMutationController } from "../controllers/studio-mutation-controller";
+import { type AgentStudioPresentation } from "../agent/studio-presentation";
 import {
   presentAgentTurnInStudio as applyAgentStudioPresentation,
-} from "./controllers/agent-studio-presentation-controller";
-import { SurfaceInstanceMutationController } from "./controllers/surface-instance-mutation-controller";
+} from "../controllers/agent-studio-presentation-controller";
+import { SurfaceInstanceMutationController } from "../controllers/surface-instance-mutation-controller";
 import {
   COMPOSE_FLOW_STAGES,
   compareSurfaceCatalogOrder,
   surfaceCatalogPolicy,
   surfaceDisplayLabel,
   surfaceUxProfile,
-} from "./surface-ux";
+} from "../surface-ux";
 import {
   findLayoutPlacement,
   NodeOutline,
-} from "./layout/LegacySceneLayout";
-import { DockviewSceneLayout } from "./layout/DockviewSceneLayout";
+} from "../layout/LegacySceneLayout";
+import { DockviewSceneLayout } from "../layout/DockviewSceneLayout";
 import type {
   ToolbarComponentId,
   ToolbarLayout,
   ToolbarPreferenceLoad,
-} from "./toolbar-model";
-import { projectLabel } from "../transport/normalize";
+} from "../toolbar-model";
+import { projectLabel } from "../../transport/normalize";
+import { useWorkbenchProjection } from "./useWorkbenchProjection";
+import {
+  LayoutMiniMap,
+  layoutInstanceIds,
+  surfaceRailGlyph,
+  surfaceToolHints,
+} from "./WorkbenchChrome";
+import {
+  createAdmissionGuardedTransport,
+  instanceRequest,
+  resourceTarget,
+  runRevocableFileMutationWorkflow,
+  runtimeRequest,
+  sameProjectActionScope,
+  settleWorkbenchMutationQueues,
+} from "./workbenchAdmission";
 
-function layoutInstanceIds(node: LayoutNode): string[] {
-  switch (node.kind) {
-    case "surface": return [node.instance_id];
-    case "stack": return [...node.instances];
-    case "container": return node.children.flatMap((child) => layoutInstanceIds(child.child));
-  }
-}
+export {
+  runRevocableFileMutationWorkflow,
+  settleWorkbenchMutationQueues,
+} from "./workbenchAdmission";
 
-function LayoutMiniMap({
-  node,
-  instances,
-  focusedInstanceId,
-}: {
-  readonly node: LayoutNode;
-  readonly instances: ReadonlyMap<string, SurfaceInstance>;
-  readonly focusedInstanceId: string | null;
-}) {
-  if (node.kind === "surface") {
-    const instance = instances.get(node.instance_id);
-    return <span
-      className="rho-layout-mini-surface"
-      data-focused={node.instance_id === focusedInstanceId || undefined}
-      title={instance == null ? node.instance_id : surfaceDisplayLabel(instance.surface_id)}
-    >{instance == null ? "?" : surfaceRailGlyph(instance.surface_id)}</span>;
-  }
-  if (node.kind === "stack") {
-    return <span className="rho-layout-mini-stack">{node.instances.slice(0, 4).map((instanceId) => {
-      const instance = instances.get(instanceId);
-      return <span data-focused={instanceId === focusedInstanceId || undefined} key={instanceId}>{instance == null ? "?" : surfaceRailGlyph(instance.surface_id)}</span>;
-    })}</span>;
-  }
-  return <span className={`rho-layout-mini-container rho-layout-mini-${node.axis}`}>
-    {node.children.map((child) => <LayoutMiniMap node={child.child} instances={instances} focusedInstanceId={focusedInstanceId} key={child.child.node_id} />)}
-  </span>;
-}
-
-function surfaceRailGlyph(surfaceId: string): string {
-  switch (surfaceId) {
-    case "rho.navigator": return "N";
-    case "rho.file-source": return "R";
-    case "rho.file-preview": return "P";
-    case "rho.console": return ">_";
-    case "rho.plots": return "▧";
-    case "rho.runs": return "↺";
-    case "rho.agent": return "✦";
-    case "rho.environment": return "◉";
-    case "rho.git": return "⑂";
-    default: return surfaceDisplayLabel(surfaceId).slice(0, 1).toUpperCase();
-  }
-}
-
-function surfaceToolHints(surfaceId: string): readonly string[] {
-  switch (surfaceId) {
-    case "rho.file-source": return ["Run the current expression from the Source toolbar", "Save or reload from the component header"];
-    case "rho.console": return ["Return runs code", "Shift+Return inserts a new line"];
-    case "rho.navigator": return ["Switch between Files and History", "Search the current project tree"];
-    case "rho.plots": return ["Browse current and historical project plots", "Use exact Plot links from Console or History"];
-    case "rho.environment": return ["Inspect Resources, Toolchains, Packages, and Requests"];
-    default: return [surfaceUxProfile(surfaceId).primaryTask];
-  }
-}
-
-interface WorkbenchAppProps {
+interface WorkbenchRootProps {
   readonly transport?: UiKernelTransport;
 }
 
@@ -196,160 +148,10 @@ function boundedFailureMessage(error: unknown, fallback: string): string {
   return workbenchFailureMessage(error, fallback);
 }
 
-export async function settleWorkbenchMutationQueues(
-  controllerQueues: readonly Promise<void>[],
-  settleStore: () => Promise<void>,
-): Promise<void> {
-  const controllerResults = await Promise.allSettled(controllerQueues);
-  let storeFailure: unknown = null;
-  try {
-    await settleStore();
-  } catch (error: unknown) {
-    storeFailure = error;
-  }
-  const controllerFailure = controllerResults.find(
-    (result): result is PromiseRejectedResult => result.status === "rejected",
-  );
-  if (controllerFailure != null) throw controllerFailure.reason;
-  if (storeFailure != null) throw storeFailure;
-}
-
-export async function runRevocableFileMutationWorkflow<T>(
-  operation: (workflow: FileMutationWorkflow) => Promise<T>,
-  ports: FileMutationWorkflow,
-): Promise<T> {
-  let open = true;
-  const runIfOpen = <Result,>(action: () => Promise<Result>): Promise<Result> => (
-    open
-      ? action()
-      : Promise.reject(new Error("The File workflow capability has expired."))
-  );
-  const workflow: FileMutationWorkflow = {
-    updateDraft: (content, value) => runIfOpen(() => ports.updateDraft(content, value)),
-    save: (content) => runIfOpen(() => ports.save(content)),
-    runSourceExecution: (execution) => runIfOpen(() => ports.runSourceExecution(execution)),
-  };
-  try {
-    return await operation(workflow);
-  } finally {
-    open = false;
-  }
-}
-
 export const defaultTransport = createUiKernelTransport();
 const defaultStore = new WorkbenchProjectionStore(defaultTransport);
 
-function instanceRequest(
-  instance: SurfaceInstance,
-  projectRevision: number,
-): SurfaceInstanceRequest {
-  return {
-    project_id: instance.project_id,
-    instance_id: instance.instance_id,
-    activation_generation: instance.activation_generation,
-    expected_project_revision: projectRevision,
-    expected_surface_revision: instance.surface_revision,
-  };
-}
-
-function runtimeRequest(
-  runtime: RuntimeDescriptor,
-  projectRevision: number,
-): RuntimeInstanceRequest {
-  return {
-    project_id: runtime.project_id,
-    runtime_provider_id: runtime.runtime_provider_id,
-    runtime_instance_id: runtime.runtime_instance_id,
-    activation_generation: runtime.activation_generation,
-    expected_project_revision: projectRevision,
-    expected_state_revision: runtime.state_revision,
-  };
-}
-
-function resourceTarget(
-  descriptor: ResourceDescriptor,
-  projectRevision: number,
-  resourceRevision = descriptor.resource_revision,
-): ResourceTarget {
-  return {
-    project_id: descriptor.project_id,
-    resource_provider_id: descriptor.resource_provider_id,
-    resource_kind: descriptor.resource_kind,
-    resource_id: descriptor.resource_id,
-    expected_project_revision: projectRevision,
-    expected_resource_revision: resourceRevision,
-  };
-}
-
-function sameProjectActionScope(
-  left: ProjectActionScope | null,
-  right: ProjectActionScope | null,
-): boolean {
-  return left?.epoch === right?.epoch
-    && left?.projectId === right?.projectId
-    && left?.projectRevision === right?.projectRevision;
-}
-
-const ADMISSION_GUARDED_TRANSPORT_METHODS = new Set<PropertyKey>([
-  "retryRun",
-  "updateRuntimeOutputPolicy",
-  "pruneRuntimeOutput",
-  "deleteRuntimeExecution",
-  "createAgentConversation",
-  "runAgent",
-  "retryAgentTurn",
-  "cancelAgentTurn",
-  "respondAgentApproval",
-  "retryAgentRuntime",
-  "applyAgentFileEdit",
-  "undoAgentFileEdit",
-  "dispatchPluginSurfaceEvent",
-  "runCheckProject",
-  "setSelection",
-]);
-
-function createAdmissionGuardedTransport(
-  transport: UiKernelTransport,
-  store: WorkbenchProjectionStore,
-  controller: ProjectTransitionEpochController,
-  scope: ProjectActionScope | null,
-): UiKernelTransport {
-  const methods = new Map<PropertyKey, unknown>();
-  return new Proxy(transport, {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
-      if (typeof value !== "function") return value;
-      const cached = methods.get(property);
-      if (cached != null) return cached;
-      const bound = value.bind(target) as (...args: unknown[]) => unknown;
-      const method = ADMISSION_GUARDED_TRANSPORT_METHODS.has(property)
-        ? (...args: unknown[]) => {
-            if (scope == null || !controller.accepts(scope)) {
-              return Promise.reject(new Error("The project action belongs to an inactive transition epoch."));
-            }
-            const current = store.getSnapshot();
-            if (current.status !== "ready") {
-              return Promise.reject(new Error("Workbench is not ready."));
-            }
-            if (
-              current.snapshot.project_id !== scope.projectId
-              || current.snapshot.kernel.context.project_revision !== scope.projectRevision
-            ) {
-              return Promise.reject(new Error("The project action scope is stale."));
-            }
-            return store.admitMutation(scope.projectId, () => (
-              Promise.resolve(bound(...args))
-            ));
-          }
-        : bound;
-      methods.set(property, method);
-      return method;
-    },
-  }) as UiKernelTransport;
-}
-
-
-export function WorkbenchApp({ transport }: WorkbenchAppProps) {
+export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
   const [actionError, setActionError] = useState<ScopedActionError | null>(null);
   const [resourcePath, setResourcePath] = useState("analysis.R");
   const [commandQuery, setCommandQuery] = useState("");
@@ -429,7 +231,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const runtimeStore = store;
   const resourceStore = store;
   const profileStore = store;
-  const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const state = useWorkbenchProjection(store);
   const projection = state.status === "ready" ? state.snapshot : null;
   const snapshot = projection?.kernel ?? null;
   const surfaces = projection?.surfaces ?? null;
@@ -1082,32 +884,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     if (factory == null) throw new Error("Plots Surface is unavailable.");
     await openFactory(factory, { selected_id: plotId, filter: "" });
   };
-  const openEnvironmentMode = async (modeId: "resources" | "connections") => {
-    if (surfaces == null || studio == null) {
-      throw new Error("Environment Resources is unavailable while the Surface Runtime loads.");
-    }
-    const existing = surfaces.catalog.instances.find(
-      (candidate) => candidate.surface_id === "rho.environment",
-    );
-    const placement = existing == null ? null : findLayoutPlacement(studio.scene.root, existing.instance_id);
-    if (profile?.active_mode === "studio" && existing != null && placement != null) {
-      if (existing.mode_id !== modeId) {
-        await surfaceMutationController.update(existing.instance_id, {
-          kind: "set_mode",
-          mode_id: modeId,
-        });
-      }
-      await focusAutomationInstance(existing.instance_id);
-      return;
-    }
-    const factory = surfaces.catalog.factories.find(
-      (candidate) => candidate.definition.surface_id === "rho.environment",
-    );
-    if (factory == null) throw new Error("Environment Surface is unavailable.");
-    await openFactory(factory, undefined, undefined, modeId);
-  };
-  const openEnvironmentResources = () => openEnvironmentMode("resources");
-  const openEnvironmentConnections = () => openEnvironmentMode("connections");
   const currentProfileSnapshot = () => {
     const current = profileStore.getProfileSnapshot();
     if (current.status !== "ready") throw new Error("The Project UI Profile is unavailable.");
@@ -1766,7 +1542,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
               ? activePage?.page_revision ?? null
               : null,
           };
-    return <SurfaceView
+    return <SurfaceFrame
       key={`${hostScope.epoch}:${instance.project_id}:${instance.instance_id}:${instance.activation_generation}`}
       instance={instance}
       focused={!embedded && studio?.scene.focused_surface_instance_id === instance.instance_id}
@@ -2053,7 +1829,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       surfaceFactories={surfaces?.catalog.factories ?? []}
       pluginDocumentRequest={pluginDocumentRequest}
       projectRevision={surfaces?.project_revision ?? 0}
-      openCheckEvidence={async (path) => {
+      openFindingReference={async (path) => {
         const descriptor = resources?.resources.find((candidate) =>
           candidate.resource_provider_id === "rho.project-files" &&
           candidate.resource_kind === "project_file" &&
@@ -3078,21 +2854,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         data-workspace-mode={profile?.active_mode ?? "loading"}
         aria-label="Workbench status"
       >
-        <EnvironmentTaskbarPanel
-          transport={pluginTransport}
-          workspaceState={snapshot?.context.workspace_health ?? "unknown"}
-          workspaceLabel={snapshot?.health.workspace.label ?? "Workspace connecting"}
-          agentState={snapshot?.context.agent_health ?? "unknown"}
-          agentLabel={snapshot?.health.agent.label ?? "Agent unavailable"}
-          activeOperations={snapshot?.context.active_operations.length ?? 0}
-          openResources={() => run(openEnvironmentResources())}
-          openConnections={() => run(openEnvironmentConnections())}
-          openDiagnostics={() => {
-            const logs = surfaces?.catalog.factories.find((factory) => factory.definition.surface_id === "rho.logs");
-            if (logs != null) run(openFactory(logs));
-          }}
-          diagnosticsAvailable={surfaces?.catalog.factories.some((factory) => factory.definition.surface_id === "rho.logs") === true}
-        />
         {(snapshot?.context.active_operations.length ?? 0) > 0 && <span className="rho-statusbar-item" aria-live="polite">
           {`${snapshot!.context.active_operations.length} task${snapshot!.context.active_operations.length > 1 ? "s" : ""} running`}
         </span>}

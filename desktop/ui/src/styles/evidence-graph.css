@@ -1,0 +1,161 @@
+.rho-evidence-surface,
+.rho-claim-trace {
+  display: grid;
+  gap: var(--rho-space-3);
+  min-block-size: 0;
+  padding: var(--rho-space-3);
+  overflow: auto;
+}
+
+.rho-evidence-toolbar,
+.rho-evidence-health,
+.rho-evidence-node header,
+.rho-evidence-node footer,
+.rho-evidence-gap-list > li > div,
+.rho-evidence-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--rho-space-2);
+}
+
+.rho-evidence-toolbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.rho-evidence-toolbar > div,
+.rho-evidence-health small {
+  display: grid;
+}
+
+.rho-evidence-health {
+  flex-wrap: wrap;
+  color: var(--rho-text-muted);
+  font-size: var(--rho-font-size-xs);
+}
+
+.rho-evidence-health-ready .rho-status-dot { background: var(--rho-status-ready); }
+.rho-evidence-health-unavailable .rho-status-dot { background: var(--rho-status-danger); }
+
+.rho-claims-layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 0.8fr) minmax(18rem, 1.4fr);
+  gap: var(--rho-space-3);
+  min-block-size: 0;
+}
+
+.rho-evidence-node-grid {
+  display: grid;
+  gap: var(--rho-space-2);
+  align-content: start;
+}
+
+.rho-evidence-node {
+  display: grid;
+  inline-size: 100%;
+  gap: var(--rho-space-2);
+  padding: var(--rho-space-3);
+  border: 1px solid var(--rho-border-subtle);
+  border-radius: var(--rho-radius-md);
+  background: var(--rho-surface-raised);
+  color: inherit;
+  text-align: start;
+}
+
+.rho-evidence-node-button { cursor: pointer; }
+.rho-evidence-node-selected { border-color: var(--rho-accent); }
+.rho-evidence-node p { margin: 0; color: var(--rho-text-muted); }
+.rho-evidence-node footer { justify-content: space-between; font-size: var(--rho-font-size-xs); color: var(--rho-text-muted); }
+
+.rho-evidence-node-kind {
+  padding: 0 var(--rho-space-1);
+  border-radius: var(--rho-radius-sm);
+  background: var(--rho-surface-muted);
+  color: var(--rho-text-muted);
+  font-size: var(--rho-font-size-xs);
+}
+
+.rho-evidence-edges,
+.rho-evidence-gap-list {
+  display: grid;
+  gap: var(--rho-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rho-evidence-edges li,
+.rho-evidence-gap-list > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--rho-space-2);
+  padding: var(--rho-space-2) var(--rho-space-3);
+  border-block-end: 1px solid var(--rho-border-subtle);
+}
+
+.rho-evidence-gap-list > li { grid-template-columns: 1fr; }
+.rho-evidence-gap-list > li > div { justify-content: space-between; }
+.rho-evidence-gap-list dl { display: grid; gap: var(--rho-space-1); margin: 0; }
+.rho-evidence-gap-list dl div { display: flex; gap: var(--rho-space-2); }
+.rho-evidence-gap-list dt { color: var(--rho-text-muted); }
+.rho-evidence-gap-list dd { margin: 0; overflow-wrap: anywhere; }
+
+.rho-evidence-polarity {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: var(--rho-text-muted);
+}
+.rho-evidence-polarity-support { background: var(--rho-status-ready); }
+.rho-evidence-polarity-conflict { background: var(--rho-status-danger); }
+
+.rho-claim-draft {
+  display: grid;
+  gap: var(--rho-space-2);
+  padding: var(--rho-space-3);
+  border: 1px solid var(--rho-border-subtle);
+  border-radius: var(--rho-radius-md);
+}
+.rho-claim-draft label { display: grid; gap: var(--rho-space-1); }
+.rho-evidence-empty-copy { color: var(--rho-text-muted); }
+
+.rho-agent-evidence-composition {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--rho-space-2);
+}
+
+.rho-agent-evidence-section,
+.rho-agent-final-answer {
+  display: grid;
+  gap: var(--rho-space-2);
+  padding: var(--rho-space-3);
+  border: 1px solid var(--rho-border-subtle);
+  border-radius: var(--rho-radius-md);
+  background: var(--rho-surface-muted);
+}
+
+.rho-agent-evidence-heading,
+.rho-agent-evidence-section li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--rho-space-2);
+}
+
+.rho-agent-evidence-section ul {
+  display: grid;
+  gap: var(--rho-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rho-agent-evidence-section p,
+.rho-agent-final-answer p { margin: 0; }
+
+@media (max-width: 760px) {
+  .rho-claims-layout { grid-template-columns: 1fr; }
+  .rho-agent-evidence-composition { grid-template-columns: 1fr; }
+  .rho-evidence-edges li { grid-template-columns: auto 1fr; }
+}

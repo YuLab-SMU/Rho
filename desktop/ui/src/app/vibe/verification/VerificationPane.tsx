@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 
-import type { CheckEvidence, CheckResult } from "../../../transport/check";
+import type { CheckResult, FindingReference } from "../../../transport/check";
 import type { ArtifactRecordSummary, RunSummary } from "../../../transport/history";
 import type { VerificationAdapter } from "./verification-adapter";
 import {
@@ -111,18 +111,18 @@ function checkStatusLabel(result: CheckResult): string {
   }
 }
 
-function checkEvidenceLabel(evidence: CheckEvidence): string {
-  switch (evidence.kind) {
+function findingReferenceLabel(reference: FindingReference): string {
+  switch (reference.kind) {
     case "source_range":
-      return `${evidence.path}:${evidence.line}${evidence.column == null ? "" : `:${evidence.column}`}`;
+      return `${reference.path}:${reference.line}${reference.column == null ? "" : `:${reference.column}`}`;
     case "project_file":
-      return evidence.path;
+      return reference.path;
     case "run_ref":
       return "关联执行记录";
     case "environment_ref":
       return "关联环境快照";
     case "note":
-      return evidence.text;
+      return reference.text;
   }
 }
 
@@ -368,8 +368,8 @@ function CheckRecord({
               <header><strong>{finding.title}</strong><span>{finding.severity}</span></header>
               <p>{finding.summary}</p>
               <p><strong>下一步：</strong>{finding.remediation}</p>
-              {finding.evidence.length > 0 && (
-                <ul>{finding.evidence.map((evidence, evidenceIndex) => <li key={evidenceIndex}>{checkEvidenceLabel(evidence)}</li>)}</ul>
+              {finding.references.length > 0 && (
+                <ul>{finding.references.map((reference, referenceIndex) => <li key={referenceIndex}>{findingReferenceLabel(reference)}</li>)}</ul>
               )}
             </article>
           ))}
@@ -437,23 +437,22 @@ function EvidenceLinks({
       <p className="rho-vibe-verification-scope-note">链接状态只描述结构是否可审计，不说明语义上支持某个结论。</p>
       <SourceFailure source={snapshot.evidence} onRetry={onRetry} />
       <UnresolvedReferences references={snapshot.evidence.unresolved} />
+      {snapshot.evidence.items.some(({ record }) =>
+        record.promotion_state === "draft" || record.status !== "active") && (
+        <p className="rho-vibe-verification-boundary">尚未建立可审计的证据链接。</p>
+      )}
       <div className="rho-vibe-verification-records">
         {snapshot.evidence.items.map(({ record, references }) => (
             <article
               className="rho-vibe-verification-record rho-vibe-verification-evidence-record"
-              data-tone={record.linked_evidence_ids.length === 0 ? "warning" : "normal"}
-              key={record.claim_id}
+              data-tone={record.promotion_state === "draft" || record.status !== "active" ? "warning" : "normal"}
+              key={record.node_id}
             >
-              <header><strong>{referenceLabel(references)}</strong><span>结构化证据记录</span></header>
-              <p>{record.summary}</p>
-              {record.source_path != null && (
-                <p className="rho-vibe-verification-path">
-                  {record.source_path}{record.start_line == null ? "" : `:${record.start_line}`}
-                </p>
-              )}
-              {record.linked_evidence_ids.length === 0
-                ? <p className="rho-vibe-verification-warning" role="status">尚未建立可审计的证据链接。</p>
-                : <p className="rho-vibe-verification-boundary">已记录 {record.linked_evidence_ids.length} 个结构化链接；这不等于语义支持。</p>}
+              <header><strong>{referenceLabel(references)}</strong><span>{record.label}</span></header>
+              {record.summary != null && <p>{record.summary}</p>}
+              <p className="rho-vibe-verification-boundary">
+                graph: {record.promotion_state} · {record.status}
+              </p>
             </article>
         ))}
       </div>

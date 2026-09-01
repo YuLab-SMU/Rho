@@ -27,44 +27,53 @@ import type {
   SurfaceInstance,
   SurfaceFactoryRegistration,
   UiKernelTransport,
-} from "../transport";
-import { AgentSurfaceView } from "./AgentSurfaceView";
+} from "../../transport";
+import { AgentSurface } from "../agent/AgentSurface";
 import type {
   AgentFileProposal,
   AgentFileProposalReview,
   AgentFileUndoState,
-  AgentSurfaceViewState,
-} from "./AgentSurfaceView";
-import type { AgentStudioPresentation } from "./agent/studio-presentation";
-import { CheckResultView } from "./CheckResultView";
-import { DOMAIN_SURFACE_IDS, DomainSurfaceView } from "./DomainSurfaceView";
-import { EnvironmentSurfaceView } from "./EnvironmentSurfaceView";
-import { FileResourceView } from "./FileResourceView";
-import type { FileResourceViewProps } from "./FileResourceView";
-import { MenuPopover } from "./MenuPopover";
-import { NavigatorSurfaceView } from "./Navigator";
-import { PluginSurfaceView } from "./PluginSurfaceView";
-import { SurfaceTaskState } from "./SurfaceTaskState";
-import { SettingsSurfaceView } from "./SettingsSurfaceView";
-import { consoleProjectionBlocksText } from "./console-output";
+  AgentSurfaceState,
+} from "../agent/AgentSurface";
+import type { AgentStudioPresentation } from "../agent/studio-presentation";
+import { CheckResultView } from "../CheckResultView";
+import { DOMAIN_SURFACE_IDS, DomainSurfaceView } from "../DomainSurfaceView";
+import { FileResourceView } from "../FileResourceView";
+import type { FileResourceViewProps } from "../FileResourceView";
+import { MenuPopover } from "../MenuPopover";
+import { NavigatorSurfaceView } from "../Navigator";
+import { PluginSurfaceView } from "../PluginSurfaceView";
+import { SurfaceTaskState } from "../SurfaceTaskState";
+import { SettingsSurfaceView } from "../SettingsSurfaceView";
+import { ConsoleSurface } from "../console/ConsoleSurface";
+import type { ConsoleTranscriptRow } from "../console/ConsoleSurface";
+import { consoleProjectionBlocksText } from "../console-output";
 import {
   consoleTranscriptOutputs,
   ConsoleInstanceController,
   initialConsoleState,
   needsConsoleStateCompaction,
-} from "./controllers/console-instance-controller";
+} from "../controllers/console-instance-controller";
 import type {
   ConsoleOutputRecord,
   ConsolePersistentViewState,
   ConsoleViewState,
-} from "./controllers/console-instance-controller";
+} from "../controllers/console-instance-controller";
 import type {
   ConsoleExecutionAdmission,
   ConsoleExecutionEndpoint,
-} from "./controllers/console-execution-router";
-import { surfaceUxProfile } from "./surface-ux";
+} from "../controllers/console-execution-router";
+import { surfaceUxProfile } from "../surface-ux";
+import { SurfaceRouter } from "./SurfaceRouter";
+import { createAuthorityPorts } from "./authorityPorts";
+import { createAgentCorePorts } from "./agentPorts";
+import {
+  agentEvidencePorts,
+  createEvidenceGraphPorts,
+} from "./evidenceGraphPorts";
+import { createResultsPorts } from "./resultsPorts";
 
-interface SurfaceViewProps {
+interface SurfaceFrameProps {
   readonly instance: SurfaceInstance;
   readonly focused: boolean;
   readonly setFocus: () => void;
@@ -117,17 +126,17 @@ interface SurfaceViewProps {
   readonly surfaceFactories: readonly SurfaceFactoryRegistration[];
   readonly pluginDocumentRequest: PluginSurfaceDocumentRequest | null;
   readonly projectRevision: number;
-  readonly openCheckEvidence: (path: string) => Promise<void>;
+  readonly openFindingReference: (path: string) => Promise<void>;
   readonly agentHealth: { readonly state: string; readonly label: string; readonly detail: string | null } | null;
   readonly createAgentConversation: (
-    current: AgentSurfaceViewState,
-  ) => Promise<AgentSurfaceViewState>;
+    current: AgentSurfaceState,
+  ) => Promise<AgentSurfaceState>;
   readonly runAgentConversation: (
-    current: AgentSurfaceViewState,
+    current: AgentSurfaceState,
     request: RunAgentRequest,
     onAccepted?: (conversationId: string) => void,
-  ) => Promise<AgentSurfaceViewState>;
-  readonly persistAgentViewState: (viewState: AgentSurfaceViewState) => Promise<void>;
+  ) => Promise<AgentSurfaceState>;
+  readonly persistAgentViewState: (viewState: AgentSurfaceState) => Promise<void>;
   readonly persistSurfaceViewState: (viewState: unknown) => Promise<void>;
   readonly pinAgentTask: (turn: AgentTurnSummary) => Promise<void>;
   readonly presentAgentTurnInStudio: (
@@ -169,7 +178,7 @@ function findDockviewActionsHost(instanceId: string): HTMLElement | null {
   return [...document.querySelectorAll<HTMLElement>("[data-rho-surface-actions-host]")]
     .find((candidate) => candidate.dataset.rhoSurfaceActionsHost === instanceId) ?? null;
 }
-export function SurfaceView({
+export function SurfaceFrame({
   instance, focused, setFocus, remove, duplicate, suspend, resume, persistDraft, draftCache,
   consoleSessionCache,
   availableModes, setMode,
@@ -180,13 +189,18 @@ export function SurfaceView({
   resources, readResource, updateResourceDraft, withFileMutation,
   reloadResource, renameResource, deleteResource,
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
-  pluginTransport, surfaceFactories, pluginDocumentRequest, projectRevision, openCheckEvidence,
+  pluginTransport, surfaceFactories, pluginDocumentRequest, projectRevision, openFindingReference,
   agentHealth, createAgentConversation, runAgentConversation, persistAgentViewState,
   persistSurfaceViewState, pinAgentTask, presentAgentTurnInStudio,
   applyAgentFileProposal, undoAgentFileProposal, openNavigatorFile, openSurfaceById, openPlot,
   agentRuntimeOutputContext, setAgentRuntimeOutputContext,
   embedded, dockviewHosted,
-}: SurfaceViewProps) {
+}: SurfaceFrameProps) {
+  const authorityPorts = createAuthorityPorts(pluginTransport);
+  const agentCore = createAgentCorePorts(pluginTransport);
+  const evidencePorts = createEvidenceGraphPorts(pluginTransport);
+  const agentEvidence = agentEvidencePorts(evidencePorts);
+  const resultsPorts = createResultsPorts(pluginTransport);
   const [draft, setDraft] = useState(() => initialDraft(instance, draftCache));
   const [consoleController] = useState(() => new ConsoleInstanceController(
     consoleSessionCache.get(instance.instance_id) ?? initialConsoleState(instance)
@@ -286,7 +300,7 @@ export function SurfaceView({
   const consoleNeedle = consoleState.filter.trim().toLowerCase();
   const transcriptOutputs = consoleTranscriptOutputs(consoleState);
   let runtimeGroup = 0;
-  const transcriptRows = transcriptOutputs.map((output, index) => {
+  const transcriptRows: ConsoleTranscriptRow[] = transcriptOutputs.map((output, index) => {
     if (index > 0 && transcriptOutputs[index - 1]?.runtime_instance_id !== output.runtime_instance_id) {
       runtimeGroup += 1;
     }
@@ -451,36 +465,36 @@ export function SurfaceView({
             }}
           >Start new transcript</button>
         </>
-      )}
-      <div className="rho-menu-separator" />
-      <dl className="rho-menu-facts">
+              )}
+              <div className="rho-menu-separator" />
+              <dl className="rho-menu-facts">
         <div><dt>Component</dt><dd>{instance.surface_id}</dd></div>
         <div><dt>Revision</dt><dd>{instance.surface_revision}</dd></div>
         <div><dt>Runtime</dt><dd>{runtime?.runtime_instance_id ?? (instance.surface_id === "rho.console" ? "Not attached" : "None")}</dd></div>
-      </dl>
-    </MenuPopover>
-    {!dockviewOwnsChrome && <button
-      type="button"
-      className="rho-icon-btn"
-      onClick={remove}
-      aria-label={`Remove ${instance.instance_id} from layout`}
-    >×</button>}
-  </div> : null;
-  return (
-    <article
-      className={`rho-surface rho-surface-${instance.lifecycle_state} ${focused ? "rho-surface-focused" : ""} ${isStrip ? "rho-surface-strip" : ""} ${dockviewOwnsChrome ? "rho-surface-dockview-hosted" : ""}`}
-      data-instance-id={instance.instance_id}
-      data-surface-id={instance.surface_id}
-      data-surface-area={uxProfile.areaRole}
-      data-surface-narrow={uxProfile.narrowBehavior}
-      data-surface-default-focus={uxProfile.defaultFocus}
-      aria-label={`${title} component`}
-      onPointerDown={embedded && instance.surface_id !== "rho.console" ? undefined : () => {
+              </dl>
+            </MenuPopover>
+            {!dockviewOwnsChrome && <button
+              type="button"
+              className="rho-icon-btn"
+              onClick={remove}
+              aria-label={`Remove ${instance.instance_id} from layout`}
+            >×</button>}
+          </div> : null;
+          return (
+            <article
+              className={`rho-surface rho-surface-${instance.lifecycle_state} ${focused ? "rho-surface-focused" : ""} ${isStrip ? "rho-surface-strip" : ""} ${dockviewOwnsChrome ? "rho-surface-dockview-hosted" : ""}`}
+              data-instance-id={instance.instance_id}
+              data-surface-id={instance.surface_id}
+              data-surface-area={uxProfile.areaRole}
+              data-surface-narrow={uxProfile.narrowBehavior}
+              data-surface-default-focus={uxProfile.defaultFocus}
+              aria-label={`${title} component`}
+              onPointerDown={embedded && instance.surface_id !== "rho.console" ? undefined : () => {
         if (instance.surface_id === "rho.console") markConsolePreferred(instance.instance_id);
         if (!embedded) setFocus();
-      }}
-    >
-      {dockviewOwnsChrome
+              }}
+            >
+              {dockviewOwnsChrome
         ? dockviewActionsHost != null && surfaceManagement != null
           ? createPortal(surfaceManagement, dockviewActionsHost)
           : null
@@ -488,315 +502,48 @@ export function SurfaceView({
             <div className="rho-surface-title"><strong>{title}</strong></div>
             {surfaceManagement}
           </header>}
-      {instance.lifecycle_state === "suspended" ? (
+              {instance.lifecycle_state === "suspended" ? (
         <SurfaceTaskState tone="paused" title="Component paused" detail="Its durable binding is preserved while the renderer and derived payloads are released." role="status" className="rho-surface-lifecycle-state">
           <button type="button" onClick={() => void resume().catch(reportError)}>Resume component</button>
         </SurfaceTaskState>
-      ) : instance.lifecycle_state === "failed" ? (
+              ) : instance.lifecycle_state === "failed" ? (
         <SurfaceTaskState tone="error" title="Component failed" detail="The failed projection is isolated; project data, Runtime and sibling components remain available." role="alert" className="rho-surface-lifecycle-state rho-surface-lifecycle-failed" />
-      ) : instance.lifecycle_state === "placeholder" ? (
+              ) : instance.lifecycle_state === "placeholder" ? (
         <SurfaceTaskState tone="attention" title="Component provider unavailable" detail="The exact placement and binding are preserved without showing stale plugin or Runtime content." role="status" className="rho-surface-lifecycle-state rho-surface-lifecycle-placeholder">
           <button type="button" onClick={() => void resume().catch(reportError)}>Try again</button>
           <button type="button" onClick={remove}>Close component</button>
         </SurfaceTaskState>
-      ) : <>
-      {instance.surface_id === "rho.console" && (
-        <div className="rho-console-surface">
-          <div className="rho-console-toolbar">
-            {consoleFilterOpen ? (
-              <div className="rho-console-filterbar" role="search">
-                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                  <circle cx="7" cy="7" r="4" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="m10 10 3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                <input
-                  autoFocus
-                  type="search"
-                  aria-label={`Filter output ${instance.instance_id}`}
-                  value={consoleState.filter}
-                  onChange={(event) => consoleController.replaceState({ ...consoleState, filter: event.target.value })}
-                  onBlur={() => void consoleController.persistCurrent()}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") closeConsoleFilter();
-                  }}
-                  placeholder="Find in output…"
-                />
-                <span>{consoleSearchBusy
-                  ? "Searching History…"
-                  : consoleSearch == null
-                    ? `${filteredOutputs.length} / ${transcriptOutputs.length}`
-                    : `${consoleSearch.matched_execution_count} / ${consoleSearch.searched_execution_count}`}</span>
-                <button type="button" className="rho-icon-btn" aria-label="Close output filter" onClick={closeConsoleFilter}>×</button>
-              </div>
-            ) : (
-              <div className="rho-console-runtime-bar">
-                <select
-                  aria-label={`Runtime for ${instance.instance_id}`}
-                  value={attached?.runtime_instance_id ?? ""}
-                  disabled={consoleRunning}
-                  onChange={(event) => {
-                    const selected = runtimes?.instances.find((candidate) =>
-                      candidate.runtime_instance_id === event.target.value
-                    );
-                    const operation = selected == null ? detachRuntime() : attachRuntime(selected);
-                    void operation.catch(reportError);
-                  }}
-                >
-                  <option value="">Attach runtime…</option>
-                  {runtimes?.instances.filter((candidate) =>
-                    candidate.attach_capabilities.includes("console.attach")
-                  ).map((candidate) => (
-                    <option value={candidate.runtime_instance_id} key={candidate.runtime_instance_id}>
-                      {candidate.display_label}
-                    </option>
-                  ))}
-                </select>
-                <span className={`rho-runtime-state rho-runtime-${attached?.status ?? "unbound"}`}>
-                  {attached?.status ?? "unbound"}
-                </span>
-                {transcriptOutputs.length > 0 && (
-                  <button
-                    type="button"
-                    className="rho-icon-btn rho-console-search-toggle"
-                    aria-label="Filter Console output"
-                    aria-expanded="false"
-                    onClick={() => setConsoleFilterOpen(true)}
-                  >
-                    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                      <circle cx="7" cy="7" r="4" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                      <path d="m10 10 3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="rho-console-output-region">
-            <div
-              className="rho-console-output"
-              ref={(element) => {
-                consoleOutputRef.current = element;
-                if (element != null && Math.abs(element.scrollTop - consoleState.scroll_top) > 1) {
-                  element.scrollTop = consoleState.scroll_top;
-                }
-              }}
-              onBlur={(event) => {
-                const scrollTop = event.currentTarget.scrollTop;
-                const current = consoleController.getSnapshot().state;
-                if (scrollTop !== current.scroll_top) consoleController.replaceState({ ...current, scroll_top: scrollTop });
-                void consoleController.persistCurrent();
-              }}
-              onScroll={(event) => {
-                const element = event.currentTarget;
-                const followTail = element.scrollHeight - element.scrollTop - element.clientHeight <= 8;
-                const current = consoleController.getSnapshot().state;
-                const tail = consoleTranscriptOutputs(current).at(-1) ?? null;
-                const readCursor = followTail && tail != null
-                  ? { execution_id: tail.execution_id, sequence: tail.last_sequence ?? 0 }
-                  : current.read_cursor;
-                if (current.scroll_top !== element.scrollTop
-                    || current.follow_tail !== followTail
-                    || JSON.stringify(current.read_cursor) !== JSON.stringify(readCursor)) {
-                  consoleController.replaceState({
-                    ...current,
-                    scroll_top: element.scrollTop,
-                    follow_tail: followTail,
-                    read_cursor: readCursor,
-                  });
-                }
-              }}
-              onPointerUp={() => void consoleController.persistCurrent()}
-              onKeyUp={() => void consoleController.persistCurrent()}
-              aria-label="R Console transcript"
-              aria-live={consoleState.follow_tail ? "polite" : "off"}
-              aria-relevant="additions text"
-              data-follow-tail={consoleState.follow_tail ? "true" : "false"}
-              tabIndex={0}
-            >
-            {transcriptOutputs.length === 0 && (
-              <div className="rho-console-empty" role="status">
-                <span aria-hidden="true">&gt;_</span>
-                <strong>{attached == null
-                  ? "Attach a runtime to begin"
-                  : "Ready for R code"}</strong>
-              </div>
-            )}
-            {transcriptOutputs.length > 0 && filteredOutputs.length === 0 && durableSearchHits.length === 0 && (
-              <div className="rho-console-empty rho-console-no-match" role="status">
-                <strong>No output matches “{consoleState.filter.trim()}”</strong>
-                <button type="button" onClick={() => commitConsole({ ...consoleState, filter: "" })}>Clear filter</button>
-              </div>
-            )}
-            {consoleNeedle && consoleSearch != null && <div className="rho-console-search-scope" role="status">
-              <span>Searched {consoleSearch.searched_execution_count} durable {consoleSearch.searched_execution_count === 1 ? "execution" : "executions"}{consoleState.transcript_start_after == null ? "" : " since this transcript started"}.</span>
-              {consoleSearch.incomplete_execution_count > 0 && <span>{consoleSearch.incomplete_execution_count} had partial, unavailable, or pruned output.</span>}
-              {consoleSearch.truncated && <span>Showing the first 100 matches.</span>}
-            </div>}
-            {durableSearchHits.length > 0 && <div className="rho-console-durable-search-results" aria-label="Matches in durable Console History">
-              {durableSearchHits.map((hit) => <article key={`${hit.execution_id}:${hit.sequence}`}>
-                <div><strong>{hit.presentation_kind === "code" ? "Submitted code" : hit.presentation_kind}</strong><code>#{hit.sequence}</code></div>
-                <pre>{hit.preview}</pre>
-                <footer>
-                  <button type="button" onClick={() => openSurfaceById("rho.runs")}>Open in History</button>
-                  {hit.reference_kind === "plot" && hit.reference_id != null && <button type="button" data-reference-id={hit.reference_id} onClick={() => openPlot(hit.reference_id!)}>Open Plot</button>}
-                </footer>
-              </article>)}
-            </div>}
-            {consoleState.released_output_count > 0 && (
-              <div className="rho-console-retention-notice" role="status">
-                <span>{consoleState.released_output_count} older {consoleState.released_output_count === 1 ? "entry was" : "entries were"} released from this live view.</span>
-                <button type="button" onClick={() => openSurfaceById("rho.runs")}>Open History</button>
-              </div>
-            )}
-            {filteredOutputs.map(({ output, ordinal, runtimeGroup: outputRuntimeGroup }, visibleIndex) => (
-              <section
-                className="rho-console-entry"
-                aria-label={`R Console execution ${ordinal}`}
-                data-runtime-group-start={visibleIndex === 0 || filteredOutputs[visibleIndex - 1]?.runtimeGroup !== outputRuntimeGroup
-                  ? "true"
-                  : "false"}
-                key={output.execution_id}
-              >
-                {output.has_older && <button
-                  type="button"
-                  className="rho-console-load-older"
-                  onClick={() => {
-                    const element = consoleOutputRef.current;
-                    const beforeHeight = element?.scrollHeight ?? 0;
-                    const beforeTop = element?.scrollTop ?? 0;
-                    void consoleController.loadOlder(output.execution_id).then(() => {
-                      window.requestAnimationFrame(() => {
-                        if (element != null) element.scrollTop = beforeTop + element.scrollHeight - beforeHeight;
-                      });
-                    }).catch(reportError);
-                  }}
-                >Load earlier output</button>}
-                {output.newer_output_omitted && <div className="rho-console-window-notice" role="status">
-                  <span>Newer chunks were released from this bounded reading window.</span>
-                  <button type="button" onClick={() => void consoleController.loadLatest(output.execution_id).catch(reportError)}>Return to latest output</button>
-                </div>}
-                <header>
-                  {(visibleIndex === 0 || filteredOutputs[visibleIndex - 1]?.runtimeGroup !== outputRuntimeGroup) && <span className="rho-console-workspace-label">{
-                    runtimes?.instances.find((candidate) =>
-                      candidate.runtime_instance_id === output.runtime_instance_id
-                    )?.display_label ?? "R runtime"
-                  }</span>}
-                  {(() => {
-                    const stateLabel = `${output.status ?? "completed"}${output.output_state != null && !["collecting", "complete"].includes(output.output_state)
-                      ? ` · ${output.output_state}`
-                      : ""}`;
-                    /* A completed execution is the norm; only attention states earn a
-                       label, but the slot keeps the header layout stable. */
-                    return (
-                      <span className={`rho-console-entry-state rho-console-entry-state-${output.status ?? "completed"}`}>
-                        {stateLabel === "completed" ? "" : stateLabel}
-                      </span>
-                    );
-                  })()}
-                  <span>#{ordinal}</span>
-                  <button type="button" onClick={() => openSurfaceById("rho.runs")}>Open in History</button>
-                </header>
-                <code className="rho-console-command"><span aria-hidden="true">&gt;</span> {output.code}</code>
-                <div className="rho-console-results">
-                  {output.blocks.map((result, index) => (
-                    <div className={`rho-console-result rho-console-result-${result.kind}`} key={`${result.kind}:${index}`}>
-                      {result.label != null && <strong>{result.label}</strong>}
-                      <pre>{result.text}</pre>
-                      {result.reference?.kind === "plot" && <button
-                        type="button"
-                        className="rho-runtime-output-reference"
-                        data-reference-id={result.reference.id}
-                        onClick={() => openPlot(result.reference!.id)}
-                      >Open Plot</button>}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ))}
-            </div>
-            {!consoleState.follow_tail && transcriptOutputs.length > 0 && (
-              <button
-                type="button"
-                className="rho-console-jump-latest"
-                onClick={() => commitConsole({ ...consoleState, follow_tail: true })}
-              >Jump to latest</button>
-            )}
-            {consoleRunning && <div className="rho-console-busybar" role="progressbar" aria-label="Console is running code" />}
-          </div>
-          <div className="rho-console-composer">
-            <div className="rho-console-input-row">
-              <span className="rho-console-prompt" aria-hidden="true">&gt;</span>
-              <textarea
-                rows={1}
-                ref={(element) => {
-                  if (element == null) return;
-                  element.style.height = "auto";
-                  element.style.height = `${element.scrollHeight}px`;
-                }}
-                aria-label={`Code for ${instance.instance_id}`}
-                aria-describedby={`rho-console-hint-${instance.instance_id}`}
-                title="Return to run · Shift+Return for a new line · Up/Down for history"
-                value={consoleState.draft}
-                disabled={attached == null || consoleRunning}
-                onChange={(event) => consoleController.replaceState({ ...consoleState, draft: event.target.value, history_cursor: null })}
-                onBlur={() => void consoleController.persistCurrent()}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                    event.preventDefault();
-                    void submitConsole();
-                    return;
-                  }
-                  if ((event.key === "ArrowUp" || event.key === "ArrowDown") && consoleState.history.length > 0) {
-                    const atBoundary = event.key === "ArrowUp"
-                      ? event.currentTarget.selectionStart === 0 && event.currentTarget.selectionEnd === 0
-                      : event.currentTarget.selectionStart === event.currentTarget.value.length &&
-                        event.currentTarget.selectionEnd === event.currentTarget.value.length;
-                    if (!atBoundary) return;
-                    event.preventDefault();
-                    const current = consoleState.history_cursor ?? consoleState.history.length;
-                    const cursor = event.key === "ArrowUp"
-                      ? Math.max(0, current - 1)
-                      : Math.min(consoleState.history.length, current + 1);
-                    consoleController.replaceState({
-                      ...consoleState,
-                      history_cursor: cursor === consoleState.history.length ? null : cursor,
-                      draft: cursor === consoleState.history.length ? "" : consoleState.history[cursor] ?? "",
-                    });
-                  }
-                }}
-                placeholder={attached == null ? "Attach this Console to a Runtime" : "R code…"}
-              />
-              <button
-                type="button"
-                className={consoleBusy ? "rho-console-stop" : "rho-primary-action"}
-                disabled={attached == null || (!consoleBusy && !consoleState.draft.trim())}
-                onClick={() => {
-                  if (consoleBusy && attached != null) void interruptRuntime(attached).catch(reportError);
-                  else void submitConsole();
-                }}
-              >{consoleBusy ? "Stop" : "Run"}</button>
-            </div>
-            <div className="rho-console-input-hint rho-visually-hidden" id={`rho-console-hint-${instance.instance_id}`}>
-              <span>Return to run</span>
-              <span>Shift+Return for a new line</span>
-              {consoleState.history.length > 0 && <span>↑↓ history</span>}
-            </div>
-          </div>
-          {runtimeRecovering && attached != null && (
-            <div className="rho-console-recovering" role="alert">
-              <div className="rho-console-recovering-card">
-                <span className="rho-preparation-spinner" aria-hidden="true" />
-                <strong>{attached.display_label} is restarting</strong>
-                <p>The workbench preserves this Console and its drafts while the Runtime recovers.</p>
-                <div className="rho-console-recovering-actions">
-                  <button type="button" onClick={() => void interruptRuntime(attached).catch(reportError)}>Cancel restart</button>
-                  <button type="button" onClick={() => openSurfaceById("rho.logs")}>Open diagnostics</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+              ) : <>
+              {instance.surface_id === "rho.console" && (
+        <ConsoleSurface
+          instance={instance}
+          consoleFilterOpen={consoleFilterOpen}
+          setConsoleFilterOpen={setConsoleFilterOpen}
+          consoleState={consoleState}
+          consoleController={consoleController}
+          consoleSearchBusy={consoleSearchBusy}
+          consoleSearch={consoleSearch}
+          filteredOutputs={filteredOutputs}
+          transcriptOutputs={transcriptOutputs}
+          closeConsoleFilter={closeConsoleFilter}
+          consoleRunning={consoleRunning}
+          attached={attached}
+          runtimes={runtimes}
+          detachRuntime={detachRuntime}
+          attachRuntime={attachRuntime}
+          reportError={reportError}
+          consoleOutputRef={consoleOutputRef}
+          consoleNeedle={consoleNeedle}
+          durableSearchHits={durableSearchHits}
+          openSurfaceById={openSurfaceById}
+          openPlot={openPlot}
+          commitConsole={commitConsole}
+          consoleBusy={consoleBusy}
+          submitConsole={submitConsole}
+          interruptRuntime={interruptRuntime}
+          runtimeRecovering={runtimeRecovering}
+        />
+              )}
       {(instance.surface_id === "rho.file-source" || instance.surface_id === "rho.file-preview") && (
         <FileResourceView
           instance={instance}
@@ -821,14 +568,16 @@ export function SurfaceView({
           instance={instance}
           projectRevision={projectRevision}
           transport={pluginTransport}
-          openEvidence={openCheckEvidence}
+          openReference={openFindingReference}
           reportError={reportError}
         />
       )}
       {instance.surface_id === "rho.agent" && (
-        <AgentSurfaceView
+        <AgentSurface
           instance={instance}
-          transport={pluginTransport}
+          transport={agentCore}
+          evidencePorts={agentEvidence}
+          environmentPort={authorityPorts.environment}
           health={agentHealth}
           createConversation={createAgentConversation}
           runConversation={runAgentConversation}
@@ -858,14 +607,6 @@ export function SurfaceView({
           openSurfaceById={openSurfaceById}
         />
       )}
-      {instance.surface_id === "rho.environment" && (
-        <EnvironmentSurfaceView
-          instance={instance}
-          transport={pluginTransport}
-          persist={persistSurfaceViewState}
-          reportError={reportError}
-        />
-      )}
       {instance.surface_id === "rho.settings" && (
         <SettingsSurfaceView
           instance={instance}
@@ -875,17 +616,22 @@ export function SurfaceView({
           reportError={reportError}
         />
       )}
+      <SurfaceRouter
+        instance={instance}
+        authorityPorts={authorityPorts}
+        evidencePorts={evidencePorts}
+        resultsPorts={resultsPorts}
+        reportError={reportError}
+        openSurface={openSurfaceById}
+        openPlot={openPlot}
+      />
       {DOMAIN_SURFACE_IDS.has(instance.surface_id) && (
         <DomainSurfaceView
           instance={instance}
           transport={pluginTransport}
           persist={persistSurfaceViewState}
           reportError={reportError}
-          useRuntimeOutputInAgent={(reference) => {
-            if (setAgentRuntimeOutputContext(reference)) openSurfaceById("rho.agent");
-          }}
           openSurfaceById={openSurfaceById}
-          openPlot={openPlot}
         />
       )}
       {instance.surface_id === "rho.surface-playground" && (

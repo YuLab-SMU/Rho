@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMockUiKernelTransport } from "../transport/mock";
-import type { LayoutChild, LayoutNode } from "../transport/types";
+import type { LayoutChild } from "../transport/types";
 import { WorkbenchProjectionStore } from "../transport/workbench-store";
 import { App } from "./App";
 import type { FileMutationWorkflow } from "./FileResourceView";
@@ -13,7 +13,7 @@ import type { SourceExecutionSubmission } from "./source-execution";
 import {
   runRevocableFileMutationWorkflow,
   settleWorkbenchMutationQueues,
-} from "./WorkbenchApp";
+} from "./workbench/WorkbenchRoot";
 import { workbenchOperationTrace } from "./operation-trace";
 import { loadProjectHistory, saveProjectHistory } from "./project-history";
 import {
@@ -5818,7 +5818,7 @@ describe("Studio foundation app", () => {
     expect([...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-verification button")]
       .some((button) => button.textContent === "在 Studio 中查看")).toBe(false);
     expect(container.querySelector("[data-surface-id='rho.artifacts']")).toBeNull();
-    expect(container.querySelector("[data-surface-factory='rho.artifacts']")).toBeNull();
+    expect(container.querySelector("[data-surface-factory='rho.artifacts']")).not.toBeNull();
     expect(openSurface).not.toHaveBeenCalled();
     expect(setMode.mock.calls.some(([request]) => request.mode === "studio")).toBe(false);
   });
@@ -6153,7 +6153,7 @@ describe("Studio foundation app", () => {
     expect(container.textContent).toContain("Random result may change");
     expect(container.textContent).toContain("Rho core");
     expect(container.textContent).toContain("Workspace rule pack · org.example.project-checks · g3");
-    expect(container.querySelector(".rho-check-evidence button")?.textContent).toContain("analysis.R:2:1");
+    expect(container.querySelector(".rho-check-references button")?.textContent).toContain("analysis.R:2:1");
 
     await invokePaletteCommand(container, "Check project");
     const results = [...container.querySelectorAll<HTMLElement>(".rho-check-result")];
@@ -6395,9 +6395,9 @@ describe("Studio foundation app", () => {
       .toContain("Goal-driven scientific work");
   });
 
-  it("makes read-only Toolchain Doctor the primary Environment view", async () => {
+  it("makes read-only Authority health the primary Environment view", async () => {
     const transport = createMockUiKernelTransport();
-    const doctor = vi.spyOn(transport, "toolchainDoctor");
+    const health = vi.spyOn(transport, "environmentHealth");
     const { container } = await renderApp(transport);
     await openInspector(container);
     await act(async () => {
@@ -6405,160 +6405,70 @@ describe("Studio foundation app", () => {
         .querySelector<HTMLButtonElement>("button")!.click();
       for (let index = 0; index < 12; index += 1) await Promise.resolve();
     });
-    const toolchain = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")]
-      .find((surface) => surface.querySelector(".rho-toolchain-surface") != null)!;
-    expect(toolchain).toBeDefined();
-    expect(toolchain.textContent).toContain("Exact project environments are ready");
-    expect(toolchain.textContent).toContain("Target local");
-    expect(toolchain.textContent).toContain("local / native");
-    expect(toolchain.textContent).toContain("R 4.5.2");
-    expect(toolchain.textContent).toContain("Python 3.12");
-    expect(toolchain.textContent).toContain("project library ready");
-    const doctorCallsBeforeRefresh = doctor.mock.calls.length;
-    expect(doctorCallsBeforeRefresh).toBeGreaterThan(0);
+    const environment = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")]
+      .find((surface) => surface.querySelector(".rho-environment-health") != null)!;
+    expect(environment).toBeDefined();
+    expect(environment.textContent).toContain("Realized and observed");
+    expect(environment.textContent).toContain("Authority facts");
+    expect(environment.textContent).toContain("environment-receipt:mock");
+    expect(environment.textContent).toContain("Immutable exact plan");
+    const callsBeforeRefresh = health.mock.calls.length;
+    expect(callsBeforeRefresh).toBeGreaterThan(0);
     await act(async () => {
-      toolchain.querySelector<HTMLButtonElement>("[aria-label='Refresh toolchains']")!.click();
+      [...environment.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Refresh")!.click();
       await settle();
     });
-    expect(doctor).toHaveBeenCalledTimes(doctorCallsBeforeRefresh + 1);
+    expect(health).toHaveBeenCalledTimes(callsBeforeRefresh + 1);
   });
 
-  it("opens Environment Resources directly from the realtime taskbar panel", async () => {
+  it("removes the retired Environment resource taskbar and keeps Authority health contextual", async () => {
     const transport = createMockUiKernelTransport();
-    const monitor = vi.spyOn(transport, "resourceMonitorSnapshot");
+    const health = vi.spyOn(transport, "environmentHealth");
     const { container } = await renderApp(transport);
+    expect(container.querySelector("[aria-label='Environment realtime information']")).toBeNull();
+    await openInspector(container);
     await act(async () => {
-      container.querySelector<HTMLButtonElement>("[aria-label='Environment realtime information']")!.click();
-      await settle();
-    });
-    const panel = container.querySelector<HTMLElement>(".rho-environment-taskbar-popover")!;
-    expect(panel.textContent).toContain("Workspace R ready");
-    await act(async () => {
-      [...panel.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Open Environment Resources")!.click();
+      container.querySelector<HTMLElement>("[data-surface-factory='rho.environment']")!
+        .querySelector<HTMLButtonElement>("button")!.click();
       for (let index = 0; index < 12; index += 1) await Promise.resolve();
     });
-    const resources = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")]
-      .find((surface) => surface.querySelector(".rho-resource-monitor") != null);
-    expect(resources).toBeDefined();
-    expect(resources?.textContent).toContain("Resource governance");
-    expect(monitor.mock.calls.length).toBeGreaterThanOrEqual(2);
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("[aria-label='Environment realtime information']")!.click();
-      await settle();
-      [...container.querySelectorAll<HTMLButtonElement>(".rho-environment-taskbar-popover footer button")]
-        .find((button) => button.textContent === "Remote Connections")!.click();
-      for (let index = 0; index < 12; index += 1) await Promise.resolve();
-    });
-    expect(container.querySelector("[data-surface-id='rho.environment'] .rho-remote-connections"))
+    expect(container.querySelector("[data-surface-id='rho.environment'] .rho-environment-health"))
       .not.toBeNull();
+    expect(health).toHaveBeenCalled();
   });
 
-  it("presents Environment inventory semantically with on-demand search and no raw payload", async () => {
+  it("maps a retired package mode to Authority health without generic payload rendering", async () => {
     const transport = createMockUiKernelTransport();
-    const packageSurfaces = structuredClone(await transport.loadSurfaces());
-    const packageEnvironment = packageSurfaces.catalog.instances.find(
+    const surfaces = structuredClone(await transport.loadSurfaces());
+    const environment = surfaces.catalog.instances.find(
       (instance) => instance.surface_id === "rho.environment",
     )!;
-    (packageEnvironment as { mode_id: string | null }).mode_id = "packages";
-    transport.publishSurfaces(packageSurfaces);
-    const persist = vi.spyOn(transport, "updateSurface");
-    const loadDomainSurface = transport.loadDomainSurface.bind(transport);
-    vi.spyOn(transport, "loadDomainSurface").mockImplementation(async (surfaceId) => {
-      if (surfaceId !== "rho.environment") return loadDomainSurface(surfaceId);
-      return {
-        surface_id: surfaceId,
-        loaded_at: "2026-08-22T12:00:00Z",
-        summary: "raw generic summary",
-        items: [
-          { id: "package:rho", title: "rho", subtitle: "0.4.1-dev.14", status: "installed", detail: "Project library" },
-          { id: "package:aisdk", title: "aisdk", subtitle: "required >= 1.5.0", status: "incompatible", detail: "{\"installed_version\":\"1.4.12\",\"required_version\":\"1.5.0\",\"resolved_path\":\"/private/library\"}" },
-          { id: "environment-request:1", title: "Restore project library", subtitle: null, status: "running", detail: "{\"operation\":\"restore\",\"request_id\":\"internal-id\"}" },
-        ],
-      };
-    });
+    (environment as { mode_id: string | null }).mode_id = "packages";
+    transport.publishSurfaces(surfaces);
+    const generic = vi.spyOn(transport, "loadDomainSurface");
     const { container } = await renderApp(transport);
-    await openInspector(container);
-    await act(async () => {
-      container.querySelector<HTMLElement>("[data-surface-factory='rho.environment']")!
-        .querySelector<HTMLButtonElement>("button")!.click();
-      for (let index = 0; index < 8; index += 1) await Promise.resolve();
-    });
-    const environments = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")];
-    const environment = environments.at(-1)!;
-    const environmentMenu = await openSurfaceMenu(environment);
-    await act(async () => {
-      [...environmentMenu.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent?.includes("Packages"))!.click();
-      for (let index = 0; index < 8; index += 1) await Promise.resolve();
-    });
-    expect(environment.querySelector(".rho-environment-toolbar")?.textContent)
-      .toContain("1 package needs attention");
-    expect(environment.querySelectorAll(".rho-environment-record")).toHaveLength(2);
-    expect(environment.textContent).toContain("Installed: 1.4.12 · Required: 1.5.0");
-    expect(environment.textContent).not.toContain("resolved_path");
-    expect(environment.textContent).not.toContain("/private/library");
-    expect(environment.querySelector("[aria-label='Filter environment']")).toBeNull();
-
-    await act(async () => {
-      environment.querySelector<HTMLButtonElement>("[aria-label='Search environment']")!.click();
-      await settle();
-    });
-    const input = environment.querySelector<HTMLInputElement>("[aria-label='Filter environment']")!;
-    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-    await act(async () => {
-      setValue.call(input, "aisdk");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      await settle();
-    });
-    expect(environment.querySelectorAll(".rho-environment-record")).toHaveLength(1);
-    expect(environment.querySelector(".rho-environment-record")?.textContent).toContain("aisdk");
-    await act(async () => {
-      input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-      await settle();
-    });
-    expect(persist).toHaveBeenCalledWith(expect.objectContaining({
-      mutation: { kind: "set_view_state", view_state: { filter: "aisdk" } },
-    }));
+    const surface = container.querySelector<HTMLElement>("[data-surface-id='rho.environment']")!;
+    expect(surface.querySelector(".rho-environment-health")).not.toBeNull();
+    expect(surface.textContent).toContain("Authority facts");
+    expect(generic.mock.calls.some(([surfaceId]) => surfaceId === "rho.environment")).toBe(false);
   });
 
-  it("keeps Environment operation requests in their own mode", async () => {
+  it("maps a retired request mode to immutable plan and Authority activity", async () => {
     const transport = createMockUiKernelTransport();
     const surfaces = structuredClone(await transport.loadSurfaces());
     const environment = surfaces.catalog.instances.find((instance) => instance.surface_id === "rho.environment")!;
     (environment as { mode_id: string | null }).mode_id = "requests";
     transport.publishSurfaces(surfaces);
-    const studio = structuredClone(await transport.loadStudio());
-    const activate = (node: LayoutNode): boolean => {
-      if (node.kind === "stack" && node.instances.includes(environment.instance_id)) {
-        (node as { active_instance_id: string }).active_instance_id = environment.instance_id;
-        return true;
-      }
-      return node.kind === "container" && node.children.some((child) => activate(child.child));
-    };
-    expect(activate(studio.scene.root)).toBe(true);
-    transport.publishStudio(studio);
-    const loadDomainSurface = transport.loadDomainSurface.bind(transport);
-    vi.spyOn(transport, "loadDomainSurface").mockImplementation(async (surfaceId) => surfaceId === "rho.environment" ? {
-      surface_id: surfaceId,
-      loaded_at: "2026-08-22T12:00:00Z",
-      summary: "2 records",
-      items: [
-        { id: "package:rho", title: "rho", subtitle: "0.4.1", status: "installed", detail: "Project library" },
-        { id: "environment-request:restore", title: "Restore project library", subtitle: "requested now", status: "running", detail: "{\"operation\":\"restore\",\"project_root\":\"/private/project\"}" },
-      ],
-    } : loadDomainSurface(surfaceId));
     const { container } = await renderApp(transport);
     const surface = container.querySelector<HTMLElement>("[data-surface-id='rho.environment']")!;
-    expect(surface.querySelector(".rho-environment-toolbar")?.textContent).toContain("1 active operation");
-    expect(surface.querySelectorAll(".rho-environment-record")).toHaveLength(1);
-    expect(surface.textContent).toContain("Restore project library");
-    expect(surface.textContent).not.toContain("rho0.4.1");
+    expect(surface.querySelector(".rho-environment-health")).not.toBeNull();
+    expect(surface.textContent).toContain("Immutable exact plan");
+    expect(surface.textContent).toContain("Operation activity");
     expect(surface.textContent).not.toContain("/private/project");
   });
 
-  it("exposes component views as actions and switches Environment with the latest Surface revision", async () => {
+  it("exposes only Health, Plans and Activity Environment modes", async () => {
     const transport = createMockUiKernelTransport();
     const update = vi.spyOn(transport, "updateSurface");
     const { container } = await renderApp(transport);
@@ -6571,66 +6481,26 @@ describe("Studio foundation app", () => {
     const environments = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")];
     const environment = environments.at(-1)!;
     const menu = await openSurfaceMenu(environment);
-    const toolchains = [...menu.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.includes("Toolchains"));
-    const packages = [...menu.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.includes("Packages"));
-    const requests = [...menu.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.includes("Requests"));
-    expect(toolchains?.getAttribute("aria-pressed")).toBe("true");
-    expect(packages?.getAttribute("aria-pressed")).toBe("false");
-    expect(requests?.getAttribute("aria-pressed")).toBe("false");
+    const health = [...menu.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Health"));
+    const plans = [...menu.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Plans"));
+    const activity = [...menu.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("Activity"));
+    expect(health?.getAttribute("aria-pressed")).toBe("true");
+    expect(plans?.getAttribute("aria-pressed")).toBe("false");
+    expect(activity?.getAttribute("aria-pressed")).toBe("false");
+    expect(menu.textContent).not.toContain("Packages");
+    expect(menu.textContent).not.toContain("Requests");
     await act(async () => {
-      requests!.click();
+      activity!.click();
       for (let index = 0; index < 8; index += 1) await Promise.resolve();
     });
     expect(update).toHaveBeenCalledWith(expect.objectContaining({
       target: expect.objectContaining({ instance_id: environment.dataset.instanceId }),
-      mutation: { kind: "set_mode", mode_id: "requests" },
+      mutation: { kind: "set_mode", mode_id: "activity" },
     }));
-    expect(environment.querySelector(".rho-environment-toolbar")?.textContent)
-      .toMatch(/operation|request/iu);
-  });
-
-  it("offers truthful Environment recovery after a load failure", async () => {
-    const transport = createMockUiKernelTransport();
-    const loadDomainSurface = transport.loadDomainSurface.bind(transport);
-    let environmentAvailable = false;
-    vi.spyOn(transport, "loadDomainSurface").mockImplementation(async (surfaceId) => {
-      if (surfaceId !== "rho.environment") return loadDomainSurface(surfaceId);
-      if (!environmentAvailable) {
-        throw new Error("Environment broker unavailable at /Users/alice/private-project");
-      }
-      return loadDomainSurface(surfaceId);
-    });
-    const { container } = await renderApp(transport);
-    await openInspector(container);
-    await act(async () => {
-      container.querySelector<HTMLElement>("[data-surface-factory='rho.environment']")!
-        .querySelector<HTMLButtonElement>("button")!.click();
-      for (let index = 0; index < 8; index += 1) await Promise.resolve();
-    });
-    const environments = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")];
-    const environment = environments.at(-1)!;
-    const environmentMenu = await openSurfaceMenu(environment);
-    await act(async () => {
-      [...environmentMenu.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent?.includes("Packages"))!.click();
-      for (let index = 0; index < 8; index += 1) await Promise.resolve();
-    });
-    await vi.waitFor(() => expect(environment.querySelector("[role='alert']")).not.toBeNull());
-    expect(environment.querySelector("[role='alert']")?.textContent).toContain("Environment broker unavailable");
-    expect(environment.querySelector("[role='alert']")?.textContent).toContain("[local path]");
-    expect(environment.querySelector("[role='alert']")?.textContent).not.toContain("/Users/alice");
-    expect(environment.querySelector(".rho-task-state-error")).not.toBeNull();
-    await act(async () => {
-      environmentAvailable = true;
-      [...environment.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Try again")!.click();
-      await settle();
-    });
-    expect(environment.querySelector("[role='alert']")).toBeNull();
-    expect(environment.querySelectorAll(".rho-environment-record")).toHaveLength(2);
+    expect(environment.textContent).toContain("Operation activity");
   });
 
   it("keeps contextual failed-run Problems out of Compose but reachable by command", async () => {
@@ -6666,7 +6536,7 @@ describe("Studio foundation app", () => {
     expect(catalog.querySelector(":scope > [data-surface-factory='rho.surface-playground']")).toBeNull();
     expect(catalog.querySelector("[data-surface-factory='rho.settings']")).toBeNull();
     expect(catalog.querySelector("[data-surface-factory='rho.check-result']")).toBeNull();
-    expect(catalog.querySelector("[data-surface-factory='rho.render-jobs']")).toBeNull();
+    expect(catalog.querySelector("[data-surface-factory='rho.jobs']")).not.toBeNull();
     expect(catalog.querySelector("[data-surface-factory='rho.problems']")).toBeNull();
     const flowGroups = [...catalog.querySelectorAll<HTMLElement>(".rho-surface-catalog-flow")];
     expect(flowGroups.map((group) => group.dataset.flowStage)).toEqual([
@@ -6709,11 +6579,9 @@ describe("Studio foundation app", () => {
     const domainLoad = vi.spyOn(transport, "loadDomainSurface").mockImplementation(async (surfaceId) => {
       const fixtures = {
         "rho.runs": [{ id: "run:secret", title: "workspace.execute", subtitle: "analysis.R", status: "failed", detail: "{\"run_id\":\"secret\",\"project_root\":\"/private/project\",\"workspace_id\":\"internal-workspace\",\"source_path\":\"analysis.R\",\"execution_mode\":\"expression\",\"code_preview\":\"plot(x)\",\"error_message\":\"object x not found\",\"started_at\":\"2026-08-22T10:00:00Z\"}" }],
-        "rho.render-jobs": [{ id: "render:1", title: "analysis.qmd → HTML", subtitle: "analysis.qmd", status: "completed", detail: "{\"source_path\":\"analysis.qmd\",\"request_type\":\"render\",\"started_at\":\"2026-08-22T10:00:00Z\"}" }],
         "rho.plots": [{ id: "plot:mock-1", title: "QC plot", subtitle: "image/png", status: "ready", detail: "{\"media_type\":\"image/png\",\"source_path\":\"analysis.R\",\"payload_json\":\"private-payload\"}" }],
         "rho.problems": [{ id: "problem:1", title: "object x not found", subtitle: "analysis.R", status: "error", detail: "{\"source_path\":\"analysis.R\",\"line_number\":7,\"workspace_id\":\"internal-workspace\"}" }],
         "rho.logs": [{ id: "log:1", title: "Startup diagnostics", subtitle: "now", status: "current", detail: "{\"detail\":\"Ark ready\\nWorkspace R ready\",\"project_root\":\"/private/project\"}" }],
-        "rho.evidence": [{ id: "claim:1", title: "Analysis uses a fixed seed", subtitle: "analysis.R", status: null, detail: "{\"kind\":\"source_claim\",\"source_path\":\"analysis.R\",\"start_line\":1,\"source_excerpt\":\"set.seed(42)\",\"linked_evidence_ids\":[1],\"project_root\":\"/private/project\"}" }],
         "rho.git": [{ id: "rho.git:1", title: "main", subtitle: null, status: null, detail: "{\"dirty\":true,\"staged\":1,\"modified\":2,\"untracked\":0,\"project_root\":\"/private/project\"}" }],
         "rho.help": [{ id: "rho.build", title: "Rho 0.4.1", subtitle: null, status: "current", detail: "{\"summary\":\"Exact build identity\",\"detail\":\"Commit: abc\\nPlatform: macOS\",\"executable_path\":\"/private/bin\"}" }],
       } as const;
@@ -6727,7 +6595,7 @@ describe("Studio foundation app", () => {
     });
     const { container } = await renderApp(transport);
     await openInspector(container);
-    expect(container.querySelector("[data-surface-factory='rho.artifacts']")).toBeNull();
+    expect(container.querySelector("[data-surface-factory='rho.artifacts']")).not.toBeNull();
     const open = async (surfaceId: string) => {
       const factory = container.querySelector<HTMLElement>(`[data-surface-factory='${surfaceId}']`);
       await act(async () => {
@@ -6807,13 +6675,8 @@ describe("Studio foundation app", () => {
     const logs = await open("rho.logs");
     expect(logs.querySelector(".rho-domain-disclosure summary")?.textContent).toBe("Open diagnostic text");
 
-    const evidence = await open("rho.evidence");
-    expect(evidence.querySelector("[data-domain-kind='claims']")?.textContent).toContain("set.seed(42)");
-    expect(evidence.textContent).not.toContain("/private/project");
     const git = await open("rho.git");
     expect(git.querySelector("[data-domain-kind='git']")?.textContent).toContain("1 staged · 2 modified · 0 untracked");
-    const renderJobs = await open("rho.render-jobs");
-    expect(renderJobs.querySelector("[data-domain-kind='timeline']")?.textContent).toContain("Document output history");
     const help = await open("rho.help");
     expect(help.querySelector("[data-domain-kind='help']")?.textContent).toContain("Exact build identity");
     expect(help.querySelector(".rho-domain-disclosure summary")?.textContent).toBe("Build details");

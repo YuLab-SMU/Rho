@@ -25,7 +25,8 @@ import { createTauriCheckTransport } from "./check";
 import { createTauriStartupTransport } from "./startup";
 import { createTauriHistoryTransport } from "./history";
 import { createTauriEnvironmentReadTransport } from "./environment";
-import { createTauriEvidenceReadTransport } from "./evidence";
+import { createTauriAuthorityTransport } from "./authority";
+import { createTauriEvidenceGraphTransport } from "./evidence-graph";
 import { createTauriGitReadTransport } from "./git";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
@@ -122,16 +123,10 @@ function recordValue(record: Readonly<Record<string, unknown>>, keys: readonly s
 }
 
 const DOMAIN_RECORD_ID_KEYS = [
-  "run_id", "problem_id", "claim_id", "artifact_id", "plot_id", "request_id", "hash", "id",
+  "request_id", "hash", "id",
 ] as const;
 
 const DOMAIN_SURFACE_ID_KEYS: Readonly<Record<string, readonly string[]>> = {
-  "rho.runs": ["run_id"],
-  "rho.render-jobs": ["run_id"],
-  "rho.problems": ["problem_id"],
-  "rho.evidence": ["claim_id"],
-  "rho.plots": ["plot_id"],
-  "rho.environment": ["request_id"],
   "rho.git": ["hash"],
 };
 
@@ -212,7 +207,8 @@ export function createTauriUiKernelTransport(
   const startupTransport = createTauriStartupTransport(invoke);
   const historyTransport = createTauriHistoryTransport(invoke);
   const environmentTransport = createTauriEnvironmentReadTransport(invoke);
-  const evidenceTransport = createTauriEvidenceReadTransport(invoke);
+  const authorityTransport = createTauriAuthorityTransport(invoke);
+  const evidenceTransport = createTauriEvidenceGraphTransport(invoke);
   const gitTransport = createTauriGitReadTransport(invoke);
   return {
     source: "tauri",
@@ -356,33 +352,18 @@ export function createTauriUiKernelTransport(
     ...createTauriAgentFileTransport(invoke),
     ...historyTransport,
     ...environmentTransport,
+    ...authorityTransport,
     ...evidenceTransport,
     subscribeAgentInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("agent"), listener),
     loadDomainSurface: async (surfaceId) => {
       let payload: unknown;
       switch (surfaceId) {
-        case "rho.environment": payload = {
-          installed: await environmentTransport.listInstalledPackages(200),
-          requests: await environmentTransport.listEnvironmentOperationRequests(50),
-        }; break;
-        case "rho.evidence": payload = await evidenceTransport.listEvidenceClaims(100); break;
         case "rho.git": payload = {
           status: await gitTransport.status(),
           history: await gitTransport.log(30),
         }; break;
-        case "rho.runs": payload = await historyTransport.listRuns(100); break;
-        case "rho.problems": payload = await historyTransport.listProblems(100); break;
-        case "rho.plots": payload = await historyTransport.listPlotArtifacts(100, false); break;
         case "rho.logs": payload = { id: "startup-diagnostics", title: "Startup diagnostics", status: "current", detail: await startupTransport.diagnostics() }; break;
-        case "rho.render-jobs": {
-          const runs = await historyTransport.listRuns(100);
-          payload = Array.isArray(runs) ? runs.filter((run) => {
-            const encoded = boundedJson(run)?.toLowerCase() ?? "";
-            return encoded.includes("render");
-          }) : runs;
-          break;
-        }
         case "rho.help": {
           const [snapshot, app] = await Promise.all([
             kernelTransport.loadSnapshot(),

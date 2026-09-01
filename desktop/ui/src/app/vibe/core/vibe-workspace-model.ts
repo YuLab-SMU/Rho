@@ -186,8 +186,10 @@ function exactSurfaceReferences(instance: SurfaceInstance | undefined): VibeExac
       const plotId = exactViewStateId(instance, "selected_id");
       return { ...EMPTY_REFS, plotIds: plotId == null ? [] : [plotId] };
     }
-    case "rho.evidence": {
-      const evidenceId = exactViewStateId(instance, "selected_id");
+    case "rho.claims":
+    case "rho.claim-trace": {
+      const evidenceId = exactViewStateId(instance, "claim_id")
+        ?? exactViewStateId(instance, "selected_id");
       return { ...EMPTY_REFS, evidenceIds: evidenceId == null ? [] : [evidenceId] };
     }
     default:

@@ -636,33 +636,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .rho-environment-taskbar { position: relative; flex: 0 0 auto; min-width: 0; }
-  .rho-environment-taskbar-trigger { display: flex; align-items: stretch; gap: 0; min-height: calc(var(--rho-statusbar-height) - 2px); padding: 0; overflow: hidden; border: 0; border-right: var(--rho-border); border-left: var(--rho-border); border-radius: 0; color: var(--rho-ink-2); background: transparent; }
-  .rho-environment-taskbar-trigger:hover, .rho-environment-taskbar-trigger[aria-expanded="true"] { background: var(--rho-panel); }
-  .rho-environment-taskbar-metric { position: relative; display: flex; min-width: 5.5rem; align-items: center; justify-content: space-between; gap: var(--rho-space-2); padding: 0 var(--rho-space-2) var(--rho-space-1); }
-  .rho-environment-taskbar-metric + .rho-environment-taskbar-metric { border-left: var(--rho-border); }
-  .rho-environment-taskbar-metric > span { color: var(--rho-muted); font-size: var(--rho-text-caption); font-weight: var(--rho-weight-medium); }
-  .rho-environment-taskbar-metric > strong { color: var(--rho-ink); font-size: var(--rho-text-caption); font-variant-numeric: tabular-nums; }
-  .rho-environment-taskbar-metric > progress { position: absolute; right: var(--rho-space-2); bottom: 2px; left: var(--rho-space-2); width: calc(100% - 2 * var(--rho-space-2)); height: 2px; overflow: hidden; border: 0; border-radius: var(--rho-radius-pill); accent-color: var(--rho-ok); }
-  .rho-environment-taskbar-metric.rho-resource-pressure-warning > progress { accent-color: var(--rho-warn); }
-  .rho-environment-taskbar-metric.rho-resource-pressure-critical > progress { accent-color: var(--rho-danger); }
-  .rho-environment-taskbar-popover { position: fixed; z-index: 42; bottom: calc(var(--rho-statusbar-height) + var(--rho-space-2)); left: calc(var(--rho-rail-width) + var(--rho-space-4)); display: grid; width: min(38rem, calc(100vw - var(--rho-rail-width) - 2 * var(--rho-space-4))); max-height: min(34rem, calc(100vh - var(--rho-statusbar-height) - 2 * var(--rho-space-6))); gap: var(--rho-space-3); overflow: auto; padding: var(--rho-space-4); border: var(--rho-border); border-radius: var(--rho-radius-2); color: var(--rho-ink-2); background: var(--rho-paper); box-shadow: var(--rho-shadow-panel); }
-  .rho-environment-taskbar-popover > header { display: flex; align-items: start; justify-content: space-between; gap: var(--rho-space-3); }
-  .rho-environment-taskbar-popover > header > div { display: grid; gap: var(--rho-space-1); }
-  .rho-environment-taskbar-popover > header strong { color: var(--rho-ink); font-size: var(--rho-text-body); }
-  .rho-environment-taskbar-popover > p { margin: 0; color: var(--rho-muted); font-size: var(--rho-text-caption); overflow-wrap: anywhere; }
-  .rho-environment-taskbar-device { display: grid; gap: var(--rho-space-1); padding: var(--rho-space-3); border: var(--rho-border); border-radius: var(--rho-radius-1); background: var(--rho-panel); }
-  .rho-environment-taskbar-device strong { color: var(--rho-ink); font-size: var(--rho-text-ui); }
-  .rho-environment-taskbar-device small { color: var(--rho-muted); font-size: var(--rho-text-caption); }
-  .rho-environment-taskbar-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: var(--rho-space-2); }
-  .rho-environment-taskbar-detail-grid > div { display: grid; gap: var(--rho-space-1); padding: var(--rho-space-3); border-radius: var(--rho-radius-1); background: var(--rho-panel); }
-  .rho-environment-taskbar-detail-grid span, .rho-environment-taskbar-detail-grid small { color: var(--rho-muted); font-size: var(--rho-text-caption); }
-  .rho-environment-taskbar-detail-grid strong { color: var(--rho-ink); font-size: var(--rho-text-body); font-variant-numeric: tabular-nums; }
-  .rho-environment-taskbar-health { display: flex; flex-wrap: wrap; gap: var(--rho-space-2) var(--rho-space-4); padding-top: var(--rho-space-3); border-top: var(--rho-border); }
-  .rho-environment-taskbar-health > span { display: flex; align-items: center; gap: var(--rho-space-2); color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
-  .rho-environment-taskbar-popover > footer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--rho-space-2); padding-top: var(--rho-space-3); border-top: var(--rho-border); }
-  .rho-environment-taskbar-popover > footer button { min-height: var(--rho-target-min); }
-  .rho-environment-taskbar-popover > footer small { margin-left: auto; color: var(--rho-muted); font-size: var(--rho-text-caption); }
 
   /* --- Workspace grid and inspector ---------------------------------------- */
   .rho-studio-workspace { position: relative; display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr); }
@@ -1075,8 +1048,5 @@
     .rho-vibe-section[data-layout="grid"] .rho-vibe-block { grid-column: 1 / -1 !important; grid-row: auto !important; }
     .rho-statusbar { gap: var(--rho-space-3); padding-inline: var(--rho-space-3); }
     .rho-statusbar-path { display: none; }
-    .rho-environment-taskbar-metric { min-width: 4.5rem; padding-inline: var(--rho-space-1); }
-    .rho-environment-taskbar-metric > progress { right: var(--rho-space-1); left: var(--rho-space-1); width: calc(100% - 2 * var(--rho-space-1)); }
-    .rho-environment-taskbar-popover { right: var(--rho-space-2); left: var(--rho-space-2); width: auto; }
   }
 }

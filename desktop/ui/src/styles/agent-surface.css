@@ -1,6 +1,6 @@
 /* Agent Surface (rho.agent): task-first information hierarchy for Studio.
    Refines the base Agent rules in surfaces.css inside the same `surfaces`
-   layer; every value comes from tokens.css. Imported by AgentSurfaceView.tsx,
+   layer; every value comes from tokens.css. Imported by agent/AgentSurface.tsx,
    which the bundler orders before foundation.css, so every selector is scoped
    under `section.rho-agent-surface` to stay order-independent. */
 
@@ -45,6 +45,18 @@
   section.rho-agent-surface .rho-agent-overview dl > div { display: flex; justify-content: space-between; gap: var(--rho-space-3); }
   section.rho-agent-surface .rho-agent-overview dt { color: var(--rho-muted); font-size: var(--rho-text-caption); }
   section.rho-agent-surface .rho-agent-overview dd { margin: 0; overflow: hidden; font-size: var(--rho-text-caption); font-weight: var(--rho-weight-medium); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+  section.rho-agent-surface .rho-agent-environment-doctor {
+    display: grid;
+    gap: var(--rho-space-2);
+    padding: var(--rho-space-3) var(--rho-space-4);
+    border-block: var(--rho-border);
+    background: var(--rho-panel);
+  }
+  section.rho-agent-surface .rho-agent-environment-doctor > header { display: flex; justify-content: space-between; gap: var(--rho-space-2); }
+  section.rho-agent-surface .rho-agent-environment-doctor p { margin: 0; color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
+  section.rho-agent-surface .rho-agent-environment-doctor ul { display: grid; gap: var(--rho-space-1); margin: 0; padding-inline-start: var(--rho-space-5); }
+  section.rho-agent-surface .rho-agent-environment-doctor li { display: grid; gap: var(--rho-space-1); }
+  section.rho-agent-surface .rho-agent-environment-uncertainty { color: var(--rho-warn); }
 
   section.rho-agent-surface .rho-agent-current-work-header {
     display: flex;

@@ -84,44 +84,68 @@ export const FIRST_PARTY_SURFACE_CATALOG: Readonly<Record<string, SurfaceCatalog
     visibility: "primary", capabilityGroup: "results", flowStage: "results", composeOrder: 40,
     handoffTargets: ["rho.file-source", "rho.agent"],
   },
-  "rho.render-jobs": {
+  "rho.jobs": {
     visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 41,
     handoffTargets: ["rho.runs"],
   },
-  "rho.problems": {
+  "rho.artifacts": {
     visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 42,
+    handoffTargets: ["rho.runs", "rho.plots"],
+  },
+  "rho.approvals": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 43,
+    handoffTargets: ["rho.agent"],
+  },
+  "rho.revisions": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 44,
+    handoffTargets: ["rho.runs"],
+  },
+  "rho.problems": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 45,
     handoffTargets: ["rho.runs", "rho.file-source"],
   },
   "rho.check-result": {
-    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 43,
-    handoffTargets: ["rho.file-source", "rho.evidence"],
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 46,
+    handoffTargets: ["rho.file-source", "rho.claims"],
   },
-  "rho.evidence": {
-    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 44,
-    handoffTargets: ["rho.file-source"],
+  "rho.claims": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 47,
+    handoffTargets: ["rho.claim-trace", "rho.evidence-graph", "rho.evidence-gaps"],
+  },
+  "rho.evidence-graph": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 48,
+    handoffTargets: ["rho.claim-trace"],
+  },
+  "rho.evidence-gaps": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 49,
+    handoffTargets: ["rho.claims"],
+  },
+  "rho.claim-trace": {
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 50,
+    handoffTargets: ["rho.claims", "rho.file-source", "rho.runs"],
   },
   "rho.logs": {
-    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 45,
+    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 51,
     handoffTargets: [],
   },
   "rho.agent": {
-    visibility: "primary", capabilityGroup: "agent", flowStage: "collaborate", composeOrder: 50,
+    visibility: "primary", capabilityGroup: "agent", flowStage: "collaborate", composeOrder: 60,
     handoffTargets: ["rho.file-source", "rho.console", "rho.plots", "rho.runs"],
   },
   "rho.environment": {
-    visibility: "primary", capabilityGroup: "workspace_r", flowStage: "project", composeOrder: 60,
+    visibility: "primary", capabilityGroup: "workspace_r", flowStage: "project", composeOrder: 70,
     handoffTargets: ["rho.console"],
   },
   "rho.git": {
-    visibility: "primary", capabilityGroup: "project_integration", flowStage: "project", composeOrder: 70,
+    visibility: "primary", capabilityGroup: "project_integration", flowStage: "project", composeOrder: 80,
     handoffTargets: ["rho.file-source"],
   },
   "rho.help": {
-    visibility: "contextual", capabilityGroup: "workbench", flowStage: "project", composeOrder: 80,
+    visibility: "contextual", capabilityGroup: "workbench", flowStage: "project", composeOrder: 90,
     handoffTargets: [],
   },
   "rho.settings": {
-    visibility: "internal", capabilityGroup: "workbench", flowStage: "project", composeOrder: 81,
+    visibility: "internal", capabilityGroup: "workbench", flowStage: "project", composeOrder: 91,
     handoffTargets: [],
   },
   "rho.surface-playground": {
@@ -158,14 +182,29 @@ export const FIRST_PARTY_SURFACE_UX: Readonly<Record<string, SurfaceUxProfile>> 
     emptyState: "Ready for R code.",
   },
   "rho.environment": {
-    label: "Environment", primaryTask: "Govern toolchains, devices, resources, and packages", defaultFocus: "Target health",
+    label: "Environment", primaryTask: "Review verified realization, Workspace activation, exact plans, activity, and incidents", defaultFocus: "Authority health",
     primaryAction: "Refresh", actionBudget: 2, areaRole: "context", narrowBehavior: "collapse",
     emptyState: "Environment and resource state appears after inspection.",
   },
-  "rho.evidence": {
-    label: "Evidence", primaryTask: "Inspect supporting evidence", defaultFocus: "First evidence item",
-    primaryAction: "Open", actionBudget: 2, areaRole: "support", narrowBehavior: "stack",
-    emptyState: "Evidence linked by checks and runs will appear here.",
+  "rho.claims": {
+    label: "Claims", primaryTask: "Review and promote project claims", defaultFocus: "First claim",
+    primaryAction: "Draft claim", actionBudget: 2, areaRole: "support", narrowBehavior: "stack",
+    emptyState: "Draft and promoted claims will appear here.",
+  },
+  "rho.evidence-graph": {
+    label: "Evidence graph", primaryTask: "Traverse claim relationships", defaultFocus: "Graph root",
+    primaryAction: "Refresh", actionBudget: 2, areaRole: "support", narrowBehavior: "stack",
+    emptyState: "Select a claim to inspect its graph neighborhood.",
+  },
+  "rho.evidence-gaps": {
+    label: "Evidence gaps", primaryTask: "Review deterministic gaps", defaultFocus: "First gap",
+    primaryAction: "Recompute", actionBudget: 2, areaRole: "support", narrowBehavior: "stack",
+    emptyState: "No open evidence gaps.",
+  },
+  "rho.claim-trace": {
+    label: "Claim trace", primaryTask: "Inspect one exact claim trace", defaultFocus: "Claim",
+    primaryAction: null, actionBudget: 2, areaRole: "context", narrowBehavior: "stack",
+    emptyState: "Open an exact claim from Claims.",
   },
   "rho.file-preview": {
     label: "File preview", primaryTask: "Read a rendered project file", defaultFocus: "Document body",
@@ -207,10 +246,25 @@ export const FIRST_PARTY_SURFACE_UX: Readonly<Record<string, SurfaceUxProfile>> 
     primaryAction: "Open source", actionBudget: 1, areaRole: "strip", narrowBehavior: "strip",
     emptyState: "No project problems.",
   },
-  "rho.render-jobs": {
-    label: "Render jobs", primaryTask: "Track document rendering", defaultFocus: "Active job",
-    primaryAction: "Open output", actionBudget: 2, areaRole: "support", narrowBehavior: "stack",
-    emptyState: "Render jobs will appear when documents are built.",
+  "rho.jobs": {
+    label: "Jobs", primaryTask: "Track submitted and render jobs", defaultFocus: "Active job",
+    primaryAction: "Refresh", actionBudget: 2, areaRole: "support", narrowBehavior: "stack",
+    emptyState: "Jobs will appear when work is submitted.",
+  },
+  "rho.artifacts": {
+    label: "Artifacts", primaryTask: "Inspect durable artifact identity", defaultFocus: "Newest artifact",
+    primaryAction: "Refresh", actionBudget: 2, areaRole: "support", narrowBehavior: "stack",
+    emptyState: "Durable artifacts will appear here.",
+  },
+  "rho.approvals": {
+    label: "Approvals", primaryTask: "Review broker-owned approval receipts", defaultFocus: "Newest approval",
+    primaryAction: "Refresh", actionBudget: 2, areaRole: "context", narrowBehavior: "stack",
+    emptyState: "Approval receipts will appear here.",
+  },
+  "rho.revisions": {
+    label: "Revisions", primaryTask: "Inspect current authority revisions", defaultFocus: "Project revision",
+    primaryAction: "Refresh", actionBudget: 2, areaRole: "context", narrowBehavior: "stack",
+    emptyState: "Revision state is unavailable.",
   },
   "rho.runs": {
     label: "History", primaryTask: "Review and repeat scientific executions", defaultFocus: "Newest execution",

@@ -42,16 +42,9 @@ import type { ProjectTransport } from "./project";
 import type { KernelTransport } from "./kernel-generated";
 import type { CheckTransport } from "./check";
 import type { WorkbenchProjectionTransport } from "./workbench-projection";
-import type { EvidenceReadTransport } from "./evidence";
-import type {
-  ComputeTargetListView,
-  ConfigureSshTargetRequest,
-  ConfigureSshTargetView,
-  ResourceMonitorView,
-  SshConnectionProbeRequest,
-  SshConnectionProbeView,
-  ToolchainDoctorView,
-} from "./environment";
+import type { EvidenceGraphTransport } from "./evidence-graph";
+import type { AuthorityReadTransport } from "./authority";
+import type { EnvironmentHealthView } from "./environment";
 import type { HistoryReadTransport } from "./history";
 
 export type {
@@ -276,7 +269,7 @@ export type {
 } from "./kernel-generated";
 
 export type {
-  CheckEvidence,
+  FindingReference,
   CheckFinding,
   CheckProjectSnapshot,
   CheckResult,
@@ -297,7 +290,34 @@ export type {
   RunSummary,
 } from "./history";
 
-export type { EvidenceClaim, EvidenceReadTransport } from "./evidence";
+export type {
+  AuthorityObservation,
+  AuthorityReceipt,
+  AuthorityReceiptPage,
+  AuthorityReadTransport,
+  AuthorityReference,
+} from "./authority";
+
+export type {
+  ClaimTrace,
+  CreateDraftClaimRequest,
+  CreateDraftLinkRequest,
+  EvidenceDraftTransport,
+  EvidenceEdge,
+  EvidenceGap,
+  EvidenceGapPage,
+  EvidenceGraphAdminTransport,
+  EvidenceGraphHealth,
+  EvidenceGraphReadTransport,
+  EvidenceGraphTransport,
+  EvidenceMutation,
+  EvidenceNode,
+  EvidencePromotionRequest,
+  EvidencePromotionTransport,
+  EvidenceRetirementRequest,
+  EvidenceSubgraph,
+  ReviseDraftClaimRequest,
+} from "./evidence-graph";
 
 export type UiSnapshotSource = "tauri" | "mock";
 
@@ -377,7 +397,7 @@ export type WorkspacePreparationProgressListener = (
   snapshot: WorkspacePreparationProgress,
 ) => void;
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentEventsTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport, ProjectTransport, KernelTransport, CheckTransport, WorkbenchProjectionTransport, HistoryReadTransport, EvidenceReadTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentEventsTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport, ProjectTransport, KernelTransport, CheckTransport, WorkbenchProjectionTransport, HistoryReadTransport, AuthorityReadTransport, EvidenceGraphTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(
     chooseRscript?: boolean,
@@ -417,10 +437,7 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   subscribeResourcesInvalidated(listener: () => void): Unsubscribe;
   subscribeAgentInvalidated(listener: () => void): Unsubscribe;
   loadDomainSurface(surfaceId: string): Promise<DomainSurfaceData>;
-  toolchainDoctor(): Promise<ToolchainDoctorView>;
-  resourceMonitorSnapshot(): Promise<ResourceMonitorView>;
-  computeTargetList(): Promise<ComputeTargetListView>;
-  remoteConnectionProbe(request: SshConnectionProbeRequest): Promise<SshConnectionProbeView>;
-  configureSshTarget(request: ConfigureSshTargetRequest): Promise<ConfigureSshTargetView>;
+  environmentHealth(): Promise<EnvironmentHealthView>;
+  reobserveEnvironment(): Promise<EnvironmentHealthView>;
   retryRun(runId: string): Promise<unknown>;
 }

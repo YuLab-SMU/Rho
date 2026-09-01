@@ -1,6 +1,6 @@
 import {
   createCheckCommands,
-  type CheckEvidenceV1,
+  type FindingReferenceV1,
   type CheckFindingV1,
   type CheckInvoke,
   type CheckProjectSnapshotV1,
@@ -22,7 +22,7 @@ type DeepReadonly<T> = T extends (...args: never[]) => unknown
 
 export type CheckSeverity = CheckSeverityV1;
 export type CheckResultStatus = CheckResultStatusV1;
-export type CheckEvidence = DeepReadonly<CheckEvidenceV1>;
+export type FindingReference = DeepReadonly<FindingReferenceV1>;
 export type CheckFinding = DeepReadonly<CheckFindingV1>;
 export type CheckRunRequest = DeepReadonly<CheckRunRequestWire>;
 export type CheckResultRequest = DeepReadonly<CheckResultRequestWire>;

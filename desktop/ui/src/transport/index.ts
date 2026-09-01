@@ -25,6 +25,19 @@ export type { ProjectTransport } from "./project";
 export type { KernelTransport } from "./kernel-generated";
 export type { CheckTransport } from "./check";
 export type {
+  AuthorityObservation,
+  AuthorityReceipt,
+  AuthorityReceiptPage,
+  AuthorityReadTransport,
+  AuthorityReference,
+} from "./authority";
+export type {
+  EvidenceDraftTransport,
+  EvidenceGraphReadTransport,
+  EvidenceGraphTransport,
+  EvidencePromotionTransport,
+} from "./evidence-graph";
+export type {
   WorkbenchProjection,
   WorkbenchProjectionTransport,
   WorkbenchRevisionVector,
@@ -80,7 +93,7 @@ export type {
   AgentTurnSummary,
   RunAgentRequest,
   RunAgentResponse,
-  CheckEvidence,
+  FindingReference,
   CheckFinding,
   CheckProjectSnapshot,
   CheckResult,

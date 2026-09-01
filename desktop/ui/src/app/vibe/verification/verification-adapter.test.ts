@@ -40,7 +40,7 @@ describe("typed verification adapter", () => {
     ]);
     const readEvidenceClaims = vi.fn(async () => [
       makeEvidence(),
-      makeEvidence({ claim_id: "unlinked-claim" }),
+      makeEvidence({ node_id: "unlinked-claim" }),
     ]);
     const port = makePort({ readRuns, readArtifacts, readEvidenceClaims });
     const focus = makeFocus([
@@ -72,7 +72,7 @@ describe("typed verification adapter", () => {
     expect(snapshot.artifacts.unresolved.map(({ label }) => label)).toEqual([
       "Donor consistency report",
     ]);
-    expect(snapshot.evidence.items.map(({ record }) => record.claim_id)).toEqual([
+    expect(snapshot.evidence.items.map(({ record }) => record.node_id)).toEqual([
       "claim-cluster-identity",
     ]);
   });

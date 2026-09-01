@@ -9,192 +9,104 @@ export type EnvironmentInvoke = <T>(
 
 /** Commands */
 export const createEnvironmentCommands = (__TAURI_INVOKE: EnvironmentInvoke) => ({
-	listInstalledPackages: (limit: number | null) => __TAURI_INVOKE<InstalledPackageInventory>("list_installed_packages", { limit }),
-	listEnvironmentOperationRequests: (limit: number | null, status: string | null) => __TAURI_INVOKE<EnvironmentOperationRequestSummary[]>("list_environment_operation_requests", { limit, status }),
-	toolchainDoctor: () => __TAURI_INVOKE<ToolchainDoctorView>("toolchain_doctor"),
-	resourceMonitorSnapshot: () => __TAURI_INVOKE<ResourceMonitorView>("resource_monitor_snapshot"),
-	computeTargetList: () => __TAURI_INVOKE<ComputeTargetListView>("compute_target_list"),
-	remoteConnectionProbe: (request: SshConnectionProbeRequest) => __TAURI_INVOKE<SshConnectionProbeView>("remote_connection_probe", { request }),
-	configureSshTarget: (request: ConfigureSshTargetRequest) => __TAURI_INVOKE<ConfigureSshTargetView>("configure_ssh_target", { request }),
+	environmentHealth: () => __TAURI_INVOKE<EnvironmentHealthViewV1>("environment_health"),
+	environmentReobserve: () => __TAURI_INVOKE<EnvironmentHealthViewV1>("environment_reobserve"),
 });
 
 /* Types */
-export type ComputeTargetListView = {
-	selected_target_id: string,
-	targets_yaml: string,
-	targets: ComputeTargetView[],
-};
-
-export type ComputeTargetView = {
+export type EnvironmentBindingViewV1 = {
+	environment_id: string,
+	role: string,
 	target_id: string,
-	selected: boolean,
-	host_kind: string,
-	host: string | null,
-	port: number | null,
-	username: string | null,
-	remote_root: string | null,
-	isolation_kind: string,
-	capabilities: string[],
-	identity_file: string | null,
-	identity_available: boolean,
+	runtime_id: string,
+	runtime_ownership: string | null,
+	runtime_support_tier: string | null,
+	desired_revision: string,
+	realization_revision: string,
+	receipt_id: string,
+	receipt_digest: string,
+	receipt_outcome: string,
+	receipt_restart_required: boolean,
+	updated_at: string,
 };
 
-export type ConfigureSshTargetRequest = {
-	target_id: string,
-	host: string,
-	port: number,
-	username: string,
-	password: string | null,
-	confirmed_fingerprint: string,
-	remote_root: string,
-	capabilities: string[],
-	install_managed_key: boolean,
-	identity_file: string | null,
-	select_for_project: boolean,
+export type EnvironmentCheckpointViewV1 = {
+	name: string,
+	reached_at: string,
+	digest: string | null,
 };
 
-export type ConfigureSshTargetView = {
-	target: ComputeTargetView,
-	probe: SshConnectionProbeView,
-	project_selected: boolean,
-};
+export type EnvironmentHealthStatusViewV1 = "unbound" | "realized" | "restart_required" | "observation_required" | "blocked_by_incident";
 
-export type DeviceResourceView = {
-	device_id: string,
-	host_name: string,
-	operating_system: string,
-	architecture: string,
+export type EnvironmentHealthViewV1 = {
+	status: EnvironmentHealthStatusViewV1,
+	binding: EnvironmentBindingViewV1 | null,
+	workspace: EnvironmentWorkspaceViewV1,
+	pending_plan: EnvironmentPlanReviewViewV1 | null,
+	latest_operation: EnvironmentOperationViewV1 | null,
+	incidents: EnvironmentIncidentViewV1[],
+	limitations: string[],
 	observed_at: string,
-	cpu_logical_count: number,
-	metrics: ResourceMetricView[],
 };
 
-export type EnvironmentOperationRequestSummary = {
-	request_id: string,
-	turn_id: string | null,
-	source: string,
-	request_name: string,
-	status: string,
-	decision: string | null,
-	reason: string | null,
-	project_root: string,
-	arguments_json: string,
-	preview_json: string,
-	preview_sha256: string,
-	workspace_id: string | null,
-	state_revision: number | null,
-	project_revision: number | null,
-	before_snapshot_id: string | null,
-	run_id: string | null,
-	requested_at: string,
-	responded_at: string | null,
-	completed_at: string | null,
-	terminal_outcome: string | null,
-};
-
-export type InstalledPackageInventory = unknown;
-
-export type ResourceGovernanceThresholdsView = {
-	cpu_warning_basis_points: number,
-	cpu_critical_basis_points: number,
-	memory_available_warning_basis_points: number,
-	memory_available_critical_basis_points: number,
-	disk_available_warning_basis_points: number,
-	disk_available_critical_basis_points: number,
-	gpu_warning_basis_points: number,
-	gpu_critical_basis_points: number,
-};
-
-export type ResourceMetricView = {
-	resource_id: string,
+export type EnvironmentIncidentViewV1 = {
+	incident_id: string,
 	kind: string,
-	label: string,
-	unit: string,
-	capacity: string | null,
-	available: string | null,
-	utilization_basis_points: number | null,
-	pressure: string,
+	subject: string,
 	detail: string,
-};
-
-export type ResourceMonitorView = {
 	status: string,
-	selected_target_id: string,
-	observed_at: string,
-	configured: boolean,
-	rho_toml_sha256: string | null,
-	target_registry_sha256: string | null,
-	thresholds: ResourceGovernanceThresholdsView,
-	targets: TargetResourceView[],
-	total_targets: number,
-	truncated: boolean,
+	detected_at: string,
+	resolved_at: string | null,
 };
 
-export type SlurmPartitionView = {
-	partition: string,
-	available: string,
-	nodes: string,
-	gres: string,
-	cpus: string,
-};
-
-export type SshConnectionProbeRequest = {
-	host: string,
-	port: number,
-	username: string,
-	password: string | null,
-	identity_file: string | null,
-	confirmed_fingerprint: string | null,
-};
-
-export type SshConnectionProbeView = {
+export type EnvironmentOperationViewV1 = {
+	operation_id: string,
 	status: string,
-	fingerprints: SshHostFingerprintView[],
-	authenticated: boolean,
-	host_name: string | null,
-	home_directory: string | null,
-	slurm_version: string | null,
-	partitions: SlurmPartitionView[],
-	helper_available: boolean,
-	message: string,
+	reason: string | null,
+	checkpoints: EnvironmentCheckpointViewV1[],
+	plan: EnvironmentPlanReviewViewV1,
+	created_at: string,
+	updated_at: string,
 };
 
-export type SshHostFingerprintView = {
-	algorithm: string,
-	sha256: string,
+export type EnvironmentPlanActionViewV1 = {
+	package: string,
+	action: string,
+	version: string | null,
+	source: string,
+	artifact_digest: string,
+	artifact_byte_size: number,
 };
 
-export type TargetResourceView = {
-	target_id: string,
-	selected: boolean,
-	host_kind: string,
-	isolation_kind: string,
-	environment_identity: string,
-	capabilities: string[],
-	status: string,
-	admission_allowed: boolean,
-	governance_reasons: string[],
-	device: DeviceResourceView | null,
-	error: string | null,
+export type EnvironmentPlanReviewViewV1 = {
+	plan_id: string,
+	intent: string,
+	environment_id: string,
+	expected_desired_revision: string,
+	expected_realization_revision: string,
+	runtime_id: string,
+	runtime_version: string,
+	runtime_ownership: string,
+	runtime_support_tier: string,
+	library_stack_digest: string,
+	target_library_kind: string,
+	target_library_path: string,
+	package_actions: EnvironmentPlanActionViewV1[],
+	native_actions: string[],
+	toolchain_actions: string[],
+	network_intents: string[],
+	secret_requirements: string[],
+	verification_probes: string[],
+	restart_required: boolean,
+	expires_at: string,
 };
 
-export type ToolchainDoctorCheckView = {
-	id: string,
-	status: string,
-	detail: string,
-};
-
-export type ToolchainDoctorView = {
-	status: string,
-	configured: boolean,
-	rho_toml_sha256: string | null,
-	target_id: string,
-	target_registry_sha256: string | null,
-	host_kind: string,
-	isolation_kind: string,
-	r_version: string | null,
-	rscript: string | null,
-	python_version: string | null,
-	python: string | null,
-	checks: ToolchainDoctorCheckView[],
+export type EnvironmentWorkspaceViewV1 = {
+	phase: string,
+	workspace_id: string | null,
+	kernel_instance_id: string | null,
+	active_receipt_digest: string | null,
+	pending_receipt_digest: string | null,
+	restart_required: boolean,
+	reobserve_required: boolean,
 };

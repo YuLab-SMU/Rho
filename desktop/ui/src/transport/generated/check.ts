@@ -25,8 +25,6 @@ export type CheckCoverageV1 = {
 	plugin_rule_failures: number,
 };
 
-export type CheckEvidenceV1 = { kind: "source_range"; path: string; line: number; column: number | null; excerpt: string | null } | { kind: "project_file"; path: string } | { kind: "run_ref"; run_id: string } | { kind: "environment_ref"; snapshot_id: string } | { kind: "note"; text: string };
-
 export type CheckFindingV1 = {
 	rule_id: CheckRuleId,
 	rule_version: number,
@@ -37,7 +35,7 @@ export type CheckFindingV1 = {
 	title: string,
 	summary: string,
 	remediation: string,
-	evidence: CheckEvidenceV1[],
+	references: FindingReferenceV1[],
 	limitations: string[],
 };
 
@@ -101,6 +99,8 @@ export type CheckSnapshotFileV1 = {
 };
 
 export type CheckSnapshotId = string;
+
+export type FindingReferenceV1 = { kind: "source_range"; path: string; line: number; column: number | null; excerpt: string | null } | { kind: "project_file"; path: string } | { kind: "run_ref"; run_id: string } | { kind: "environment_ref"; snapshot_id: string } | { kind: "note"; text: string };
 
 export type PackageDigest = string;
 

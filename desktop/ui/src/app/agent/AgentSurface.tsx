@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type {
   AgentConversationSummary,
@@ -13,19 +13,35 @@ import type {
   RuntimeOutputReference,
   RunAgentRequest,
   SurfaceInstance,
-  UiKernelTransport,
-} from "../transport";
-import { computeLineDiff } from "./agent/diff";
-import { announceAgentSettingsChanged, subscribeAgentSettingsChanged } from "./agent/settings-events";
+} from "../../transport";
+import { AgentEvidencePanel } from "./AgentEvidencePanel";
+import { AgentEnvironmentPanel } from "./AgentEnvironmentPanel";
+import { AgentFinalAnswer } from "./AgentFinalAnswer";
+import { AgentActivity } from "./AgentActivity";
+import { AgentApprovalPanel } from "./AgentApprovalPanel";
+import { AgentCurrentWork, AgentRunningRow } from "./AgentCurrentWork";
+import { AgentGoal } from "./AgentGoal";
+import {
+  AgentProposalDiff,
+  agentFileProposalOutcome,
+  parseAgentFileProposal,
+  type AgentFileProposal,
+  type AgentFileProposalReview,
+  type AgentFileUndoState,
+  type AgentProposalDiffState,
+} from "./AgentFileProposal";
+import type { AgentEvidencePorts } from "../workbench/evidenceGraphPorts";
+import type { AgentCorePorts, AgentEnvironmentPort } from "../workbench/agentPorts";
+import { announceAgentSettingsChanged, subscribeAgentSettingsChanged } from "./settings-events";
 import {
   agentStudioPresentationKey,
   parseAgentStudioPresentation,
   type AgentStudioPresentation,
-} from "./agent/studio-presentation";
+} from "./studio-presentation";
 
-import "../styles/agent-surface.css";
+import "../../styles/agent-surface.css";
 
-export interface AgentSurfaceViewState {
+export interface AgentSurfaceState {
   readonly conversation_id: string | null;
   readonly mode: AgentMode;
   readonly composer: string;
@@ -37,25 +53,11 @@ export interface AgentSurfaceViewState {
   >>;
 }
 
-export interface AgentFileProposal {
-  readonly path: string;
-  readonly operation: "replace_selection" | "insert_at_cursor" | "append" | "create";
-  readonly content: string;
-}
-
-export interface AgentFileUndoState {
-  readonly turn_id: string;
-  readonly proposal_event_id: number;
-  readonly path: string;
-  readonly expected_after_sha256: string;
-  readonly before_content: string;
-  readonly created: boolean;
-}
-
-export interface AgentFileProposalReview {
-  readonly before_content: string;
-  readonly expected_disk_sha256: string | null;
-}
+export type {
+  AgentFileProposal,
+  AgentFileProposalReview,
+  AgentFileUndoState,
+} from "./AgentFileProposal";
 
 interface AgentQueueItem {
   readonly id: string;
@@ -64,15 +66,6 @@ interface AgentQueueItem {
   readonly request: RunAgentRequest;
   readonly queued_at: string;
 }
-
-type AgentProposalDiffState =
-  | { readonly status: "loading" }
-  | { readonly status: "unavailable" }
-  | {
-      readonly status: "ready";
-      readonly before: string;
-      readonly expected_disk_sha256: string | null;
-    };
 
 interface AgentRefreshToken {
   readonly activationVersion: number;
@@ -87,46 +80,6 @@ interface AgentRefreshOperation {
 interface AgentConversationValidation {
   readonly conversationId: string | null;
   readonly status: "pending" | "available" | "unavailable";
-}
-
-function parseAgentFileProposal(event: AgentTurnDetail["events"][number]): AgentFileProposal | null {
-  if (event.event_type !== "tool.call_completed" || event.tool !== "propose_file_edit") return null;
-  const parse = (value: string | null) => {
-    if (value == null) return null;
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return typeof parsed === "object" && parsed != null ? parsed as Record<string, unknown> : null;
-    } catch { return null; }
-  };
-  let proposal = parse(event.body);
-  if (proposal?.kind !== "rho.file_edit_proposal") {
-    const details = parse(event.details_json);
-    const argumentsValue = details?.success === true && typeof details.arguments === "object" && details.arguments != null
-      ? details.arguments as Record<string, unknown>
-      : null;
-    proposal = argumentsValue == null ? null : { kind: "rho.file_edit_proposal", ...argumentsValue };
-  }
-  const operation = proposal?.operation;
-  if (
-    typeof proposal?.path !== "string" || typeof proposal.content !== "string" ||
-    (operation !== "replace_selection" && operation !== "insert_at_cursor" && operation !== "append" && operation !== "create")
-  ) return null;
-  return { path: proposal.path, operation, content: proposal.content };
-}
-
-function agentFileProposalOutcome(detail: AgentTurnDetail, proposalEventId: number) {
-  for (const event of detail.events) {
-    if (!event.event_type.startsWith("file_edit.")) continue;
-    try {
-      const envelope = JSON.parse(event.details_json) as Record<string, unknown>;
-      if (Number(envelope.proposal_event_id) !== proposalEventId) continue;
-      if (event.event_type === "file_edit.applied") return "applied";
-      if (event.event_type === "file_edit.undone") return "undone";
-      if (event.event_type.includes("stale")) return "stale";
-      if (event.event_type.includes("failed") || event.event_type.includes("cancelled")) return "not applied";
-    } catch { /* malformed diagnostics stay visible as raw events */ }
-  }
-  return null;
 }
 
 function studioPresentationStates(value: unknown): Readonly<Record<
@@ -145,7 +98,7 @@ function studioPresentationStates(value: unknown): Readonly<Record<
   }));
 }
 
-function initialAgentSurfaceState(instance: SurfaceInstance): AgentSurfaceViewState {
+function initialAgentSurfaceState(instance: SurfaceInstance): AgentSurfaceState {
   const candidate = typeof instance.view_state === "object" && instance.view_state != null
     ? instance.view_state as Record<string, unknown>
     : {};
@@ -202,78 +155,6 @@ const AGENT_SUGGESTIONS: readonly string[] = [
   "Draft a reproducible analysis plan",
 ];
 
-function AgentRunningRow({ status, startedAt, disabled, onStop }: {
-  readonly status: AgentTurnSummary["status"];
-  readonly startedAt: string;
-  readonly disabled: boolean;
-  readonly onStop: () => void;
-}) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const started = Date.parse(startedAt);
-  const seconds = Number.isFinite(started) ? Math.max(0, Math.floor((now - started) / 1000)) : 0;
-  const label = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-  return (
-    <div className="rho-agent-running" role="status">
-      <span className="rho-status-dot rho-status-degraded" aria-hidden="true" />
-      <span className="rho-agent-running-label">
-        {status === "waiting" ? "Waiting for a decision or response" : "Agent running"} · {label}
-      </span>
-      <button type="button" disabled={disabled} onClick={onStop}>Stop</button>
-    </div>
-  );
-}
-
-function AgentLineDiff({ before, after }: {
-  readonly before: string;
-  readonly after: string;
-}) {
-  const diff = useMemo(() => computeLineDiff(before, after), [before, after]);
-  if (diff == null) return (<>
-    <p className="rho-agent-diff-note">This file is too large to diff here; showing the proposed content.</p>
-    <pre>{after}</pre>
-  </>);
-  if (diff.hunks.length === 0) return <p className="rho-agent-diff-note">No line changes.</p>;
-  return (
-    <div className="rho-agent-diff" role="group" aria-label="Proposed diff">
-      <div className="rho-agent-diff-summary">+{diff.additions} −{diff.removals}</div>
-      {diff.hunks.map((hunk, hunkIndex) => (
-        <div className="rho-agent-diff-hunk" key={hunkIndex}>
-          {hunkIndex > 0 && <div className="rho-agent-diff-gap" aria-hidden="true">⋮</div>}
-          <div className="rho-agent-diff-hunk-header">@@ -{hunk.beforeStart} +{hunk.afterStart} @@</div>
-          <div className="rho-agent-diff-lines">{hunk.lines.map((line, lineIndex) => (
-            <div className={`rho-agent-diff-line rho-agent-diff-${line.kind}`} key={lineIndex}>
-              <span className="rho-agent-diff-sign" aria-hidden="true">{line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}</span>
-              <span className="rho-agent-diff-text">{line.text}</span>
-            </div>
-          ))}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function AgentProposalDiff({ proposal, state }: {
-  readonly proposal: AgentFileProposal;
-  readonly state: AgentProposalDiffState | undefined;
-}) {
-  if (proposal.operation !== "append" && proposal.operation !== "create") return (<>
-    <p className="rho-agent-diff-note">This edit depends on the current editor selection, so only the proposed content can be shown.</p>
-    <pre>{proposal.content}</pre>
-  </>);
-  if (state == null) return <pre>{proposal.content}</pre>;
-  if (state.status === "loading") return <p className="rho-agent-diff-note">Loading current content…</p>;
-  if (state.status === "unavailable") return (<>
-    <p className="rho-agent-diff-note">Current content is unavailable; showing the proposed content.</p>
-    <pre>{proposal.content}</pre>
-  </>);
-  const after = proposal.operation === "append" ? state.before + proposal.content : proposal.content;
-  return <AgentLineDiff before={state.before} after={after} />;
-}
-
 const POSTURE_OPTIONS = [{
   id: "ask",
   label: "Ask every time",
@@ -283,9 +164,11 @@ const POSTURE_OPTIONS = [{
   label: "Auto-approve project tools for this conversation",
   hint: "The Broker still evaluates every effect and asks whenever policy requires it.",
 }] as const;
-export function AgentSurfaceView({
+export function AgentSurface({
   instance,
   transport,
+  evidencePorts,
+  environmentPort,
   health,
   createConversation,
   runConversation,
@@ -300,17 +183,19 @@ export function AgentSurfaceView({
   openModelSettings,
 }: {
   readonly instance: SurfaceInstance;
-  readonly transport: UiKernelTransport;
+  readonly transport: AgentCorePorts;
+  readonly evidencePorts: AgentEvidencePorts;
+  readonly environmentPort: AgentEnvironmentPort;
   readonly health: { readonly state: string; readonly label: string; readonly detail: string | null } | null;
   readonly createConversation: (
-    current: AgentSurfaceViewState,
-  ) => Promise<AgentSurfaceViewState>;
+    current: AgentSurfaceState,
+  ) => Promise<AgentSurfaceState>;
   readonly runConversation: (
-    current: AgentSurfaceViewState,
+    current: AgentSurfaceState,
     request: RunAgentRequest,
     onAccepted?: (conversationId: string) => void,
-  ) => Promise<AgentSurfaceViewState>;
-  readonly persist: (viewState: AgentSurfaceViewState) => Promise<void>;
+  ) => Promise<AgentSurfaceState>;
+  readonly persist: (viewState: AgentSurfaceState) => Promise<void>;
   readonly pinTask: (turn: AgentTurnSummary) => Promise<void>;
   readonly presentInStudio: (
     turn: AgentTurnSummary,
@@ -430,7 +315,7 @@ export function AgentSurfaceView({
   );
 
   const buildContextPlanKey = (
-    state: AgentSurfaceViewState,
+    state: AgentSurfaceState,
     runtimeSnapshot: RuntimeOutputReference | null,
   ) => JSON.stringify([
     state.composer.trim(),
@@ -713,7 +598,7 @@ export function AgentSurfaceView({
 
   const viewStateWriteBlocked = busy || contextReviewBusy;
   const commitView = (
-    update: (current: AgentSurfaceViewState) => AgentSurfaceViewState,
+    update: (current: AgentSurfaceState) => AgentSurfaceState,
     durable = true,
   ) => {
     if (viewStateWriteBlocked || mutationRef.current != null) return;
@@ -795,7 +680,7 @@ export function AgentSurfaceView({
       endMutation(mutation);
     }
   };
-  const conversationRequestIsAvailable = (state: AgentSurfaceViewState) => {
+  const conversationRequestIsAvailable = (state: AgentSurfaceState) => {
     const validation = conversationValidationRef.current;
     return validation.status === "available"
       && validation.conversationId === state.conversation_id;
@@ -935,7 +820,7 @@ export function AgentSurfaceView({
     presentationInFlightRef.current.add(key);
     const storeStatus = async (status: "presenting" | "presented" | "failed") => {
       const current = viewRef.current;
-      const next: AgentSurfaceViewState = {
+      const next: AgentSurfaceState = {
         ...current,
         studio_presentations: {
           ...(current.studio_presentations ?? {}),
@@ -1404,6 +1289,7 @@ export function AgentSurfaceView({
           <div><dt>State</dt><dd>{activeTurn == null ? "Ready" : agentTurnStatusLabel(activeTurn.status)}</dd></div>
         </dl>
       </section>
+      <AgentEnvironmentPanel port={environmentPort} reportError={reportError} />
       {displayMode === "activity" && activeTurn != null && stopActiveTurn != null && (
         <AgentRunningRow
           status={activeTurn.status}
@@ -1414,10 +1300,7 @@ export function AgentSurfaceView({
       )}
       {displayMode !== "composer" && (
         <div className="rho-agent-timeline" aria-busy={loading}>
-          <header className="rho-agent-current-work-header">
-            <div><span className="rho-agent-section-label">Current Work</span><strong>{activeTurn == null ? "Conversation" : activeTurn.prompt_preview}</strong></div>
-            <span>{turns.length} {turns.length === 1 ? "turn" : "turns"}</span>
-          </header>
+          <AgentCurrentWork prompt={activeTurn?.prompt_preview ?? null} turnCount={turns.length} />
           {loading && <p className="rho-agent-loading">Loading conversation…</p>}
           {!loading && refreshError != null && <div className="rho-agent-empty" role="alert">
             <strong>Conversation refresh failed</strong>
@@ -1478,11 +1361,16 @@ export function AgentSurfaceView({
                     <div><span>Status</span><strong>{turn.status}</strong><span>Model</span><code>{turn.model}</code></div>
                   </details>
                 </header>
-                <div className="rho-agent-goal">
-                  <span className="rho-agent-section-label">Goal</span>
-                  <p className="rho-agent-prompt">{turn.prompt_preview}</p>
-                </div>
-                {turn.final_message != null && <p className="rho-agent-answer">{turn.final_message}</p>}
+                <AgentGoal prompt={turn.prompt_preview} />
+                {turn.final_message != null && <>
+                  <AgentFinalAnswer answer={turn.final_message} />
+                  <AgentEvidencePanel
+                    turnId={turn.turn_id}
+                    finalAnswer={turn.final_message}
+                    ports={evidencePorts}
+                    reportError={reportError}
+                  />
+                </>}
                 {turn.error_message != null && (
                   <div className="rho-agent-turn-failure" role="alert">
                     <strong>{turn.status === "cancelled"
@@ -1494,19 +1382,15 @@ export function AgentSurfaceView({
                 {turn.status === "cancelled" && turn.error_message == null && (
                   <p className="rho-agent-turn-cancelled">This turn was cancelled before completion. Retry runs it again.</p>
                 )}
-                {waitingApprovals.map((approval) => (
-                  <section className="rho-agent-approval" key={approval.request_id}>
-                    <header className="rho-agent-decision-header">
-                      <span className="rho-agent-decision-kind">Approval required</span>
-                      <strong>{approval.tool}</strong>
-                    </header>
-                    <pre>{approval.code ?? approval.arguments_json}</pre>
-                    <div className="rho-agent-decision-actions">
-                      <button type="button" disabled={turnMutationRenderBlocked(turn)} onClick={() => void runAndRefresh(turn, () => transport.respondAgentApproval({ request_id: approval.request_id, decision: "approve", reason: null }))}>Approve</button>
-                      <button type="button" disabled={turnMutationRenderBlocked(turn)} onClick={() => void runAndRefresh(turn, () => transport.respondAgentApproval({ request_id: approval.request_id, decision: "reject", reason: "Rejected in Agent Surface" }))}>Reject</button>
-                    </div>
-                  </section>
-                ))}
+                <AgentApprovalPanel
+                  approvals={waitingApprovals}
+                  disabled={turnMutationRenderBlocked(turn)}
+                  onDecision={(approval, decision) => void runAndRefresh(turn, () => transport.respondAgentApproval({
+                    request_id: approval.request_id,
+                    decision,
+                    reason: decision === "reject" ? "Rejected in Agent Surface" : null,
+                  }))}
+                />
                 {presentations.map(({ event, presentation }) => {
                   const key = agentStudioPresentationKey(turn.turn_id, event.id);
                   const status = view.studio_presentations?.[key];
@@ -1644,25 +1528,7 @@ export function AgentSurfaceView({
                     </section>
                   );
                 })}
-                {(activityEvents.length > 0 || contextItems.length > 0) && (
-                  <div className="rho-agent-activity">
-                    {activityEvents.map((event) => event.code != null ? (
-                      <details className="rho-agent-code-review" key={event.id}>
-                        <summary>{event.title}</summary><pre>{event.code}</pre>
-                      </details>
-                    ) : (
-                      <div className="rho-agent-activity-row" key={event.id}>{event.title}</div>
-                    ))}
-                    {contextItems.length > 0 && <details className="rho-agent-context-used">
-                      <summary>Context used · {contextItems.length} {contextItems.length === 1 ? "source" : "sources"}</summary>
-                      <ol>{contextItems.map((item) => <li key={`${item.ordinal}:${item.source_kind}:${item.source_id ?? "current"}`}>
-                        <div><strong>{item.source_kind.replaceAll("_", " ")}</strong><span>{item.disposition}</span></div>
-                        {item.source_id != null && <code>{item.source_id}</code>}
-                        <small>{item.included_bytes.toLocaleString()} of {item.original_bytes.toLocaleString()} bytes · {item.trust_class}</small>
-                      </li>)}</ol>
-                    </details>}
-                  </div>
-                )}
+                <AgentActivity events={activityEvents} contextItems={contextItems} />
                 <footer>
                   <button type="button" disabled={turnMutationRenderBlocked(turn)} onClick={() => void pinTurn(turn)}>Pin to Vibe</button>
                   {(turn.status === "failed" || turn.status === "cancelled") && <button type="button" disabled={turnMutationRenderBlocked(turn)} onClick={() => void runAndRefresh(turn, () => transport.retryAgentTurn(turn.turn_id))}>Retry</button>}

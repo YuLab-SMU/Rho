@@ -1,5 +1,5 @@
 import type { CheckResult } from "../../../transport/check";
-import type { EvidenceClaim } from "../../../transport/evidence";
+import type { EvidenceNode } from "../../../transport/evidence-graph";
 import type {
   ArtifactRecordSummary,
   PlotArtifactSummary,
@@ -331,8 +331,8 @@ export function createVerificationAdapter(port: VerificationReadPort): Verificat
             scope,
             evidenceReferences,
             (ids) => port.readEvidenceClaims(scope, ids),
-            (record: EvidenceClaim) => record.claim_id,
-            (record: EvidenceClaim) => record.project_root,
+            (record: EvidenceNode) => record.node_id,
+            () => null,
           ),
         ] as const);
 

@@ -1,0 +1,111 @@
+.rho-authority-surface {
+  display: grid;
+  gap: var(--rho-space-3);
+  min-block-size: 0;
+  padding: var(--rho-space-3);
+  overflow: auto;
+}
+
+.rho-authority-surface > header,
+.rho-authority-records article {
+  display: flex;
+  align-items: center;
+  gap: var(--rho-space-2);
+}
+
+.rho-authority-surface > header { justify-content: space-between; }
+.rho-authority-records { display: grid; gap: var(--rho-space-1); }
+.rho-authority-records article {
+  padding: var(--rho-space-2) var(--rho-space-3);
+  border-block-end: 1px solid var(--rho-line);
+}
+.rho-authority-records article strong { flex: 1; overflow-wrap: anywhere; }
+.rho-authority-records article span,
+.rho-authority-records article small { color: var(--rho-muted); }
+
+.rho-environment-health {
+  display: grid;
+  gap: var(--rho-space-4);
+  min-block-size: 0;
+  padding: var(--rho-space-4);
+  overflow: auto;
+}
+
+.rho-environment-health > header,
+.rho-environment-authority-card > header,
+.rho-environment-plan-review > header,
+.rho-environment-operation-activity > header,
+.rho-environment-incidents article > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rho-space-3);
+}
+
+.rho-environment-authority-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--rho-space-3);
+}
+
+.rho-environment-authority-card,
+.rho-environment-plan-review,
+.rho-environment-operation-activity,
+.rho-environment-incidents {
+  display: grid;
+  gap: var(--rho-space-3);
+  padding: var(--rho-space-3);
+  border: 1px solid var(--rho-line);
+  border-radius: var(--rho-radius-2);
+  background: var(--rho-panel);
+}
+
+.rho-environment-authority-card dl,
+.rho-environment-plan-review dl {
+  display: grid;
+  gap: var(--rho-space-2);
+  margin: 0;
+}
+
+.rho-environment-authority-card dl > div,
+.rho-environment-plan-review dl > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.35fr) minmax(0, 1fr);
+  gap: var(--rho-space-2);
+}
+
+.rho-environment-authority-card dt,
+.rho-environment-plan-review dt,
+.rho-environment-authority-card small,
+.rho-environment-plan-runtime span,
+.rho-environment-plan-review li span,
+.rho-environment-plan-review li small,
+.rho-environment-operation-activity time {
+  color: var(--rho-muted);
+}
+
+.rho-environment-authority-card dd,
+.rho-environment-plan-review dd { margin: 0; min-inline-size: 0; }
+.rho-environment-authority-card code,
+.rho-environment-plan-review code,
+.rho-environment-operation-activity code { overflow-wrap: anywhere; }
+
+.rho-environment-plan-runtime,
+.rho-environment-plan-review li,
+.rho-environment-operation-activity li {
+  display: grid;
+  gap: var(--rho-space-1);
+}
+
+.rho-environment-plan-review ul,
+.rho-environment-operation-activity ol {
+  display: grid;
+  gap: var(--rho-space-2);
+  margin: 0;
+  padding-inline-start: var(--rho-space-5);
+}
+
+.rho-environment-incidents article {
+  padding-block-start: var(--rho-space-2);
+  border-block-start: 1px solid var(--rho-line);
+}

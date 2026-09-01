@@ -20,7 +20,7 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     exclude: [
       "src/app/App.test.tsx",
-      "src/app/AgentSurfaceView.test.tsx",
+      "src/app/agent/AgentSurface.test.tsx",
       "src/acceptance/**",
     ],
     restoreMocks: true,

@@ -241,7 +241,8 @@ describe("Runtime History exact-target navigation", () => {
 
     expect(host.querySelector("[data-domain-id='run:legacy-exact']")?.getAttribute("aria-current"))
       .toBe("true");
-    expect(host.textContent).toContain("legacy_exact_result()");
+    expect(host.textContent).toContain("This record predates the Runtime output journal");
+    expect(host.textContent).not.toContain("legacy_exact_result()");
     expect(host.textContent).not.toContain("latest_local_result()");
   });
 

@@ -818,7 +818,7 @@ describe("UI Kernel transport and external store", () => {
     ]);
   });
 
-  it("projects current and historical Plot records without inline image payloads", async () => {
+  it("reads historical Plot records through the typed History facet instead of a generic Surface", async () => {
     const calls: Array<{ readonly command: string; readonly args?: Record<string, unknown> }> = [];
     const transport = createTauriUiKernelTransport(async <T,>(command: string, args?: Record<string, unknown>) => {
       calls.push(args === undefined ? { command } : { command, args });
@@ -834,35 +834,17 @@ describe("UI Kernel transport and external store", () => {
       }] as T;
     }, async () => () => undefined);
 
-    const plots = await transport.loadDomainSurface("rho.plots");
+    const plots = await transport.listPlotArtifacts(100, false);
     expect(calls).toEqual([{
       command: "list_plot_artifacts",
       args: { limit: 100, sessionOnly: false },
     }]);
-    expect(plots.items).toHaveLength(1);
-    expect(plots.items[0]?.id).toBe("plot:exact-preview");
-    expect(plots.items[0]?.detail).not.toContain("payload_json");
-    expect(plots.items[0]?.detail).not.toContain("AAAA");
-    expect(JSON.parse(plots.items[0]?.detail ?? "{}")).toMatchObject({
+    expect(plots).toHaveLength(1);
+    expect(plots[0]).toMatchObject({
       plot_id: "plot:exact-preview",
       run_id: "run:different-identity",
       media_type: "image/png",
     });
-  });
-
-  it("keeps surface identities ahead of cross-reference identities", async () => {
-    const transport = createTauriUiKernelTransport(async <T,>(command: string) => {
-      if (command !== "list_evidence_claims") throw new Error(`unexpected command ${command}`);
-      return [{
-        claim_id: "claim:primary-card",
-        artifact_id: "artifact:cross-reference",
-        summary: "Claim linked to an artifact",
-      }] as T;
-    }, async () => () => undefined);
-
-    const evidence = await transport.loadDomainSurface("rho.evidence");
-    expect(evidence.items).toHaveLength(1);
-    expect(evidence.items[0]?.id).toBe("claim:primary-card");
   });
 
   it("keeps startup recovery actionable and never enters an unreconciled workspace", async () => {
@@ -1111,7 +1093,7 @@ describe("UI Kernel transport and external store", () => {
         execution: { status: "admitted" },
       });
       expect(settled).toBe(true);
-      expect((await transport.loadDomainSurface("rho.runs")).items[0]?.title).toBe("Console command");
+      expect((await transport.listRuntimeExecutions())[0]?.submitted_code).toBe("1 + 1");
     } finally {
       vi.useRealTimers();
     }

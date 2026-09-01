@@ -1,5 +1,5 @@
 import type { CheckResult } from "../../../transport/check";
-import type { EvidenceClaim } from "../../../transport/evidence";
+import type { EvidenceNode } from "../../../transport/evidence-graph";
 import type {
   ArtifactRecordSummary,
   PlotArtifactSummary,
@@ -115,7 +115,7 @@ export interface VerificationSnapshot extends VerificationScope {
   readonly plots: VerificationSourceProjection<VerificationPlotRecord>;
   readonly checks: VerificationSourceProjection<VerificationCheckRecord>;
   readonly evidence: VerificationSourceProjection<
-    VerificationResolvedRecord<EvidenceClaim>
+    VerificationResolvedRecord<EvidenceNode>
   >;
   readonly stale: boolean;
 }

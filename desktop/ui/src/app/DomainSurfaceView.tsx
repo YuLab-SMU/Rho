@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 
 import type {
   DomainSurfaceData,
-  RuntimeOutputReference,
   SurfaceInstance,
   UiKernelTransport,
 } from "../transport";
@@ -14,26 +13,19 @@ import {
   domainPresentationKind,
   domainSummary,
 } from "./domain-presentation";
-import { PlotThumbnail } from "./PlotThumbnail";
-import { RuntimeHistory } from "./RuntimeHistory";
 import { SurfaceTaskState } from "./SurfaceTaskState";
 import { workbenchFailureMessage } from "./workbench-failure";
 
 export const DOMAIN_SURFACE_IDS = new Set([
-  "rho.evidence", "rho.git", "rho.runs",
-  "rho.problems", "rho.plots", "rho.logs", "rho.render-jobs", "rho.help",
-]);
-const EXACT_TARGET_SURFACE_IDS = new Set([
-  "rho.runs", "rho.plots", "rho.evidence",
+  "rho.git",
+  "rho.logs", "rho.help",
 ]);
 interface DomainSurfaceViewProps {
   readonly instance: SurfaceInstance;
   readonly transport: UiKernelTransport;
   readonly persist: (viewState: unknown) => Promise<void>;
   readonly reportError: (error: unknown) => void;
-  readonly useRuntimeOutputInAgent: (reference: RuntimeOutputReference) => void;
   readonly openSurfaceById: (surfaceId: string) => void;
-  readonly openPlot: (plotId: string) => void;
 }
 
 function viewStateRecord(viewState: unknown): Readonly<Record<string, unknown>> {
@@ -47,34 +39,13 @@ function viewStateFilter(viewState: unknown): string {
   return typeof record.filter === "string" ? record.filter : "";
 }
 
-function viewStateSelectedId(surfaceId: string, viewState: unknown): string | null {
-  if (!EXACT_TARGET_SURFACE_IDS.has(surfaceId)) return null;
-  const selectedId = viewStateRecord(viewState).selected_id;
-  return typeof selectedId === "string" && selectedId.trim().length > 0 ? selectedId : null;
-}
-
 function viewStateWithFilter(viewState: unknown, filter: string): Readonly<Record<string, unknown>> {
   return { ...viewStateRecord(viewState), filter };
 }
 
 export function DomainSurfaceView(props: DomainSurfaceViewProps) {
-  const { instance, transport, persist, reportError, useRuntimeOutputInAgent, openPlot } = props;
-  const initialFilter = viewStateFilter(instance.view_state);
-  const selectedId = viewStateSelectedId(instance.surface_id, instance.view_state);
-  if (instance.surface_id === "rho.runs") {
-    return <RuntimeHistory
-      key={`${instance.project_id}:${selectedId ?? "browse"}`}
-      transport={transport}
-      initialFilter={initialFilter}
-      selectedId={selectedId}
-      persistFilter={(nextFilter) => persist(viewStateWithFilter(instance.view_state, nextFilter))}
-      reportError={reportError}
-      useInAgent={useRuntimeOutputInAgent}
-      openPlot={openPlot}
-    />;
-  }
   return <GenericDomainSurfaceView
-    key={`${instance.project_id}:${instance.surface_id}:${selectedId ?? "browse"}`}
+    key={`${props.instance.project_id}:${props.instance.surface_id}`}
     {...props}
   />;
 }
@@ -86,13 +57,11 @@ function GenericDomainSurfaceView({
   reportError,
 }: DomainSurfaceViewProps) {
   const initialFilter = viewStateFilter(instance.view_state);
-  const selectedId = viewStateSelectedId(instance.surface_id, instance.view_state);
   const [filter, setFilter] = useState(initialFilter);
   const [searchOpen, setSearchOpen] = useState(Boolean(initialFilter) ||
     (instance.surface_id === "rho.help" && instance.mode_id === "search"));
   const [data, setData] = useState<DomainSurfaceData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,19 +79,10 @@ function GenericDomainSurfaceView({
     return transport.subscribeInvalidated(() => void load());
   }, [load, transport]);
   const modeItems = domainItemsForMode(instance.surface_id, instance.mode_id, data?.items ?? []);
-  const exactItem = selectedId == null
-    ? null
-    : (data?.items ?? []).find((item) => item.id === selectedId) ?? null;
-  const exactPlotFallback = instance.surface_id === "rho.plots"
-    && selectedId != null && !loading && data != null && exactItem == null;
-  const exactUnavailable = selectedId != null && !loading && data != null
-    && exactItem == null && !exactPlotFallback;
-  const items = selectedId == null
-    ? modeItems.filter((item) => domainMatches(instance.surface_id, item, filter))
-    : exactItem == null ? [] : [exactItem];
+  const items = modeItems.filter((item) => domainMatches(instance.surface_id, item, filter));
   const summary = domainSummary(instance.surface_id, modeItems);
   const kind = domainPresentationKind(instance.surface_id);
-  const strip = instance.surface_id === "rho.logs" || instance.surface_id === "rho.problems";
+  const strip = instance.surface_id === "rho.logs";
   const closeSearch = () => {
     setFilter("");
     setSearchOpen(false);
@@ -170,29 +130,13 @@ function GenericDomainSurfaceView({
       </SurfaceTaskState>}
       {error == null && <div className="rho-domain-records" aria-busy={loading}>
         {loading && data == null && <SurfaceTaskState tone="loading" title="Loading this view…" detail="Reading the current project records." role="status" busy />}
-        {exactUnavailable && <SurfaceTaskState
-          tone="empty"
-          title="Exact target unavailable"
-          detail="The referenced record is not available in this project. No substitute was selected."
-          role="status"
-          className="rho-domain-exact-unavailable"
-        />}
-        {!loading && !exactUnavailable && !exactPlotFallback && items.length === 0 && (() => {
+        {!loading && items.length === 0 && (() => {
           const empty = domainEmptyState(instance.surface_id, Boolean(filter.trim()));
           return <SurfaceTaskState tone="empty" title={empty.title} detail={empty.detail} role="status" className="rho-domain-empty" />;
         })()}
-        {exactPlotFallback && selectedId != null && <article className="rho-domain-record rho-domain-record-ready" data-domain-id={selectedId}>
-          <PlotThumbnail plotId={selectedId} transport={transport} />
-          <span className="rho-domain-indicator rho-domain-indicator-ready" aria-hidden="true" />
-          <div className="rho-domain-record-copy"><strong>Historical plot</strong><p>Loaded from the exact durable Plot reference.</p></div>
-          <span className="rho-domain-state rho-domain-ready">ready</span>
-        </article>}
         {items.map((item) => {
           const projected = domainItemPresentation(instance.surface_id, item);
           return <article className={`rho-domain-record rho-domain-record-${projected.tone}`} data-domain-id={item.id} key={item.id}>
-            {kind === "outputs" && instance.surface_id === "rho.plots" && (
-              <PlotThumbnail plotId={item.id} transport={transport} />
-            )}
             <span className={`rho-domain-indicator rho-domain-indicator-${projected.tone}`} aria-hidden="true" />
             <div className="rho-domain-record-copy">
               <strong title={projected.title}>{projected.title}</strong>
@@ -204,12 +148,6 @@ function GenericDomainSurfaceView({
             {projected.disclosureLabel != null && projected.disclosureText != null && <details className="rho-domain-disclosure">
               <summary>{projected.disclosureLabel}</summary><pre>{projected.disclosureText}</pre>
             </details>}
-            {!strip && instance.surface_id === "rho.runs" && (projected.status === "failed" || projected.status === "cancelled") && (
-              <button type="button" className="rho-domain-row-action" disabled={busyId === item.id} onClick={() => {
-                setBusyId(item.id);
-                void transport.retryRun(item.id).then(load).catch(reportError).finally(() => setBusyId(null));
-              }}>{busyId === item.id ? "Starting…" : "Run again"}</button>
-            )}
           </article>;
         })}
       </div>}

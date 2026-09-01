@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import type { UiKernelTransport } from "../transport";
-import { defaultTransport, WorkbenchApp } from "./WorkbenchApp";
+import { defaultTransport, WorkbenchRoot } from "./workbench/WorkbenchRoot";
 import {
   createStartupController,
   StartupLedgerView,
@@ -35,7 +35,7 @@ export function App({ transport }: AppProps) {
   }, [preparation.status]);
 
   if (preparation.status === "ready") {
-    return <WorkbenchApp transport={resolvedTransport} />;
+    return <WorkbenchRoot transport={resolvedTransport} />;
   }
 
   const recoveryAction: StartupRecoveryAction | null = preparation.recovery === "choose_project"

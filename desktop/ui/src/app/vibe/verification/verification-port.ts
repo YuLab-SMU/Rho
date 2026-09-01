@@ -1,5 +1,5 @@
 import type { CheckResult } from "../../../transport/check";
-import type { EvidenceClaim } from "../../../transport/evidence";
+import type { EvidenceNode } from "../../../transport/evidence-graph";
 import type {
   ArtifactRecordSummary,
   PlotArtifactSummary,
@@ -33,7 +33,7 @@ export interface VerificationReadPort {
   readEvidenceClaims(
     scope: VerificationScope,
     claimIds: readonly string[],
-  ): Promise<readonly EvidenceClaim[]>;
+  ): Promise<readonly EvidenceNode[]>;
   readCheckResult(scope: VerificationScope, resultId: string): Promise<CheckResult>;
   readPlot(scope: VerificationScope, plotId: string): Promise<PlotImageView>;
   subscribe(listener: () => void): VerificationUnsubscribe;

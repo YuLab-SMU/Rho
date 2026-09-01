@@ -276,28 +276,18 @@
       "resource_kinds": [],
       "modes": [
         {
-          "mode_id": "toolchains",
-          "label": "Toolchains",
+          "mode_id": "health",
+          "label": "Health",
           "interaction_kind": "interactive"
         },
         {
-          "mode_id": "connections",
-          "label": "Connections",
+          "mode_id": "plans",
+          "label": "Plans",
           "interaction_kind": "interactive"
         },
         {
-          "mode_id": "resources",
-          "label": "Resources",
-          "interaction_kind": "interactive"
-        },
-        {
-          "mode_id": "packages",
-          "label": "Packages",
-          "interaction_kind": "interactive"
-        },
-        {
-          "mode_id": "requests",
-          "label": "Requests",
+          "mode_id": "activity",
+          "label": "Activity",
           "interaction_kind": "interactive"
         }
       ],
@@ -705,7 +695,7 @@
       },
       "activation_generation": 1,
       "surface_revision": 1,
-      "mode_id": "toolchains",
+      "mode_id": "health",
       "resource_binding": null,
       "runtime_binding": null,
       "view_group_id": null,
@@ -1072,6 +1062,106 @@
         },
         {
           "definition": {
+            "command_id": "rho.surface.open.approvals",
+            "label": "Open Approvals",
+            "purpose": "Open broker-owned approval receipts.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.approvals"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.artifacts",
+            "label": "Open Artifacts",
+            "purpose": "Open durable artifact authority records.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.artifacts"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.claim-trace",
+            "label": "Open Claim trace",
+            "purpose": "Open one exact claim trace when a claim reference is supplied.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.claim-trace"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.claims",
+            "label": "Open Claims",
+            "purpose": "Open draft and promoted project claims.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.claims"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
             "command_id": "rho.surface.open.console",
             "label": "Open Console",
             "purpose": "Open another Console attached explicitly to a scientific runtime.",
@@ -1122,9 +1212,9 @@
         },
         {
           "definition": {
-            "command_id": "rho.surface.open.evidence",
-            "label": "Open Evidence",
-            "purpose": "Open durable evidence and provenance.",
+            "command_id": "rho.surface.open.evidence-gaps",
+            "label": "Open Evidence gaps",
+            "purpose": "Open deterministic graph and authority reconciliation gaps.",
             "input_schema": {
               "properties": {},
               "type": "object"
@@ -1137,7 +1227,32 @@
             ],
             "origin": {
               "kind": "application",
-              "component_id": "rho.evidence"
+              "component_id": "rho.evidence-gaps"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.evidence-graph",
+            "label": "Open Evidence graph",
+            "purpose": "Open typed support, conflict, citation, and trace relationships.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.evidence-graph"
             }
           },
           "activation_generation": 1,
@@ -1188,6 +1303,31 @@
             "origin": {
               "kind": "application",
               "component_id": "rho.help"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.jobs",
+            "label": "Open Jobs",
+            "purpose": "Open typed submitted and document-render job lifecycle state.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.jobs"
             }
           },
           "activation_generation": 1,
@@ -1272,9 +1412,9 @@
         },
         {
           "definition": {
-            "command_id": "rho.surface.open.render-jobs",
-            "label": "Open Render jobs",
-            "purpose": "Open document rendering activity.",
+            "command_id": "rho.surface.open.revisions",
+            "label": "Open Revisions",
+            "purpose": "Open current project and Workspace revisions.",
             "input_schema": {
               "properties": {},
               "type": "object"
@@ -1287,7 +1427,7 @@
             ],
             "origin": {
               "kind": "application",
-              "component_id": "rho.render-jobs"
+              "component_id": "rho.revisions"
             }
           },
           "activation_generation": 1,
@@ -1707,28 +1847,18 @@
             "resource_kinds": [],
             "modes": [
               {
-                "mode_id": "toolchains",
-                "label": "Toolchains",
+                "mode_id": "health",
+                "label": "Health",
                 "interaction_kind": "interactive"
               },
               {
-                "mode_id": "connections",
-                "label": "Connections",
+                "mode_id": "plans",
+                "label": "Plans",
                 "interaction_kind": "interactive"
               },
               {
-                "mode_id": "resources",
-                "label": "Resources",
-                "interaction_kind": "interactive"
-              },
-              {
-                "mode_id": "packages",
-                "label": "Packages",
-                "interaction_kind": "interactive"
-              },
-              {
-                "mode_id": "requests",
-                "label": "Requests",
+                "mode_id": "activity",
+                "label": "Activity",
                 "interaction_kind": "interactive"
               }
             ],
@@ -2012,7 +2142,7 @@
           },
           "activation_generation": 1,
           "surface_revision": 1,
-          "mode_id": "toolchains",
+          "mode_id": "health",
           "resource_binding": null,
           "runtime_binding": null,
           "view_group_id": null,
@@ -2453,7 +2583,7 @@
             "kind": "application",
             "component_id": "rho.environment"
           },
-          "mode_id": "toolchains",
+          "mode_id": "health",
           "resource_binding": null,
           "runtime_attachment_intent": null,
           "view_group_id": null,
@@ -2715,7 +2845,7 @@
               "kind": "application",
               "component_id": "rho.environment"
             },
-            "mode_id": "toolchains",
+            "mode_id": "health",
             "resource_binding": null,
             "runtime_attachment_intent": null,
             "view_group_id": null,

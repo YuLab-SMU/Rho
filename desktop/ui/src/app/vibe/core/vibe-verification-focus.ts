@@ -28,10 +28,13 @@ function surfaceReference(
       return selectedId == null ? null : { kind: "run", id: selectedId, label: "执行记录" };
     case "rho.plots":
       return selectedId == null ? null : { kind: "plot", id: selectedId, label: "候选图形" };
-    case "rho.evidence":
-      return selectedId == null
+    case "rho.claims":
+    case "rho.claim-trace": {
+      const claimId = viewStateId(instance, "claim_id") ?? selectedId;
+      return claimId == null
         ? null
-        : { kind: "evidence", id: selectedId, label: "结构化证据记录" };
+        : { kind: "evidence", id: claimId, label: "结构化证据记录" };
+    }
     default:
       return null;
   }

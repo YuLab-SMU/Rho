@@ -25,9 +25,11 @@ describe("Vibe typed verification transport aggregation", () => {
     await expect(facets.listPlotArtifacts(100, false)).resolves.toEqual([
       expect.objectContaining({ plot_id: "plot:mock-1", project_root: "/projects/atlas-a" }),
     ]);
-    await expect(facets.listEvidenceClaims(100)).resolves.toEqual([
-      expect.objectContaining({ claim_id: "claim:1", project_root: "/projects/atlas-a" }),
-    ]);
+    await expect(facets.listClaims({ limit: 100 })).resolves.toEqual(
+      expect.objectContaining({
+        items: [expect.objectContaining({ node_id: "claim:mock-1", kind: "claim" })],
+      }),
+    );
     await expect(facets.readPlotArtifact("plot:missing")).rejects.toThrow(
       "Mock Plot artifact is unavailable",
     );
@@ -38,6 +40,15 @@ describe("Vibe typed verification transport aggregation", () => {
       void args;
       if (command === "read_plot_artifact") {
         return { plot_id: "plot:1", media_type: "image/png", data_base64: "AAAA" };
+      }
+      if (command === "evidence_list_claims") {
+        return {
+          contract: "rho.ui.evidence-graph.v1",
+          project_id: "project:test",
+          items: [],
+          next_cursor: null,
+          has_more: false,
+        };
       }
       return [];
     });
@@ -51,7 +62,7 @@ describe("Vibe typed verification transport aggregation", () => {
     await facets.listRuns(7);
     await facets.listArtifactRecords(8, false);
     await facets.listPlotArtifacts(9, false);
-    await facets.listEvidenceClaims(10);
+    await facets.listClaims({ limit: 10 });
     await facets.readPlotArtifact("plot:1");
 
     expect(invokeMock).toHaveBeenCalledWith("list_runs", { limit: 7 });
@@ -63,7 +74,9 @@ describe("Vibe typed verification transport aggregation", () => {
       limit: 9,
       sessionOnly: false,
     });
-    expect(invokeMock).toHaveBeenCalledWith("list_evidence_claims", { limit: 10 });
+    expect(invokeMock).toHaveBeenCalledWith("evidence_list_claims", {
+      request: { cursor: null, include_drafts: false, limit: 10 },
+    });
     expect(invokeMock).toHaveBeenCalledWith("read_plot_artifact", { plotId: "plot:1" });
   });
 });

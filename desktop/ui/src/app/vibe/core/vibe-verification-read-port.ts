@@ -1,5 +1,5 @@
 import type { CheckTransport } from "../../../transport/check";
-import type { EvidenceReadTransport } from "../../../transport/evidence";
+import type { EvidenceGraphReadTransport } from "../../../transport/evidence-graph";
 import type { HistoryReadTransport } from "../../../transport/history";
 import type { KernelTransport } from "../../../transport/kernel-generated";
 import type { WorkbenchProjectionTransport } from "../../../transport/workbench-projection";
@@ -20,7 +20,7 @@ export type VibeVerificationReadFacets =
     | "listPlotArtifacts"
     | "readPlotArtifact"
   >
-  & Pick<EvidenceReadTransport, "listEvidenceClaims">
+  & Pick<EvidenceGraphReadTransport, "listClaims">
   & Pick<CheckTransport, "loadCheckResult">
   & Pick<KernelTransport, "loadSnapshot">
   & Pick<WorkbenchProjectionTransport, "subscribeWorkbenchInvalidated">
@@ -171,9 +171,9 @@ export function createVibeVerificationReadPort(
       const records = await guardedRead(
         scope,
         options,
-        () => transport.listEvidenceClaims(VIBE_VERIFICATION_READ_LIMIT),
+        async () => (await transport.listClaims({ limit: VIBE_VERIFICATION_READ_LIMIT })).items,
       );
-      return exactRecords(records, claimIds, (record) => record.claim_id);
+      return exactRecords(records, claimIds, (record) => record.node_id);
     },
     readCheckResult: (scope, resultId) => guardedRead(
       scope,
