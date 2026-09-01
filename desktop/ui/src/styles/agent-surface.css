@@ -61,6 +61,23 @@
   section.rho-agent-surface .rho-agent-environment-doctor[data-state="unbound"],
   section.rho-agent-surface .rho-agent-environment-doctor[data-state="ready"] { gap: var(--rho-space-1); padding-block: var(--rho-space-2); }
   section.rho-agent-surface .rho-agent-environment-doctor[data-state="unbound"] > header > span { color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  /* Settled Authority state: one line, full wording behind the disclosure. */
+  section.rho-agent-surface .rho-agent-environment-settled > summary {
+    display: flex;
+    align-items: baseline;
+    gap: var(--rho-space-3);
+    cursor: pointer;
+    list-style: none;
+    font-size: var(--rho-text-caption);
+  }
+  section.rho-agent-surface .rho-agent-environment-settled > summary::-webkit-details-marker { display: none; }
+  section.rho-agent-surface .rho-agent-environment-settled > summary::after { content: "▾"; flex: 0 0 auto; color: var(--rho-muted); }
+  section.rho-agent-surface .rho-agent-environment-settled[open] > summary::after { content: "▴"; }
+  section.rho-agent-surface .rho-agent-environment-settled > summary:hover { color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-environment-settled .rho-agent-section-label { flex: 0 0 auto; }
+  section.rho-agent-surface .rho-agent-environment-state { min-width: 0; overflow: hidden; color: var(--rho-ink); text-overflow: ellipsis; white-space: nowrap; }
+  section.rho-agent-surface .rho-agent-environment-aside { flex: 0 1 auto; min-width: 0; margin-left: auto; overflow: hidden; color: var(--rho-muted); text-overflow: ellipsis; white-space: nowrap; }
+  section.rho-agent-surface .rho-agent-environment-settled > :not(summary) { margin-top: var(--rho-space-2); }
 
   section.rho-agent-surface .rho-agent-current-work-header {
     position: sticky;
