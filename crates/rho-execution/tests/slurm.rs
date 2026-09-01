@@ -68,7 +68,14 @@ fn request(label: &str, retry_class: RetryClass) -> SlurmSubmitRequest {
         submission_bundle_digest: digest('a'),
         script_file_handle: "script_handle".to_string(),
         spec_file_handle: "spec_handle".to_string(),
+        staging_manifest_file_handle: "staging_manifest_handle".to_string(),
+        staging_manifest_digest: digest('f'),
+        environment_receipt_digest: AuthorityDigest::new(format!("sha256:{}", "1".repeat(64)))
+            .unwrap(),
+        execution_profile_digest: AuthorityDigest::new(format!("sha256:{}", "2".repeat(64)))
+            .unwrap(),
         output_staging_handle: "staging_handle".to_string(),
+        offline_network: true,
         retry_class,
     }
 }
@@ -150,6 +157,9 @@ fn slurm_queue_running_and_accounting_terminal_normalize_with_complete_linkage()
             .output_manifest_digest
             .is_some()
     );
+    let commit = executor.environment_commit_facts(&operation_id).unwrap();
+    assert_eq!(commit.shared_storage_output_manifest_digest, digest('e'));
+    assert_eq!(commit.staging_manifest_digest, digest('f'));
 }
 
 #[test]

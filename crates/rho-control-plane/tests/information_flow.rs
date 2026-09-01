@@ -120,7 +120,7 @@ fn information_flow_missing_unknown_label_and_missing_read_set_fail_closed() {
 }
 
 #[test]
-fn information_flow_only_explicit_reviewed_declassification_with_p0_p1_evidence_can_lower() {
+fn information_flow_only_explicit_reviewed_declassification_with_p0_p1_attestation_can_lower() {
     let mut engine = InformationFlowEngine::new();
     engine
         .admit_result(result(
@@ -129,8 +129,8 @@ fn information_flow_only_explicit_reviewed_declassification_with_p0_p1_evidence_
             "confidential",
         ))
         .unwrap();
-    let invalid = DeclassificationEvidence {
-        evidence_id: "evidence_invalid".to_string(),
+    let invalid = DeclassificationAttestation {
+        attestation_id: "attestation_invalid".to_string(),
         capability_id: CapabilityId::new("text.rewrite").unwrap(),
         from: DataClass::ProjectConfidential,
         to: DataClass::ProjectInternal,
@@ -144,8 +144,8 @@ fn information_flow_only_explicit_reviewed_declassification_with_p0_p1_evidence_
             .unwrap_err(),
         InformationFlowError::Declassification
     );
-    let valid = DeclassificationEvidence {
-        evidence_id: "evidence_valid".to_string(),
+    let valid = DeclassificationAttestation {
+        attestation_id: "attestation_valid".to_string(),
         capability_id: CapabilityId::new(DECLASSIFICATION_CAPABILITY_ID).unwrap(),
         from: DataClass::ProjectConfidential,
         to: DataClass::ProjectInternal,
@@ -159,7 +159,7 @@ fn information_flow_only_explicit_reviewed_declassification_with_p0_p1_evidence_
     assert_eq!(declassified.data_class, DataClass::ProjectInternal);
     assert_eq!(
         declassified.source_classifications[0].source_id,
-        "evidence_valid"
+        "attestation_valid"
     );
 }
 

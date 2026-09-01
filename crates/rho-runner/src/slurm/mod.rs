@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use rho_protocol::{ArtifactDigest, ExecutionSpec, ResourceRequest};
+use rho_protocol::{
+    ArtifactDigest, ExecutionSpec, NetworkPolicy, ResourceRequest, RunnerStagingManifestV1,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -35,6 +37,9 @@ pub struct SlurmSubmissionBundle {
     pub spec_file_name: String,
     pub spec_bytes: Vec<u8>,
     pub spec_digest: ArtifactDigest,
+    pub staging_manifest_file_name: String,
+    pub staging_manifest_bytes: Vec<u8>,
+    pub staging_manifest_digest: ArtifactDigest,
     pub script_file_name: String,
     pub script_bytes: Vec<u8>,
     pub effective_resources: SlurmEffectiveResources,
@@ -53,6 +58,7 @@ pub enum SlurmBundleError {
 
 pub fn build_slurm_submission(
     spec: &ExecutionSpec,
+    staging: &RunnerStagingManifestV1,
     profile: &SlurmSubmissionProfile,
     output_staging_handle: impl Into<String>,
 ) -> Result<SlurmSubmissionBundle, SlurmBundleError> {
@@ -72,6 +78,12 @@ pub fn build_slurm_submission(
     }
     spec.validate(&BTreeSet::new())
         .map_err(|_| SlurmBundleError::InvalidSpec)?;
+    staging
+        .validate_against(spec, &BTreeSet::new())
+        .map_err(|_| SlurmBundleError::InvalidSpec)?;
+    if spec.network != NetworkPolicy::Deny {
+        return Err(SlurmBundleError::InvalidSpec);
+    }
     let resources = normalize_resources(
         spec.resources
             .as_ref()
@@ -84,12 +96,20 @@ pub fn build_slurm_submission(
     let spec_digest = spec
         .digest(&BTreeSet::new())
         .map_err(|_| SlurmBundleError::InvalidSpec)?;
+    let staging_manifest_bytes =
+        serde_json::to_vec(staging).map_err(|_| SlurmBundleError::InvalidSpec)?;
+    let staging_manifest_digest = staging
+        .digest()
+        .map_err(|_| SlurmBundleError::InvalidSpec)?;
     let operation_marker = format!("rho-operation-{}", spec.operation_id.as_str());
     let spec_file_name = format!("{}.execution-spec-v1.json", spec.execution_id.as_str());
+    let staging_manifest_file_name =
+        format!("{}.runner-staging-v1.json", spec.execution_id.as_str());
     let script_file_name = format!("{}.sbatch", spec.execution_id.as_str());
     let mut directives = BTreeMap::from([
         ("account", resources.account.clone()),
         ("cpus-per-task", resources.cpu_cores.to_string()),
+        ("export", "NIL".to_string()),
         ("gres", format!("gpu:{}", resources.gpu_count)),
         ("mem", resources.memory_bytes.to_string()),
         ("partition", resources.partition.clone()),
@@ -105,8 +125,11 @@ pub fn build_slurm_submission(
     script.push_str(&format!("#SBATCH --comment={operation_marker}\n"));
     script.push_str("set -eu\n");
     script.push_str("# Dynamic job argv is held only in the authenticated ExecutionSpec file.\n");
+    script.push_str("export RHO_BUILD_NETWORK=deny\n");
+    script.push_str("export R_ENVIRON_USER=/dev/null\n");
+    script.push_str("export R_PROFILE_USER=/dev/null\n");
     script.push_str(&format!(
-        "exec {} --execute-spec-file \"$RHO_EXECUTION_SPEC_FILE\" --expected-digest {} --config {}\n",
+        "exec {} --execute-spec-file \"$RHO_EXECUTION_SPEC_FILE\" --staging-manifest-file \"$RHO_STAGING_MANIFEST_FILE\" --expected-digest {} --config {}\n",
         profile.runner_path,
         spec_digest.as_str(),
         profile.runner_config_path
@@ -116,6 +139,9 @@ pub fn build_slurm_submission(
         spec_file_name,
         spec_bytes,
         spec_digest,
+        staging_manifest_file_name,
+        staging_manifest_bytes,
+        staging_manifest_digest,
         script_file_name,
         script_bytes: script.into_bytes(),
         effective_resources: resources,
@@ -185,6 +211,7 @@ fn valid_digest(value: &str) -> bool {
 pub fn submission_bundle_digest(bundle: &SlurmSubmissionBundle) -> ArtifactDigest {
     let mut hasher = Sha256::new();
     hasher.update(&bundle.spec_bytes);
+    hasher.update(&bundle.staging_manifest_bytes);
     hasher.update(&bundle.script_bytes);
     ArtifactDigest::new(format!("sha256:{:x}", hasher.finalize())).expect("sha256")
 }

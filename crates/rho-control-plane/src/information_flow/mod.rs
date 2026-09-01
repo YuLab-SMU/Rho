@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use rho_protocol::{
-    CapabilityId, CapabilityResultEnvelope, DataClass, DeclassificationEvidence,
+    CapabilityId, CapabilityResultEnvelope, DataClass, DeclassificationAttestation,
     UntrustedCapabilityResult, apply_declassification,
 };
 use serde::{Deserialize, Serialize};
@@ -99,13 +99,13 @@ impl InformationFlowEngine {
         &mut self,
         source_result_id: &str,
         new_result_id: impl Into<String>,
-        evidence: &DeclassificationEvidence,
+        attestation: &DeclassificationAttestation,
     ) -> Result<&CapabilityResultEnvelope, InformationFlowError> {
         let source = self
             .results
             .get(source_result_id)
             .ok_or_else(|| InformationFlowError::MissingReadResult(source_result_id.to_string()))?;
-        let mut declassified = apply_declassification(source, evidence)
+        let mut declassified = apply_declassification(source, attestation)
             .map_err(|_| InformationFlowError::Declassification)?;
         declassified.result_id = new_result_id.into();
         let id = declassified.result_id.clone();

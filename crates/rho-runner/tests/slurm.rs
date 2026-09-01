@@ -41,16 +41,35 @@ fn spec() -> ExecutionSpec {
     spec
 }
 
+fn staging(spec: &ExecutionSpec) -> RunnerStagingManifestV1 {
+    RunnerStagingManifestV1::new(
+        spec,
+        Vec::new(),
+        RemoteBlobDescriptor {
+            digest: spec.environment.manifest_digest.clone(),
+            byte_size: 1,
+            media_type: "application/vnd.rho.environment+json".to_string(),
+        },
+        &BTreeSet::new(),
+    )
+    .unwrap()
+}
+
 #[test]
 fn slurm_bundle_uses_validated_directives_and_separate_authenticated_spec_file() {
     let spec = spec();
-    let bundle = build_slurm_submission(&spec, &profile(), "staging_handle").unwrap();
+    let staging = staging(&spec);
+    let bundle = build_slurm_submission(&spec, &staging, &profile(), "staging_handle").unwrap();
     let script = String::from_utf8(bundle.script_bytes.clone()).unwrap();
     assert!(script.contains("#SBATCH --cpus-per-task=4"));
     assert!(script.contains("#SBATCH --partition=cpu"));
     assert!(script.contains("#SBATCH --account=rho"));
     assert!(script.contains("#SBATCH --comment=rho-operation-operation_slurm_bundle"));
+    assert!(script.contains("#SBATCH --export=NIL"));
     assert!(script.contains("$RHO_EXECUTION_SPEC_FILE"));
+    assert!(script.contains("$RHO_STAGING_MANIFEST_FILE"));
+    assert!(script.contains("RHO_BUILD_NETWORK=deny"));
+    assert!(!script.contains("--get-user-env"));
     assert!(!script.contains("--input"));
     assert!(!script.contains("dataset"));
     assert!(!script.contains("gpu:0"));
@@ -58,6 +77,11 @@ fn slurm_bundle_uses_validated_directives_and_separate_authenticated_spec_file()
         decode_execution_spec_v1(&bundle.spec_bytes, &BTreeSet::new()).unwrap(),
         spec
     );
+    let decoded_staging: RunnerStagingManifestV1 =
+        serde_json::from_slice(&bundle.staging_manifest_bytes).unwrap();
+    decoded_staging
+        .validate_against(&spec, &BTreeSet::new())
+        .unwrap();
     assert!(
         submission_bundle_digest(&bundle)
             .as_str()
@@ -68,32 +92,37 @@ fn slurm_bundle_uses_validated_directives_and_separate_authenticated_spec_file()
 #[test]
 fn slurm_bundle_rejects_unapproved_partition_account_resources_and_mutable_runner() {
     let mut bad = spec();
+    let valid_staging = staging(&bad);
     bad.resources.as_mut().unwrap().partition = Some("attacker;rm".to_string());
     assert_eq!(
-        build_slurm_submission(&bad, &profile(), "staging").unwrap_err(),
+        build_slurm_submission(&bad, &valid_staging, &profile(), "staging").unwrap_err(),
         SlurmBundleError::InvalidSpec
     );
     let mut bad = spec();
     bad.resources.as_mut().unwrap().partition = Some("other".to_string());
     assert_eq!(
-        build_slurm_submission(&bad, &profile(), "staging").unwrap_err(),
+        build_slurm_submission(&bad, &staging(&bad), &profile(), "staging").unwrap_err(),
         SlurmBundleError::InvalidResources
     );
     let mut bad_profile = profile();
     bad_profile.runner_digest = "latest".to_string();
     assert_eq!(
-        build_slurm_submission(&spec(), &bad_profile, "staging").unwrap_err(),
+        {
+            let spec = spec();
+            build_slurm_submission(&spec, &staging(&spec), &bad_profile, "staging").unwrap_err()
+        },
         SlurmBundleError::InvalidProfile
     );
 }
 
 #[test]
 fn slurm_bundle_has_no_compute_node_ssh_or_agent_text_interpolation() {
-    let script = String::from_utf8(
-        build_slurm_submission(&spec(), &profile(), "staging")
+    let script = String::from_utf8({
+        let spec = spec();
+        build_slurm_submission(&spec, &staging(&spec), &profile(), "staging")
             .unwrap()
-            .script_bytes,
-    )
+            .script_bytes
+    })
     .unwrap();
     for forbidden in ["ssh ", "Agent", "user prompt", "eval ", "bash -c"] {
         assert!(!script.contains(forbidden));

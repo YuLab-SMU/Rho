@@ -13,6 +13,15 @@ fn record() -> RunnerJobRecord {
         operation_id: OperationId::new("operation_failure_journal").unwrap(),
         spec_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             .to_string(),
+        staging_manifest_digest:
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+        environment_receipt_digest:
+            "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string(),
+        execution_profile_digest:
+            "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string(),
+        repository_profile_digest:
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string(),
+        staging_root: "/runner/staging/execution_failure_journal".to_string(),
         command_id: "analysis".to_string(),
         argv: vec!["input".to_string()],
         remote_job_id: "remote_job_failure".to_string(),

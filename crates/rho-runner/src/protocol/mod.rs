@@ -1,4 +1,4 @@
-use rho_protocol::{ExecutionId, ExecutionSpec, OperationId};
+use rho_protocol::{ExecutionId, ExecutionSpec, OperationId, RunnerStagingManifestV1};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -10,13 +10,28 @@ pub const MAX_RUNNER_REQUEST_ID_BYTES: usize = 256;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RunnerRequest {
-    Handshake { client_version: u16 },
-    Prepare { spec: Box<ExecutionSpec> },
-    Submit { operation_id: OperationId },
-    Status { execution_id: ExecutionId },
-    Cancel { execution_id: ExecutionId },
-    Collect { execution_id: ExecutionId },
-    Reconcile { execution_id: ExecutionId },
+    Handshake {
+        client_version: u16,
+    },
+    Prepare {
+        spec: Box<ExecutionSpec>,
+        staging: Box<RunnerStagingManifestV1>,
+    },
+    Submit {
+        operation_id: OperationId,
+    },
+    Status {
+        execution_id: ExecutionId,
+    },
+    Cancel {
+        execution_id: ExecutionId,
+    },
+    Collect {
+        execution_id: ExecutionId,
+    },
+    Reconcile {
+        execution_id: ExecutionId,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

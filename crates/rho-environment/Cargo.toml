@@ -1,20 +1,16 @@
 [package]
-name = "rho-toolchain"
+name = "rho-environment"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-chrono.workspace = true
-semver.workspace = true
+rho-protocol = { path = "../rho-protocol" }
 serde.workspace = true
 serde_json.workspace = true
-serde_norway.workspace = true
 sha2.workspace = true
-sysinfo.workspace = true
 thiserror.workspace = true
-toml.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

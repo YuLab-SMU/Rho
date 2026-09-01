@@ -18,8 +18,8 @@ fn mechanisms(all: bool) -> BTreeMap<SandboxGuarantee, String> {
 }
 
 #[test]
-fn platform_matrix_linux_verified_advertises_mutation_and_oci_from_evidence() {
-    let profile = PlatformSandboxProfile::from_evidence(PlatformEvidence {
+fn platform_matrix_linux_attestation_advertises_mutation_and_oci() {
+    let profile = PlatformSandboxProfile::from_attestation(PlatformAttestation {
         platform: SandboxPlatformKind::Linux,
         mechanisms: mechanisms(true),
         oci_rootless_verified: true,
@@ -38,7 +38,7 @@ fn platform_matrix_linux_verified_advertises_mutation_and_oci_from_evidence() {
 
 #[test]
 fn platform_matrix_macos_missing_resource_guarantees_stays_observer() {
-    let profile = PlatformSandboxProfile::from_evidence(PlatformEvidence {
+    let profile = PlatformSandboxProfile::from_attestation(PlatformAttestation {
         platform: SandboxPlatformKind::MacOs,
         mechanisms: mechanisms(false),
         oci_rootless_verified: false,
@@ -53,7 +53,7 @@ fn platform_matrix_macos_missing_resource_guarantees_stays_observer() {
 
 #[test]
 fn platform_matrix_windows_unimplemented_guarantees_fail_closed_not_best_effort() {
-    let profile = PlatformSandboxProfile::from_evidence(PlatformEvidence {
+    let profile = PlatformSandboxProfile::from_attestation(PlatformAttestation {
         platform: SandboxPlatformKind::Windows,
         mechanisms: BTreeMap::from([(
             SandboxGuarantee::ProcessTreeControl,
@@ -70,13 +70,13 @@ fn platform_matrix_windows_unimplemented_guarantees_fail_closed_not_best_effort(
 }
 
 #[test]
-fn platform_matrix_installer_permission_evidence_is_mandatory_even_with_mechanisms() {
-    let profile = PlatformSandboxProfile::from_evidence(PlatformEvidence {
+fn platform_matrix_installer_permission_attestation_is_mandatory_even_with_mechanisms() {
+    let profile = PlatformSandboxProfile::from_attestation(PlatformAttestation {
         platform: SandboxPlatformKind::Linux,
         mechanisms: mechanisms(true),
         oci_rootless_verified: true,
         installer_permissions_verified: false,
-        source: "linux-mechanisms-without-installer-evidence".to_string(),
+        source: "linux-mechanisms-without-installer-attestation".to_string(),
     });
     assert!(!profile.external_mutation_enabled);
     assert!(!profile.oci_enabled);

@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 rho-artifact-store = { path = "../rho-artifact-store" }
 rho-execution = { path = "../rho-execution" }
+rho-environment = { path = "../rho-environment" }
 rho-protocol = { path = "../rho-protocol" }
 rho-sandbox = { path = "../rho-sandbox" }
 rho-secret-broker = { path = "../rho-secret-broker" }

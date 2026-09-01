@@ -6,6 +6,8 @@ members = [
   "crates/rho-plugin-dev",
   "crates/rho-protocol",
   "crates/rho-store",
+  "crates/rho-evidence-graph",
+  "crates/rho-environment",
   "crates/rho-artifact-store",
   "crates/rho-secret-broker",
   "crates/rho-sandbox",
@@ -25,7 +27,6 @@ members = [
   "crates/rho-cli",
   "crates/rho-mcp",
   "crates/rho-updater-verifier",
-  "crates/rho-toolchain",
   "desktop/src-tauri",
 ]
 exclude = ["vendor/jet"]
@@ -44,6 +45,7 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 jet_core = { path = "vendor/jet/crates/core" }
 include_dir = "0.7.4"
+lbug = "=0.20.1"
 libc = "0.2"
 rand = "0.9"
 petgraph = { version = "0.8", default-features = false, features = ["std"] }

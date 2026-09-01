@@ -6,9 +6,10 @@ use std::{
 };
 
 use rho_protocol::{
-    ArtifactDigest, MAX_REMOTE_CAS_BLOB_BYTES, MAX_REMOTE_CAS_BLOBS, REMOTE_CAS_CHUNK_BYTES,
-    REMOTE_CAS_PROTOCOL_VERSION, RemoteBlobDescriptor, RemoteCasChunk, RemoteCasLease,
-    RemoteCasManifest, RemoteCasResumeCursor, TransferDirection,
+    ArtifactDigest, ExecutionSpec, MAX_REMOTE_CAS_BLOB_BYTES, MAX_REMOTE_CAS_BLOBS,
+    REMOTE_CAS_CHUNK_BYTES, REMOTE_CAS_PROTOCOL_VERSION, RemoteBlobDescriptor, RemoteCasChunk,
+    RemoteCasLease, RemoteCasManifest, RemoteCasResumeCursor, RunnerStagingManifestV1,
+    TransferDirection,
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -75,6 +76,177 @@ pub struct RemoteCasServer {
     quota: RemoteCasQuota,
     active: BTreeMap<(String, ArtifactDigest), ActiveTransfer>,
     transferred_bytes: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunnerStagingOutcome {
+    Created,
+    Existing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunnerStagedExecution {
+    pub root: PathBuf,
+    pub manifest_digest: ArtifactDigest,
+    pub outcome: RunnerStagingOutcome,
+}
+
+#[derive(Debug, Error)]
+pub enum RunnerStagingError {
+    #[error("Runner staging manifest does not match the ExecutionSpec")]
+    Manifest,
+    #[error("Runner staging lease is invalid or overbroad")]
+    Lease,
+    #[error("Runner staging CAS blob is unavailable or corrupt")]
+    Blob,
+    #[error("Runner staging directory conflicts with another immutable execution")]
+    Conflict,
+    #[error("Runner staging IO failed")]
+    Io,
+}
+
+pub struct RunnerInputStager {
+    root: PathBuf,
+}
+
+impl RunnerInputStager {
+    pub fn open(root: impl AsRef<Path>) -> Result<Self, RunnerStagingError> {
+        fs::create_dir_all(root.as_ref()).map_err(|_| RunnerStagingError::Io)?;
+        let root = root
+            .as_ref()
+            .canonicalize()
+            .map_err(|_| RunnerStagingError::Io)?;
+        Ok(Self { root })
+    }
+
+    pub fn stage(
+        &self,
+        spec: &ExecutionSpec,
+        manifest: &RunnerStagingManifestV1,
+        lease: &RemoteCasLease,
+        now_ms: u64,
+        cas: &RemoteCasServer,
+    ) -> Result<RunnerStagedExecution, RunnerStagingError> {
+        manifest
+            .validate_against(spec, &BTreeSet::new())
+            .map_err(|_| RunnerStagingError::Manifest)?;
+        let required_digests = manifest
+            .input_blobs
+            .iter()
+            .map(|blob| blob.digest.clone())
+            .chain(std::iter::once(manifest.environment_blob.digest.clone()))
+            .collect::<BTreeSet<_>>();
+        let leased_digests = lease
+            .allowed_digests
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if lease.execution_id != spec.execution_id
+            || lease.direction != TransferDirection::UploadInput
+            || now_ms > lease.expires_at_ms
+            || required_digests != leased_digests
+            || required_digests.len() != lease.allowed_digests.len()
+        {
+            return Err(RunnerStagingError::Lease);
+        }
+        let manifest_bytes =
+            serde_json::to_vec(manifest).map_err(|_| RunnerStagingError::Manifest)?;
+        let manifest_digest = manifest
+            .digest()
+            .map_err(|_| RunnerStagingError::Manifest)?;
+        let final_root = self.root.join(spec.execution_id.as_str());
+        if final_root.exists() {
+            let existing = fs::read(final_root.join("staging-manifest.json"))
+                .map_err(|_| RunnerStagingError::Conflict)?;
+            return if existing == manifest_bytes {
+                Ok(RunnerStagedExecution {
+                    root: final_root,
+                    manifest_digest,
+                    outcome: RunnerStagingOutcome::Existing,
+                })
+            } else {
+                Err(RunnerStagingError::Conflict)
+            };
+        }
+        let temporary_root = self
+            .root
+            .join(format!(".{}.partial", spec.execution_id.as_str()));
+        if temporary_root.exists() {
+            fs::remove_dir_all(&temporary_root).map_err(|_| RunnerStagingError::Io)?;
+        }
+        fs::create_dir_all(temporary_root.join("inputs")).map_err(|_| RunnerStagingError::Io)?;
+        fs::create_dir_all(temporary_root.join("environment"))
+            .map_err(|_| RunnerStagingError::Io)?;
+        for blob in &manifest.input_blobs {
+            stage_verified_blob(
+                cas,
+                lease,
+                blob,
+                now_ms,
+                &temporary_root
+                    .join("inputs")
+                    .join(digest_filename(&blob.digest)),
+            )?;
+        }
+        stage_verified_blob(
+            cas,
+            lease,
+            &manifest.environment_blob,
+            now_ms,
+            &temporary_root
+                .join("environment")
+                .join(digest_filename(&manifest.environment_blob.digest)),
+        )?;
+        let manifest_path = temporary_root.join("staging-manifest.json");
+        {
+            let mut file = File::create(&manifest_path).map_err(|_| RunnerStagingError::Io)?;
+            file.write_all(&manifest_bytes)
+                .map_err(|_| RunnerStagingError::Io)?;
+            file.sync_all().map_err(|_| RunnerStagingError::Io)?;
+        }
+        let mut permissions = fs::metadata(&manifest_path)
+            .map_err(|_| RunnerStagingError::Io)?
+            .permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&manifest_path, permissions).map_err(|_| RunnerStagingError::Io)?;
+        File::open(&temporary_root)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|_| RunnerStagingError::Io)?;
+        fs::rename(&temporary_root, &final_root).map_err(|_| RunnerStagingError::Io)?;
+        File::open(&self.root)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|_| RunnerStagingError::Io)?;
+        Ok(RunnerStagedExecution {
+            root: final_root,
+            manifest_digest,
+            outcome: RunnerStagingOutcome::Created,
+        })
+    }
+}
+
+fn stage_verified_blob(
+    cas: &RemoteCasServer,
+    lease: &RemoteCasLease,
+    descriptor: &RemoteBlobDescriptor,
+    now_ms: u64,
+    destination: &Path,
+) -> Result<(), RunnerStagingError> {
+    let source = cas
+        .verified_blob_path(lease, descriptor, now_ms)
+        .map_err(|_| RunnerStagingError::Blob)?;
+    fs::copy(source, destination).map_err(|_| RunnerStagingError::Io)?;
+    if !verify_file(destination, descriptor).map_err(|_| RunnerStagingError::Blob)? {
+        return Err(RunnerStagingError::Blob);
+    }
+    let mut permissions = fs::metadata(destination)
+        .map_err(|_| RunnerStagingError::Io)?
+        .permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(destination, permissions).map_err(|_| RunnerStagingError::Io)
+}
+
+fn digest_filename(digest: &ArtifactDigest) -> &str {
+    digest.as_str().trim_start_matches("sha256:")
 }
 
 impl RemoteCasServer {
@@ -269,6 +441,25 @@ impl RemoteCasServer {
             chunk_digest: digest(&bytes),
             bytes,
         })
+    }
+
+    pub fn verified_blob_path(
+        &self,
+        lease: &RemoteCasLease,
+        descriptor: &RemoteBlobDescriptor,
+        now_ms: u64,
+    ) -> Result<PathBuf, RemoteCasError> {
+        validate_lease_for_digest(
+            lease,
+            &descriptor.digest,
+            TransferDirection::UploadInput,
+            now_ms,
+        )?;
+        let path = self.blob_path(&descriptor.digest);
+        if !path.exists() || !verify_file(&path, descriptor)? {
+            return Err(RemoteCasError::BlobUnavailable);
+        }
+        Ok(path)
     }
 
     pub fn cleanup_partial(&mut self, job_id: &str) -> Result<usize, RemoteCasError> {

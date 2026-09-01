@@ -1,8 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use rho_protocol::{
-    CapabilityDescriptor, CapabilityId, DataClass, DestinationClass, EffectClass, ExecutorKind,
-    RetryClass, TargetClass, run_r_descriptor,
+    CapabilityDescriptor, CapabilityId, DataClass, DestinationClass,
+    ENVIRONMENT_EXPLAIN_INCIDENT_CAPABILITY, ENVIRONMENT_INSPECT_CAPABILITY,
+    ENVIRONMENT_OPERATION_INSPECT_CAPABILITY, ENVIRONMENT_PROPOSE_CHANGE_CAPABILITY,
+    ENVIRONMENT_REQUEST_APPLY_PLAN_CAPABILITY, EffectClass, ExecutorKind, RetryClass, TargetClass,
+    run_r_descriptor,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -139,7 +142,11 @@ impl CapabilityRegistry {
             &entry.descriptor.input_schema,
             arguments,
             entry.max_array_items,
-        )
+        )?;
+        if id.as_str() == ENVIRONMENT_REQUEST_APPLY_PLAN_CAPABILITY {
+            validate_environment_plan_binding(id, arguments)?;
+        }
+        Ok(())
     }
 
     pub fn provider_snapshot(
@@ -344,6 +351,134 @@ pub fn canonical_capabilities() -> Vec<RegisteredCapability> {
             ResultSensitivityRule::AtLeast(DataClass::ProjectInternal),
             vec![DestinationClass::LocalWorkspace],
         ),
+        with_schema(
+            descriptor(
+                ENVIRONMENT_INSPECT_CAPABILITY,
+                "Inspect Environment state",
+                EffectClass::Read,
+                RetryClass::PureRead,
+                DataClass::ProjectConfidential,
+                TargetClass::LocalProcess,
+                vec![ExecutorKind::LocalProcess],
+                false,
+            ),
+            json!({
+                "type": "object",
+                "required": [],
+                "additionalProperties": false,
+                "properties": {
+                    "environment_id": {"type": "string", "minLength": 1},
+                    "include_packages": {"type": "boolean"}
+                }
+            }),
+            ResultSensitivityRule::SameAsInput,
+            vec![DestinationClass::LocalSandbox],
+        ),
+        with_schema(
+            descriptor(
+                ENVIRONMENT_EXPLAIN_INCIDENT_CAPABILITY,
+                "Explain an Environment incident",
+                EffectClass::Read,
+                RetryClass::PureRead,
+                DataClass::ProjectConfidential,
+                TargetClass::LocalProcess,
+                vec![ExecutorKind::LocalProcess],
+                false,
+            ),
+            json!({
+                "type": "object",
+                "required": ["incident_id"],
+                "additionalProperties": false,
+                "properties": {"incident_id": {"type": "string", "minLength": 1}}
+            }),
+            ResultSensitivityRule::SameAsInput,
+            vec![DestinationClass::LocalSandbox],
+        ),
+        with_schema(
+            descriptor(
+                ENVIRONMENT_PROPOSE_CHANGE_CAPABILITY,
+                "Propose an immutable Environment plan",
+                EffectClass::Read,
+                RetryClass::PureRead,
+                DataClass::ProjectConfidential,
+                TargetClass::LocalProcess,
+                vec![ExecutorKind::LocalProcess],
+                false,
+            ),
+            json!({
+                "type": "object",
+                "required": ["environment_id", "intent", "subject"],
+                "additionalProperties": false,
+                "properties": {
+                    "environment_id": {"type": "string", "minLength": 1},
+                    "intent": {"type": "string", "minLength": 1},
+                    "subject": {"type": "string", "minLength": 1}
+                }
+            }),
+            ResultSensitivityRule::SameAsInput,
+            vec![DestinationClass::LocalSandbox],
+        ),
+        with_schema(
+            descriptor(
+                ENVIRONMENT_REQUEST_APPLY_PLAN_CAPABILITY,
+                "Request exact Environment plan application",
+                EffectClass::ProjectMutation,
+                RetryClass::NonIdempotent,
+                DataClass::ProjectConfidential,
+                TargetClass::LocalProcess,
+                vec![
+                    ExecutorKind::LocalProcess,
+                    ExecutorKind::Oci,
+                    ExecutorKind::SshRunner,
+                    ExecutorKind::Slurm,
+                ],
+                false,
+            ),
+            json!({
+                "type": "object",
+                "required": [
+                    "plan_id", "plan_digest", "environment_id",
+                    "expected_desired_revision", "expected_realization_revision",
+                    "project_revision", "restart_required"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                    "plan_id": {"type": "string", "minLength": 81},
+                    "plan_digest": {"type": "string", "minLength": 71},
+                    "environment_id": {"type": "string", "minLength": 1},
+                    "expected_desired_revision": {"type": "string", "minLength": 1},
+                    "expected_realization_revision": {"type": "string", "minLength": 1},
+                    "project_revision": {"type": "integer", "minimum": 0},
+                    "restart_required": {"type": "boolean"}
+                }
+            }),
+            ResultSensitivityRule::AtLeast(DataClass::ProjectInternal),
+            vec![
+                DestinationClass::LocalWorkspace,
+                DestinationClass::LocalSandbox,
+                DestinationClass::RemoteExecutor,
+            ],
+        ),
+        with_schema(
+            descriptor(
+                ENVIRONMENT_OPERATION_INSPECT_CAPABILITY,
+                "Inspect an Environment operation",
+                EffectClass::Read,
+                RetryClass::PureRead,
+                DataClass::ProjectConfidential,
+                TargetClass::LocalProcess,
+                vec![ExecutorKind::LocalProcess],
+                false,
+            ),
+            json!({
+                "type": "object",
+                "required": ["operation_id"],
+                "additionalProperties": false,
+                "properties": {"operation_id": {"type": "string", "minLength": 1}}
+            }),
+            ResultSensitivityRule::SameAsInput,
+            vec![DestinationClass::LocalSandbox],
+        ),
     ]
 }
 
@@ -445,6 +580,48 @@ fn validate_metadata(entry: &RegisteredCapability) -> Result<(), CapabilityRegis
         return Err(CapabilityRegistryError::ContradictoryMetadata {
             id,
             reason: "schemas must be JSON objects".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_environment_plan_binding(
+    id: &CapabilityId,
+    arguments: &Value,
+) -> Result<(), CapabilityRegistryError> {
+    let object = arguments
+        .as_object()
+        .expect("schema validation already required an object");
+    let plan_id = object
+        .get("plan_id")
+        .and_then(Value::as_str)
+        .expect("schema validation required plan_id");
+    let plan_digest = object
+        .get("plan_digest")
+        .and_then(Value::as_str)
+        .expect("schema validation required plan_digest");
+    let Some(plan_hex) = plan_id.strip_prefix("environment_plan_") else {
+        return Err(CapabilityRegistryError::SchemaViolation {
+            id: id.clone(),
+            reason: "plan_id must use environment_plan_<sha256> identity".to_string(),
+        });
+    };
+    let Some(digest_hex) = plan_digest.strip_prefix("sha256:") else {
+        return Err(CapabilityRegistryError::SchemaViolation {
+            id: id.clone(),
+            reason: "plan_digest must use sha256:<hex> identity".to_string(),
+        });
+    };
+    if plan_hex.len() != 64
+        || digest_hex.len() != 64
+        || plan_hex != digest_hex
+        || !plan_hex
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        return Err(CapabilityRegistryError::SchemaViolation {
+            id: id.clone(),
+            reason: "plan_id and plan_digest must bind the same lowercase SHA-256".to_string(),
         });
     }
     Ok(())

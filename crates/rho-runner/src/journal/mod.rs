@@ -33,6 +33,11 @@ pub struct RunnerJobRecord {
     pub execution_id: ExecutionId,
     pub operation_id: OperationId,
     pub spec_digest: String,
+    pub staging_manifest_digest: String,
+    pub environment_receipt_digest: String,
+    pub execution_profile_digest: String,
+    pub repository_profile_digest: String,
+    pub staging_root: String,
     pub command_id: String,
     pub argv: Vec<String>,
     pub remote_job_id: String,
@@ -93,6 +98,7 @@ impl RunnerJournal {
     ) -> Result<(RunnerJobRecord, bool), RunnerJournalError> {
         if let Some(existing) = self.document.records.get(&record.operation_id) {
             if existing.spec_digest != record.spec_digest
+                || existing.staging_manifest_digest != record.staging_manifest_digest
                 || existing.execution_id != record.execution_id
             {
                 return Err(RunnerJournalError::OperationConflict);

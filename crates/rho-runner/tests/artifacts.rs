@@ -39,6 +39,29 @@ fn lease(manifest: &RemoteCasManifest, expiry: u64) -> RemoteCasLease {
     }
 }
 
+fn upload_blob(
+    server: &mut RemoteCasServer,
+    lease: &RemoteCasLease,
+    descriptor: &RemoteBlobDescriptor,
+    bytes: &[u8],
+) {
+    server
+        .write_chunk(
+            lease,
+            &RemoteCasChunk {
+                digest: descriptor.digest.clone(),
+                offset: 0,
+                bytes: bytes.to_vec(),
+                chunk_digest: digest(bytes),
+            },
+            1_000,
+        )
+        .unwrap();
+    server
+        .finalize_upload(lease, &descriptor.digest, 1_000)
+        .unwrap();
+}
+
 #[test]
 fn artifacts_negotiate_missing_chunk_verify_fsync_commit_and_read_end_to_end() {
     let temp = tempfile::tempdir().unwrap();
@@ -330,4 +353,85 @@ fn artifacts_boundary_never_enumerates_unlisted_blobs_or_syncs_mutable_project()
     assert!(does_not_own.contains(&"blob_enumeration"));
     assert!(does_not_own.contains(&"mutable_project_sync"));
     assert!(does_not_own.contains(&"unverified_bytes_use"));
+}
+
+#[test]
+fn runner_staging_binds_execution_environment_profiles_and_verified_cas_bytes() {
+    let temp = tempfile::tempdir().unwrap();
+    let input_bytes = b"analysis <- readRDS('input')";
+    let environment_bytes = b"{\"runtime\":\"R-4.5.2\"}";
+    let input = descriptor(input_bytes);
+    let environment = RemoteBlobDescriptor {
+        digest: digest(environment_bytes),
+        byte_size: environment_bytes.len() as u64,
+        media_type: "application/vnd.rho.environment+json".to_string(),
+    };
+    let mut spec = ExecutionSpec::new(
+        ExecutionId::new("execution_runner_staging").unwrap(),
+        OperationId::new("operation_runner_staging").unwrap(),
+        ExecutorKind::SshRunner,
+        vec!["analysis".to_string()],
+    );
+    spec.working_set.inputs = vec![ArtifactRef {
+        artifact_id: ArtifactId::new("artifact_runner_input").unwrap(),
+        digest: input.digest.clone(),
+    }];
+    spec.environment.manifest_digest = environment.digest.clone();
+    let staging = RunnerStagingManifestV1::new(
+        &spec,
+        vec![input.clone()],
+        environment.clone(),
+        &std::collections::BTreeSet::new(),
+    )
+    .unwrap();
+    let transfer = manifest(
+        "job_runner_staging",
+        spec.execution_id.as_str(),
+        TransferDirection::UploadInput,
+        vec![input.clone(), environment.clone()],
+    );
+    let transfer_lease = lease(&transfer, 2_000);
+    let mut cas =
+        RemoteCasServer::open(temp.path().join("cas"), RemoteCasQuota::default()).unwrap();
+    cas.negotiate(&transfer, &transfer_lease, 1_000).unwrap();
+    upload_blob(&mut cas, &transfer_lease, &input, input_bytes);
+    upload_blob(&mut cas, &transfer_lease, &environment, environment_bytes);
+    let stager = RunnerInputStager::open(temp.path().join("staging")).unwrap();
+    let staged = stager
+        .stage(&spec, &staging, &transfer_lease, 1_000, &cas)
+        .unwrap();
+    assert_eq!(staged.outcome, RunnerStagingOutcome::Created);
+    assert_eq!(staged.manifest_digest, staging.digest().unwrap());
+    let input_path = staged
+        .root
+        .join("inputs")
+        .join(input.digest.as_str().trim_start_matches("sha256:"));
+    assert_eq!(std::fs::read(&input_path).unwrap(), input_bytes);
+    assert!(
+        std::fs::metadata(input_path)
+            .unwrap()
+            .permissions()
+            .readonly()
+    );
+    assert_eq!(
+        stager
+            .stage(&spec, &staging, &transfer_lease, 1_000, &cas)
+            .unwrap()
+            .outcome,
+        RunnerStagingOutcome::Existing
+    );
+
+    let mut tampered = staging.clone();
+    tampered.execution_profile_digest =
+        AuthorityDigest::new(format!("sha256:{}", "9".repeat(64))).unwrap();
+    assert!(matches!(
+        stager.stage(&spec, &tampered, &transfer_lease, 1_000, &cas),
+        Err(RunnerStagingError::Manifest)
+    ));
+    let mut overbroad = transfer_lease;
+    overbroad.allowed_digests.push(digest(b"unapproved"));
+    assert!(matches!(
+        stager.stage(&spec, &staging, &overbroad, 1_000, &cas),
+        Err(RunnerStagingError::Lease)
+    ));
 }

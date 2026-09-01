@@ -6,7 +6,9 @@ use std::{
     process::Command,
 };
 
-use rho_protocol::{ExecutorKind, NetworkPolicy, decode_execution_spec_v1};
+use rho_protocol::{
+    ExecutorKind, NetworkPolicy, RunnerStagingManifestV1, decode_execution_spec_v1,
+};
 use rho_runner::{
     RunnerCore, RunnerDeploymentProfile,
     process::OsRunnerProcessPort,
@@ -90,6 +92,7 @@ fn execute_spec_file(arguments: &[String]) -> Result<(), String> {
         .position(|argument| argument == "--expected-digest")
         .and_then(|index| arguments.get(index + 1))
         .ok_or_else(|| "missing --expected-digest".to_string())?;
+    let staging_manifest_path = argument(arguments, "--staging-manifest-file")?;
     let config_path = argument(arguments, "--config")?;
     let profile: RunnerDeploymentProfile = serde_json::from_slice(
         &fs::read(config_path).map_err(|_| "configuration unavailable".to_string())?,
@@ -100,6 +103,11 @@ fn execute_spec_file(arguments: &[String]) -> Result<(), String> {
         &BTreeSet::new(),
     )
     .map_err(|_| "spec invalid".to_string())?;
+    let staging: RunnerStagingManifestV1 = serde_json::from_slice(
+        &fs::read(&staging_manifest_path)
+            .map_err(|_| "staging manifest unavailable".to_string())?,
+    )
+    .map_err(|_| "staging manifest invalid".to_string())?;
     let actual_digest = spec
         .digest(&BTreeSet::new())
         .map_err(|_| "spec invalid".to_string())?;
@@ -115,6 +123,14 @@ fn execute_spec_file(arguments: &[String]) -> Result<(), String> {
             spec.network,
             NetworkPolicy::Deny | NetworkPolicy::ProviderOnly
         )
+        || profile
+            .allowed_execution_profiles
+            .get(&spec.environment.execution_profile_id)
+            != Some(&spec.environment.execution_profile_digest)
+        || profile
+            .allowed_repository_profiles
+            .get(&spec.environment.repository_profile_id)
+            != Some(&spec.environment.repository_profile_digest)
         || !spec.environment.secret_env.is_empty()
         || spec.argv.is_empty()
         || spec
@@ -124,6 +140,11 @@ fn execute_spec_file(arguments: &[String]) -> Result<(), String> {
     {
         return Err("spec not admitted by runner profile".to_string());
     }
+    staging
+        .validate_against(&spec, &BTreeSet::new())
+        .map_err(|_| "staging manifest does not match spec".to_string())?;
+    let staged_root = rho_runner::verify_staged_execution(&profile.working_root, &spec, &staging)
+        .map_err(|_| "staged inputs are unavailable or corrupt".to_string())?;
     let command_profile = profile
         .commands
         .get(&spec.argv[0])
@@ -134,18 +155,7 @@ fn execute_spec_file(arguments: &[String]) -> Result<(), String> {
     {
         return Err("command digest mismatch".to_string());
     }
-    let relative_working = spec
-        .working_set
-        .relative_working_directory
-        .as_deref()
-        .unwrap_or(".");
-    let working_directory = if relative_working == "." {
-        profile.working_root.clone()
-    } else {
-        profile.working_root.join(relative_working)
-    };
-    fs::create_dir_all(&working_directory)
-        .map_err(|_| "working directory unavailable".to_string())?;
+    let working_directory = staged_root;
     fs::create_dir_all(&profile.output_root)
         .map_err(|_| "output directory unavailable".to_string())?;
     let mut command = Command::new(&command_profile.executable);

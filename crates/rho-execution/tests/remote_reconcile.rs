@@ -100,6 +100,59 @@ fn runner_truth(stage: RemoteStage, outcome: Option<OperationOutcome>) -> Runner
     }
 }
 
+fn staged_spec(label: &str) -> (ExecutionSpec, RunnerStagingManifestV1) {
+    let spec = ExecutionSpec::new(
+        ExecutionId::new(format!("execution_remote_staged_{label}")).unwrap(),
+        OperationId::new(format!("operation_remote_staged_{label}")).unwrap(),
+        ExecutorKind::SshRunner,
+        vec!["analysis".to_string()],
+    );
+    let staging = RunnerStagingManifestV1::new(
+        &spec,
+        Vec::new(),
+        RemoteBlobDescriptor {
+            digest: spec.environment.manifest_digest.clone(),
+            byte_size: 1,
+            media_type: "application/vnd.rho.environment+json".to_string(),
+        },
+        &BTreeSet::new(),
+    )
+    .unwrap();
+    (spec, staging)
+}
+
+#[test]
+fn remote_staged_intent_binds_spec_environment_and_profile_before_submit() {
+    let (spec, staging) = staged_spec("identity");
+    let mut reconciler = RemoteReconciler::new();
+    assert!(reconciler.record_staged_intent(&spec, &staging).unwrap());
+    assert!(!reconciler.record_staged_intent(&spec, &staging).unwrap());
+    let record = reconciler.record(&spec.execution_id).unwrap();
+    assert_eq!(
+        record.environment_receipt_digest.as_deref(),
+        Some(spec.environment.binding.receipt_digest.as_str())
+    );
+    assert_eq!(
+        record.execution_profile_digest.as_deref(),
+        Some(spec.environment.execution_profile_digest.as_str())
+    );
+    let mut conflict = spec.clone();
+    conflict.argv.push("different".to_string());
+    let conflict_staging = RunnerStagingManifestV1::new(
+        &conflict,
+        Vec::new(),
+        staging.environment_blob.clone(),
+        &BTreeSet::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        reconciler
+            .record_staged_intent(&conflict, &conflict_staging)
+            .unwrap_err(),
+        RemoteReconcileError::IntentConflict
+    );
+}
+
 #[test]
 fn remote_reconcile_ack_drop_never_resubmits_non_idempotent_and_recovers_marker() {
     let (execution_id, operation_id) = ids("ack_drop");

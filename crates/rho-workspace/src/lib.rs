@@ -1,9 +1,11 @@
 #![forbid(unsafe_code)]
 //! Target owner for the authenticated Workspace R bridge and WorkspaceExecutor adapter.
 
+pub mod environment;
 pub mod executor;
 pub mod revisions;
 
+pub use environment::*;
 pub use executor::*;
 pub use revisions::*;
 

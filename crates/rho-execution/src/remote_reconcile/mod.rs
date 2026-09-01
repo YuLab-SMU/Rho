@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use rho_protocol::{ArtifactDigest, ExecutionId, OperationId, OperationOutcome, RetryClass};
+use rho_protocol::{
+    ArtifactDigest, ExecutionId, ExecutionSpec, OperationId, OperationOutcome, RetryClass,
+    RunnerStagingManifestV1,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -22,6 +25,10 @@ pub struct RemoteExecutionRecord {
     pub execution_id: ExecutionId,
     pub operation_id: OperationId,
     pub retry_class: RetryClass,
+    pub execution_spec_digest: Option<ArtifactDigest>,
+    pub staging_manifest_digest: Option<ArtifactDigest>,
+    pub environment_receipt_digest: Option<String>,
+    pub execution_profile_digest: Option<String>,
     pub stage: RemoteStage,
     pub runner_job_id: Option<String>,
     pub scheduler_job_id: Option<String>,
@@ -151,6 +158,8 @@ pub enum RemoteReconcileError {
     TerminalConflict,
     #[error("remote request is invalid")]
     InvalidRequest,
+    #[error("remote execution identity was reused with a different staged specification")]
+    IntentConflict,
 }
 
 #[derive(Debug, Default)]
@@ -178,6 +187,10 @@ impl RemoteReconciler {
                 execution_id,
                 operation_id,
                 retry_class,
+                execution_spec_digest: None,
+                staging_manifest_digest: None,
+                environment_receipt_digest: None,
+                execution_profile_digest: None,
                 stage: RemoteStage::IntentRecorded,
                 runner_job_id: None,
                 scheduler_job_id: None,
@@ -191,6 +204,62 @@ impl RemoteReconciler {
             },
         );
         true
+    }
+
+    pub fn record_staged_intent(
+        &mut self,
+        spec: &ExecutionSpec,
+        staging: &RunnerStagingManifestV1,
+    ) -> Result<bool, RemoteReconcileError> {
+        staging
+            .validate_against(spec, &BTreeSet::new())
+            .map_err(|_| RemoteReconcileError::InvalidRequest)?;
+        let spec_digest = spec
+            .digest(&BTreeSet::new())
+            .map_err(|_| RemoteReconcileError::InvalidRequest)?;
+        let staging_digest = staging
+            .digest()
+            .map_err(|_| RemoteReconcileError::InvalidRequest)?;
+        if let Some(existing) = self.records.get(&spec.execution_id) {
+            return if existing.operation_id == spec.operation_id
+                && existing.execution_spec_digest.as_ref() == Some(&spec_digest)
+                && existing.staging_manifest_digest.as_ref() == Some(&staging_digest)
+            {
+                Ok(false)
+            } else {
+                Err(RemoteReconcileError::IntentConflict)
+            };
+        }
+        self.records.insert(
+            spec.execution_id.clone(),
+            RemoteExecutionRecord {
+                execution_id: spec.execution_id.clone(),
+                operation_id: spec.operation_id.clone(),
+                retry_class: spec.retry_class,
+                execution_spec_digest: Some(spec_digest),
+                staging_manifest_digest: Some(staging_digest),
+                environment_receipt_digest: Some(
+                    spec.environment.binding.receipt_digest.as_str().to_string(),
+                ),
+                execution_profile_digest: Some(
+                    spec.environment
+                        .execution_profile_digest
+                        .as_str()
+                        .to_string(),
+                ),
+                stage: RemoteStage::IntentRecorded,
+                runner_job_id: None,
+                scheduler_job_id: None,
+                terminal_outcome: None,
+                terminal_event_id: None,
+                artifact_digests: BTreeSet::new(),
+                reconcile_attempts: 0,
+                submit_dispatched: false,
+                cancel_request_ids: BTreeSet::new(),
+                collect_request_ids: BTreeSet::new(),
+            },
+        );
+        Ok(true)
     }
 
     pub fn ensure_submit(

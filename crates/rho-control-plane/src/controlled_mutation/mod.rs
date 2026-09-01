@@ -11,40 +11,41 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SecurityProfileEvidence {
+pub struct SecurityProfileAttestation {
     pub profile_id: String,
     pub platform: String,
     pub provider_id: String,
     pub provider_executable_digest: String,
     pub corpus_report_digest: String,
     pub corpus_passed: bool,
-    pub reviewer_evidence_digest: String,
+    pub reviewer_attestation_digest: String,
     pub guarantees: BTreeSet<SandboxGuarantee>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VerifiedMutationProfile {
-    pub evidence: SecurityProfileEvidence,
+    pub attestation: SecurityProfileAttestation,
     pub controlled_mutation_enabled: bool,
     pub reason_code: String,
 }
 
 impl VerifiedMutationProfile {
-    pub fn evaluate(evidence: SecurityProfileEvidence) -> Self {
+    pub fn evaluate(attestation: SecurityProfileAttestation) -> Self {
         let required = required_mutation_guarantees()
             .into_iter()
             .collect::<BTreeSet<_>>();
         let digests_valid = [
-            evidence.provider_executable_digest.as_str(),
-            evidence.corpus_report_digest.as_str(),
-            evidence.reviewer_evidence_digest.as_str(),
+            attestation.provider_executable_digest.as_str(),
+            attestation.corpus_report_digest.as_str(),
+            attestation.reviewer_attestation_digest.as_str(),
         ]
         .iter()
         .all(|digest| valid_digest(digest));
-        let controlled_mutation_enabled =
-            evidence.corpus_passed && digests_valid && required.is_subset(&evidence.guarantees);
+        let controlled_mutation_enabled = attestation.corpus_passed
+            && digests_valid
+            && required.is_subset(&attestation.guarantees);
         Self {
-            evidence,
+            attestation,
             controlled_mutation_enabled,
             reason_code: if controlled_mutation_enabled {
                 "verified_security_profile".to_string()
@@ -141,7 +142,7 @@ pub fn execute_controlled_patch(
     Ok((
         outcome,
         ControlledMutationReport {
-            profile_id: profile.evidence.profile_id.clone(),
+            profile_id: profile.attestation.profile_id.clone(),
             patch_id: prepared.patch.patch_id.clone(),
             base_project_revision: prepared.patch.base_project_revision,
             resulting_project_revision,

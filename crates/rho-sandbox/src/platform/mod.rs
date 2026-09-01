@@ -38,7 +38,7 @@ pub enum SandboxPlatformKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PlatformEvidence {
+pub struct PlatformAttestation {
     pub platform: SandboxPlatformKind,
     pub mechanisms: BTreeMap<SandboxGuarantee, String>,
     pub oci_rootless_verified: bool,
@@ -134,37 +134,37 @@ impl PlatformSandboxProfile {
         }
     }
 
-    pub fn from_evidence(evidence: PlatformEvidence) -> Self {
+    pub fn from_attestation(attestation: PlatformAttestation) -> Self {
         let required = required_mutation_guarantees();
-        let guarantees = evidence.mechanisms.keys().copied().collect::<Vec<_>>();
+        let guarantees = attestation.mechanisms.keys().copied().collect::<Vec<_>>();
         let unsupported = required
             .iter()
             .copied()
-            .filter(|guarantee| !evidence.mechanisms.contains_key(guarantee))
+            .filter(|guarantee| !attestation.mechanisms.contains_key(guarantee))
             .collect::<Vec<_>>();
         let verified_source =
-            !evidence.source.is_empty() && evidence.installer_permissions_verified;
+            !attestation.source.is_empty() && attestation.installer_permissions_verified;
         let external_mutation_enabled = unsupported.is_empty() && verified_source;
-        let platform = match evidence.platform {
+        let platform = match attestation.platform {
             SandboxPlatformKind::Linux => "linux",
             SandboxPlatformKind::MacOs => "macos",
             SandboxPlatformKind::Windows => "windows",
         }
         .to_string();
         Self {
-            adapter: format!("{platform}-evidence-profile"),
+            adapter: format!("{platform}-attested-profile"),
             platform,
             guarantees,
             unsupported: unsupported.clone(),
-            mechanisms: evidence.mechanisms,
+            mechanisms: attestation.mechanisms,
             external_mutation_enabled,
-            oci_enabled: external_mutation_enabled && evidence.oci_rootless_verified,
+            oci_enabled: external_mutation_enabled && attestation.oci_rootless_verified,
             reason: if external_mutation_enabled {
-                "all guarantees and installer permissions verified by target-host evidence"
+                "all guarantees and installer permissions verified by a target-host attestation"
                     .to_string()
             } else {
                 format!(
-                    "external mutation disabled; evidence incomplete or unsupported: {}",
+                    "external mutation disabled; attestation incomplete or unsupported: {}",
                     unsupported
                         .iter()
                         .map(|value| format!("{value:?}").to_ascii_lowercase())

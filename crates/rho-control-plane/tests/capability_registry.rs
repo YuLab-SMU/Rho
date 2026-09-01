@@ -11,6 +11,11 @@ fn capability_registry_contains_exhaustive_initial_descriptors() {
         "project.apply_patch",
         "network.fetch",
         "artifact.commit",
+        ENVIRONMENT_INSPECT_CAPABILITY,
+        ENVIRONMENT_EXPLAIN_INCIDENT_CAPABILITY,
+        ENVIRONMENT_PROPOSE_CHANGE_CAPABILITY,
+        ENVIRONMENT_REQUEST_APPLY_PLAN_CAPABILITY,
+        ENVIRONMENT_OPERATION_INSPECT_CAPABILITY,
     ] {
         let capability_id = CapabilityId::new(id).unwrap();
         assert_eq!(

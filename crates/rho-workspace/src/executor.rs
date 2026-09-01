@@ -2,12 +2,16 @@ use rho_control_plane::{BrokerLease, lease_matches_request};
 use rho_protocol::{
     DestinationClass, ExecutionId, ExecutionTerminalOutcome, JobId, KernelInstanceId, OperationId,
     ProjectId, ProjectRevision, RevisionError, RevisionStamp, RevisionTransition, StateRevision,
-    WorkspaceId,
+    WorkspaceEnvironmentBindingV1, WorkspaceId,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{WorkspaceRevisionTracker, WorkspaceTerminalOutcome};
+use crate::{
+    WorkspaceEnvironmentError, WorkspaceEnvironmentGate, WorkspaceEnvironmentObservation,
+    WorkspaceEnvironmentReobservation, WorkspaceEnvironmentStatus, WorkspaceRevisionTracker,
+    WorkspaceTerminalOutcome,
+};
 
 pub const MAX_WORKSPACE_STDOUT_BYTES: usize = 64 * 1024;
 pub const MAX_WORKSPACE_CONDITIONS: usize = 128;
@@ -30,6 +34,7 @@ pub struct WorkspaceBridgeRequest {
     pub operation_id: OperationId,
     pub now_ms: u64,
     pub effect: WorkspaceEffectKind,
+    pub environment_binding: Option<WorkspaceEnvironmentBindingV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -62,7 +67,14 @@ pub struct WorkspaceStatus {
     pub active_job_id: Option<JobId>,
     pub state_revision: StateRevision,
     pub project_revision: ProjectRevision,
+    pub environment: WorkspaceEnvironmentStatus,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkspaceEnvironmentRestart {
+    pub revision_transition: RevisionTransition,
+    pub replay_failed_expression: bool,
 }
 
 #[derive(Debug, Error)]
@@ -77,17 +89,28 @@ pub enum WorkspaceExecutorError {
     Revision(#[from] RevisionError),
     #[error("broker lease error: {0}")]
     Broker(#[from] rho_control_plane::BrokerError),
+    #[error("Workspace Environment admission error: {0}")]
+    Environment(#[from] WorkspaceEnvironmentError),
 }
 
 #[derive(Debug, Clone)]
 pub struct WorkspaceExecutor {
     project_id: ProjectId,
     tracker: WorkspaceRevisionTracker,
+    environment: WorkspaceEnvironmentGate,
     active_job_id: Option<JobId>,
 }
 
 impl WorkspaceExecutor {
     pub fn new(project_id: ProjectId, initial: RevisionStamp) -> Self {
+        Self::with_environment(project_id, initial, None)
+    }
+
+    pub fn with_environment(
+        project_id: ProjectId,
+        initial: RevisionStamp,
+        active_environment: Option<WorkspaceEnvironmentBindingV1>,
+    ) -> Self {
         Self {
             project_id,
             tracker: WorkspaceRevisionTracker::new(
@@ -96,6 +119,7 @@ impl WorkspaceExecutor {
                 initial.state_revision,
                 initial.project_revision,
             ),
+            environment: WorkspaceEnvironmentGate::new(active_environment),
             active_job_id: None,
         }
     }
@@ -110,6 +134,8 @@ impl WorkspaceExecutor {
         if let Some(job_id) = &self.active_job_id {
             return Err(WorkspaceExecutorError::Busy(job_id.clone()));
         }
+        self.environment
+            .admit_execution(request.environment_binding.as_ref())?;
         self.verify_request(&request, lease, normalized_arguments)?;
         let job_id = JobId::new(format!("job_{}", request.execution_id.as_str()))
             .unwrap_or_else(|_| JobId::generate());
@@ -151,9 +177,15 @@ impl WorkspaceExecutor {
             active_job_id: self.active_job_id.clone(),
             state_revision: self.tracker.current().state_revision,
             project_revision: self.tracker.current().project_revision,
+            environment: self.environment.status(),
             message: if self.active_job_id.is_some() {
                 "Workspace evaluation running; only bounded status and stream reads are available"
                     .to_string()
+            } else if self.environment.status().restart_required {
+                "Workspace restart required before the verified Environment can become active"
+                    .to_string()
+            } else if self.environment.status().reobserve_required {
+                "Workspace Environment re-observation required before execution".to_string()
             } else {
                 "Workspace ready".to_string()
             },
@@ -162,6 +194,42 @@ impl WorkspaceExecutor {
 
     pub fn current_revision(&self) -> &RevisionStamp {
         self.tracker.current()
+    }
+
+    pub fn stage_environment_binding(
+        &mut self,
+        binding: WorkspaceEnvironmentBindingV1,
+        receipt: &rho_protocol::EnvironmentOperationReceiptV1,
+    ) -> Result<WorkspaceEnvironmentStatus, WorkspaceExecutorError> {
+        if let Some(job_id) = &self.active_job_id {
+            return Err(WorkspaceExecutorError::Busy(job_id.clone()));
+        }
+        Ok(self.environment.stage_verified_binding(binding, receipt)?)
+    }
+
+    pub fn restart_for_environment(
+        &mut self,
+        new_kernel_instance_id: KernelInstanceId,
+    ) -> Result<WorkspaceEnvironmentRestart, WorkspaceExecutorError> {
+        if let Some(job_id) = &self.active_job_id {
+            return Err(WorkspaceExecutorError::Busy(job_id.clone()));
+        }
+        let old_kernel = self.tracker.current().kernel_instance_id.clone();
+        self.environment
+            .record_restart(&old_kernel, &new_kernel_instance_id)?;
+        let revision_transition = self.tracker.restart_kernel(new_kernel_instance_id);
+        Ok(WorkspaceEnvironmentRestart {
+            revision_transition,
+            replay_failed_expression: false,
+        })
+    }
+
+    pub fn reobserve_environment(
+        &mut self,
+        observation: WorkspaceEnvironmentObservation,
+    ) -> Result<WorkspaceEnvironmentReobservation, WorkspaceExecutorError> {
+        let kernel = self.tracker.current().kernel_instance_id.clone();
+        Ok(self.environment.reobserve(&kernel, observation)?)
     }
 
     fn verify_request(

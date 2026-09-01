@@ -101,6 +101,14 @@ fn fixture() -> Fixture {
             commands: BTreeMap::from([("analysis".to_string(), command)]),
             resource_profile: "bounded-test".to_string(),
             allowed_executors: BTreeSet::from([ExecutorKind::LocalProcess]),
+            allowed_execution_profiles: BTreeMap::from([(
+                ExecutionProfileId::new("execution_profile_default").unwrap(),
+                AuthorityDigest::new(format!("sha256:{}", "d".repeat(64))).unwrap(),
+            )]),
+            allowed_repository_profiles: BTreeMap::from([(
+                RepositoryProfileId::new("repository_profile_default").unwrap(),
+                AuthorityDigest::new(format!("sha256:{}", "e".repeat(64))).unwrap(),
+            )]),
         },
         key: RunnerAuthKey::new(vec![7; 32]).unwrap(),
         _temp: temp,
@@ -108,12 +116,52 @@ fn fixture() -> Fixture {
 }
 
 fn spec(label: &str) -> ExecutionSpec {
-    ExecutionSpec::new(
+    let mut spec = ExecutionSpec::new(
         ExecutionId::new(format!("execution_runner_{label}")).unwrap(),
         OperationId::new(format!("operation_runner_{label}")).unwrap(),
         ExecutorKind::LocalProcess,
         vec!["analysis".to_string()],
+    );
+    spec.environment.manifest_digest = rho_runner::artifacts::digest(b"runner-environment");
+    spec
+}
+
+fn prepare_request(profile: &RunnerDeploymentProfile, spec: ExecutionSpec) -> RunnerRequest {
+    let staging = RunnerStagingManifestV1::new(
+        &spec,
+        Vec::new(),
+        RemoteBlobDescriptor {
+            digest: spec.environment.manifest_digest.clone(),
+            byte_size: b"runner-environment".len() as u64,
+            media_type: "application/vnd.rho.environment+json".to_string(),
+        },
+        &BTreeSet::new(),
     )
+    .unwrap();
+    let root = profile.working_root.join(spec.execution_id.as_str());
+    if !root.exists() {
+        let environment = root.join("environment");
+        fs::create_dir_all(&environment).unwrap();
+        let blob = environment.join(
+            spec.environment
+                .manifest_digest
+                .as_str()
+                .trim_start_matches("sha256:"),
+        );
+        fs::write(&blob, b"runner-environment").unwrap();
+        let mut permissions = fs::metadata(&blob).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&blob, permissions).unwrap();
+        let manifest_path = root.join("staging-manifest.json");
+        fs::write(&manifest_path, serde_json::to_vec(&staging).unwrap()).unwrap();
+        let mut permissions = fs::metadata(&manifest_path).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&manifest_path, permissions).unwrap();
+    }
+    RunnerRequest::Prepare {
+        spec: Box::new(spec),
+        staging: Box::new(staging),
+    }
 }
 
 fn envelope(id: &str, request: RunnerRequest, key: &RunnerAuthKey) -> AuthenticatedRunnerRequest {
@@ -146,9 +194,7 @@ fn runner_core_handshake_prepare_submit_duplicate_and_terminal_status_are_durabl
     runner
         .handle(envelope(
             "request_prepare",
-            RunnerRequest::Prepare {
-                spec: Box::new(spec.clone()),
-            },
+            prepare_request(&fixture.profile, spec.clone()),
             &fixture.key,
         ))
         .unwrap();
@@ -214,9 +260,7 @@ fn runner_core_restart_recovers_journal_and_missing_process_is_uncertain_not_fai
         runner
             .handle(envelope(
                 "prepare_restart",
-                RunnerRequest::Prepare {
-                    spec: Box::new(spec.clone()),
-                },
+                prepare_request(&fixture.profile, spec.clone()),
                 &fixture.key,
             ))
             .unwrap();
@@ -268,9 +312,7 @@ fn runner_protocol_rejects_malformed_oversized_unauthenticated_without_effect() 
     );
     let bytes = encode_authenticated_request(
         "request_auth",
-        RunnerRequest::Prepare {
-            spec: Box::new(spec("auth")),
-        },
+        prepare_request(&fixture.profile, spec("auth")),
         &fixture.key,
     )
     .unwrap();
@@ -287,8 +329,12 @@ fn runner_protocol_rejects_malformed_oversized_unauthenticated_without_effect() 
 #[test]
 fn runner_command_profile_rejects_agent_shell_text_and_conflicting_operation() {
     let fixture = fixture();
-    let mut runner =
-        RunnerCore::open(fixture.profile, &fixture.journal, FakeProcess::default()).unwrap();
+    let mut runner = RunnerCore::open(
+        fixture.profile.clone(),
+        &fixture.journal,
+        FakeProcess::default(),
+    )
+    .unwrap();
     let mut shell = spec("shell");
     shell.argv = vec![
         "analysis".to_string(),
@@ -299,9 +345,7 @@ fn runner_command_profile_rejects_agent_shell_text_and_conflicting_operation() {
         runner
             .handle(envelope(
                 "prepare_shell",
-                RunnerRequest::Prepare {
-                    spec: Box::new(shell),
-                },
+                prepare_request(&fixture.profile, shell),
                 &fixture.key,
             ))
             .is_err()
@@ -311,9 +355,7 @@ fn runner_command_profile_rejects_agent_shell_text_and_conflicting_operation() {
     runner
         .handle(envelope(
             "prepare_one",
-            RunnerRequest::Prepare {
-                spec: Box::new(one.clone()),
-            },
+            prepare_request(&fixture.profile, one.clone()),
             &fixture.key,
         ))
         .unwrap();
@@ -323,11 +365,51 @@ fn runner_command_profile_rejects_agent_shell_text_and_conflicting_operation() {
         runner
             .handle(envelope(
                 "prepare_conflict",
-                RunnerRequest::Prepare {
-                    spec: Box::new(conflict),
-                },
+                prepare_request(&fixture.profile, conflict),
                 &fixture.key,
             ))
+            .is_err()
+    );
+}
+
+#[test]
+fn runner_rejects_staged_blob_tamper_and_unadmitted_execution_profile() {
+    let fixture = fixture();
+    let mut runner = RunnerCore::open(
+        fixture.profile.clone(),
+        &fixture.journal,
+        FakeProcess::default(),
+    )
+    .unwrap();
+    let staged_spec = spec("staged_tamper");
+    let request = prepare_request(&fixture.profile, staged_spec.clone());
+    let environment_blob = fixture
+        .profile
+        .working_root
+        .join(staged_spec.execution_id.as_str())
+        .join("environment")
+        .join(
+            staged_spec
+                .environment
+                .manifest_digest
+                .as_str()
+                .trim_start_matches("sha256:"),
+        );
+    fs::set_permissions(&environment_blob, fs::Permissions::from_mode(0o600)).unwrap();
+    fs::write(&environment_blob, b"tampered").unwrap();
+    assert!(
+        runner
+            .handle(envelope("prepare_staged_tamper", request, &fixture.key))
+            .is_err()
+    );
+
+    let mut profile_mismatch = spec("profile_mismatch");
+    profile_mismatch.environment.execution_profile_digest =
+        AuthorityDigest::new(format!("sha256:{}", "9".repeat(64))).unwrap();
+    let request = prepare_request(&fixture.profile, profile_mismatch);
+    assert!(
+        runner
+            .handle(envelope("prepare_profile_mismatch", request, &fixture.key))
             .is_err()
     );
 }

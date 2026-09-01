@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use rho_protocol::{
-    ArtifactDigest, ExecutionId, ExecutionState, JobId, JobObservation, OperationId, RetryClass,
+    ArtifactDigest, AuthorityDigest, ExecutionId, ExecutionState, JobId, JobObservation,
+    OperationId, RetryClass,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -14,7 +15,12 @@ pub struct SlurmSubmitRequest {
     pub submission_bundle_digest: ArtifactDigest,
     pub script_file_handle: String,
     pub spec_file_handle: String,
+    pub staging_manifest_file_handle: String,
+    pub staging_manifest_digest: ArtifactDigest,
+    pub environment_receipt_digest: AuthorityDigest,
+    pub execution_profile_digest: AuthorityDigest,
     pub output_staging_handle: String,
+    pub offline_network: bool,
     pub retry_class: RetryClass,
 }
 
@@ -80,12 +86,29 @@ pub struct SlurmJobRecord {
     pub execution_id: ExecutionId,
     pub operation_id: OperationId,
     pub operation_marker: String,
+    pub submission_bundle_digest: ArtifactDigest,
+    pub staging_manifest_digest: ArtifactDigest,
+    pub environment_receipt_digest: AuthorityDigest,
+    pub execution_profile_digest: AuthorityDigest,
     pub slurm_job_id: Option<String>,
     pub state: ExecutionState,
     pub retry_class: RetryClass,
     pub cancel_requested: bool,
     pub scheduler_terminal_confirmed: bool,
     pub accounting: Option<SlurmAccountingRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SlurmEnvironmentCommitFacts {
+    pub execution_id: ExecutionId,
+    pub operation_id: OperationId,
+    pub slurm_job_id: String,
+    pub submission_bundle_digest: ArtifactDigest,
+    pub staging_manifest_digest: ArtifactDigest,
+    pub environment_receipt_digest: AuthorityDigest,
+    pub execution_profile_digest: AuthorityDigest,
+    pub effective_resources_digest: String,
+    pub shared_storage_output_manifest_digest: ArtifactDigest,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -113,6 +136,8 @@ pub enum SlurmExecutorError {
     Scheduler(#[from] SlurmPortError),
     #[error("Slurm requeue is not allowed by retry class or scheduler truth")]
     RequeueDenied,
+    #[error("Slurm Environment commit evidence is not scheduler-terminal and complete")]
+    CommitNotReady,
 }
 
 #[derive(Default)]
@@ -283,6 +308,40 @@ impl SlurmExecutor {
         self.records.get(operation_id)
     }
 
+    pub fn environment_commit_facts(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<SlurmEnvironmentCommitFacts, SlurmExecutorError> {
+        let record = self
+            .records
+            .get(operation_id)
+            .ok_or(SlurmExecutorError::UnknownJob)?;
+        let accounting = record
+            .accounting
+            .as_ref()
+            .filter(|_| {
+                record.state == ExecutionState::Succeeded && record.scheduler_terminal_confirmed
+            })
+            .ok_or(SlurmExecutorError::CommitNotReady)?;
+        Ok(SlurmEnvironmentCommitFacts {
+            execution_id: record.execution_id.clone(),
+            operation_id: record.operation_id.clone(),
+            slurm_job_id: record
+                .slurm_job_id
+                .clone()
+                .ok_or(SlurmExecutorError::CommitNotReady)?,
+            submission_bundle_digest: record.submission_bundle_digest.clone(),
+            staging_manifest_digest: record.staging_manifest_digest.clone(),
+            environment_receipt_digest: record.environment_receipt_digest.clone(),
+            execution_profile_digest: record.execution_profile_digest.clone(),
+            effective_resources_digest: accounting.effective_resources_digest.clone(),
+            shared_storage_output_manifest_digest: accounting
+                .output_manifest_digest
+                .clone()
+                .ok_or(SlurmExecutorError::CommitNotReady)?,
+        })
+    }
+
     fn record(
         &self,
         request: &SlurmSubmitRequest,
@@ -295,6 +354,10 @@ impl SlurmExecutor {
             execution_id: request.execution_id.clone(),
             operation_id: request.operation_id.clone(),
             operation_marker: request.operation_marker.clone(),
+            submission_bundle_digest: request.submission_bundle_digest.clone(),
+            staging_manifest_digest: request.staging_manifest_digest.clone(),
+            environment_receipt_digest: request.environment_receipt_digest.clone(),
+            execution_profile_digest: request.execution_profile_digest.clone(),
             slurm_job_id,
             state,
             retry_class: request.retry_class,
@@ -309,7 +372,9 @@ fn validate_request(request: &SlurmSubmitRequest) -> Result<(), SlurmExecutorErr
     if request.operation_marker != format!("rho-operation-{}", request.operation_id.as_str())
         || request.script_file_handle.is_empty()
         || request.spec_file_handle.is_empty()
+        || request.staging_manifest_file_handle.is_empty()
         || request.output_staging_handle.is_empty()
+        || !request.offline_network
     {
         return Err(SlurmExecutorError::InvalidRequest);
     }

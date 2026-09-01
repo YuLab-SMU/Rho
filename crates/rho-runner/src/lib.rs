@@ -13,10 +13,13 @@ pub mod slurm;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
-use rho_protocol::{ExecutionSpec, ExecutorKind, NetworkPolicy, OperationId};
+use rho_protocol::{
+    AuthorityDigest, ExecutionProfileId, ExecutionSpec, ExecutorKind, NetworkPolicy, OperationId,
+    RepositoryProfileId, RunnerStagingManifestV1,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -42,6 +45,8 @@ pub struct RunnerDeploymentProfile {
     pub commands: BTreeMap<String, ApprovedRunnerCommand>,
     pub resource_profile: String,
     pub allowed_executors: BTreeSet<ExecutorKind>,
+    pub allowed_execution_profiles: BTreeMap<ExecutionProfileId, AuthorityDigest>,
+    pub allowed_repository_profiles: BTreeMap<RepositoryProfileId, AuthorityDigest>,
 }
 
 #[derive(Debug, Error)]
@@ -71,7 +76,7 @@ pub struct RunnerCore<P> {
 
 impl<P: RunnerProcessPort> RunnerCore<P> {
     pub fn open(
-        profile: RunnerDeploymentProfile,
+        mut profile: RunnerDeploymentProfile,
         journal_path: impl AsRef<std::path::Path>,
         process: P,
     ) -> Result<Self, RunnerCoreError> {
@@ -88,6 +93,8 @@ impl<P: RunnerProcessPort> RunnerCore<P> {
         if working_root == output_root {
             return Err(RunnerCoreError::CommandRejected);
         }
+        profile.working_root = working_root;
+        profile.output_root = output_root;
         for (id, command) in &profile.commands {
             if id != &command.command_id
                 || id.is_empty()
@@ -138,7 +145,7 @@ impl<P: RunnerProcessPort> RunnerCore<P> {
                     capabilities: capabilities(self.profile.resource_profile.clone()),
                 })
             }
-            RunnerRequest::Prepare { spec } => self.prepare(*spec),
+            RunnerRequest::Prepare { spec, staging } => self.prepare(*spec, *staging),
             RunnerRequest::Submit { operation_id } => self.submit(&operation_id),
             RunnerRequest::Status { execution_id } | RunnerRequest::Reconcile { execution_id } => {
                 self.status(&execution_id)
@@ -163,10 +170,27 @@ impl<P: RunnerProcessPort> RunnerCore<P> {
         }
     }
 
-    fn prepare(&mut self, spec: ExecutionSpec) -> Result<RunnerResponse, RunnerCoreError> {
+    fn prepare(
+        &mut self,
+        spec: ExecutionSpec,
+        staging: RunnerStagingManifestV1,
+    ) -> Result<RunnerResponse, RunnerCoreError> {
         spec.validate(&BTreeSet::new())
             .map_err(|_| RunnerCoreError::SpecRejected)?;
+        staging
+            .validate_against(&spec, &BTreeSet::new())
+            .map_err(|_| RunnerCoreError::SpecRejected)?;
         if !self.profile.allowed_executors.contains(&spec.executor)
+            || self
+                .profile
+                .allowed_execution_profiles
+                .get(&spec.environment.execution_profile_id)
+                != Some(&spec.environment.execution_profile_digest)
+            || self
+                .profile
+                .allowed_repository_profiles
+                .get(&spec.environment.repository_profile_id)
+                != Some(&spec.environment.repository_profile_digest)
             || spec.argv.is_empty()
             || matches!(spec.network, NetworkPolicy::UnrestrictedWithApproval)
         {
@@ -184,11 +208,34 @@ impl<P: RunnerProcessPort> RunnerCore<P> {
         let digest = spec
             .digest(&BTreeSet::new())
             .map_err(|_| RunnerCoreError::SpecRejected)?;
+        let staging_root = verify_staged_execution(&self.profile.working_root, &spec, &staging)?;
         let job_id = format!("remote_job_{}", spec.operation_id.as_str());
         let record = RunnerJobRecord {
             execution_id: spec.execution_id.clone(),
             operation_id: spec.operation_id.clone(),
             spec_digest: digest.as_str().to_string(),
+            staging_manifest_digest: staging
+                .digest()
+                .map_err(|_| RunnerCoreError::SpecRejected)?
+                .as_str()
+                .to_string(),
+            environment_receipt_digest: spec
+                .environment
+                .binding
+                .receipt_digest
+                .as_str()
+                .to_string(),
+            execution_profile_digest: spec
+                .environment
+                .execution_profile_digest
+                .as_str()
+                .to_string(),
+            repository_profile_digest: spec
+                .environment
+                .repository_profile_digest
+                .as_str()
+                .to_string(),
+            staging_root: staging_root.display().to_string(),
             command_id: command_id.clone(),
             argv: spec.argv.iter().skip(1).cloned().collect(),
             remote_job_id: job_id,
@@ -234,7 +281,7 @@ impl<P: RunnerProcessPort> RunnerCore<P> {
             execution_id: existing.execution_id.clone(),
             executable: command.executable.display().to_string(),
             argv: existing.argv.clone(),
-            working_directory: self.profile.working_root.display().to_string(),
+            working_directory: existing.staging_root.clone(),
             environment: BTreeMap::from([
                 (
                     "HOME".to_string(),
@@ -396,6 +443,55 @@ fn is_shell(path: &std::path::Path) -> bool {
             .as_str(),
         "sh" | "bash" | "zsh" | "cmd" | "cmd.exe" | "powershell" | "pwsh"
     )
+}
+
+pub fn verify_staged_execution(
+    working_root: &Path,
+    spec: &ExecutionSpec,
+    manifest: &RunnerStagingManifestV1,
+) -> Result<PathBuf, RunnerCoreError> {
+    let root = working_root.join(spec.execution_id.as_str());
+    let root = root
+        .canonicalize()
+        .map_err(|_| RunnerCoreError::SpecRejected)?;
+    if !root.starts_with(working_root) {
+        return Err(RunnerCoreError::SpecRejected);
+    }
+    let manifest_path = root.join("staging-manifest.json");
+    let bytes = fs::read(&manifest_path).map_err(|_| RunnerCoreError::SpecRejected)?;
+    let stored: RunnerStagingManifestV1 =
+        serde_json::from_slice(&bytes).map_err(|_| RunnerCoreError::SpecRejected)?;
+    if &stored != manifest
+        || !fs::metadata(&manifest_path)
+            .map(|metadata| metadata.permissions().readonly())
+            .unwrap_or(false)
+    {
+        return Err(RunnerCoreError::SpecRejected);
+    }
+    for (directory, descriptor) in manifest
+        .input_blobs
+        .iter()
+        .map(|descriptor| ("inputs", descriptor))
+        .chain(std::iter::once(("environment", &manifest.environment_blob)))
+    {
+        let path = root
+            .join(directory)
+            .join(descriptor.digest.as_str().trim_start_matches("sha256:"));
+        let canonical = path
+            .canonicalize()
+            .map_err(|_| RunnerCoreError::SpecRejected)?;
+        let blob = fs::read(&canonical).map_err(|_| RunnerCoreError::SpecRejected)?;
+        if !canonical.starts_with(&root)
+            || blob.len() as u64 != descriptor.byte_size
+            || format!("sha256:{:x}", Sha256::digest(&blob)) != descriptor.digest.as_str()
+            || !fs::metadata(&canonical)
+                .map(|metadata| metadata.permissions().readonly())
+                .unwrap_or(false)
+        {
+            return Err(RunnerCoreError::SpecRejected);
+        }
+    }
+    Ok(root)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

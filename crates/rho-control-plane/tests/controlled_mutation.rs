@@ -13,14 +13,14 @@ fn digest(byte: char) -> String {
     format!("sha256:{}", byte.to_string().repeat(64))
 }
 
-fn evidence(passed: bool, all_guarantees: bool) -> SecurityProfileEvidence {
-    SecurityProfileEvidence {
+fn attestation(passed: bool, all_guarantees: bool) -> SecurityProfileAttestation {
+    SecurityProfileAttestation {
         profile_id: "security_profile_linux_verified".to_string(),
         platform: "linux".to_string(),
         provider_id: "provider_external_observer".to_string(),
         provider_executable_digest: digest('a'),
         corpus_report_digest: digest('b'),
-        reviewer_evidence_digest: digest('c'),
+        reviewer_attestation_digest: digest('c'),
         corpus_passed: passed,
         guarantees: if all_guarantees {
             required_mutation_guarantees().into_iter().collect()
@@ -41,9 +41,9 @@ fn revision(project: u64) -> RevisionStamp {
 
 #[test]
 fn controlled_mutation_capability_is_advertised_only_by_verified_security_profile() {
-    let verified = VerifiedMutationProfile::evaluate(evidence(true, true));
+    let verified = VerifiedMutationProfile::evaluate(attestation(true, true));
     assert!(verified.controlled_mutation_enabled);
-    let disabled = VerifiedMutationProfile::evaluate(evidence(true, false));
+    let disabled = VerifiedMutationProfile::evaluate(attestation(true, false));
     assert!(!disabled.controlled_mutation_enabled);
     let reads = vec![CapabilityId::new("workspace.inspect").unwrap()];
     let enabled = controlled_mutation_capabilities(reads.clone(), &verified);
@@ -93,7 +93,7 @@ fn controlled_mutation_pipeline_requires_broker_approval_commits_revision_and_re
             BTreeSet::new(),
         )
         .unwrap();
-    let profile = VerifiedMutationProfile::evaluate(evidence(true, true));
+    let profile = VerifiedMutationProfile::evaluate(attestation(true, true));
     let (outcome, report) =
         execute_controlled_patch(&profile, &mut committer, &prepared, &approval, 1000).unwrap();
     assert!(matches!(outcome, ProjectCommitOutcome::Committed { .. }));
@@ -140,7 +140,7 @@ fn controlled_mutation_provider_permission_absence_does_not_remove_exact_broker_
         expires_at_ms: 2000,
         high_risk_acknowledgements: BTreeSet::new(),
     };
-    let profile = VerifiedMutationProfile::evaluate(evidence(true, true));
+    let profile = VerifiedMutationProfile::evaluate(attestation(true, true));
     assert!(matches!(
         execute_controlled_patch(&profile, &mut committer, &prepared, &wrong_approval, 1000,),
         Err(ControlledMutationError::Commit(
