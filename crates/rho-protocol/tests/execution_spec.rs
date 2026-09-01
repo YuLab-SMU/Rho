@@ -17,9 +17,35 @@ fn execution_spec_v1_golden_fixture_validates_and_digest_is_stable() {
     assert_eq!(spec.schema_version, EXECUTION_SPEC_V1);
     assert_eq!(spec.executor, ExecutorKind::LocalProcess);
     assert_eq!(spec.retry_class, RetryClass::NonIdempotent);
+    assert_eq!(
+        spec.environment.binding.environment_id.as_str(),
+        "environment_golden"
+    );
+    assert_eq!(
+        spec.environment.execution_profile_id.as_str(),
+        "execution_profile_golden"
+    );
+    assert_eq!(
+        spec.environment.repository_profile_id.as_str(),
+        "repository_profile_golden"
+    );
     let digest = spec.digest(&BTreeSet::new()).unwrap();
     assert!(digest.as_str().starts_with("sha256:"));
     assert_eq!(digest, spec.digest(&BTreeSet::new()).unwrap());
+}
+
+#[test]
+fn execution_spec_digest_binds_exact_environment_receipt_and_profiles() {
+    let spec = fixture();
+    let original = spec.digest(&BTreeSet::new()).unwrap();
+    let mut changed = spec.clone();
+    changed.environment.binding.receipt_digest =
+        AuthorityDigest::new(format!("sha256:{}", "f".repeat(64))).unwrap();
+    assert_ne!(original, changed.digest(&BTreeSet::new()).unwrap());
+    let mut changed = spec;
+    changed.environment.execution_profile_digest =
+        AuthorityDigest::new(format!("sha256:{}", "1".repeat(64))).unwrap();
+    assert_ne!(original, changed.digest(&BTreeSet::new()).unwrap());
 }
 
 #[test]

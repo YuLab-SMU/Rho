@@ -381,6 +381,9 @@ bounded_id!(ViewGroupId, "view_group_id");
 bounded_id!(CheckSnapshotId, "check_snapshot_id");
 bounded_id!(CheckResultId, "check_result_id");
 bounded_id!(CheckRuleId, "check_rule_id");
+bounded_id!(EvidenceNodeId, "evidence_node_id");
+bounded_id!(EvidenceEdgeId, "evidence_edge_id");
+bounded_id!(EvidenceGapId, "evidence_gap_id");
 
 #[cfg(test)]
 mod tests {

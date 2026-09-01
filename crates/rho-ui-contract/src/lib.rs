@@ -7,9 +7,12 @@
 #![forbid(unsafe_code)]
 
 pub mod agent_ux;
+pub mod authority;
 pub mod check;
 pub mod command;
 pub mod context;
+pub mod environment;
+pub mod evidence_graph;
 pub mod fixture;
 pub mod jobs;
 pub mod layout;
@@ -25,9 +28,12 @@ pub mod workbench;
 pub mod workbench_vnext;
 
 pub use agent_ux::*;
+pub use authority::*;
 pub use check::*;
 pub use command::*;
 pub use context::*;
+pub use environment::*;
+pub use evidence_graph::*;
 pub use fixture::*;
 pub use jobs::*;
 pub use layout::*;

@@ -1,7 +1,7 @@
 //! Immutable Check project snapshots and typed rule results.
 //!
 //! The shapes in this module carry no filesystem or rule-execution authority.
-//! They bind evidence to one captured project revision and preserve the exact
+//! They bind references to one captured project revision and preserve the exact
 //! application/plugin origin that produced each bounded finding.
 
 use std::collections::BTreeSet;
@@ -19,7 +19,7 @@ pub const CHECK_RULE_PACK_OUTPUT_CONTRACT: &str = "rho.ui.check-rule-pack.output
 pub const MAX_CHECK_SNAPSHOT_FILES: usize = 2_000;
 pub const MAX_CHECK_SNAPSHOT_BYTES: usize = 512 * 1024;
 pub const MAX_CHECK_RESULT_FINDINGS: usize = 1_000;
-pub const MAX_CHECK_RESULT_EVIDENCE: usize = 4_000;
+pub const MAX_CHECK_RESULT_REFERENCES: usize = 4_000;
 pub const MAX_CHECK_RESULT_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_CHECK_RULE_PACK_FINDINGS: usize = 128;
 pub const MAX_CHECK_RULE_PACK_BYTES: usize = 512 * 1024;
@@ -144,7 +144,7 @@ pub enum CheckSeverityV1 {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum CheckEvidenceV1 {
+pub enum FindingReferenceV1 {
     SourceRange {
         path: String,
         #[specta(type = crate::UiIpcNumber)]
@@ -167,7 +167,7 @@ pub enum CheckEvidenceV1 {
     },
 }
 
-impl Validate for CheckEvidenceV1 {
+impl Validate for FindingReferenceV1 {
     fn validate(&self) -> Result<(), ContractError> {
         match self {
             Self::SourceRange {
@@ -176,23 +176,23 @@ impl Validate for CheckEvidenceV1 {
                 column,
                 excerpt,
             } => {
-                validate_opaque_text(path, "check_evidence.path")?;
+                validate_opaque_text(path, "finding_reference.path")?;
                 if *line == 0 || *column == Some(0) {
                     return Err(ContractError::InvalidValue {
-                        path: "check_evidence.range".to_string(),
-                        reason: "source evidence uses positive one-based locations".to_string(),
+                        path: "finding_reference.range".to_string(),
+                        reason: "source references use positive one-based locations".to_string(),
                     });
                 }
                 if let Some(excerpt) = excerpt {
-                    validate_purpose(excerpt, "check_evidence.excerpt")?;
+                    validate_purpose(excerpt, "finding_reference.excerpt")?;
                 }
             }
-            Self::ProjectFile { path } => validate_opaque_text(path, "check_evidence.path")?,
-            Self::RunRef { run_id } => validate_opaque_text(run_id, "check_evidence.run_id")?,
+            Self::ProjectFile { path } => validate_opaque_text(path, "finding_reference.path")?,
+            Self::RunRef { run_id } => validate_opaque_text(run_id, "finding_reference.run_id")?,
             Self::EnvironmentRef { snapshot_id } => {
-                validate_opaque_text(snapshot_id, "check_evidence.snapshot_id")?
+                validate_opaque_text(snapshot_id, "finding_reference.snapshot_id")?
             }
-            Self::Note { text } => validate_purpose(text, "check_evidence.note")?,
+            Self::Note { text } => validate_purpose(text, "finding_reference.note")?,
         }
         Ok(())
     }
@@ -212,7 +212,7 @@ pub struct CheckFindingV1 {
     pub title: String,
     pub summary: String,
     pub remediation: String,
-    pub evidence: Vec<CheckEvidenceV1>,
+    pub references: Vec<FindingReferenceV1>,
     pub limitations: Vec<String>,
 }
 
@@ -229,8 +229,8 @@ impl Validate for CheckFindingV1 {
         validate_label(&self.title, "check_finding.title")?;
         validate_purpose(&self.summary, "check_finding.summary")?;
         validate_purpose(&self.remediation, "check_finding.remediation")?;
-        for evidence in &self.evidence {
-            evidence.validate()?;
+        for reference in &self.references {
+            reference.validate()?;
         }
         for limitation in &self.limitations {
             validate_purpose(limitation, "check_finding.limitations")?;
@@ -303,16 +303,16 @@ impl Validate for CheckResultV1 {
                 actual: self.findings.len(),
             });
         }
-        let mut evidence_count = 0usize;
+        let mut reference_count = 0usize;
         for finding in &self.findings {
             finding.validate()?;
-            evidence_count = evidence_count.saturating_add(finding.evidence.len());
+            reference_count = reference_count.saturating_add(finding.references.len());
         }
-        if evidence_count > MAX_CHECK_RESULT_EVIDENCE {
+        if reference_count > MAX_CHECK_RESULT_REFERENCES {
             return Err(ContractError::LimitExceeded {
-                path: "check_result.evidence".to_string(),
-                limit: MAX_CHECK_RESULT_EVIDENCE,
-                actual: evidence_count,
+                path: "check_result.references".to_string(),
+                limit: MAX_CHECK_RESULT_REFERENCES,
+                actual: reference_count,
             });
         }
         if matches!(self.status, CheckResultStatusV1::Clean) && !self.findings.is_empty() {
@@ -353,7 +353,7 @@ pub struct PluginCheckFindingV1 {
     pub title: String,
     pub summary: String,
     pub remediation: String,
-    pub evidence: Vec<CheckEvidenceV1>,
+    pub references: Vec<FindingReferenceV1>,
     pub limitations: Vec<String>,
 }
 
@@ -373,7 +373,7 @@ impl PluginCheckFindingV1 {
             title: self.title,
             summary: self.summary,
             remediation: self.remediation,
-            evidence: self.evidence,
+            references: self.references,
             limitations: self.limitations,
         }
     }
@@ -525,7 +525,7 @@ mod tests {
             title: "Working directory is fixed".to_string(),
             summary: "setwd() fixes execution to one directory.".to_string(),
             remediation: "Use project-relative paths.".to_string(),
-            evidence: vec![CheckEvidenceV1::ProjectFile {
+            references: vec![FindingReferenceV1::ProjectFile {
                 path: "analysis.R".to_string(),
             }],
             limitations: Vec::new(),

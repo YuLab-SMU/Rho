@@ -2,8 +2,10 @@
 
 pub mod agent;
 pub mod artifacts;
+pub mod authority;
 pub mod capabilities;
 pub mod data_classification;
+pub mod environment;
 pub mod events;
 pub mod execution;
 pub mod ids;
@@ -20,8 +22,10 @@ pub mod workbench;
 
 pub use agent::*;
 pub use artifacts::*;
+pub use authority::*;
 pub use capabilities::*;
 pub use data_classification::*;
+pub use environment::*;
 pub use events::*;
 pub use execution::*;
 pub use ids::*;

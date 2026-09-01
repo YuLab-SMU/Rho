@@ -144,6 +144,39 @@ define_id!(ArtifactId, "artifact", "artifact_");
 define_id!(SecretId, "secret", "secret_");
 define_id!(CapabilityId, "capability", "capability_");
 define_id!(OperationId, "operation", "operation_");
+define_id!(EnvironmentId, "environment", "environment_");
+define_id!(
+    RuntimeRealizationId,
+    "runtime_realization",
+    "runtime_realization_"
+);
+define_id!(EnvironmentPlanId, "environment_plan", "environment_plan_");
+define_id!(
+    EnvironmentDesiredRevisionId,
+    "environment_desired_revision",
+    "env_desired_"
+);
+define_id!(
+    EnvironmentRealizationRevisionId,
+    "environment_realization_revision",
+    "env_realized_"
+);
+define_id!(
+    EnvironmentReceiptId,
+    "environment_receipt",
+    "environment_receipt_"
+);
+define_id!(
+    ExecutionProfileId,
+    "execution_profile",
+    "execution_profile_"
+);
+define_id!(
+    RepositoryProfileId,
+    "repository_profile",
+    "repository_profile_"
+);
+define_id!(LibraryLayerId, "library_layer", "library_layer_");
 define_id!(ProviderId, "provider", "provider_");
 define_id!(EventId, "event", "event_");
 define_id!(StreamId, "stream", "stream_");

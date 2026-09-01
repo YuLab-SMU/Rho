@@ -12,7 +12,16 @@
   },
   "environment": {
     "manifest_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    "project_profile_id": "environment_profile_default"
+    "binding": {
+      "environment_id": "environment_golden",
+      "desired_revision": "env_desired_golden",
+      "realization_revision": "env_realized_golden",
+      "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "execution_profile_id": "execution_profile_golden",
+    "execution_profile_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "repository_profile_id": "repository_profile_golden",
+    "repository_profile_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   },
   "network": "deny",
   "resources": {

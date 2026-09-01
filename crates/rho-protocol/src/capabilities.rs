@@ -10,6 +10,11 @@ use crate::{
 };
 
 pub const RUN_R_CAPABILITY: &str = "workspace.run_r";
+pub const ENVIRONMENT_INSPECT_CAPABILITY: &str = "environment.inspect";
+pub const ENVIRONMENT_EXPLAIN_INCIDENT_CAPABILITY: &str = "environment.explain_incident";
+pub const ENVIRONMENT_PROPOSE_CHANGE_CAPABILITY: &str = "environment.propose_change";
+pub const ENVIRONMENT_REQUEST_APPLY_PLAN_CAPABILITY: &str = "environment.request_apply_plan";
+pub const ENVIRONMENT_OPERATION_INSPECT_CAPABILITY: &str = "environment.operation.inspect";
 pub const RUN_R_EFFECT_CLASS: EffectClass = EffectClass::WorkspaceMutation;
 pub const RUN_R_RETRY_CLASS: RetryClass = RetryClass::NonIdempotent;
 

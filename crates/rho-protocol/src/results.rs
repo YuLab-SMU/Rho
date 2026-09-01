@@ -101,8 +101,8 @@ impl CapabilityResultEnvelope {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DeclassificationEvidence {
-    pub evidence_id: String,
+pub struct DeclassificationAttestation {
+    pub attestation_id: String,
     pub capability_id: CapabilityId,
     pub from: DataClass,
     pub to: DataClass,
@@ -119,28 +119,28 @@ pub enum ResultEnvelopeError {
     MissingProvenance,
     #[error("classification combine failed: {0}")]
     Classification(#[from] ClassificationError),
-    #[error("declassification requires the explicit reviewed capability and P0/P1 evidence")]
+    #[error("declassification requires an explicit reviewed P0/P1 attestation")]
     InvalidDeclassification,
 }
 
 pub fn apply_declassification(
     result: &CapabilityResultEnvelope,
-    evidence: &DeclassificationEvidence,
+    attestation: &DeclassificationAttestation,
 ) -> Result<CapabilityResultEnvelope, ResultEnvelopeError> {
-    if evidence.capability_id.as_str() != DECLASSIFICATION_CAPABILITY_ID
-        || evidence.from != result.data_class
-        || evidence.to >= evidence.from
-        || !matches!(evidence.priority, EventPriority::P0 | EventPriority::P1)
-        || evidence.evidence_id.is_empty()
-        || evidence.policy_id.is_empty()
+    if attestation.capability_id.as_str() != DECLASSIFICATION_CAPABILITY_ID
+        || attestation.from != result.data_class
+        || attestation.to >= attestation.from
+        || !matches!(attestation.priority, EventPriority::P0 | EventPriority::P1)
+        || attestation.attestation_id.is_empty()
+        || attestation.policy_id.is_empty()
     {
         return Err(ResultEnvelopeError::InvalidDeclassification);
     }
     let mut result = result.clone();
-    result.data_class = evidence.to;
+    result.data_class = attestation.to;
     result.source_classifications = vec![ClassifiedSource {
-        source_id: evidence.evidence_id.clone(),
-        data_class: evidence.to,
+        source_id: attestation.attestation_id.clone(),
+        data_class: attestation.to,
     }];
     Ok(result)
 }

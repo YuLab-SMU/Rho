@@ -296,13 +296,13 @@ pub struct OutputSummary {
     pub incomplete_reason: Option<String>,
 }
 
-/// Environment evidence from a recorded snapshot or operation.
+/// Environment receipt from a recorded snapshot or admitted operation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct EnvironmentEvidence {
+pub struct EnvironmentReceipt {
     /// Opaque snapshot or request identifier.
-    pub evidence_id: String,
-    /// Evidence kind: "snapshot", "operation_request".
-    pub evidence_kind: String,
+    pub receipt_id: String,
+    /// Receipt kind: "snapshot", "operation_receipt".
+    pub receipt_kind: String,
     /// Operation name, if this is an operation request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operation_name: Option<String>,

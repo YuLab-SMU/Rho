@@ -6,8 +6,11 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
+    AuthorityDigest, EnvironmentDesiredRevisionId, EnvironmentId, EnvironmentRealizationRevisionId,
+    ExecutionProfileId, RepositoryProfileId, WorkspaceEnvironmentBindingV1,
     artifacts::{ArtifactDigest, ArtifactRef},
     ids::{ArtifactId, ExecutionId, JobId, OperationId},
+    remote_cas::{MAX_REMOTE_CAS_BLOB_BYTES, RemoteBlobDescriptor},
     secrets::SecretRef,
     taxonomy::{NetworkPolicy, RetryClass},
 };
@@ -20,6 +23,7 @@ pub const MAX_EXECUTION_ENV_REFS: usize = 128;
 pub const MAX_EXECUTION_OUTPUTS: usize = 256;
 pub const MAX_EXECUTION_EXTENSIONS: usize = 32;
 pub const MAX_EXECUTION_JSON_DEPTH: usize = 24;
+pub const RUNNER_STAGING_MANIFEST_V1: u16 = 1;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -96,7 +100,11 @@ pub struct EnvironmentManifestV1 {
     pub manifest_digest: ArtifactDigest,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_digest: Option<ArtifactDigest>,
-    pub project_profile_id: String,
+    pub binding: WorkspaceEnvironmentBindingV1,
+    pub execution_profile_id: ExecutionProfileId,
+    pub execution_profile_digest: AuthorityDigest,
+    pub repository_profile_id: RepositoryProfileId,
+    pub repository_profile_digest: AuthorityDigest,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub secret_env: Vec<EnvVarRef>,
 }
@@ -145,6 +153,112 @@ pub struct ExecutionSpec {
     pub extensions: BTreeMap<String, Value>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RunnerStagingManifestV1 {
+    pub schema_version: u16,
+    pub execution_id: ExecutionId,
+    pub operation_id: OperationId,
+    pub execution_spec_digest: ArtifactDigest,
+    pub working_set_manifest_digest: ArtifactDigest,
+    pub environment_manifest_digest: ArtifactDigest,
+    pub environment_binding: WorkspaceEnvironmentBindingV1,
+    pub execution_profile_id: ExecutionProfileId,
+    pub execution_profile_digest: AuthorityDigest,
+    pub repository_profile_id: RepositoryProfileId,
+    pub repository_profile_digest: AuthorityDigest,
+    pub input_blobs: Vec<RemoteBlobDescriptor>,
+    pub environment_blob: RemoteBlobDescriptor,
+    pub expected_outputs: Vec<ExpectedOutput>,
+}
+
+impl RunnerStagingManifestV1 {
+    pub fn new(
+        spec: &ExecutionSpec,
+        mut input_blobs: Vec<RemoteBlobDescriptor>,
+        environment_blob: RemoteBlobDescriptor,
+        negotiated_extensions: &BTreeSet<String>,
+    ) -> Result<Self, ExecutionSpecError> {
+        spec.validate(negotiated_extensions)?;
+        input_blobs.sort_by(|left, right| left.digest.cmp(&right.digest));
+        let mut expected_outputs = spec.expected_outputs.clone();
+        expected_outputs.sort_by(|left, right| left.path_hint.cmp(&right.path_hint));
+        let manifest = Self {
+            schema_version: RUNNER_STAGING_MANIFEST_V1,
+            execution_id: spec.execution_id.clone(),
+            operation_id: spec.operation_id.clone(),
+            execution_spec_digest: spec.digest(negotiated_extensions)?,
+            working_set_manifest_digest: spec.working_set.manifest_digest.clone(),
+            environment_manifest_digest: spec.environment.manifest_digest.clone(),
+            environment_binding: spec.environment.binding.clone(),
+            execution_profile_id: spec.environment.execution_profile_id.clone(),
+            execution_profile_digest: spec.environment.execution_profile_digest.clone(),
+            repository_profile_id: spec.environment.repository_profile_id.clone(),
+            repository_profile_digest: spec.environment.repository_profile_digest.clone(),
+            input_blobs,
+            environment_blob,
+            expected_outputs,
+        };
+        manifest.validate_against(spec, negotiated_extensions)?;
+        Ok(manifest)
+    }
+
+    pub fn validate_against(
+        &self,
+        spec: &ExecutionSpec,
+        negotiated_extensions: &BTreeSet<String>,
+    ) -> Result<(), ExecutionSpecError> {
+        spec.validate(negotiated_extensions)?;
+        if self.schema_version != RUNNER_STAGING_MANIFEST_V1
+            || self.execution_id != spec.execution_id
+            || self.operation_id != spec.operation_id
+            || self.execution_spec_digest != spec.digest(negotiated_extensions)?
+            || self.working_set_manifest_digest != spec.working_set.manifest_digest
+            || self.environment_manifest_digest != spec.environment.manifest_digest
+            || self.environment_binding != spec.environment.binding
+            || self.execution_profile_id != spec.environment.execution_profile_id
+            || self.execution_profile_digest != spec.environment.execution_profile_digest
+            || self.repository_profile_id != spec.environment.repository_profile_id
+            || self.repository_profile_digest != spec.environment.repository_profile_digest
+            || self.environment_blob.digest != spec.environment.manifest_digest
+            || !valid_remote_blob(&self.environment_blob)
+        {
+            return Err(ExecutionSpecError::StagingManifest);
+        }
+        if self
+            .input_blobs
+            .windows(2)
+            .any(|values| values[0].digest >= values[1].digest)
+            || self.input_blobs.iter().any(|blob| !valid_remote_blob(blob))
+        {
+            return Err(ExecutionSpecError::StagingManifest);
+        }
+        let expected = spec
+            .working_set
+            .inputs
+            .iter()
+            .map(|input| input.digest.clone())
+            .collect::<BTreeSet<_>>();
+        let actual = self
+            .input_blobs
+            .iter()
+            .map(|blob| blob.digest.clone())
+            .collect::<BTreeSet<_>>();
+        let mut expected_outputs = spec.expected_outputs.clone();
+        expected_outputs.sort_by(|left, right| left.path_hint.cmp(&right.path_hint));
+        if expected != actual || self.expected_outputs != expected_outputs {
+            return Err(ExecutionSpecError::StagingManifest);
+        }
+        Ok(())
+    }
+
+    pub fn digest(&self) -> Result<ArtifactDigest, ExecutionSpecError> {
+        let bytes = serde_json::to_vec(self).map_err(|_| ExecutionSpecError::Encoding)?;
+        ArtifactDigest::new(format!("sha256:{:x}", Sha256::digest(bytes)))
+            .map_err(|_| ExecutionSpecError::Encoding)
+    }
+}
+
 impl ExecutionSpec {
     pub fn new(
         execution_id: ExecutionId,
@@ -167,7 +281,32 @@ impl ExecutionSpec {
             environment: EnvironmentManifestV1 {
                 manifest_digest: placeholder_digest('b'),
                 image_digest: None,
-                project_profile_id: "environment_profile_default".to_string(),
+                binding: WorkspaceEnvironmentBindingV1 {
+                    environment_id: EnvironmentId::new("environment_execution_default").unwrap(),
+                    desired_revision: EnvironmentDesiredRevisionId::new(
+                        "env_desired_execution_default",
+                    )
+                    .unwrap(),
+                    realization_revision: EnvironmentRealizationRevisionId::new(
+                        "env_realized_execution_default",
+                    )
+                    .unwrap(),
+                    receipt_digest: AuthorityDigest::new(format!("sha256:{}", "c".repeat(64)))
+                        .unwrap(),
+                },
+                execution_profile_id: ExecutionProfileId::new("execution_profile_default").unwrap(),
+                execution_profile_digest: AuthorityDigest::new(format!(
+                    "sha256:{}",
+                    "d".repeat(64)
+                ))
+                .unwrap(),
+                repository_profile_id: RepositoryProfileId::new("repository_profile_default")
+                    .unwrap(),
+                repository_profile_digest: AuthorityDigest::new(format!(
+                    "sha256:{}",
+                    "e".repeat(64)
+                ))
+                .unwrap(),
                 secret_env: Vec::new(),
             },
             network: NetworkPolicy::Deny,
@@ -215,12 +354,6 @@ impl ExecutionSpec {
             if !valid_env_name(&env.name) || !env_names.insert(env.name.clone()) {
                 return Err(ExecutionSpecError::EnvironmentManifest);
             }
-        }
-        if self.environment.project_profile_id.is_empty()
-            || self.environment.project_profile_id.starts_with('/')
-            || self.environment.project_profile_id.contains("..")
-        {
-            return Err(ExecutionSpecError::EnvironmentManifest);
         }
         for output in &self.expected_outputs {
             validate_relative_path_opt(Some(&output.path_hint))?;
@@ -324,6 +457,16 @@ pub enum ExecutionSpecError {
     Encoding,
     #[error("ExecutionSpec contains forbidden surface {0}")]
     ForbiddenSurface(&'static str),
+    #[error("Runner staging manifest does not match the exact ExecutionSpec and CAS inputs")]
+    StagingManifest,
+}
+
+fn valid_remote_blob(blob: &RemoteBlobDescriptor) -> bool {
+    blob.byte_size > 0
+        && blob.byte_size <= MAX_REMOTE_CAS_BLOB_BYTES
+        && !blob.media_type.is_empty()
+        && blob.media_type.len() <= 256
+        && !blob.media_type.chars().any(char::is_control)
 }
 
 pub fn decode_execution_spec_v1(
