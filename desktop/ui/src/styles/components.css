@@ -127,7 +127,8 @@
     text-align: left;
   }
   .rho-nav-row:hover:not(:disabled) { color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
-  .rho-nav-row[aria-selected="true"], .rho-nav-row[aria-current="true"] {
+  .rho-nav-row[aria-selected="true"],
+  .rho-nav-row[aria-current]:not([aria-current="false"]) {
     border-left-color: var(--rho-accent);
     color: var(--rho-accent-ink);
     font-weight: var(--rho-weight-semibold);
