@@ -28,24 +28,31 @@ export function AgentEnvironmentPanel({ port, reportError }: {
       ? "loading"
       : health.incidents.length > 0 || health.workspace.restart_required || health.workspace.reobserve_required
         ? "attention"
-        : health.binding == null ? "unbound" : "ready";
+        : health.status === "local_ready" && health.local_observation != null
+          ? "local_ready"
+          : health.binding == null ? "unbound" : "ready";
   const label = <span className="rho-agent-section-label">Environment Doctor</span>;
-  // "unbound" and "ready" are the states in which Authority reports nothing to
-  // act on. Reporting them as a standing headline reads as a permanent alarm
+  // Local-ready, unbound and ready are states in which Authority reports nothing
+  // to act on. Reporting them as a standing headline reads as a permanent alarm
   // above the workspace, so they collapse to one line and keep the full
   // Authority wording one disclosure away.
-  const settled = health != null && (state === "unbound" || state === "ready");
+  const settled = health != null && (state === "local_ready" || state === "unbound" || state === "ready");
   const headline = health == null
     ? null
-    : health.binding == null ? "No verified Environment binding" : health.workspace.phase.replaceAll("_", " ");
+    : state === "local_ready"
+      ? "Ready for local work"
+      : health.binding == null ? "No verified Environment binding" : health.workspace.phase.replaceAll("_", " ");
   const aside = health == null
     ? null
-    : health.binding == null
+    : state === "local_ready" && health.local_observation != null
+      ? `${health.local_observation.runtime_version} · ${health.local_observation.project_mode.replaceAll("_", " ")}`
+      : health.binding == null
       ? `Workspace R: ${health.workspace.phase.replaceAll("_", " ")}`
       : `authority: ${health.binding.receipt_outcome}`;
   const detail = health == null ? null : <>
     {health.binding != null && <p>Cites receipt <code>{health.binding.receipt_id}</code> and realization <code>{health.binding.realization_revision}</code>.</p>}
-    {health.binding == null && <p>Workspace R may be running, but the Agent has no receipt-backed package realization to cite.</p>}
+    {state === "local_ready" && health.local_observation != null && <p>Cites local observation <code>{health.local_observation.observation_digest}</code>. It covers Runtime and library paths; package inventory and formal reproducibility remain unverified.</p>}
+    {state === "unbound" && <p>Workspace R may be running, but the Agent has no current Environment observation or receipt-backed realization to cite.</p>}
     {health.binding != null && health.incidents.length === 0
       ? <p>No open Environment incident is reported by Authority.</p>
       : health.incidents.length > 0 && <ul>{health.incidents.map((incident) => <li key={incident.incident_id}><strong>{incident.kind.replaceAll("_", " ")}</strong><span>{incident.subject}: {incident.detail}</span></li>)}</ul>}

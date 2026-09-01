@@ -1,9 +1,26 @@
 import type { EnvironmentHealthView } from "./environment";
 
+export function mockLocalEnvironmentObservation(): NonNullable<EnvironmentHealthView["local_observation"]> {
+  return {
+    project_mode: "native_user",
+    runtime_version: "R version 4.5.2",
+    runtime_selection_digest: `sha256:${"1".repeat(64)}`,
+    library_stack_digest: `sha256:${"2".repeat(64)}`,
+    library_count: 3,
+    lockfile_digest: null,
+    coverage: "runtime_and_library_paths",
+    package_inventory_status: "not_captured",
+    externally_mutable: true,
+    source: "startup_runtime_probe",
+    observation_digest: `sha256:${"3".repeat(64)}`,
+  };
+}
+
 export function mockEnvironmentHealth(): EnvironmentHealthView {
   const observedAt = "2026-09-01T12:00:00Z";
   return {
     status: "realized",
+    local_observation: mockLocalEnvironmentObservation(),
     binding: {
       environment_id: "environment:mock",
       role: "native_user",

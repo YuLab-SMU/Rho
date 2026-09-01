@@ -9,6 +9,7 @@ type EnvironmentHealthMode = "health" | "plans" | "activity";
 
 function statusLabel(status: EnvironmentHealthView["status"]): string {
   switch (status) {
+    case "local_ready": return "Ready for local work";
     case "realized": return "Realized and observed";
     case "restart_required": return "Workspace restart required";
     case "observation_required": return "Workspace re-observation required";
@@ -19,9 +20,10 @@ function statusLabel(status: EnvironmentHealthView["status"]): string {
 
 function BindingFacts({ health }: { readonly health: EnvironmentHealthView }) {
   const binding = health.binding;
+  const observation = health.local_observation;
   return <section className="rho-environment-authority-card" aria-label="Environment Authority facts">
-    <span className="rho-eyebrow">Authority facts</span>
-    {binding == null ? <p>No verified Environment receipt is recorded for this project.</p> : <>
+    <span className="rho-eyebrow">{binding == null && observation != null ? "Local observation" : "Authority facts"}</span>
+    {binding != null ? <>
       <header><strong>{binding.environment_id}</strong><span>{binding.receipt_outcome}</span></header>
       <dl>
         <div><dt>Receipt</dt><dd><code>{binding.receipt_id}</code></dd></div>
@@ -31,7 +33,23 @@ function BindingFacts({ health }: { readonly health: EnvironmentHealthView }) {
         <div><dt>Runtime</dt><dd><code>{binding.runtime_id}</code></dd></div>
         <div><dt>Target</dt><dd>{binding.target_id}</dd></div>
       </dl>
-    </>}
+    </> : observation != null ? <>
+      <header>
+        <strong>{observation.project_mode === "project_renv" ? "renv project detected" : "Using your existing R environment"}</strong>
+        <span>observed this session</span>
+      </header>
+      <p>{observation.project_mode === "project_renv"
+        ? "The lockfile exists, but installed packages have not yet been compared with it. Local work remains available."
+        : "Rho is using the selected R and its existing user, site, and system libraries without creating renv."}</p>
+      <dl>
+        <div><dt>R</dt><dd>{observation.runtime_version}</dd></div>
+        <div><dt>Mode</dt><dd>{observation.project_mode === "project_renv" ? "Project renv" : "Native user"}</dd></div>
+        <div><dt>Libraries</dt><dd>{observation.library_count} effective {observation.library_count === 1 ? "path" : "paths"}</dd></div>
+        <div><dt>Reproducibility</dt><dd>{observation.project_mode === "project_renv" ? "Lockfile detected; match not verified" : "Not configured"}</dd></div>
+        <div><dt>Observation</dt><dd><code title={observation.observation_digest}>{observation.observation_digest.slice(0, 23)}…</code></dd></div>
+      </dl>
+      <small>Externally mutable · package inventory is not part of this startup observation.</small>
+    </> : <p>Workspace R has no current Runtime and library-path observation.</p>}
   </section>;
 }
 
@@ -40,15 +58,20 @@ function WorkspaceFacts({ health, busy, reobserve }: {
   readonly busy: boolean;
   readonly reobserve: () => void;
 }) {
+  const ready = health.workspace.kernel_instance_id != null
+    && !health.workspace.restart_required
+    && !health.workspace.reobserve_required;
   return <section className="rho-environment-authority-card" aria-label="Live Workspace Environment">
     <span className="rho-eyebrow">Live Workspace</span>
-    <header><strong>{health.workspace.phase.replaceAll("_", " ")}</strong>
-      <span>{health.workspace.kernel_instance_id ?? "not running"}</span></header>
+    <header><strong>{ready ? "ready" : health.workspace.phase.replaceAll("_", " ")}</strong>
+      <span>{ready ? "Workspace R running" : "not running"}</span></header>
+    {health.status === "local_ready" && <p>Execution uses this session&apos;s observed Runtime and library paths.</p>}
     {health.workspace.restart_required && <p>The verified realization is pending. Restart Workspace R from its runtime control; the failed expression will not replay.</p>}
     {health.workspace.reobserve_required && <p>The current kernel cannot execute until its package inventory and namespaces match the receipt.</p>}
     {health.workspace.reobserve_required && !health.workspace.restart_required && <button type="button" disabled={busy} onClick={reobserve}>{busy ? "Observing…" : "Re-observe now"}</button>}
     {health.workspace.active_receipt_digest != null && <small>Active receipt <code>{health.workspace.active_receipt_digest}</code></small>}
     {health.workspace.pending_receipt_digest != null && <small>Pending receipt <code>{health.workspace.pending_receipt_digest}</code></small>}
+    {health.workspace.kernel_instance_id != null && <small>Kernel <code>{health.workspace.kernel_instance_id}</code></small>}
   </section>;
 }
 
@@ -139,11 +162,12 @@ export function EnvironmentHealthPanel({ transport, mode, reportError }: {
   if (loading && health == null) return <SurfaceTaskState tone="loading" title="Reading Environment authority…" detail="Loading the verified receipt, exact plan and live Workspace gate." role="status" busy />;
   if (error != null && health == null) return <SurfaceTaskState tone="error" title="Environment Authority unavailable" detail={error} role="alert"><button type="button" onClick={() => void load()}>Try again</button></SurfaceTaskState>;
   if (health == null) return null;
+  const hasPlan = health.pending_plan != null || health.latest_operation?.plan != null;
   return <section className="rho-environment-health" data-status={health.status}>
-    <header><div><span className="rho-eyebrow">Environment realization</span><strong>{statusLabel(health.status)}</strong></div><button type="button" disabled={loading} onClick={() => void load()}>Refresh</button></header>
+    <header><div><span className="rho-eyebrow">Environment</span><strong>{statusLabel(health.status)}</strong></div><button type="button" disabled={loading} onClick={() => void load()}>Refresh</button></header>
     {error != null && <p role="alert">{error}</p>}
     {mode === "health" && <div className="rho-environment-authority-grid"><BindingFacts health={health} /><WorkspaceFacts health={health} busy={reobserving} reobserve={() => void reobserve()} /></div>}
-    {(mode === "health" || mode === "plans") && <PlanReview health={health} />}
+    {(mode === "plans" || (mode === "health" && hasPlan)) && <PlanReview health={health} />}
     {(mode === "health" || mode === "activity") && <OperationActivity health={health} />}
     <IncidentList health={health} />
     {mode === "health" && <details><summary>Projection limitations</summary><ul>{health.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul></details>}

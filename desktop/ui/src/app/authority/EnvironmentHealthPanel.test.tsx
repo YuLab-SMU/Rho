@@ -3,7 +3,10 @@ import type { ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { mockEnvironmentHealth } from "../../transport/environment.mock";
+import {
+  mockEnvironmentHealth,
+  mockLocalEnvironmentObservation,
+} from "../../transport/environment.mock";
 import { AgentEnvironmentPanel } from "../agent/AgentEnvironmentPanel";
 import type { AuthorityEnvironmentPort } from "../workbench/authorityPorts";
 import { EnvironmentHealthPanel } from "./EnvironmentHealthPanel";
@@ -56,7 +59,7 @@ describe("Environment Authority and Agent Doctor", () => {
     expect(host.textContent).toContain("/Users/rho/R/library");
     expect(host.textContent).toContain("Operation activity");
     expect(host.textContent).toContain("committed");
-    expect(host.textContent).toContain("active");
+    expect(host.textContent).toContain("Workspace R running");
   });
 
   it("shows a materialized plan before approval or execution", async () => {
@@ -74,6 +77,36 @@ describe("Environment Authority and Agent Doctor", () => {
     expect(host.textContent).toContain("Awaiting exact approval");
     expect(host.textContent).toContain(base.latest_operation!.plan.plan_id);
     expect(host.textContent).not.toContain("Operation activity");
+  });
+
+  it("presents an ordinary project as locally ready without inventing a plan or receipt", async () => {
+    const base = mockEnvironmentHealth();
+    const local = {
+      ...base,
+      status: "local_ready",
+      binding: null,
+      local_observation: mockLocalEnvironmentObservation(),
+      pending_plan: null,
+      latest_operation: null,
+      workspace: {
+        ...base.workspace,
+        phase: "unbound",
+        active_receipt_digest: null,
+      },
+      incidents: [],
+    } as const;
+    const host = await render(<EnvironmentHealthPanel
+      transport={port(local)}
+      mode="health"
+      reportError={vi.fn()}
+    />);
+    expect(host.textContent).toContain("Ready for local work");
+    expect(host.textContent).toContain("Using your existing R environment");
+    expect(host.textContent).toContain("Native user");
+    expect(host.textContent).toContain("ReproducibilityNot configured");
+    expect(host.textContent).toContain("Workspace R running");
+    expect(host.textContent).not.toContain("No materialized plan");
+    expect(host.textContent).not.toContain("No verified Environment receipt");
   });
 
   it("Agent Doctor cites Environment Authority and exposes uncertainty without installing", async () => {
@@ -103,13 +136,20 @@ describe("Environment Authority and Agent Doctor", () => {
     expect(host.textContent).toContain("cannot install directly");
   });
 
-  it("separates a running Workspace R from a missing verified Environment binding", async () => {
+  it("lets Agent cite the local observation without claiming formal reproducibility", async () => {
     const base = mockEnvironmentHealth();
-    const unbound = { ...base, binding: null, incidents: [] } as const;
-    const host = await render(<AgentEnvironmentPanel port={port(unbound)} reportError={vi.fn()} />);
-    expect(host.textContent).toContain("No verified Environment binding");
-    expect(host.textContent).toContain(`Workspace R: ${base.workspace.phase.replaceAll("_", " ")}`);
-    expect(host.textContent).toContain("may be running");
+    const local = {
+      ...base,
+      status: "local_ready",
+      binding: null,
+      local_observation: mockLocalEnvironmentObservation(),
+      incidents: [],
+    } as const;
+    const host = await render(<AgentEnvironmentPanel port={port(local)} reportError={vi.fn()} />);
+    expect(host.textContent).toContain("Ready for local work");
+    expect(host.textContent).toContain("R version 4.5.2");
+    expect(host.textContent).toContain("local observation");
+    expect(host.textContent).toContain("formal reproducibility remain unverified");
     expect(host.textContent).not.toContain("No open Environment incident");
   });
 

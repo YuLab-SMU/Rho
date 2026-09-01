@@ -94,6 +94,7 @@ import type { AgentTurnEventFrame } from "./agent-events";
 import { INVALIDATION_TOPICS } from "./invalidation-contract";
 import { createMockEvidenceGraphTransport } from "./evidence-graph.mock";
 import { createMockAuthorityTransport } from "./authority.mock";
+import { mockEnvironmentHealth } from "./environment.mock";
 import type {
   ArtifactRecordSummary,
   PlotArtifactSummary,
@@ -3507,80 +3508,7 @@ export function createMockUiKernelTransport(
       return structuredClone(typedPlotRecords().slice(0, Math.max(0, limit)));
     },
     async environmentHealth() {
-      return {
-        status: "realized" as const,
-        binding: {
-          environment_id: "environment:mock",
-          role: "native_user",
-          target_id: "local",
-          runtime_id: "runtime:mock-r-4.5.2",
-          runtime_ownership: "system",
-          runtime_support_tier: "verified",
-          desired_revision: "environment-desired:mock",
-          realization_revision: "environment-realization:mock",
-          receipt_id: "environment-receipt:mock",
-          receipt_digest: `sha256:${"a".repeat(64)}`,
-          receipt_outcome: "succeeded",
-          receipt_restart_required: true,
-          updated_at: agentNow,
-        },
-        workspace: {
-          phase: "active",
-          workspace_id: "workspace:mock",
-          kernel_instance_id: "kernel:mock",
-          active_receipt_digest: `sha256:${"a".repeat(64)}`,
-          pending_receipt_digest: null,
-          restart_required: false,
-          reobserve_required: false,
-        },
-        pending_plan: null,
-        latest_operation: {
-          operation_id: "operation:environment-mock",
-          status: "succeeded",
-          reason: null,
-          checkpoints: ["admitted", "executed", "verified", "committed"].map((name) => ({
-            name,
-            reached_at: agentNow,
-            digest: name === "committed" ? `sha256:${"a".repeat(64)}` : null,
-          })),
-          plan: {
-            plan_id: `environment_plan_${"b".repeat(64)}`,
-            intent: "install_user_package",
-            environment_id: "environment:mock",
-            expected_desired_revision: "environment-desired:before",
-            expected_realization_revision: "environment-realization:before",
-            runtime_id: "runtime:mock-r-4.5.2",
-            runtime_version: "4.5.2",
-            runtime_ownership: "system",
-            runtime_support_tier: "verified",
-            library_stack_digest: `sha256:${"d".repeat(64)}`,
-            target_library_kind: "user",
-            target_library_path: "/Users/rho/R/library",
-            package_actions: [{
-              package: "DESeq2",
-              action: "install",
-              version: "1.50.0",
-              source: "file:///fixtures/DESeq2.tar.gz",
-              artifact_digest: `sha256:${"c".repeat(64)}`,
-              artifact_byte_size: 42,
-            }],
-            native_actions: [],
-            toolchain_actions: [],
-            network_intents: [],
-            secret_requirements: [],
-            verification_probes: ["probe_namespace_deseq2:namespace_load=DESeq2@1.50.0"],
-            restart_required: true,
-            expires_at: agentNow,
-          },
-          created_at: agentNow,
-          updated_at: agentNow,
-        },
-        incidents: [],
-        limitations: [
-          "Authority realization and live Workspace activation are reported separately.",
-        ],
-        observed_at: agentNow,
-      };
+      return structuredClone(mockEnvironmentHealth());
     },
     async reobserveEnvironment() {
       return this.environmentHealth();

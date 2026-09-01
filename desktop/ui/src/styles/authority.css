@@ -169,6 +169,7 @@
     background: color-mix(in srgb, var(--rho-panel) 94%, transparent);
     backdrop-filter: blur(10px);
   }
+  .rho-environment-health[data-status="local_ready"] > header { box-shadow: inset 3px 0 0 var(--rho-ok); }
   .rho-environment-health > header > div { display: grid; gap: var(--rho-space-1); }
   .rho-environment-health > header button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); }
   .rho-environment-health > [role="alert"] { margin: 0; padding: var(--rho-space-3) var(--rho-space-4); border-bottom: var(--rho-border); color: var(--rho-danger); background: var(--rho-danger-tint); }
@@ -196,6 +197,7 @@
   .rho-environment-operation-activity > header > strong,
   .rho-environment-incidents article > header > span { color: var(--rho-ink-2); font-size: var(--rho-text-caption); font-weight: var(--rho-weight-semibold); text-transform: uppercase; }
   .rho-environment-authority-card > p { margin: 0; color: var(--rho-ink-2); font-size: var(--rho-text-ui); line-height: 1.5; }
+  .rho-environment-authority-card > small { line-height: 1.45; }
 
   .rho-environment-authority-card dl,
   .rho-environment-plan-review dl { display: grid; gap: 0; margin: 0; }

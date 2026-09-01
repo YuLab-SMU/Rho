@@ -58,6 +58,7 @@
   section.rho-agent-surface .rho-agent-environment-doctor ul { display: grid; gap: var(--rho-space-1); margin: 0; padding-inline-start: var(--rho-space-5); }
   section.rho-agent-surface .rho-agent-environment-doctor li { display: grid; gap: var(--rho-space-1); }
   section.rho-agent-surface .rho-agent-environment-uncertainty { color: var(--rho-warn); }
+  section.rho-agent-surface .rho-agent-environment-doctor[data-state="local_ready"],
   section.rho-agent-surface .rho-agent-environment-doctor[data-state="unbound"],
   section.rho-agent-surface .rho-agent-environment-doctor[data-state="ready"] { gap: var(--rho-space-1); padding-block: var(--rho-space-2); }
   section.rho-agent-surface .rho-agent-environment-doctor[data-state="unbound"] > header > span { color: var(--rho-muted); font-size: var(--rho-text-caption); }
