@@ -1,0 +1,19 @@
+[package]
+name = "rho-acp-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+agent-client-protocol = "=0.11.1"
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util = { version = "0.7", features = ["compat"] }
+
+[dev-dependencies]
+tempfile.workspace = true

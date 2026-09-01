@@ -14,6 +14,7 @@ members = [
   "crates/rho-event-hub",
   "crates/rho-execution",
   "crates/rho-control-plane",
+  "crates/rho-acp-client",
   "crates/rho-agent-host",
   "crates/rho-workspace",
   "crates/rho-runner",
