@@ -366,58 +366,6 @@ fn bridge_expression(request_type: &str, arguments: &Value) -> Result<(Operation
                 ),
             ))
         }
-        "environment.initialize"
-        | "environment.restore"
-        | "environment.snapshot"
-        | "environment.package_install"
-        | "environment.package_update"
-        | "environment.package_remove" => {
-            let operation = match request_type {
-                "environment.initialize" => "initialize",
-                "environment.restore" => "restore",
-                "environment.snapshot" => "snapshot",
-                "environment.package_install" => "install_package",
-                "environment.package_update" => "update_package",
-                "environment.package_remove" => "remove_package",
-                _ => unreachable!(),
-            };
-            let repositories = arguments
-                .get("repositories")
-                .filter(|value| !value.is_null())
-                .cloned()
-                .map(serde_json::from_value)
-                .transpose()
-                .context("decoding environment operation repositories")?;
-            let operation_arguments = EnvironmentOperationArguments {
-                operation: operation.to_string(),
-                project_root: arguments
-                    .get("project_root")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                repositories,
-                bioconductor: arguments
-                    .get("bioconductor")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                package: arguments
-                    .get("package")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-                project_library: arguments
-                    .get("project_library")
-                    .and_then(Value::as_str)
-                    .map(str::to_string),
-            };
-            let class = if environment_operation_is_package(operation) {
-                OperationClass::StateCapable
-            } else {
-                OperationClass::ProjectMutation
-            };
-            Ok((
-                class,
-                environment_operation_bridge_expression(&operation_arguments)?,
-            ))
-        }
         "workspace.set_project_root" => {
             let code = arguments["code"]
                 .as_str()
@@ -495,23 +443,6 @@ fn requested_code(request_type: &str, arguments: &Value, bridge_expression: &str
                 )
             })
             .unwrap_or_else(|| bridge_expression.to_string()),
-        "environment.initialize"
-        | "environment.restore"
-        | "environment.snapshot"
-        | "environment.package_install"
-        | "environment.package_update"
-        | "environment.package_remove" => {
-            let project_root = arguments
-                .get("project_root")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown project");
-            let package = arguments
-                .get("package")
-                .and_then(Value::as_str)
-                .map(|value| format!(" {value}"))
-                .unwrap_or_default();
-            format!("{request_type}{package} {project_root}")
-        }
         "workspace.render_document" => arguments
             .get("path")
             .and_then(Value::as_str)

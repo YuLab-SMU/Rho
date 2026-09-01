@@ -16,14 +16,12 @@ fn authorize_agent_workspace_request(
         | "workspace.format_r_source"
         | "workspace.inspect_targets"
         | "workspace.read_data_view"
+        | "environment.inspect"
+        | "environment.explain_incident"
+        | "environment.propose_change"
+        | "environment.operation.inspect"
         | "plugin.contribution.invoke" => Ok(()),
-        "workspace.execute"
-        | "environment.initialize"
-        | "environment.restore"
-        | "environment.snapshot"
-        | "environment.package_install"
-        | "environment.package_update"
-        | "environment.package_remove" => {
+        "workspace.execute" => {
             ensure!(mode == "act", "{mode} mode cannot mutate Workspace R");
             let request_id = payload
                 .get("approval_request_id")
@@ -63,63 +61,8 @@ fn approved_arguments_match(approved: &Value, actual: &Value) -> bool {
 fn agent_tool_request_type(tool: &str) -> Option<&'static str> {
     match tool {
         "run_r" => Some("workspace.execute"),
-        "initialize_project_environment" => Some("environment.initialize"),
-        "restore_project_environment" => Some("environment.restore"),
-        "snapshot_project_environment" => Some("environment.snapshot"),
-        "install_project_package" => Some("environment.package_install"),
-        "update_project_package" => Some("environment.package_update"),
-        "remove_project_package" => Some("environment.package_remove"),
         _ => None,
     }
-}
-
-fn request_type_uses_environment_contract(request_type: &str) -> bool {
-    matches!(
-        request_type,
-        "environment.initialize"
-            | "environment.restore"
-            | "environment.snapshot"
-            | "environment.package_install"
-            | "environment.package_update"
-            | "environment.package_remove"
-    )
-}
-
-fn tool_environment_operation_arguments(
-    tool: &str,
-    arguments: &Value,
-) -> Result<EnvironmentOperationArguments> {
-    let repositories = arguments
-        .get("repositories")
-        .cloned()
-        .map(serde_json::from_value)
-        .transpose()
-        .context("decoding environment operation repositories")?;
-    let bioconductor = arguments
-        .get("bioconductor")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let package = arguments
-        .get("package")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let operation = match tool {
-        "initialize_project_environment" => "initialize",
-        "restore_project_environment" => "restore",
-        "snapshot_project_environment" => "snapshot",
-        "install_project_package" => "install_package",
-        "update_project_package" => "update_package",
-        "remove_project_package" => "remove_package",
-        _ => bail!("unsupported environment tool `{tool}`"),
-    };
-    Ok(EnvironmentOperationArguments {
-        operation: operation.to_string(),
-        project_root: None,
-        repositories,
-        bioconductor,
-        package,
-        project_library: None,
-    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -127,11 +70,9 @@ async fn handle_tool_approval_required(
     incoming: &Envelope,
     turn_id: &str,
     mode: &str,
-    session: &ArkSession,
     context: Arc<WorkspaceBrokerLane>,
     agent_store: &AgentRepository,
     approvals: Arc<PendingApprovalRegistry>,
-    environment_approvals: Arc<PendingApprovalRegistry>,
     approved_mutations: &mut HashMap<String, ApprovedMutation>,
     auto_approve: bool,
 ) -> Result<Value> {
@@ -151,8 +92,6 @@ async fn handle_tool_approval_required(
         .to_string();
     let request_id = incoming.id.clone();
     let request_type = agent_tool_request_type(&tool);
-    let uses_environment_contract =
-        request_type.is_some_and(request_type_uses_environment_contract);
     let mut context_guard = context.lock().await;
     let WorkspaceBrokerState { broker, .. } = &mut *context_guard;
     let identity = broker.identity().clone();
@@ -186,226 +125,6 @@ async fn handle_tool_approval_required(
             "decision": "policy_denied",
             "reason": reason,
             "policy": "desktop_read_only_mode"
-        }));
-    }
-
-    if uses_environment_contract {
-        let environment_arguments = tool_environment_operation_arguments(&tool, &arguments)?;
-        let request = request_environment_operation(
-            environment_arguments,
-            Some(turn_id),
-            "agent",
-            session,
-            broker,
-            &executor,
-        )
-        .await?;
-        let request_type = request.request_name.clone();
-        let approved_arguments: Value = serde_json::from_str(&request.arguments_json)
-            .context("decoding approved environment operation arguments")?;
-        let receiver = environment_approvals
-            .register(request.request_id.clone(), Some(turn_id.to_string()))
-            .await;
-        let waiting_turn_id = turn_id.to_string();
-        let waiting_event = AgentTurnEventDraft {
-            turn_id: turn_id.to_string(),
-            event_type: "environment.requested".to_string(),
-            title: format!("Environment review required · {}", request.request_name),
-            body: Some(
-                "Project environment remains unchanged until you approve this reviewed operation."
-                    .to_string(),
-            ),
-            status: "running".to_string(),
-            tool: Some(tool.clone()),
-            request_id: Some(request.request_id.clone()),
-            code: None,
-            details_json: serde_json::to_string(&json!({
-                "tool": tool,
-                "policy": policy,
-                "preview_sha256": request.preview_sha256,
-                "before_snapshot_id": request.before_snapshot_id,
-                "project_root": request.project_root
-            }))?,
-        };
-        let waiting_event_id = run_workspace_store_service(&executor, move |store| {
-            store.update_agent_turn_status(&waiting_turn_id, "waiting")?;
-            let event_id = store.append_agent_turn_event(&waiting_event)?;
-            Ok(event_id)
-        })
-        .await?;
-        executor.publish_agent_turn_event(waiting_event_id).await;
-        drop(context_guard);
-
-        let response = receiver.await.unwrap_or(ApprovalResponseInput {
-            decision: "cancel".to_string(),
-            reason: Some(
-                "Environment operation channel closed before a decision was delivered.".to_string(),
-            ),
-        });
-        environment_approvals.remove(&request.request_id).await;
-
-        let mut context_guard = context.lock().await;
-        let WorkspaceBrokerState { broker, .. } = &mut *context_guard;
-        let request = executor
-            .environment_repository()
-            .get_request(request.project_root.clone(), request.request_id.clone())
-            .await?
-            .context("Environment operation request disappeared before approval resolution")?;
-        if response.decision == "approve" {
-            let current_project_root = executor
-                .project_transition_repository()
-                .active_project_root()
-                .await?
-                .unwrap_or_default()
-                .replace('\\', "/");
-            let current_snapshot_id =
-                capture_environment_snapshot_id(session, &current_project_root, &executor)
-                    .await
-                    .ok();
-            if let Some(reason) = environment_operation_stale_reason(
-                &request,
-                broker,
-                &current_project_root,
-                current_snapshot_id.as_deref(),
-            ) {
-                let stale_request_id = request.request_id.clone();
-                let stale_decision = EnvironmentOperationDecisionRecord {
-                    decision: "approve".to_string(),
-                    status: "stale".to_string(),
-                    reason: Some(reason.clone()),
-                };
-                let running_turn_id = turn_id.to_string();
-                let stale_event = AgentTurnEventDraft {
-                    turn_id: turn_id.to_string(),
-                    event_type: "environment.stale".to_string(),
-                    title: format!("Environment approval stale · {}", request.request_name),
-                    body: Some(reason.clone()),
-                    status: "error".to_string(),
-                    tool: Some(tool),
-                    request_id: Some(request.request_id.clone()),
-                    code: None,
-                    details_json: serde_json::to_string(&json!({"reason": reason}))?,
-                };
-                let stale_event_id = run_workspace_store_service(&executor, move |store| {
-                    store
-                        .decide_environment_operation_request(&stale_request_id, &stale_decision)?;
-                    store.update_agent_turn_status(&running_turn_id, "running")?;
-                    let event_id = store.append_agent_turn_event(&stale_event)?;
-                    Ok(event_id)
-                })
-                .await?;
-                executor.publish_agent_turn_event(stale_event_id).await;
-                return Ok(json!({
-                    "approved": false,
-                    "request_id": request.request_id,
-                    "decision": "stale",
-                    "reason": reason,
-                    "policy": "desktop_environment_review"
-                }));
-            }
-
-            let approved_request_id = request.request_id.clone();
-            let approved_decision = EnvironmentOperationDecisionRecord {
-                decision: "approve".to_string(),
-                status: "approved".to_string(),
-                reason: response.reason.clone(),
-            };
-            let running_turn_id = turn_id.to_string();
-            let approved_event = AgentTurnEventDraft {
-                turn_id: turn_id.to_string(),
-                event_type: "environment.approved".to_string(),
-                title: format!("Environment approval granted · {}", request.request_name),
-                body: Some("Broker authorized the reviewed environment operation.".to_string()),
-                status: "completed".to_string(),
-                tool: Some(tool),
-                request_id: Some(request.request_id.clone()),
-                code: None,
-                details_json: serde_json::to_string(&json!({
-                    "request_type": request_type,
-                    "arguments": approved_arguments
-                }))?,
-            };
-            let approved_event_id = run_workspace_store_service(&executor, move |store| {
-                store.decide_environment_operation_request(
-                    &approved_request_id,
-                    &approved_decision,
-                )?;
-                store.update_agent_turn_status(&running_turn_id, "running")?;
-                let event_id = store.append_agent_turn_event(&approved_event)?;
-                Ok(event_id)
-            })
-            .await?;
-            executor.publish_agent_turn_event(approved_event_id).await;
-            approved_mutations.insert(
-                request.request_id.clone(),
-                ApprovedMutation {
-                    request_type: request_type.clone(),
-                    arguments: approved_arguments.clone(),
-                },
-            );
-            return Ok(json!({
-                "approved": true,
-                "request_id": request.request_id,
-                "approval_request_id": request.request_id,
-                "decision": "approved",
-                "reason": "Environment operation approved.",
-                "policy": "desktop_environment_review",
-                "request_type": request_type,
-                "arguments": approved_arguments
-            }));
-        }
-
-        let (status, body) = match response.decision.as_str() {
-            "cancel" => (
-                "cancelled",
-                response
-                    .reason
-                    .clone()
-                    .unwrap_or_else(|| "The environment operation was cancelled.".to_string()),
-            ),
-            _ => (
-                "rejected",
-                response
-                    .reason
-                    .clone()
-                    .unwrap_or_else(|| "The environment operation was rejected.".to_string()),
-            ),
-        };
-        let terminal_request_id = request.request_id.clone();
-        let terminal_decision = EnvironmentOperationDecisionRecord {
-            decision: response.decision.clone(),
-            status: status.to_string(),
-            reason: response.reason.clone(),
-        };
-        let running_turn_id = turn_id.to_string();
-        let terminal_event = AgentTurnEventDraft {
-            turn_id: turn_id.to_string(),
-            event_type: format!("environment.{status}"),
-            title: format!("Environment approval {status} · {}", request.request_name),
-            body: Some(body.clone()),
-            status: "error".to_string(),
-            tool: Some(tool),
-            request_id: Some(request.request_id.clone()),
-            code: None,
-            details_json: serde_json::to_string(&json!({
-                "decision": response.decision,
-                "reason": response.reason
-            }))?,
-        };
-        let terminal_event_id = run_workspace_store_service(&executor, move |store| {
-            store.decide_environment_operation_request(&terminal_request_id, &terminal_decision)?;
-            store.update_agent_turn_status(&running_turn_id, "running")?;
-            let event_id = store.append_agent_turn_event(&terminal_event)?;
-            Ok(event_id)
-        })
-        .await?;
-        executor.publish_agent_turn_event(terminal_event_id).await;
-        return Ok(json!({
-            "approved": false,
-            "request_id": request.request_id,
-            "decision": status,
-            "reason": body,
-            "policy": "desktop_environment_review"
         }));
     }
 
@@ -797,16 +516,4 @@ fn event_message_text(payload: &Value) -> Option<String> {
                 .and_then(Value::as_str)
                 .map(str::to_string)
         })
-}
-
-fn environment_operation_request_name(operation: &str) -> Result<&'static str> {
-    match operation {
-        "initialize" => Ok("environment.initialize"),
-        "restore" => Ok("environment.restore"),
-        "snapshot" => Ok("environment.snapshot"),
-        "install_package" => Ok("environment.package_install"),
-        "update_package" => Ok("environment.package_update"),
-        "remove_package" => Ok("environment.package_remove"),
-        _ => bail!("unsupported environment operation `{operation}`"),
-    }
 }

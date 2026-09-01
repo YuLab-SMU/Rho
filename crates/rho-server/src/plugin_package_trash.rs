@@ -1,6 +1,6 @@
 //! Broker-owned recoverable moves for project-local plugin packages.
 //!
-//! This module owns only exact, same-filesystem rename/restore evidence. It
+//! This module owns only exact, same-filesystem rename/restore receipts. It
 //! does not update SQLite, delete recursively, activate code, or expose paths
 //! to guest code.
 
@@ -33,7 +33,7 @@ pub enum PluginPackageOwnershipOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PluginPackageMoveEvidence {
+pub struct PluginPackageMoveReceipt {
     pub outcome: PluginPackageOwnershipOutcome,
     pub plugin_id: String,
     pub package_digest: String,
@@ -98,7 +98,7 @@ impl PluginPackageTrash {
         plugin_id: &str,
         expected_digest: &str,
         trash_key: &str,
-    ) -> Result<PluginPackageMoveEvidence, PluginPackageTrashError> {
+    ) -> Result<PluginPackageMoveReceipt, PluginPackageTrashError> {
         let identity =
             ValidatedMoveIdentity::new(directory_name, plugin_id, expected_digest, trash_key)?;
         let _gate = self
@@ -161,11 +161,11 @@ impl PluginPackageTrash {
                     ));
                 }
                 validate_exact_directory(&target, &identity)?;
-                Ok(identity.evidence(PluginPackageOwnershipOutcome::Moved))
+                Ok(identity.receipt(PluginPackageOwnershipOutcome::Moved))
             }
             (false, true) => {
                 validate_exact_directory(&target, &identity)?;
-                Ok(identity.evidence(PluginPackageOwnershipOutcome::AlreadyMoved))
+                Ok(identity.receipt(PluginPackageOwnershipOutcome::AlreadyMoved))
             }
             (true, true) => Err(PluginPackageTrashError::UnsafeOwnership(
                 "source and trash both exist for one package".to_string(),
@@ -183,7 +183,7 @@ impl PluginPackageTrash {
         plugin_id: &str,
         expected_digest: &str,
         trash_key: &str,
-    ) -> Result<PluginPackageMoveEvidence, PluginPackageTrashError> {
+    ) -> Result<PluginPackageMoveReceipt, PluginPackageTrashError> {
         let identity =
             ValidatedMoveIdentity::new(directory_name, plugin_id, expected_digest, trash_key)?;
         let _gate = self
@@ -226,7 +226,7 @@ impl PluginPackageTrash {
                         "restored package digest changed".to_string(),
                     ));
                 }
-                Ok(identity.evidence(PluginPackageOwnershipOutcome::Restored))
+                Ok(identity.receipt(PluginPackageOwnershipOutcome::Restored))
             }
             (true, false) => {
                 let snapshot = snapshot_workspace_plugin_package(
@@ -240,7 +240,7 @@ impl PluginPackageTrash {
                         "already-restored package digest changed".to_string(),
                     ));
                 }
-                Ok(identity.evidence(PluginPackageOwnershipOutcome::AlreadyRestored))
+                Ok(identity.receipt(PluginPackageOwnershipOutcome::AlreadyRestored))
             }
             (true, true) => Err(PluginPackageTrashError::UnsafeOwnership(
                 "restore source and trash target both exist".to_string(),
@@ -258,7 +258,7 @@ impl PluginPackageTrash {
         plugin_id: &str,
         expected_digest: &str,
         trash_key: &str,
-    ) -> Result<PluginPackageMoveEvidence, PluginPackageTrashError> {
+    ) -> Result<PluginPackageMoveReceipt, PluginPackageTrashError> {
         let identity =
             ValidatedMoveIdentity::new(directory_name, plugin_id, expected_digest, trash_key)?;
         let _gate = self
@@ -314,7 +314,7 @@ impl PluginPackageTrash {
             (false, false) => {
                 if marker.exists() {
                     validate_purge_marker(&marker, &marker_evidence)?;
-                    return Ok(identity.evidence(PluginPackageOwnershipOutcome::AlreadyPurged));
+                    return Ok(identity.receipt(PluginPackageOwnershipOutcome::AlreadyPurged));
                 }
                 return Err(PluginPackageTrashError::UnsafeOwnership(
                     "purged package has no exact retained marker".to_string(),
@@ -345,7 +345,7 @@ impl PluginPackageTrash {
             ));
         }
         validate_purge_marker(&marker, &marker_evidence)?;
-        Ok(identity.evidence(PluginPackageOwnershipOutcome::Purged))
+        Ok(identity.receipt(PluginPackageOwnershipOutcome::Purged))
     }
 }
 
@@ -373,8 +373,8 @@ impl ValidatedMoveIdentity {
         })
     }
 
-    fn evidence(&self, outcome: PluginPackageOwnershipOutcome) -> PluginPackageMoveEvidence {
-        PluginPackageMoveEvidence {
+    fn receipt(&self, outcome: PluginPackageOwnershipOutcome) -> PluginPackageMoveReceipt {
+        PluginPackageMoveReceipt {
             outcome,
             plugin_id: self.plugin_id.to_string(),
             package_digest: self.digest.to_string(),

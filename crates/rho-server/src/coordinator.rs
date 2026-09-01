@@ -19,10 +19,8 @@ use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, Op
 use rho_store::{
     AgentConversationTurn, AgentRepository, AgentTurnContextItemDraft, AgentTurnEventDraft,
     AgentTurnFinish, ApprovalDecisionRecord, ApprovalRequestDraft, ArtifactRecordDraft,
-    BorrowedStore, EnvironmentOperationDecisionRecord, EnvironmentOperationFinish,
-    EnvironmentOperationRequestDraft, EnvironmentOperationRequestSummary, EnvironmentSnapshotDraft,
-    PlotArtifactDraft, RunDraft, RunErrorRange, RunFinish, Store, StoreConnection, StoreExecutor,
-    StoreExecutorOperationError, normalize_project_root,
+    BorrowedStore, EnvironmentSnapshotDraft, PlotArtifactDraft, RunDraft, RunErrorRange, RunFinish,
+    Store, StoreConnection, StoreExecutor, StoreExecutorOperationError, normalize_project_root,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};

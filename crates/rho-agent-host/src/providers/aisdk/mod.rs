@@ -115,6 +115,18 @@ impl AisdkAdapter {
                 "read_artifact".to_string(),
                 CapabilityId::new("artifact.read").unwrap(),
             ),
+            (
+                "inspect_environment".to_string(),
+                CapabilityId::new(rho_protocol::ENVIRONMENT_INSPECT_CAPABILITY).unwrap(),
+            ),
+            (
+                "explain_environment_incident".to_string(),
+                CapabilityId::new(rho_protocol::ENVIRONMENT_EXPLAIN_INCIDENT_CAPABILITY).unwrap(),
+            ),
+            (
+                "propose_environment_change".to_string(),
+                CapabilityId::new(rho_protocol::ENVIRONMENT_PROPOSE_CHANGE_CAPABILITY).unwrap(),
+            ),
         ]);
         let capability_ids = tool_map.values().cloned().collect();
         Self {

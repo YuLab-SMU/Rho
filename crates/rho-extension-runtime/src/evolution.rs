@@ -2,7 +2,7 @@
 //!
 //! P2.5-0 defines the *vocabulary* and *pure validation* for Agent-authored
 //! capability evolution — experience traces, recipes, lineages, candidates,
-//! standing policies, evaluation evidence, and capability gardening — without
+//! standing policies, evaluation reports, and capability gardening — without
 //! any schema, observation, Agent call, build, plugin execution, or UI.
 //!
 //! The governing invariants are enforced here as pure functions, not
@@ -12,7 +12,7 @@
 //! 2. A candidate is an immutable digest, never a live patch.
 //! 3. Authority is external to the builder.
 //! 4. A standing policy is an upper bound, not a suggestion.
-//! 5. Evaluation evidence is versioned; a candidate cannot choose its own gate.
+//! 5. Evaluation reports are versioned; a candidate cannot choose its own gate.
 //! 6. No production side-effect replay.
 //! 7. Everything is project-scoped.
 //! 8. First-party promotion is ordinary product work, never a runtime state.
@@ -226,7 +226,7 @@ pub struct ProvenanceRef {
 }
 
 /// A lineage version, binding the package digest to its parent, source, and
-/// evaluation evidence. The `accepted_digest` of a lineage is a broker-owned
+/// evaluation report. The `accepted_digest` of a lineage is a broker-owned
 /// compare-and-swap pointer, never the authorization principal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LineageVersion {
@@ -344,8 +344,8 @@ mod tests {
             rejection_conditions: vec!["crash".to_string()],
         };
         let sealed = plan.seal().unwrap();
-        let evidence = crate::EvaluationEvidence {
-            evidence_id: "evidence.1".to_string(),
+        let report = crate::EvaluationReport {
+            report_id: "report.1".to_string(),
             plan_id: sealed.plan().plan_id.clone(),
             plan_seal_digest: sealed.seal_digest().clone(),
             candidate_digest: sealed.plan().candidate_digest.clone(),
@@ -363,8 +363,7 @@ mod tests {
             safety_invariants_held: true,
             claimed_improvement_met: true,
         };
-        crate::ManualPromotion::authorize(&evidence, &sealed, digest(parent), digest(parent))
-            .unwrap()
+        crate::ManualPromotion::authorize(&report, &sealed, digest(parent), digest(parent)).unwrap()
     }
 
     #[test]

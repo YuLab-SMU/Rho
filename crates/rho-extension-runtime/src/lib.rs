@@ -77,8 +77,8 @@ pub use error::{
     InvalidParentReason, InvalidScopePolicyReason, InvalidScopeReason, LimitKind,
 };
 pub use evaluation::{
-    CaseResult, EvaluationDecision, EvaluationError, EvaluationEvidence, EvaluationPlan,
-    LayerResult, ManualPromotion, SealedEvaluationPlan,
+    CaseResult, EvaluationDecision, EvaluationError, EvaluationPlan, EvaluationReport, LayerResult,
+    ManualPromotion, SealedEvaluationPlan,
 };
 pub use evolution::{
     AutonomyLevel, DEFAULT_LINEAGE_AUTONOMY, EvolutionEnvelopes, FailureClass, GardenAction,

@@ -38,17 +38,6 @@ pub async fn dispatch_workspace_request_with_execution_id(
         .get("arguments")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let environment_operation_request_id = if request_type_uses_environment_contract(request_type) {
-        Some(
-            payload
-                .get("approval_request_id")
-                .and_then(Value::as_str)
-                .context("Environment operation omitted approval_request_id")?
-                .to_string(),
-        )
-    } else {
-        None
-    };
     let (operation_class, bridge_expression) = bridge_expression(request_type, &arguments)?;
     let mut request =
         ExecutionRequest::new(origin, operation_class, expected, bridge_expression.clone());
@@ -67,26 +56,6 @@ pub async fn dispatch_workspace_request_with_execution_id(
             .context("Cannot persist run without an active project identity")
     })
     .await?;
-    if let Some(request_id) = environment_operation_request_id.as_deref() {
-        let project_root = project_root.clone();
-        let request_type = request_type.to_string();
-        let request_id = request_id.to_string();
-        let execution_id = request.execution_id.clone();
-        ensure!(
-            run_workspace_store_service(executor, move |store| {
-                store
-                    .claim_environment_operation_request(
-                        &project_root,
-                        &request_type,
-                        &request_id,
-                        &execution_id,
-                    )
-                    .map_err(Into::into)
-            })
-            .await?,
-            "Environment operation approval is missing, invalid, or already consumed"
-        );
-    }
     let environment_snapshot_id = if scientific_run_requires_environment_snapshot(request_type) {
         Some(capture_environment_snapshot_id(session, &project_root, executor).await?)
     } else {
@@ -176,7 +145,7 @@ pub async fn dispatch_workspace_request_with_execution_id(
             })
             .await?;
             let environment_snapshot_id_after =
-                if environment_operation_requires_after_snapshot(request_type) {
+                if scientific_run_requires_environment_snapshot(request_type) {
                     capture_environment_snapshot_id(session, &project_root, executor)
                         .await
                         .ok()
@@ -207,31 +176,8 @@ pub async fn dispatch_workspace_request_with_execution_id(
                 traceback: Vec::new(),
                 environment_snapshot_id_after,
             };
-            let environment_finish = environment_operation_request_id.as_ref().map(|request_id| {
-                EnvironmentOperationFinish {
-                    request_id: request_id.to_string(),
-                    status: if cancelled {
-                        "interrupted".to_string()
-                    } else {
-                        "failed".to_string()
-                    },
-                    run_id: Some(request.execution_id.clone()),
-                    terminal_outcome: Some(
-                        if cancelled {
-                            "user_interrupt"
-                        } else {
-                            "execution_error"
-                        }
-                        .to_string(),
-                    ),
-                    reason: Some(error_message),
-                }
-            });
             run_workspace_store_service(executor, move |store| {
                 store.finish_run(&finish)?;
-                if let Some(environment_finish) = environment_finish {
-                    let _ = store.finish_environment_operation_request(&environment_finish)?;
-                }
                 Ok(())
             })
             .await?;
@@ -249,7 +195,7 @@ pub async fn dispatch_workspace_request_with_execution_id(
             })
             .await?;
             let environment_snapshot_id_after =
-                if environment_operation_requires_after_snapshot(request_type) {
+                if scientific_run_requires_environment_snapshot(request_type) {
                     capture_environment_snapshot_id(session, &project_root, executor)
                         .await
                         .ok()
@@ -280,31 +226,8 @@ pub async fn dispatch_workspace_request_with_execution_id(
                 traceback: Vec::new(),
                 environment_snapshot_id_after,
             };
-            let environment_finish = environment_operation_request_id.as_ref().map(|request_id| {
-                EnvironmentOperationFinish {
-                    request_id: request_id.to_string(),
-                    status: if cancelled {
-                        "interrupted".to_string()
-                    } else {
-                        "failed".to_string()
-                    },
-                    run_id: Some(request.execution_id.clone()),
-                    terminal_outcome: Some(
-                        if cancelled {
-                            "user_interrupt"
-                        } else {
-                            "result_unavailable"
-                        }
-                        .to_string(),
-                    ),
-                    reason: Some(error_message),
-                }
-            });
             run_workspace_store_service(executor, move |store| {
                 store.finish_run(&finish)?;
-                if let Some(environment_finish) = environment_finish {
-                    let _ = store.finish_environment_operation_request(&environment_finish)?;
-                }
                 Ok(())
             })
             .await?;
@@ -328,7 +251,7 @@ pub async fn dispatch_workspace_request_with_execution_id(
         .map(|(before, after)| generated_output_deltas(before, after))
         .unwrap_or_default();
     let environment_snapshot_id_after =
-        if environment_operation_requires_after_snapshot(request_type) {
+        if scientific_run_requires_environment_snapshot(request_type) {
             capture_environment_snapshot_id(session, &project_root, executor)
                 .await
                 .ok()
@@ -363,29 +286,8 @@ pub async fn dispatch_workspace_request_with_execution_id(
             .collect(),
         environment_snapshot_id_after,
     };
-    let environment_finish =
-        environment_operation_request_id
-            .as_ref()
-            .map(|request_id| EnvironmentOperationFinish {
-                request_id: request_id.to_string(),
-                status: if failed {
-                    "failed".to_string()
-                } else {
-                    "completed".to_string()
-                },
-                run_id: Some(request.execution_id.clone()),
-                terminal_outcome: Some(if failed { "r_error" } else { "completed" }.to_string()),
-                reason: result
-                    .get("error")
-                    .and_then(|value| value.get("message"))
-                    .and_then(Value::as_str)
-                    .map(redact_sensitive_text),
-            });
     run_workspace_store_service(executor, move |store| {
         store.finish_run_with_error_range(&finish, error_range.as_ref())?;
-        if let Some(environment_finish) = environment_finish {
-            let _ = store.finish_environment_operation_request(&environment_finish)?;
-        }
         Ok(())
     })
     .await?;

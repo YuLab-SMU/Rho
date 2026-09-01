@@ -394,6 +394,11 @@ fn map_tool(tool: &str) -> CapabilityId {
         "inspect_object" => "workspace.inspect_object",
         "read_snapshot" => "snapshot.read",
         "error_history" => "history.errors",
+        "inspect_environment" => rho_protocol::ENVIRONMENT_INSPECT_CAPABILITY,
+        "explain_environment_incident" => rho_protocol::ENVIRONMENT_EXPLAIN_INCIDENT_CAPABILITY,
+        "propose_environment_change" => rho_protocol::ENVIRONMENT_PROPOSE_CHANGE_CAPABILITY,
+        "request_environment_plan_apply" => rho_protocol::ENVIRONMENT_REQUEST_APPLY_PLAN_CAPABILITY,
+        "inspect_environment_operation" => rho_protocol::ENVIRONMENT_OPERATION_INSPECT_CAPABILITY,
         other => other,
     })
     .unwrap_or_else(|_| CapabilityId::new("unsupported.provider_tool").unwrap())

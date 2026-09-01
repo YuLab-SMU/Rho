@@ -139,6 +139,9 @@ impl ProviderMatrixEntry {
                 CapabilityId::new("workspace.inspect_object").unwrap(),
                 CapabilityId::new("snapshot.read").unwrap(),
                 CapabilityId::new("history.errors").unwrap(),
+                CapabilityId::new(rho_protocol::ENVIRONMENT_INSPECT_CAPABILITY).unwrap(),
+                CapabilityId::new(rho_protocol::ENVIRONMENT_EXPLAIN_INCIDENT_CAPABILITY).unwrap(),
+                CapabilityId::new(rho_protocol::ENVIRONMENT_PROPOSE_CHANGE_CAPABILITY).unwrap(),
             ]
         } else {
             vec![
@@ -146,6 +149,10 @@ impl ProviderMatrixEntry {
                 CapabilityId::new(rho_protocol::RUN_R_CAPABILITY).unwrap(),
                 CapabilityId::new("project.apply_patch").unwrap(),
                 CapabilityId::new("artifact.commit").unwrap(),
+                CapabilityId::new(rho_protocol::ENVIRONMENT_INSPECT_CAPABILITY).unwrap(),
+                CapabilityId::new(rho_protocol::ENVIRONMENT_EXPLAIN_INCIDENT_CAPABILITY).unwrap(),
+                CapabilityId::new(rho_protocol::ENVIRONMENT_PROPOSE_CHANGE_CAPABILITY).unwrap(),
+                CapabilityId::new(rho_protocol::ENVIRONMENT_OPERATION_INSPECT_CAPABILITY).unwrap(),
             ]
         };
         Some(AgentProviderSnapshot {

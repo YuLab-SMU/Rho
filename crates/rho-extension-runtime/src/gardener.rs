@@ -99,8 +99,8 @@ pub struct GardenerProposal {
     pub action: crate::GardenAction,
     /// Explicit parent lineages for a merge candidate.
     pub parent_lineage_ids: Vec<String>,
-    /// The heuristic evidence (bounded overlap/usage/failure/cost/correction).
-    pub evidence: Vec<String>,
+    /// Bounded heuristic observations about overlap, usage, failure, cost, and correction.
+    pub observations: Vec<String>,
 }
 
 /// P2.5-6 pure rule: a merge that would widen permissions is rejected. The

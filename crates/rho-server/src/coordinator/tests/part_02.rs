@@ -815,82 +815,21 @@
     }
 
     #[test]
-    fn package_environment_operations_bind_validated_arguments_and_fixed_r_calls() {
+    fn package_names_are_bounded_and_legacy_environment_bridge_calls_are_absent() {
         assert!(validate_environment_package_name("SummarizedExperiment").is_ok());
         for invalid in ["", "bad-name", "pkg@1.0", "../pkg", "\u{5305}"] {
             assert!(validate_environment_package_name(invalid).is_err());
         }
-
-        let arguments = tool_environment_operation_arguments(
-            "install_project_package",
-            &json!({"package": "ggplot2"}),
-        )
-        .unwrap();
-        assert_eq!(arguments.operation, "install_package");
-        assert_eq!(arguments.package.as_deref(), Some("ggplot2"));
-        assert!(request_type_uses_environment_contract(
-            "environment.package_install"
-        ));
-
-        let arguments = EnvironmentOperationArguments {
-            operation: "install_package".to_string(),
-            project_root: Some("C:/projects/quoted \"root\"".to_string()),
-            repositories: Some(HashMap::from([
-                (
-                    "CRAN".to_string(),
-                    "https://cloud.r-project.org".to_string(),
-                ),
-                (
-                    "BioC".to_string(),
-                    "https://bioconductor.org/packages/3.21/bioc".to_string(),
-                ),
-            ])),
-            bioconductor: None,
-            package: Some("ggplot2".to_string()),
-            project_library: Some("C:/projects/quoted \"root\"/renv/library".to_string()),
-        };
-        let expression = environment_operation_bridge_expression(&arguments).unwrap();
-        assert!(expression.contains("operation = \"install_package\""));
-        assert!(expression.contains("package = \"ggplot2\""));
-        assert!(
-            expression
-                .contains("project_library = \"C:/projects/quoted \\\"root\\\"/renv/library\"")
-        );
-        assert!(expression.contains("stats::setNames"));
-
-        let canonical =
-            canonical_environment_operation_arguments("C:/projects/quoted \"root\"", &arguments);
-        assert_eq!(canonical["package"], "ggplot2");
-        assert_eq!(canonical["repositories"][0]["name"], "BioC");
-        assert_eq!(canonical["repositories"][1]["name"], "CRAN");
-
-        let (class, remove_expression) = bridge_expression(
-            "environment.package_remove",
-            &json!({
-                "project_root": "C:/projects/a",
-                "project_library": "C:/projects/a/renv/library",
-                "package": "ggplot2",
-                "repositories": {}
-            }),
-        )
-        .unwrap();
-        assert!(matches!(class, OperationClass::StateCapable));
-        assert!(remove_expression.contains("operation = \"remove_package\""));
-    }
-
-    #[test]
-    fn environment_initialize_accepts_null_repositories() {
-        let (class, expression) = bridge_expression(
+        for request_type in [
             "environment.initialize",
-            &json!({
-                "project_root": "C:/projects/environment-demo",
-                "repositories": null
-            }),
-        )
-        .unwrap();
-        assert!(matches!(class, OperationClass::ProjectMutation));
-        assert!(expression.contains("operation = \"initialize\""));
-        assert!(expression.contains("repositories = NULL"));
+            "environment.restore",
+            "environment.snapshot",
+            "environment.package_install",
+            "environment.package_update",
+            "environment.package_remove",
+        ] {
+            assert!(bridge_expression(request_type, &json!({})).is_err());
+        }
     }
 
     #[test]
@@ -1016,65 +955,79 @@
     }
 
     #[test]
-    fn agent_package_mutation_requires_exact_single_use_approval() {
-        let arguments = json!({
-            "operation": "remove_package",
-            "project_root": "C:/projects/a",
-            "repositories": {},
-            "bioconductor": null,
-            "package": "ggplot2",
-            "project_library": "C:/projects/a/renv/library"
-        });
-        let payload = json!({
-            "arguments": arguments,
-            "approval_request_id": "env_pkg_1"
-        });
-        let approved = ApprovedMutation {
-            request_type: "environment.package_remove".to_string(),
-            arguments: arguments.clone(),
-        };
-        let mut ask_approvals = HashMap::from([("env_pkg_1".to_string(), approved.clone())]);
+    fn agent_environment_boundary_allows_reads_and_proposals_but_rejects_legacy_mutation() {
+        let mut approvals = HashMap::new();
+        for request_type in [
+            "environment.inspect",
+            "environment.explain_incident",
+            "environment.propose_change",
+            "environment.operation.inspect",
+        ] {
+            assert!(
+                authorize_agent_workspace_request(
+                    "ask",
+                    request_type,
+                    &json!({"arguments": {}}),
+                    &mut approvals,
+                )
+                .is_ok()
+            );
+        }
         assert!(
             authorize_agent_workspace_request(
-                "ask",
+                "act",
                 "environment.package_remove",
-                &payload,
-                &mut ask_approvals,
+                &json!({"arguments": {"package": "ggplot2"}}),
+                &mut approvals,
             )
             .is_err()
         );
+    }
 
-        let mut changed = arguments.clone();
-        changed["package"] = json!("dplyr");
-        let mut changed_approvals = HashMap::from([("env_pkg_1".to_string(), approved.clone())]);
-        assert!(
-            authorize_agent_workspace_request(
-                "act",
-                "environment.package_remove",
-                &json!({"arguments": changed, "approval_request_id": "env_pkg_1"}),
-                &mut changed_approvals,
-            )
-            .is_err()
-        );
+    #[tokio::test]
+    async fn agent_environment_inspection_reads_authority_without_entering_workspace_r() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("agent-environment.sqlite");
+        let project_root = directory.path().join("project");
+        std::fs::create_dir_all(&project_root).unwrap();
+        let normalized = normalize_project_root(project_root.to_string_lossy().as_ref());
+        let mut store = Store::open(&database).unwrap();
+        store.set_project_root(Some(&normalized)).unwrap();
+        drop(store);
+        let agent_store = StoreExecutor::open(&database)
+            .await
+            .unwrap()
+            .agent_repository();
 
-        let mut approvals = HashMap::from([("env_pkg_1".to_string(), approved)]);
-        assert!(
-            authorize_agent_workspace_request(
-                "act",
-                "environment.package_remove",
-                &payload,
-                &mut approvals,
-            )
-            .is_ok()
+        let inspected = dispatch_agent_environment_request(
+            "environment.inspect",
+            &json!({"arguments": {}}),
+            &agent_store,
+            &normalized,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            inspected["authority_source"],
+            "rho-store Environment projection"
         );
-        assert!(approvals.is_empty());
+        assert!(inspected["state"].is_null());
+        assert!(inspected["latest_operation"].is_null());
+        assert_eq!(inspected["incidents"], json!([]));
         assert!(
-            authorize_agent_workspace_request(
-                "act",
-                "environment.package_remove",
-                &payload,
-                &mut approvals,
+            dispatch_agent_environment_request(
+                "environment.propose_change",
+                &json!({
+                    "arguments": {
+                        "environment_id": "environment_missing",
+                        "intent": "install_user_package",
+                        "subject": "DESeq2"
+                    }
+                }),
+                &agent_store,
+                &normalized,
             )
+            .await
             .is_err()
         );
     }
@@ -1210,7 +1163,7 @@
 
         let snapshot = canonicalize_environment_snapshot(
             "D:/Rho/project".to_string(),
-            RawEnvironmentEvidence {
+            RawEnvironmentReceipt {
                 project_dir: "D:/Rho/project".to_string(),
                 runtime: RawRuntimeState {
                     version: Some("4.5.0".to_string()),

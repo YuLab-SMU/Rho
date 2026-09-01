@@ -9,6 +9,7 @@ use rho_protocol::{
     TurnId,
 };
 
+pub mod environment_doctor;
 pub mod install;
 pub mod normalization;
 pub mod process;
@@ -16,6 +17,7 @@ pub mod protocol;
 pub mod providers;
 pub mod session;
 pub mod turn;
+pub use environment_doctor::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

@@ -67,7 +67,6 @@ pub async fn run_agent_turn(
     conversation_id: String,
     workspace_lane: Arc<AgentWorkspaceLane>,
     approvals: Arc<PendingApprovalRegistry>,
-    environment_approvals: Arc<PendingApprovalRegistry>,
     auto_approve: bool,
     editor_context: Option<Value>,
     explicit_context: Option<AgentExplicitContextItem>,
@@ -241,7 +240,6 @@ pub async fn run_agent_turn(
             &mode,
             workspace_lane,
             approvals.clone(),
-            environment_approvals.clone(),
             auto_approve,
             adapters,
         )
@@ -325,7 +323,6 @@ async fn serve_desktop_agent(
     mode: &str,
     workspace_lane: Arc<AgentWorkspaceLane>,
     approvals: Arc<PendingApprovalRegistry>,
-    environment_approvals: Arc<PendingApprovalRegistry>,
     auto_approve: bool,
     adapters: AgentRuntimeAdapters,
 ) -> Result<DesktopAgentCompletion> {
@@ -357,11 +354,9 @@ async fn serve_desktop_agent(
                         &incoming,
                         turn_id,
                         mode,
-                        session,
                         context.clone(),
                         &agent_store,
                         approvals.clone(),
-                        environment_approvals.clone(),
                         &mut approved_mutations,
                         auto_approve,
                     )
@@ -446,6 +441,15 @@ async fn dispatch_agent_workspace_request(
     workspace_lane: Arc<AgentWorkspaceLane>,
     adapters: AgentRuntimeAdapters,
 ) -> Result<Value> {
+    if request_type.starts_with("environment.") {
+        return dispatch_agent_environment_request(
+            request_type,
+            payload,
+            &agent_store,
+            project_root,
+        )
+        .await;
+    }
     if request_type == "plugin.contribution.invoke" {
         let adapter = adapters
             .plugin_contribution
@@ -506,6 +510,157 @@ async fn dispatch_agent_workspace_request(
         Some(&execution_id),
     )
     .await
+}
+
+async fn dispatch_agent_environment_request(
+    request_type: &str,
+    payload: &Value,
+    agent_store: &AgentRepository,
+    project_root: &str,
+) -> Result<Value> {
+    let arguments = payload
+        .get("arguments")
+        .and_then(Value::as_object)
+        .context("Environment capability arguments must be an object")?;
+    let repository = agent_store.store_executor().environment_repository();
+    let project_root = normalize_project_root(project_root);
+    match request_type {
+        "environment.inspect" => {
+            let state = repository.current_state(project_root.clone()).await?;
+            if let Some(requested) = arguments.get("environment_id").and_then(Value::as_str) {
+                validate_agent_environment_token("environment_id", requested)?;
+                ensure!(
+                    state
+                        .as_ref()
+                        .is_some_and(|state| state.environment.environment_id.as_str() == requested),
+                    "Requested Environment identity is not bound to the active project"
+                );
+            }
+            let (latest_operation, pending_plan, incidents) = tokio::try_join!(
+                repository.latest_operation(project_root.clone()),
+                repository.latest_reviewable_plan(project_root.clone()),
+                repository.list_incidents(project_root.clone(), false, 200),
+            )?;
+            Ok(json!({
+                "authority_source": "rho-store Environment projection",
+                "project_root": project_root,
+                "state": state,
+                "pending_plan": pending_plan,
+                "latest_operation": latest_operation,
+                "incidents": incidents,
+                "limitations": [
+                    "This capability reports Authority state; it does not prove a scientific claim.",
+                    "Live Workspace activation must be checked separately after restart."
+                ]
+            }))
+        }
+        "environment.explain_incident" => {
+            let incident_id = required_agent_environment_token(arguments, "incident_id")?;
+            let incident = repository
+                .list_incidents(project_root.clone(), true, 200)
+                .await?
+                .into_iter()
+                .find(|record| record.incident.incident_id == incident_id)
+                .context("Environment incident is not part of the active project")?;
+            let state = repository.current_state(project_root.clone()).await?;
+            Ok(json!({
+                "authority_source": "rho-store Environment incident",
+                "project_root": project_root,
+                "incident": incident,
+                "current_state": state,
+                "explanation_kind": "recorded_observation",
+                "mutation_performed": false
+            }))
+        }
+        "environment.operation.inspect" => {
+            let operation_id = required_agent_environment_token(arguments, "operation_id")?;
+            let operation = repository
+                .operation(project_root.clone(), operation_id)
+                .await?
+                .context("Environment operation is not part of the active project")?;
+            Ok(json!({
+                "authority_source": "rho-store Environment operation journal",
+                "project_root": project_root,
+                "operation": operation
+            }))
+        }
+        "environment.propose_change" => {
+            let environment_id = required_agent_environment_token(arguments, "environment_id")?;
+            let intent = required_agent_environment_token(arguments, "intent")?;
+            let subject = required_agent_environment_token(arguments, "subject")?;
+            ensure!(
+                matches!(
+                    intent.as_str(),
+                    "restore_locked"
+                        | "add_dependency"
+                        | "install_user_package"
+                        | "install_unlocked"
+                        | "adopt_project_environment"
+                        | "repair_core"
+                        | "update_dependency"
+                        | "remove_dependency"
+                ),
+                "Unsupported Environment package intent"
+            );
+            if matches!(
+                intent.as_str(),
+                "add_dependency"
+                    | "install_user_package"
+                    | "install_unlocked"
+                    | "update_dependency"
+                    | "remove_dependency"
+            ) {
+                validate_environment_package_name(&subject)?;
+            }
+            let state = repository
+                .current_state(project_root.clone())
+                .await?
+                .context("No verified Environment state is bound to the active project")?;
+            ensure!(
+                state.environment.environment_id.as_str() == environment_id,
+                "Proposed Environment identity is stale"
+            );
+            Ok(json!({
+                "proposal_kind": "environment_change_intent",
+                "project_root": project_root,
+                "environment_id": environment_id,
+                "intent": intent,
+                "subject": subject,
+                "expected_before": {
+                    "desired_revision": state.desired.revision_id,
+                    "realization_revision": state.realization.revision_id
+                },
+                "materialized_plan": null,
+                "requires_materialization": true,
+                "apply_capability": "environment.request_apply_plan",
+                "mutation_performed": false
+            }))
+        }
+        _ => bail!("Unsupported Agent Environment capability `{request_type}`"),
+    }
+}
+
+fn required_agent_environment_token(
+    arguments: &serde_json::Map<String, Value>,
+    name: &'static str,
+) -> Result<String> {
+    let value = arguments
+        .get(name)
+        .and_then(Value::as_str)
+        .with_context(|| format!("Environment capability requires string `{name}`"))?;
+    validate_agent_environment_token(name, value)?;
+    Ok(value.to_string())
+}
+
+fn validate_agent_environment_token(name: &'static str, value: &str) -> Result<()> {
+    ensure!(
+        !value.is_empty()
+            && value.trim() == value
+            && value.len() <= 512
+            && !value.chars().any(char::is_control),
+        "Environment capability `{name}` is outside its bounded text contract"
+    );
+    Ok(())
 }
 
 fn redacted_bounded_agent_context_text(value: &str, max_chars: usize) -> String {

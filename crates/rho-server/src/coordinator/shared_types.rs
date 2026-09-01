@@ -92,7 +92,6 @@ pub struct AgentContextPlanPreview {
 }
 
 const MAX_CANONICAL_SNAPSHOT_BYTES: usize = 2 * 1024 * 1024;
-const MAX_ENVIRONMENT_DIFF_ENTRIES: usize = 50;
 const PROJECT_SKILL_TRUST_STATUS: &str = "untrusted_project_content";
 const MAX_PROJECT_SKILL_MANIFEST_BYTES: u64 = 65_536;
 const MAX_PROJECT_SKILL_COUNT: usize = 16;
@@ -127,18 +126,8 @@ struct GeneratedOutputDelta {
     signature: GeneratedOutputSignature,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct EnvironmentOperationArguments {
-    pub operation: String,
-    pub project_root: Option<String>,
-    pub repositories: Option<HashMap<String, String>>,
-    pub bioconductor: Option<String>,
-    pub package: Option<String>,
-    pub project_library: Option<String>,
-}
-
 #[derive(Debug, Clone, Default, serde::Deserialize)]
-struct RawEnvironmentEvidence {
+struct RawEnvironmentReceipt {
     #[serde(default)]
     project_dir: String,
     #[serde(default)]

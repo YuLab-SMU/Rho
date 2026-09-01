@@ -42,7 +42,7 @@ pub struct EvaluationPlan {
     pub rejection_conditions: Vec<String>,
 }
 
-/// Broker-sealed plan retained independently from candidate-produced evidence.
+/// Broker-sealed plan retained independently from the candidate-produced report.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SealedEvaluationPlan {
     plan: EvaluationPlan,
@@ -99,10 +99,10 @@ pub struct CaseResult {
     pub observation: String,
 }
 
-/// Evaluation evidence: the complete, versioned outcome for one candidate.
+/// Complete, versioned evaluation report for one candidate.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EvaluationEvidence {
-    pub evidence_id: String,
+pub struct EvaluationReport {
+    pub report_id: String,
     pub plan_id: String,
     pub plan_seal_digest: PackageDigest,
     pub candidate_digest: PackageDigest,
@@ -134,19 +134,19 @@ pub enum EvaluationError {
     SafetyInvariantViolated,
     /// The plan was not sealed before the result (missing fixture digest).
     UnsealedPlan,
-    /// Evidence does not bind to the independently retained sealed plan.
+    /// The report does not bind to the independently retained sealed plan.
     PlanMismatch,
     /// A required evaluation layer is absent, duplicated, or failed.
     LayerFailed,
     /// A predeclared absolute rejection condition occurred.
     RejectionConditionTriggered,
-    /// Candidate evidence contains duplicate or otherwise ambiguous results.
-    DuplicateEvidence,
+    /// The candidate report contains duplicate or otherwise ambiguous results.
+    DuplicateResult,
     /// Promotion was requested without an accepted sealed evaluation.
     PromotionNotAccepted,
 }
 
-impl EvaluationEvidence {
+impl EvaluationReport {
     /// Produce the decision strictly from hard gates. A failed mandatory case,
     /// a violated safety invariant, or a tampered fixture is rejection; missing
     /// determinism is inconclusive; otherwise pass.
@@ -165,7 +165,7 @@ impl EvaluationEvidence {
             || has_duplicates_by(&self.layers, |result| result.layer.as_str())
             || has_duplicates(&self.triggered_rejection_conditions)
         {
-            return Err(EvaluationError::DuplicateEvidence);
+            return Err(EvaluationError::DuplicateResult);
         }
 
         // Every mandatory case must be present and passed. A missing case is
@@ -205,7 +205,7 @@ impl EvaluationEvidence {
         }
 
         // If the candidate claimed improvement, the rule must be met. Missing
-        // evidence for a claimed improvement is inconclusive, not pass.
+        // a missing result for a claimed improvement is inconclusive, not pass.
         if plan.minimum_improvement_rule.is_some() && !self.claimed_improvement_met {
             return Ok(EvaluationDecision::Inconclusive);
         }
@@ -223,7 +223,7 @@ pub struct ManualPromotion {
     candidate_digest: PackageDigest,
     parent_digest: PackageDigest,
     rollback_digest: PackageDigest,
-    evidence_id: String,
+    evaluation_report_id: String,
     plan_seal_digest: PackageDigest,
     project_id: ScopeId,
     lineage_id: String,
@@ -232,12 +232,12 @@ pub struct ManualPromotion {
 
 impl ManualPromotion {
     pub fn authorize(
-        evidence: &EvaluationEvidence,
+        report: &EvaluationReport,
         sealed_plan: &SealedEvaluationPlan,
         parent_digest: PackageDigest,
         rollback_digest: PackageDigest,
     ) -> Result<Self, EvaluationError> {
-        if evidence.decide(sealed_plan)? != EvaluationDecision::Accept
+        if report.decide(sealed_plan)? != EvaluationDecision::Accept
             || parent_digest != sealed_plan.plan.baseline_digest
             || rollback_digest != sealed_plan.plan.baseline_digest
         {
@@ -247,7 +247,7 @@ impl ManualPromotion {
             candidate_digest: sealed_plan.plan.candidate_digest.clone(),
             parent_digest,
             rollback_digest,
-            evidence_id: evidence.evidence_id.clone(),
+            evaluation_report_id: report.report_id.clone(),
             plan_seal_digest: sealed_plan.seal_digest.clone(),
             project_id: sealed_plan.plan.project_id.clone(),
             lineage_id: sealed_plan.plan.lineage_id.clone(),
@@ -267,8 +267,8 @@ impl ManualPromotion {
         &self.rollback_digest
     }
 
-    pub fn evidence_id(&self) -> &str {
-        &self.evidence_id
+    pub fn evaluation_report_id(&self) -> &str {
+        &self.evaluation_report_id
     }
 
     pub fn plan_seal_digest(&self) -> &PackageDigest {
@@ -342,9 +342,9 @@ mod tests {
         sealed_plan: &SealedEvaluationPlan,
         cases: Vec<CaseResult>,
         safety: bool,
-    ) -> EvaluationEvidence {
-        EvaluationEvidence {
-            evidence_id: "ev.1".to_string(),
+    ) -> EvaluationReport {
+        EvaluationReport {
+            report_id: "report.1".to_string(),
             plan_id: sealed_plan.plan().plan_id.clone(),
             plan_seal_digest: sealed_plan.seal_digest().clone(),
             candidate_digest: sealed_plan.plan().candidate_digest.clone(),
@@ -429,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn evidence_must_match_the_external_sealed_plan() {
+    fn report_must_match_the_external_sealed_plan() {
         let sealed = plan().seal().unwrap();
         let mut tampered_plan = plan();
         tampered_plan.candidate_digest = digest("v3");
@@ -439,7 +439,7 @@ mod tests {
     }
 
     #[test]
-    fn manual_promotion_requires_accepted_sealed_evidence() {
+    fn manual_promotion_requires_an_accepted_sealed_report() {
         let sealed = plan().seal().unwrap();
         let evidence = evidence(&sealed, passing_cases(), true);
         let promotion =
