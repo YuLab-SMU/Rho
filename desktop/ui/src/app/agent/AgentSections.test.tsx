@@ -61,4 +61,52 @@ describe("Agent semantic sections", () => {
     act(() => approve.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(onDecision).toHaveBeenCalledWith(approval, "approve");
   });
+
+  it("counts only contributing context sources and never prices a withheld one", () => {
+    const item = (
+      ordinal: number,
+      sourceKind: string,
+      disposition: string,
+    ): AgentTurnDetail["context_items"][number] => ({
+      ordinal,
+      source_kind: sourceKind,
+      source_id: `source:${ordinal}`,
+      source_revision: "revision:1",
+      source_sha256: "a".repeat(64),
+      trust_class: "explicit_project_context",
+      capacity_source: "conservative",
+      original_bytes: 62,
+      included_bytes: 62,
+      estimated_tokens: 16,
+      disposition,
+      reason_code: disposition === "unavailable" ? "source_unavailable" : null,
+    });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    act(() => root.render(<AgentActivity events={[]} contextItems={[
+      item(1, "current_request", "complete"),
+      item(2, "explicit_runtime_output", "unavailable"),
+      item(3, "conversation_history", "complete"),
+      item(4, "editor_context", "unavailable"),
+      item(5, "project_skills", "unavailable"),
+      item(6, "workspace_plugin_context", "unavailable"),
+    ]} />));
+
+    expect(host.textContent).toContain("Context used · 2 of 6 sources");
+    const withheld = [...host.querySelectorAll(".rho-agent-context-withheld")];
+    expect(withheld).toHaveLength(4);
+    // A source that contributed nothing still names itself and its
+    // disposition, and withheld sources keep their original relative order.
+    expect(withheld.map((row) => row.textContent)).toEqual([
+      "explicit runtime outputunavailable",
+      "editor contextunavailable",
+      "project skillsunavailable",
+      "workspace plugin contextunavailable",
+    ]);
+    // ...but never carries a byte price, which only the contributing rows have.
+    expect(withheld.every((row) => !row.textContent!.includes("bytes"))).toBe(true);
+    expect(host.querySelectorAll("li:not(.rho-agent-context-withheld) small")).toHaveLength(2);
+  });
 });

@@ -239,6 +239,10 @@
   section.rho-agent-surface .rho-agent-activity-row::before { content: "–"; flex: 0 0 auto; color: var(--rho-muted); }
   section.rho-agent-surface .rho-agent-activity .rho-agent-code-review,
   section.rho-agent-surface .rho-agent-activity .rho-agent-context-used { margin-top: 0; }
+  /* A source that contributed nothing is still named, but it is one dim line
+     rather than a full priced entry competing with the sources that did. */
+  section.rho-agent-surface .rho-agent-context-withheld { color: var(--rho-muted); }
+  section.rho-agent-surface .rho-agent-context-withheld strong { font-weight: var(--rho-weight-regular); }
   section.rho-agent-surface .rho-agent-activity .rho-agent-code-review > summary { cursor: pointer; color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
   section.rho-agent-surface .rho-agent-activity .rho-agent-code-review > summary:hover { color: var(--rho-ink); }
 
