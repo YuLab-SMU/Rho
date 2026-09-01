@@ -30,18 +30,19 @@
   section.rho-agent-surface .rho-agent-overview {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.42fr);
-    gap: var(--rho-space-5);
-    margin: var(--rho-space-3);
-    padding: var(--rho-space-4);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-2);
+    gap: var(--rho-space-6);
+    margin: 0;
+    padding: var(--rho-space-4) var(--rho-space-5);
+    border: 0;
+    border-bottom: var(--rho-border);
+    border-radius: 0;
     background: var(--rho-paper);
-    box-shadow: var(--rho-shadow-raised);
+    box-shadow: none;
   }
   section.rho-agent-surface .rho-agent-overview > div { display: grid; align-content: start; gap: var(--rho-space-1); }
   section.rho-agent-surface .rho-agent-overview > div > strong { font-size: var(--rho-text-head); }
   section.rho-agent-surface .rho-agent-overview p { max-width: 48rem; margin: 0; color: var(--rho-ink-2); font-size: var(--rho-text-ui); }
-  section.rho-agent-surface .rho-agent-overview dl { display: grid; align-content: start; gap: var(--rho-space-2); margin: 0; }
+  section.rho-agent-surface .rho-agent-overview dl { display: grid; align-content: start; gap: var(--rho-space-2); margin: 0; padding-left: var(--rho-space-5); border-left: var(--rho-border); }
   section.rho-agent-surface .rho-agent-overview dl > div { display: flex; justify-content: space-between; gap: var(--rho-space-3); }
   section.rho-agent-surface .rho-agent-overview dt { color: var(--rho-muted); font-size: var(--rho-text-caption); }
   section.rho-agent-surface .rho-agent-overview dd { margin: 0; overflow: hidden; font-size: var(--rho-text-caption); font-weight: var(--rho-weight-medium); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
@@ -59,11 +60,17 @@
   section.rho-agent-surface .rho-agent-environment-uncertainty { color: var(--rho-warn); }
 
   section.rho-agent-surface .rho-agent-current-work-header {
+    position: sticky;
+    z-index: 2;
+    top: 0;
     display: flex;
-    align-items: end;
+    align-items: center;
     justify-content: space-between;
     gap: var(--rho-space-3);
-    padding: var(--rho-space-1) var(--rho-space-1) var(--rho-space-2);
+    padding: var(--rho-space-3) var(--rho-space-5);
+    border-bottom: var(--rho-border);
+    background: color-mix(in srgb, var(--rho-panel) 94%, transparent);
+    backdrop-filter: blur(10px);
   }
   section.rho-agent-surface .rho-agent-current-work-header > div { display: grid; min-width: 0; gap: var(--rho-space-1); }
   section.rho-agent-surface .rho-agent-current-work-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -76,12 +83,12 @@
     display: block;
     color: var(--rho-muted);
     font-size: var(--rho-text-caption);
-    font-weight: var(--rho-weight-medium);
-    letter-spacing: 0.06em;
+    font-weight: var(--rho-weight-semibold);
+    letter-spacing: 0.075em;
     text-transform: uppercase;
   }
-  section.rho-agent-surface .rho-agent-goal { margin-top: var(--rho-space-2); }
-  section.rho-agent-surface .rho-agent-goal .rho-agent-prompt { margin-top: var(--rho-space-1); }
+  section.rho-agent-surface .rho-agent-goal { margin-top: var(--rho-space-3); }
+  section.rho-agent-surface .rho-agent-goal .rho-agent-prompt { margin-top: var(--rho-space-2); color: var(--rho-ink); font-size: var(--rho-text-body); line-height: 1.5; }
 
   /* Text status chips: state is carried by words, color only supports them. */
   section.rho-agent-surface .rho-agent-turn-status {
@@ -208,11 +215,11 @@
   section.rho-agent-surface .rho-agent-suggestions button {
     min-height: var(--rho-control-small);
     padding: var(--rho-space-2) var(--rho-space-4);
-    border: 0;
-    border-radius: var(--rho-radius-pill);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
     color: var(--rho-ink-2);
-    background: var(--rho-paper);
-    box-shadow: var(--rho-shadow-raised);
+    background: transparent;
+    box-shadow: none;
     font-size: var(--rho-text-caption);
   }
   section.rho-agent-surface .rho-agent-suggestions button:hover:not(:disabled) { color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
@@ -220,17 +227,18 @@
   /* --- Composer dock: one container with status, input, and control row ------ */
   section.rho-agent-surface .rho-agent-composer {
     grid-template-columns: minmax(0, 1fr);
-    margin: var(--rho-space-3);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-3);
-    box-shadow: var(--rho-shadow-panel);
+    margin: 0;
+    border: 0;
+    border-top: var(--rho-border);
+    border-radius: 0;
+    box-shadow: none;
     transition: border-color var(--rho-motion-fast) var(--rho-ease-out), box-shadow var(--rho-motion-fast) var(--rho-ease-out);
   }
-  section.rho-agent-surface .rho-agent-composer:focus-within { border-color: var(--rho-accent); box-shadow: var(--rho-shadow-focus), var(--rho-shadow-panel); }
+  section.rho-agent-surface .rho-agent-composer:focus-within { border-color: var(--rho-line-strong); box-shadow: inset 0 1px 0 var(--rho-line-strong); }
   section.rho-agent-surface .rho-agent-composer > .rho-agent-running {
     grid-column: 1 / -1;
     margin: calc(-1 * var(--rho-space-3)) calc(-1 * var(--rho-space-3)) var(--rho-space-1);
-    border-radius: var(--rho-radius-2) var(--rho-radius-2) 0 0;
+    border-radius: 0;
   }
   section.rho-agent-surface .rho-agent-composer textarea {
     grid-column: 1 / -1;
@@ -238,6 +246,28 @@
     background: transparent;
   }
   section.rho-agent-surface .rho-agent-composer textarea:focus-visible { outline: none; }
+
+  /* Final prose is the conclusion of the turn; graph-backed evidence remains
+     adjacent but visually subordinate and never impersonates authority. */
+  section.rho-agent-surface .rho-agent-final-answer {
+    margin-top: var(--rho-space-4);
+    padding: var(--rho-space-3) var(--rho-space-4);
+    border: 0;
+    border-left: 3px solid var(--rho-ink);
+    border-radius: 0;
+    background: var(--rho-panel);
+  }
+  section.rho-agent-surface .rho-agent-final-answer .rho-agent-answer { margin-top: var(--rho-space-2); }
+  section.rho-agent-surface .rho-agent-evidence-composition {
+    margin-top: var(--rho-space-3);
+    gap: var(--rho-space-3);
+  }
+  section.rho-agent-surface .rho-agent-evidence-section {
+    padding: var(--rho-space-3);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-paper);
+  }
 
   section.rho-agent-surface .rho-agent-queue {
     grid-column: 1 / -1;
@@ -434,12 +464,16 @@
   @container (max-width: 420px) {
     section.rho-agent-surface .rho-agent-toolbar { flex-wrap: wrap; }
     section.rho-agent-surface .rho-agent-overview { grid-template-columns: minmax(0, 1fr); }
+    section.rho-agent-surface .rho-agent-overview dl { padding-top: var(--rho-space-3); padding-left: 0; border-top: var(--rho-border); border-left: 0; }
     section.rho-agent-surface .rho-agent-toolbar select { flex: 1 1 100%; }
     section.rho-agent-surface .rho-agent-turn { padding: var(--rho-space-3); }
     section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { margin-left: 0; }
     section.rho-agent-surface .rho-agent-file-proposal .rho-agent-decision-actions { flex-basis: 100%; margin-left: 0; justify-content: flex-end; }
     section.rho-agent-surface .rho-agent-studio-presentation { grid-template-columns: minmax(0, 1fr) auto; }
     section.rho-agent-surface .rho-agent-studio-presentation button { grid-column: 1 / -1; justify-self: end; }
+  }
+  @container (max-width: 620px) {
+    section.rho-agent-surface .rho-agent-evidence-composition { grid-template-columns: minmax(0, 1fr); }
   }
   @container (max-width: 300px) {
     section.rho-agent-surface .rho-agent-turn-meta > div { max-width: calc(100cqw - var(--rho-space-7)); }
