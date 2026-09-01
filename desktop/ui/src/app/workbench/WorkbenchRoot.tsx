@@ -617,12 +617,19 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
     runtime: RuntimeDescriptor,
     admissionLease?: WorkbenchMutationLease,
   ) => {
-    if (surfaces == null || studio == null) return;
-    return withMutationAdmission(surfaces.project_id, admissionLease, async (lease) => {
-    const before = new Set(surfaces.catalog.instances.map((candidate) => candidate.instance_id));
+    await store.settled();
+    const currentSurfaces = surfaceStore.getSurfaceSnapshot();
+    const currentStudio = studioStore.getStudioSnapshot();
+    if (currentSurfaces.status !== "ready" || currentStudio.status !== "ready") {
+      throw new Error("Surface Runtime or Studio layout is unavailable for a new Console.");
+    }
+    const surfaceSnapshot = currentSurfaces.snapshot;
+    const studioSnapshot = currentStudio.snapshot;
+    return withMutationAdmission(surfaceSnapshot.project_id, admissionLease, async (lease) => {
+    const before = new Set(surfaceSnapshot.catalog.instances.map((candidate) => candidate.instance_id));
     const opened = await surfaceStore.open({
       surface_id: "rho.console",
-      project_id: surfaces.project_id,
+      project_id: surfaceSnapshot.project_id,
       mode_id: null,
       resource_binding: null,
       runtime_binding: {
@@ -645,20 +652,20 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
       },
       instance_disposition: "new_instance",
       placement_intent: "beside",
-      expected_project_revision: surfaces.project_revision,
-      expected_layout_revision: studio.scene.layout_revision,
+      expected_project_revision: surfaceSnapshot.project_revision,
+      expected_layout_revision: studioSnapshot.scene.layout_revision,
     }, lease);
     const created = opened.catalog.instances.find((candidate) => !before.has(candidate.instance_id));
     if (created == null) throw new Error("Surface Runtime did not return the new Console.");
-    if (studio.scene.root.kind !== "container") return;
+    if (studioSnapshot.scene.root.kind !== "container") return;
     await studioStore.apply({
-      project_id: studio.project_id,
-      expected_project_revision: studio.project_revision,
-      expected_layout_revision: studio.scene.layout_revision,
+      project_id: studioSnapshot.project_id,
+      expected_project_revision: studioSnapshot.project_revision,
+      expected_layout_revision: studioSnapshot.scene.layout_revision,
       edit: {
         kind: "insert_surface",
-        target_container_node_id: studio.scene.root.node_id,
-        child_index: studio.scene.root.children.length,
+        target_container_node_id: studioSnapshot.scene.root.node_id,
+        child_index: studioSnapshot.scene.root.children.length,
         instance_id: created.instance_id,
         basis: { kind: "fraction", weight: 1 },
       },

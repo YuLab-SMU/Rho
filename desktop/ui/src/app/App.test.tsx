@@ -4698,6 +4698,43 @@ describe("Studio foundation app", () => {
     expect(compose.querySelector(".rho-runtime-card")).toBeNull();
   });
 
+  it("creates consecutive auxiliary Runtimes with dedicated Consoles using current layout revisions", async () => {
+    const { container } = await renderApp();
+    const openCenter = async () => {
+      const consoleView = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+      await act(async () => {
+        consoleView.querySelector<HTMLButtonElement>("[aria-label='Open Runtime Center']")!.click();
+        await settle();
+      });
+      return container.querySelector<HTMLElement>("[data-surface-id='rho.runtimes']")!;
+    };
+    const create = async (label: string, expectedRuntimes: number) => {
+      const center = await openCenter();
+      await act(async () => {
+        center.querySelector<HTMLButtonElement>(".rho-runtime-center-toolbar .rho-primary-action")!.click();
+        await settle();
+      });
+      const input = center.querySelector<HTMLInputElement>(".rho-runtime-create-fields input")!;
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      await act(async () => {
+        setValue.call(input, label);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        [...center.querySelectorAll<HTMLButtonElement>("button")]
+          .find((button) => button.textContent === "Create Runtime")!.click();
+        await settle();
+      });
+      await vi.waitFor(() => {
+        expect(container.querySelectorAll("[data-surface-id='rho.runtimes'] .rho-runtime-row"))
+          .toHaveLength(expectedRuntimes);
+      });
+    };
+
+    await create("Background model", 2);
+    await create("Plot worker", 3);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+    expect(container.querySelectorAll("[data-surface-id='rho.console']").length).toBeGreaterThanOrEqual(3);
+  });
+
   it("groups consecutive Console commands by Workspace and separates commands from output", async () => {
     const transport = createMockUiKernelTransport();
     const initialRuntimes = await transport.loadRuntimes();
