@@ -1141,6 +1141,20 @@ export function AgentSurface({
   );
   const showSyntheticConversation = view.conversation_id != null && !selectedConversationListed;
   const conversationRequestBlocked = conversationValidationPending || selectedConversationUnavailable;
+  // Review context and Send share one gate. The setup banner above reports the
+  // chat route, but sending is gated on the act route, so a disabled composer
+  // has to name the requirement that is actually unmet instead of going quiet.
+  const composerBlockedReason = health?.state !== "ready"
+    ? "Agent runtime is not ready."
+    : conversationValidationPending
+      ? "Checking the selected conversation…"
+      : selectedConversationUnavailable
+        ? "Select No conversation or a listed conversation before sending."
+        : !modeReady
+          ? actRoute == null
+            ? "No agent.act route is configured for autonomous work."
+            : `The agent.act model is ${actRoute.consumer_status.replaceAll("_", " ")}.`
+          : null;
   const turnMutationRenderBlocked = (turn: AgentTurnSummary) => busy
     || conversationRequestBlocked
     || view.conversation_id !== turn.conversation_id;
@@ -1606,9 +1620,6 @@ export function AgentSurface({
             placeholder="Describe the scientific goal…"
           />
           <div className="rho-agent-context-controls">
-            <button type="button" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !modeReady || !view.composer.trim()} onClick={() => void reviewContext()}>
-              {contextReviewBusy ? "Reviewing…" : "Review context"}
-            </button>
             <div className="rho-agent-autonomous-badge" role="status" title="Observe, plan, request governed effects, then re-observe">
               Governed agent
             </div>
@@ -1704,6 +1715,12 @@ export function AgentSurface({
                 }}>Manage models…</button>
               </div>
             </details>
+            {composerBlockedReason != null && view.composer.trim() !== "" && (
+              <small className="rho-agent-submit-block" role="status" title={composerBlockedReason}>{composerBlockedReason}</small>
+            )}
+            <button type="button" className="rho-agent-review-context" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !modeReady || !view.composer.trim()} onClick={() => void reviewContext()}>
+              {contextReviewBusy ? "Reviewing…" : "Review context"}
+            </button>
             <button type="button" className="rho-primary-action" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !modeReady || !view.composer.trim()} onClick={() => void submit()}>
               {busy ? "Working…" : runtimeOutputContext != null && contextPreview?.key !== contextPlanKey ? "Review before send" : "Send"}
             </button>

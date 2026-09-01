@@ -123,7 +123,7 @@ async function isolateSurface(ctx, surfaceId, timeoutMs = 30_000) {
 const AGENT_SURFACE = '[data-surface-id="rho.agent"]';
 const MODE_BUTTONS = `${AGENT_SURFACE} .rho-agent-mode button`;
 const COMPOSER = `${AGENT_SURFACE} .rho-agent-composer textarea`;
-const REVIEW_BUTTON = `${AGENT_SURFACE} .rho-agent-context-controls button:first-child`;
+const REVIEW_BUTTON = `${AGENT_SURFACE} .rho-agent-context-controls .rho-agent-review-context`;
 const SEND_BUTTON = `${AGENT_SURFACE} .rho-agent-context-controls .rho-primary-action`;
 const CONTEXT_PREVIEW = `${AGENT_SURFACE} .rho-agent-context-preview`;
 const TURNS = `${AGENT_SURFACE} .rho-agent-turn`;

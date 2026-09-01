@@ -329,11 +329,25 @@
 
   section.rho-agent-surface .rho-agent-context-controls { align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: var(--rho-space-2); }
   section.rho-agent-surface .rho-agent-context-controls > button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); font-size: var(--rho-text-caption); }
-  /* Review context is a quiet ghost action; Send stays the only solid control. */
-  section.rho-agent-surface .rho-agent-context-controls > button:first-child:not(.rho-primary-action) { border-color: transparent; color: var(--rho-ink-2); background: transparent; }
-  section.rho-agent-surface .rho-agent-context-controls > button:first-child:not(.rho-primary-action):hover:not(:disabled) { border-color: transparent; color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
-  section.rho-agent-surface .rho-agent-context-controls > button:first-child:not(.rho-primary-action):active:not(:disabled) { background: var(--rho-fill-2); }
-  section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { margin-left: auto; font-size: var(--rho-text-ui); }
+  /* Review context is a quiet ghost action; Send stays the only solid control.
+     The gate and the send it guards sit together at the trailing edge, so the
+     row reads as settings on the left and the submit sequence on the right. */
+  section.rho-agent-surface .rho-agent-review-context { margin-inline-start: auto; border-color: transparent; color: var(--rho-ink-2); background: transparent; }
+  section.rho-agent-surface .rho-agent-review-context:hover:not(:disabled) { border-color: transparent; color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
+  section.rho-agent-surface .rho-agent-review-context:active:not(:disabled) { background: var(--rho-fill-2); }
+  section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { font-size: var(--rho-text-ui); }
+  /* Names the unmet gate next to the control it disables. */
+  section.rho-agent-surface .rho-agent-submit-block {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-inline-start: auto;
+    overflow: hidden;
+    color: var(--rho-warn);
+    font-size: var(--rho-text-caption);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  section.rho-agent-surface .rho-agent-submit-block ~ .rho-agent-review-context { margin-inline-start: 0; }
 
   section.rho-agent-surface .rho-agent-autonomous-badge {
     flex: 0 0 auto;
@@ -502,7 +516,7 @@
     section.rho-agent-surface .rho-agent-overview dl { padding-top: var(--rho-space-3); padding-left: 0; border-top: var(--rho-border); border-left: 0; }
     section.rho-agent-surface .rho-agent-toolbar select { flex: 1 1 100%; }
     section.rho-agent-surface .rho-agent-turn { padding: var(--rho-space-3); }
-    section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { margin-left: 0; }
+    section.rho-agent-surface .rho-agent-review-context { margin-inline-start: 0; }
     section.rho-agent-surface .rho-agent-file-proposal .rho-agent-decision-actions { flex-basis: 100%; margin-left: 0; justify-content: flex-end; }
     section.rho-agent-surface .rho-agent-studio-presentation { grid-template-columns: minmax(0, 1fr) auto; }
     section.rho-agent-surface .rho-agent-studio-presentation button { grid-column: 1 / -1; justify-self: end; }
