@@ -61,7 +61,7 @@ assert.match(release, /npm run rsr:test:release-contracts/u);
 const fastConfig = fs.readFileSync(path.join(root, "desktop/ui/vitest.fast.config.mts"), "utf8");
 for (const demotedSuite of [
   "src/app/App.test.tsx",
-  "src/app/AgentSurfaceView.test.tsx",
+  "src/app/agent/AgentSurface.test.tsx",
   "src/acceptance/**",
 ]) {
   assert.ok(fastConfig.includes(demotedSuite), `fast Vitest tier must exclude ${demotedSuite}`);

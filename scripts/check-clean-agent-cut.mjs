@@ -7,10 +7,10 @@ const root = process.cwd();
 const errors = [];
 const requiredPaths = [
   "desktop/ui/src/app/App.tsx",
-  "desktop/ui/src/app/WorkbenchApp.tsx",
-  "desktop/ui/src/app/SurfaceView.tsx",
+  "desktop/ui/src/app/workbench/WorkbenchRoot.tsx",
+  "desktop/ui/src/app/workbench/SurfaceFrame.tsx",
   "desktop/ui/src/app/startup/StartupLedgerView.tsx",
-  "desktop/ui/src/app/AgentSurfaceView.tsx",
+  "desktop/ui/src/app/agent/AgentSurface.tsx",
   "desktop/src-tauri/src/main.rs",
 ];
 for (const required of requiredPaths) {
@@ -18,18 +18,18 @@ for (const required of requiredPaths) {
 }
 
 const app = await source("desktop/ui/src/app/App.tsx");
-for (const required of ["createStartupController", "StartupLedgerView", "WorkbenchApp"]) {
+for (const required of ["createStartupController", "StartupLedgerView", "WorkbenchRoot"]) {
   if (!app.includes(required)) errors.push(`production App does not retain ${required}`);
 }
 for (const forbidden of ["AGENT_UX_SUCCESS_FIXTURE", "AgentSurfaceVNext", "workbenchVNextFixture"]) {
   if (app.includes(forbidden)) errors.push(`production App mounts fixture path ${forbidden}`);
 }
 
-const workbench = await source("desktop/ui/src/app/WorkbenchApp.tsx");
-const router = await source("desktop/ui/src/app/SurfaceView.tsx");
-const agent = await source("desktop/ui/src/app/AgentSurfaceView.tsx");
-if (!workbench.includes("<SurfaceView")) errors.push("WorkbenchApp does not route real surfaces");
-if (!router.includes("<AgentSurfaceView")) errors.push("SurfaceView does not mount the Agent subsystem");
+const workbench = await source("desktop/ui/src/app/workbench/WorkbenchRoot.tsx");
+const router = await source("desktop/ui/src/app/workbench/SurfaceFrame.tsx");
+const agent = await source("desktop/ui/src/app/agent/AgentSurface.tsx");
+if (!workbench.includes("<SurfaceFrame")) errors.push("WorkbenchRoot does not route real surfaces");
+if (!router.includes("<AgentSurface")) errors.push("SurfaceFrame does not mount the Agent subsystem");
 for (const required of [
   "Autonomous goal loop",
   "Goal-driven scientific work",

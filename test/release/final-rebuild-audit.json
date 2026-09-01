@@ -1,21 +1,21 @@
 {
-  "schema": "rho.rebuild.final-audit.v2",
+  "schema": "rho.rebuild.final-audit.v4",
   "result": "pass",
   "requirements": {
     "work_packages_complete": {
-      "work_packages": 64,
-      "done": 64,
-      "progress_sha256": "sha256:0579214d0f4f1b2d32c3bcb8df7c8bd4594144a94479519f41e979c8fba50401",
-      "status_sha256": "sha256:125a8fc289b2bff04c7af9cd4dfef056ea016cb6801cb0f01182c13866b13032"
+      "work_packages": 35,
+      "done": 35
     },
     "complete_workbench_preserved": true,
     "production_fixture_root_absent": true,
     "user_selected_agent_mode_ui_absent": true,
     "fixture_backed_tauri_commands_unregistered": true,
     "git_only_history": true,
-    "active_program_ledger_removed": true,
+    "completed_program_ledger_retained_by_owner_request": true,
     "provider_private_secret_raw_project_ui_absent": true,
-    "authoritative_success_evidence": true
+    "authoritative_success_evidence": true,
+    "legacy_live_workspace_environment_mutation_absent": true,
+    "reviewed_exact_environment_apply_path_present": true
   },
   "reports": {
     "final_golden": "pass",
@@ -26,7 +26,7 @@
     "performance": "pass",
     "real_cluster": "pass",
     "clean_snapshot": "pass",
-    "production_integration": "pass"
+    "production_integration": "deferred_by_owner_direction"
   },
   "errors": []
 }

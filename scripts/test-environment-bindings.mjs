@@ -8,7 +8,10 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generator = path.join(repositoryRoot, "scripts/generate-environment-bindings.mjs");
 const generatedPath = path.join(repositoryRoot, "desktop/ui/src/transport/generated/environment.ts");
-const commands = ["list_installed_packages", "list_environment_operation_requests", "toolchain_doctor"];
+const commands = [
+  "environment_health",
+  "environment_reobserve",
+];
 
 function count(text, needle) {
   return text.split(needle).length - 1;
@@ -38,15 +41,11 @@ try {
   const generated = fs.readFileSync(generatedPath, "utf8");
   const tauri = fs.readFileSync(path.join(repositoryRoot, "desktop/ui/src/transport/tauri.ts"), "utf8");
   const facet = fs.readFileSync(path.join(repositoryRoot, "desktop/ui/src/transport/environment.ts"), "utf8");
-  assert.match(generated, /listInstalledPackages: \(limit: number \| null\)/);
-  assert.match(generated, /listEnvironmentOperationRequests: \(limit: number \| null, status: string \| null\)/);
-  assert.match(generated, /InstalledPackageInventory = unknown/);
-  assert.match(generated, /toolchainDoctor: \(\) =>/);
-  assert.match(generated, /export type ToolchainDoctorView/);
-  assert.match(generated, /state_revision: number \| null/);
-  assert.match(generated, /terminal_outcome: string \| null/);
+  assert.match(generated, /environmentHealth: \(\) =>/);
+  assert.match(generated, /environmentReobserve: \(\) =>/);
+  assert.match(generated, /export type EnvironmentPlanReviewViewV1/);
   assert.match(facet, /export interface EnvironmentReadTransport/);
-  assert.match(facet, /toolchainDoctor\(\): Promise<ToolchainDoctorView>/);
+  assert.doesNotMatch(facet, /toolchainDoctor|listInstalledPackages|computeTargetList/);
   assert.match(tauri, /const environmentTransport = createTauriEnvironmentReadTransport\(invoke\)/);
   for (const command of commands) {
     assert.equal(count(generated, `"${command}"`), 1);

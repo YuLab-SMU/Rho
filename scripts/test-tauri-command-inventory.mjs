@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "733b89c93b9bf3c77140000d0f77d89fac2ff50a13d12856d09b5dbcc604cc62";
+const EXPECTED_HANDLER_DIGEST = "661964225541022bdc01d4f3203ee10e2c46291cbe46a367a92171e44bfbfb5a";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [
@@ -29,33 +29,32 @@ const ARTIFACT_COMMANDS = [
   "read_plot_artifact",
 ];
 
+const AUTHORITY_COMMANDS = [
+  "authority_list_receipts",
+  "authority_resolve_refs",
+];
+
 const EVIDENCE_COMMANDS = [
-  "create_evidence_claim",
-  "create_evidence_entry",
-  "delete_evidence_claim",
-  "delete_evidence_entry",
-  "get_evidence_entry",
-  "list_evidence_claims",
-  "list_evidence_entries",
-  "resolve_doi",
-  "review_evidence_claim",
+  "evidence_create_draft_claim",
+  "evidence_create_draft_link",
+  "evidence_get_claim_trace",
+  "evidence_get_subgraph",
+  "evidence_graph_health",
+  "evidence_list_agent_turn",
+  "evidence_list_claims",
+  "evidence_list_gaps",
+  "evidence_promote_draft",
+  "evidence_refresh",
+  "evidence_retire_draft",
+  "evidence_retire_promoted",
+  "evidence_revise_draft_claim",
+  "evidence_snapshot",
+  "evidence_trace_artifact",
 ];
 
 const ENVIRONMENT_COMMANDS = [
-  "get_environment_operation_request",
-  "list_environment_operation_requests",
-  "list_installed_packages",
-  "list_lockfile_packages",
-  "request_environment_operation_preview",
-  "respond_environment_operation",
-];
-
-const TOOLCHAIN_COMMANDS = ["toolchain_doctor"];
-const RESOURCE_MONITOR_COMMANDS = ["resource_monitor_snapshot"];
-const REMOTE_CONNECTION_COMMANDS = [
-  "compute_target_list",
-  "configure_ssh_target",
-  "remote_connection_probe",
+  "environment_health",
+  "environment_reobserve",
 ];
 
 const EDITOR_COMMANDS = [
@@ -306,12 +305,20 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Artifact command module ownership changed",
   );
 
-  const evidenceSource = sources.find(({ name }) => name.endsWith("commands/evidence.rs"));
-  assert.ok(evidenceSource, "Evidence command module is missing");
+  const evidenceSource = sources.find(({ name }) => name.endsWith("commands/evidence_graph.rs"));
+  assert.ok(evidenceSource, "Evidence Graph command module is missing");
   assert.deepEqual(
     commandDefinitions([evidenceSource]).map(({ name }) => name).sort(),
     EVIDENCE_COMMANDS,
-    "Evidence command module ownership changed",
+    "Evidence Graph command module ownership changed",
+  );
+
+  const authoritySource = sources.find(({ name }) => name.endsWith("commands/authority.rs"));
+  assert.ok(authoritySource, "Authority command module is missing");
+  assert.deepEqual(
+    commandDefinitions([authoritySource]).map(({ name }) => name).sort(),
+    AUTHORITY_COMMANDS,
+    "Authority command module ownership changed",
   );
 
   const environmentSource = sources.find(({ name }) => name.endsWith("commands/environment.rs"));
@@ -320,34 +327,6 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     commandDefinitions([environmentSource]).map(({ name }) => name).sort(),
     ENVIRONMENT_COMMANDS,
     "Environment command module ownership changed",
-  );
-
-  const toolchainSource = sources.find(({ name }) => name.endsWith("commands/toolchain.rs"));
-  assert.ok(toolchainSource, "Toolchain command module is missing");
-  assert.deepEqual(
-    commandDefinitions([toolchainSource]).map(({ name }) => name).sort(),
-    TOOLCHAIN_COMMANDS,
-    "Toolchain command module ownership changed",
-  );
-
-  const resourceMonitorSource = sources.find(
-    ({ name }) => name.endsWith("commands/resource_monitor.rs"),
-  );
-  assert.ok(resourceMonitorSource, "Resource monitor command module is missing");
-  assert.deepEqual(
-    commandDefinitions([resourceMonitorSource]).map(({ name }) => name).sort(),
-    RESOURCE_MONITOR_COMMANDS,
-    "Resource monitor command module ownership changed",
-  );
-
-  const remoteConnectionSource = sources.find(
-    ({ name }) => name.endsWith("commands/remote_connection.rs"),
-  );
-  assert.ok(remoteConnectionSource, "Remote connection command module is missing");
-  assert.deepEqual(
-    commandDefinitions([remoteConnectionSource]).map(({ name }) => name).sort(),
-    REMOTE_CONNECTION_COMMANDS,
-    "Remote connection command module ownership changed",
   );
 
   const editorSource = sources.find(({ name }) => name.endsWith("commands/editor.rs"));
@@ -446,19 +425,13 @@ function fixtures() {
     (command) => `  commands::artifacts::${command},`,
   ).join("\n");
   const evidenceHandlers = EVIDENCE_COMMANDS.map(
-    (command) => `  commands::evidence::${command},`,
+    (command) => `  commands::evidence_graph::${command},`,
+  ).join("\n");
+  const authorityHandlers = AUTHORITY_COMMANDS.map(
+    (command) => `  commands::authority::${command},`,
   ).join("\n");
   const environmentHandlers = ENVIRONMENT_COMMANDS.map(
     (command) => `  commands::environment::${command},`,
-  ).join("\n");
-  const toolchainHandlers = TOOLCHAIN_COMMANDS.map(
-    (command) => `  commands::toolchain::${command},`,
-  ).join("\n");
-  const resourceMonitorHandlers = RESOURCE_MONITOR_COMMANDS.map(
-    (command) => `  commands::resource_monitor::${command},`,
-  ).join("\n");
-  const remoteConnectionHandlers = REMOTE_CONNECTION_COMMANDS.map(
-    (command) => `  commands::remote_connection::${command},`,
   ).join("\n");
   const editorHandlers = EDITOR_COMMANDS.map(
     (command) => `  commands::editor::${command},`,
@@ -500,11 +473,9 @@ async fn app_info() {}
   app_info,
 ${pluginHandlers}
 ${artifactHandlers}
+${authorityHandlers}
 ${evidenceHandlers}
 ${environmentHandlers}
-${toolchainHandlers}
-${resourceMonitorHandlers}
-${remoteConnectionHandlers}
 ${editorHandlers}
 ${projectHandlers}
 ${agentLlmHandlers}
@@ -532,19 +503,13 @@ ${runtimeControlHandlers}
       { name: "commands/artifacts.rs", text: ARTIFACT_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
-      { name: "commands/evidence.rs", text: EVIDENCE_COMMANDS.map(
+      { name: "commands/authority.rs", text: AUTHORITY_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
+      { name: "commands/evidence_graph.rs", text: EVIDENCE_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
       { name: "commands/environment.rs", text: ENVIRONMENT_COMMANDS.map(
-        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
-      ).join("\n") },
-      { name: "commands/toolchain.rs", text: TOOLCHAIN_COMMANDS.map(
-        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
-      ).join("\n") },
-      { name: "commands/resource_monitor.rs", text: RESOURCE_MONITOR_COMMANDS.map(
-        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
-      ).join("\n") },
-      { name: "commands/remote_connection.rs", text: REMOTE_CONNECTION_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
       { name: "commands/editor.rs", text: EDITOR_COMMANDS.map(
@@ -585,11 +550,9 @@ ${runtimeControlHandlers}
     frontend: [
       ...RUN_COMMANDS,
       ...ARTIFACT_COMMANDS,
+      ...AUTHORITY_COMMANDS,
       ...EVIDENCE_COMMANDS,
       ...ENVIRONMENT_COMMANDS,
-      ...TOOLCHAIN_COMMANDS,
-      ...RESOURCE_MONITOR_COMMANDS,
-      ...REMOTE_CONNECTION_COMMANDS,
       ...EDITOR_COMMANDS,
       ...PROJECT_COMMANDS,
       ...AGENT_LLM_COMMANDS,

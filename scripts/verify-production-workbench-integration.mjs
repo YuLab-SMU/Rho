@@ -21,8 +21,8 @@ for (const [name, command, args, timeout] of [
 }
 
 const app = await read("desktop/ui/src/app/App.tsx");
-const agent = await read("desktop/ui/src/app/AgentSurfaceView.tsx");
-for (const marker of ["createStartupController", "StartupLedgerView", "WorkbenchApp"]) {
+const agent = await read("desktop/ui/src/app/agent/AgentSurface.tsx");
+for (const marker of ["createStartupController", "StartupLedgerView", "WorkbenchRoot"]) {
   if (!app.includes(marker)) errors.push(`production_app_missing:${marker}`);
 }
 for (const marker of ["AGENT_UX_SUCCESS_FIXTURE", "AgentSurfaceVNext"]) {

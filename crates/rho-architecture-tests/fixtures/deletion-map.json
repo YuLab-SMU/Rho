@@ -12,7 +12,7 @@
     {
       "old_path": "desktop/ui/src/app/App.tsx::fixture-root",
       "responsibility": "static Agent acceptance fixture mounted as the production application",
-      "replacement_owner": "App startup controller -> StartupLedgerView -> WorkbenchApp",
+      "replacement_owner": "App startup controller -> StartupLedgerView -> WorkbenchRoot",
       "delete_work_package": "P8-08",
       "compatibility_allowed": false
     },

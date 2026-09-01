@@ -1,6 +1,6 @@
 {
   "schema": "rho.release.production-workbench-integration.v1",
-  "result": "pass",
+  "result": "fail",
   "checks": [
     {
       "name": "agent_production_source_audit",
@@ -11,7 +11,7 @@
       "passed": true
     },
     {
-      "name": "production_bundle_cutover",
+      "name": "production_bundle_invariants",
       "passed": true
     }
   ],
@@ -20,7 +20,7 @@
     "agent_uses_real_ui_kernel_transport": true,
     "user_selectable_ask_plan_act_absent": true,
     "static_agent_fixture_absent_from_bundle": true,
-    "live_release_binary_capture_confirmed": true,
+    "live_release_binary_capture_confirmed": false,
     "stable_rollback_preserved": true
   },
   "live_observation": {
@@ -44,7 +44,7 @@
     "frontend_manifest": {
       "path": "desktop/dist/asset-manifest.json",
       "bytes": 1150,
-      "sha256": "sha256:46c0ac3df8910590fc64ad7123b8b2aaf865dc3fc799c5ddfc774e5160df8580"
+      "sha256": "sha256:c0e6f101a33676d8740f3962a3f98a71e44e9bf538660f9d4df489c893e25079"
     },
     "real_agent_session_capture": {
       "path": "test/release/artifacts/production-agent-real-session.png",
@@ -57,5 +57,7 @@
       "sha256": "sha256:54069dfa4634c54bb0230a3f95eaf3da691f808b381073262b72c028b7ed78c3"
     }
   },
-  "errors": []
+  "errors": [
+    "live_release_binary_capture_not_confirmed"
+  ]
 }

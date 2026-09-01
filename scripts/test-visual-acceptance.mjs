@@ -1463,7 +1463,7 @@ async function reviewFrame(runDirectory, frame, verdict = "pass") {
     path.join(repositoryRoot, "desktop", "ui", "src", "styles", "vibe.css"),
     "utf8",
   );
-  const workbenchSource = fs.readFileSync(path.join(repositoryRoot, "desktop", "ui", "src", "app", "WorkbenchApp.tsx"), "utf8");
+  const workbenchSource = fs.readFileSync(path.join(repositoryRoot, "desktop", "ui", "src", "app", "workbench", "WorkbenchRoot.tsx"), "utf8");
   const automationSource = fs.readFileSync(
     path.join(repositoryRoot, "desktop", "ui", "src", "acceptance", "automation.ts"),
     "utf8",

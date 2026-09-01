@@ -295,9 +295,9 @@ try {
     const environment = page.locator('article[data-surface-id="rho.environment"]');
     await page.getByRole("button", { name: "More actions for Environment" }).click();
     await page.getByRole("dialog", { name: "More actions for Environment" })
-      .getByRole("button", { name: "Requests", exact: true })
+      .getByRole("button", { name: "Activity", exact: true })
       .click();
-    await environment.getByText("No environment operations yet", { exact: true }).waitFor();
+    await environment.getByText("Operation activity", { exact: true }).waitFor();
     await context.close();
   }
 
@@ -521,17 +521,12 @@ try {
 
   {
     const { context, page } = await openWorkbench("&vibe=information-flow&agent_runtime=ready", { width: 1440, height: 900 });
-    const environmentTaskbar = page.getByRole("button", { name: "Environment realtime information" });
-    await environmentTaskbar.waitFor();
-    await environmentTaskbar.click();
-    const agentRuntimeStatus = page.locator(".rho-environment-taskbar-health span", { hasText: "Agent runtime ready" });
-    await agentRuntimeStatus.waitFor();
-    if (await agentRuntimeStatus.locator(".rho-status-ready").count() !== 1) {
-      throw new Error("the ready-Agent Environment taskbar fixture exposed an incoherent status indicator");
+    if (await page.getByRole("button", { name: "Environment realtime information" }).count() !== 0) {
+      throw new Error("the retired Environment resource taskbar is still mounted");
     }
-    await page.keyboard.press("Escape");
     const mountedAgentSurface = page.locator("article[data-surface-id='rho.agent']");
     await mountedAgentSurface.waitFor();
+    await mountedAgentSurface.getByRole("region", { name: "Agent Environment Doctor" }).waitFor();
     const mountedConversationPicker = mountedAgentSurface.getByLabel(/^Conversation for /);
     if (await mountedConversationPicker.inputValue() !== "agent-conversation:mock-shared") {
       throw new Error("the mounted Agent fixture did not begin on its declared default Conversation");
@@ -817,20 +812,14 @@ try {
     }
     const intermediateStatus = await page.evaluate(() => {
       const statusbar = document.querySelector('.rho-statusbar[data-workspace-mode="vibe"]');
-      const metrics = [...(statusbar?.querySelectorAll(".rho-environment-taskbar-metric") ?? [])];
       const path = statusbar?.querySelector(".rho-statusbar-path");
       return {
-        labels: metrics.map((item) => item.textContent?.trim() ?? ""),
-        clipped: metrics.some((item) => item.scrollWidth > item.clientWidth + 1),
+        environmentMetrics: statusbar?.querySelectorAll(".rho-environment-taskbar-metric").length ?? 0,
         pathDisplay: path == null ? null : getComputedStyle(path).display,
       };
     });
-    if (intermediateStatus.clipped || intermediateStatus.pathDisplay !== "none") {
-      throw new Error(`Vibe intermediate status bar clipped authoritative labels: ${JSON.stringify(intermediateStatus)}`);
-    }
-    if (!["CPU", "RAM", "Disk"].every((label) =>
-      intermediateStatus.labels.some((value) => value.startsWith(label)))) {
-      throw new Error(`Vibe intermediate status bar lost an Environment metric: ${JSON.stringify(intermediateStatus.labels)}`);
+    if (intermediateStatus.environmentMetrics !== 0 || intermediateStatus.pathDisplay !== "none") {
+      throw new Error(`Vibe intermediate status bar retained retired Environment metrics: ${JSON.stringify(intermediateStatus)}`);
     }
     await page.setViewportSize({ width: 1440, height: 900 });
 

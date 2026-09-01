@@ -9,6 +9,8 @@ use toml::Value as TomlValue;
 const TARGET_CRATES: &[&str] = &[
     "rho-protocol",
     "rho-store",
+    "rho-evidence-graph",
+    "rho-environment",
     "rho-artifact-store",
     "rho-secret-broker",
     "rho-sandbox",
@@ -28,6 +30,7 @@ const NEW_BOUNDARY_CRATES: &[&str] = &[
     "rho-secret-broker",
     "rho-sandbox",
     "rho-execution",
+    "rho-environment",
     "rho-control-plane",
     "rho-agent-host",
     "rho-workspace",
@@ -89,6 +92,8 @@ fn target_dependency_allowlist() -> BTreeMap<&'static str, BTreeSet<&'static str
     BTreeMap::from([
         ("rho-protocol", BTreeSet::new()),
         ("rho-store", BTreeSet::from(["rho-protocol"])),
+        ("rho-evidence-graph", BTreeSet::from(["rho-protocol"])),
+        ("rho-environment", BTreeSet::from(["rho-protocol"])),
         ("rho-artifact-store", BTreeSet::from(["rho-protocol"])),
         ("rho-secret-broker", BTreeSet::from(["rho-protocol"])),
         ("rho-sandbox", BTreeSet::from(["rho-protocol"])),
@@ -103,6 +108,7 @@ fn target_dependency_allowlist() -> BTreeMap<&'static str, BTreeSet<&'static str
                 "rho-sandbox",
                 "rho-secret-broker",
                 "rho-execution",
+                "rho-environment",
             ]),
         ),
         (
@@ -140,6 +146,97 @@ fn workspace_members_include_target_crates_and_architecture_tests() {
         assert!(
             members.contains(&format!("crates/{crate_name}")),
             "workspace must include crates/{crate_name}"
+        );
+    }
+}
+
+#[test]
+fn rebuild_deleted_legacy_environment_and_evidence_owners() {
+    let root = repo_root();
+    for removed in [
+        "crates/rho-toolchain",
+        "desktop/src-tauri/src/commands/toolchain.rs",
+        "desktop/src-tauri/src/commands/resource_monitor.rs",
+        "desktop/src-tauri/src/commands/remote_connection.rs",
+        "desktop/ui/src/app/EnvironmentSurfaceView.tsx",
+        "desktop/ui/src/app/EnvironmentSurfaceView.test.tsx",
+        "desktop/ui/src/app/environment-presentation.ts",
+        "desktop/ui/src/app/environment-presentation.test.ts",
+    ] {
+        assert!(
+            !root.join(removed).exists(),
+            "retired Environment owner remains: {removed}"
+        );
+    }
+    let manifests = [
+        std::fs::read_to_string(root.join("Cargo.toml")).unwrap(),
+        std::fs::read_to_string(root.join("Cargo.lock")).unwrap(),
+        std::fs::read_to_string(root.join("desktop/src-tauri/Cargo.toml")).unwrap(),
+    ]
+    .join("\n");
+    assert!(!manifests.contains("rho-toolchain"));
+    let generated =
+        std::fs::read_to_string(root.join("desktop/ui/src/transport/generated/environment.ts"))
+            .unwrap();
+    for removed in [
+        "toolchainDoctor",
+        "resourceMonitorSnapshot",
+        "computeTargetList",
+        "remoteConnectionProbe",
+        "configureSshTarget",
+        "listInstalledPackages",
+        "listEnvironmentOperationRequests",
+    ] {
+        assert!(
+            !generated.contains(removed),
+            "legacy Environment command remains: {removed}"
+        );
+    }
+    let graph_contracts = [
+        std::fs::read_to_string(root.join("crates/rho-ui-contract/src/evidence_graph.rs")).unwrap(),
+        std::fs::read_to_string(root.join("desktop/ui/src/transport/generated/evidence-graph.ts"))
+            .unwrap(),
+        std::fs::read_to_string(root.join("desktop/ui/src/transport/evidence-graph.ts")).unwrap(),
+    ]
+    .join("\n");
+    for removed in ["EvidenceClaim", "EvidenceEntry", "EvidenceReadTransport"] {
+        assert!(
+            !graph_contracts.contains(removed),
+            "legacy Evidence concept remains: {removed}"
+        );
+    }
+
+    let legacy_environment_surfaces = [
+        std::fs::read_to_string(
+            root.join("crates/rho-server/src/coordinator/agent_authorization.rs"),
+        )
+        .unwrap(),
+        std::fs::read_to_string(root.join("crates/rho-server/src/coordinator/agent_execution.rs"))
+            .unwrap(),
+        std::fs::read_to_string(
+            root.join("crates/rho-server/src/coordinator/workspace_protocol.rs"),
+        )
+        .unwrap(),
+        std::fs::read_to_string(root.join("r/rho.agent/R/aisdk_adapter.R")).unwrap(),
+        std::fs::read_to_string(root.join("r/rho.bridge/R/workspace.R")).unwrap(),
+        std::fs::read_to_string(root.join("r/rho.bridge/NAMESPACE")).unwrap(),
+        std::fs::read_to_string(root.join("crates/rho-store/src/migration.rs")).unwrap(),
+    ]
+    .join("\n");
+    for removed in [
+        "initialize_project_environment",
+        "restore_project_environment",
+        "snapshot_project_environment",
+        "install_project_package",
+        "update_project_package",
+        "remove_project_package",
+        "rho_environment_operation",
+        "rho_environment_package_preview",
+        "environment_operation_requests",
+    ] {
+        assert!(
+            !legacy_environment_surfaces.contains(removed),
+            "legacy live-Workspace Environment write surface remains: {removed}"
         );
     }
 }
@@ -191,6 +288,311 @@ fn protocol_crate_has_no_adapter_runtime_or_authority_dependency() {
             "rho-protocol must remain pure and not depend on {forbidden}"
         );
     }
+}
+
+#[test]
+fn authority_owners_do_not_depend_on_the_evidence_graph() {
+    for crate_name in [
+        "rho-store",
+        "rho-artifact-store",
+        "rho-secret-broker",
+        "rho-sandbox",
+        "rho-execution",
+        "rho-control-plane",
+        "rho-workspace",
+        "rho-runner",
+    ] {
+        let dependencies = dependency_names(&crate_manifest(crate_name));
+        assert!(
+            !dependencies.contains("rho-evidence-graph"),
+            "authority owner {crate_name} must not depend on rho-evidence-graph"
+        );
+    }
+}
+
+#[test]
+fn public_authority_runtime_types_do_not_use_evidence_names() {
+    for crate_name in TARGET_CRATES {
+        if matches!(*crate_name, "rho-evidence-graph" | "rho-ui-contract") {
+            continue;
+        }
+        let source_root = repo_root().join("crates").join(crate_name).join("src");
+        let mut pending = vec![source_root];
+        while let Some(path) = pending.pop() {
+            for entry in std::fs::read_dir(&path).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if path.is_dir() {
+                    pending.push(path);
+                    continue;
+                }
+                if path.extension().and_then(|value| value.to_str()) != Some("rs") {
+                    continue;
+                }
+                let source = std::fs::read_to_string(&path).unwrap();
+                for line in source.lines().map(str::trim) {
+                    let name = ["pub struct ", "pub enum ", "pub type "]
+                        .into_iter()
+                        .find_map(|prefix| line.strip_prefix(prefix))
+                        .and_then(|rest| {
+                            rest.split(|character: char| {
+                                !(character.is_ascii_alphanumeric() || character == '_')
+                            })
+                            .next()
+                        });
+                    assert!(
+                        !name.is_some_and(|name| name.contains("Evidence")),
+                        "public authority/runtime type uses reserved Evidence name in {}: {line}",
+                        path.display()
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn desktop_registers_graph_commands_from_the_graph_module_only() {
+    let root = repo_root();
+    assert!(
+        root.join("desktop/src-tauri/src/commands/evidence_graph.rs")
+            .is_file()
+    );
+    assert!(
+        !root
+            .join("desktop/src-tauri/src/commands/evidence.rs")
+            .exists()
+    );
+    let commands =
+        std::fs::read_to_string(root.join("desktop/src-tauri/src/commands/mod.rs")).unwrap();
+    assert!(commands.contains("mod evidence_graph"));
+    assert!(commands.contains("mod authority"));
+    assert!(
+        !commands
+            .lines()
+            .any(|line| line.trim() == "pub(crate) mod evidence;")
+    );
+    let graph_commands =
+        std::fs::read_to_string(root.join("desktop/src-tauri/src/commands/evidence_graph.rs"))
+            .unwrap();
+    let authority_commands =
+        std::fs::read_to_string(root.join("desktop/src-tauri/src/commands/authority.rs")).unwrap();
+    for command in ["authority_resolve_refs", "authority_list_receipts"] {
+        assert!(
+            authority_commands.contains(command),
+            "Authority command module is missing {command}"
+        );
+        assert!(
+            !graph_commands.contains(&format!("fn {command}")),
+            "Evidence Graph command module retained Authority command {command}"
+        );
+    }
+}
+
+#[test]
+fn frontend_semantic_ports_remain_directional_and_typed() {
+    let root = repo_root().join("desktop/ui/src/app");
+    let authority = read_tree(&root.join("authority"));
+    assert!(
+        !authority.contains("transport/evidence-graph"),
+        "Authority surfaces must not import Evidence Graph ports"
+    );
+    let evidence = read_tree(&root.join("evidence"));
+    for forbidden in [
+        "transport/history",
+        "transport/environment",
+        "transport/agent-execution",
+    ] {
+        assert!(
+            !evidence.contains(forbidden),
+            "Evidence surfaces must not import authority mutation/read implementation {forbidden}"
+        );
+    }
+    let agent = read_tree(&root.join("agent"));
+    for forbidden in [".promoteDraft(", ".retirePromotedRecord("] {
+        assert!(
+            !agent.contains(forbidden),
+            "Agent surface leaked Evidence promotion capability: {forbidden}"
+        );
+    }
+    assert!(
+        !agent.contains("UiKernelTransport"),
+        "Agent semantic modules accept the renderer mega transport"
+    );
+    for (name, source) in [
+        ("authority", authority.as_str()),
+        ("evidence", evidence.as_str()),
+    ] {
+        assert!(
+            !source.contains("UiKernelTransport"),
+            "{name} semantic modules accept the renderer mega transport"
+        );
+    }
+    let surface_router = std::fs::read_to_string(root.join("workbench/SurfaceRouter.tsx")).unwrap();
+    for forbidden in ["UiKernelTransport", "as EvidenceGraphTransport"] {
+        assert!(
+            !surface_router.contains(forbidden),
+            "SurfaceRouter retained broad/cast transport boundary {forbidden}"
+        );
+    }
+    let graph_transport =
+        std::fs::read_to_string(repo_root().join("desktop/ui/src/transport/evidence-graph.ts"))
+            .unwrap();
+    assert!(
+        !graph_transport.contains("AuthorityReadTransport"),
+        "EvidenceGraphTransport still contains Authority reads"
+    );
+    let generated_graph = std::fs::read_to_string(
+        repo_root().join("desktop/ui/src/transport/generated/evidence-graph.ts"),
+    )
+    .unwrap();
+    for forbidden in ["authority_status", "authority_observed_at"] {
+        assert!(
+            !generated_graph.contains(forbidden),
+            "graph renderer projection retained cached Authority fact {forbidden}"
+        );
+    }
+    for forbidden in [
+        "request_type.toLowerCase",
+        "provenance_complete ? \"present\"",
+    ] {
+        assert!(
+            !authority.contains(forbidden),
+            "Authority renderer retained local fact heuristic {forbidden}"
+        );
+    }
+    for forbidden in ["supported", "contradicted", "disputed", "evidence gap"] {
+        assert!(
+            !authority.to_ascii_lowercase().contains(forbidden),
+            "Authority renderer claims graph-owned vocabulary {forbidden}"
+        );
+    }
+    let agent_ports = std::fs::read_to_string(root.join("workbench/agentPorts.ts")).unwrap();
+    let agent_environment =
+        std::fs::read_to_string(root.join("agent/AgentEnvironmentPanel.tsx")).unwrap();
+    for forbidden in [
+        "reobserveEnvironment",
+        "configureSshTarget",
+        "promoteDraft",
+        "environment.request_apply_plan",
+    ] {
+        assert!(
+            !agent_ports.contains(forbidden) && !agent_environment.contains(forbidden),
+            "Agent Environment UI retained direct mutation authority {forbidden}"
+        );
+    }
+    let evidence_production = read_tree_without_tests(&root.join("evidence"));
+    for forbidden in [
+        "authority: succeeded",
+        "authority: completed",
+        "authority: committed",
+    ] {
+        assert!(
+            !evidence_production.to_ascii_lowercase().contains(forbidden),
+            "Evidence renderer hard-codes Authority outcome {forbidden}"
+        );
+    }
+    let generic = std::fs::read_to_string(root.join("DomainSurfaceView.tsx")).unwrap();
+    for forbidden in [
+        "rho.runs",
+        "rho.jobs",
+        "rho.artifacts",
+        "rho.approvals",
+        "rho.revisions",
+        "rho.environment",
+        "rho.claims",
+        "rho.evidence-graph",
+        "rho.evidence-gaps",
+        "rho.claim-trace",
+        "rho.plots",
+        "rho.problems",
+    ] {
+        assert!(
+            !generic.contains(forbidden),
+            "generic DomainSurfaceView retained semantic surface {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn frontend_composition_roots_shrink_behind_owned_modules() {
+    let root = repo_root().join("desktop/ui/src/app");
+    for (relative, maximum_lines) in [
+        ("workbench/WorkbenchRoot.tsx", 3_000),
+        ("workbench/SurfaceFrame.tsx", 700),
+        ("agent/AgentSurface.tsx", 1_750),
+    ] {
+        let source = std::fs::read_to_string(root.join(relative)).unwrap();
+        let lines = source.lines().count();
+        assert!(
+            lines <= maximum_lines,
+            "{relative} regrew to {lines} lines after its owned modules were extracted (limit {maximum_lines})"
+        );
+    }
+    for relative in [
+        "console/ConsoleSurface.tsx",
+        "workbench/WorkbenchChrome.tsx",
+        "workbench/workbenchAdmission.ts",
+        "authority/RunsSurface.tsx",
+        "authority/JobsSurface.tsx",
+        "authority/ArtifactsSurface.tsx",
+        "authority/ApprovalsSurface.tsx",
+        "authority/RevisionsSurface.tsx",
+        "authority/EnvironmentHealthPanel.tsx",
+        "agent/AgentActivity.tsx",
+        "agent/AgentApprovalPanel.tsx",
+        "agent/AgentEvidencePanel.tsx",
+        "agent/AgentGapPanel.tsx",
+        "agent/AgentFinalAnswer.tsx",
+        "agent/AgentEnvironmentPanel.tsx",
+    ] {
+        assert!(
+            root.join(relative).is_file(),
+            "missing extracted frontend owner {relative}"
+        );
+    }
+}
+
+fn read_tree(root: &Path) -> String {
+    let mut output = String::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(path) = pending.pop() {
+        for entry in std::fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if matches!(
+                path.extension().and_then(|value| value.to_str()),
+                Some("ts" | "tsx")
+            ) {
+                output.push_str(&std::fs::read_to_string(path).unwrap());
+            }
+        }
+    }
+    output
+}
+
+fn read_tree_without_tests(root: &Path) -> String {
+    let mut output = String::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(path) = pending.pop() {
+        for entry in std::fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if matches!(
+                path.extension().and_then(|value| value.to_str()),
+                Some("ts" | "tsx")
+            ) && !path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.contains(".test."))
+            {
+                output.push_str(&std::fs::read_to_string(path).unwrap());
+            }
+        }
+    }
+    output
 }
 
 #[test]
@@ -300,10 +702,10 @@ fn production_integration_preserves_workbench_and_replaces_only_agent_experience
     let root = repo_root();
     for required in [
         "desktop/ui/src/app/App.tsx",
-        "desktop/ui/src/app/WorkbenchApp.tsx",
-        "desktop/ui/src/app/SurfaceView.tsx",
+        "desktop/ui/src/app/workbench/WorkbenchRoot.tsx",
+        "desktop/ui/src/app/workbench/SurfaceFrame.tsx",
         "desktop/ui/src/app/startup/StartupLedgerView.tsx",
-        "desktop/ui/src/app/AgentSurfaceView.tsx",
+        "desktop/ui/src/app/agent/AgentSurface.tsx",
         "desktop/src-tauri/src/main.rs",
     ] {
         assert!(
@@ -316,7 +718,7 @@ fn production_integration_preserves_workbench_and_replaces_only_agent_experience
     for required in [
         "createStartupController",
         "StartupLedgerView",
-        "WorkbenchApp",
+        "WorkbenchRoot",
     ] {
         assert!(
             app_source.contains(required),
@@ -335,14 +737,16 @@ fn production_integration_preserves_workbench_and_replaces_only_agent_experience
     }
 
     let workbench_source =
-        std::fs::read_to_string(root.join("desktop/ui/src/app/WorkbenchApp.tsx")).unwrap();
+        std::fs::read_to_string(root.join("desktop/ui/src/app/workbench/WorkbenchRoot.tsx"))
+            .unwrap();
     let surface_router =
-        std::fs::read_to_string(root.join("desktop/ui/src/app/SurfaceView.tsx")).unwrap();
-    assert!(workbench_source.contains("<SurfaceView"));
-    assert!(surface_router.contains("<AgentSurfaceView"));
+        std::fs::read_to_string(root.join("desktop/ui/src/app/workbench/SurfaceFrame.tsx"))
+            .unwrap();
+    assert!(workbench_source.contains("<SurfaceFrame"));
+    assert!(surface_router.contains("<AgentSurface"));
 
     let agent_source =
-        std::fs::read_to_string(root.join("desktop/ui/src/app/AgentSurfaceView.tsx")).unwrap();
+        std::fs::read_to_string(root.join("desktop/ui/src/app/agent/AgentSurface.tsx")).unwrap();
     for required in [
         "Autonomous goal loop",
         "Goal-driven scientific work",

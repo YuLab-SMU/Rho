@@ -61,11 +61,11 @@ for (const marker of ["Autonomous goal loop", "Goal-driven scientific work"]) {
 }
 
 const app = read("desktop/ui/src/app/App.tsx");
-for (const marker of ["createStartupController", "StartupLedgerView", "WorkbenchApp"]) {
+for (const marker of ["createStartupController", "StartupLedgerView", "WorkbenchRoot"]) {
   assert.match(app, new RegExp(marker, "u"), `production App is missing ${marker}`);
 }
 assert.doesNotMatch(app, /AGENT_UX_SUCCESS_FIXTURE|AgentSurfaceVNext/u);
-assert.doesNotMatch(read("desktop/ui/src/app/AgentSurfaceView.tsx"), /className=["']rho-agent-mode["']/u);
+assert.doesNotMatch(read("desktop/ui/src/app/agent/AgentSurface.tsx"), /className=["']rho-agent-mode["']/u);
 
 const transport = read("desktop/ui/src/transport/index.ts");
 assert.match(transport, /isTauri\(\)/u);

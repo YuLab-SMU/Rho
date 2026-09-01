@@ -7,7 +7,7 @@ export function validateP24PackageTrashContract(value) {
   for (const marker of [
     "PLUGIN_TRASH_DIRECTORY",
     "PluginPackageOwnershipOutcome",
-    "PluginPackageMoveEvidence",
+    "PluginPackageMoveReceipt",
     "pub fn move_exact(",
     "pub fn restore_exact(",
     "pub fn purge_exact(",
@@ -37,7 +37,7 @@ export function validateP24PackageTrashContract(value) {
 
 function fixture() {
   return {
-    trash: "PLUGIN_TRASH_DIRECTORY\nPluginPackageOwnershipOutcome\nPluginPackageMoveEvidence\npub fn move_exact(\npub fn restore_exact(\npub fn purge_exact(\nsnapshot_workspace_plugin_package\nsnapshot_workspace_plugin_cache_directory\nfs::rename\nsource and trash both exist\nTrashFailurePoint::BeforeRename\nTrashFailurePoint::AfterRename\nTrashFailurePoint::BeforePurgeRename\nTrashFailurePoint::AfterPurgeRename\nTrashFailurePoint::MidPurgeDelete\nTrashFailurePoint::AfterPurgeDelete\nmove_restore_and_replays_are_exact_and_idempotent\nsymlinked_trash_root_and_restore_collision_are_rejected\nexact_purge_is_bounded_idempotent_and_preserves_siblings\npurge_interruptions_recover_from_exact_marker_and_ownership\n#[cfg(test)]",
+    trash: "PLUGIN_TRASH_DIRECTORY\nPluginPackageOwnershipOutcome\nPluginPackageMoveReceipt\npub fn move_exact(\npub fn restore_exact(\npub fn purge_exact(\nsnapshot_workspace_plugin_package\nsnapshot_workspace_plugin_cache_directory\nfs::rename\nsource and trash both exist\nTrashFailurePoint::BeforeRename\nTrashFailurePoint::AfterRename\nTrashFailurePoint::BeforePurgeRename\nTrashFailurePoint::AfterPurgeRename\nTrashFailurePoint::MidPurgeDelete\nTrashFailurePoint::AfterPurgeDelete\nmove_restore_and_replays_are_exact_and_idempotent\nsymlinked_trash_root_and_restore_collision_are_rejected\nexact_purge_is_bounded_idempotent_and_preserves_siblings\npurge_interruptions_recover_from_exact_marker_and_ownership\n#[cfg(test)]",
     server: "pub mod plugin_package_trash;",
     serverCargo: 'rho-extension-runtime = { path = "../rho-extension-runtime" }',
   };

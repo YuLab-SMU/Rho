@@ -46,6 +46,7 @@ try {
   assert.match(generated, /checkResult: \(request: CheckResultRequest\)/);
   assert.match(generated, /column: number \| null/);
   assert.match(generated, /activation_generation: number/);
+  assert.match(generated, /references: FindingReferenceV1\[\]/);
   assert.match(facet, /readonly contract: "rho\.ui\.check-result\.v1"/);
   assert.match(facet, /readonly contract: "rho\.ui\.check-project\.snapshot\.v1"/);
   assert.match(facet, /export interface CheckTransport/);
@@ -57,7 +58,7 @@ try {
   for (const name of [
     "CheckSeverity",
     "CheckResultStatus",
-    "CheckEvidence",
+    "FindingReference",
     "CheckFinding",
     "CheckProjectSnapshot",
     "CheckResult",
