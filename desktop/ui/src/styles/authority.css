@@ -1,111 +1,244 @@
-.rho-authority-surface {
-  display: grid;
-  gap: var(--rho-space-3);
-  min-block-size: 0;
-  padding: var(--rho-space-3);
-  overflow: auto;
-}
+/* Authority surfaces answer whether a run, artifact, approval or revision
+   actually exists. Receipt identity and state therefore lead the hierarchy. */
 
-.rho-authority-surface > header,
-.rho-authority-records article {
-  display: flex;
-  align-items: center;
-  gap: var(--rho-space-2);
-}
+@layer surfaces {
+  .rho-authority-surface {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    color: var(--rho-ink);
+    background: var(--rho-paper);
+  }
+  .rho-authority-surface > header {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    min-height: var(--rho-surface-header-height);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--rho-space-3);
+    padding: var(--rho-space-2) var(--rho-space-4);
+    border-bottom: var(--rho-border);
+    background: var(--rho-panel);
+  }
+  .rho-authority-surface > header strong { font-size: var(--rho-text-body); font-weight: var(--rho-weight-semibold); }
+  .rho-authority-surface > header button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); }
 
-.rho-authority-surface > header { justify-content: space-between; }
-.rho-authority-records { display: grid; gap: var(--rho-space-1); }
-.rho-authority-records article {
-  padding: var(--rho-space-2) var(--rho-space-3);
-  border-block-end: 1px solid var(--rho-line);
-}
-.rho-authority-records article strong { flex: 1; overflow-wrap: anywhere; }
-.rho-authority-records article span,
-.rho-authority-records article small { color: var(--rho-muted); }
+  .rho-authority-records {
+    display: grid;
+    min-height: 0;
+    align-content: start;
+    overflow: auto;
+  }
+  .rho-authority-records article {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) auto auto;
+    align-items: center;
+    gap: var(--rho-space-2) var(--rho-space-4);
+    min-width: 0;
+    padding: var(--rho-space-3) var(--rho-space-4);
+    border-bottom: var(--rho-border);
+    background: var(--rho-paper);
+  }
+  .rho-authority-records article::before {
+    position: absolute;
+    top: var(--rho-space-3);
+    bottom: var(--rho-space-3);
+    left: 0;
+    width: 2px;
+    content: "";
+    background: transparent;
+  }
+  .rho-authority-records article[data-authority-status="succeeded"]::before,
+  .rho-authority-records article[data-authority-status="committed"]::before,
+  .rho-authority-records article[data-authority-status="approved"]::before,
+  .rho-authority-records article[data-authority-status="present"]::before { background: var(--rho-ok); }
+  .rho-authority-records article[data-authority-status="failed"]::before,
+  .rho-authority-records article[data-authority-status="rejected"]::before,
+  .rho-authority-records article[data-authority-status="missing"]::before { background: var(--rho-danger); }
+  .rho-authority-records article[data-authority-status="uncertain"]::before,
+  .rho-authority-records article[data-authority-status="stale"]::before,
+  .rho-authority-records article[data-authority-status="pending"]::before,
+  .rho-authority-records article[data-authority-status="running"]::before { background: var(--rho-warn); }
+  .rho-authority-records article:hover { background: var(--rho-panel); }
+  .rho-authority-records article > strong { min-width: 0; overflow-wrap: anywhere; font-size: var(--rho-text-body); }
+  .rho-authority-records article > small { color: var(--rho-muted); font-size: var(--rho-text-caption); white-space: nowrap; }
+  .rho-authority-records article > ul {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--rho-space-1) var(--rho-space-3);
+    margin: 0;
+    padding: var(--rho-space-2) 0 0;
+    border-top: var(--rho-border);
+    color: var(--rho-muted);
+    font-family: var(--rho-font-mono);
+    font-size: var(--rho-text-caption);
+    list-style: none;
+  }
 
-.rho-environment-health {
-  display: grid;
-  gap: var(--rho-space-4);
-  min-block-size: 0;
-  padding: var(--rho-space-4);
-  overflow: auto;
-}
+  .rho-authority-status {
+    display: grid;
+    justify-items: end;
+    gap: var(--rho-space-1);
+    color: var(--rho-ink-2);
+    font-size: var(--rho-text-caption);
+  }
+  .rho-authority-status > span { display: flex; align-items: center; gap: var(--rho-space-2); font-weight: var(--rho-weight-semibold); }
+  .rho-authority-status > span::before { width: 7px; height: 7px; border-radius: 50%; content: ""; background: var(--rho-muted); }
+  .rho-authority-status-succeeded > span::before,
+  .rho-authority-status-committed > span::before,
+  .rho-authority-status-approved > span::before,
+  .rho-authority-status-present > span::before { background: var(--rho-ok); }
+  .rho-authority-status-failed > span::before,
+  .rho-authority-status-rejected > span::before,
+  .rho-authority-status-missing > span::before { background: var(--rho-danger); }
+  .rho-authority-status-uncertain > span::before,
+  .rho-authority-status-stale > span::before,
+  .rho-authority-status-pending > span::before,
+  .rho-authority-status-running > span::before { background: var(--rho-warn); }
+  .rho-authority-status code { max-width: 16rem; overflow: hidden; color: var(--rho-muted); font-size: var(--rho-text-caption); text-overflow: ellipsis; white-space: nowrap; }
 
-.rho-environment-health > header,
-.rho-environment-authority-card > header,
-.rho-environment-plan-review > header,
-.rho-environment-operation-activity > header,
-.rho-environment-incidents article > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--rho-space-3);
-}
+  .rho-environment-health {
+    container-type: inline-size;
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+    align-content: start;
+    overflow: auto;
+    color: var(--rho-ink);
+    background: var(--rho-paper);
+  }
+  .rho-environment-health > header,
+  .rho-environment-authority-card > header,
+  .rho-environment-plan-review > header,
+  .rho-environment-operation-activity > header,
+  .rho-environment-incidents article > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--rho-space-3);
+  }
+  .rho-environment-health > header {
+    position: sticky;
+    z-index: 3;
+    top: 0;
+    min-height: var(--rho-surface-header-height);
+    padding: var(--rho-space-2) var(--rho-space-4);
+    border-bottom: var(--rho-border);
+    background: color-mix(in srgb, var(--rho-panel) 94%, transparent);
+    backdrop-filter: blur(10px);
+  }
+  .rho-environment-health > header > div { display: grid; gap: var(--rho-space-1); }
+  .rho-environment-health > header button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); }
+  .rho-environment-health > [role="alert"] { margin: 0; padding: var(--rho-space-3) var(--rho-space-4); border-bottom: var(--rho-border); color: var(--rho-danger); background: var(--rho-danger-tint); }
 
-.rho-environment-authority-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--rho-space-3);
-}
+  .rho-environment-authority-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-bottom: var(--rho-border);
+  }
+  .rho-environment-authority-card,
+  .rho-environment-plan-review,
+  .rho-environment-operation-activity,
+  .rho-environment-incidents {
+    display: grid;
+    gap: var(--rho-space-3);
+    padding: var(--rho-space-4);
+    border: 0;
+    border-bottom: var(--rho-border);
+    border-radius: 0;
+    background: var(--rho-paper);
+  }
+  .rho-environment-authority-grid .rho-environment-authority-card { border-bottom: 0; }
+  .rho-environment-authority-grid .rho-environment-authority-card + .rho-environment-authority-card { border-left: var(--rho-border); }
+  .rho-environment-authority-card > header > span,
+  .rho-environment-operation-activity > header > strong,
+  .rho-environment-incidents article > header > span { color: var(--rho-ink-2); font-size: var(--rho-text-caption); font-weight: var(--rho-weight-semibold); text-transform: uppercase; }
+  .rho-environment-authority-card > p { margin: 0; color: var(--rho-ink-2); font-size: var(--rho-text-ui); line-height: 1.5; }
 
-.rho-environment-authority-card,
-.rho-environment-plan-review,
-.rho-environment-operation-activity,
-.rho-environment-incidents {
-  display: grid;
-  gap: var(--rho-space-3);
-  padding: var(--rho-space-3);
-  border: 1px solid var(--rho-line);
-  border-radius: var(--rho-radius-2);
-  background: var(--rho-panel);
-}
+  .rho-environment-authority-card dl,
+  .rho-environment-plan-review dl { display: grid; gap: 0; margin: 0; }
+  .rho-environment-authority-card dl > div,
+  .rho-environment-plan-review dl > div {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.34fr) minmax(0, 1fr);
+    gap: var(--rho-space-3);
+    padding: var(--rho-space-2) 0;
+    border-top: var(--rho-border);
+  }
+  .rho-environment-authority-card dt,
+  .rho-environment-plan-review dt,
+  .rho-environment-authority-card small,
+  .rho-environment-plan-runtime span,
+  .rho-environment-plan-review li span,
+  .rho-environment-plan-review li small,
+  .rho-environment-operation-activity time { color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  .rho-environment-authority-card dd,
+  .rho-environment-plan-review dd { min-width: 0; margin: 0; }
+  .rho-environment-authority-card code,
+  .rho-environment-plan-review code,
+  .rho-environment-operation-activity code { overflow-wrap: anywhere; color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
 
-.rho-environment-authority-card dl,
-.rho-environment-plan-review dl {
-  display: grid;
-  gap: var(--rho-space-2);
-  margin: 0;
-}
+  .rho-environment-plan-review > header > div { display: grid; gap: var(--rho-space-1); }
+  .rho-environment-plan-review > header > code { max-width: 45%; text-align: right; }
+  .rho-environment-plan-runtime {
+    display: grid;
+    grid-template-columns: minmax(8rem, 0.4fr) minmax(0, 1fr);
+    gap: var(--rho-space-1) var(--rho-space-3);
+    padding: var(--rho-space-3);
+    border-left: 2px solid var(--rho-line-strong);
+    background: var(--rho-panel);
+  }
+  .rho-environment-plan-runtime code,
+  .rho-environment-plan-runtime small { grid-column: 1 / -1; }
+  .rho-environment-plan-review ul,
+  .rho-environment-operation-activity ol { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+  .rho-environment-plan-review li {
+    display: grid;
+    grid-template-columns: minmax(10rem, 1fr) auto;
+    gap: var(--rho-space-1) var(--rho-space-3);
+    padding: var(--rho-space-3) 0;
+    border-top: var(--rho-border);
+  }
+  .rho-environment-plan-review li code,
+  .rho-environment-plan-review li small { grid-column: 1 / -1; }
 
-.rho-environment-authority-card dl > div,
-.rho-environment-plan-review dl > div {
-  display: grid;
-  grid-template-columns: minmax(90px, 0.35fr) minmax(0, 1fr);
-  gap: var(--rho-space-2);
-}
+  .rho-environment-operation-activity ol { counter-reset: environment-checkpoint; }
+  .rho-environment-operation-activity li {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--rho-space-1) var(--rho-space-3);
+    padding: var(--rho-space-2) 0 var(--rho-space-2) var(--rho-space-5);
+    border-top: var(--rho-border);
+  }
+  .rho-environment-operation-activity li::before {
+    position: absolute;
+    top: calc(var(--rho-space-2) + 0.35em);
+    left: var(--rho-space-1);
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    content: "";
+    background: var(--rho-ok);
+  }
+  .rho-environment-operation-activity li code { grid-column: 1 / -1; }
+  .rho-environment-operation-activity > p { margin: 0; color: var(--rho-ink-2); }
 
-.rho-environment-authority-card dt,
-.rho-environment-plan-review dt,
-.rho-environment-authority-card small,
-.rho-environment-plan-runtime span,
-.rho-environment-plan-review li span,
-.rho-environment-plan-review li small,
-.rho-environment-operation-activity time {
-  color: var(--rho-muted);
-}
+  .rho-environment-incidents { border-left: 3px solid var(--rho-danger); background: var(--rho-danger-tint); }
+  .rho-environment-incidents article { padding-top: var(--rho-space-3); border-top: var(--rho-border); }
+  .rho-environment-incidents article > p { margin: var(--rho-space-2) 0 0; color: var(--rho-ink-2); }
+  .rho-environment-health > details { margin: var(--rho-space-3) var(--rho-space-4) var(--rho-space-4); color: var(--rho-muted); font-size: var(--rho-text-caption); }
 
-.rho-environment-authority-card dd,
-.rho-environment-plan-review dd { margin: 0; min-inline-size: 0; }
-.rho-environment-authority-card code,
-.rho-environment-plan-review code,
-.rho-environment-operation-activity code { overflow-wrap: anywhere; }
-
-.rho-environment-plan-runtime,
-.rho-environment-plan-review li,
-.rho-environment-operation-activity li {
-  display: grid;
-  gap: var(--rho-space-1);
-}
-
-.rho-environment-plan-review ul,
-.rho-environment-operation-activity ol {
-  display: grid;
-  gap: var(--rho-space-2);
-  margin: 0;
-  padding-inline-start: var(--rho-space-5);
-}
-
-.rho-environment-incidents article {
-  padding-block-start: var(--rho-space-2);
-  border-block-start: 1px solid var(--rho-line);
+  @container (max-width: 700px) {
+    .rho-environment-authority-grid { grid-template-columns: minmax(0, 1fr); }
+    .rho-environment-authority-grid .rho-environment-authority-card { border-bottom: var(--rho-border); }
+    .rho-environment-authority-grid .rho-environment-authority-card + .rho-environment-authority-card { border-left: 0; }
+    .rho-authority-records article { grid-template-columns: minmax(0, 1fr) auto; }
+    .rho-authority-records article > small { grid-column: 1 / -1; }
+  }
 }

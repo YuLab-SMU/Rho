@@ -23,7 +23,10 @@ export function ReceiptSurface({ title, kind, empty, transport }: {
     title={title}
     load={load}
     empty={empty}
-    render={(receipt) => <article key={receipt.reference.kind + ":" + receipt.reference.authority_id}>
+    render={(receipt) => <article
+      data-authority-status={receipt.status}
+      key={receipt.reference.kind + ":" + receipt.reference.authority_id}
+    >
       <strong>{receipt.label}</strong>
       <AuthorityStatus receipt={receipt} />
       <small>{receipt.captured_at}</small>
