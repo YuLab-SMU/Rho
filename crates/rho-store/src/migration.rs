@@ -1,5 +1,3 @@
-use std::path::{Path, PathBuf};
-
 use rusqlite::{Connection, OptionalExtension};
 
 use super::{MigrationOutcome, MigrationRecordCounts, SCHEMA_VERSION, StoreError};
@@ -45,7 +43,7 @@ pub(crate) fn set_schema_version(connection: &Connection, version: i64) -> Resul
     Ok(())
 }
 
-pub(crate) fn v8_schema_sql() -> &'static str {
+pub(crate) fn current_schema_sql() -> &'static str {
     "
     CREATE TABLE metadata (
         key TEXT PRIMARY KEY,
@@ -215,29 +213,146 @@ pub(crate) fn v8_schema_sql() -> &'static str {
         first_captured_at TEXT NOT NULL,
         last_captured_at TEXT NOT NULL
     );
-    CREATE TABLE environment_operation_requests (
-        request_id TEXT PRIMARY KEY,
-        turn_id TEXT,
-        source TEXT NOT NULL,
-        request_name TEXT NOT NULL,
-        status TEXT NOT NULL,
-        decision TEXT,
-        reason TEXT,
-        project_root TEXT NOT NULL,
-        arguments_json TEXT NOT NULL,
-        preview_json TEXT NOT NULL,
-        preview_sha256 TEXT NOT NULL,
-        workspace_id TEXT,
-        state_revision INTEGER,
-        project_revision INTEGER,
-        before_snapshot_id TEXT,
-        run_id TEXT,
-        requested_at TEXT NOT NULL,
-        responded_at TEXT,
-        completed_at TEXT,
-        terminal_outcome TEXT,
-        FOREIGN KEY(turn_id) REFERENCES agent_turns(turn_id) ON DELETE SET NULL
+    CREATE TABLE environment_desired_revisions (
+        revision_id TEXT PRIMARY KEY,
+        project_root TEXT NOT NULL CHECK (project_root <> ''),
+        environment_id TEXT NOT NULL CHECK (environment_id <> ''),
+        canonical_json TEXT NOT NULL,
+        canonical_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL
     );
+    CREATE TABLE environment_realization_revisions (
+        revision_id TEXT PRIMARY KEY,
+        project_root TEXT NOT NULL CHECK (project_root <> ''),
+        environment_id TEXT NOT NULL CHECK (environment_id <> ''),
+        canonical_json TEXT NOT NULL,
+        canonical_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+    CREATE TABLE environment_plan_reviews (
+        project_root TEXT NOT NULL CHECK (project_root <> ''),
+        plan_id TEXT NOT NULL CHECK (plan_id <> ''),
+        environment_id TEXT NOT NULL CHECK (environment_id <> ''),
+        canonical_plan_json TEXT NOT NULL CHECK (json_valid(canonical_plan_json)),
+        status TEXT NOT NULL CHECK (
+            status IN ('materialized', 'approved', 'rejected', 'dispatched', 'expired', 'superseded')
+        ),
+        approval_lease_id TEXT,
+        operation_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(project_root, plan_id),
+        CHECK (
+            (status = 'materialized' AND approval_lease_id IS NULL AND operation_id IS NULL) OR
+            (status IN ('approved', 'dispatched') AND approval_lease_id IS NOT NULL AND operation_id IS NOT NULL) OR
+            (status IN ('rejected', 'expired', 'superseded'))
+        )
+    );
+    CREATE TABLE environment_operation_receipts (
+        receipt_id TEXT PRIMARY KEY,
+        operation_id TEXT NOT NULL UNIQUE,
+        project_root TEXT NOT NULL CHECK (project_root <> ''),
+        environment_id TEXT NOT NULL CHECK (environment_id <> ''),
+        plan_id TEXT NOT NULL CHECK (plan_id <> ''),
+        outcome TEXT NOT NULL CHECK (
+            outcome IN ('succeeded', 'failed', 'cancelled', 'uncertain', 'reconcile_required')
+        ),
+        canonical_json TEXT NOT NULL,
+        recorded_at TEXT NOT NULL
+    );
+    CREATE TABLE environment_operation_journal (
+        operation_id TEXT PRIMARY KEY,
+        project_root TEXT NOT NULL CHECK (project_root <> ''),
+        environment_id TEXT NOT NULL CHECK (environment_id <> ''),
+        plan_id TEXT NOT NULL CHECK (plan_id <> ''),
+        canonical_plan_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (
+            status IN ('prepared', 'running', 'verifying', 'succeeded', 'failed',
+                       'cancelled', 'uncertain', 'reconcile_required')
+        ),
+        next_checkpoint_sequence INTEGER NOT NULL DEFAULT 0,
+        reason TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE environment_operation_checkpoints (
+        operation_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL,
+        name TEXT NOT NULL CHECK (name <> ''),
+        digest TEXT,
+        reached_at TEXT NOT NULL,
+        PRIMARY KEY(operation_id, sequence),
+        FOREIGN KEY(operation_id) REFERENCES environment_operation_journal(operation_id)
+            ON DELETE CASCADE
+    );
+    CREATE TABLE environment_incidents (
+        incident_id TEXT PRIMARY KEY,
+        project_root TEXT NOT NULL CHECK (project_root <> ''),
+        environment_id TEXT NOT NULL CHECK (environment_id <> ''),
+        kind TEXT NOT NULL CHECK (kind <> ''),
+        status TEXT NOT NULL CHECK (status IN ('open', 'resolved')),
+        canonical_json TEXT NOT NULL,
+        detected_at TEXT NOT NULL,
+        resolved_at TEXT
+    );
+    CREATE TABLE workspace_environment_bindings (
+        project_root TEXT PRIMARY KEY,
+        environment_id TEXT NOT NULL CHECK (environment_id <> ''),
+        desired_revision TEXT NOT NULL CHECK (desired_revision <> ''),
+        realization_revision TEXT NOT NULL CHECK (realization_revision <> ''),
+        receipt_id TEXT NOT NULL CHECK (receipt_id <> ''),
+        receipt_digest TEXT NOT NULL CHECK (receipt_digest <> ''),
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE authority_receipt_log (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_root TEXT NOT NULL CHECK (project_root <> ''),
+        authority_kind TEXT NOT NULL CHECK (
+            authority_kind IN ('run', 'artifact', 'approval', 'environment_snapshot', 'agent_turn')
+        ),
+        authority_id TEXT NOT NULL CHECK (authority_id <> ''),
+        changed_at TEXT NOT NULL
+    );
+    CREATE TRIGGER authority_run_insert AFTER INSERT ON runs BEGIN
+        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
+        VALUES(NEW.project_root, 'run', NEW.run_id, NEW.started_at);
+    END;
+    CREATE TRIGGER authority_run_update AFTER UPDATE ON runs BEGIN
+        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
+        VALUES(NEW.project_root, 'run', NEW.run_id, COALESCE(NEW.finished_at, NEW.started_at));
+    END;
+    CREATE TRIGGER authority_artifact_insert AFTER INSERT ON artifact_records BEGIN
+        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
+        VALUES(NEW.project_root, 'artifact', NEW.artifact_id, NEW.created_at);
+    END;
+    CREATE TRIGGER authority_artifact_update AFTER UPDATE ON artifact_records BEGIN
+        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
+        VALUES(NEW.project_root, 'artifact', NEW.artifact_id, NEW.created_at);
+    END;
+    CREATE TRIGGER authority_approval_insert AFTER INSERT ON approval_requests BEGIN
+        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
+        VALUES(NEW.project_root, 'approval', NEW.request_id, NEW.requested_at);
+    END;
+    CREATE TRIGGER authority_approval_update AFTER UPDATE ON approval_requests BEGIN
+        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
+        VALUES(NEW.project_root, 'approval', NEW.request_id, COALESCE(NEW.responded_at, NEW.requested_at));
+    END;
+    CREATE TRIGGER authority_environment_insert AFTER INSERT ON environment_snapshots BEGIN
+        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
+        VALUES(NEW.project_root, 'environment_snapshot', NEW.snapshot_id, NEW.last_captured_at);
+    END;
+    CREATE TRIGGER authority_environment_update AFTER UPDATE ON environment_snapshots BEGIN
+        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
+        VALUES(NEW.project_root, 'environment_snapshot', NEW.snapshot_id, NEW.last_captured_at);
+    END;
+    CREATE TRIGGER authority_agent_turn_insert AFTER INSERT ON agent_turns BEGIN
+        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
+        VALUES(NEW.project_root, 'agent_turn', NEW.turn_id, NEW.started_at);
+    END;
+    CREATE TRIGGER authority_agent_turn_update AFTER UPDATE ON agent_turns BEGIN
+        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
+        VALUES(NEW.project_root, 'agent_turn', NEW.turn_id, COALESCE(NEW.finished_at, NEW.started_at));
+    END;
     CREATE INDEX idx_agent_turns_started_at
         ON agent_turns(started_at DESC);
     CREATE INDEX idx_agent_conversations_project_updated
@@ -264,66 +379,28 @@ pub(crate) fn v8_schema_sql() -> &'static str {
         ON artifact_records(project_root, created_at DESC);
     CREATE INDEX idx_environment_snapshots_project_root
         ON environment_snapshots(project_root, last_captured_at DESC);
-    CREATE INDEX idx_environment_operation_requests_status
-        ON environment_operation_requests(status, requested_at DESC);
-    CREATE INDEX idx_environment_operation_requests_turn_id
-        ON environment_operation_requests(turn_id, requested_at DESC);
-    CREATE INDEX idx_environment_operation_requests_project
-        ON environment_operation_requests(project_root, requested_at DESC);
+    CREATE INDEX idx_environment_desired_project_created
+        ON environment_desired_revisions(project_root, created_at DESC);
+    CREATE INDEX idx_environment_realization_project_created
+        ON environment_realization_revisions(project_root, created_at DESC);
+    CREATE INDEX idx_environment_plan_reviews_project_status
+        ON environment_plan_reviews(project_root, status, updated_at DESC);
+    CREATE INDEX idx_environment_receipts_project_recorded
+        ON environment_operation_receipts(project_root, recorded_at DESC);
+    CREATE INDEX idx_environment_journal_project_updated
+        ON environment_operation_journal(project_root, updated_at DESC);
+    CREATE UNIQUE INDEX idx_environment_journal_project_plan
+        ON environment_operation_journal(project_root, plan_id);
+    CREATE INDEX idx_environment_incidents_project_status
+        ON environment_incidents(project_root, status, detected_at DESC);
     CREATE INDEX idx_runs_project_started
         ON runs(project_root, started_at DESC);
     CREATE INDEX idx_agent_turns_project_started
         ON agent_turns(project_root, started_at DESC);
     CREATE INDEX idx_approval_requests_project_status
         ON approval_requests(project_root, status, requested_at DESC);
-    CREATE TABLE evidence_entries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        project_root TEXT NOT NULL CHECK (project_root <> ''),
-        title TEXT NOT NULL,
-        notes TEXT NOT NULL DEFAULT '',
-        doi TEXT,
-        run_id TEXT,
-        artifact_id TEXT,
-        citation_json TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-    );
-    CREATE INDEX idx_evidence_entries_project
-        ON evidence_entries(project_root, created_at DESC);
-    CREATE TABLE evidence_claims (
-        claim_id TEXT PRIMARY KEY,
-        project_root TEXT NOT NULL CHECK (project_root <> ''),
-        kind TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        anchor_kind TEXT NOT NULL CHECK (anchor_kind IN ('source_range', 'artifact')),
-        source_path TEXT,
-        start_line INTEGER,
-        start_column INTEGER,
-        end_line INTEGER,
-        end_column INTEGER,
-        source_sha256 TEXT,
-        source_excerpt TEXT,
-        artifact_id TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        CHECK (
-            (anchor_kind = 'source_range' AND source_path IS NOT NULL AND artifact_id IS NULL) OR
-            (anchor_kind = 'artifact' AND artifact_id IS NOT NULL AND source_path IS NULL)
-        )
-    );
-    CREATE TABLE claim_evidence_links (
-        claim_id TEXT NOT NULL,
-        evidence_id INTEGER NOT NULL,
-        project_root TEXT NOT NULL CHECK (project_root <> ''),
-        created_at TEXT NOT NULL,
-        PRIMARY KEY(claim_id, evidence_id),
-        FOREIGN KEY(claim_id) REFERENCES evidence_claims(claim_id) ON DELETE CASCADE,
-        FOREIGN KEY(evidence_id) REFERENCES evidence_entries(id) ON DELETE CASCADE
-    );
-    CREATE INDEX idx_evidence_claims_project
-        ON evidence_claims(project_root, created_at DESC);
-    CREATE INDEX idx_claim_evidence_links_project
-        ON claim_evidence_links(project_root, claim_id);
+    CREATE INDEX idx_authority_receipt_log_project_seq
+        ON authority_receipt_log(project_root, seq);
     "
 }
 
@@ -1094,7 +1171,10 @@ fn assert_table_sql_contains(
     }
 }
 
-fn assert_table_exists(connection: &Connection, table_name: &str) -> Result<(), StoreError> {
+pub(crate) fn assert_table_exists(
+    connection: &Connection,
+    table_name: &str,
+) -> Result<(), StoreError> {
     let exists = connection
         .query_row(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
@@ -1108,6 +1188,33 @@ fn assert_table_exists(connection: &Connection, table_name: &str) -> Result<(), 
     } else {
         Err(StoreError::MigrationRejected {
             message: format!("required table {table_name} is missing"),
+            outcome: MigrationOutcome::rejected(
+                Some(SCHEMA_VERSION),
+                None,
+                MigrationRecordCounts::default(),
+                "invalid_current_schema",
+            ),
+        })
+    }
+}
+
+pub(crate) fn assert_table_absent(
+    connection: &Connection,
+    table_name: &str,
+) -> Result<(), StoreError> {
+    let exists = connection
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [table_name],
+            |_row| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    if !exists {
+        Ok(())
+    } else {
+        Err(StoreError::MigrationRejected {
+            message: format!("retired table {table_name} is still present"),
             outcome: MigrationOutcome::rejected(
                 Some(SCHEMA_VERSION),
                 None,
@@ -1150,114 +1257,6 @@ fn assert_column_absent(
     } else {
         Ok(())
     }
-}
-
-pub(crate) fn create_claim_review_schema(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<(), StoreError> {
-    transaction.execute_batch(
-        "
-        CREATE TABLE evidence_claims (
-            claim_id TEXT PRIMARY KEY,
-            project_root TEXT NOT NULL CHECK (project_root <> ''),
-            kind TEXT NOT NULL,
-            summary TEXT NOT NULL,
-            anchor_kind TEXT NOT NULL CHECK (anchor_kind IN ('source_range', 'artifact')),
-            source_path TEXT,
-            start_line INTEGER,
-            start_column INTEGER,
-            end_line INTEGER,
-            end_column INTEGER,
-            source_sha256 TEXT,
-            source_excerpt TEXT,
-            artifact_id TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            CHECK (
-                (anchor_kind = 'source_range' AND source_path IS NOT NULL AND artifact_id IS NULL) OR
-                (anchor_kind = 'artifact' AND artifact_id IS NOT NULL AND source_path IS NULL)
-            )
-        );
-        CREATE TABLE claim_evidence_links (
-            claim_id TEXT NOT NULL,
-            evidence_id INTEGER NOT NULL,
-            project_root TEXT NOT NULL CHECK (project_root <> ''),
-            created_at TEXT NOT NULL,
-            PRIMARY KEY(claim_id, evidence_id),
-            FOREIGN KEY(claim_id) REFERENCES evidence_claims(claim_id) ON DELETE CASCADE,
-            FOREIGN KEY(evidence_id) REFERENCES evidence_entries(id) ON DELETE CASCADE
-        );
-        CREATE INDEX idx_evidence_claims_project
-            ON evidence_claims(project_root, created_at DESC);
-        CREATE INDEX idx_claim_evidence_links_project
-            ON claim_evidence_links(project_root, claim_id);
-        ",
-    )?;
-    Ok(())
-}
-
-pub(crate) fn create_agent_conversation_schema(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<(), StoreError> {
-    transaction.execute_batch(
-        "
-        CREATE TABLE agent_conversations (
-            conversation_id TEXT PRIMARY KEY,
-            project_root TEXT NOT NULL CHECK (project_root <> ''),
-            title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 240),
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            archived_at TEXT,
-            legacy_unthreaded INTEGER NOT NULL DEFAULT 0
-                CHECK (legacy_unthreaded IN (0, 1))
-        );
-        CREATE TABLE agent_conversation_turns (
-            turn_id TEXT PRIMARY KEY,
-            conversation_id TEXT NOT NULL,
-            retry_of_turn_id TEXT,
-            terminal_reason TEXT,
-            FOREIGN KEY(turn_id) REFERENCES agent_turns(turn_id) ON DELETE CASCADE,
-            FOREIGN KEY(conversation_id) REFERENCES agent_conversations(conversation_id)
-                ON DELETE RESTRICT,
-            FOREIGN KEY(retry_of_turn_id) REFERENCES agent_turns(turn_id)
-                ON DELETE SET NULL
-        );
-        CREATE INDEX idx_agent_conversations_project_updated
-            ON agent_conversations(project_root, updated_at DESC);
-        CREATE INDEX idx_agent_conversation_turns_conversation
-            ON agent_conversation_turns(conversation_id, turn_id);
-
-        INSERT INTO agent_conversations(
-            conversation_id, project_root, title, created_at, updated_at,
-            archived_at, legacy_unthreaded
-        )
-        SELECT
-            'legacy_' || lower(hex(CAST(project_root AS BLOB))),
-            project_root,
-            'Legacy project history',
-            MIN(started_at),
-            MAX(COALESCE(finished_at, started_at)),
-            NULL,
-            1
-        FROM agent_turns
-        GROUP BY project_root;
-
-        INSERT INTO agent_conversation_turns(
-            turn_id, conversation_id, retry_of_turn_id, terminal_reason
-        )
-        SELECT
-            turn_id,
-            'legacy_' || lower(hex(CAST(project_root AS BLOB))),
-            NULL,
-            CASE
-                WHEN status = 'interrupted' THEN 'legacy_interrupted'
-                WHEN status = 'failed' THEN 'agent_failure'
-                ELSE NULL
-            END
-        FROM agent_turns;
-        ",
-    )?;
-    Ok(())
 }
 
 pub(crate) fn assert_agent_conversation_schema(connection: &Connection) -> Result<(), StoreError> {
@@ -1330,308 +1329,6 @@ pub(crate) fn assert_agent_conversation_schema(connection: &Connection) -> Resul
             ),
         });
     }
-    Ok(())
-}
-
-pub(crate) fn create_pre_migration_backup(
-    connection: &Connection,
-    path: &Path,
-    schema_version: i64,
-) -> Result<Option<PathBuf>, StoreError> {
-    if path.as_os_str().is_empty() || path == Path::new(":memory:") {
-        return Ok(None);
-    }
-    let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
-        return Ok(None);
-    };
-    let backup_path = path.with_file_name(format!("{file_name}.schema-v{schema_version}.bak"));
-    if backup_path.exists() {
-        std::fs::remove_file(&backup_path)
-            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
-    }
-    connection.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
-    let escaped = backup_path.to_string_lossy().replace('\'', "''");
-    connection.execute_batch(&format!("VACUUM INTO '{escaped}'"))?;
-    Ok(Some(backup_path))
-}
-
-pub(crate) fn v7_record_counts(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<MigrationRecordCounts, StoreError> {
-    let mut counts = MigrationRecordCounts::default();
-    for table in ["runs", "agent_turns", "approval_requests", "plot_artifacts"] {
-        counts += table_project_identity_counts(transaction, table)?;
-    }
-    Ok(counts)
-}
-
-fn table_project_identity_counts(
-    transaction: &rusqlite::Transaction<'_>,
-    table: &str,
-) -> Result<MigrationRecordCounts, StoreError> {
-    let sql = format!(
-        "SELECT
-            COALESCE(SUM(CASE WHEN project_root IS NOT NULL AND TRIM(project_root) <> '' THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN project_root IS NULL THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN project_root IS NOT NULL AND TRIM(project_root) = '' THEN 1 ELSE 0 END), 0)
-         FROM {table}"
-    );
-    transaction
-        .query_row(&sql, [], |row| {
-            Ok(MigrationRecordCounts {
-                scoped: row.get(0)?,
-                legacy_unscoped: row.get(1)?,
-                rejected: row.get(2)?,
-            })
-        })
-        .map_err(StoreError::from)
-}
-
-pub(crate) fn rebuild_runs_v8(transaction: &rusqlite::Transaction<'_>) -> Result<(), StoreError> {
-    transaction.execute_batch(
-        "
-        ALTER TABLE runs RENAME TO runs_v7;
-        CREATE TABLE runs (
-            run_id TEXT PRIMARY KEY,
-            parent_run_id TEXT,
-            project_root TEXT NOT NULL CHECK (project_root <> ''),
-            origin TEXT NOT NULL DEFAULT 'system',
-            status TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            finished_at TEXT,
-            terminal_reason TEXT,
-            request_type TEXT NOT NULL DEFAULT 'workspace.execute',
-            operation_class TEXT NOT NULL DEFAULT 'probe',
-            code TEXT NOT NULL DEFAULT '',
-            arguments_json TEXT NOT NULL DEFAULT '{}',
-            source_path TEXT,
-            execution_mode TEXT,
-            document_version INTEGER,
-            workspace_id TEXT,
-            state_revision_before INTEGER,
-            project_revision_before INTEGER,
-            state_revision_after INTEGER,
-            project_revision_after INTEGER,
-            stdout TEXT,
-            value_text TEXT,
-            messages_json TEXT NOT NULL DEFAULT '[]',
-            warnings_json TEXT NOT NULL DEFAULT '[]',
-            error_message TEXT,
-            error_call TEXT,
-            traceback_json TEXT NOT NULL DEFAULT '[]',
-            error_start_line INTEGER,
-            error_start_column INTEGER,
-            error_end_line INTEGER,
-            error_end_column INTEGER,
-            error_range_kind TEXT CHECK (
-                error_range_kind IS NULL OR
-                error_range_kind IN ('r_expression', 'r_parse_token')
-            ),
-            cancel_requested INTEGER NOT NULL DEFAULT 0,
-            environment_snapshot_id TEXT,
-            environment_snapshot_id_after TEXT
-        );
-        INSERT INTO runs(
-            run_id, parent_run_id, project_root, origin, status, started_at, finished_at,
-            terminal_reason, request_type, operation_class, code, arguments_json, source_path,
-            execution_mode, document_version, workspace_id, state_revision_before,
-            project_revision_before, state_revision_after, project_revision_after, stdout,
-            value_text, messages_json, warnings_json, error_message, error_call,
-            traceback_json, cancel_requested, environment_snapshot_id,
-            environment_snapshot_id_after
-        )
-        SELECT
-            run_id,
-            parent_run_id,
-            COALESCE(project_root, 'legacy_unscoped'),
-            origin,
-            status,
-            started_at,
-            finished_at,
-            terminal_reason,
-            request_type,
-            operation_class,
-            code,
-            arguments_json,
-            source_path,
-            execution_mode,
-            document_version,
-            workspace_id,
-            state_revision_before,
-            project_revision_before,
-            state_revision_after,
-            project_revision_after,
-            stdout,
-            value_text,
-            messages_json,
-            warnings_json,
-            error_message,
-            error_call,
-            traceback_json,
-            cancel_requested,
-            environment_snapshot_id,
-            environment_snapshot_id_after
-        FROM runs_v7;
-        DROP TABLE runs_v7;
-        ",
-    )?;
-    Ok(())
-}
-
-pub(crate) fn rebuild_agent_turns_v8(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<(), StoreError> {
-    transaction.execute_batch(
-        "
-        ALTER TABLE agent_turns RENAME TO agent_turns_v7;
-        CREATE TABLE agent_turns (
-            turn_id TEXT PRIMARY KEY,
-            project_root TEXT NOT NULL CHECK (project_root <> ''),
-            mode TEXT NOT NULL,
-            prompt TEXT NOT NULL,
-            prompt_preview TEXT NOT NULL,
-            model TEXT NOT NULL,
-            status TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            finished_at TEXT,
-            workspace_id_before TEXT,
-            state_revision_before INTEGER,
-            project_revision_before INTEGER,
-            workspace_id_after TEXT,
-            state_revision_after INTEGER,
-            project_revision_after INTEGER,
-            final_message TEXT,
-            error_message TEXT
-        );
-        INSERT INTO agent_turns(
-            turn_id, project_root, mode, prompt, prompt_preview, model, status, started_at,
-            finished_at, workspace_id_before, state_revision_before, project_revision_before,
-            workspace_id_after, state_revision_after, project_revision_after, final_message,
-            error_message
-        )
-        SELECT
-            turn_id,
-            COALESCE(project_root, 'legacy_unscoped'),
-            mode,
-            prompt,
-            prompt_preview,
-            model,
-            status,
-            started_at,
-            finished_at,
-            workspace_id_before,
-            state_revision_before,
-            project_revision_before,
-            workspace_id_after,
-            state_revision_after,
-            project_revision_after,
-            final_message,
-            error_message
-        FROM agent_turns_v7;
-        ",
-    )?;
-    Ok(())
-}
-
-pub(crate) fn rebuild_approval_requests_v8(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<(), StoreError> {
-    transaction.execute_batch(
-        "
-        ALTER TABLE approval_requests RENAME TO approval_requests_v7;
-        CREATE TABLE approval_requests (
-            request_id TEXT PRIMARY KEY,
-            turn_id TEXT NOT NULL,
-            project_root TEXT NOT NULL CHECK (project_root <> ''),
-            tool TEXT NOT NULL,
-            policy TEXT NOT NULL,
-            status TEXT NOT NULL,
-            decision TEXT,
-            reason TEXT,
-            arguments_json TEXT NOT NULL,
-            code TEXT,
-            workspace_id TEXT,
-            state_revision INTEGER,
-            project_revision INTEGER,
-            requested_at TEXT NOT NULL,
-            responded_at TEXT,
-            continuation_outcome TEXT,
-            FOREIGN KEY(turn_id) REFERENCES agent_turns(turn_id) ON DELETE CASCADE
-        );
-        INSERT INTO approval_requests(
-            request_id, turn_id, project_root, tool, policy, status, decision, reason,
-            arguments_json, code, workspace_id, state_revision, project_revision, requested_at,
-            responded_at, continuation_outcome
-        )
-        SELECT
-            request_id,
-            turn_id,
-            COALESCE(project_root, 'legacy_unscoped'),
-            tool,
-            policy,
-            status,
-            decision,
-            reason,
-            arguments_json,
-            code,
-            workspace_id,
-            state_revision,
-            project_revision,
-            requested_at,
-            responded_at,
-            continuation_outcome
-        FROM approval_requests_v7;
-        DROP TABLE approval_requests_v7;
-        DROP TABLE agent_turns_v7;
-        ",
-    )?;
-    Ok(())
-}
-
-pub(crate) fn rebuild_plot_artifacts_v8(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<(), StoreError> {
-    transaction.execute_batch(
-        "
-        ALTER TABLE plot_artifacts RENAME TO plot_artifacts_v7;
-        CREATE TABLE plot_artifacts (
-            plot_id TEXT PRIMARY KEY,
-            run_id TEXT NOT NULL,
-            project_root TEXT NOT NULL CHECK (project_root <> ''),
-            source_path TEXT,
-            execution_mode TEXT,
-            document_version INTEGER,
-            workspace_id TEXT,
-            state_revision INTEGER,
-            project_revision INTEGER,
-            media_type TEXT NOT NULL,
-            payload_json TEXT NOT NULL,
-            provenance_complete INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL
-        );
-        INSERT INTO plot_artifacts(
-            plot_id, run_id, project_root, source_path, execution_mode, document_version,
-            workspace_id, state_revision, project_revision, media_type, payload_json,
-            provenance_complete, created_at
-        )
-        SELECT
-            plot_id,
-            run_id,
-            COALESCE(project_root, 'legacy_unscoped'),
-            source_path,
-            execution_mode,
-            document_version,
-            workspace_id,
-            state_revision,
-            project_revision,
-            media_type,
-            payload_json,
-            provenance_complete,
-            created_at
-        FROM plot_artifacts_v7;
-        DROP TABLE plot_artifacts_v7;
-        ",
-    )?;
     Ok(())
 }
 
@@ -1986,99 +1683,6 @@ pub(crate) fn assert_index_exists(
             ),
         })
     }
-}
-
-pub(crate) fn add_run_error_range_columns(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<(), StoreError> {
-    transaction.execute_batch(
-        "ALTER TABLE runs ADD COLUMN error_start_line INTEGER;
-         ALTER TABLE runs ADD COLUMN error_start_column INTEGER;
-         ALTER TABLE runs ADD COLUMN error_end_line INTEGER;
-         ALTER TABLE runs ADD COLUMN error_end_column INTEGER;
-         ALTER TABLE runs ADD COLUMN error_range_kind TEXT CHECK (
-             error_range_kind IS NULL OR
-             error_range_kind IN ('r_expression', 'r_parse_token')
-         );",
-    )?;
-    Ok(())
-}
-
-pub(crate) fn rebuild_runs_error_range_kind_v11(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<(), StoreError> {
-    transaction.execute_batch(
-        "DROP INDEX IF EXISTS idx_runs_project_started;
-         ALTER TABLE runs RENAME TO runs_v10;
-         CREATE TABLE runs (
-            run_id TEXT PRIMARY KEY,
-            parent_run_id TEXT,
-            project_root TEXT NOT NULL CHECK (project_root <> ''),
-            origin TEXT NOT NULL DEFAULT 'system',
-            status TEXT NOT NULL,
-            started_at TEXT NOT NULL,
-            finished_at TEXT,
-            terminal_reason TEXT,
-            request_type TEXT NOT NULL DEFAULT 'workspace.execute',
-            operation_class TEXT NOT NULL DEFAULT 'probe',
-            code TEXT NOT NULL DEFAULT '',
-            arguments_json TEXT NOT NULL DEFAULT '{}',
-            source_path TEXT,
-            execution_mode TEXT,
-            document_version INTEGER,
-            workspace_id TEXT,
-            state_revision_before INTEGER,
-            project_revision_before INTEGER,
-            state_revision_after INTEGER,
-            project_revision_after INTEGER,
-            stdout TEXT,
-            value_text TEXT,
-            messages_json TEXT NOT NULL DEFAULT '[]',
-            warnings_json TEXT NOT NULL DEFAULT '[]',
-            error_message TEXT,
-            error_call TEXT,
-            traceback_json TEXT NOT NULL DEFAULT '[]',
-            cancel_requested INTEGER NOT NULL DEFAULT 0,
-            environment_snapshot_id TEXT,
-            environment_snapshot_id_after TEXT,
-            error_start_line INTEGER,
-            error_start_column INTEGER,
-            error_end_line INTEGER,
-            error_end_column INTEGER,
-            error_range_kind TEXT CHECK (
-                error_range_kind IS NULL OR
-                error_range_kind IN ('r_expression', 'r_parse_token')
-            )
-         );
-         INSERT INTO runs(
-            run_id, parent_run_id, project_root, origin, status, started_at,
-            finished_at, terminal_reason, request_type, operation_class, code,
-            arguments_json, source_path, execution_mode, document_version,
-            workspace_id, state_revision_before, project_revision_before,
-            state_revision_after, project_revision_after, stdout, value_text,
-            messages_json, warnings_json, error_message, error_call,
-            traceback_json, cancel_requested, environment_snapshot_id,
-            environment_snapshot_id_after, error_start_line,
-            error_start_column, error_end_line, error_end_column,
-            error_range_kind
-         )
-         SELECT
-            run_id, parent_run_id, project_root, origin, status, started_at,
-            finished_at, terminal_reason, request_type, operation_class, code,
-            arguments_json, source_path, execution_mode, document_version,
-            workspace_id, state_revision_before, project_revision_before,
-            state_revision_after, project_revision_after, stdout, value_text,
-            messages_json, warnings_json, error_message, error_call,
-            traceback_json, cancel_requested, environment_snapshot_id,
-            environment_snapshot_id_after, error_start_line,
-            error_start_column, error_end_line, error_end_column,
-            error_range_kind
-         FROM runs_v10;
-         DROP TABLE runs_v10;
-         CREATE INDEX idx_runs_project_started
-            ON runs(project_root, started_at DESC);",
-    )?;
-    Ok(())
 }
 
 pub(crate) fn assert_runs_error_range_kind_constraint(

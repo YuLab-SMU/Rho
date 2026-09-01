@@ -1,9 +1,11 @@
 //! Asynchronous durable Environment operation request repository.
 
 use crate::{
-    EnvironmentOperationDecisionRecord, EnvironmentOperationRequestSummary, Store, StoreExecutor,
-    StoreExecutorError, query::required_project_root,
+    EnvironmentIncidentRecord, EnvironmentOperationJournalRecord, EnvironmentPlanReviewRecord,
+    EnvironmentStateCommit, EnvironmentStateProjection, Store, StoreExecutor, StoreExecutorError,
+    query::required_project_root,
 };
+use rho_protocol::EnvironmentIncidentV1;
 
 #[derive(Clone, Debug)]
 pub struct EnvironmentRepository {
@@ -19,146 +21,126 @@ impl StoreExecutor {
 }
 
 impl EnvironmentRepository {
-    pub async fn list_requests(
+    pub async fn record_plan_for_review(
         &self,
         project_root: String,
-        limit: Option<usize>,
-        status: Option<String>,
-    ) -> Result<Vec<EnvironmentOperationRequestSummary>, StoreExecutorError> {
+        plan: rho_protocol::MaterializedPackagePlanV1,
+    ) -> Result<EnvironmentPlanReviewRecord, StoreExecutorError> {
         let project_root = required_project_root(&project_root)?;
         self.executor
             .call(move |connection| {
-                Store::borrowed(connection).list_environment_operation_requests(
+                Store::borrowed(connection).record_environment_plan_for_review(&project_root, &plan)
+            })
+            .await
+    }
+
+    pub async fn latest_reviewable_plan(
+        &self,
+        project_root: String,
+    ) -> Result<Option<EnvironmentPlanReviewRecord>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).latest_reviewable_environment_plan(&project_root)
+            })
+            .await
+    }
+
+    pub async fn operation(
+        &self,
+        project_root: String,
+        operation_id: String,
+    ) -> Result<Option<EnvironmentOperationJournalRecord>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection)
+                    .get_environment_operation_journal(&project_root, &operation_id)
+            })
+            .await
+    }
+
+    pub async fn latest_operation(
+        &self,
+        project_root: String,
+    ) -> Result<Option<EnvironmentOperationJournalRecord>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).latest_environment_operation_journal(&project_root)
+            })
+            .await
+    }
+
+    pub async fn commit_state(
+        &self,
+        commit: EnvironmentStateCommit,
+    ) -> Result<EnvironmentStateProjection, StoreExecutorError> {
+        self.executor
+            .call(move |connection| Store::borrowed(connection).commit_environment_state(&commit))
+            .await
+    }
+
+    pub async fn current_state(
+        &self,
+        project_root: String,
+    ) -> Result<Option<EnvironmentStateProjection>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).current_environment_state(&project_root)
+            })
+            .await
+    }
+
+    pub async fn record_incident(
+        &self,
+        project_root: String,
+        incident: EnvironmentIncidentV1,
+    ) -> Result<EnvironmentIncidentRecord, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).record_environment_incident(&project_root, &incident)
+            })
+            .await
+    }
+
+    pub async fn list_incidents(
+        &self,
+        project_root: String,
+        include_resolved: bool,
+        limit: usize,
+    ) -> Result<Vec<EnvironmentIncidentRecord>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).list_environment_incidents(
                     &project_root,
+                    include_resolved,
                     limit,
-                    status.as_deref(),
                 )
             })
             .await
     }
 
-    pub async fn get_request(
+    pub async fn resolve_incident(
         &self,
         project_root: String,
-        request_id: String,
-    ) -> Result<Option<EnvironmentOperationRequestSummary>, StoreExecutorError> {
+        environment_id: String,
+        incident_id: String,
+        resolved_at: String,
+    ) -> Result<usize, StoreExecutorError> {
         let project_root = required_project_root(&project_root)?;
         self.executor
             .call(move |connection| {
-                Store::borrowed(connection)
-                    .get_environment_operation_request(&project_root, &request_id)
+                Store::borrowed(connection).resolve_environment_incident(
+                    &project_root,
+                    &environment_id,
+                    &incident_id,
+                    &resolved_at,
+                )
             })
             .await
-    }
-
-    pub async fn decide_request(
-        &self,
-        request_id: String,
-        record: EnvironmentOperationDecisionRecord,
-    ) -> Result<usize, StoreExecutorError> {
-        self.executor
-            .call(move |connection| {
-                Store::borrowed(connection)
-                    .decide_environment_operation_request(&request_id, &record)
-            })
-            .await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use tempfile::tempdir;
-
-    use super::*;
-    use crate::{EnvironmentOperationRequestDraft, Store};
-
-    fn request(request_id: &str, project_root: &str) -> EnvironmentOperationRequestDraft {
-        EnvironmentOperationRequestDraft {
-            request_id: request_id.to_string(),
-            turn_id: None,
-            source: "user".to_string(),
-            request_name: "renv_restore".to_string(),
-            project_root: project_root.to_string(),
-            arguments_json: "{}".to_string(),
-            preview_json: "{}".to_string(),
-            preview_sha256: format!("sha256.{request_id}"),
-            workspace_id: "workspace.environment-repository".to_string(),
-            state_revision: 2,
-            project_revision: 3,
-            before_snapshot_id: None,
-        }
-    }
-
-    #[tokio::test]
-    async fn repository_isolates_projects_and_recovers_after_rejected_decision() {
-        let directory = tempdir().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        let mut store = Store::open(&database).unwrap();
-        store
-            .create_environment_operation_request(&request("request-a", "/projects/a"))
-            .unwrap();
-        store
-            .create_environment_operation_request(&request("request-b", "/projects/b"))
-            .unwrap();
-        drop(store);
-
-        let repository = StoreExecutor::open(&database)
-            .await
-            .unwrap()
-            .environment_repository();
-        let listed = repository
-            .list_requests(
-                "/projects/a/".to_string(),
-                Some(10),
-                Some("requested".to_string()),
-            )
-            .await
-            .unwrap();
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].request_id, "request-a");
-        assert!(
-            repository
-                .get_request("/projects/b".to_string(), "request-a".to_string())
-                .await
-                .unwrap()
-                .is_none()
-        );
-        assert_eq!(
-            repository
-                .decide_request(
-                    "missing".to_string(),
-                    EnvironmentOperationDecisionRecord {
-                        decision: "cancel".to_string(),
-                        status: "interrupted".to_string(),
-                        reason: Some("missing channel".to_string()),
-                    },
-                )
-                .await
-                .unwrap(),
-            0
-        );
-        assert_eq!(
-            repository
-                .decide_request(
-                    "request-a".to_string(),
-                    EnvironmentOperationDecisionRecord {
-                        decision: "cancel".to_string(),
-                        status: "interrupted".to_string(),
-                        reason: Some("missing channel".to_string()),
-                    },
-                )
-                .await
-                .unwrap(),
-            1
-        );
-        assert_eq!(
-            repository
-                .get_request("/projects/a".to_string(), "request-a".to_string())
-                .await
-                .unwrap()
-                .unwrap()
-                .status,
-            "interrupted"
-        );
     }
 }

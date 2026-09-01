@@ -10,10 +10,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::{
-    EvidenceClaim, EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
-    MigrationOutcome, Store, StoreError, query::required_project_root,
-};
+use crate::{MigrationOutcome, Store, StoreError};
 
 #[derive(Debug, Error)]
 pub enum StoreExecutorError {
@@ -177,123 +174,6 @@ impl StoreExecutor {
             })
     }
 
-    pub async fn create_evidence_entry(
-        &self,
-        mut draft: EvidenceEntryDraft,
-    ) -> Result<EvidenceEntry, StoreExecutorError> {
-        draft.project_root = required_project_root(&draft.project_root)?;
-        self.call(move |connection| Store::borrowed(connection).create_evidence_entry(&draft))
-            .await
-    }
-
-    pub async fn list_evidence_entries(
-        &self,
-        project_root: String,
-        limit: Option<usize>,
-        search: Option<String>,
-    ) -> Result<Vec<EvidenceEntry>, StoreExecutorError> {
-        self.call(move |connection| {
-            Store::borrowed(connection).list_evidence_entries(
-                &project_root,
-                limit,
-                search.as_deref(),
-            )
-        })
-        .await
-    }
-
-    pub async fn get_evidence_entry(
-        &self,
-        project_root: String,
-        id: i64,
-    ) -> Result<Option<EvidenceEntry>, StoreExecutorError> {
-        self.call(move |connection| {
-            Store::borrowed(connection).get_evidence_entry(&project_root, id)
-        })
-        .await
-    }
-
-    pub async fn delete_evidence_entry(
-        &self,
-        project_root: String,
-        id: i64,
-    ) -> Result<bool, StoreExecutorError> {
-        let project_root = required_project_root(&project_root)?;
-        self.call(move |connection| {
-            Store::borrowed(connection).delete_evidence_entry(&project_root, id)
-        })
-        .await
-    }
-
-    pub async fn set_evidence_citation(
-        &self,
-        project_root: String,
-        id: i64,
-        citation_json: String,
-    ) -> Result<bool, StoreExecutorError> {
-        self.call(move |connection| {
-            Store::borrowed(connection).set_evidence_citation(&project_root, id, &citation_json)
-        })
-        .await
-    }
-
-    pub async fn create_evidence_claim(
-        &self,
-        draft: EvidenceClaimDraft,
-    ) -> Result<EvidenceClaim, StoreExecutorError> {
-        self.call(move |connection| Store::borrowed(connection).create_evidence_claim(&draft))
-            .await
-    }
-
-    pub async fn list_evidence_claims(
-        &self,
-        project_root: String,
-        limit: Option<usize>,
-    ) -> Result<Vec<EvidenceClaim>, StoreExecutorError> {
-        self.call(move |connection| {
-            Store::borrowed(connection).list_evidence_claims(&project_root, limit)
-        })
-        .await
-    }
-
-    pub async fn get_evidence_claim(
-        &self,
-        project_root: String,
-        claim_id: String,
-    ) -> Result<Option<EvidenceClaim>, StoreExecutorError> {
-        self.call(move |connection| {
-            Store::borrowed(connection).get_evidence_claim(&project_root, &claim_id)
-        })
-        .await
-    }
-
-    pub async fn review_evidence_claim(
-        &self,
-        project_root: String,
-        claim_id: String,
-        source_anchor_resolved: Option<bool>,
-    ) -> Result<EvidenceClaimReview, StoreExecutorError> {
-        self.call(move |connection| {
-            Store::borrowed(connection).review_evidence_claim(
-                &project_root,
-                &claim_id,
-                source_anchor_resolved,
-            )
-        })
-        .await
-    }
-
-    pub async fn delete_evidence_claim(
-        &self,
-        project_root: String,
-        claim_id: String,
-    ) -> Result<bool, StoreExecutorError> {
-        self.call(move |connection| {
-            Store::borrowed(connection).delete_evidence_claim(&project_root, &claim_id)
-        })
-        .await
-    }
-
     #[cfg(test)]
     async fn test_call<R, F>(&self, operation: F) -> Result<R, StoreExecutorError>
     where
@@ -315,7 +195,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::{ClaimReviewStatus, MigrationStatus};
+    use crate::MigrationStatus;
 
     #[derive(Debug, Error)]
     enum TestServiceError {
@@ -325,37 +205,8 @@ mod tests {
         Store(#[from] StoreError),
     }
 
-    fn entry_draft(project_root: &str, title: &str) -> EvidenceEntryDraft {
-        EvidenceEntryDraft {
-            project_root: project_root.to_string(),
-            title: title.to_string(),
-            notes: "Inspectable notes".to_string(),
-            doi: None,
-            run_id: None,
-            artifact_id: None,
-        }
-    }
-
-    fn source_claim(project_root: &str, evidence_ids: Vec<i64>) -> EvidenceClaimDraft {
-        EvidenceClaimDraft {
-            project_root: project_root.to_string(),
-            kind: "result".to_string(),
-            summary: "A bounded scientific statement".to_string(),
-            anchor_kind: "source_range".to_string(),
-            source_path: Some("reports/result.R".to_string()),
-            start_line: Some(1),
-            start_column: Some(1),
-            end_line: Some(1),
-            end_column: Some(10),
-            source_sha256: Some("a".repeat(64)),
-            source_excerpt: Some("result".to_string()),
-            artifact_id: None,
-            evidence_ids,
-        }
-    }
-
     #[tokio::test]
-    async fn executor_preserves_open_contract_and_reopens_durable_evidence() {
+    async fn executor_preserves_fresh_open_contract_and_reopens() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         let executor = StoreExecutor::open(&database).await.unwrap();
@@ -363,13 +214,14 @@ mod tests {
             executor.migration_outcome().status,
             MigrationStatus::BootstrappedCurrent
         );
-
-        let entry = executor
-            .create_evidence_entry(entry_draft("D:/projects/A", "Durable entry"))
-            .await
-            .unwrap();
-        let claim = executor
-            .create_evidence_claim(source_claim("D:/projects/A", vec![entry.id]))
+        executor
+            .test_call(|connection| {
+                connection.execute(
+                    "INSERT INTO events(event_id, timestamp, kind, payload) VALUES('event:1', '2026-08-31T00:00:00Z', 'test', '{}')",
+                    [],
+                )?;
+                Ok(())
+            })
             .await
             .unwrap();
         drop(executor);
@@ -379,58 +231,17 @@ mod tests {
             reopened.migration_outcome().status,
             MigrationStatus::OpenedCurrent
         );
-        assert_eq!(
-            reopened
-                .list_evidence_entries("D:/projects/A".to_string(), None, None)
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
-        assert_eq!(
-            reopened
-                .review_evidence_claim("D:/projects/A".to_string(), claim.claim_id, Some(true),)
-                .await
-                .unwrap()
-                .status,
-            ClaimReviewStatus::Linked
-        );
-    }
-
-    #[tokio::test]
-    async fn executor_rejects_cross_project_links_without_partial_writes() {
-        let directory = TempDir::new().unwrap();
-        let executor = StoreExecutor::open(directory.path().join("rho.sqlite"))
+        let count = reopened
+            .test_call(|connection| {
+                connection
+                    .query_row("SELECT COUNT(*) FROM events", [], |row| {
+                        row.get::<_, i64>(0)
+                    })
+                    .map_err(StoreError::from)
+            })
             .await
             .unwrap();
-        let foreign = executor
-            .create_evidence_entry(entry_draft("D:/projects/B", "Foreign"))
-            .await
-            .unwrap();
-
-        let error = executor
-            .create_evidence_claim(source_claim("D:/projects/A", vec![foreign.id]))
-            .await
-            .unwrap_err();
-        assert!(matches!(
-            error,
-            StoreExecutorError::Store(StoreError::Validation(_))
-        ));
-        assert!(
-            executor
-                .list_evidence_claims("D:/projects/A".to_string(), None)
-                .await
-                .unwrap()
-                .is_empty()
-        );
-        assert_eq!(
-            executor
-                .list_evidence_entries("D:/projects/B".to_string(), None, None)
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
+        assert_eq!(count, 1);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -505,18 +316,15 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(5)).await;
         waiter.abort();
 
-        executor
-            .create_evidence_entry(entry_draft("D:/projects/A", "Recovered"))
+        let value = executor
+            .test_call(|connection| {
+                connection
+                    .query_row("SELECT 1", [], |row| row.get::<_, i64>(0))
+                    .map_err(StoreError::from)
+            })
             .await
             .unwrap();
-        assert_eq!(
-            executor
-                .list_evidence_entries("D:/projects/A".to_string(), None, None)
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
+        assert_eq!(value, 1);
     }
 
     #[tokio::test]
@@ -546,7 +354,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn executor_reports_migration_rejection_without_rewriting_schema() {
+    async fn executor_reports_reset_required_without_rewriting_schema() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         let connection = rusqlite::Connection::open(&database).unwrap();
@@ -564,7 +372,7 @@ mod tests {
         assert_eq!(outcome.from_schema_version, Some(6));
         assert_eq!(
             outcome.reason_code.as_deref(),
-            Some("unsupported_schema_version")
+            Some("store_schema_reset_required")
         );
 
         let verification = rusqlite::Connection::open(&database).unwrap();

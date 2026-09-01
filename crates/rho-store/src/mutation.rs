@@ -69,32 +69,6 @@ impl<'a> ProjectMutationService<'a> {
             .delete_agent_conversation(&normalized, conversation_id)
     }
 
-    /// Create a new evidence entry.
-    ///
-    /// The project root is normalized via `normalize_project_root` before
-    /// mutating.
-    pub fn create_evidence_entry(
-        &mut self,
-        draft: &crate::EvidenceEntryDraft,
-    ) -> Result<crate::EvidenceEntry, StoreError> {
-        let mut normalized_draft = draft.clone();
-        normalized_draft.project_root = required_project_root(&draft.project_root)?;
-        self.store.create_evidence_entry(&normalized_draft)
-    }
-
-    /// Delete an evidence entry.
-    ///
-    /// The project root is normalized via `normalize_project_root` before
-    /// mutating. Returns `true` if a row was deleted.
-    pub fn delete_evidence_entry(
-        &mut self,
-        project_root: &str,
-        id: i64,
-    ) -> Result<bool, StoreError> {
-        let normalized = required_project_root(project_root)?;
-        self.store.delete_evidence_entry(&normalized, id)
-    }
-
     /// Clear plot artifacts for the given project.
     ///
     /// The project root is normalized via `normalize_project_root` before

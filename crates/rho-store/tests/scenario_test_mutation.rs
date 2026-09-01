@@ -5,8 +5,8 @@
 //! error categories — all without Tauri/DOM dependency.
 
 use rho_store::{
-    AgentTurnDraft, ArtifactRecordDraft, EvidenceEntryDraft, PlotArtifactDraft,
-    ProjectMutationService, ProjectQueryService, RunDraft, Store,
+    AgentTurnDraft, ArtifactRecordDraft, PlotArtifactDraft, ProjectMutationService,
+    ProjectQueryService, RunDraft, Store,
 };
 use tempfile::tempdir;
 
@@ -242,72 +242,6 @@ fn scenario_clear_agent_history_preserves_foreign_project() {
     );
 }
 
-// ── create_evidence_entry + delete_evidence_entry ─────────────────────────
-
-#[test]
-fn scenario_create_and_delete_evidence_entry() {
-    let (mut store, _dir) = setup_store();
-    let mut service = ProjectMutationService::new(&mut store);
-
-    let entry = service
-        .create_evidence_entry(&EvidenceEntryDraft {
-            project_root: "/projects/alpha".into(),
-            title: "Test evidence".into(),
-            notes: "Some notes".into(),
-            doi: None,
-            run_id: None,
-            artifact_id: None,
-        })
-        .unwrap();
-    assert!(entry.id > 0);
-
-    let deleted = service
-        .delete_evidence_entry("/projects/alpha", entry.id)
-        .unwrap();
-    assert!(deleted);
-}
-
-#[test]
-fn scenario_delete_evidence_entry_foreign_project() {
-    let (mut store, _dir) = setup_store();
-    let mut service = ProjectMutationService::new(&mut store);
-
-    let entry = service
-        .create_evidence_entry(&EvidenceEntryDraft {
-            project_root: "/projects/alpha".into(),
-            title: "Test evidence".into(),
-            notes: "Some notes".into(),
-            doi: None,
-            run_id: None,
-            artifact_id: None,
-        })
-        .unwrap();
-
-    // Try to delete from project beta — should fail (false).
-    let deleted = service
-        .delete_evidence_entry("/projects/beta", entry.id)
-        .unwrap();
-    assert!(!deleted);
-}
-
-#[test]
-fn scenario_create_evidence_entry_normalizes_trailing_slash() {
-    let (mut store, _dir) = setup_store();
-    let mut service = ProjectMutationService::new(&mut store);
-
-    let entry = service
-        .create_evidence_entry(&EvidenceEntryDraft {
-            project_root: "/projects/alpha/".into(),
-            title: "Test".into(),
-            notes: "".into(),
-            doi: None,
-            run_id: None,
-            artifact_id: None,
-        })
-        .unwrap();
-    assert!(entry.id > 0);
-}
-
 // ── delete_agent_conversation ─────────────────────────────────────────────
 
 #[test]
@@ -380,49 +314,7 @@ fn scenario_delete_agent_conversation_foreign_project() {
     assert!(result.is_err());
 }
 
-// ── Cross-service: query reads what mutation wrote ────────────────────────
-
-#[test]
-fn scenario_mutation_then_query_consistent() {
-    let (mut store, _dir) = setup_store();
-    let entry = {
-        let mut mutation = ProjectMutationService::new(&mut store);
-        mutation
-            .create_evidence_entry(&EvidenceEntryDraft {
-                project_root: "/projects/alpha".into(),
-                title: "Cross-service test".into(),
-                notes: "Created via mutation service".into(),
-                doi: Some("10.1000/test".into()),
-                run_id: None,
-                artifact_id: None,
-            })
-            .unwrap()
-    };
-
-    // Read back via the store directly.
-    let read_back = store
-        .get_evidence_entry("/projects/alpha", entry.id)
-        .unwrap();
-    assert!(read_back.is_some());
-    let read_back = read_back.unwrap();
-    assert_eq!(read_back.title, "Cross-service test");
-    assert_eq!(read_back.doi, Some("10.1000/test".into()));
-
-    // Delete via mutation service.
-    let deleted = {
-        let mut mutation = ProjectMutationService::new(&mut store);
-        mutation
-            .delete_evidence_entry("/projects/alpha", entry.id)
-            .unwrap()
-    };
-    assert!(deleted);
-
-    // Verify it's gone.
-    let read_back = store
-        .get_evidence_entry("/projects/alpha", entry.id)
-        .unwrap();
-    assert!(read_back.is_none());
-}
+// ── Artifact and plot mutation scope ─────────────────────────────────────
 
 #[test]
 fn scenario_artifact_and_plot_clears_require_explicit_project_scope() {

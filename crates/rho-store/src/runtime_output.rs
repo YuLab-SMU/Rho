@@ -2094,16 +2094,10 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
-    use rusqlite::Connection;
     use tempfile::TempDir;
 
     use super::*;
-    use crate::{
-        AgentTurnDraft, MigrationStatus, RunDraft, SCHEMA_VERSION, StoreOpenOptions,
-        migration::{assert_runtime_output_schema, read_schema_version, set_schema_version},
-    };
+    use crate::{AgentTurnDraft, RunDraft};
 
     fn execution(project_root: &str) -> RuntimeExecutionDraft {
         RuntimeExecutionDraft {
@@ -2133,91 +2127,6 @@ mod tests {
                 text: text.to_string(),
             },
         }
-    }
-
-    fn create_v14_fixture(path: &Path) {
-        let store = Store::open(path).unwrap();
-        store
-            .connection
-            .execute_batch(
-                "DROP TABLE agent_turn_context_items;
-                 DROP TABLE project_runtime_output_policies;
-                 DROP TABLE runtime_output_chunks;
-                 DROP TABLE runtime_executions;
-                 DROP INDEX IF EXISTS idx_agent_turn_context_project_turn;
-                 DROP INDEX IF EXISTS idx_runtime_output_project_execution_sequence;
-                 DROP INDEX IF EXISTS idx_runtime_executions_workspace_started;
-                 DROP INDEX IF EXISTS idx_runtime_executions_console_started;
-                 DROP INDEX IF EXISTS idx_runtime_executions_project_started;
-                 DROP INDEX IF EXISTS idx_agent_turns_id_project;
-                 DROP INDEX IF EXISTS idx_runs_id_project;",
-            )
-            .unwrap();
-        set_schema_version(&store.connection, 14).unwrap();
-    }
-
-    #[test]
-    fn migrates_v14_to_v15_with_backup_and_reopens_idempotently() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v14_fixture(&database);
-
-        let store = Store::open(&database).unwrap();
-        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
-        assert_eq!(store.migration_outcome().from_schema_version, Some(14));
-        assert_eq!(
-            store.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert!(
-            store
-                .migration_outcome()
-                .backup_path
-                .as_deref()
-                .unwrap()
-                .ends_with("rho.sqlite.schema-v14.bak")
-        );
-        assert_runtime_output_schema(&store.connection).unwrap();
-        drop(store);
-        assert_eq!(
-            Store::open(&database).unwrap().migration_outcome().status,
-            MigrationStatus::OpenedCurrent
-        );
-    }
-
-    #[test]
-    fn rolls_back_v14_migration_failure_and_recovers() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v14_fixture(&database);
-
-        let error = Store::open_with_options(
-            &database,
-            StoreOpenOptions {
-                inject_v14_failure_before_commit: true,
-                ..Default::default()
-            },
-        )
-        .unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.from_schema_version, Some(14));
-        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
-        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(14));
-        assert!(
-            verification
-                .prepare("SELECT * FROM runtime_executions")
-                .is_err()
-        );
-        drop(verification);
-        assert_eq!(
-            Store::open(&database)
-                .unwrap()
-                .migration_outcome()
-                .to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
     }
 
     #[test]

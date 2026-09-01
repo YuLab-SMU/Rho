@@ -738,7 +738,7 @@ where
     }
 
     /// Restart/shutdown recovery for one-shot decisions. A durable allow-once
-    /// row is audit evidence, never a reusable authorization after the live
+    /// row is an audit record, never a reusable authorization after the live
     /// broker session disappears.
     pub fn recover_transient_plugin_permission_grants(
         &mut self,

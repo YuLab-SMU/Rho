@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use chrono::Utc;
 use rho_protocol::{Envelope, WorkspaceIdentity};
@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub(crate) const SCHEMA_VERSION: i64 = 15;
+pub(crate) const SCHEMA_VERSION: i64 = 19;
 const DEFAULT_LIMIT: usize = 50;
 const MAX_AGENT_LIST_LIMIT: usize = 100;
 const MAX_DIAGNOSTIC_LINE: u32 = 10_000_000;
@@ -22,12 +22,13 @@ mod artifact;
 mod artifact_repository;
 mod audit;
 mod audit_repository;
+mod authority_feed;
 pub mod checkpoints;
 mod compare;
 mod environment;
+mod environment_realization;
 mod environment_repository;
 pub mod events;
-mod evidence;
 mod executor;
 mod migration;
 mod mutation;
@@ -67,20 +68,17 @@ pub use artifact_repository::{
 };
 pub use audit::*;
 pub use audit_repository::{AuditRepository, AuditRepositoryError};
+pub use authority_feed::AuthorityFeed;
 pub use checkpoints::*;
 pub use compare::{
     CompareField, CompareFieldEntry, CompareRunsResponse, CompareSection, CompareSummary,
 };
-pub use environment::{
-    EnvironmentOperationDecisionRecord, EnvironmentOperationFinish,
-    EnvironmentOperationRequestDraft, EnvironmentOperationRequestSummary, EnvironmentSnapshotDraft,
-    EnvironmentSnapshotRecord,
+pub use environment::{EnvironmentSnapshotDraft, EnvironmentSnapshotRecord};
+pub use environment_realization::{
+    EnvironmentIncidentRecord, EnvironmentOperationActivity, EnvironmentOperationJournalRecord,
+    EnvironmentPlanReviewRecord, EnvironmentStateCommit, EnvironmentStateProjection,
 };
 pub use environment_repository::EnvironmentRepository;
-pub use evidence::{
-    ClaimReviewStatus, EvidenceClaim, EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry,
-    EvidenceEntryDraft,
-};
 pub use executor::{StoreExecutor, StoreExecutorError, StoreExecutorOperationError};
 pub use mutation::ProjectMutationService;
 pub use plugin_lifecycle::{
@@ -208,7 +206,6 @@ impl StoreError {
 pub enum MigrationStatus {
     OpenedCurrent,
     BootstrappedCurrent,
-    Migrated,
     Rejected,
 }
 
@@ -251,23 +248,6 @@ impl MigrationOutcome {
         }
     }
 
-    fn migrated(
-        from_schema_version: i64,
-        backup_path: Option<String>,
-        counts: MigrationRecordCounts,
-    ) -> Self {
-        Self {
-            status: MigrationStatus::Migrated,
-            from_schema_version: Some(from_schema_version),
-            to_schema_version: Some(SCHEMA_VERSION),
-            backup_path,
-            scoped_count: counts.scoped,
-            legacy_unscoped_count: counts.legacy_unscoped,
-            rejected_count: counts.rejected,
-            reason_code: None,
-        }
-    }
-
     pub(crate) fn rejected(
         from_schema_version: Option<i64>,
         backup_path: Option<String>,
@@ -302,26 +282,6 @@ impl std::ops::AddAssign for MigrationRecordCounts {
     }
 }
 
-#[derive(Default)]
-struct StoreOpenOptions {
-    #[cfg(test)]
-    inject_v7_failure_before_commit: bool,
-    #[cfg(test)]
-    inject_v8_failure_before_commit: bool,
-    #[cfg(test)]
-    inject_v9_failure_before_commit: bool,
-    #[cfg(test)]
-    inject_v10_failure_before_commit: bool,
-    #[cfg(test)]
-    inject_v11_failure_before_commit: bool,
-    #[cfg(test)]
-    inject_v12_failure_before_commit: bool,
-    #[cfg(test)]
-    inject_v13_failure_before_commit: bool,
-    #[cfg(test)]
-    inject_v14_failure_before_commit: bool,
-}
-
 #[derive(Debug)]
 pub struct Store<C = Box<Connection>> {
     connection: C,
@@ -343,10 +303,6 @@ impl<C> StoreConnection for C where C: std::ops::Deref<Target = Connection> + st
 
 impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
-        Self::open_with_options(path.as_ref(), StoreOpenOptions::default())
-    }
-
-    fn open_with_options(path: &Path, options: StoreOpenOptions) -> Result<Self, StoreError> {
         let connection = Connection::open(path)?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
@@ -355,559 +311,49 @@ impl Store {
             connection: Box::new(connection),
             migration_outcome: MigrationOutcome::opened_current(),
         };
-        store.migrate(path, &options)?;
+        store.initialize_schema()?;
         Ok(store)
     }
 
-    fn migrate(&mut self, path: &Path, options: &StoreOpenOptions) -> Result<(), StoreError> {
+    fn initialize_schema(&mut self) -> Result<(), StoreError> {
         if migration::database_is_empty(&self.connection)? {
-            self.connection.execute_batch(migration::v8_schema_sql())?;
-            migration::create_plugin_permission_schema(&self.connection)?;
-            migration::create_plugin_lifecycle_schema(&self.connection)?;
-            migration::create_runtime_output_schema(&self.connection)?;
-            self.set_schema_version(SCHEMA_VERSION)?;
+            let transaction = self.connection.transaction()?;
+            transaction.execute_batch(migration::current_schema_sql())?;
+            migration::create_plugin_permission_schema(&transaction)?;
+            migration::create_plugin_lifecycle_schema(&transaction)?;
+            migration::create_runtime_output_schema(&transaction)?;
+            migration::set_schema_version(&transaction, SCHEMA_VERSION)?;
+            transaction.commit()?;
             self.assert_current_schema()?;
             self.migration_outcome = MigrationOutcome::bootstrapped_current();
             return Ok(());
         }
 
         let current = migration::read_schema_version(&self.connection)?;
-        match current {
-            Some(SCHEMA_VERSION) => {
-                self.assert_current_schema()?;
-                self.migration_outcome = MigrationOutcome::opened_current();
-            }
-            Some(7) => {
-                let backup_path =
-                    migration::create_pre_migration_backup(&self.connection, path, 7)?;
-                let outcome = self.migrate_v7_to_v8(backup_path, options)?;
-                self.migration_outcome = outcome;
-            }
-            Some(8) => {
-                let backup_path =
-                    migration::create_pre_migration_backup(&self.connection, path, 8)?;
-                let outcome = self.migrate_v8_to_v9(backup_path, options)?;
-                self.migration_outcome = outcome;
-            }
-            Some(9) => {
-                let backup_path =
-                    migration::create_pre_migration_backup(&self.connection, path, 9)?;
-                let outcome = self.migrate_v9_to_v11(backup_path, options)?;
-                self.migration_outcome = outcome;
-            }
-            Some(10) => {
-                let backup_path =
-                    migration::create_pre_migration_backup(&self.connection, path, 10)?;
-                let outcome = self.migrate_v10_to_v11(backup_path, options)?;
-                self.migration_outcome = outcome;
-            }
-            Some(11) => {
-                let backup_path =
-                    migration::create_pre_migration_backup(&self.connection, path, 11)?;
-                let outcome = self.migrate_v11_to_v12(backup_path, options)?;
-                self.migration_outcome = outcome;
-            }
-            Some(12) => {
-                let backup_path =
-                    migration::create_pre_migration_backup(&self.connection, path, 12)?;
-                let outcome = self.migrate_v12_to_v14(backup_path, options)?;
-                self.migration_outcome = outcome;
-            }
-            Some(13) => {
-                let backup_path =
-                    migration::create_pre_migration_backup(&self.connection, path, 13)?;
-                let outcome = self.migrate_v13_to_v14(backup_path, options)?;
-                self.migration_outcome = outcome;
-            }
-            Some(14) => {
-                let backup_path =
-                    migration::create_pre_migration_backup(&self.connection, path, 14)?;
-                let outcome = self.migrate_v14_to_v15(backup_path, options)?;
-                self.migration_outcome = outcome;
-            }
-            Some(other) => {
-                return Err(StoreError::MigrationRejected {
-                    message: format!("unsupported schema version {other}"),
-                    outcome: MigrationOutcome::rejected(
-                        Some(other),
-                        None,
-                        MigrationRecordCounts::default(),
-                        "unsupported_schema_version",
-                    ),
-                });
-            }
-            None => {
-                return Err(StoreError::MigrationRejected {
-                    message: "missing schema version metadata".to_string(),
-                    outcome: MigrationOutcome::rejected(
-                        None,
-                        None,
-                        MigrationRecordCounts::default(),
-                        "missing_schema_version",
-                    ),
-                });
-            }
+        if current == Some(SCHEMA_VERSION) {
+            self.assert_current_schema()?;
+            self.migration_outcome = MigrationOutcome::opened_current();
+            return Ok(());
         }
-        Ok(())
+
+        Err(StoreError::MigrationRejected {
+            message: format!(
+                "STORE_SCHEMA_RESET_REQUIRED: found {}, required {SCHEMA_VERSION}",
+                current
+                    .map(|version| version.to_string())
+                    .unwrap_or_else(|| "missing".to_string())
+            ),
+            outcome: MigrationOutcome::rejected(
+                current,
+                None,
+                MigrationRecordCounts::default(),
+                "store_schema_reset_required",
+            ),
+        })
     }
 
     pub fn migration_outcome(&self) -> &MigrationOutcome {
         &self.migration_outcome
-    }
-
-    fn migrate_v7_to_v8(
-        &mut self,
-        backup_path: Option<PathBuf>,
-        _options: &StoreOpenOptions,
-    ) -> Result<MigrationOutcome, StoreError> {
-        let _backup_path_string = backup_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().replace('\\', "/"));
-        let transaction = self.connection.transaction()?;
-        let counts = migration::v7_record_counts(&transaction)?;
-        if counts.rejected > 0 {
-            return Err(StoreError::MigrationRejected {
-                message: "malformed project identity metadata".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(7),
-                    _backup_path_string,
-                    counts,
-                    "malformed_project_identity",
-                ),
-            });
-        }
-
-        migration::rebuild_runs_v8(&transaction)?;
-        migration::rebuild_agent_turns_v8(&transaction)?;
-        migration::rebuild_approval_requests_v8(&transaction)?;
-        migration::rebuild_plot_artifacts_v8(&transaction)?;
-        migration::create_claim_review_schema(&transaction)?;
-        migration::create_agent_conversation_schema(&transaction)?;
-        migration::create_plugin_permission_schema(&transaction)?;
-        migration::create_plugin_lifecycle_schema(&transaction)?;
-        migration::create_runtime_output_schema(&transaction)?;
-        transaction.execute_batch(
-            "
-            CREATE INDEX IF NOT EXISTS idx_runs_project_started
-                ON runs(project_root, started_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_agent_turns_project_started
-                ON agent_turns(project_root, started_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_approval_requests_project_status
-                ON approval_requests(project_root, status, requested_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_plot_artifacts_project_created
-                ON plot_artifacts(project_root, created_at DESC);
-            ",
-        )?;
-        transaction.execute(
-            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            [SCHEMA_VERSION.to_string()],
-        )?;
-
-        #[cfg(test)]
-        if _options.inject_v7_failure_before_commit {
-            return Err(StoreError::MigrationRejected {
-                message: "injected migration failure".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(7),
-                    _backup_path_string,
-                    counts,
-                    "injected_failure",
-                ),
-            });
-        }
-
-        transaction.commit()?;
-        self.assert_current_schema()?;
-        Ok(MigrationOutcome::migrated(
-            7,
-            backup_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().replace('\\', "/")),
-            counts,
-        ))
-    }
-
-    fn migrate_v8_to_v9(
-        &mut self,
-        backup_path: Option<PathBuf>,
-        _options: &StoreOpenOptions,
-    ) -> Result<MigrationOutcome, StoreError> {
-        let _backup_path_string = backup_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().replace('\\', "/"));
-        let transaction = self.connection.transaction()?;
-        migration::create_claim_review_schema(&transaction)?;
-        migration::add_run_error_range_columns(&transaction)?;
-        migration::create_agent_conversation_schema(&transaction)?;
-        migration::create_plugin_permission_schema(&transaction)?;
-        migration::create_plugin_lifecycle_schema(&transaction)?;
-        migration::create_runtime_output_schema(&transaction)?;
-        transaction.execute(
-            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            [SCHEMA_VERSION.to_string()],
-        )?;
-        #[cfg(test)]
-        if _options.inject_v8_failure_before_commit {
-            return Err(StoreError::MigrationRejected {
-                message: "injected v8 migration failure".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(8),
-                    _backup_path_string,
-                    MigrationRecordCounts::default(),
-                    "injected_failure",
-                ),
-            });
-        }
-        transaction.commit()?;
-        self.assert_current_schema()?;
-        Ok(MigrationOutcome::migrated(
-            8,
-            backup_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().replace('\\', "/")),
-            MigrationRecordCounts::default(),
-        ))
-    }
-
-    fn migrate_v9_to_v11(
-        &mut self,
-        backup_path: Option<PathBuf>,
-        _options: &StoreOpenOptions,
-    ) -> Result<MigrationOutcome, StoreError> {
-        let _backup_path_string = backup_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().replace('\\', "/"));
-        let transaction = self.connection.transaction()?;
-        migration::add_run_error_range_columns(&transaction)?;
-        migration::create_agent_conversation_schema(&transaction)?;
-        migration::create_plugin_permission_schema(&transaction)?;
-        migration::create_plugin_lifecycle_schema(&transaction)?;
-        migration::create_runtime_output_schema(&transaction)?;
-        transaction.execute(
-            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            [SCHEMA_VERSION.to_string()],
-        )?;
-        #[cfg(test)]
-        if _options.inject_v9_failure_before_commit {
-            return Err(StoreError::MigrationRejected {
-                message: "injected v9 migration failure".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(9),
-                    _backup_path_string,
-                    MigrationRecordCounts::default(),
-                    "injected_failure",
-                ),
-            });
-        }
-        transaction.commit()?;
-        self.assert_current_schema()?;
-        Ok(MigrationOutcome::migrated(
-            9,
-            backup_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().replace('\\', "/")),
-            MigrationRecordCounts::default(),
-        ))
-    }
-
-    fn migrate_v10_to_v11(
-        &mut self,
-        backup_path: Option<PathBuf>,
-        _options: &StoreOpenOptions,
-    ) -> Result<MigrationOutcome, StoreError> {
-        let backup_path_string = backup_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().replace('\\', "/"));
-        let transaction = self.connection.transaction()?;
-        let invalid_kind_count: i64 = transaction.query_row(
-            "SELECT COUNT(*) FROM runs
-             WHERE error_range_kind IS NOT NULL
-               AND error_range_kind <> 'r_expression'",
-            [],
-            |row| row.get(0),
-        )?;
-        if invalid_kind_count > 0 {
-            return Err(StoreError::MigrationRejected {
-                message: "schema v10 contains an unsupported run error range kind".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(10),
-                    backup_path_string,
-                    MigrationRecordCounts {
-                        rejected: invalid_kind_count,
-                        ..MigrationRecordCounts::default()
-                    },
-                    "invalid_v10_range_kind",
-                ),
-            });
-        }
-        let before_count: i64 =
-            transaction.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
-        migration::rebuild_runs_error_range_kind_v11(&transaction)?;
-        migration::create_agent_conversation_schema(&transaction)?;
-        migration::create_plugin_permission_schema(&transaction)?;
-        migration::create_plugin_lifecycle_schema(&transaction)?;
-        migration::create_runtime_output_schema(&transaction)?;
-        let after_count: i64 =
-            transaction.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
-        if before_count != after_count {
-            return Err(StoreError::MigrationRejected {
-                message: "schema v10 run copy count changed during migration".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(10),
-                    backup_path_string,
-                    MigrationRecordCounts {
-                        rejected: before_count.saturating_sub(after_count).abs(),
-                        ..MigrationRecordCounts::default()
-                    },
-                    "v10_copy_mismatch",
-                ),
-            });
-        }
-        transaction.execute(
-            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            [SCHEMA_VERSION.to_string()],
-        )?;
-        if migration::assert_runs_error_range_kind_constraint(&transaction).is_err()
-            || migration::assert_index_exists(&transaction, "idx_runs_project_started").is_err()
-        {
-            return Err(StoreError::MigrationRejected {
-                message: "schema v11 run table assertion failed".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(10),
-                    backup_path_string,
-                    MigrationRecordCounts::default(),
-                    "invalid_v11_runs_schema",
-                ),
-            });
-        }
-        #[cfg(test)]
-        if _options.inject_v10_failure_before_commit {
-            return Err(StoreError::MigrationRejected {
-                message: "injected v10 migration failure".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(10),
-                    backup_path_string,
-                    MigrationRecordCounts::default(),
-                    "injected_failure",
-                ),
-            });
-        }
-        transaction.commit()?;
-        self.assert_current_schema()?;
-        Ok(MigrationOutcome::migrated(
-            10,
-            backup_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().replace('\\', "/")),
-            MigrationRecordCounts::default(),
-        ))
-    }
-
-    fn migrate_v11_to_v12(
-        &mut self,
-        backup_path: Option<PathBuf>,
-        _options: &StoreOpenOptions,
-    ) -> Result<MigrationOutcome, StoreError> {
-        let backup_path_string = backup_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().replace('\\', "/"));
-        let transaction = self.connection.transaction()?;
-        let before_count: i64 =
-            transaction.query_row("SELECT COUNT(*) FROM agent_turns", [], |row| row.get(0))?;
-        let malformed_project_count: i64 = transaction.query_row(
-            "SELECT COUNT(*) FROM agent_turns
-             WHERE project_root IS NULL OR TRIM(project_root) = ''",
-            [],
-            |row| row.get(0),
-        )?;
-        if malformed_project_count > 0 {
-            return Err(StoreError::MigrationRejected {
-                message: "schema v11 contains malformed Agent project identity".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(11),
-                    backup_path_string,
-                    MigrationRecordCounts {
-                        rejected: malformed_project_count,
-                        ..MigrationRecordCounts::default()
-                    },
-                    "malformed_v11_agent_identity",
-                ),
-            });
-        }
-        migration::create_agent_conversation_schema(&transaction)?;
-        migration::create_plugin_permission_schema(&transaction)?;
-        migration::create_plugin_lifecycle_schema(&transaction)?;
-        migration::create_runtime_output_schema(&transaction)?;
-        let mapping_count: i64 =
-            transaction.query_row("SELECT COUNT(*) FROM agent_conversation_turns", [], |row| {
-                row.get(0)
-            })?;
-        if before_count != mapping_count {
-            return Err(StoreError::MigrationRejected {
-                message: "schema v11 Agent turn mapping count changed during migration".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(11),
-                    backup_path_string,
-                    MigrationRecordCounts {
-                        rejected: (before_count - mapping_count).abs(),
-                        ..MigrationRecordCounts::default()
-                    },
-                    "v11_conversation_copy_mismatch",
-                ),
-            });
-        }
-        transaction.execute(
-            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            [SCHEMA_VERSION.to_string()],
-        )?;
-        #[cfg(test)]
-        if _options.inject_v11_failure_before_commit {
-            return Err(StoreError::MigrationRejected {
-                message: "injected v11 migration failure".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(11),
-                    backup_path_string,
-                    MigrationRecordCounts::default(),
-                    "injected_failure",
-                ),
-            });
-        }
-        transaction.commit()?;
-        self.assert_current_schema()?;
-        Ok(MigrationOutcome::migrated(
-            11,
-            backup_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().replace('\\', "/")),
-            MigrationRecordCounts::default(),
-        ))
-    }
-
-    fn set_schema_version(&self, version: i64) -> Result<(), StoreError> {
-        migration::set_schema_version(&self.connection, version)?;
-        Ok(())
-    }
-
-    fn migrate_v12_to_v14(
-        &mut self,
-        backup_path: Option<PathBuf>,
-        _options: &StoreOpenOptions,
-    ) -> Result<MigrationOutcome, StoreError> {
-        let _backup_path_string = backup_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().replace('\\', "/"));
-        let transaction = self.connection.transaction()?;
-        migration::create_plugin_permission_schema(&transaction)?;
-        migration::create_plugin_lifecycle_schema(&transaction)?;
-        migration::create_runtime_output_schema(&transaction)?;
-        transaction.execute(
-            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            [SCHEMA_VERSION.to_string()],
-        )?;
-        #[cfg(test)]
-        if _options.inject_v12_failure_before_commit {
-            return Err(StoreError::MigrationRejected {
-                message: "injected v12 migration failure".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(12),
-                    _backup_path_string,
-                    MigrationRecordCounts::default(),
-                    "injected_failure",
-                ),
-            });
-        }
-        transaction.commit()?;
-        self.assert_current_schema()?;
-        Ok(MigrationOutcome::migrated(
-            12,
-            backup_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().replace('\\', "/")),
-            MigrationRecordCounts::default(),
-        ))
-    }
-
-    fn migrate_v13_to_v14(
-        &mut self,
-        backup_path: Option<PathBuf>,
-        _options: &StoreOpenOptions,
-    ) -> Result<MigrationOutcome, StoreError> {
-        let _backup_path_string = backup_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().replace('\\', "/"));
-        let transaction = self.connection.transaction()?;
-        migration::create_plugin_lifecycle_schema(&transaction)?;
-        migration::create_runtime_output_schema(&transaction)?;
-        transaction.execute(
-            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            [SCHEMA_VERSION.to_string()],
-        )?;
-        #[cfg(test)]
-        if _options.inject_v13_failure_before_commit {
-            return Err(StoreError::MigrationRejected {
-                message: "injected v13 migration failure".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(13),
-                    _backup_path_string,
-                    MigrationRecordCounts::default(),
-                    "injected_failure",
-                ),
-            });
-        }
-        transaction.commit()?;
-        self.assert_current_schema()?;
-        Ok(MigrationOutcome::migrated(
-            13,
-            backup_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().replace('\\', "/")),
-            MigrationRecordCounts::default(),
-        ))
-    }
-
-    fn migrate_v14_to_v15(
-        &mut self,
-        backup_path: Option<PathBuf>,
-        _options: &StoreOpenOptions,
-    ) -> Result<MigrationOutcome, StoreError> {
-        let _backup_path_string = backup_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().replace('\\', "/"));
-        let transaction = self.connection.transaction()?;
-        migration::create_runtime_output_schema(&transaction)?;
-        transaction.execute(
-            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            [SCHEMA_VERSION.to_string()],
-        )?;
-        #[cfg(test)]
-        if _options.inject_v14_failure_before_commit {
-            return Err(StoreError::MigrationRejected {
-                message: "injected v14 migration failure".to_string(),
-                outcome: MigrationOutcome::rejected(
-                    Some(14),
-                    _backup_path_string,
-                    MigrationRecordCounts::default(),
-                    "injected_failure",
-                ),
-            });
-        }
-        transaction.commit()?;
-        self.assert_current_schema()?;
-        Ok(MigrationOutcome::migrated(
-            14,
-            backup_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().replace('\\', "/")),
-            MigrationRecordCounts::default(),
-        ))
     }
 
     fn assert_current_schema(&self) -> Result<(), StoreError> {
@@ -915,14 +361,18 @@ impl Store {
         migration::assert_not_null_project_identity(&self.connection, "agent_turns")?;
         migration::assert_not_null_project_identity(&self.connection, "approval_requests")?;
         migration::assert_not_null_project_identity(&self.connection, "plot_artifacts")?;
+        migration::assert_not_null_project_identity(&self.connection, "authority_receipt_log")?;
+        migration::assert_table_exists(&self.connection, "authority_receipt_log")?;
         migration::assert_index_exists(&self.connection, "idx_runs_project_started")?;
         migration::assert_index_exists(&self.connection, "idx_agent_turns_project_started")?;
         migration::assert_index_exists(&self.connection, "idx_approval_requests_project_status")?;
         migration::assert_index_exists(&self.connection, "idx_plot_artifacts_project_created")?;
-        migration::assert_not_null_project_identity(&self.connection, "evidence_claims")?;
-        migration::assert_not_null_project_identity(&self.connection, "claim_evidence_links")?;
-        migration::assert_index_exists(&self.connection, "idx_evidence_claims_project")?;
-        migration::assert_index_exists(&self.connection, "idx_claim_evidence_links_project")?;
+        migration::assert_index_exists(&self.connection, "idx_authority_receipt_log_project_seq")?;
+        migration::assert_table_exists(&self.connection, "environment_plan_reviews")?;
+        migration::assert_index_exists(
+            &self.connection,
+            "idx_environment_plan_reviews_project_status",
+        )?;
         for column in [
             "error_start_line",
             "error_start_column",
@@ -937,6 +387,7 @@ impl Store {
         migration::assert_plugin_permission_schema(&self.connection)?;
         migration::assert_plugin_lifecycle_schema(&self.connection)?;
         migration::assert_runtime_output_schema(&self.connection)?;
+        migration::assert_table_absent(&self.connection, "environment_operation_requests")?;
         Ok(())
     }
 }
@@ -2425,52 +1876,6 @@ where
         Ok(changed)
     }
 
-    pub fn interrupt_agent_environment_operations(
-        &mut self,
-        turn_id: &str,
-        reason: &str,
-    ) -> Result<usize, StoreError> {
-        self.interrupt_agent_environment_operations_with_outcome(turn_id, reason, "user_cancelled")
-    }
-
-    pub fn interrupt_agent_environment_operations_with_outcome(
-        &mut self,
-        turn_id: &str,
-        reason: &str,
-        terminal_outcome: &str,
-    ) -> Result<usize, StoreError> {
-        let changed = self.connection.execute(
-            "UPDATE environment_operation_requests
-             SET status = 'interrupted',
-                 decision = COALESCE(decision, 'cancel'),
-                 reason = COALESCE(reason, ?2),
-                 completed_at = COALESCE(completed_at, ?4),
-                 terminal_outcome = COALESCE(terminal_outcome, ?3)
-             WHERE turn_id = ?1
-               AND source = 'agent'
-               AND status IN ('requested', 'approved', 'running')",
-            params![turn_id, reason, terminal_outcome, Utc::now().to_rfc3339()],
-        )?;
-        Ok(changed)
-    }
-
-    pub fn recover_incomplete_environment_operations(&mut self) -> Result<usize, StoreError> {
-        let changed = self.connection.execute(
-            "UPDATE environment_operation_requests
-             SET status = CASE
-                    WHEN status = 'requested' THEN 'stale'
-                    ELSE 'interrupted'
-                 END,
-                 decision = COALESCE(decision, 'cancel'),
-                 reason = COALESCE(reason, 'Environment operation interrupted by desktop restart'),
-                 completed_at = COALESCE(completed_at, ?1),
-                 terminal_outcome = COALESCE(terminal_outcome, 'desktop_restart')
-             WHERE status IN ('requested', 'approved', 'running')",
-            [Utc::now().to_rfc3339()],
-        )?;
-        Ok(changed)
-    }
-
     pub fn create_plot_artifact(&mut self, draft: &PlotArtifactDraft) -> Result<(), StoreError> {
         self.connection.execute(
             "INSERT INTO plot_artifacts(
@@ -2579,164 +1984,6 @@ where
                 },
             )
             .optional()
-            .map_err(StoreError::from)
-    }
-
-    pub fn create_environment_operation_request(
-        &mut self,
-        draft: &EnvironmentOperationRequestDraft,
-    ) -> Result<(), StoreError> {
-        self.connection.execute(
-            "INSERT INTO environment_operation_requests(
-                request_id, turn_id, source, request_name, status, decision, reason,
-                project_root, arguments_json, preview_json, preview_sha256, workspace_id,
-                state_revision, project_revision, before_snapshot_id, run_id, requested_at,
-                responded_at, completed_at, terminal_outcome
-             ) VALUES(
-                ?1, ?2, ?3, ?4, 'requested', NULL, NULL, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                NULL, ?13, NULL, NULL, NULL
-             )",
-            params![
-                draft.request_id,
-                draft.turn_id,
-                draft.source,
-                draft.request_name,
-                draft.project_root,
-                draft.arguments_json,
-                draft.preview_json,
-                draft.preview_sha256,
-                draft.workspace_id,
-                draft.state_revision,
-                draft.project_revision,
-                draft.before_snapshot_id,
-                Utc::now().to_rfc3339(),
-            ],
-        )?;
-        Ok(())
-    }
-
-    pub fn decide_environment_operation_request(
-        &mut self,
-        request_id: &str,
-        record: &EnvironmentOperationDecisionRecord,
-    ) -> Result<usize, StoreError> {
-        let changed = self.connection.execute(
-            "UPDATE environment_operation_requests
-             SET status = ?2,
-                 decision = ?3,
-                 reason = ?4,
-                 responded_at = ?5
-             WHERE request_id = ?1",
-            params![
-                request_id,
-                record.status,
-                record.decision,
-                record.reason,
-                Utc::now().to_rfc3339(),
-            ],
-        )?;
-        Ok(changed)
-    }
-
-    pub fn start_environment_operation_request(
-        &mut self,
-        request_id: &str,
-        run_id: Option<&str>,
-    ) -> Result<usize, StoreError> {
-        let changed = self.connection.execute(
-            "UPDATE environment_operation_requests
-             SET status = 'running',
-                 run_id = ?2
-             WHERE request_id = ?1",
-            params![request_id, run_id],
-        )?;
-        Ok(changed)
-    }
-
-    pub fn claim_environment_operation_request(
-        &mut self,
-        project_root: &str,
-        request_name: &str,
-        request_id: &str,
-        run_id: &str,
-    ) -> Result<bool, StoreError> {
-        let changed = self.connection.execute(
-            "UPDATE environment_operation_requests
-             SET status = 'running', run_id = ?4
-             WHERE project_root = ?1 AND request_name = ?2 AND request_id = ?3
-               AND status = 'approved' AND run_id IS NULL",
-            params![project_root, request_name, request_id, run_id],
-        )?;
-        Ok(changed == 1)
-    }
-
-    pub fn finish_environment_operation_request(
-        &mut self,
-        finish: &EnvironmentOperationFinish,
-    ) -> Result<usize, StoreError> {
-        let changed = self.connection.execute(
-            "UPDATE environment_operation_requests
-             SET status = ?2,
-                 run_id = COALESCE(?3, run_id),
-                 terminal_outcome = ?4,
-                 reason = COALESCE(?5, reason),
-                 completed_at = ?6
-             WHERE request_id = ?1",
-            params![
-                finish.request_id,
-                finish.status,
-                finish.run_id,
-                finish.terminal_outcome,
-                finish.reason,
-                Utc::now().to_rfc3339(),
-            ],
-        )?;
-        Ok(changed)
-    }
-
-    pub fn get_environment_operation_request(
-        &self,
-        project_root: &str,
-        request_id: &str,
-    ) -> Result<Option<EnvironmentOperationRequestSummary>, StoreError> {
-        self.connection
-            .query_row(
-                "SELECT
-                    request_id, turn_id, source, request_name, status, decision, reason,
-                    project_root, arguments_json, preview_json, preview_sha256, workspace_id,
-                    state_revision, project_revision, before_snapshot_id, run_id, requested_at,
-                    responded_at, completed_at, terminal_outcome
-                 FROM environment_operation_requests
-                 WHERE project_root = ?1 AND request_id = ?2",
-                params![project_root, request_id],
-                environment::decode_environment_operation_request,
-            )
-            .optional()
-            .map_err(StoreError::from)
-    }
-
-    pub fn list_environment_operation_requests(
-        &self,
-        project_root: &str,
-        limit: Option<usize>,
-        status: Option<&str>,
-    ) -> Result<Vec<EnvironmentOperationRequestSummary>, StoreError> {
-        let mut statement = self.connection.prepare(
-            "SELECT
-                request_id, turn_id, source, request_name, status, decision, reason,
-                project_root, arguments_json, preview_json, preview_sha256, workspace_id,
-                state_revision, project_revision, before_snapshot_id, run_id, requested_at,
-                responded_at, completed_at, terminal_outcome
-             FROM environment_operation_requests
-             WHERE project_root = ?1 AND (?3 IS NULL OR status = ?3)
-             ORDER BY requested_at DESC
-             LIMIT ?2",
-        )?;
-        let rows = statement.query_map(
-            params![project_root, limit.unwrap_or(DEFAULT_LIMIT) as i64, status],
-            environment::decode_environment_operation_request,
-        )?;
-        rows.collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
     }
 
@@ -3276,209 +2523,9 @@ fn text_preview(text: &str, limit: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::migration::{
-        assert_index_exists, assert_not_null_project_identity, assert_plugin_lifecycle_schema,
-        assert_plugin_permission_schema, assert_runs_error_range_kind_constraint,
-        read_schema_version, set_schema_version,
-    };
     use rho_protocol::{MessageKind, WorkspaceIdentity};
     use serde_json::json;
     use tempfile::TempDir;
-
-    fn create_v7_fixture(path: &Path) {
-        let connection = Connection::open(path).unwrap();
-        connection
-            .execute_batch(
-                "
-                CREATE TABLE metadata (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                );
-                CREATE TABLE runs (
-                    run_id TEXT PRIMARY KEY,
-                    parent_run_id TEXT,
-                    project_root TEXT,
-                    origin TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    started_at TEXT NOT NULL,
-                    finished_at TEXT,
-                    terminal_reason TEXT,
-                    request_type TEXT NOT NULL,
-                    operation_class TEXT NOT NULL,
-                    code TEXT NOT NULL,
-                    arguments_json TEXT NOT NULL,
-                    source_path TEXT,
-                    execution_mode TEXT,
-                    document_version INTEGER,
-                    workspace_id TEXT,
-                    state_revision_before INTEGER,
-                    project_revision_before INTEGER,
-                    state_revision_after INTEGER,
-                    project_revision_after INTEGER,
-                    stdout TEXT,
-                    value_text TEXT,
-                    messages_json TEXT NOT NULL,
-                    warnings_json TEXT NOT NULL,
-                    error_message TEXT,
-                    error_call TEXT,
-                    traceback_json TEXT NOT NULL,
-                    cancel_requested INTEGER NOT NULL DEFAULT 0,
-                    environment_snapshot_id TEXT,
-                    environment_snapshot_id_after TEXT
-                );
-                CREATE TABLE agent_turns (
-                    turn_id TEXT PRIMARY KEY,
-                    project_root TEXT,
-                    mode TEXT NOT NULL,
-                    prompt TEXT NOT NULL,
-                    prompt_preview TEXT NOT NULL,
-                    model TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    started_at TEXT NOT NULL,
-                    finished_at TEXT,
-                    workspace_id_before TEXT,
-                    state_revision_before INTEGER,
-                    project_revision_before INTEGER,
-                    workspace_id_after TEXT,
-                    state_revision_after INTEGER,
-                    project_revision_after INTEGER,
-                    final_message TEXT,
-                    error_message TEXT
-                );
-                CREATE TABLE approval_requests (
-                    request_id TEXT PRIMARY KEY,
-                    turn_id TEXT NOT NULL,
-                    project_root TEXT,
-                    tool TEXT NOT NULL,
-                    policy TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    decision TEXT,
-                    reason TEXT,
-                    arguments_json TEXT NOT NULL,
-                    code TEXT,
-                    workspace_id TEXT,
-                    state_revision INTEGER,
-                    project_revision INTEGER,
-                    requested_at TEXT NOT NULL,
-                    responded_at TEXT,
-                    continuation_outcome TEXT,
-                    FOREIGN KEY(turn_id) REFERENCES agent_turns(turn_id) ON DELETE CASCADE
-                );
-                CREATE TABLE plot_artifacts (
-                    plot_id TEXT PRIMARY KEY,
-                    run_id TEXT NOT NULL,
-                    project_root TEXT,
-                    source_path TEXT,
-                    execution_mode TEXT,
-                    document_version INTEGER,
-                    workspace_id TEXT,
-                    state_revision INTEGER,
-                    project_revision INTEGER,
-                    media_type TEXT NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    provenance_complete INTEGER NOT NULL DEFAULT 1,
-                    created_at TEXT NOT NULL
-                );
-                ",
-            )
-            .unwrap();
-        set_schema_version(&connection, 7).unwrap();
-        let now = Utc::now().to_rfc3339();
-        connection.execute(
-            "INSERT INTO runs(
-                run_id, parent_run_id, project_root, origin, status, started_at, request_type,
-                operation_class, code, arguments_json, source_path, execution_mode,
-                document_version, workspace_id, state_revision_before, project_revision_before,
-                messages_json, warnings_json, traceback_json
-             ) VALUES(
-                'run_scoped', NULL, 'D:/projects/A', 'user', 'queued', ?1, 'workspace.execute',
-                'state_capable', 'x <- 1', '{}', 'analysis.R', 'file', 1, 'ws_a', 1, 1, '[]', '[]', '[]'
-             )",
-            [now.clone()],
-        ).unwrap();
-        connection.execute(
-            "INSERT INTO runs(
-                run_id, parent_run_id, project_root, origin, status, started_at, request_type,
-                operation_class, code, arguments_json, source_path, execution_mode,
-                document_version, workspace_id, state_revision_before, project_revision_before,
-                messages_json, warnings_json, traceback_json
-             ) VALUES(
-                'run_legacy', NULL, NULL, 'user', 'queued', ?1, 'workspace.execute',
-                'state_capable', 'x <- 2', '{}', 'analysis.R', 'file', 1, 'ws_b', 1, 1, '[]', '[]', '[]'
-             )",
-            [now.clone()],
-        ).unwrap();
-        connection.execute(
-            "INSERT INTO agent_turns(
-                turn_id, project_root, mode, prompt, prompt_preview, model, status, started_at
-             ) VALUES(
-                'turn_scoped', 'D:/projects/A', 'ask', 'scoped prompt', 'scoped prompt', 'test', 'completed', ?1
-             )",
-            [now.clone()],
-        ).unwrap();
-        connection.execute(
-            "INSERT INTO agent_turns(
-                turn_id, project_root, mode, prompt, prompt_preview, model, status, started_at
-             ) VALUES(
-                'turn_legacy', NULL, 'ask', 'legacy prompt', 'legacy prompt', 'test', 'completed', ?1
-             )",
-            [now.clone()],
-        ).unwrap();
-        connection.execute(
-            "INSERT INTO approval_requests(
-                request_id, turn_id, project_root, tool, policy, status, arguments_json, requested_at
-             ) VALUES(
-                'req_scoped', 'turn_scoped', 'D:/projects/A', 'run_r', 'required', 'pending', '{}', ?1
-             )",
-            [now.clone()],
-        ).unwrap();
-        connection.execute(
-            "INSERT INTO approval_requests(
-                request_id, turn_id, project_root, tool, policy, status, arguments_json, requested_at
-             ) VALUES(
-                'req_legacy', 'turn_legacy', NULL, 'run_r', 'required', 'pending', '{}', ?1
-             )",
-            [now.clone()],
-        ).unwrap();
-        connection
-            .execute(
-                "INSERT INTO plot_artifacts(
-                plot_id, run_id, project_root, media_type, payload_json, created_at
-             ) VALUES(
-                'plot_scoped', 'run_scoped', 'D:/projects/A', 'application/json', '{}', ?1
-             )",
-                [now.clone()],
-            )
-            .unwrap();
-        connection
-            .execute(
-                "INSERT INTO plot_artifacts(
-                plot_id, run_id, project_root, media_type, payload_json, created_at
-             ) VALUES(
-                'plot_legacy', 'run_legacy', NULL, 'application/json', '{}', ?1
-             )",
-                [now],
-            )
-            .unwrap();
-    }
-
-    fn create_nonempty_store_without_schema_version(path: &Path) {
-        let connection = Connection::open(path).unwrap();
-        connection
-            .execute_batch(
-                "
-                CREATE TABLE metadata (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                );
-                CREATE TABLE placeholder (
-                    id INTEGER PRIMARY KEY
-                );
-                INSERT INTO placeholder(id) VALUES(1);
-                ",
-            )
-            .unwrap();
-    }
 
     #[test]
     fn persists_identity_and_events() {
@@ -3752,250 +2799,6 @@ mod tests {
         assert_eq!(first.snapshot_id, second.snapshot_id);
         assert_eq!(first.canonical_json, second.canonical_json);
         assert_eq!(first.first_captured_at, second.first_captured_at);
-    }
-
-    #[test]
-    fn persists_environment_operation_requests() {
-        let directory = TempDir::new().unwrap();
-        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
-        store
-            .create_environment_operation_request(&EnvironmentOperationRequestDraft {
-                request_id: "env_req_1".to_string(),
-                turn_id: None,
-                source: "user".to_string(),
-                request_name: "environment.snapshot".to_string(),
-                project_root: "D:/Rho/project".to_string(),
-                arguments_json: "{\"operation\":\"snapshot\"}".to_string(),
-                preview_json: "{\"operation\":\"snapshot\",\"diff\":{\"values\":[]}}".to_string(),
-                preview_sha256: "preview_hash".to_string(),
-                workspace_id: "ws_test".to_string(),
-                state_revision: 7,
-                project_revision: 3,
-                before_snapshot_id: Some("env_before".to_string()),
-            })
-            .unwrap();
-        store
-            .decide_environment_operation_request(
-                "env_req_1",
-                &EnvironmentOperationDecisionRecord {
-                    decision: "approve".to_string(),
-                    status: "approved".to_string(),
-                    reason: Some("looks good".to_string()),
-                },
-            )
-            .unwrap();
-        assert!(
-            store
-                .claim_environment_operation_request(
-                    "D:/Rho/project",
-                    "environment.snapshot",
-                    "env_req_1",
-                    "run_env_1",
-                )
-                .unwrap()
-        );
-        assert!(
-            !store
-                .claim_environment_operation_request(
-                    "D:/Rho/project",
-                    "environment.snapshot",
-                    "env_req_1",
-                    "run_env_2",
-                )
-                .unwrap()
-        );
-        store
-            .finish_environment_operation_request(&EnvironmentOperationFinish {
-                request_id: "env_req_1".to_string(),
-                status: "completed".to_string(),
-                run_id: Some("run_env_1".to_string()),
-                terminal_outcome: Some("lockfile_updated".to_string()),
-                reason: None,
-            })
-            .unwrap();
-
-        let detail = store
-            .get_environment_operation_request("D:/Rho/project", "env_req_1")
-            .unwrap()
-            .unwrap();
-        assert_eq!(detail.status, "completed");
-        assert_eq!(detail.decision.as_deref(), Some("approve"));
-        assert_eq!(detail.run_id.as_deref(), Some("run_env_1"));
-        assert_eq!(detail.terminal_outcome.as_deref(), Some("lockfile_updated"));
-        assert_eq!(detail.before_snapshot_id.as_deref(), Some("env_before"));
-    }
-
-    #[test]
-    fn interrupting_agent_environment_operation_is_exact_turn_only() {
-        let directory = TempDir::new().unwrap();
-        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
-        for turn_id in ["turn_env_a", "turn_env_b"] {
-            store
-                .create_agent_turn(&AgentTurnDraft {
-                    turn_id: turn_id.to_string(),
-                    project_root: "D:/Rho/project".to_string(),
-                    mode: "act".to_string(),
-                    prompt: format!("environment request {turn_id}"),
-                    model: "test".to_string(),
-                    workspace_id: "ws_test".to_string(),
-                    state_revision_before: 1,
-                    project_revision_before: 1,
-                })
-                .unwrap();
-        }
-        for (request_id, turn_id, source) in [
-            ("env_turn_a", Some("turn_env_a"), "agent"),
-            ("env_turn_b", Some("turn_env_b"), "agent"),
-            ("env_direct", None, "direct"),
-        ] {
-            store
-                .create_environment_operation_request(&EnvironmentOperationRequestDraft {
-                    request_id: request_id.to_string(),
-                    turn_id: turn_id.map(str::to_string),
-                    source: source.to_string(),
-                    request_name: "environment.snapshot".to_string(),
-                    project_root: "D:/Rho/project".to_string(),
-                    arguments_json: "{}".to_string(),
-                    preview_json: "{}".to_string(),
-                    preview_sha256: format!("preview_{request_id}"),
-                    workspace_id: "ws_test".to_string(),
-                    state_revision: 1,
-                    project_revision: 1,
-                    before_snapshot_id: None,
-                })
-                .unwrap();
-        }
-
-        assert_eq!(
-            store
-                .interrupt_agent_environment_operations("turn_env_a", "Cancelled by user")
-                .unwrap(),
-            1
-        );
-        let cancelled = store
-            .get_environment_operation_request("D:/Rho/project", "env_turn_a")
-            .unwrap()
-            .unwrap();
-        assert_eq!(cancelled.status, "interrupted");
-        assert_eq!(cancelled.decision.as_deref(), Some("cancel"));
-        assert_eq!(
-            cancelled.terminal_outcome.as_deref(),
-            Some("user_cancelled")
-        );
-        assert_eq!(cancelled.reason.as_deref(), Some("Cancelled by user"));
-        for request_id in ["env_turn_b", "env_direct"] {
-            assert_eq!(
-                store
-                    .get_environment_operation_request("D:/Rho/project", request_id)
-                    .unwrap()
-                    .unwrap()
-                    .status,
-                "requested"
-            );
-        }
-    }
-
-    #[test]
-    fn reconciles_approved_environment_operation_when_dispatch_fails() {
-        let directory = TempDir::new().unwrap();
-        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
-        store
-            .create_environment_operation_request(&EnvironmentOperationRequestDraft {
-                request_id: "env_dispatch_error".to_string(),
-                turn_id: None,
-                source: "user".to_string(),
-                request_name: "environment.initialize".to_string(),
-                project_root: "D:/Rho/project".to_string(),
-                arguments_json: "{}".to_string(),
-                preview_json: "{}".to_string(),
-                preview_sha256: "preview_dispatch_error".to_string(),
-                workspace_id: "ws_test".to_string(),
-                state_revision: 1,
-                project_revision: 1,
-                before_snapshot_id: None,
-            })
-            .unwrap();
-        store
-            .decide_environment_operation_request(
-                "env_dispatch_error",
-                &EnvironmentOperationDecisionRecord {
-                    decision: "approve".to_string(),
-                    status: "approved".to_string(),
-                    reason: None,
-                },
-            )
-            .unwrap();
-        store
-            .finish_environment_operation_request(&EnvironmentOperationFinish {
-                request_id: "env_dispatch_error".to_string(),
-                status: "failed".to_string(),
-                run_id: None,
-                terminal_outcome: Some("dispatch_error".to_string()),
-                reason: Some("Workspace R was unavailable before execution started.".to_string()),
-            })
-            .unwrap();
-
-        let detail = store
-            .get_environment_operation_request("D:/Rho/project", "env_dispatch_error")
-            .unwrap()
-            .unwrap();
-        assert_eq!(detail.status, "failed");
-        assert_eq!(detail.terminal_outcome.as_deref(), Some("dispatch_error"));
-        assert_eq!(
-            detail.reason.as_deref(),
-            Some("Workspace R was unavailable before execution started.")
-        );
-    }
-
-    #[test]
-    fn environment_package_requests_are_project_isolated() {
-        let directory = TempDir::new().unwrap();
-        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
-        for (request_id, project_root, package) in [
-            ("env_pkg_a", "D:/Rho/project-a", "ggplot2"),
-            ("env_pkg_b", "D:/Rho/project-b", "dplyr"),
-        ] {
-            store
-                .create_environment_operation_request(&EnvironmentOperationRequestDraft {
-                    request_id: request_id.to_string(),
-                    turn_id: None,
-                    source: "user".to_string(),
-                    request_name: "environment.package_remove".to_string(),
-                    project_root: project_root.to_string(),
-                    arguments_json: format!(
-                        r#"{{"operation":"remove_package","package":"{package}"}}"#
-                    ),
-                    preview_json: format!(r#"{{"package":"{package}"}}"#),
-                    preview_sha256: format!("preview_{request_id}"),
-                    workspace_id: "ws_test".to_string(),
-                    state_revision: 1,
-                    project_revision: 1,
-                    before_snapshot_id: Some(format!("before_{request_id}")),
-                })
-                .unwrap();
-        }
-
-        let project_a = store
-            .list_environment_operation_requests("D:/Rho/project-a", Some(20), None)
-            .unwrap();
-        assert_eq!(project_a.len(), 1);
-        assert_eq!(project_a[0].request_id, "env_pkg_a");
-        assert!(
-            store
-                .get_environment_operation_request("D:/Rho/project-a", "env_pkg_b")
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            !store
-                .claim_environment_operation_request(
-                    "D:/Rho/project-a",
-                    "environment.package_remove",
-                    "env_pkg_b",
-                    "run_wrong_project",
-                )
-                .unwrap()
-        );
     }
 
     #[test]
@@ -5200,1043 +4003,73 @@ mod tests {
     }
 
     #[test]
-    fn bootstraps_empty_store_to_v14_and_reopens_idempotently() {
+    fn bootstraps_only_the_fresh_authority_schema_and_reopens() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
-
         let store = Store::open(&database).unwrap();
         assert_eq!(
-            store.migration_outcome(),
-            &MigrationOutcome::bootstrapped_current()
+            store.migration_outcome().status,
+            MigrationStatus::BootstrappedCurrent
         );
-        drop(store);
-
-        let reopened = Store::open(&database).unwrap();
         assert_eq!(
-            reopened.migration_outcome(),
-            &MigrationOutcome::opened_current()
-        );
-    }
-
-    #[test]
-    fn migrates_v7_to_v14_and_marks_legacy_unscoped_records() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v7_fixture(&database);
-
-        let store = Store::open(&database).unwrap();
-        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
-        assert_eq!(store.migration_outcome().from_schema_version, Some(7));
-        assert_eq!(
-            store.migration_outcome().to_schema_version,
+            migration::read_schema_version(&store.connection).unwrap(),
             Some(SCHEMA_VERSION)
         );
-        assert_eq!(store.migration_outcome().scoped_count, 4);
-        assert_eq!(store.migration_outcome().legacy_unscoped_count, 4);
-        assert_eq!(store.migration_outcome().rejected_count, 0);
-        assert!(
-            store
-                .migration_outcome()
-                .backup_path
-                .as_deref()
-                .unwrap()
-                .ends_with("rho.sqlite.schema-v7.bak")
-        );
-        assert_eq!(store.list_runs("D:/projects/A", None).unwrap().len(), 1);
-        assert_eq!(
-            store.list_agent_turns("D:/projects/A", None).unwrap().len(),
-            1
-        );
-        assert_eq!(
-            store
-                .list_approval_requests("D:/projects/A", None, None)
-                .unwrap()
-                .len(),
-            1
-        );
-        let legacy_runs: i64 = store
-            .connection
-            .query_row(
-                "SELECT COUNT(*) FROM runs WHERE project_root = ?1",
-                [LEGACY_UNSCOPED],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(legacy_runs, 1);
-        assert_not_null_project_identity(&store.connection, "runs").unwrap();
-        assert_not_null_project_identity(&store.connection, "agent_turns").unwrap();
-        assert_not_null_project_identity(&store.connection, "approval_requests").unwrap();
-        assert_not_null_project_identity(&store.connection, "plot_artifacts").unwrap();
-        assert_index_exists(&store.connection, "idx_plot_artifacts_project_created").unwrap();
-    }
-
-    #[test]
-    fn rejects_blank_project_identity_in_v7_fixture() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v7_fixture(&database);
-        let connection = Connection::open(&database).unwrap();
-        connection
-            .execute(
-                "UPDATE runs SET project_root = '' WHERE run_id = 'run_legacy'",
-                [],
-            )
-            .unwrap();
-        drop(connection);
-
-        let error = Store::open(&database).unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(
-            outcome.reason_code.as_deref(),
-            Some("malformed_project_identity")
-        );
-        assert_eq!(outcome.rejected_count, 1);
-        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
-
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(7));
-        let blank_count: i64 = verification
-            .query_row(
-                "SELECT COUNT(*) FROM runs WHERE project_root = ''",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(blank_count, 1);
-    }
-
-    #[test]
-    fn rejects_unsupported_nonempty_schema_version() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_nonempty_store_without_schema_version(&database);
-        let connection = Connection::open(&database).unwrap();
-        set_schema_version(&connection, 6).unwrap();
-        drop(connection);
-
-        let error = Store::open(&database).unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(
-            outcome.reason_code.as_deref(),
-            Some("unsupported_schema_version")
-        );
-        assert_eq!(outcome.from_schema_version, Some(6));
-    }
-
-    #[test]
-    fn rolls_back_v7_migration_after_injected_failure_and_preserves_backup() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v7_fixture(&database);
-
-        let error = Store::open_with_options(
-            &database,
-            StoreOpenOptions {
-                inject_v7_failure_before_commit: true,
-                ..Default::default()
-            },
-        )
-        .unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
-        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
-
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(7));
-        let legacy_null_runs: i64 = verification
-            .query_row(
-                "SELECT COUNT(*) FROM runs WHERE project_root IS NULL",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(legacy_null_runs, 1);
-    }
-
-    fn drop_runtime_output_schema(connection: &Connection) {
-        connection
-            .execute_batch(
-                "DROP TABLE IF EXISTS agent_turn_context_items;
-                 DROP TABLE IF EXISTS runtime_output_chunks;
-                 DROP TABLE IF EXISTS runtime_executions;
-                 DROP INDEX IF EXISTS idx_agent_turn_context_project_turn;
-                 DROP INDEX IF EXISTS idx_runtime_output_project_execution_sequence;
-                 DROP INDEX IF EXISTS idx_runtime_executions_workspace_started;
-                 DROP INDEX IF EXISTS idx_runtime_executions_console_started;
-                 DROP INDEX IF EXISTS idx_runtime_executions_project_started;
-                 DROP INDEX IF EXISTS idx_agent_turns_id_project;
-                 DROP INDEX IF EXISTS idx_runs_id_project;",
-            )
-            .unwrap();
-    }
-
-    fn create_v8_fixture(path: &Path) {
-        let store = Store::open(path).unwrap();
-        drop(store);
-        let connection = Connection::open(path).unwrap();
-        drop_runtime_output_schema(&connection);
-        connection
-            .execute_batch(
-                "ALTER TABLE runs DROP COLUMN error_start_line;
-                 ALTER TABLE runs DROP COLUMN error_start_column;
-                 ALTER TABLE runs DROP COLUMN error_end_line;
-                 ALTER TABLE runs DROP COLUMN error_end_column;
-                 ALTER TABLE runs DROP COLUMN error_range_kind;
-                 DROP TABLE claim_evidence_links;
-                 DROP TABLE evidence_claims;
-                 DROP INDEX IF EXISTS idx_claim_evidence_links_project;
-                 DROP INDEX IF EXISTS idx_evidence_claims_project;
-                 DROP INDEX IF EXISTS idx_agent_conversation_turns_conversation;
-                 DROP INDEX IF EXISTS idx_agent_conversations_project_updated;
-                 DROP TABLE agent_conversation_turns;
-                 DROP TABLE agent_conversations;
-                 DROP TABLE plugin_permission_events;
-                 DROP TABLE plugin_permission_grants;
-                 DROP TABLE plugin_permission_requests;",
-            )
-            .unwrap();
-        set_schema_version(&connection, 8).unwrap();
-    }
-
-    #[test]
-    fn migrates_v8_to_v14_with_backup_and_reopens() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v8_fixture(&database);
-
-        let store = Store::open(&database).unwrap();
-        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
-        assert_eq!(store.migration_outcome().from_schema_version, Some(8));
-        assert_eq!(
-            store.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert!(Path::new(store.migration_outcome().backup_path.as_deref().unwrap()).exists());
-        assert_index_exists(&store.connection, "idx_evidence_claims_project").unwrap();
-        drop(store);
-
-        let reopened = Store::open(&database).unwrap();
-        assert_eq!(
-            reopened.migration_outcome(),
-            &MigrationOutcome::opened_current()
-        );
-    }
-
-    #[test]
-    fn rolls_back_v8_migration_after_injected_failure_and_recovers() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v8_fixture(&database);
-
-        let error = Store::open_with_options(
-            &database,
-            StoreOpenOptions {
-                inject_v8_failure_before_commit: true,
-                ..Default::default()
-            },
-        )
-        .unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
-        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(8));
-        assert!(
-            verification
-                .prepare("SELECT * FROM evidence_claims")
-                .is_err()
-        );
-        drop(verification);
-
-        let recovered = Store::open(&database).unwrap();
-        assert_eq!(
-            recovered.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-    }
-
-    fn create_v9_fixture(path: &Path) {
-        let store = Store::open(path).unwrap();
-        drop(store);
-        let connection = Connection::open(path).unwrap();
-        drop_runtime_output_schema(&connection);
-        connection
-            .execute_batch(
-                "ALTER TABLE runs DROP COLUMN error_start_line;
-                 ALTER TABLE runs DROP COLUMN error_start_column;
-                 ALTER TABLE runs DROP COLUMN error_end_line;
-                 ALTER TABLE runs DROP COLUMN error_end_column;
-                 ALTER TABLE runs DROP COLUMN error_range_kind;
-                 DROP INDEX IF EXISTS idx_agent_conversation_turns_conversation;
-                 DROP INDEX IF EXISTS idx_agent_conversations_project_updated;
-                 DROP TABLE agent_conversation_turns;
-                 DROP TABLE agent_conversations;",
-            )
-            .unwrap();
-        set_schema_version(&connection, 9).unwrap();
-    }
-
-    #[test]
-    fn migrates_v9_to_v14_without_guessing_historical_ranges_and_reopens() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v9_fixture(&database);
-        let connection = Connection::open(&database).unwrap();
-        connection
-            .execute(
-                "INSERT INTO runs(
-                    run_id, project_root, origin, status, started_at, request_type,
-                    operation_class, code, arguments_json, source_path,
-                    messages_json, warnings_json, traceback_json, error_message
-                 ) VALUES(
-                    'historical_problem', 'D:/projects/A', 'user', 'failed', ?1,
-                    'workspace.execute', 'state_capable', 'stop(\"old\")', '{}',
-                    'analysis.R', '[]', '[]', '[]', 'old failure'
-                 )",
-                [Utc::now().to_rfc3339()],
-            )
-            .unwrap();
-        drop(connection);
-
-        let store = Store::open(&database).unwrap();
-        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
-        assert_eq!(store.migration_outcome().from_schema_version, Some(9));
-        assert_eq!(
-            store.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert!(
-            store
-                .migration_outcome()
-                .backup_path
-                .as_deref()
-                .unwrap()
-                .ends_with("rho.sqlite.schema-v9.bak")
-        );
-        let problem = store
-            .list_problems("D:/projects/A", None)
-            .unwrap()
-            .remove(0);
-        assert_eq!(problem.line_number, None);
-        assert_eq!(problem.range_kind, None);
-        drop(store);
-
-        let reopened = Store::open(&database).unwrap();
-        assert_eq!(
-            reopened.migration_outcome(),
-            &MigrationOutcome::opened_current()
-        );
-    }
-
-    #[test]
-    fn rolls_back_v9_migration_after_injected_failure_and_recovers() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v9_fixture(&database);
-
-        let error = Store::open_with_options(
-            &database,
-            StoreOpenOptions {
-                inject_v9_failure_before_commit: true,
-                ..Default::default()
-            },
-        )
-        .unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
-        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(9));
-        assert!(
-            verification
-                .prepare("SELECT error_start_line FROM runs")
-                .is_err()
-        );
-        drop(verification);
-
-        let recovered = Store::open(&database).unwrap();
-        assert_eq!(
-            recovered.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-    }
-
-    fn create_v10_fixture(path: &Path) {
-        create_v9_fixture(path);
-        let connection = Connection::open(path).unwrap();
-        connection
-            .execute_batch(
-                "ALTER TABLE runs ADD COLUMN error_start_line INTEGER;
-                 ALTER TABLE runs ADD COLUMN error_start_column INTEGER;
-                 ALTER TABLE runs ADD COLUMN error_end_line INTEGER;
-                 ALTER TABLE runs ADD COLUMN error_end_column INTEGER;
-                 ALTER TABLE runs ADD COLUMN error_range_kind TEXT CHECK (
-                     error_range_kind IS NULL OR error_range_kind = 'r_expression'
-                 );",
-            )
-            .unwrap();
-        set_schema_version(&connection, 10).unwrap();
-    }
-
-    #[test]
-    fn migrates_v10_to_v14_preserving_expression_ranges_without_parse_backfill() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v10_fixture(&database);
-        let connection = Connection::open(&database).unwrap();
-        let now = Utc::now().to_rfc3339();
-        connection
-            .execute(
-                "INSERT INTO runs(
-                    run_id, project_root, origin, status, started_at, request_type,
-                    operation_class, code, arguments_json, source_path,
-                    messages_json, warnings_json, traceback_json, error_message,
-                    error_start_line, error_start_column, error_end_line,
-                    error_end_column, error_range_kind
-                 ) VALUES(
-                    'expression_problem', 'D:/projects/A', 'user', 'failed', ?1,
-                    'workspace.execute', 'state_capable', 'stop(\"old\")', '{}',
-                    'analysis.R', '[]', '[]', '[]', 'old failure', 7, 3, 7, 14,
-                    'r_expression'
-                 )",
-                [now.clone()],
-            )
-            .unwrap();
-        connection
-            .execute(
-                "INSERT INTO runs(
-                    run_id, project_root, origin, status, started_at, request_type,
-                    operation_class, code, arguments_json, source_path,
-                    messages_json, warnings_json, traceback_json, error_message
-                 ) VALUES(
-                    'historical_parse_problem', 'D:/projects/A', 'user', 'failed', ?1,
-                    'workspace.execute', 'state_capable', 'value <- (', '{}',
-                    'analysis.R', '[]', '[]', '[]', '<text>:1:10: unexpected end'
-                 )",
-                [now],
-            )
-            .unwrap();
-        drop(connection);
-
-        let store = Store::open(&database).unwrap();
-        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
-        assert_eq!(store.migration_outcome().from_schema_version, Some(10));
-        assert_eq!(
-            store.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert!(
-            store
-                .migration_outcome()
-                .backup_path
-                .as_deref()
-                .unwrap()
-                .ends_with("rho.sqlite.schema-v10.bak")
-        );
-        let problems = store.list_problems("D:/projects/A", None).unwrap();
-        let expression = problems
-            .iter()
-            .find(|problem| problem.run_id == "expression_problem")
-            .unwrap();
-        assert_eq!(expression.line_number, Some(7));
-        assert_eq!(expression.column_number, Some(3));
-        assert_eq!(expression.end_column_number, Some(14));
-        assert_eq!(expression.range_kind.as_deref(), Some("r_expression"));
-        let historical_parse = problems
-            .iter()
-            .find(|problem| problem.run_id == "historical_parse_problem")
-            .unwrap();
-        assert_eq!(historical_parse.line_number, None);
-        assert_eq!(historical_parse.range_kind, None);
-        assert_index_exists(&store.connection, "idx_runs_project_started").unwrap();
-        assert_runs_error_range_kind_constraint(&store.connection).unwrap();
-        let legacy_table_count: i64 = store
-            .connection
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runs_v10'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(legacy_table_count, 0);
-        assert!(
-            store
-                .connection
-                .execute(
-                    "UPDATE runs SET error_range_kind = 'message_guess'
-                 WHERE run_id = 'expression_problem'",
-                    [],
-                )
-                .is_err()
-        );
-        drop(store);
-
-        let reopened = Store::open(&database).unwrap();
-        assert_eq!(
-            reopened.migration_outcome(),
-            &MigrationOutcome::opened_current()
-        );
-    }
-
-    #[test]
-    fn rolls_back_v10_migration_after_injected_failure_and_recovers() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v10_fixture(&database);
-
-        let error = Store::open_with_options(
-            &database,
-            StoreOpenOptions {
-                inject_v10_failure_before_commit: true,
-                ..Default::default()
-            },
-        )
-        .unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(outcome.from_schema_version, Some(10));
-        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
-        assert!(
-            outcome
-                .backup_path
-                .as_deref()
-                .unwrap()
-                .ends_with("rho.sqlite.schema-v10.bak")
-        );
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(10));
-        let schema_sql: String = verification
-            .query_row(
-                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'runs'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert!(!schema_sql.contains("r_parse_token"));
-        drop(verification);
-
-        let recovered = Store::open(&database).unwrap();
-        assert_eq!(
-            recovered.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert_runs_error_range_kind_constraint(&recovered.connection).unwrap();
-    }
-
-    #[test]
-    fn rejects_unknown_v10_range_kind_without_laundering_it() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v10_fixture(&database);
-        let connection = Connection::open(&database).unwrap();
-        connection
-            .execute_batch(
-                "PRAGMA ignore_check_constraints = ON;
-                 INSERT INTO runs(
-                    run_id, project_root, origin, status, started_at, request_type,
-                    operation_class, code, arguments_json, source_path,
-                    messages_json, warnings_json, traceback_json, error_message,
-                    error_start_line, error_start_column, error_end_line,
-                    error_end_column, error_range_kind
-                 ) VALUES(
-                    'unknown_kind', 'D:/projects/A', 'user', 'failed',
-                    '2026-08-08T00:00:00Z', 'workspace.execute', 'state_capable',
-                    'x', '{}', 'analysis.R', '[]', '[]', '[]', 'failure',
-                    1, 1, 1, 2, 'message_guess'
-                 );
-                 PRAGMA ignore_check_constraints = OFF;",
-            )
-            .unwrap();
-        drop(connection);
-
-        let error = Store::open(&database).unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(outcome.from_schema_version, Some(10));
-        assert_eq!(
-            outcome.reason_code.as_deref(),
-            Some("invalid_v10_range_kind")
-        );
-        assert_eq!(outcome.rejected_count, 1);
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(10));
-        let retained: String = verification
-            .query_row(
-                "SELECT error_range_kind FROM runs WHERE run_id = 'unknown_kind'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(retained, "message_guess");
-    }
-
-    fn create_v11_fixture(path: &Path) {
-        let mut store = Store::open(path).unwrap();
-        for (turn_id, project_root, status) in [
-            ("legacy_turn_a1", "D:/projects/A", "failed"),
-            ("legacy_turn_a2", "D:/projects/A", "interrupted"),
-            ("legacy_turn_b1", "D:/projects/B", "completed"),
+        for retired_table in [
+            "evidence_entries",
+            "evidence_claims",
+            "claim_evidence_links",
         ] {
-            store
-                .create_agent_turn(&AgentTurnDraft {
-                    turn_id: turn_id.to_string(),
-                    project_root: project_root.to_string(),
-                    mode: "ask".to_string(),
-                    prompt: format!("Historical prompt for {turn_id}"),
-                    model: "test".to_string(),
-                    workspace_id: format!("ws_{turn_id}"),
-                    state_revision_before: 1,
-                    project_revision_before: 0,
-                })
-                .unwrap();
-            store
-                .finish_agent_turn(&AgentTurnFinish {
-                    turn_id: turn_id.to_string(),
-                    status: status.to_string(),
-                    terminal_reason: Some(format!("old_reason_{status}")),
-                    workspace_id_after: Some(format!("ws_{turn_id}")),
-                    state_revision_after: Some(1),
-                    project_revision_after: Some(0),
-                    final_message: (status == "completed").then(|| "done".to_string()),
-                    error_message: (status != "completed").then(|| status.to_string()),
-                })
-                .unwrap();
-        }
-        drop(store);
-
-        let connection = Connection::open(path).unwrap();
-        drop_runtime_output_schema(&connection);
-        connection
-            .execute_batch(
-                "DROP INDEX IF EXISTS idx_agent_conversation_turns_conversation;
-                 DROP INDEX IF EXISTS idx_agent_conversations_project_updated;
-                 DROP TABLE agent_conversation_turns;
-                 DROP TABLE agent_conversations;
-                 DROP TABLE plugin_permission_events;
-                 DROP TABLE plugin_permission_grants;
-                 DROP TABLE plugin_permission_requests;",
-            )
-            .unwrap();
-        set_schema_version(&connection, 11).unwrap();
-    }
-
-    #[test]
-    fn migrates_v11_agent_turns_into_read_only_project_conversations() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v11_fixture(&database);
-
-        let mut store = Store::open(&database).unwrap();
-        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
-        assert_eq!(store.migration_outcome().from_schema_version, Some(11));
-        assert_eq!(
-            store.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert!(
-            store
-                .migration_outcome()
-                .backup_path
-                .as_deref()
-                .unwrap()
-                .ends_with("rho.sqlite.schema-v11.bak")
-        );
-
-        let conversations_a = store
-            .list_agent_conversations("D:/projects/A", None)
-            .unwrap();
-        assert_eq!(conversations_a.len(), 1);
-        let legacy_a = &conversations_a[0];
-        assert_eq!(legacy_a.title, "Legacy project history");
-        assert!(legacy_a.legacy_unthreaded);
-        assert_eq!(legacy_a.turn_count, 2);
-        assert_eq!(
-            store
-                .list_agent_turns_for_conversation(
-                    "D:/projects/A",
-                    &legacy_a.conversation_id,
-                    None,
-                )
-                .unwrap()
-                .len(),
-            2
-        );
-        assert_eq!(
-            store
-                .list_agent_conversations("D:/projects/B", None)
-                .unwrap()[0]
-                .turn_count,
-            1
-        );
-        let legacy_write = store
-            .create_agent_turn_in_conversation(
-                &legacy_a.conversation_id,
-                None,
-                &AgentTurnDraft {
-                    turn_id: "new_turn_in_legacy".to_string(),
-                    project_root: "D:/projects/A".to_string(),
-                    mode: "ask".to_string(),
-                    prompt: "Do not append".to_string(),
-                    model: "test".to_string(),
-                    workspace_id: "ws_test".to_string(),
-                    state_revision_before: 1,
-                    project_revision_before: 0,
-                },
-            )
-            .unwrap_err();
-        assert!(matches!(
-            legacy_write,
-            StoreError::Validation(message)
-                if message == "Legacy project history is read-only; start a new conversation"
-        ));
-        drop(store);
-
-        let reopened = Store::open(&database).unwrap();
-        assert_eq!(
-            reopened.migration_outcome(),
-            &MigrationOutcome::opened_current()
-        );
-    }
-
-    #[test]
-    fn rolls_back_v11_conversation_migration_after_injected_failure_and_recovers() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v11_fixture(&database);
-
-        let error = Store::open_with_options(
-            &database,
-            StoreOpenOptions {
-                inject_v11_failure_before_commit: true,
-                ..Default::default()
-            },
-        )
-        .unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(outcome.from_schema_version, Some(11));
-        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
-        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
-
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(11));
-        assert_eq!(
-            verification
-                .query_row("SELECT COUNT(*) FROM agent_turns", [], |row| {
-                    row.get::<_, i64>(0)
-                })
-                .unwrap(),
-            3
-        );
-        assert!(
-            verification
-                .prepare("SELECT * FROM agent_conversations")
-                .is_err()
-        );
-        drop(verification);
-
-        let recovered = Store::open(&database).unwrap();
-        assert_eq!(
-            recovered.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert_eq!(
-            recovered
-                .list_agent_conversations("D:/projects/A", None)
-                .unwrap()[0]
-                .turn_count,
-            2
-        );
-    }
-
-    #[test]
-    fn rejects_malformed_v11_agent_project_identity_without_advancing_schema() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v11_fixture(&database);
-        let connection = Connection::open(&database).unwrap();
-        connection
-            .execute_batch(
-                "PRAGMA ignore_check_constraints = ON;
-                 UPDATE agent_turns
-                 SET project_root = ''
-                 WHERE turn_id = 'legacy_turn_a1';
-                 PRAGMA ignore_check_constraints = OFF;",
-            )
-            .unwrap();
-        drop(connection);
-
-        let error = Store::open(&database).unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(outcome.from_schema_version, Some(11));
-        assert_eq!(
-            outcome.reason_code.as_deref(),
-            Some("malformed_v11_agent_identity")
-        );
-        assert_eq!(outcome.rejected_count, 1);
-        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
-
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(11));
-        assert!(
-            verification
-                .prepare("SELECT * FROM agent_conversations")
-                .is_err()
-        );
-        assert_eq!(
-            verification
+            let present: i64 = store
+                .connection
                 .query_row(
-                    "SELECT project_root FROM agent_turns WHERE turn_id = 'legacy_turn_a1'",
-                    [],
-                    |row| row.get::<_, String>(0),
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    [retired_table],
+                    |row| row.get(0),
                 )
-                .unwrap(),
-            ""
-        );
-    }
-
-    fn create_v12_fixture(path: &Path) {
-        let store = Store::open(path).unwrap();
+                .unwrap();
+            assert_eq!(present, 0, "retired table survived: {retired_table}");
+        }
         drop(store);
-        let connection = Connection::open(path).unwrap();
-        drop_runtime_output_schema(&connection);
-        connection
-            .execute_batch(
-                "DROP TABLE plugin_permission_events;
-                 DROP TABLE plugin_permission_grants;
-                 DROP TABLE plugin_permission_requests;
-                 DROP TABLE workspace_plugin_lifecycle_events;
-                 DROP TABLE workspace_plugin_transitions;
-                 DROP TABLE workspace_plugin_package_tombstones;
-                 DROP TABLE workspace_plugin_states;",
-            )
-            .unwrap();
-        set_schema_version(&connection, 12).unwrap();
+        assert_eq!(
+            Store::open(&database).unwrap().migration_outcome().status,
+            MigrationStatus::OpenedCurrent
+        );
     }
 
     #[test]
-    fn migrates_v12_to_v14_without_guessing_plugin_permissions_or_lifecycle() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v12_fixture(&database);
+    fn prior_or_unidentified_schema_requires_explicit_reset_without_rewrite() {
+        for stored_version in [Some(15_i64), None] {
+            let directory = TempDir::new().unwrap();
+            let database = directory.path().join("rho.sqlite");
+            let connection = Connection::open(&database).unwrap();
+            connection
+                .execute_batch("CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+                .unwrap();
+            if let Some(version) = stored_version {
+                connection
+                    .execute(
+                        "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)",
+                        [version.to_string()],
+                    )
+                    .unwrap();
+            }
+            drop(connection);
 
-        let store = Store::open(&database).unwrap();
-        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
-        assert_eq!(store.migration_outcome().from_schema_version, Some(12));
-        assert_eq!(
-            store.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert!(
-            store
-                .migration_outcome()
-                .backup_path
-                .as_deref()
-                .unwrap()
-                .ends_with("rho.sqlite.schema-v12.bak")
-        );
-        assert_plugin_permission_schema(&store.connection).unwrap();
-        assert_plugin_lifecycle_schema(&store.connection).unwrap();
-        for table in [
-            "plugin_permission_requests",
-            "plugin_permission_grants",
-            "plugin_permission_events",
-        ] {
-            let count: i64 = store
-                .connection
-                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
-                    row.get(0)
-                })
-                .unwrap();
-            assert_eq!(count, 0, "{table} must not backfill historical authority");
-        }
-        for table in [
-            "workspace_plugin_states",
-            "workspace_plugin_transitions",
-            "workspace_plugin_lifecycle_events",
-            "workspace_plugin_package_tombstones",
-        ] {
-            let count: i64 = store
-                .connection
-                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
-                    row.get(0)
-                })
-                .unwrap();
+            let error = Store::open(&database).unwrap_err();
+            let outcome = error.migration_outcome().unwrap();
+            assert_eq!(outcome.status, MigrationStatus::Rejected);
+            assert_eq!(outcome.from_schema_version, stored_version);
             assert_eq!(
-                count, 0,
-                "{table} must not infer historical lifecycle truth"
+                outcome.reason_code.as_deref(),
+                Some("store_schema_reset_required")
+            );
+            let connection = Connection::open(&database).unwrap();
+            assert_eq!(
+                migration::read_schema_version(&connection).unwrap(),
+                stored_version
             );
         }
-        drop(store);
-
-        let reopened = Store::open(&database).unwrap();
-        assert_eq!(
-            reopened.migration_outcome(),
-            &MigrationOutcome::opened_current()
-        );
-    }
-
-    #[test]
-    fn rolls_back_v12_plugin_permission_migration_and_recovers() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v12_fixture(&database);
-
-        let error = Store::open_with_options(
-            &database,
-            StoreOpenOptions {
-                inject_v12_failure_before_commit: true,
-                ..Default::default()
-            },
-        )
-        .unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(outcome.from_schema_version, Some(12));
-        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
-        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
-
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(12));
-        assert!(
-            verification
-                .prepare("SELECT * FROM plugin_permission_requests")
-                .is_err()
-        );
-        drop(verification);
-
-        let recovered = Store::open(&database).unwrap();
-        assert_eq!(
-            recovered.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert_plugin_permission_schema(&recovered.connection).unwrap();
-    }
-
-    fn create_v13_fixture(path: &Path) {
-        let mut store = Store::open(path).unwrap();
-        store
-            .create_plugin_permission_request(&PluginPermissionRequestDraft {
-                request_id: "request.v13".to_string(),
-                project_root: "D:/projects/A".to_string(),
-                plugin_id: "org.example.plugin".to_string(),
-                plugin_version: "1.0.0".to_string(),
-                package_digest: "a".repeat(64),
-                runtime_kind: "wasm".to_string(),
-                permission: "project.fs.read".to_string(),
-                constraints_json: r#"{"maxBytes":1024,"paths":["data/**/*.csv"]}"#.to_string(),
-                constraints_digest:
-                    "ab86c4e35fe429e9ffa6f7d21e5398744922cb5d1d8128f261cc5dbe8e3aed88".to_string(),
-                purpose_text: None,
-                expected_project_revision: 1,
-            })
-            .unwrap();
-        store
-            .connection
-            .execute_batch(
-                "DROP TABLE workspace_plugin_lifecycle_events;
-                 DROP TABLE workspace_plugin_transitions;
-                 DROP TABLE workspace_plugin_package_tombstones;
-                 DROP TABLE workspace_plugin_states;",
-            )
-            .unwrap();
-        drop_runtime_output_schema(&store.connection);
-        set_schema_version(&store.connection, 13).unwrap();
-    }
-
-    #[test]
-    fn migrates_v13_to_v14_without_inferring_lifecycle_from_permissions() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v13_fixture(&database);
-
-        let store = Store::open(&database).unwrap();
-        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
-        assert_eq!(store.migration_outcome().from_schema_version, Some(13));
-        assert_eq!(
-            store.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert!(
-            store
-                .migration_outcome()
-                .backup_path
-                .as_deref()
-                .unwrap()
-                .ends_with("rho.sqlite.schema-v13.bak")
-        );
-        assert_plugin_lifecycle_schema(&store.connection).unwrap();
-        assert_eq!(
-            store
-                .list_plugin_permission_requests("D:/projects/A", None, None)
-                .unwrap()
-                .len(),
-            1
-        );
-        assert!(
-            store
-                .list_workspace_plugin_states("D:/projects/A", None)
-                .unwrap()
-                .is_empty()
-        );
-        drop(store);
-        assert_eq!(
-            Store::open(&database).unwrap().migration_outcome(),
-            &MigrationOutcome::opened_current()
-        );
-    }
-
-    #[test]
-    fn rolls_back_v13_lifecycle_migration_and_recovers() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        create_v13_fixture(&database);
-
-        let error = Store::open_with_options(
-            &database,
-            StoreOpenOptions {
-                inject_v13_failure_before_commit: true,
-                ..Default::default()
-            },
-        )
-        .unwrap_err();
-        let outcome = error.migration_outcome().unwrap();
-        assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(outcome.from_schema_version, Some(13));
-        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
-        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
-
-        let verification = Connection::open(&database).unwrap();
-        assert_eq!(read_schema_version(&verification).unwrap(), Some(13));
-        assert!(
-            verification
-                .prepare("SELECT * FROM workspace_plugin_states")
-                .is_err()
-        );
-        assert_eq!(
-            verification
-                .query_row(
-                    "SELECT COUNT(*) FROM plugin_permission_requests",
-                    [],
-                    |row| { row.get::<_, i64>(0) }
-                )
-                .unwrap(),
-            1
-        );
-        drop(verification);
-
-        let recovered = Store::open(&database).unwrap();
-        assert_eq!(
-            recovered.migration_outcome().to_schema_version,
-            Some(SCHEMA_VERSION)
-        );
-        assert_plugin_lifecycle_schema(&recovered.connection).unwrap();
     }
 
     #[test]

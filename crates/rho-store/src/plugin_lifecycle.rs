@@ -1927,7 +1927,7 @@ fn ensure_tombstone_matches(
         Ok(())
     } else {
         Err(StoreError::Validation(
-            "tombstone ID already belongs to different package evidence".to_string(),
+            "tombstone ID already belongs to a different package identity".to_string(),
         ))
     }
 }

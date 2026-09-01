@@ -384,23 +384,6 @@ impl AgentRepository {
             })
             .await
     }
-
-    pub async fn interrupt_environment_operations(
-        &self,
-        turn_id: String,
-        reason: String,
-        terminal_outcome: String,
-    ) -> Result<usize, StoreExecutorError> {
-        self.executor
-            .call(move |connection| {
-                Store::borrowed(connection).interrupt_agent_environment_operations_with_outcome(
-                    &turn_id,
-                    &reason,
-                    &terminal_outcome,
-                )
-            })
-            .await
-    }
 }
 
 #[cfg(test)]

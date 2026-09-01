@@ -30,7 +30,7 @@ pub enum AuditSeverity {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct AuditEvidence {
+pub struct AuditReference {
     pub kind: String,
     pub path: Option<String>,
     pub line: Option<u32>,
@@ -48,7 +48,7 @@ pub struct AuditFinding {
     pub severity: AuditSeverity,
     pub category: String,
     pub summary: String,
-    pub evidence: Vec<AuditEvidence>,
+    pub references: Vec<AuditReference>,
     pub limitations: Vec<String>,
 }
 
@@ -573,7 +573,7 @@ where
 
         // --- Run rule checks -------------------------------------------
 
-        check_evidence(
+        check_authority_provenance(
             &runs,
             &artifacts,
             project_root,
@@ -714,7 +714,7 @@ pub fn audit_current_project_snapshot(
         .as_deref()
         .and_then(parse_lockfile_packages_content);
 
-    check_evidence(
+    check_authority_provenance(
         &runs,
         &artifacts,
         &snapshot.project_root,
@@ -850,10 +850,10 @@ fn push_finding(
     findings.push(finding);
 }
 
-// --- 2a. Evidence Completeness --------------------------------------------
+// --- 2a. Provenance Completeness --------------------------------------------
 
 #[allow(clippy::too_many_arguments)]
-fn check_evidence(
+fn check_authority_provenance(
     runs: &[crate::run::RunSummary],
     artifacts: &[crate::artifact::ArtifactRecordSummary],
     project_root: &str,
@@ -865,7 +865,7 @@ fn check_evidence(
     truncated: &mut bool,
 ) {
     for run in runs {
-        // evidence.run.env_snapshot_missing
+        // authority provenance: run environment snapshot missing
         if run.environment_snapshot_id.is_none() {
             push_finding(
                 findings,
@@ -873,12 +873,12 @@ fn check_evidence(
                 truncation_reasons,
                 truncated,
                 AuditFinding {
-                    rule_id: "rho.repro.v1.evidence.run.env_snapshot_missing".to_string(),
+                    rule_id: "rho.repro.v1.provenance.run.env_snapshot_missing".to_string(),
                     rule_version: 1,
                     severity: AuditSeverity::Warning,
-                    category: "evidence".to_string(),
+                    category: "provenance".to_string(),
                     summary: format!("Run {} has no environment snapshot recorded", run.run_id),
-                    evidence: vec![AuditEvidence {
+                    references: vec![AuditReference {
                         kind: "run_id".to_string(),
                         path: None,
                         line: None,
@@ -892,7 +892,7 @@ fn check_evidence(
             );
         }
 
-        // evidence.run.source_revision_missing
+        // authority provenance: run source revision missing
         if run.source_path.is_none() || run.document_version.is_none() {
             push_finding(
                 findings,
@@ -900,15 +900,15 @@ fn check_evidence(
                 truncation_reasons,
                 truncated,
                 AuditFinding {
-                    rule_id: "rho.repro.v1.evidence.run.source_revision_missing".to_string(),
+                    rule_id: "rho.repro.v1.provenance.run.source_revision_missing".to_string(),
                     rule_version: 1,
                     severity: AuditSeverity::Warning,
-                    category: "evidence".to_string(),
+                    category: "provenance".to_string(),
                     summary: format!(
                         "Run {} is missing source_path or document_version",
                         run.run_id
                     ),
-                    evidence: vec![AuditEvidence {
+                    references: vec![AuditReference {
                         kind: "run_id".to_string(),
                         path: None,
                         line: None,
@@ -924,7 +924,7 @@ fn check_evidence(
     }
 
     for artifact in artifacts {
-        // evidence.artifact.producing_run_missing
+        // authority provenance: artifact producing run missing
         if artifact.run_id.is_none() {
             push_finding(
                 findings,
@@ -932,15 +932,15 @@ fn check_evidence(
                 truncation_reasons,
                 truncated,
                 AuditFinding {
-                    rule_id: "rho.repro.v1.evidence.artifact.producing_run_missing".to_string(),
+                    rule_id: "rho.repro.v1.provenance.artifact.producing_run_missing".to_string(),
                     rule_version: 1,
                     severity: AuditSeverity::Error,
-                    category: "evidence".to_string(),
+                    category: "provenance".to_string(),
                     summary: format!(
                         "Artifact {} has no producing run recorded",
                         artifact.artifact_id
                     ),
-                    evidence: vec![AuditEvidence {
+                    references: vec![AuditReference {
                         kind: "artifact_id".to_string(),
                         path: Some(artifact.output_path.clone()),
                         line: None,
@@ -954,7 +954,7 @@ fn check_evidence(
             );
         }
 
-        // evidence.artifact.provenance_incomplete
+        // authority provenance: artifact projection incomplete
         if !artifact.provenance_complete {
             push_finding(
                 findings,
@@ -962,15 +962,15 @@ fn check_evidence(
                 truncation_reasons,
                 truncated,
                 AuditFinding {
-                    rule_id: "rho.repro.v1.evidence.artifact.provenance_incomplete".to_string(),
+                    rule_id: "rho.repro.v1.provenance.artifact.provenance_incomplete".to_string(),
                     rule_version: 1,
                     severity: AuditSeverity::Warning,
-                    category: "evidence".to_string(),
+                    category: "provenance".to_string(),
                     summary: format!(
                         "Artifact {} has incomplete provenance",
                         artifact.artifact_id
                     ),
-                    evidence: vec![AuditEvidence {
+                    references: vec![AuditReference {
                         kind: "artifact_id".to_string(),
                         path: Some(artifact.output_path.clone()),
                         line: None,
@@ -984,7 +984,7 @@ fn check_evidence(
             );
         }
 
-        // evidence.artifact.file_missing
+        // authority provenance: artifact file missing
         let full_path = Path::new(project_root).join(&artifact.output_path);
         if !full_path.exists() {
             push_finding(
@@ -993,15 +993,15 @@ fn check_evidence(
                 truncation_reasons,
                 truncated,
                 AuditFinding {
-                    rule_id: "rho.repro.v1.evidence.artifact.file_missing".to_string(),
+                    rule_id: "rho.repro.v1.provenance.artifact.file_missing".to_string(),
                     rule_version: 1,
                     severity: AuditSeverity::Error,
-                    category: "evidence".to_string(),
+                    category: "provenance".to_string(),
                     summary: format!(
                         "Output file for artifact {} does not exist on disk: {}",
                         artifact.artifact_id, artifact.output_path
                     ),
-                    evidence: vec![AuditEvidence {
+                    references: vec![AuditReference {
                         kind: "file_path".to_string(),
                         path: Some(artifact.output_path.clone()),
                         line: None,
@@ -1016,7 +1016,7 @@ fn check_evidence(
         }
     }
 
-    // evidence.env.snapshot_incomplete
+    // authority provenance: environment snapshot incomplete
     if let Some(snap) = reference_snapshot {
         if let Some(completeness) = snapshot_completeness(&snap.canonical_json)
             && completeness != "complete"
@@ -1027,15 +1027,15 @@ fn check_evidence(
                 truncation_reasons,
                 truncated,
                 AuditFinding {
-                    rule_id: "rho.repro.v1.evidence.env.snapshot_incomplete".to_string(),
+                    rule_id: "rho.repro.v1.provenance.env.snapshot_incomplete".to_string(),
                     rule_version: 1,
                     severity: AuditSeverity::Warning,
-                    category: "evidence".to_string(),
+                    category: "provenance".to_string(),
                     summary: format!(
                         "Environment snapshot {} reports completeness as '{}'",
                         snap.snapshot_id, completeness
                     ),
-                    evidence: vec![AuditEvidence {
+                    references: vec![AuditReference {
                         kind: "snapshot_id".to_string(),
                         path: None,
                         line: None,
@@ -1049,7 +1049,7 @@ fn check_evidence(
             );
         }
 
-        // evidence.env.lockfile_drift
+        // authority provenance: environment lockfile drift
         if snapshot_has_lockfile_drift(&snap.canonical_json) {
             push_finding(
                 findings,
@@ -1057,15 +1057,15 @@ fn check_evidence(
                 truncation_reasons,
                 truncated,
                 AuditFinding {
-                    rule_id: "rho.repro.v1.evidence.env.lockfile_drift".to_string(),
+                    rule_id: "rho.repro.v1.provenance.env.lockfile_drift".to_string(),
                     rule_version: 1,
                     severity: AuditSeverity::Warning,
-                    category: "evidence".to_string(),
+                    category: "provenance".to_string(),
                     summary: format!(
                         "Environment snapshot {} reports lockfile drift",
                         snap.snapshot_id
                     ),
-                    evidence: vec![AuditEvidence {
+                    references: vec![AuditReference {
                         kind: "snapshot_id".to_string(),
                         path: None,
                         line: None,
@@ -1080,7 +1080,7 @@ fn check_evidence(
         }
     }
 
-    // evidence.env.lockfile_missing
+    // authority provenance: environment lockfile missing
     if !lockfile_present {
         push_finding(
             findings,
@@ -1088,12 +1088,12 @@ fn check_evidence(
             truncation_reasons,
             truncated,
             AuditFinding {
-                rule_id: "rho.repro.v1.evidence.env.lockfile_missing".to_string(),
+                rule_id: "rho.repro.v1.provenance.env.lockfile_missing".to_string(),
                 rule_version: 1,
                 severity: AuditSeverity::Error,
-                category: "evidence".to_string(),
+                category: "provenance".to_string(),
                 summary: "No renv.lock found in project root".to_string(),
-                evidence: vec![AuditEvidence {
+                references: vec![AuditReference {
                     kind: "file_path".to_string(),
                     path: Some("renv.lock".to_string()),
                     line: None,
@@ -1141,7 +1141,7 @@ fn check_portability(
                             "Windows absolute path detected in {}:{}",
                             file.path, line_num
                         ),
-                        evidence: vec![AuditEvidence {
+                        references: vec![AuditReference {
                             kind: "source_range".to_string(),
                             path: Some(file.path.clone()),
                             line: Some(line_num),
@@ -1173,7 +1173,7 @@ fn check_portability(
                             "POSIX absolute path detected in {}:{}",
                             file.path, line_num
                         ),
-                        evidence: vec![AuditEvidence {
+                        references: vec![AuditReference {
                             kind: "source_range".to_string(),
                             path: Some(file.path.clone()),
                             line: Some(line_num),
@@ -1203,7 +1203,7 @@ fn check_portability(
                             "Home-relative path (~/) detected in {}:{}",
                             file.path, line_num
                         ),
-                        evidence: vec![AuditEvidence {
+                        references: vec![AuditReference {
                             kind: "source_range".to_string(),
                             path: Some(file.path.clone()),
                             line: Some(line_num),
@@ -1230,7 +1230,7 @@ fn check_portability(
                         severity: AuditSeverity::Warning,
                         category: "portability".to_string(),
                         summary: format!("setwd() call detected in {}:{}", file.path, line_num),
-                        evidence: vec![AuditEvidence {
+                        references: vec![AuditReference {
                             kind: "source_range".to_string(),
                             path: Some(file.path.clone()),
                             line: Some(line_num),
@@ -1306,7 +1306,7 @@ fn check_randomness(
                                 file.path,
                                 line_num
                             ),
-                            evidence: vec![AuditEvidence {
+                            references: vec![AuditReference {
                                 kind: "source_range".to_string(),
                                 path: Some(file.path.clone()),
                                 line: Some(line_num),
@@ -1329,7 +1329,7 @@ fn check_randomness(
     }
 }
 
-// --- 2d. Package Evidence -------------------------------------------------
+// --- 2d. Package References -------------------------------------------------
 
 fn check_packages(
     source_files: &[SourceFile],
@@ -1376,7 +1376,7 @@ fn check_packages(
                             "Package '{}' used in source but not found in environment snapshot",
                             pkg_name
                         ),
-                        evidence: vec![AuditEvidence {
+                        references: vec![AuditReference {
                             kind: "source_range".to_string(),
                             path: None,
                             line: None,
@@ -1413,7 +1413,7 @@ fn check_packages(
                             "Package '{}' {} is installed but not in lockfile",
                             pkg.name, pkg.version
                         ),
-                        evidence: vec![AuditEvidence {
+                        references: vec![AuditReference {
                             kind: "snapshot_id".to_string(),
                             path: None,
                             line: None,
@@ -1447,7 +1447,7 @@ fn check_packages(
                             "Package '{}' {} is locked but not installed",
                             pkg.name, pkg.version
                         ),
-                        evidence: vec![AuditEvidence {
+                        references: vec![AuditReference {
                             kind: "file_path".to_string(),
                             path: Some("renv.lock".to_string()),
                             line: None,
@@ -1483,7 +1483,7 @@ fn check_packages(
                             "Package '{}' version drift: snapshot={}, lockfile={}",
                             sp.name, sp.version, lp.version
                         ),
-                        evidence: vec![AuditEvidence {
+                        references: vec![AuditReference {
                             kind: "snapshot_id".to_string(),
                             path: None,
                             line: None,
@@ -1529,7 +1529,7 @@ fn check_runs(
                     severity: AuditSeverity::Error,
                     category: "runs".to_string(),
                     summary: format!("Run {} failed", run.run_id),
-                    evidence: vec![AuditEvidence {
+                    references: vec![AuditReference {
                         kind: "run_id".to_string(),
                         path: None,
                         line: None,
@@ -1556,7 +1556,7 @@ fn check_runs(
                     severity: AuditSeverity::Warning,
                     category: "runs".to_string(),
                     summary: format!("Run {} was cancelled", run.run_id),
-                    evidence: vec![AuditEvidence {
+                    references: vec![AuditReference {
                         kind: "run_id".to_string(),
                         path: None,
                         line: None,
@@ -1583,7 +1583,7 @@ fn check_runs(
                     severity: AuditSeverity::Warning,
                     category: "runs".to_string(),
                     summary: format!("Run {} was interrupted", run.run_id),
-                    evidence: vec![AuditEvidence {
+                    references: vec![AuditReference {
                         kind: "run_id".to_string(),
                         path: None,
                         line: None,
@@ -1623,7 +1623,7 @@ fn check_runs(
                             "Artifact {} from run {} that did not complete successfully",
                             artifact.artifact_id, run_id
                         ),
-                        evidence: vec![AuditEvidence {
+                        references: vec![AuditReference {
                             kind: "artifact_id".to_string(),
                             path: Some(artifact.output_path.clone()),
                             line: None,
@@ -1869,7 +1869,7 @@ mod tests {
     }
 
     #[test]
-    fn evidence_completeness_rules() {
+    fn authority_provenance_completeness_rules() {
         let dir = TempDir::new().unwrap();
         let project_root = dir.path().to_str().unwrap();
         let database = dir.path().join("test.sqlite");
@@ -1891,18 +1891,18 @@ mod tests {
         let response =
             store.audit_reproducibility(AuditScope::Project, project_root, None, &limits);
 
-        let evidence_ids: Vec<&str> = response
+        let provenance_rule_ids: Vec<&str> = response
             .findings
             .iter()
             .map(|f| f.rule_id.as_str())
             .collect();
 
         assert!(
-            evidence_ids.contains(&"rho.repro.v1.evidence.run.env_snapshot_missing"),
+            provenance_rule_ids.contains(&"rho.repro.v1.provenance.run.env_snapshot_missing"),
             "should flag missing env snapshot"
         );
         assert!(
-            evidence_ids.contains(&"rho.repro.v1.evidence.run.source_revision_missing"),
+            provenance_rule_ids.contains(&"rho.repro.v1.provenance.run.source_revision_missing"),
             "should flag missing source revision"
         );
 
@@ -1921,7 +1921,7 @@ mod tests {
             response
                 .findings
                 .iter()
-                .any(|f| f.rule_id == "rho.repro.v1.evidence.artifact.producing_run_missing"),
+                .any(|f| f.rule_id == "rho.repro.v1.provenance.artifact.producing_run_missing"),
             "should flag artifact with no producing run"
         );
 
@@ -1940,7 +1940,7 @@ mod tests {
             response
                 .findings
                 .iter()
-                .any(|f| f.rule_id == "rho.repro.v1.evidence.artifact.provenance_incomplete"),
+                .any(|f| f.rule_id == "rho.repro.v1.provenance.artifact.provenance_incomplete"),
             "should flag incomplete provenance"
         );
 
@@ -1949,7 +1949,7 @@ mod tests {
             response
                 .findings
                 .iter()
-                .any(|f| f.rule_id == "rho.repro.v1.evidence.env.lockfile_missing"),
+                .any(|f| f.rule_id == "rho.repro.v1.provenance.env.lockfile_missing"),
             "should flag missing lockfile"
         );
     }
@@ -2040,7 +2040,7 @@ mod tests {
     }
 
     #[test]
-    fn package_evidence_unmatched_package() {
+    fn package_provenance_unmatched_package() {
         let dir = TempDir::new().unwrap();
         let project_root = dir.path().to_str().unwrap();
         let db_path = dir.path().join("test.sqlite");
@@ -2402,7 +2402,7 @@ mod tests {
         let file_missing = response
             .findings
             .iter()
-            .find(|f| f.rule_id == "rho.repro.v1.evidence.artifact.file_missing");
+            .find(|f| f.rule_id == "rho.repro.v1.provenance.artifact.file_missing");
         assert!(
             file_missing.is_some(),
             "should flag artifact with missing output file"
@@ -2769,10 +2769,9 @@ mod tests {
                 .any(|finding| { finding.rule_id == "rho.repro.v1.portability.setwd.literal" })
         );
         assert!(
-            !first
-                .findings
-                .iter()
-                .any(|finding| { finding.rule_id == "rho.repro.v1.evidence.env.lockfile_missing" })
+            !first.findings.iter().any(|finding| {
+                finding.rule_id == "rho.repro.v1.provenance.env.lockfile_missing"
+            })
         );
 
         let live = capture_current_project_audit_snapshot(project_root, &AuditLimits::default());
@@ -2784,10 +2783,9 @@ mod tests {
                 .any(|finding| { finding.rule_id == "rho.repro.v1.portability.setwd.literal" })
         );
         assert!(
-            live_result
-                .findings
-                .iter()
-                .any(|finding| { finding.rule_id == "rho.repro.v1.evidence.env.lockfile_missing" })
+            live_result.findings.iter().any(|finding| {
+                finding.rule_id == "rho.repro.v1.provenance.env.lockfile_missing"
+            })
         );
     }
 }

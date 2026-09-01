@@ -5,7 +5,7 @@
 //! or internal transport fields are exposed.
 
 use rho_protocol::workbench::{
-    ApprovalSummary, EnvironmentEvidence, MAX_PAGE_SIZE, OutputSummary, ProblemSummary,
+    ApprovalSummary, EnvironmentReceipt, MAX_PAGE_SIZE, OutputSummary, ProblemSummary,
     ProjectSummary, ProvenanceLink, RunDetail, RunSummary, WORKBENCH_PROTOCOL_VERSION,
     WorkbenchCapabilities, WorkbenchPage, WorkbenchPageInfo, WorkspaceStatus,
 };
@@ -51,8 +51,8 @@ where
                 "problem_get".into(),
                 "output_list".into(),
                 "output_get".into(),
-                "environment_evidence_list".into(),
-                "environment_evidence_get".into(),
+                "environment_receipt_list".into(),
+                "environment_receipt_get".into(),
                 "approval_list".into(),
                 "approval_get".into(),
                 "provenance_get".into(),
@@ -64,7 +64,7 @@ where
                 "RunDetail".into(),
                 "ProblemSummary".into(),
                 "OutputSummary".into(),
-                "EnvironmentEvidence".into(),
+                "EnvironmentReceipt".into(),
                 "ApprovalSummary".into(),
                 "ProvenanceLink".into(),
             ],
@@ -568,12 +568,12 @@ where
         Ok(record)
     }
 
-    // ── Environment Evidence ─────────────────────────────────────────────────
+    // ── Environment Receipts ────────────────────────────────────────────────
 
-    fn map_env_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EnvironmentEvidence> {
-        Ok(EnvironmentEvidence {
-            evidence_id: row.get(0)?,
-            evidence_kind: row.get(1)?,
+    fn map_env_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EnvironmentReceipt> {
+        Ok(EnvironmentReceipt {
+            receipt_id: row.get(0)?,
+            receipt_kind: row.get(1)?,
             operation_name: row.get(2)?,
             operation_status: row.get(3)?,
             operation_decision: row.get(4)?,
@@ -581,23 +581,23 @@ where
         })
     }
 
-    /// Paginated list of environment evidence (snapshots + operation requests).
-    pub fn workbench_environment_evidence_list(
+    /// Paginated list of Authority environment receipts (snapshots + committed operations).
+    pub fn workbench_environment_receipt_list(
         &self,
         project_root: &str,
         after: Option<&str>,
         page_size: usize,
-    ) -> Result<WorkbenchPage<EnvironmentEvidence>, StoreError> {
+    ) -> Result<WorkbenchPage<EnvironmentReceipt>, StoreError> {
         let page_size = clamp_page_size(page_size);
 
-        // Cursor: "captured_at|evidence_kind|evidence_id" — compound cursor
+        // Cursor: "captured_at|receipt_kind|receipt_id" — compound cursor
         // with kind prefix to disambiguate across UNION ALL.
         let (cursor_clause, cursor_params): (&str, Vec<String>) = match after {
             Some(cursor) => {
                 let parts: Vec<&str> = cursor.splitn(3, '|').collect();
                 if parts.len() == 3 {
                     (
-                        "AND (captured_at < ?3 OR (captured_at = ?3 AND evidence_kind < ?4) OR (captured_at = ?3 AND evidence_kind = ?4 AND evidence_id < ?5))",
+                        "AND (captured_at < ?3 OR (captured_at = ?3 AND receipt_kind < ?4) OR (captured_at = ?3 AND receipt_kind = ?4 AND receipt_id < ?5))",
                         vec![
                             parts[0].to_string(),
                             parts[1].to_string(),
@@ -614,25 +614,25 @@ where
         };
 
         let sql = format!(
-            "SELECT snapshot_id AS evidence_id, 'snapshot' AS evidence_kind,
+            "SELECT snapshot_id AS receipt_id, 'snapshot' AS receipt_kind,
                     NULL AS operation_name, NULL AS operation_status,
                     NULL AS operation_decision, first_captured_at AS captured_at
              FROM environment_snapshots
              WHERE project_root = ?1 {}
              UNION ALL
-             SELECT request_id AS evidence_id, 'operation_request' AS evidence_kind,
-                    request_name AS operation_name, status AS operation_status,
-                    decision AS operation_decision, created_at AS captured_at
-             FROM environment_operation_requests
+             SELECT receipt_id AS receipt_id, 'operation_receipt' AS receipt_kind,
+                    plan_id AS operation_name, outcome AS operation_status,
+                    NULL AS operation_decision, recorded_at AS captured_at
+             FROM environment_operation_receipts
              WHERE project_root = ?1 {}
-             ORDER BY captured_at DESC, evidence_kind DESC, evidence_id DESC
+             ORDER BY captured_at DESC, receipt_kind DESC, receipt_id DESC
              LIMIT ?2",
             cursor_clause, cursor_clause
         );
 
         let mut statement = self.connection.prepare(&sql)?;
 
-        let rows: Vec<EnvironmentEvidence> = if cursor_params.len() == 3 {
+        let rows: Vec<EnvironmentReceipt> = if cursor_params.len() == 3 {
             statement
                 .query_map(
                     params![
@@ -654,15 +654,18 @@ where
         };
 
         let has_more = rows.len() > page_size;
-        let items: Vec<EnvironmentEvidence> = if has_more {
+        let items: Vec<EnvironmentReceipt> = if has_more {
             rows.into_iter().take(page_size).collect()
         } else {
             rows
         };
 
-        let after_cursor = items
-            .last()
-            .map(|e| format!("{}|{}|{}", e.captured_at, e.evidence_kind, e.evidence_id));
+        let after_cursor = items.last().map(|receipt| {
+            format!(
+                "{}|{}|{}",
+                receipt.captured_at, receipt.receipt_kind, receipt.receipt_id
+            )
+        });
 
         Ok(WorkbenchPage {
             items,
@@ -676,12 +679,12 @@ where
         })
     }
 
-    /// Get a single environment evidence record.
-    pub fn workbench_environment_evidence_get(
+    /// Get a single environment receipt.
+    pub fn workbench_environment_receipt_get(
         &self,
         project_root: &str,
-        evidence_id: &str,
-    ) -> Result<Option<EnvironmentEvidence>, StoreError> {
+        receipt_id: &str,
+    ) -> Result<Option<EnvironmentReceipt>, StoreError> {
         // Try snapshots first.
         let snapshot = self
             .connection
@@ -689,11 +692,11 @@ where
                 "SELECT snapshot_id, first_captured_at
                  FROM environment_snapshots
                  WHERE project_root = ?1 AND snapshot_id = ?2",
-                params![project_root, evidence_id],
+                params![project_root, receipt_id],
                 |row| {
-                    Ok(EnvironmentEvidence {
-                        evidence_id: row.get(0)?,
-                        evidence_kind: "snapshot".into(),
+                    Ok(EnvironmentReceipt {
+                        receipt_id: row.get(0)?,
+                        receipt_kind: "snapshot".into(),
                         operation_name: None,
                         operation_status: None,
                         operation_decision: None,
@@ -707,18 +710,18 @@ where
             return Ok(snapshot);
         }
 
-        // Try operation requests.
+        // Try canonical operation receipts.
         let op = self
             .connection
             .query_row(
-                "SELECT request_id, request_name, status, decision, created_at
-                 FROM environment_operation_requests
-                 WHERE project_root = ?1 AND request_id = ?2",
-                params![project_root, evidence_id],
+                "SELECT receipt_id, plan_id, outcome, NULL, recorded_at
+                 FROM environment_operation_receipts
+                 WHERE project_root = ?1 AND receipt_id = ?2",
+                params![project_root, receipt_id],
                 |row| {
-                    Ok(EnvironmentEvidence {
-                        evidence_id: row.get(0)?,
-                        evidence_kind: "operation_request".into(),
+                    Ok(EnvironmentReceipt {
+                        receipt_id: row.get(0)?,
+                        receipt_kind: "operation_receipt".into(),
                         operation_name: Some(row.get(1)?),
                         operation_status: Some(row.get(2)?),
                         operation_decision: row.get(3)?,
