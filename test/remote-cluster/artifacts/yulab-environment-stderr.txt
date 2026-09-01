@@ -1,0 +1,9 @@
+* installing *source* package ‘rhoenvaccept’ ...
+** this is package ‘rhoenvaccept’ version ‘0.0.1’
+** using staged installation
+** R
+** byte-compile and prepare package for lazy loading
+** help
+*** installing help indices
+** building package indices
+* DONE (rhoenvaccept)

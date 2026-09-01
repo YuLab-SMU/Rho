@@ -1,197 +1,84 @@
 {
-  "schema": "rho.remote-cluster.acceptance.v1",
+  "schema": "rho.remote-cluster.environment-acceptance.v2",
   "profile": "yulab",
   "result": "pass",
-  "remote_root": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7",
-  "ssh_sessions": 2,
-  "runner_digest": "sha256:3e5da233664acc195e22841b5cb3ed80751693f8c39609e6fdc6bad0b6044a1b",
-  "runner_version": "rho-runner 0.4.1-dev.22 protocol=1",
-  "slurm_version": "slurm 19.05.2",
-  "cluster": "cluster",
-  "scenarios": [
-    {
-      "id": "normal",
-      "jobId": "28655",
-      "operation_id": "operation_yulab_normal",
-      "execution_id": "execution_yulab_normal",
-      "spec_digest": "sha256:023dbcd2e1e2a859c4353f5a1530597a7ea17783c98e458fa6bb42433ffae662",
-      "spec_path": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/specs/normal.json",
-      "script_path": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/jobs/normal.sbatch",
-      "stdout": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/normal-28655.out",
-      "stderr": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/normal-28655.err",
-      "partition": "cpu_batch",
-      "gpu_count": 0,
-      "accounting": {
-        "job_id": "28655",
-        "state": "COMPLETED",
-        "exit_code": "0:0",
-        "elapsed": "00:00:00",
-        "node_list": "cnode01",
-        "account": "",
-        "partition": "",
-        "source": "sacct"
-      },
-      "expected_states": [
-        "COMPLETED"
-      ],
-      "passed": true
-    },
-    {
-      "id": "failure",
-      "jobId": "28656",
-      "operation_id": "operation_yulab_failure",
-      "execution_id": "execution_yulab_failure",
-      "spec_digest": "sha256:95c485c58cc6892e85d212eb9eb3c18d8ac352b7f4ef98f60f69e5c8b3e3bba2",
-      "spec_path": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/specs/failure.json",
-      "script_path": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/jobs/failure.sbatch",
-      "stdout": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/failure-28656.out",
-      "stderr": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/failure-28656.err",
-      "partition": "cpu_batch",
-      "gpu_count": 0,
-      "accounting": {
-        "job_id": "28656",
-        "state": "FAILED",
-        "exit_code": "1:0",
-        "elapsed": "00:00:00",
-        "node_list": "cnode01",
-        "account": "",
-        "partition": "cpu_batch",
-        "source": "sacct"
-      },
-      "expected_states": [
-        "FAILED"
-      ],
-      "passed": true
-    },
-    {
-      "id": "timeout",
-      "jobId": "28657",
-      "operation_id": "operation_yulab_timeout",
-      "execution_id": "execution_yulab_timeout",
-      "spec_digest": "sha256:23e67186b40d2a51183985a4de9835ecd17c5ff79004ed3c3ae951717c729260",
-      "spec_path": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/specs/timeout.json",
-      "script_path": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/jobs/timeout.sbatch",
-      "stdout": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/timeout-28657.out",
-      "stderr": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/timeout-28657.err",
-      "partition": "cpu_batch",
-      "gpu_count": 0,
-      "accounting": {
-        "job_id": "28657",
-        "state": "TIMEOUT",
-        "exit_code": "0:0",
-        "elapsed": "00:01:29",
-        "node_list": "cnode01",
-        "account": "",
-        "partition": "cpu_batch",
-        "source": "sacct"
-      },
-      "expected_states": [
-        "TIMEOUT",
-        "CANCELLED"
-      ],
-      "passed": true
-    },
-    {
-      "id": "gpu_numa",
-      "jobId": "28658",
-      "operation_id": "operation_yulab_gpu_numa",
-      "execution_id": "execution_yulab_gpu_numa",
-      "spec_digest": "sha256:685af2057ec1c4e1c2a3677204ba8c91a3e682eba6105e13d7d80156378c3fce",
-      "spec_path": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/specs/gpu_numa.json",
-      "script_path": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/jobs/gpu_numa.sbatch",
-      "stdout": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/gpu_numa-28658.out",
-      "stderr": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/gpu_numa-28658.err",
-      "partition": "gpu_batch",
-      "gpu_count": 1,
-      "accounting": {
-        "job_id": "28658",
-        "state": "COMPLETED",
-        "exit_code": "0:0",
-        "elapsed": "00:00:00",
-        "node_list": "gnode01",
-        "account": "",
-        "partition": "",
-        "source": "sacct"
-      },
-      "expected_states": [
-        "COMPLETED",
-        "CANCELLED"
-      ],
-      "passed": true
-    }
-  ],
-  "reconnect_job": {
-    "id": "disconnect_restart",
-    "jobId": "28659",
-    "operation_id": "operation_yulab_disconnect_restart",
-    "execution_id": "execution_yulab_disconnect_restart",
-    "spec_digest": "sha256:63e30b75d8b9ac5910a89137d55d638404af84606f4b8a243c4a2aba6ebc3e47",
-    "spec_path": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/specs/disconnect_restart.json",
-    "script_path": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/jobs/disconnect_restart.sbatch",
-    "stdout": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/disconnect_restart-28659.out",
-    "stderr": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/disconnect_restart-28659.err",
+  "captured_at": "2026-09-01T05:00:13Z",
+  "source_baseline": "main@56380569917b+rho-rebuild-working-tree",
+  "transport": "serverctl:YuLabServer",
+  "remote_root": "/biostack/home/yonghe/projects/rho-env14-00wo90",
+  "acceptance_script": {
+    "path": "test/remote-cluster/env14-yulab-acceptance.sh",
+    "sha256": "ae20e14fb919fa9e3a61f500fc6fa68848d855859554e5e48caeee0c499b07ee"
+  },
+  "login": {
+    "host": "master",
+    "slurm_version": "slurm 19.05.2",
+    "conda_version": "conda 26.1.1",
+    "lmod_version": "Modules Release 5.4.0 (2024-02-20)",
+    "apptainer_version": "1.3.2-1.el7",
+    "rscript_path": "/biostack/tools/devtools/R/4.5.2/bin/Rscript",
+    "system_rscript_on_path": false,
+    "storage": "10.0.4.210@tcp:/lustrefs|lustre|/biostack"
+  },
+  "job": {
+    "job_id": "28672",
+    "operation_id": "operation_env14_yulab_acceptance",
+    "state": "COMPLETED",
+    "exit_code": "0:0",
+    "elapsed": "00:00:10",
+    "compute_host": "cnode01",
+    "account": "yonghe",
     "partition": "cpu_batch",
-    "gpu_count": 0,
-    "state_before_reconnect_cancel": {
-      "job_id": "28659",
-      "state": "RUNNING",
-      "exit_code": "0:0",
-      "elapsed": "00:00:01",
-      "node_list": "cnode01",
-      "account": "",
-      "partition": "cpu_batch",
-      "source": "sacct"
-    },
-    "state_after_reconnect_cancel": {
-      "job_id": "28659",
-      "state": "CANCELLED by 1256",
-      "exit_code": "0:0",
-      "elapsed": "00:00:01",
-      "node_list": "cnode01",
-      "account": "",
-      "partition": "cpu_batch",
-      "source": "sacct"
-    },
-    "separate_ssh_session": true,
-    "desktop_restart_truth_preserved": true,
-    "runner_restart_version": "rho-runner 0.4.1-dev.22 protocol=1"
+    "submit_wait": "single sbatch --wait --parsable session",
+    "submit_count": 1,
+    "export_policy": "NIL"
   },
-  "output_artifacts": [
-    {
-      "id": "normal",
-      "stdout": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/normal-28655.out",
-      "stderr": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/normal-28655.err",
-      "stdout_digest": "sha256:37c0969c13e21d6590b82fca3428620773cbda17864c3654f7007d33e6c1ad03",
-      "stderr_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  "environment": {
+    "r_version": "4.5.2",
+    "package_archive_digest": "sha256:0c064edb736af69712deb1bb89e7a346a9843b6067bcb01cc44f94297a39f790",
+    "environment_manifest_digest": "sha256:880b2d3038ff73a8865ef570af531b227bcc257f4085845239554d67f54ccbd4",
+    "module_digest": "sha256:51ce859f2b2cd71138abb3300e01e16b4cd20fd3c5c72976ef07685a7086b306",
+    "conda_explicit_digest": "sha256:aec3de2da7c63188b8b267fbd6a8d549b95b3ae362191be1a74c350fb18fc7fc",
+    "library_digest": "sha256:377128d380cede5385e25ecad78e2da86ba84501c14e2b057dd53995e9e0383d",
+    "namespace_probe": "passed",
+    "offline_inputs_verified": true,
+    "network_policy_requested": "deny",
+    "network_enforcement": "proxy_environment_only"
+  },
+  "checks": {
+    "package_build_ran_on_compute_not_login": true,
+    "login_compute_module_digest_match": true,
+    "login_compute_conda_explicit_digest_match": true,
+    "login_compute_r_version_match": true,
+    "login_compute_storage_identity_match": true,
+    "source_archive_verified_before_install": true,
+    "namespace_load_verified_after_install": true,
+    "receipt_committed_by_atomic_rename": true,
+    "ack_wait_used_without_agent_polling": true,
+    "duplicate_submit_absent": true
+  },
+  "artifacts": {
+    "receipt": {
+      "path": "test/remote-cluster/artifacts/yulab-environment-receipt.json",
+      "sha256": "1946704e75ce6e0e2b49240ff54467dcc37bc76fbe5efe8f65a58e242d122234"
     },
-    {
-      "id": "failure",
-      "stdout": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/failure-28656.out",
-      "stderr": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/failure-28656.err",
-      "stdout_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stderr_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    "sacct": {
+      "path": "test/remote-cluster/artifacts/yulab-environment-sacct.txt",
+      "sha256": "ed041fff7d1e99923ab4d8b9e418062705288a03e460ca4ff0065b06d53b94a0"
     },
-    {
-      "id": "timeout",
-      "stdout": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/timeout-28657.out",
-      "stderr": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/timeout-28657.err",
-      "stdout_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stderr_digest": "sha256:a48b34b1b5f1220342899fdea6dec9f84a8ac60af88318e5588c8b41b92ed6ec"
+    "stdout": {
+      "path": "test/remote-cluster/artifacts/yulab-environment-stdout.txt",
+      "sha256": "4ccf49b23ab4de06ff04a0e53e3013d2099789350f16ad7c583dda84801732b5"
     },
-    {
-      "id": "gpu_numa",
-      "stdout": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/gpu_numa-28658.out",
-      "stderr": "/biostack/home/yonghe/.rho/acceptance/rho-rebuild-p7/logs/gpu_numa-28658.err",
-      "stdout_digest": "sha256:46d3d6e19300701f7efdf7cb39eadf7139ba3ed5282c21c9c3c86c5a9ec79d54",
-      "stderr_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    "stderr": {
+      "path": "test/remote-cluster/artifacts/yulab-environment-stderr.txt",
+      "sha256": "5006251c7d504664a8ddc6d0f5e1f2e23017509efd5b64dd691b972883d0a36b"
     }
-  ],
-  "downloaded_output_evidence": {
-    "normal": "cnode01",
-    "gpu_numa": "gnode01\nCUDA_VISIBLE_DEVICES=0\nNVIDIA A100-SXM4-80GB, GPU-1519c32a-2977-edba-222a-a01c0278fd08\nNVIDIA A100-SXM4-80GB, GPU-f12eaccd-8c93-8511-83b4-44df940deacf\nNVIDIA A100 80GB PCIe, GPU-03009fb2-dbf1-f2c0-82ff-5010c998d7fe\npolicy: default\npreferred node: current\nphyscpubind: 2 \ncpubind: 0 \nnodebind: 0 \nmembind: 0 1"
   },
-  "app_local_database": true,
-  "login_node_computation": false,
-  "secret_scope": "serverctl local credential; no key in command, report, or remote general env",
+  "limitations": [
+    "The real job used verified local inputs and proxy-based deny settings; it did not prove kernel-level network namespace enforcement on YuLab.",
+    "Kernel-level no-network behavior remains covered by local sandbox boundary tests, not claimed by this remote receipt.",
+    "This acceptance used the CPU partition; previous GPU/NUMA acceptance is superseded as current Environment completion evidence."
+  ],
   "errors": []
 }
