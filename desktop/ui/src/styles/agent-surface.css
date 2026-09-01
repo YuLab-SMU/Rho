@@ -80,6 +80,16 @@
   section.rho-agent-surface .rho-agent-current-work-header > span { flex: 0 0 auto; color: var(--rho-muted); font-size: var(--rho-text-caption); }
 
   /* --- Timeline: reading order and truthful state copy ----------------------- */
+  /* Separators stay full-bleed so turn boundaries read across the whole pane,
+     while the content inside them holds a measure: extra pane width becomes
+     gutter, not line length. */
+  section.rho-agent-surface .rho-agent-turn,
+  section.rho-agent-surface .rho-agent-current-work-header {
+    padding-inline: max(var(--rho-space-5), (100% - var(--rho-agent-measure)) / 2);
+  }
+  /* An idle conversation has one small block; center it in the pane instead of
+     stranding it above empty space. */
+  section.rho-agent-surface .rho-agent-timeline-idle { display: grid; align-content: safe center; }
   section.rho-agent-surface .rho-agent-loading { margin: 0; padding: var(--rho-space-2) var(--rho-space-1); color: var(--rho-muted); font-size: var(--rho-text-ui); }
 
   section.rho-agent-surface .rho-agent-section-label {
@@ -262,6 +272,9 @@
     background: var(--rho-panel);
   }
   section.rho-agent-surface .rho-agent-final-answer .rho-agent-answer { margin-top: var(--rho-space-2); }
+  /* Continuous prose reads tighter than the mixed content around it. */
+  section.rho-agent-surface .rho-agent-answer,
+  section.rho-agent-surface .rho-agent-goal .rho-agent-prompt { max-width: var(--rho-agent-prose); }
   section.rho-agent-surface .rho-agent-evidence-composition {
     margin-top: var(--rho-space-3);
     gap: var(--rho-space-3);

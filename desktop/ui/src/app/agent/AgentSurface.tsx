@@ -1303,7 +1303,7 @@ export function AgentSurface({
         />
       )}
       {displayMode !== "composer" && (
-        <div className="rho-agent-timeline" aria-busy={loading}>
+        <div className={`rho-agent-timeline${idleConversation ? " rho-agent-timeline-idle" : ""}`} aria-busy={loading}>
           {!idleConversation && <AgentCurrentWork prompt={activeTurn?.prompt_preview ?? null} turnCount={turns.length} />}
           {loading && <p className="rho-agent-loading">Loading conversation…</p>}
           {!loading && refreshError != null && <div className="rho-agent-empty" role="alert">
