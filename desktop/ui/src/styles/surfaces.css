@@ -161,6 +161,7 @@
 
   /* --- Project Navigator ------------------------------------------------------ */
   .rho-navigator {
+    container-type: inline-size;
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -180,7 +181,7 @@
   .rho-navigator-tabs {
     display: flex;
     flex: 1 1 auto;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     min-width: 0;
     align-content: flex-start;
     gap: var(--rho-space-4);
@@ -1183,6 +1184,7 @@
 
   /* --- Agent --------------------------------------------------------------------- */
   .rho-agent-surface {
+    container-type: inline-size;
     display: flex;
     min-width: 0;
     min-height: 0;
@@ -1407,7 +1409,7 @@
   .rho-agent-context-used > summary { cursor: pointer; color: var(--rho-ink); font-weight: var(--rho-weight-medium); }
 
   /* --- Domain panels -------------------------------------------------------------- */
-  .rho-domain-surface { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; background: var(--rho-panel); }
+  .rho-domain-surface { container-type: inline-size; display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; background: var(--rho-panel); }
   .rho-domain-toolbar { display: flex; align-items: center; gap: var(--rho-space-1); min-width: 0; padding: var(--rho-space-2) var(--rho-space-3); border-bottom: var(--rho-border); background: var(--rho-paper); }
   .rho-domain-toolbar > div { min-width: 0; flex: 1 1 auto; }
   .rho-domain-toolbar strong, .rho-domain-toolbar small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1848,6 +1850,16 @@
 
   /* --- Narrow-surface container queries ------------------------------------------------- */
   @container (max-width: 260px) {
+    .rho-navigator-controls { gap: var(--rho-space-1); padding-inline: 6px; }
+    .rho-navigator-tabs { gap: 0; }
+    .rho-navigator-tabs button { min-width: 0; padding-inline: var(--rho-space-1); }
+    .rho-navigator-search-toggle { width: var(--rho-control-small); height: var(--rho-control-small); }
+    .rho-domain-toolbar { align-items: stretch; flex-wrap: wrap; padding: var(--rho-space-2); }
+    .rho-domain-toolbar > div { flex-basis: 100%; }
+    .rho-domain-toolbar strong,
+    .rho-domain-toolbar small { white-space: normal; }
+    .rho-domain-records { padding: var(--rho-space-1); }
+    .rho-domain-record { grid-template-columns: auto minmax(0, 1fr); padding-inline: var(--rho-space-1); }
     .rho-resource-state, .rho-resource-stale, .rho-resource-dirty, .rho-file-reload { display: none; }
     .rho-surface-chrome { padding: var(--rho-space-2) var(--rho-space-3); }
     .rho-runtime-state { display: none; }

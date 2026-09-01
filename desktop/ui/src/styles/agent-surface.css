@@ -21,8 +21,8 @@
   section.rho-agent-surface .rho-agent-toolbar-action:hover:not(:disabled) { border-color: transparent; color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
   section.rho-agent-surface .rho-agent-toolbar-action:active:not(:disabled) { background: var(--rho-fill-2); }
   section.rho-agent-surface .rho-agent-toolbar-action[aria-expanded="true"] { color: var(--rho-ink); background: var(--rho-fill-2); }
-  section.rho-agent-surface .rho-agent-model-setup { display: flex; align-items: center; justify-content: space-between; gap: var(--rho-space-3); padding: var(--rho-space-2) var(--rho-space-3); border-bottom: var(--rho-border); border-left: 3px solid var(--rho-warn); background: var(--rho-warn-tint); }
-  section.rho-agent-surface .rho-agent-model-setup > div { display: grid; min-width: 0; gap: var(--rho-space-1); }
+  section.rho-agent-surface .rho-agent-model-setup { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--rho-space-3); padding: var(--rho-space-2) var(--rho-space-3); border-bottom: var(--rho-border); border-left: 3px solid var(--rho-warn); background: var(--rho-warn-tint); }
+  section.rho-agent-surface .rho-agent-model-setup > div { display: grid; min-width: 0; flex: 1 1 12rem; gap: var(--rho-space-1); }
   section.rho-agent-surface .rho-agent-model-setup strong { font-size: var(--rho-text-ui); }
   section.rho-agent-surface .rho-agent-model-setup span { color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
   section.rho-agent-surface .rho-agent-model-setup button { flex: 0 0 auto; min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); }
@@ -471,6 +471,14 @@
     section.rho-agent-surface .rho-agent-file-proposal .rho-agent-decision-actions { flex-basis: 100%; margin-left: 0; justify-content: flex-end; }
     section.rho-agent-surface .rho-agent-studio-presentation { grid-template-columns: minmax(0, 1fr) auto; }
     section.rho-agent-surface .rho-agent-studio-presentation button { grid-column: 1 / -1; justify-self: end; }
+  }
+  @container (max-width: 300px) {
+    section.rho-agent-surface .rho-agent-model-setup { align-items: stretch; }
+    section.rho-agent-surface .rho-agent-model-setup > div { flex-basis: 100%; }
+    section.rho-agent-surface .rho-agent-model-setup > button { width: 100%; }
+    section.rho-agent-surface .rho-agent-overview { padding: var(--rho-space-3); }
+    section.rho-agent-surface .rho-agent-environment-doctor { padding-inline: var(--rho-space-3); }
+    section.rho-agent-surface .rho-agent-current-work-header { padding-inline: var(--rho-space-3); }
   }
   @container (max-width: 620px) {
     section.rho-agent-surface .rho-agent-evidence-composition { grid-template-columns: minmax(0, 1fr); }
