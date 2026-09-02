@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod acceptance_bridge;
+mod acp_runtime;
 mod agent_llm;
 mod application_lifecycle;
 mod application_state;

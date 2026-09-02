@@ -7,6 +7,7 @@
 
 use std::{
     collections::BTreeMap,
+    ffi::OsStr,
     path::PathBuf,
     process::Stdio,
     sync::{Arc, Mutex as StdMutex},
@@ -27,6 +28,71 @@ mod transport;
 
 pub const MAX_ACP_EVENT_BYTES: usize = 128 * 1024;
 pub const MAX_ACP_STDERR_BYTES: usize = 16 * 1024;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DiscoveredAcpAgent {
+    pub executable: PathBuf,
+    pub arguments: Vec<String>,
+    pub display_name: String,
+    pub protocol: String,
+}
+
+pub fn discover_external_acp_agent(process_path: &OsStr) -> Option<DiscoveredAcpAgent> {
+    let requested = std::env::var("RHO_ACP_AGENT").ok();
+    let candidates = if let Some(requested) = requested {
+        vec![(requested, Vec::new(), "External ACP Agent".to_string())]
+    } else {
+        vec![
+            (
+                "claude-code-acp".to_string(),
+                Vec::new(),
+                "Claude Code ACP".to_string(),
+            ),
+            ("codex-acp".to_string(), Vec::new(), "Codex ACP".to_string()),
+            (
+                "opencode".to_string(),
+                vec!["acp".to_string(), "--pure".to_string()],
+                "OpenCode ACP".to_string(),
+            ),
+        ]
+    };
+    let directories = std::env::split_paths(process_path).collect::<Vec<_>>();
+    for (command, arguments, display_name) in candidates {
+        let requested = std::path::Path::new(&command);
+        if requested.is_absolute() && requested.is_file() {
+            return Some(DiscoveredAcpAgent {
+                executable: requested.canonicalize().ok()?,
+                arguments,
+                display_name,
+                protocol: "acp/1".to_string(),
+            });
+        }
+        for directory in &directories {
+            let candidate = directory.join(&command);
+            if candidate.is_file() {
+                return Some(DiscoveredAcpAgent {
+                    executable: candidate.canonicalize().ok()?,
+                    arguments,
+                    display_name,
+                    protocol: "acp/1".to_string(),
+                });
+            }
+            #[cfg(windows)]
+            {
+                let candidate = directory.join(format!("{command}.exe"));
+                if candidate.is_file() {
+                    return Some(DiscoveredAcpAgent {
+                        executable: candidate.canonicalize().ok()?,
+                        arguments,
+                        display_name,
+                        protocol: "acp/1".to_string(),
+                    });
+                }
+            }
+        }
+    }
+    None
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AcpClientBoundary {
@@ -83,12 +149,27 @@ impl VerifiedAcpSandbox {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AcpProcessSpec {
     pub executable: PathBuf,
     pub arguments: Vec<String>,
     pub environment: BTreeMap<String, String>,
     pub sandbox: VerifiedAcpSandbox,
+}
+
+impl std::fmt::Debug for AcpProcessSpec {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AcpProcessSpec")
+            .field("executable", &self.executable)
+            .field("arguments", &self.arguments)
+            .field(
+                "environment_keys",
+                &self.environment.keys().collect::<Vec<_>>(),
+            )
+            .field("sandbox", &self.sandbox)
+            .finish()
+    }
 }
 
 impl AcpProcessSpec {
@@ -97,11 +178,23 @@ impl AcpProcessSpec {
             self.executable.is_absolute() && self.executable.is_file(),
             "ACP Agent executable must be an existing absolute path"
         );
+        const ALLOWED_ENVIRONMENT: &[&str] = &[
+            "PATH",
+            "HOME",
+            "TMPDIR",
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "CODEX_API_KEY",
+            "SSL_CERT_FILE",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "NO_PROXY",
+        ];
         ensure!(
             self.environment
                 .keys()
-                .all(|key| !key.trim().is_empty() && !key.contains('=')),
-            "ACP Agent environment contains an invalid key"
+                .all(|key| ALLOWED_ENVIRONMENT.contains(&key.as_str())),
+            "ACP Agent environment contains a key outside the exact allowlist"
         );
         self.sandbox.validate()
     }
@@ -128,6 +221,8 @@ pub struct AcpTurnResult {
     pub permission_requests_denied: u64,
     pub stderr: String,
 }
+
+pub type AcpEventSink = Arc<dyn Fn(AcpClientEvent) + Send + Sync + 'static>;
 
 fn bounded_json<T: Serialize>(value: &T) -> Option<Value> {
     let encoded = serde_json::to_vec(value).ok()?;
@@ -168,6 +263,14 @@ fn project_notification(notification: SessionNotification) -> Option<AcpClientEv
 }
 
 pub async fn run_external_acp_turn(spec: AcpProcessSpec, prompt: String) -> Result<AcpTurnResult> {
+    run_external_acp_turn_with_sink(spec, prompt, None).await
+}
+
+pub async fn run_external_acp_turn_with_sink(
+    spec: AcpProcessSpec,
+    prompt: String,
+    live_sink: Option<AcpEventSink>,
+) -> Result<AcpTurnResult> {
     spec.validate()?;
     ensure!(!prompt.trim().is_empty(), "ACP prompt is empty");
 
@@ -218,7 +321,10 @@ pub async fn run_external_acp_turn(spec: AcpProcessSpec, prompt: String) -> Resu
                     event_sink
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .push(event);
+                        .push(event.clone());
+                    if let Some(sink) = live_sink.as_ref() {
+                        sink(event);
+                    }
                 }
                 Ok(())
             },

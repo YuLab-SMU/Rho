@@ -561,40 +561,41 @@ pub(crate) fn probe_value(stdout: &str, prefix: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-pub(crate) fn probe_agent_runtime(
-    rscript: &Path,
-    r_version: &str,
-    r_profile_user: Option<&Path>,
-    r_environ_user: Option<&Path>,
-) -> AgentRuntimeStatus {
-    let expression = agent_runtime_probe_expression();
-    let output = match run_r_probe(
-        rscript,
-        &expression,
-        Duration::from_secs(30),
-        RProbeStartup::UserProfile,
-        Some(RUserStartupFiles {
-            profile: r_profile_user,
-            environ: r_environ_user,
-        }),
-    ) {
-        Ok(output) => output,
-        Err(error) => {
-            return agent_runtime_status_from_probe(
-                ProbeProcessOutput {
-                    success: false,
-                    exit_code: None,
-                    stdout: String::new(),
-                    stderr: format!("Agent R check could not start: {error:#}"),
-                    elapsed_ms: 0,
-                    timed_out: false,
-                },
-                Some(rscript),
-                Some(r_version),
-            );
+pub(crate) fn probe_agent_runtime(process_path: &std::ffi::OsStr) -> AgentRuntimeStatus {
+    let discovered = rho_acp_client::discover_external_acp_agent(process_path);
+    let available = discovered.is_some();
+    let dependency = discovered.as_ref().map(|agent| AgentDependencyStatus {
+        package: agent.display_name.clone(),
+        status: "ready".to_string(),
+        installed_version: Some(agent.protocol.clone()),
+        required_version: "acp/1".to_string(),
+        resolved_path: Some(normalized_display_path(&agent.executable)),
+        detail: Some("External ACP Agent executable discovered.".to_string()),
+        remediation: None,
+    });
+    AgentRuntimeStatus {
+        available,
+        status: if available {
+            "ready"
+        } else {
+            "needs_attention"
         }
-    };
-    agent_runtime_status_from_probe(output, Some(rscript), Some(r_version))
+        .to_string(),
+        rscript: None,
+        r_version: None,
+        aisdk_version: None,
+        provider_adapters_available: available,
+        provider_health: if available {
+            "external_acp_ready"
+        } else {
+            "external_acp_unavailable"
+        }
+        .to_string(),
+        dependencies: dependency.into_iter().collect(),
+        error: (!available).then(|| {
+            "Install claude-code-acp, codex-acp, or an ACP-capable opencode executable.".to_string()
+        }),
+    }
 }
 
 pub(crate) fn agent_runtime_probe_expression() -> String {

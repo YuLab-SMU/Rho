@@ -3,11 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, ensure};
-use rho_extension_runtime::InternalExtensionRuntimeMode;
 use rho_server::coordinator::{
-    AgentContextPlanPreview, AgentExplicitContextItem, AgentPluginContributionAdapter,
-    AgentRuntimeAdapters, ApprovalResponseInput, WorkspaceSnapshotAdapter,
-    preview_agent_context_plan, run_agent_turn,
+    AgentContextPlanPreview, AgentExplicitContextItem, ApprovalResponseInput,
+    preview_external_acp_context_plan, run_external_acp_agent_turn,
 };
 #[cfg(test)]
 use rho_store::Store;
@@ -24,10 +22,9 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::application_state::{active_context, active_session, store_executor};
-use crate::commands::workspace::{ExtensionWorkspaceSnapshotAdapter, WorkspacePluginAgentAdapter};
 use crate::project::durable_project_root;
 use crate::startup_runtime::runtime_config;
-use crate::{AppState, agent_llm, display_error, runtime_registry, workspace_plugins};
+use crate::{AppState, display_error, runtime_registry, workspace_plugins};
 
 const MAX_CONCURRENT_AGENT_TURNS: usize = 2;
 
@@ -166,34 +163,11 @@ pub(crate) async fn agent_context_preview(
         return Err("Problem repair must use read-only Ask mode.".to_string());
     }
     let config = runtime_config(&state).map_err(display_error)?;
-    if !config.agent_runtime.available {
-        return Err(config
-            .agent_runtime
-            .error
-            .clone()
-            .unwrap_or_else(|| "aisdk is unavailable in Agent R".to_string()));
-    }
+    let _ = model_id;
     let requested_conversation_id = conversation_id.map(|value| value.trim().to_string());
     if requested_conversation_id.as_deref() == Some("") {
         return Err("Agent Conversation identity cannot be empty".to_string());
     }
-    let resolved_model = if task_kind == "problem_repair" {
-        agent_llm::resolve_model_for_task(
-            &config.data_dir,
-            &config.rscript,
-            model_id.as_deref(),
-            &mode,
-            &task_kind,
-        )
-    } else {
-        agent_llm::resolve_model_for_turn(
-            &config.data_dir,
-            &config.rscript,
-            model_id.as_deref(),
-            &mode,
-        )
-    }
-    .map_err(display_error)?;
     let explicit_context = resolve_agent_explicit_context(&state, runtime_output_context.as_ref())
         .await
         .map_err(display_error)?;
@@ -228,19 +202,16 @@ pub(crate) async fn agent_context_preview(
     } else {
         Vec::new()
     };
-    let mut runtime_profile = resolved_model.runtime_profile.clone();
-    runtime_profile.plugin_tools = plugin_projection.tools.clone();
     let conversation_digest_id = requested_conversation_id
         .as_deref()
         .unwrap_or("new_conversation");
-    let preview: AgentContextPlanPreview = preview_agent_context_plan(
+    let preview: AgentContextPlanPreview = preview_external_acp_context_plan(
         &prompt,
         &history,
         editor_context.as_ref().map(|context| &context.0),
         Some(&project_root),
         &plugin_projection.context,
         explicit_context.as_ref(),
-        &runtime_profile,
         conversation_digest_id,
     )
     .map_err(display_error)?;
@@ -251,9 +222,9 @@ pub(crate) async fn agent_context_preview(
         estimated_input_tokens: preview.estimated_input_tokens,
         capacity_source: preview.capacity_source,
         items: preview.items,
-        model_profile_id: runtime_profile.profile_id,
-        model_display_name: runtime_profile.model_display_name,
-        settings_revision: runtime_profile.settings_revision,
+        model_profile_id: "external.acp".to_string(),
+        model_display_name: "External ACP Agent".to_string(),
+        settings_revision: 1,
         conversation_id: requested_conversation_id,
         runtime_output_context,
     })
@@ -298,7 +269,7 @@ async fn start_agent_turn(
     mode: String,
     task_kind: Option<String>,
     model_id: Option<String>,
-    auto_approve: Option<bool>,
+    _auto_approve: Option<bool>,
     editor_context: Option<Value>,
     conversation_id: Option<String>,
     runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
@@ -322,13 +293,7 @@ async fn start_agent_turn(
         return Err("Problem repair must use read-only Ask mode.".to_string());
     }
     let config = runtime_config(state).map_err(display_error)?;
-    if !config.agent_runtime.available {
-        return Err(config
-            .agent_runtime
-            .error
-            .clone()
-            .unwrap_or_else(|| "aisdk is unavailable in Agent R".to_string()));
-    }
+    let _ = model_id;
     let requested_conversation_id = conversation_id.map(|value| value.trim().to_string());
     if requested_conversation_id.as_deref() == Some("") {
         return Err("Agent Conversation identity cannot be empty".to_string());
@@ -343,35 +308,15 @@ async fn start_agent_turn(
     {
         return Err(error.to_string());
     }
-    let session = active_session(state).await.map_err(display_error)?;
     let context = active_context(state).await.map_err(display_error)?;
     let turn_id = format!("agent_turn_{}", Uuid::new_v4());
-    let (resolved_model, credential_override) = if task_kind == "problem_repair" {
-        agent_llm::resolve_model_and_credential_for_task(
-            &config.data_dir,
-            &config.rscript,
-            config.r_environ_user.as_deref(),
-            model_id.as_deref(),
-            &mode,
-            &task_kind,
-        )
-    } else {
-        agent_llm::resolve_model_and_credential_for_turn(
-            &config.data_dir,
-            &config.rscript,
-            config.r_environ_user.as_deref(),
-            model_id.as_deref(),
-            &mode,
-        )
-    }
-    .map_err(display_error)?;
-    let auto_approve = task_kind == "agent_turn" && auto_approve.unwrap_or(false) && mode == "act";
+    let auto_approve = false;
+    let _ = auto_approve;
     let explicit_context = resolve_agent_explicit_context(state, runtime_output_context.as_ref())
         .await
         .map_err(display_error)?;
     let store_executor = store_executor(state).await.map_err(display_error)?;
     let agent_store = store_executor.agent_repository();
-    let mut agent_runtime_profile = resolved_model.runtime_profile.clone();
     let identity = context.identity();
     let plugin_snapshot = workspace_plugins::agent_plugin_projection_snapshot(
         Arc::clone(&state.plugin_permissions),
@@ -383,9 +328,15 @@ async fn start_agent_turn(
     .await
     .map_err(display_error)?;
     let project_root = plugin_snapshot.project_root;
-    let plugin_runtime_context = plugin_snapshot.runtime_context;
     let plugin_projection = plugin_snapshot.projection;
-    agent_runtime_profile.plugin_tools = plugin_projection.tools.clone();
+    let prepared_acp = crate::acp_runtime::prepare_acp_turn(
+        &config.data_dir,
+        &project_root,
+        identity.project_revision,
+        &config.process_path,
+    )
+    .map_err(display_error)?;
+    let provider_label = prepared_acp.provider_label.clone();
 
     if explicit_context.is_some() || context_plan_digest.is_some() {
         let digest_conversation_id = requested_conversation_id
@@ -404,14 +355,13 @@ async fn start_agent_turn(
         } else {
             Vec::new()
         };
-        let current_plan = preview_agent_context_plan(
+        let current_plan = preview_external_acp_context_plan(
             &prompt,
             &history,
             editor_context.as_ref(),
             Some(&project_root),
             &plugin_projection.context,
             explicit_context.as_ref(),
-            &agent_runtime_profile,
             digest_conversation_id,
         )
         .map_err(display_error)?;
@@ -430,7 +380,7 @@ async fn start_agent_turn(
         project_root: project_root.clone(),
         mode: mode.clone(),
         prompt: prompt.clone(),
-        model: resolved_model.effective_model_ref.clone(),
+        model: provider_label.clone(),
         workspace_id: identity.workspace_id.clone(),
         state_revision_before: identity.state_revision as i64,
         project_revision_before: identity.project_revision as i64,
@@ -481,13 +431,13 @@ async fn start_agent_turn(
                 "editor_context": editor_context.clone(),
                 "runtime_output_context": runtime_output_context,
                 "context_plan_digest": context_plan_digest.clone(),
-                "model_profile_id": resolved_model.runtime_profile.profile_id,
-                "model_display_name": resolved_model.model_display_name,
-                "provider_display_name": resolved_model.provider_display_name,
-                "effective_model": resolved_model.effective_model_ref,
-                "model_settings_revision": resolved_model.settings_revision,
-                "capability_route": resolved_model.route_capability,
-                "plugin_tool_count": plugin_projection.tools.len(),
+                "model_profile_id": "external.acp",
+                "model_display_name": "Agent selected",
+                "provider_display_name": provider_label,
+                "effective_model": "external-acp-session",
+                "model_settings_revision": 1,
+                "capability_route": "external.acp",
+                "plugin_tool_count": 0,
                 "plugin_context_count": plugin_projection.context.len()
             }))
             .map_err(display_error)?,
@@ -512,62 +462,25 @@ async fn start_agent_turn(
         return Err(display_error(error));
     }
 
-    let approvals = state.approvals.clone();
-    let workspace_lane = state.agent_workspace_lane.clone();
-    let rscript = config.rscript.clone();
-    let process_path = config.process_path.clone();
-    let agent_package = config.agent_package.clone();
     let task_turn_id = turn_id.clone();
     let task_conversation_id = conversation_id.clone();
     let task_agent_tasks = state.agent_tasks.clone();
-    let workspace_snapshot_adapter: Option<Arc<dyn WorkspaceSnapshotAdapter>> =
-        (state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate).then(|| {
-            Arc::new(ExtensionWorkspaceSnapshotAdapter::new(
-                Arc::clone(&state.extension_host),
-                Arc::clone(&context),
-            )) as Arc<dyn WorkspaceSnapshotAdapter>
-        });
-    let plugin_contribution_adapter: Option<Arc<dyn AgentPluginContributionAdapter>> =
-        (!agent_runtime_profile.plugin_tools.is_empty()).then(|| {
-            Arc::new(WorkspacePluginAgentAdapter::new(
-                Arc::clone(&state.plugin_permissions),
-                plugin_runtime_context,
-                store_executor.clone(),
-            )) as Arc<dyn AgentPluginContributionAdapter>
-        });
-    let runtime_profile = agent_runtime_profile;
-    let credential_environment_names = resolved_model.credential_environment_names.clone();
-    let task_mode = mode.clone();
+    let workspace_before = identity.as_ref().clone();
     let (registered_tx, registered_rx) = oneshot::channel();
     let task = tauri::async_runtime::spawn(async move {
         let _ = registered_rx.await;
-        let _ = run_agent_turn(
-            session.as_ref(),
-            context,
+        let _prepared_acp = prepared_acp;
+        let _ = run_external_acp_agent_turn(
             agent_store,
             project_root,
-            rscript,
-            Some(process_path),
-            agent_package,
-            resolved_model.effective_model_ref,
-            Some(runtime_profile),
-            None,
-            credential_environment_names,
-            credential_override,
+            _prepared_acp.process.clone(),
             prompt,
-            task_mode,
             task_turn_id.clone(),
             task_conversation_id,
-            workspace_lane,
-            approvals,
-            auto_approve,
+            workspace_before,
             editor_context,
             explicit_context,
             context_plan_digest,
-            AgentRuntimeAdapters {
-                workspace_snapshot: workspace_snapshot_adapter,
-                plugin_contribution: plugin_contribution_adapter,
-            },
             plugin_projection.context,
         )
         .await;

@@ -13,6 +13,7 @@ clap.workspace = true
 rand.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 rho-kernel = { path = "../rho-kernel" }
+rho-acp-client = { path = "../rho-acp-client" }
 rho-agent-transport = { path = "../rho-agent-transport" }
 rho-core = { path = "../rho-core" }
 rho-extension-runtime = { path = "../rho-extension-runtime" }

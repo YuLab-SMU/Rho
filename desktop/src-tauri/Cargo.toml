@@ -21,6 +21,7 @@ notify = "8.2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 rand.workspace = true
 rho-core = { path = "../../crates/rho-core" }
+rho-acp-client = { path = "../../crates/rho-acp-client" }
 rho-control-plane = { path = "../../crates/rho-control-plane" }
 rho-extension-runtime = { path = "../../crates/rho-extension-runtime" }
 rho-evidence-graph = { path = "../../crates/rho-evidence-graph" }
@@ -28,6 +29,7 @@ rho-environment = { path = "../../crates/rho-environment" }
 rho-kernel = { path = "../../crates/rho-kernel" }
 rho-protocol = { path = "../../crates/rho-protocol" }
 rho-server = { path = "../../crates/rho-server" }
+rho-sandbox = { path = "../../crates/rho-sandbox" }
 rho-store = { path = "../../crates/rho-store" }
 rho-ui-contract = { path = "../../crates/rho-ui-contract" }
 rho-workspace = { path = "../../crates/rho-workspace" }

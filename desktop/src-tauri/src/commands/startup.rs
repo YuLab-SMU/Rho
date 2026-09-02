@@ -92,20 +92,10 @@ pub(crate) async fn agent_runtime_retry(
     state: State<'_, AppState>,
 ) -> Result<AgentRuntimeStatusView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
-    let rscript = config.rscript.clone();
-    let r_version = config.r_version.clone();
-    let r_profile_user = config.r_profile_user.clone();
-    let r_environ_user = config.r_environ_user.clone();
-    let status = tauri::async_runtime::spawn_blocking(move || {
-        probe_agent_runtime(
-            &rscript,
-            &r_version,
-            r_profile_user.as_deref(),
-            r_environ_user.as_deref(),
-        )
-    })
-    .await
-    .map_err(display_error)?;
+    let process_path = config.process_path.clone();
+    let status = tauri::async_runtime::spawn_blocking(move || probe_agent_runtime(&process_path))
+        .await
+        .map_err(display_error)?;
     if let Ok(mut stored) = state.config.write()
         && let Some(config) = stored.as_mut()
     {

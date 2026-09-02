@@ -34,6 +34,7 @@ include!("coordinator/shared_types.rs");
 include!("coordinator/startup.rs");
 include!("coordinator/workspace_dispatch.rs");
 include!("coordinator/agent_context.rs");
+include!("coordinator/acp_execution.rs");
 include!("coordinator/agent_execution.rs");
 include!("coordinator/agent_authorization.rs");
 include!("coordinator/environment.rs");
