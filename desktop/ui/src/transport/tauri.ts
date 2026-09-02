@@ -12,8 +12,6 @@ import { createTauriAgentConversationTransport } from "./agent-conversation";
 import { createTauriAgentExecutionTransport } from "./agent-execution";
 import { createTauriAgentEventsTransport } from "./agent-events";
 import { createTauriAgentRuntimeTransport } from "./agent-runtime";
-import { createTauriAgentSettingsTransport } from "./agent-settings";
-import { createTauriAgentFileTransport } from "./agent-file";
 import { createTauriPluginSurfaceTransport } from "./plugin-surface";
 import {
   createTauriProjectCommands,
@@ -348,8 +346,6 @@ export function createTauriUiKernelTransport(
     ...createTauriAgentExecutionTransport(invoke),
     ...createTauriAgentEventsTransport(listen),
     ...agentRuntimeTransport,
-    ...createTauriAgentSettingsTransport(invoke),
-    ...createTauriAgentFileTransport(invoke),
     ...historyTransport,
     ...environmentTransport,
     ...authorityTransport,

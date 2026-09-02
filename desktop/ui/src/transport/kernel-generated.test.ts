@@ -31,7 +31,8 @@ describe("UI Kernel generated transport", () => {
         rscript: "/opt/R/bin/Rscript",
         r_version: "4.5.1",
         agent_available: true,
-        aisdk_version: null,
+        acp_agent: null,
+        acp_protocol: null,
       },
     } as const satisfies AppInfo;
     const transport = createTauriKernelTransport(

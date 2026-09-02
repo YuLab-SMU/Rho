@@ -22,7 +22,8 @@ struct AppRuntimeInfo {
     rscript: Option<String>,
     r_version: Option<String>,
     agent_available: Option<bool>,
-    aisdk_version: Option<String>,
+    acp_agent: Option<String>,
+    acp_protocol: Option<String>,
 }
 
 #[derive(Serialize, specta::Type)]
@@ -92,7 +93,10 @@ pub(crate) async fn app_info(state: State<'_, AppState>) -> Result<AppInfo, Stri
                 .map(|value| value.rscript.to_string_lossy().into_owned()),
             r_version: runtime.as_ref().map(|value| value.r_version.clone()),
             agent_available: runtime.as_ref().map(|value| value.agent_runtime.available),
-            aisdk_version: runtime.and_then(|value| value.agent_runtime.aisdk_version),
+            acp_agent: runtime
+                .as_ref()
+                .and_then(|value| value.agent_runtime.active_agent_label.clone()),
+            acp_protocol: runtime.and_then(|value| value.agent_runtime.protocol),
         },
     })
 }
@@ -292,13 +296,14 @@ mod tests {
                 rscript: Some("/fixture/Rscript".to_string()),
                 r_version: Some("4.5.1".to_string()),
                 agent_available: Some(true),
-                aisdk_version: None,
+                acp_agent: Some("claude-code-acp".to_string()),
+                acp_protocol: Some("acp/1".to_string()),
             },
         })
         .unwrap();
         assert_eq!(app["channel"], "development");
         assert_eq!(app["runtime"]["agent_available"], true);
-        assert!(app["runtime"]["aisdk_version"].is_null());
+        assert_eq!(app["runtime"]["acp_protocol"], "acp/1");
     }
 
     #[test]

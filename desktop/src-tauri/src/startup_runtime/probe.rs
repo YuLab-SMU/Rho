@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -22,7 +21,6 @@ pub(crate) fn prepare_runtime_files_with_rscript(
     std::fs::create_dir_all(&data_dir)?;
     let source_dir = data_dir.join("sources");
     let bridge_package = source_dir.join("rho.bridge");
-    let agent_package = source_dir.join("rho.agent");
     write_source(&bridge_package.join("R/state.R"), BRIDGE_STATE)?;
     write_source(&bridge_package.join("R/execute.R"), BRIDGE_EXECUTE)?;
     write_source(&bridge_package.join("R/workspace.R"), BRIDGE_WORKSPACE)?;
@@ -30,9 +28,6 @@ pub(crate) fn prepare_runtime_files_with_rscript(
     write_source(&bridge_package.join("R/lintr.R"), BRIDGE_LINTR)?;
     write_source(&bridge_package.join("R/targets.R"), BRIDGE_TARGETS)?;
     write_source(&bridge_package.join("R/formatting.R"), BRIDGE_FORMATTING)?;
-    write_source(&agent_package.join("R/aaa-state.R"), AGENT_STATE)?;
-    write_source(&agent_package.join("R/transport.R"), AGENT_TRANSPORT)?;
-    write_source(&agent_package.join("R/aisdk_adapter.R"), AGENT_ADAPTER)?;
 
     let rscript = locate_rscript(selected_rscript)?;
     let cached = load_runtime_cache(&data_dir, &rscript, &ark);
@@ -193,7 +188,6 @@ pub(crate) fn prepare_runtime_files_with_rscript(
         r_profile_user,
         r_environ_user,
         bridge_package,
-        agent_package,
         agent_runtime,
         store_path: data_dir.join("rho-desktop.sqlite"),
     })
@@ -564,14 +558,18 @@ pub(crate) fn probe_value(stdout: &str, prefix: &str) -> Option<String> {
 pub(crate) fn probe_agent_runtime(process_path: &std::ffi::OsStr) -> AgentRuntimeStatus {
     let discovered = rho_acp_client::discover_external_acp_agent(process_path);
     let available = discovered.is_some();
-    let dependency = discovered.as_ref().map(|agent| AgentDependencyStatus {
-        package: agent.display_name.clone(),
+    let candidate = discovered.as_ref().map(|agent| AcpAgentCandidateStatus {
+        agent_id: agent
+            .executable
+            .file_stem()
+            .and_then(std::ffi::OsStr::to_str)
+            .unwrap_or("external-acp")
+            .to_string(),
+        display_name: agent.display_name.clone(),
         status: "ready".to_string(),
-        installed_version: Some(agent.protocol.clone()),
-        required_version: "acp/1".to_string(),
-        resolved_path: Some(normalized_display_path(&agent.executable)),
+        protocol: Some(agent.protocol.clone()),
+        executable: Some(normalized_display_path(&agent.executable)),
         detail: Some("External ACP Agent executable discovered.".to_string()),
-        remediation: None,
     });
     AgentRuntimeStatus {
         available,
@@ -581,352 +579,14 @@ pub(crate) fn probe_agent_runtime(process_path: &std::ffi::OsStr) -> AgentRuntim
             "needs_attention"
         }
         .to_string(),
-        rscript: None,
-        r_version: None,
-        aisdk_version: None,
-        provider_adapters_available: available,
-        provider_health: if available {
-            "external_acp_ready"
-        } else {
-            "external_acp_unavailable"
-        }
-        .to_string(),
-        dependencies: dependency.into_iter().collect(),
+        active_agent_id: candidate.as_ref().map(|agent| agent.agent_id.clone()),
+        active_agent_label: candidate.as_ref().map(|agent| agent.display_name.clone()),
+        protocol: candidate.as_ref().and_then(|agent| agent.protocol.clone()),
+        executable: candidate.as_ref().and_then(|agent| agent.executable.clone()),
+        candidates: candidate.into_iter().collect(),
         error: (!available).then(|| {
             "Install claude-code-acp, codex-acp, or an ACP-capable opencode executable.".to_string()
         }),
-    }
-}
-
-pub(crate) fn agent_runtime_probe_expression() -> String {
-    format!(
-        r#"
-clean_field <- function(value) {{
-  value <- paste(as.character(value), collapse = " ")
-  value <- gsub("[\t\r\n|]+", " ", value)
-  substr(trimws(value), 1L, 1024L)
-}}
-
-emit_dependency <- function(name, status, installed, required, path, detail) {{
-  cat(
-    "__RHO_AGENT_DEP__",
-    clean_field(name),
-    clean_field(status),
-    clean_field(installed),
-    clean_field(required),
-    clean_field(path),
-    clean_field(detail),
-    "\n",
-    sep = "\t"
-  )
-}}
-
-probe_dependency <- function(name, required, required_exports) {{
-  path <- tryCatch(find.package(name, quiet = TRUE), error = function(error) "")
-  if (!length(path) || !nzchar(path[[1L]])) {{
-    emit_dependency(name, "missing", "", required, "", "Package is not installed in the selected R library paths.")
-    return("missing")
-  }}
-  path <- normalizePath(path[[1L]], winslash = "/", mustWork = FALSE)
-  version_result <- tryCatch(
-    as.character(utils::packageVersion(name)),
-    error = function(error) error
-  )
-  if (inherits(version_result, "error")) {{
-    emit_dependency(name, "namespace_load_failed", "", required, path, conditionMessage(version_result))
-    return("namespace_load_failed")
-  }}
-  installed <- as.character(version_result)
-  version_ready <- tryCatch(
-    base::package_version(installed) >= base::package_version(required),
-    error = function(error) FALSE
-  )
-  if (!isTRUE(version_ready)) {{
-    emit_dependency(name, "incompatible_version", installed, required, path, sprintf("Installed %s is below required %s.", installed, required))
-    return("incompatible_version")
-  }}
-  namespace_result <- tryCatch(loadNamespace(name), error = function(error) error)
-  if (inherits(namespace_result, "error")) {{
-    emit_dependency(name, "namespace_load_failed", installed, required, path, conditionMessage(namespace_result))
-    return("namespace_load_failed")
-  }}
-  missing_exports <- setdiff(required_exports, getNamespaceExports(name))
-  if (length(missing_exports)) {{
-    emit_dependency(name, "incompatible_api", installed, required, path, sprintf("Missing required APIs: %s.", paste(missing_exports, collapse = ", ")))
-    return("incompatible_api")
-  }}
-  emit_dependency(name, "ready", installed, required, path, "")
-  "ready"
-}}
-
-invisible(probe_dependency(
-  "aisdk",
-  "{MINIMUM_AGENT_AISDK_VERSION}",
-  c("normalize_capability_model_routes", "set_run_trace_sink")
-))
-invisible(probe_dependency(
-  "aisdk.providers",
-  "{MINIMUM_AGENT_AISDK_PROVIDERS_VERSION}",
-  c(
-    "create_deepseek", "create_moonshot", "create_kimi_code",
-    "create_stepfun", "create_volcengine", "create_aihubmix", "create_xai",
-    "create_openrouter", "create_bailian", "create_nvidia"
-  )
-))
-"#
-    )
-}
-
-pub(crate) fn agent_runtime_status_from_probe(
-    output: ProbeProcessOutput,
-    rscript: Option<&Path>,
-    r_version: Option<&str>,
-) -> AgentRuntimeStatus {
-    let mut dependencies = output
-        .stdout
-        .lines()
-        .filter_map(parse_agent_dependency_marker)
-        .fold(BTreeMap::new(), |mut packages, dependency| {
-            // Package startup code may write arbitrary stdout while its namespace loads.
-            // The probe-owned marker is emitted after load returns, so the final marker for
-            // each exact package is authoritative inside this short-lived process.
-            packages.insert(dependency.package.clone(), dependency);
-            packages
-        })
-        .into_values()
-        .collect::<Vec<_>>();
-    if !output.success {
-        return AgentRuntimeStatus {
-            available: false,
-            status: "probe_failed".to_string(),
-            rscript: rscript.map(normalized_display_path),
-            r_version: r_version.map(str::to_string),
-            aisdk_version: dependency_version(&dependencies, "aisdk"),
-            provider_adapters_available: false,
-            provider_health: "not_checked".to_string(),
-            dependencies: complete_probe_failed_dependencies(
-                dependencies,
-                &format!(
-                    "Agent dependency probe failed (exit_code={:?}, timed_out={}).",
-                    output.exit_code, output.timed_out
-                ),
-            ),
-            error: Some(format!(
-                "Agent dependency probe failed (exit_code={:?}, timed_out={}): {}",
-                output.exit_code,
-                output.timed_out,
-                bounded_diagnostic(&output.stderr)
-            )),
-        };
-    }
-    dependencies = complete_probe_failed_dependencies(
-        dependencies,
-        "Agent dependency probe returned no structured package result.",
-    );
-    let core = dependency_status(&dependencies, "aisdk");
-    let providers = dependency_status(&dependencies, "aisdk.providers");
-    let available = core.is_some_and(|dependency| dependency.status == "ready");
-    let provider_adapters_available =
-        providers.is_some_and(|dependency| dependency.status == "ready");
-    let status = if !available {
-        "needs_attention"
-    } else if !provider_adapters_available {
-        "degraded"
-    } else {
-        "ready"
-    };
-    let error = if !available {
-        core.map(agent_dependency_summary)
-            .or_else(|| Some("The core Agent dependency result is unavailable.".to_string()))
-    } else if !provider_adapters_available {
-        Some(
-            "Core Agent dependencies are ready, but reviewed Provider adapters need attention."
-                .to_string(),
-        )
-    } else {
-        None
-    };
-    AgentRuntimeStatus {
-        available,
-        status: status.to_string(),
-        rscript: rscript.map(normalized_display_path),
-        r_version: r_version.map(str::to_string),
-        aisdk_version: dependency_version(&dependencies, "aisdk"),
-        provider_adapters_available,
-        provider_health: if provider_adapters_available {
-            "dependency_ready".to_string()
-        } else {
-            "dependency_unavailable".to_string()
-        },
-        dependencies,
-        error,
-    }
-}
-
-pub(crate) fn parse_agent_dependency_marker(line: &str) -> Option<AgentDependencyStatus> {
-    let encoded = line.strip_prefix("__RHO_AGENT_DEP__\t")?;
-    let mut fields = encoded.splitn(6, '\t');
-    let package = fields.next()?.trim();
-    let status = fields.next()?.trim();
-    let installed_version = optional_agent_field(fields.next()?);
-    let required_version = bounded_agent_dependency_field(fields.next()?);
-    let resolved_path = optional_agent_field(fields.next()?);
-    let detail = optional_agent_field(fields.next()?);
-    if !matches!(package, "aisdk" | "aisdk.providers")
-        || !matches!(
-            status,
-            "ready"
-                | "missing"
-                | "incompatible_version"
-                | "namespace_load_failed"
-                | "incompatible_api"
-        )
-        || required_version.is_empty()
-    {
-        return None;
-    }
-    let mut dependency = AgentDependencyStatus {
-        package: package.to_string(),
-        status: status.to_string(),
-        installed_version,
-        required_version,
-        resolved_path,
-        detail,
-        remediation: None,
-    };
-    dependency.remediation = agent_dependency_remediation(&dependency);
-    Some(dependency)
-}
-
-pub(crate) fn optional_agent_field(value: &str) -> Option<String> {
-    let value = bounded_agent_dependency_field(value);
-    (!value.is_empty()).then_some(value)
-}
-
-pub(crate) fn bounded_agent_dependency_field(value: &str) -> String {
-    bounded_diagnostic(value).chars().take(1024).collect()
-}
-
-pub(crate) fn agent_dependency_remediation(dependency: &AgentDependencyStatus) -> Option<String> {
-    if dependency.status == "ready" || dependency.status == "checking" {
-        return None;
-    }
-    let message = match dependency.package.as_str() {
-        "aisdk" => match dependency.status.as_str() {
-            "missing" | "incompatible_version" => format!(
-                "Install the reviewed aisdk build for this Rho version. A CRAN-only install may remain below >= {}; for local development use remotes::install_github(\"{}\"), then retry the Agent dependency check.",
-                dependency.required_version, REVIEWED_AISDK_REMOTE
-            ),
-            "namespace_load_failed" => format!(
-                "Repair the reviewed aisdk package and its dependencies at the resolved library path, then retry. Local development source: {}.",
-                REVIEWED_AISDK_REMOTE
-            ),
-            "incompatible_api" => format!(
-                "Replace aisdk with the reviewed Rho revision {}, then retry the Agent dependency check.",
-                REVIEWED_AISDK_REMOTE
-            ),
-            _ => "Retry the Agent dependency check after repairing the selected R library."
-                .to_string(),
-        },
-        "aisdk.providers" => match dependency.status.as_str() {
-            "missing" | "incompatible_version" => format!(
-                "Install the reviewed Provider adapter package with remotes::install_github(\"{}\"), then retry. Provider credentials and network are checked separately in Model settings.",
-                REVIEWED_AISDK_PROVIDERS_REMOTE
-            ),
-            "namespace_load_failed" => format!(
-                "Repair the reviewed aisdk.providers package and its dependencies at the resolved library path. Local development source: {}. Provider credentials and network are checked separately.",
-                REVIEWED_AISDK_PROVIDERS_REMOTE
-            ),
-            "incompatible_api" => format!(
-                "Replace aisdk.providers with the reviewed Rho revision {}. Provider credentials and network are checked separately.",
-                REVIEWED_AISDK_PROVIDERS_REMOTE
-            ),
-            _ => "Retry after repairing the reviewed Provider adapter package.".to_string(),
-        },
-        _ => return None,
-    };
-    Some(bounded_agent_dependency_field(&message))
-}
-
-pub(crate) fn probe_failed_dependency(
-    package: &str,
-    required_version: &str,
-    detail: &str,
-) -> AgentDependencyStatus {
-    AgentDependencyStatus {
-        package: package.to_string(),
-        status: "probe_failed".to_string(),
-        installed_version: None,
-        required_version: required_version.to_string(),
-        resolved_path: None,
-        detail: Some(bounded_agent_dependency_field(detail)),
-        remediation: Some(
-            "Retry the Agent dependency check. Workspace R does not need to restart.".to_string(),
-        ),
-    }
-}
-
-pub(crate) fn complete_probe_failed_dependencies(
-    mut dependencies: Vec<AgentDependencyStatus>,
-    detail: &str,
-) -> Vec<AgentDependencyStatus> {
-    for (package, required) in [
-        ("aisdk", MINIMUM_AGENT_AISDK_VERSION),
-        ("aisdk.providers", MINIMUM_AGENT_AISDK_PROVIDERS_VERSION),
-    ] {
-        if dependencies
-            .iter()
-            .all(|dependency| dependency.package != package)
-        {
-            dependencies.push(probe_failed_dependency(package, required, detail));
-        }
-    }
-    dependencies.sort_by(|left, right| left.package.cmp(&right.package));
-    dependencies
-}
-
-pub(crate) fn dependency_status<'a>(
-    dependencies: &'a [AgentDependencyStatus],
-    package: &str,
-) -> Option<&'a AgentDependencyStatus> {
-    dependencies
-        .iter()
-        .find(|dependency| dependency.package == package)
-}
-
-pub(crate) fn dependency_version(
-    dependencies: &[AgentDependencyStatus],
-    package: &str,
-) -> Option<String> {
-    dependency_status(dependencies, package)
-        .and_then(|dependency| dependency.installed_version.clone())
-}
-
-pub(crate) fn agent_dependency_summary(dependency: &AgentDependencyStatus) -> String {
-    match dependency.status.as_str() {
-        "missing" => format!(
-            "{} is missing; required >= {}. Workspace R remains available.",
-            dependency.package, dependency.required_version
-        ),
-        "incompatible_version" => format!(
-            "{} {} is installed, but >= {} is required. Workspace R remains available.",
-            dependency.package,
-            dependency.installed_version.as_deref().unwrap_or("unknown"),
-            dependency.required_version
-        ),
-        "namespace_load_failed" => format!(
-            "{} is installed but its namespace could not load. Workspace R remains available.",
-            dependency.package
-        ),
-        "incompatible_api" => format!(
-            "{} is installed but does not provide the required Rho Agent API. Workspace R remains available.",
-            dependency.package
-        ),
-        "probe_failed" => {
-            "The Agent dependency check could not complete. Workspace R remains available."
-                .to_string()
-        }
-        _ => "Agent dependencies need attention. Workspace R remains available.".to_string(),
     }
 }
 

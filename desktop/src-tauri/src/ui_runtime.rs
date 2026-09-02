@@ -236,15 +236,11 @@ fn workspace_health(
 
 fn agent_dependency_detail(runtime: &AgentRuntimeStatus) -> Option<String> {
     let mut details = runtime
-        .dependencies
+        .candidates
         .iter()
-        .filter(|dependency| dependency.status != "ready")
-        .map(|dependency| {
-            let installed = dependency.installed_version.as_deref().unwrap_or("missing");
-            format!(
-                "{}: {} (installed {}, required {}).",
-                dependency.package, dependency.status, installed, dependency.required_version
-            )
+        .filter(|candidate| candidate.status != "ready")
+        .map(|candidate| {
+            format!("{}: {}.", candidate.display_name, candidate.status)
         })
         .collect::<Vec<_>>();
     if let Some(error) = &runtime.error {
@@ -270,23 +266,22 @@ fn agent_health(startup: &StartupView) -> UiHealthDetailV1 {
     if runtime.available {
         return UiHealthDetailV1 {
             state: HealthStateV1::Ready,
-            label: "Agent runtime ready".to_string(),
-            detail: runtime
-                .aisdk_version
-                .as_ref()
-                .map(|version| format!("aisdk {version}")),
+            label: "External Agent ready".to_string(),
+            detail: runtime.active_agent_label.as_ref().map(|label| {
+                format!("{label} · {}", runtime.protocol.as_deref().unwrap_or("ACP"))
+            }),
         };
     }
     if runtime.status == "checking" {
         return UiHealthDetailV1 {
             state: HealthStateV1::Restarting,
-            label: "Checking Agent dependencies".to_string(),
+            label: "Discovering external ACP Agents".to_string(),
             detail: agent_dependency_detail(runtime),
         };
     }
     UiHealthDetailV1 {
         state: HealthStateV1::Degraded,
-        label: "Agent runtime needs attention".to_string(),
+        label: "External ACP Agent needs attention".to_string(),
         detail: agent_dependency_detail(runtime),
     }
 }
@@ -349,13 +344,6 @@ async fn active_operations(state: &AppState, project_root: &str) -> Vec<ActiveOp
                 state: ActiveOperationStateV1::Running,
             });
         }
-    }
-    for (claim_id, claim) in state.agent_file_mutations.snapshot(project_root) {
-        operations.push(ActiveOperationV1 {
-            operation_id: operation_id("file", &claim_id),
-            label: operation_label("Agent file change", &claim.path),
-            state: active_state(&claim.status),
-        });
     }
     let approval_count = state.approvals.count().await;
     if approval_count > 0 {

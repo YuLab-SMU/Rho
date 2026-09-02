@@ -22,9 +22,6 @@ pub(crate) const BRIDGE_COMPLETION: &str = include_str!("../../../r/rho.bridge/R
 pub(crate) const BRIDGE_LINTR: &str = include_str!("../../../r/rho.bridge/R/lintr.R");
 pub(crate) const BRIDGE_TARGETS: &str = include_str!("../../../r/rho.bridge/R/targets.R");
 pub(crate) const BRIDGE_FORMATTING: &str = include_str!("../../../r/rho.bridge/R/formatting.R");
-pub(crate) const AGENT_STATE: &str = include_str!("../../../r/rho.agent/R/aaa-state.R");
-pub(crate) const AGENT_TRANSPORT: &str = include_str!("../../../r/rho.agent/R/transport.R");
-pub(crate) const AGENT_ADAPTER: &str = include_str!("../../../r/rho.agent/R/aisdk_adapter.R");
 #[derive(Clone)]
 pub(crate) struct RuntimeConfig {
     pub(crate) data_dir: PathBuf,
@@ -38,7 +35,6 @@ pub(crate) struct RuntimeConfig {
     pub(crate) r_profile_user: Option<PathBuf>,
     pub(crate) r_environ_user: Option<PathBuf>,
     pub(crate) bridge_package: PathBuf,
-    pub(crate) agent_package: PathBuf,
     pub(crate) agent_runtime: AgentRuntimeStatus,
     pub(crate) store_path: PathBuf,
 }
@@ -78,14 +74,13 @@ pub(crate) struct StartupView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-pub(crate) struct AgentDependencyStatus {
-    pub(crate) package: String,
+pub(crate) struct AcpAgentCandidateStatus {
+    pub(crate) agent_id: String,
+    pub(crate) display_name: String,
     pub(crate) status: String,
-    pub(crate) installed_version: Option<String>,
-    pub(crate) required_version: String,
-    pub(crate) resolved_path: Option<String>,
+    pub(crate) protocol: Option<String>,
+    pub(crate) executable: Option<String>,
     pub(crate) detail: Option<String>,
-    pub(crate) remediation: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, specta::Type)]
@@ -93,17 +88,12 @@ pub(crate) struct AgentRuntimeStatus {
     pub(crate) available: bool,
     #[serde(default = "default_agent_runtime_status")]
     pub(crate) status: String,
+    pub(crate) active_agent_id: Option<String>,
+    pub(crate) active_agent_label: Option<String>,
+    pub(crate) protocol: Option<String>,
+    pub(crate) executable: Option<String>,
     #[serde(default)]
-    pub(crate) rscript: Option<String>,
-    #[serde(default)]
-    pub(crate) r_version: Option<String>,
-    pub(crate) aisdk_version: Option<String>,
-    #[serde(default)]
-    pub(crate) provider_adapters_available: bool,
-    #[serde(default = "default_provider_health")]
-    pub(crate) provider_health: String,
-    #[serde(default)]
-    pub(crate) dependencies: Vec<AgentDependencyStatus>,
+    pub(crate) candidates: Vec<AcpAgentCandidateStatus>,
     pub(crate) error: Option<String>,
 }
 
@@ -111,12 +101,11 @@ pub(crate) struct AgentRuntimeStatus {
 pub(crate) struct AgentRuntimeStatusView {
     pub(crate) available: bool,
     pub(crate) status: String,
-    pub(crate) rscript: Option<String>,
-    pub(crate) r_version: Option<String>,
-    pub(crate) aisdk_version: Option<String>,
-    pub(crate) provider_adapters_available: bool,
-    pub(crate) provider_health: String,
-    pub(crate) dependencies: Vec<AgentDependencyStatus>,
+    pub(crate) active_agent_id: Option<String>,
+    pub(crate) active_agent_label: Option<String>,
+    pub(crate) protocol: Option<String>,
+    pub(crate) executable: Option<String>,
+    pub(crate) candidates: Vec<AcpAgentCandidateStatus>,
     pub(crate) error: Option<String>,
 }
 
@@ -125,12 +114,11 @@ impl From<AgentRuntimeStatus> for AgentRuntimeStatusView {
         Self {
             available: status.available,
             status: status.status,
-            rscript: status.rscript,
-            r_version: status.r_version,
-            aisdk_version: status.aisdk_version,
-            provider_adapters_available: status.provider_adapters_available,
-            provider_health: status.provider_health,
-            dependencies: status.dependencies,
+            active_agent_id: status.active_agent_id,
+            active_agent_label: status.active_agent_label,
+            protocol: status.protocol,
+            executable: status.executable,
+            candidates: status.candidates,
             error: status.error,
         }
     }
@@ -142,46 +130,23 @@ pub(crate) fn deferred_agent_runtime_status() -> AgentRuntimeStatus {
 }
 
 pub(crate) fn deferred_agent_runtime_status_for(
-    rscript: Option<&Path>,
-    r_version: Option<&str>,
+    _rscript: Option<&Path>,
+    _r_version: Option<&str>,
 ) -> AgentRuntimeStatus {
     AgentRuntimeStatus {
         available: false,
         status: "checking".to_string(),
-        rscript: rscript.map(normalized_display_path),
-        r_version: r_version.map(str::to_string),
-        aisdk_version: None,
-        provider_adapters_available: false,
-        provider_health: "not_checked".to_string(),
-        dependencies: vec![
-            checking_agent_dependency("aisdk", MINIMUM_AGENT_AISDK_VERSION),
-            checking_agent_dependency("aisdk.providers", MINIMUM_AGENT_AISDK_PROVIDERS_VERSION),
-        ],
+        active_agent_id: None,
+        active_agent_label: None,
+        protocol: None,
+        executable: None,
+        candidates: Vec::new(),
         error: Some("Agent runtime check is continuing in the background.".to_string()),
     }
 }
 
 pub(crate) fn default_agent_runtime_status() -> String {
     "needs_attention".to_string()
-}
-
-pub(crate) fn default_provider_health() -> String {
-    "not_checked".to_string()
-}
-
-pub(crate) fn checking_agent_dependency(
-    package: &str,
-    required_version: &str,
-) -> AgentDependencyStatus {
-    AgentDependencyStatus {
-        package: package.to_string(),
-        status: "checking".to_string(),
-        installed_version: None,
-        required_version: required_version.to_string(),
-        resolved_path: None,
-        detail: None,
-        remediation: None,
-    }
 }
 
 pub(crate) fn normalized_display_path(path: &Path) -> String {
@@ -201,13 +166,6 @@ pub(crate) struct RRuntimeProbe {
 }
 
 pub(crate) const RUNTIME_CACHE_VERSION: u32 = 2;
-pub(crate) const MINIMUM_AGENT_AISDK_VERSION: &str = "1.5.0";
-pub(crate) const MINIMUM_AGENT_AISDK_PROVIDERS_VERSION: &str = "0.1.0";
-pub(crate) const REVIEWED_AISDK_REMOTE: &str =
-    "YuLab-SMU/aisdk@1e2fa54358dda647a6d5cbf64c0625642c673e4c";
-pub(crate) const REVIEWED_AISDK_PROVIDERS_REMOTE: &str =
-    "YuLab-SMU/aisdk.providers@5cf315e5eedad7d83b224c96595da346e1192a85";
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct RuntimeFileSignature {
     pub(crate) path: String,

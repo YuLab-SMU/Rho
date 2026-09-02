@@ -16,9 +16,6 @@ use crate::application_state::{
     active_context, active_session, persist_workspace_identity, run_store_executor_service,
     store_executor,
 };
-use crate::commands::agent_files::{
-    AgentFileMutationRecoverySummary, recover_incomplete_agent_file_mutations,
-};
 use crate::commands::runtime_control::WorkspaceStatus;
 use crate::internal_extensions::{
     ensure_extension_project_scope, publish_extension_workspace_scope,
@@ -382,19 +379,6 @@ pub(crate) async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus>
     let project_root = state.project_root.read().await.clone();
     let normalized_project_root = normalize_project_root(project_root.to_string_lossy().as_ref());
     recover_workspace_store(&executor, normalized_project_root.clone()).await?;
-    let file_recovery =
-        recover_incomplete_agent_file_mutations(&executor, &project_root, &normalized_project_root)
-            .await
-            .context("recovering incomplete Agent file mutations after desktop restart")?;
-    if file_recovery != AgentFileMutationRecoverySummary::default() {
-        write_startup_event(json!({
-            "kind": "agent_file_mutation_recovery",
-            "project_root": normalized_project_root,
-            "recovered": file_recovery.recovered,
-            "not_applied": file_recovery.not_applied,
-            "uncertain": file_recovery.uncertain
-        }));
-    }
     let mut broker = BrokerState::new(format!("desktop_{}", Uuid::new_v4()));
     persist_workspace_identity(&executor, broker.identity().clone()).await?;
     bootstrap_bridge(

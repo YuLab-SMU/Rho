@@ -138,14 +138,14 @@ async function loadRepositorySnapshot() {
   const rootLicense = await read("LICENSE");
   const frontend = JSON.parse(await read("desktop/package.json"));
   const frontendLock = JSON.parse(await read("desktop/package-lock.json"));
-  const rPackagePaths = ["r/rho.bridge/DESCRIPTION", "r/rho.agent/DESCRIPTION"];
+  const rPackagePaths = ["r/rho.bridge/DESCRIPTION"];
   const rPackages = [];
   for (const relativePath of rPackagePaths) {
     const fields = parseDcf(await read(relativePath));
     rPackages.push({ name: fields.Package, license: fields.License, authors: fields["Authors@R"] });
   }
 
-  const packageLocalLicenseCandidates = ["r/rho.bridge/LICENSE", "r/rho.agent/LICENSE"];
+  const packageLocalLicenseCandidates = ["r/rho.bridge/LICENSE"];
   const vendorNoticePaths = [
     "vendor/jet/LICENSE",
     "desktop/legal/licenses/monaco/LICENSE",

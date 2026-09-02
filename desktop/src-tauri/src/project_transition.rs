@@ -13,9 +13,6 @@ use serde_json::json;
 use tauri::AppHandle;
 
 use crate::application_state::{active_context, active_session, store_executor};
-use crate::commands::agent_files::{
-    AgentFileMutationRecoverySummary, recover_incomplete_agent_file_mutations,
-};
 use crate::commands::render::render_job_is_terminal;
 use crate::internal_extensions::{
     RunHistoryBrokerFacade, build_extension_workspace_candidate, extension_project_scope_id,
@@ -580,19 +577,6 @@ pub(crate) async fn project_switch_blocker(
     }
     drop(agent_tasks);
 
-    if let Some((pending_count, claim)) = state.agent_file_mutations.blocker(&current_root) {
-        return Ok(Some(ProjectSwitchBlocker {
-            kind: ProjectSwitchBlockerKind::AgentFileMutation,
-            message: "Wait for the Agent file change to finish before switching projects."
-                .to_string(),
-            pending_count,
-            run_id: None,
-            turn_id: Some(claim.turn_id),
-            request_id: None,
-            operation_status: Some(format!("{}:{}", claim.status, claim.path)),
-        }));
-    }
-
     let waiting_approvals = &durable.waiting_approvals;
     if approval_count > 0 || !waiting_approvals.is_empty() {
         return Ok(Some(ProjectSwitchBlocker {
@@ -705,18 +689,6 @@ pub(crate) async fn sync_workspace_project_root(
         executor,
     )
     .await?;
-    let normalized_root = normalize_project_root(root.to_string_lossy().as_ref());
-    let file_recovery =
-        recover_incomplete_agent_file_mutations(executor, root, &normalized_root).await?;
-    if file_recovery != AgentFileMutationRecoverySummary::default() {
-        write_startup_event(json!({
-            "kind": "agent_file_mutation_recovery",
-            "project_root": normalized_root,
-            "recovered": file_recovery.recovered,
-            "not_applied": file_recovery.not_applied,
-            "uncertain": file_recovery.uncertain
-        }));
-    }
     Ok(())
 }
 

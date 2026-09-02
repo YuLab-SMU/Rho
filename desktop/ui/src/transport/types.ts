@@ -34,9 +34,7 @@ import type {
 } from "./agent-turn";
 import type { AgentExecutionTransport } from "./agent-execution";
 import type { AgentRuntimeTransport } from "./agent-runtime";
-import type { AgentSettingsTransport } from "./agent-settings";
 import type { AgentEventsTransport } from "./agent-events";
-import type { AgentFileTransport } from "./agent-file";
 import type { PluginSurfaceTransport } from "./plugin-surface";
 import type { ProjectTransport } from "./project";
 import type { KernelTransport } from "./kernel-generated";
@@ -195,34 +193,9 @@ export type {
 } from "./agent-execution";
 
 export type {
-  AgentDependencyDiagnostics,
   AgentRuntimeDiagnostics,
   AgentRuntimeTransport,
 } from "./agent-runtime";
-
-export type {
-  AgentContextCapacityRequest,
-  AgentLlmCredentialRevealView,
-  AgentLlmSettingsView,
-  AgentModelCapabilityDeclarationRequest,
-  AgentModelDiscoveryResponse,
-  AgentModelContextCapacity,
-  AgentModelProfile,
-  AgentSettingsTransport,
-} from "./agent-settings";
-export {
-  buildAddedModelProfile,
-  CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
-  CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
-  MODEL_CAPABILITY_NAMES,
-} from "./agent-settings";
-
-export type {
-  AgentFileApplyRequest,
-  AgentFileMutationResponse,
-  AgentFileTransport,
-  AgentFileUndoRequest,
-} from "./agent-file";
 
 export type {
   PluginSurfaceBlock,
@@ -397,7 +370,7 @@ export type WorkspacePreparationProgressListener = (
   snapshot: WorkspacePreparationProgress,
 ) => void;
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentEventsTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport, ProjectTransport, KernelTransport, CheckTransport, WorkbenchProjectionTransport, HistoryReadTransport, AuthorityReadTransport, EvidenceGraphTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentEventsTransport, AgentRuntimeTransport, PluginSurfaceTransport, ProjectTransport, KernelTransport, CheckTransport, WorkbenchProjectionTransport, HistoryReadTransport, AuthorityReadTransport, EvidenceGraphTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(
     chooseRscript?: boolean,

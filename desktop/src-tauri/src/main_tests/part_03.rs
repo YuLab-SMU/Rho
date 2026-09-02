@@ -1,591 +1,7 @@
-    #[test]
-    fn agent_file_write_failures_record_safe_or_uncertain_terminal_truth() {
-        let tempdir = TempDir::new().unwrap();
-        let project_root = tempdir.path().join("project-a");
-        std::fs::create_dir_all(&project_root).unwrap();
-        let project_root = project_root.canonicalize().unwrap();
-        let file = project_root.join("analysis.R");
-        std::fs::write(&file, "before\n").unwrap();
-        let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
-        let mut store = Store::open(tempdir.path().join("rho.sqlite")).unwrap();
-        store.set_project_root(Some(&normalized_root)).unwrap();
-        let proposal_event_id = add_agent_file_proposal(
-            &mut store,
-            &normalized_root,
-            "conversation-write-failure",
-            "turn-write-failure",
-            "analysis.R",
-            "append",
-            "after\n",
-            None,
-        );
 
-        add_agent_file_mutation_start(
-            &mut store,
-            "turn-write-failure",
-            "analysis.R",
-            proposal_event_id,
-            "mutation-safe-failure",
-            "before\n",
-            "before\nafter\n",
-        );
-        let injected = anyhow::anyhow!("injected atomic write failure");
-        let (safe_event, safe_error) = classify_agent_file_write_failure(
-            &project_root,
-            "turn-write-failure",
-            "analysis.R",
-            "append",
-            proposal_event_id,
-            "mutation-safe-failure",
-            "apply",
-            Some(&text_sha256("before\n")),
-            false,
-            &injected,
-        );
-        persist_agent_file_mutation_event_to_store(&mut store, safe_event).unwrap();
-        assert!(safe_error.to_string().contains("AGENT_FILE_WRITE_FAILED"));
 
-        add_agent_file_mutation_start(
-            &mut store,
-            "turn-write-failure",
-            "analysis.R",
-            proposal_event_id,
-            "mutation-uncertain-failure",
-            "before\n",
-            "before\nafter\n",
-        );
-        std::fs::write(&file, "different\n").unwrap();
-        let (uncertain_event, uncertain_error) = classify_agent_file_write_failure(
-            &project_root,
-            "turn-write-failure",
-            "analysis.R",
-            "append",
-            proposal_event_id,
-            "mutation-uncertain-failure",
-            "apply",
-            Some(&text_sha256("before\n")),
-            false,
-            &injected,
-        );
-        persist_agent_file_mutation_event_to_store(&mut store, uncertain_event).unwrap();
-        assert!(
-            uncertain_error
-                .to_string()
-                .contains("AGENT_FILE_OUTCOME_UNCERTAIN")
-        );
 
-        add_agent_file_mutation_start(
-            &mut store,
-            "turn-write-failure",
-            "analysis.R",
-            proposal_event_id,
-            "mutation-postwrite-failure",
-            "different\n",
-            "different\nafter\n",
-        );
-        let (postwrite_event, postwrite_error) = classify_agent_file_postwrite_failure(
-            "turn-write-failure",
-            "analysis.R",
-            "append",
-            proposal_event_id,
-            "mutation-postwrite-failure",
-            "apply",
-            &injected,
-        );
-        persist_agent_file_mutation_event_to_store(&mut store, postwrite_event).unwrap();
-        assert!(
-            postwrite_error
-                .to_string()
-                .contains("AGENT_FILE_OUTCOME_UNCERTAIN")
-        );
 
-        let detail = store
-            .get_agent_turn_detail(&normalized_root, "turn-write-failure")
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            detail
-                .events
-                .iter()
-                .filter(|event| event.event_type == "file_edit.mutation_failed")
-                .count(),
-            1
-        );
-        assert_eq!(
-            detail
-                .events
-                .iter()
-                .filter(|event| event.event_type == "file_edit.outcome_uncertain")
-                .count(),
-            2
-        );
-        let store_path = tempdir.path().join("rho.sqlite");
-        drop(store);
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        let executor = runtime.block_on(StoreExecutor::open(&store_path)).unwrap();
-        assert_eq!(
-            runtime
-                .block_on(recover_incomplete_agent_file_mutations(
-                    &executor,
-                    &project_root,
-                    &normalized_root,
-                ))
-                .unwrap(),
-            Default::default()
-        );
-    }
-
-    #[test]
-    fn agent_file_edit_uses_utf16_ranges_and_stale_undo_preserves_later_content() {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async {
-            let tempdir = TempDir::new().unwrap();
-            let project_root = tempdir.path().join("project-a");
-            std::fs::create_dir_all(&project_root).unwrap();
-            let project_root = project_root.canonicalize().unwrap();
-            let file = project_root.join("unicode.R");
-            let before = "a😀b";
-            std::fs::write(&file, before).unwrap();
-            let store_path = tempdir.path().join("rho.sqlite");
-            let mut store = Store::open(&store_path).unwrap();
-            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
-            store.set_project_root(Some(&normalized_root)).unwrap();
-            let event_id = add_agent_file_proposal(
-                &mut store,
-                &normalized_root,
-                "conversation-unicode",
-                "turn-unicode",
-                "unicode.R",
-                "replace_selection",
-                "替换",
-                Some(json!({
-                    "active_path": "unicode.R",
-                    "selection_start": 1,
-                    "selection_end": 3,
-                    "selection_text": "😀"
-                })),
-            );
-            let state = test_app_state(tempdir.path(), &project_root, &store_path);
-            install_test_context(&state, store).await;
-
-            let applied = apply_agent_file_edit_state(
-                AgentFileApplyRequest {
-                    turn_id: "turn-unicode".to_string(),
-                    proposal_event_id: event_id,
-                    path: "unicode.R".to_string(),
-                    expected_disk_sha256: Some(text_sha256(before)),
-                    before_content: before.to_string(),
-                },
-                &state,
-            )
-            .await
-            .unwrap();
-            assert_eq!(applied.content.as_deref(), Some("a替换b"));
-            assert_eq!((applied.start, applied.end), (1, 3));
-            let applied_digest = applied.after_sha256.unwrap();
-
-            let forged_undo = undo_agent_file_edit_state(
-                AgentFileUndoRequest {
-                    turn_id: "turn-unicode".to_string(),
-                    proposal_event_id: event_id,
-                    path: "unicode.R".to_string(),
-                    expected_after_sha256: applied_digest.clone(),
-                    before_content: "forged <- TRUE\n".to_string(),
-                    created: false,
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(
-                forged_undo.contains("durable pre-Apply editor snapshot"),
-                "{forged_undo}"
-            );
-            assert_eq!(std::fs::read_to_string(&file).unwrap(), "a替换b");
-
-            std::fs::write(&file, "later <- TRUE\n").unwrap();
-            let error = undo_agent_file_edit_state(
-                AgentFileUndoRequest {
-                    turn_id: "turn-unicode".to_string(),
-                    proposal_event_id: event_id,
-                    path: "unicode.R".to_string(),
-                    expected_after_sha256: applied_digest,
-                    before_content: before.to_string(),
-                    created: false,
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(error.contains("AGENT_FILE_RESOURCE_STALE"), "{error}");
-            assert_eq!(std::fs::read_to_string(&file).unwrap(), "later <- TRUE\n");
-        });
-    }
-
-    #[test]
-    fn agent_file_undo_restores_the_exact_unsaved_editor_snapshot() {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async {
-            let tempdir = TempDir::new().unwrap();
-            let project_root = tempdir.path().join("project-a");
-            std::fs::create_dir_all(&project_root).unwrap();
-            let project_root = project_root.canonicalize().unwrap();
-            let file = project_root.join("draft.R");
-            let disk_before = "value <- 1\n";
-            let editor_before = "value <- 1\nunsaved <- TRUE\n";
-            std::fs::write(&file, disk_before).unwrap();
-            let store_path = tempdir.path().join("rho.sqlite");
-            let mut store = Store::open(&store_path).unwrap();
-            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
-            store.set_project_root(Some(&normalized_root)).unwrap();
-            let event_id = add_agent_file_proposal(
-                &mut store,
-                &normalized_root,
-                "conversation-draft",
-                "turn-draft",
-                "draft.R",
-                "append",
-                "agent <- TRUE\n",
-                None,
-            );
-            let state = test_app_state(tempdir.path(), &project_root, &store_path);
-            install_test_context(&state, store).await;
-
-            let applied = apply_agent_file_edit_state(
-                AgentFileApplyRequest {
-                    turn_id: "turn-draft".to_string(),
-                    proposal_event_id: event_id,
-                    path: "draft.R".to_string(),
-                    expected_disk_sha256: Some(text_sha256(disk_before)),
-                    before_content: editor_before.to_string(),
-                },
-                &state,
-            )
-            .await
-            .unwrap();
-            assert_eq!(
-                applied.content.as_deref(),
-                Some("value <- 1\nunsaved <- TRUE\nagent <- TRUE\n")
-            );
-
-            let undone = undo_agent_file_edit_state(
-                AgentFileUndoRequest {
-                    turn_id: "turn-draft".to_string(),
-                    proposal_event_id: event_id,
-                    path: "draft.R".to_string(),
-                    expected_after_sha256: applied.after_sha256.unwrap(),
-                    before_content: editor_before.to_string(),
-                    created: false,
-                },
-                &state,
-            )
-            .await
-            .unwrap();
-            assert_eq!(undone.status, "undone");
-            assert_eq!(std::fs::read_to_string(&file).unwrap(), editor_before);
-        });
-    }
-
-    #[test]
-    fn agent_create_undo_deletes_exact_file_and_rejects_invalid_targets() {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async {
-            let tempdir = TempDir::new().unwrap();
-            let project_root = tempdir.path().join("project-a");
-            std::fs::create_dir_all(&project_root).unwrap();
-            let project_root = project_root.canonicalize().unwrap();
-            std::fs::write(project_root.join("existing.R"), "original\n").unwrap();
-            let store_path = tempdir.path().join("rho.sqlite");
-            let mut store = Store::open(&store_path).unwrap();
-            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
-            store.set_project_root(Some(&normalized_root)).unwrap();
-            let create_event = add_agent_file_proposal(
-                &mut store,
-                &normalized_root,
-                "conversation-create",
-                "turn-create",
-                "created.R",
-                "create",
-                "created <- TRUE\n",
-                None,
-            );
-            let existing_event = add_agent_file_proposal(
-                &mut store,
-                &normalized_root,
-                "conversation-existing",
-                "turn-existing",
-                "existing.R",
-                "create",
-                "overwrite <- TRUE\n",
-                None,
-            );
-            let missing_event = add_agent_file_proposal(
-                &mut store,
-                &normalized_root,
-                "conversation-missing",
-                "turn-missing",
-                "missing.R",
-                "append",
-                "append <- TRUE\n",
-                None,
-            );
-            let state = test_app_state(tempdir.path(), &project_root, &store_path);
-            install_test_context(&state, store).await;
-
-            let applied = apply_agent_file_edit_state(
-                AgentFileApplyRequest {
-                    turn_id: "turn-create".to_string(),
-                    proposal_event_id: create_event,
-                    path: "created.R".to_string(),
-                    expected_disk_sha256: None,
-                    before_content: String::new(),
-                },
-                &state,
-            )
-            .await
-            .unwrap();
-            assert!(project_root.join("created.R").is_file());
-            let applied_digest = applied.after_sha256.clone().unwrap();
-            let replay_error = apply_agent_file_edit_state(
-                AgentFileApplyRequest {
-                    turn_id: "turn-create".to_string(),
-                    proposal_event_id: create_event,
-                    path: "created.R".to_string(),
-                    expected_disk_sha256: None,
-                    before_content: String::new(),
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(replay_error.contains("AGENT_FILE_ALREADY_DECIDED"));
-            let forged_undo_error = undo_agent_file_edit_state(
-                AgentFileUndoRequest {
-                    turn_id: "turn-create".to_string(),
-                    proposal_event_id: create_event,
-                    path: "created.R".to_string(),
-                    expected_after_sha256: applied_digest.clone(),
-                    before_content: "forged".to_string(),
-                    created: true,
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(forged_undo_error.contains("durable pre-Apply editor snapshot"));
-            assert!(project_root.join("created.R").is_file());
-            let undone = undo_agent_file_edit_state(
-                AgentFileUndoRequest {
-                    turn_id: "turn-create".to_string(),
-                    proposal_event_id: create_event,
-                    path: "created.R".to_string(),
-                    expected_after_sha256: applied_digest.clone(),
-                    before_content: String::new(),
-                    created: true,
-                },
-                &state,
-            )
-            .await
-            .unwrap();
-            assert_eq!(undone.status, "undone");
-            assert!(!project_root.join("created.R").exists());
-            let repeated_undo_error = undo_agent_file_edit_state(
-                AgentFileUndoRequest {
-                    turn_id: "turn-create".to_string(),
-                    proposal_event_id: create_event,
-                    path: "created.R".to_string(),
-                    expected_after_sha256: applied_digest,
-                    before_content: String::new(),
-                    created: true,
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(repeated_undo_error.contains("AGENT_FILE_ALREADY_DECIDED"));
-
-            let existing_error = apply_agent_file_edit_state(
-                AgentFileApplyRequest {
-                    turn_id: "turn-existing".to_string(),
-                    proposal_event_id: existing_event,
-                    path: "existing.R".to_string(),
-                    expected_disk_sha256: None,
-                    before_content: String::new(),
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(existing_error.contains("AGENT_FILE_RESOURCE_STALE"));
-            assert_eq!(
-                std::fs::read_to_string(project_root.join("existing.R")).unwrap(),
-                "original\n"
-            );
-
-            let missing_error = apply_agent_file_edit_state(
-                AgentFileApplyRequest {
-                    turn_id: "turn-missing".to_string(),
-                    proposal_event_id: missing_event,
-                    path: "missing.R".to_string(),
-                    expected_disk_sha256: Some(text_sha256("")),
-                    before_content: String::new(),
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(missing_error.contains("AGENT_FILE_RESOURCE_STALE"));
-
-            let wrong_event_error = apply_agent_file_edit_state(
-                AgentFileApplyRequest {
-                    turn_id: "turn-existing".to_string(),
-                    proposal_event_id: existing_event + 10_000,
-                    path: "existing.R".to_string(),
-                    expected_disk_sha256: Some(text_sha256("original\n")),
-                    before_content: "original\n".to_string(),
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(wrong_event_error.contains("proposal event was not found"));
-            assert_eq!(
-                std::fs::read_to_string(project_root.join("existing.R")).unwrap(),
-                "original\n"
-            );
-        });
-    }
-
-    #[test]
-    fn durable_file_mutation_state_rejects_noop_replay_and_unapplied_or_forged_undo() {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(async {
-            let tempdir = TempDir::new().unwrap();
-            let project_root = tempdir.path().join("project-a");
-            std::fs::create_dir_all(&project_root).unwrap();
-            let project_root = project_root.canonicalize().unwrap();
-            let file = project_root.join("noop.R");
-            let before = "value <- 1\n";
-            std::fs::write(&file, before).unwrap();
-            let store_path = tempdir.path().join("rho.sqlite");
-            let mut store = Store::open(&store_path).unwrap();
-            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
-            store.set_project_root(Some(&normalized_root)).unwrap();
-            let event_id = add_agent_file_proposal(
-                &mut store,
-                &normalized_root,
-                "conversation-noop",
-                "turn-noop",
-                "noop.R",
-                "append",
-                "",
-                None,
-            );
-            let state = test_app_state(tempdir.path(), &project_root, &store_path);
-            install_test_context(&state, store).await;
-            let digest = text_sha256(before);
-
-            let unapplied_undo = undo_agent_file_edit_state(
-                AgentFileUndoRequest {
-                    turn_id: "turn-noop".to_string(),
-                    proposal_event_id: event_id,
-                    path: "noop.R".to_string(),
-                    expected_after_sha256: digest.clone(),
-                    before_content: before.to_string(),
-                    created: false,
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(unapplied_undo.contains("AGENT_FILE_NOT_APPLIED"));
-
-            let applied = apply_agent_file_edit_state(
-                AgentFileApplyRequest {
-                    turn_id: "turn-noop".to_string(),
-                    proposal_event_id: event_id,
-                    path: "noop.R".to_string(),
-                    expected_disk_sha256: Some(digest.clone()),
-                    before_content: before.to_string(),
-                },
-                &state,
-            )
-            .await
-            .unwrap();
-            assert_eq!(applied.after_sha256.as_deref(), Some(digest.as_str()));
-
-            let replay = apply_agent_file_edit_state(
-                AgentFileApplyRequest {
-                    turn_id: "turn-noop".to_string(),
-                    proposal_event_id: event_id,
-                    path: "noop.R".to_string(),
-                    expected_disk_sha256: Some(digest.clone()),
-                    before_content: before.to_string(),
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(replay.contains("AGENT_FILE_ALREADY_DECIDED"));
-
-            let forged = undo_agent_file_edit_state(
-                AgentFileUndoRequest {
-                    turn_id: "turn-noop".to_string(),
-                    proposal_event_id: event_id,
-                    path: "noop.R".to_string(),
-                    expected_after_sha256: digest.clone(),
-                    before_content: "forged <- TRUE\n".to_string(),
-                    created: false,
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(forged.contains("durable pre-Apply editor snapshot"));
-            assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
-
-            undo_agent_file_edit_state(
-                AgentFileUndoRequest {
-                    turn_id: "turn-noop".to_string(),
-                    proposal_event_id: event_id,
-                    path: "noop.R".to_string(),
-                    expected_after_sha256: digest.clone(),
-                    before_content: before.to_string(),
-                    created: false,
-                },
-                &state,
-            )
-            .await
-            .unwrap();
-            let repeated_undo = undo_agent_file_edit_state(
-                AgentFileUndoRequest {
-                    turn_id: "turn-noop".to_string(),
-                    proposal_event_id: event_id,
-                    path: "noop.R".to_string(),
-                    expected_after_sha256: digest,
-                    before_content: before.to_string(),
-                    created: false,
-                },
-                &state,
-            )
-            .await
-            .unwrap_err()
-            .to_string();
-            assert!(repeated_undo.contains("AGENT_FILE_ALREADY_DECIDED"));
-            assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
-        });
-    }
 
     #[test]
     fn retry_source_and_conversation_delete_are_exact_and_project_scoped() {
@@ -603,36 +19,70 @@
             let store_path = tempdir.path().join("rho.sqlite");
             let mut store = Store::open(&store_path).unwrap();
             store.set_project_root(Some(&root_a)).unwrap();
-            add_agent_file_proposal(
-                &mut store,
-                &root_a,
-                "conversation-delete",
-                "turn-delete",
-                "analysis.R",
-                "append",
-                "one\n",
-                Some(json!({"active_path": "analysis.R", "selection_start": 0})),
-            );
-            add_agent_file_proposal(
-                &mut store,
-                &root_a,
-                "conversation-keep",
-                "turn-keep",
-                "keep.R",
-                "create",
-                "keep\n",
-                None,
-            );
-            add_agent_file_proposal(
-                &mut store,
-                &root_b,
-                "conversation-other-project",
-                "turn-other-project",
-                "other.R",
-                "create",
-                "other\n",
-                None,
-            );
+            for (root, conversation, turn, path) in [
+                (&root_a, "conversation-delete", "turn-delete", "analysis.R"),
+                (&root_a, "conversation-keep", "turn-keep", "keep.R"),
+                (
+                    &root_b,
+                    "conversation-other-project",
+                    "turn-other-project",
+                    "other.R",
+                ),
+            ] {
+                store
+                    .create_agent_turn_with_conversation(
+                        &AgentConversationDraft {
+                            conversation_id: conversation.to_string(),
+                            project_root: root.to_string(),
+                            title: format!("Conversation {conversation}"),
+                            legacy_unthreaded: false,
+                        },
+                        &AgentTurnDraft {
+                            turn_id: turn.to_string(),
+                            project_root: root.to_string(),
+                            mode: "act".to_string(),
+                            prompt: format!("Edit {path}"),
+                            model: "test-model".to_string(),
+                            workspace_id: "ws-file-test".to_string(),
+                            state_revision_before: 0,
+                            project_revision_before: 0,
+                        },
+                    )
+                    .unwrap();
+                store
+                    .append_agent_turn_event(&AgentTurnEventDraft {
+                        turn_id: turn.to_string(),
+                        event_type: "agent.user_prompt".to_string(),
+                        title: "You".to_string(),
+                        body: Some(format!("Edit {path}")),
+                        status: "completed".to_string(),
+                        tool: None,
+                        request_id: None,
+                        code: None,
+                        details_json: json!({
+                            "task_kind": "agent_turn",
+                            "editor_context": if turn == "turn-delete" {
+                                Some(json!({"active_path": "analysis.R", "selection_start": 0}))
+                            } else {
+                                None
+                            }
+                        })
+                        .to_string(),
+                    })
+                    .unwrap();
+                store
+                    .finish_agent_turn(&AgentTurnFinish {
+                        turn_id: turn.to_string(),
+                        status: "completed".to_string(),
+                        terminal_reason: Some("completed".to_string()),
+                        workspace_id_after: Some("ws-file-test".to_string()),
+                        state_revision_after: Some(0),
+                        project_revision_after: Some(0),
+                        final_message: Some("Done".to_string()),
+                        error_message: None,
+                    })
+                    .unwrap();
+            }
 
             let source = agent_retry_source(&store, &root_a, "turn-delete").unwrap();
             assert_eq!(source.prompt, "Edit analysis.R");
@@ -644,16 +94,6 @@
             drop(store);
 
             let state = test_app_state(tempdir.path(), &project_a, &store_path);
-            let claim = state
-                .agent_file_mutations
-                .register(&root_a, "turn-delete", "analysis.R");
-            let blocked = delete_agent_conversation_state("conversation-delete", &state)
-                .await
-                .unwrap_err()
-                .to_string();
-            assert!(blocked.contains("file operation"), "{blocked}");
-            drop(claim);
-
             let deleted = delete_agent_conversation_state("conversation-delete", &state)
                 .await
                 .unwrap();

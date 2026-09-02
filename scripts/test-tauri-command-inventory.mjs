@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "661964225541022bdc01d4f3203ee10e2c46291cbe46a367a92171e44bfbfb5a";
+const EXPECTED_HANDLER_DIGEST = "63c2b6f7f50b5f7c483e16a4b358d661cd3b6189b4a4859b329c1b9d8bb8c612";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [
@@ -83,30 +83,6 @@ const PROJECT_COMMANDS = [
   "viewer_read_file",
 ];
 
-const AGENT_LLM_COMMANDS = [
-  "agent_llm_cancel_test",
-  "agent_llm_catalog",
-  "agent_llm_connect_provider",
-  "agent_llm_declare_model_capabilities",
-  "agent_llm_declare_model_capability",
-  "agent_llm_delete_capability_route",
-  "agent_llm_delete_credential",
-  "agent_llm_delete_model",
-  "agent_llm_delete_provider",
-  "agent_llm_discover_models",
-  "agent_llm_refresh_credentials",
-  "agent_llm_repair_config_permissions",
-  "agent_llm_save_capability_route",
-  "agent_llm_save_model",
-  "agent_llm_save_provider",
-  "agent_llm_select_model",
-  "agent_llm_set_context_capacity",
-  "agent_llm_set_credential",
-  "agent_llm_settings",
-  "agent_llm_test_model",
-  "agent_llm_view_credential",
-];
-
 const AGENT_CONVERSATION_COMMANDS = [
   "create_agent_conversation",
   "delete_agent_conversation",
@@ -123,11 +99,6 @@ const AGENT_EXECUTION_COMMANDS = [
   "respond_approval",
   "retry_agent_turn",
   "run_agent",
-];
-
-const AGENT_FILE_COMMANDS = [
-  "apply_agent_file_edit",
-  "undo_agent_file_edit",
 ];
 
 const STARTUP_COMMANDS = [
@@ -345,14 +316,6 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Project command module ownership changed",
   );
 
-  const agentLlmSource = sources.find(({ name }) => name.endsWith("commands/agent_llm.rs"));
-  assert.ok(agentLlmSource, "Agent LLM command module is missing");
-  assert.deepEqual(
-    commandDefinitions([agentLlmSource]).map(({ name }) => name).sort(),
-    AGENT_LLM_COMMANDS,
-    "Agent LLM command module ownership changed",
-  );
-
   const agentConversationSource = sources.find(
     ({ name }) => name.endsWith("commands/agent_conversation.rs"),
   );
@@ -371,16 +334,6 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     commandDefinitions([agentExecutionSource]).map(({ name }) => name).sort(),
     AGENT_EXECUTION_COMMANDS,
     "Agent execution command module ownership changed",
-  );
-
-  const agentFileSource = sources.find(
-    ({ name }) => name.endsWith("commands/agent_files.rs"),
-  );
-  assert.ok(agentFileSource, "Agent file command module is missing");
-  assert.deepEqual(
-    commandDefinitions([agentFileSource]).map(({ name }) => name).sort(),
-    AGENT_FILE_COMMANDS,
-    "Agent file command module ownership changed",
   );
 
   const startupSource = sources.find(({ name }) => name.endsWith("commands/startup.rs"));
@@ -439,17 +392,11 @@ function fixtures() {
   const projectHandlers = PROJECT_COMMANDS.map(
     (command) => `  commands::project_session::${command},`,
   ).join("\n");
-  const agentLlmHandlers = AGENT_LLM_COMMANDS.map(
-    (command) => `  commands::agent_llm::${command},`,
-  ).join("\n");
   const agentConversationHandlers = AGENT_CONVERSATION_COMMANDS.map(
     (command) => `  commands::agent_conversation::${command},`,
   ).join("\n");
   const agentExecutionHandlers = AGENT_EXECUTION_COMMANDS.map(
     (command) => `  commands::agent_execution::${command},`,
-  ).join("\n");
-  const agentFileHandlers = AGENT_FILE_COMMANDS.map(
-    (command) => `  commands::agent_files::${command},`,
   ).join("\n");
   const startupHandlers = STARTUP_COMMANDS.map(
     (command) => `  commands::startup::${command},`,
@@ -478,10 +425,8 @@ ${evidenceHandlers}
 ${environmentHandlers}
 ${editorHandlers}
 ${projectHandlers}
-${agentLlmHandlers}
 ${agentConversationHandlers}
 ${agentExecutionHandlers}
-${agentFileHandlers}
 ${startupHandlers}
 ${renderHandlers}
 ${workspaceHandlers}
@@ -518,16 +463,10 @@ ${runtimeControlHandlers}
       { name: "commands/project_session.rs", text: PROJECT_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
-      { name: "commands/agent_llm.rs", text: AGENT_LLM_COMMANDS.map(
-        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
-      ).join("\n") },
       { name: "commands/agent_conversation.rs", text: AGENT_CONVERSATION_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
       { name: "commands/agent_execution.rs", text: AGENT_EXECUTION_COMMANDS.map(
-        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
-      ).join("\n") },
-      { name: "commands/agent_files.rs", text: AGENT_FILE_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
       { name: "commands/startup.rs", text: STARTUP_COMMANDS.map(
@@ -555,10 +494,8 @@ ${runtimeControlHandlers}
       ...ENVIRONMENT_COMMANDS,
       ...EDITOR_COMMANDS,
       ...PROJECT_COMMANDS,
-      ...AGENT_LLM_COMMANDS,
       ...AGENT_CONVERSATION_COMMANDS,
       ...AGENT_EXECUTION_COMMANDS,
-      ...AGENT_FILE_COMMANDS,
       ...STARTUP_COMMANDS,
       ...RENDER_COMMANDS,
       ...WORKSPACE_COMMANDS,

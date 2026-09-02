@@ -11,11 +11,7 @@ use rho_server::workspace_lane::WorkspaceBrokerLane;
 use rho_store::{BorrowedStore, StoreExecutor, StoreExecutorOperationError};
 use tokio::sync::{Mutex, OnceCell, RwLock};
 
-use crate::agent_llm::AgentModelTestControl;
 use crate::commands::agent_execution::AgentTaskEntry;
-#[cfg(test)]
-use crate::commands::agent_files::AgentFileApplyTestControl;
-use crate::commands::agent_files::AgentFileMutationRegistry;
 use crate::commands::render::RenderJobState;
 use crate::project::{ProjectSessionStore, ProjectWatcherControl};
 use crate::project_transition::SwitchTestControl;
@@ -72,10 +68,6 @@ pub(crate) struct AppState {
     pub(crate) plugin_permissions: Arc<workspace_plugins::PendingPluginPermissionRegistry>,
     pub(crate) agent_tasks: Arc<Mutex<HashMap<String, AgentTaskEntry>>>,
     pub(crate) agent_workspace_lane: Arc<AgentWorkspaceLane>,
-    pub(crate) agent_file_mutations: Arc<AgentFileMutationRegistry>,
-    #[cfg(test)]
-    pub(crate) agent_file_apply_test_control: AgentFileApplyTestControl,
-    pub(crate) agent_llm_test_control: AgentModelTestControl,
     pub(crate) switch_test_control: SwitchTestControl,
     pub(crate) shutdown_started: AtomicBool,
     pub(crate) render_jobs: Arc<Mutex<HashMap<String, RenderJobState>>>,

@@ -302,12 +302,6 @@ fn hide_console_window(_command: &mut tokio::process::Command) {
     _command.creation_flags(0x0800_0000);
 }
 
-#[derive(Debug, Clone)]
-struct ApprovedMutation {
-    request_type: String,
-    arguments: Value,
-}
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ApprovalResponseInput {
     pub decision: String,
@@ -501,11 +495,4 @@ impl PendingApprovalRegistry {
         }
         count
     }
-}
-
-struct DesktopAgentCompletion {
-    events: Vec<Value>,
-    final_message: Option<String>,
-    error_message: Option<String>,
-    failed: bool,
 }

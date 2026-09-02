@@ -9,22 +9,20 @@ import { createMockUiKernelTransport } from "./mock";
 
 const diagnostics = {
   available: true,
-  status: "degraded",
-  rscript: "/opt/R/4.6.1/bin/Rscript",
-  r_version: "4.6.1",
-  aisdk_version: "1.5.0",
-  provider_adapters_available: false,
-  provider_health: "dependency_unavailable",
-  dependencies: [{
-    package: "aisdk.providers",
-    status: "missing",
-    installed_version: null,
-    required_version: "0.1.0",
-    resolved_path: null,
-    detail: "Registered Provider adapters are unavailable.",
-    remediation: "Install the reviewed Agent dependency without changing Workspace R.",
+  status: "ready",
+  active_agent_id: "claude-code-acp",
+  active_agent_label: "Claude Code",
+  protocol: "acp/1",
+  executable: "/usr/local/bin/claude-code-acp",
+  candidates: [{
+    agent_id: "claude-code-acp",
+    display_name: "Claude Code",
+    status: "ready",
+    protocol: "acp/1",
+    executable: "/usr/local/bin/claude-code-acp",
+    detail: "External ACP Agent executable discovered.",
   }],
-  error: "Agent Provider adapters need attention.",
+  error: null,
 } satisfies AgentRuntimeDiagnostics;
 
 describe("Agent runtime generated transport", () => {
@@ -56,9 +54,9 @@ describe("Agent runtime generated transport", () => {
     const transport: AgentRuntimeTransport = createMockUiKernelTransport();
     await expect(transport.getAgentRuntimeDiagnostics()).resolves.toMatchObject({
       available: false,
-      dependencies: expect.arrayContaining([
-        expect.objectContaining({ package: "aisdk", status: "incompatible_version" }),
-      ]),
+      status: "needs_attention",
+      active_agent_id: null,
+      candidates: [],
     });
   });
 });

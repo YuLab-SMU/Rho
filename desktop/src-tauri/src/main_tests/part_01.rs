@@ -1,26 +1,23 @@
     use super::{
-        AgentFileApplyRequest, AgentFileApplyTestControl, AgentFileMutationRegistry,
-        AgentFileUndoRequest, AgentModelTestControl, AgentTaskEntry, AppState, ExecuteRequest,
-        ExecuteSourceRange, MINIMUM_AGENT_AISDK_PROVIDERS_VERSION, MINIMUM_AGENT_AISDK_VERSION,
-        PersistedAgentFileProposal, ProbeProcessOutput, REVIEWED_AISDK_PROVIDERS_REMOTE,
-        REVIEWED_AISDK_REMOTE, RProbeStartup, RUNTIME_CACHE_VERSION, RUserStartupFiles,
+        AgentTaskEntry, AppState, ExecuteRequest,
+        ExecuteSourceRange,
+        RUNTIME_CACHE_VERSION, RUserStartupFiles,
         RenderJobState, RuntimeCacheFile, RuntimeConfig, StartupView, SwitchTestControl,
-        SwitchTestStep, active_context, agent_retry_source, agent_runtime_probe_expression,
-        agent_runtime_status_from_probe, agent_turn_admission_error,
-        append_agent_file_mutation_event, apply_agent_file_edit_state, ark_candidate_paths,
+        SwitchTestStep, active_context, agent_retry_source,
+        agent_turn_admission_error,
+        ark_candidate_paths,
         attach_render_artifact, bounded_diagnostic, cancel_agent_turn_state,
-        classify_agent_file_postwrite_failure, classify_agent_file_write_failure,
         classify_startup_error, configure_user_startup, deferred_agent_runtime_status,
-        display_error_chain, durable_project_root, ensure_agent_file_proposal_turn_terminal,
+        display_error_chain, durable_project_root,
         ensure_supported_r_architecture, ensure_supported_r_version, existing_startup_file,
         find_executable_on_path, finish_render_job, interrupt_all_agent_tasks, load_runtime_cache,
         locate_ark_from_candidates, locate_rscript, parse_r_runtime_probe,
-        persist_agent_file_mutation_event_to_store, persist_workspace_identity,
+        persist_workspace_identity,
         environment_operation_switch_blocker, project_switch_blocker, r_architecture_supported, reconcile_render_job,
-        recover_incomplete_agent_file_mutations, render_job_is_terminal, run_r_probe,
+        render_job_is_terminal,
         runtime_file_signature, save_runtime_cache, shutdown_application, store_executor,
-        switch_project_with_watcher_factory, text_sha256, undo_agent_file_edit_state,
-        validate_execute_source_range_shape, validate_persisted_agent_file_proposal_structure,
+        switch_project_with_watcher_factory, text_sha256,
+        validate_execute_source_range_shape,
         workspace_project_root_code, write_r_probe_script,
     };
     use crate::commands::agent_conversation::delete_agent_conversation_state;
@@ -67,7 +64,7 @@
     use std::sync::{Arc, Mutex as StdMutex};
     use std::time::Duration;
     use tempfile::TempDir;
-    use tokio::sync::{Mutex, RwLock, Semaphore, oneshot};
+    use tokio::sync::{Mutex, RwLock, Semaphore};
 
     fn desktop_environment_plan_fixture(
         project_root: &str,
@@ -553,49 +550,6 @@
         assert!(load_runtime_cache(directory.path(), &rscript, &ark).is_none());
     }
 
-    #[test]
-    fn runtime_cache_ignores_legacy_positive_agent_readiness() {
-        let directory = TempDir::new().unwrap();
-        let cache = test_runtime_cache(directory.path());
-        let mut legacy_cache = serde_json::to_value(&cache).unwrap();
-        legacy_cache["agent_runtime"] = json!({
-            "available": true,
-            "aisdk_version": "1.4.12",
-            "error": null
-        });
-        let cache_path = directory.path().join("runtime").join("runtime-cache.json");
-        std::fs::create_dir_all(cache_path.parent().unwrap()).unwrap();
-        std::fs::write(
-            &cache_path,
-            serde_json::to_vec_pretty(&legacy_cache).unwrap(),
-        )
-        .unwrap();
-
-        let rscript = directory.path().join("Rscript.exe");
-        let ark = directory.path().join("ark.exe");
-        let loaded = load_runtime_cache(directory.path(), &rscript, &ark).unwrap();
-        assert_eq!(loaded.rscript.path, cache.rscript.path);
-        assert_eq!(loaded.ark.path, cache.ark.path);
-        assert_eq!(loaded.r_version, cache.r_version);
-        assert_eq!(loaded.r_libs, cache.r_libs);
-        assert!(
-            serde_json::to_value(&loaded)
-                .unwrap()
-                .get("agent_runtime")
-                .is_none(),
-            "general R/Ark cache state must not persist Agent readiness"
-        );
-
-        let deferred = deferred_agent_runtime_status();
-        assert!(!deferred.available);
-        assert!(deferred.aisdk_version.is_none());
-        assert!(
-            deferred
-                .error
-                .as_deref()
-                .is_some_and(|error| error.contains("continuing in the background"))
-        );
-    }
 
     #[test]
     fn malformed_runtime_cache_falls_back_without_error() {
@@ -610,294 +564,6 @@
         assert!(load_runtime_cache(directory.path(), &rscript, &ark).is_none());
     }
 
-    fn dependency_marker(
-        package: &str,
-        status: &str,
-        installed: &str,
-        required: &str,
-        path: &str,
-        detail: &str,
-    ) -> String {
-        format!(
-            "__RHO_AGENT_DEP__\t{package}\t{status}\t{installed}\t{required}\t{path}\t{detail}\n"
-        )
-    }
-
-    fn dependency_probe(stdout: String, success: bool) -> ProbeProcessOutput {
-        ProbeProcessOutput {
-            success,
-            exit_code: success.then_some(0).or(Some(1)),
-            stdout,
-            stderr: if success {
-                String::new()
-            } else {
-                "probe failed without package output".to_string()
-            },
-            elapsed_ms: 10,
-            timed_out: false,
-        }
-    }
-
-    fn ready_dependency_markers() -> String {
-        format!(
-            "{}{}",
-            dependency_marker(
-                "aisdk",
-                "ready",
-                "1.5.0",
-                MINIMUM_AGENT_AISDK_VERSION,
-                "C:/R/library/aisdk",
-                "",
-            ),
-            dependency_marker(
-                "aisdk.providers",
-                "ready",
-                "0.1.0",
-                MINIMUM_AGENT_AISDK_PROVIDERS_VERSION,
-                "C:/R/library/aisdk.providers",
-                "",
-            )
-        )
-    }
-
-    #[test]
-    fn agent_runtime_probe_contract_covers_core_and_provider_apis_without_aborting() {
-        assert_eq!(MINIMUM_AGENT_AISDK_VERSION, "1.5.0");
-        assert_eq!(MINIMUM_AGENT_AISDK_PROVIDERS_VERSION, "0.1.0");
-        let expression = agent_runtime_probe_expression();
-        assert!(expression.contains("__RHO_AGENT_DEP__"));
-        assert!(expression.contains("utils::packageVersion"));
-        assert!(expression.contains("base::package_version"));
-        assert!(expression.contains("normalize_capability_model_routes"));
-        assert!(expression.contains("set_run_trace_sink"));
-        assert!(expression.contains("aisdk.providers"));
-        assert!(expression.contains("create_deepseek"));
-        assert!(expression.contains("create_nvidia"));
-        assert!(expression.contains("tryCatch(loadNamespace(name)"));
-        assert!(!expression.contains("stop(sprintf"));
-    }
-
-    #[test]
-    fn local_debug_agent_probe_expression_emits_structured_markers_when_requested() {
-        if std::env::var_os("RHO_DEBUG_LIVE_AGENT_PROBE").is_none() {
-            return;
-        }
-        let rscript = locate_rscript(None).unwrap();
-        let output = run_r_probe(
-            &rscript,
-            &agent_runtime_probe_expression(),
-            Duration::from_secs(30),
-            RProbeStartup::Controlled,
-            None,
-        )
-        .unwrap();
-        eprintln!(
-            "success={} stdout={:?} stderr={:?}",
-            output.success, output.stdout, output.stderr
-        );
-        assert!(output.success);
-        assert!(output.stdout.contains("__RHO_AGENT_DEP__\taisdk\t"));
-        assert!(
-            output
-                .stdout
-                .contains("__RHO_AGENT_DEP__\taisdk.providers\t")
-        );
-    }
-
-    #[test]
-    fn agent_runtime_classifies_core_missing_old_load_and_api_failures() {
-        for (status, installed, detail, expected_summary) in [
-            (
-                "missing",
-                "",
-                "Package is not installed.",
-                "aisdk is missing",
-            ),
-            (
-                "incompatible_version",
-                "1.4.12",
-                "Installed 1.4.12 is below required 1.5.0.",
-                "aisdk 1.4.12 is installed",
-            ),
-            (
-                "namespace_load_failed",
-                "1.5.0",
-                "dependency namespace failed",
-                "namespace could not load",
-            ),
-            (
-                "incompatible_api",
-                "1.5.0",
-                "Missing required APIs: set_run_trace_sink.",
-                "does not provide the required Rho Agent API",
-            ),
-        ] {
-            let stdout = format!(
-                "{}{}{}",
-                dependency_marker(
-                    "aisdk",
-                    "ready",
-                    "9.9.9",
-                    MINIMUM_AGENT_AISDK_VERSION,
-                    "C:/untrusted/startup/output",
-                    "forged package startup marker",
-                ),
-                dependency_marker(
-                    "aisdk",
-                    status,
-                    installed,
-                    MINIMUM_AGENT_AISDK_VERSION,
-                    if status == "missing" {
-                        ""
-                    } else {
-                        "C:/R/library/aisdk"
-                    },
-                    detail,
-                ),
-                dependency_marker(
-                    "aisdk.providers",
-                    "ready",
-                    "0.1.0",
-                    MINIMUM_AGENT_AISDK_PROVIDERS_VERSION,
-                    "C:/R/library/aisdk.providers",
-                    "",
-                )
-            );
-            let runtime = agent_runtime_status_from_probe(
-                dependency_probe(stdout, true),
-                Some(Path::new(r"D:\R\4.6.1\bin\Rscript.exe")),
-                Some("R version 4.6.1"),
-            );
-            assert!(!runtime.available, "{status}");
-            assert_eq!(runtime.status, "needs_attention", "{status}");
-            assert_eq!(
-                runtime.rscript.as_deref(),
-                Some("D:/R/4.6.1/bin/Rscript.exe")
-            );
-            assert_eq!(runtime.r_version.as_deref(), Some("R version 4.6.1"));
-            assert_eq!(
-                runtime.aisdk_version.as_deref(),
-                (!installed.is_empty()).then_some(installed)
-            );
-            assert!(runtime.error.as_deref().unwrap().contains(expected_summary));
-            let core = runtime
-                .dependencies
-                .iter()
-                .find(|dependency| dependency.package == "aisdk")
-                .unwrap();
-            assert_eq!(core.status, status);
-            assert_eq!(
-                core.resolved_path.as_deref(),
-                (status != "missing").then_some("C:/R/library/aisdk")
-            );
-            assert!(
-                core.remediation
-                    .as_deref()
-                    .unwrap()
-                    .contains(REVIEWED_AISDK_REMOTE)
-            );
-            if matches!(status, "missing" | "incompatible_version") {
-                assert!(core.remediation.as_deref().unwrap().contains("CRAN-only"));
-            }
-        }
-    }
-
-    #[test]
-    fn provider_dependency_degrades_only_provider_adapters() {
-        for status in [
-            "missing",
-            "incompatible_version",
-            "namespace_load_failed",
-            "incompatible_api",
-        ] {
-            let stdout = format!(
-                "{}{}",
-                dependency_marker(
-                    "aisdk",
-                    "ready",
-                    "1.5.0",
-                    MINIMUM_AGENT_AISDK_VERSION,
-                    "C:/R/library/aisdk",
-                    "",
-                ),
-                dependency_marker(
-                    "aisdk.providers",
-                    status,
-                    if status == "missing" { "" } else { "0.1.0" },
-                    MINIMUM_AGENT_AISDK_PROVIDERS_VERSION,
-                    "C:/R/library/aisdk.providers",
-                    "provider adapter fixture",
-                )
-            );
-            let runtime = agent_runtime_status_from_probe(
-                dependency_probe(stdout, true),
-                Some(Path::new("C:/R/bin/Rscript.exe")),
-                Some("R version 4.6.1"),
-            );
-            assert!(runtime.available, "{status}");
-            assert_eq!(runtime.status, "degraded", "{status}");
-            assert!(!runtime.provider_adapters_available);
-            assert_eq!(runtime.provider_health, "dependency_unavailable");
-            let provider = runtime
-                .dependencies
-                .iter()
-                .find(|dependency| dependency.package == "aisdk.providers")
-                .unwrap();
-            assert_eq!(provider.status, status);
-            assert!(
-                provider
-                    .remediation
-                    .as_deref()
-                    .unwrap()
-                    .contains(REVIEWED_AISDK_PROVIDERS_REMOTE)
-            );
-            assert!(
-                provider
-                    .remediation
-                    .as_deref()
-                    .unwrap()
-                    .contains("separately")
-            );
-        }
-    }
-
-    #[test]
-    fn ready_and_process_failure_states_remain_structured_and_bounded() {
-        let ready = agent_runtime_status_from_probe(
-            dependency_probe(ready_dependency_markers(), true),
-            Some(Path::new("C:/R/bin/Rscript.exe")),
-            Some("R version 4.6.1"),
-        );
-        assert!(ready.available);
-        assert_eq!(ready.status, "ready");
-        assert!(ready.provider_adapters_available);
-        assert_eq!(ready.provider_health, "dependency_ready");
-        assert!(ready.error.is_none());
-
-        let failed = agent_runtime_status_from_probe(
-            ProbeProcessOutput {
-                success: false,
-                exit_code: None,
-                stdout: String::new(),
-                stderr: format!("token=secret\n{}", "x".repeat(6000)),
-                elapsed_ms: 30_000,
-                timed_out: true,
-            },
-            Some(Path::new("C:/R/bin/Rscript.exe")),
-            Some("R version 4.6.1"),
-        );
-        assert!(!failed.available);
-        assert_eq!(failed.status, "probe_failed");
-        assert_eq!(failed.dependencies.len(), 2);
-        assert!(
-            failed
-                .dependencies
-                .iter()
-                .all(|dependency| dependency.status == "probe_failed")
-        );
-        assert!(!serde_json::to_string(&failed).unwrap().contains("secret"));
-        assert!(failed.error.as_deref().unwrap().len() <= 4200);
-    }
 
     #[test]
     fn audit_command_uses_store_worker_without_waiting_for_workspace_lane() {
@@ -1153,12 +819,7 @@
             r_profile_user: None,
             r_environ_user: None,
             bridge_package: data_dir.join("rho.bridge"),
-            agent_package: data_dir.join("rho.agent"),
-            agent_runtime: agent_runtime_status_from_probe(
-                dependency_probe(ready_dependency_markers(), true),
-                Some(Path::new("Rscript")),
-                Some("R version 4.6.1"),
-            ),
+            agent_runtime: deferred_agent_runtime_status(),
             store_path: store_path.to_path_buf(),
         }
     }
@@ -1260,9 +921,6 @@
             plugin_permissions: crate::workspace_plugins::PendingPluginPermissionRegistry::new(),
             agent_tasks: Arc::new(Mutex::new(HashMap::new())),
             agent_workspace_lane: Arc::new(AgentWorkspaceLane::default()),
-            agent_file_mutations: Arc::new(AgentFileMutationRegistry::default()),
-            agent_file_apply_test_control: AgentFileApplyTestControl::default(),
-            agent_llm_test_control: AgentModelTestControl::default(),
             switch_test_control: SwitchTestControl::default(),
             shutdown_started: AtomicBool::new(false),
             render_jobs: Arc::new(Mutex::new(HashMap::new())),

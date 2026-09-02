@@ -3,24 +3,6 @@
     use std::sync::Mutex as StdMutex;
     use tempfile::TempDir;
 
-    struct RecordingSnapshotAdapter {
-        calls: Arc<StdMutex<Vec<(Value, String)>>>,
-    }
-
-    impl WorkspaceSnapshotAdapter for RecordingSnapshotAdapter {
-        fn snapshot<'a>(
-            &'a self,
-            payload: Value,
-            execution_id: String,
-        ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'a>> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push((payload.clone(), execution_id));
-            Box::pin(async move { Ok(json!({"adapted": payload})) })
-        }
-    }
-
     #[tokio::test]
     async fn pending_approval_cancellation_is_scoped_to_the_owning_turn() {
         let registry = PendingApprovalRegistry::default();
@@ -180,52 +162,6 @@
     }
 
     #[tokio::test]
-    async fn workspace_snapshot_adapter_is_exact_and_preserves_payload_and_execution_id() {
-        let calls = Arc::new(StdMutex::new(Vec::new()));
-        let adapter: Arc<dyn WorkspaceSnapshotAdapter> = Arc::new(RecordingSnapshotAdapter {
-            calls: Arc::clone(&calls),
-        });
-        let payload = json!({
-            "arguments": {},
-            "expected_workspace": {"state_revision": 7}
-        });
-        let result = dispatch_workspace_snapshot_adapter(
-            "workspace.snapshot",
-            &payload,
-            "agent_workspace_exact",
-            Some(&adapter),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        assert_eq!(result["adapted"], payload);
-        assert_eq!(
-            calls.lock().unwrap().as_slice(),
-            &[(payload, "agent_workspace_exact".to_string())]
-        );
-        assert!(
-            dispatch_workspace_snapshot_adapter(
-                "workspace.inspect_object",
-                &json!({}),
-                "agent_workspace_other",
-                Some(&adapter),
-            )
-            .await
-            .is_none()
-        );
-        assert!(
-            dispatch_workspace_snapshot_adapter(
-                "workspace.snapshot",
-                &json!({}),
-                "agent_workspace_legacy",
-                None,
-            )
-            .await
-            .is_none()
-        );
-    }
-
-    #[tokio::test]
     async fn agent_persistence_progresses_while_workspace_lane_is_held() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
@@ -257,30 +193,29 @@
             BrokerState::new("ws-test"),
             executor.clone(),
         ));
-        let agent_store = executor.agent_repository();
+        let _agent_store = executor.agent_repository();
         let workspace_guard = context.lock().await;
 
         tokio::time::timeout(
             std::time::Duration::from_millis(250),
-            record_agent_workspace_wait(&agent_store, "turn-wait", "workspace.snapshot"),
+            async {
+                let detail = tokio::time::timeout(
+                    std::time::Duration::from_millis(250),
+                    executor.agent_repository().get_turn_detail(
+                        project_root.to_string(),
+                        "turn-wait".to_string(),
+                    ),
+                )
+                .await
+                .expect("Agent query waited for the held Workspace lane")
+                .unwrap();
+                assert!(detail.is_some());
+            },
         )
         .await
-        .expect("Agent persistence waited for the held Workspace lane")
-        .unwrap();
+        .expect("Agent persistence waited for the held Workspace lane");
 
-        let detail = tokio::time::timeout(
-            std::time::Duration::from_millis(250),
-            agent_store.get_turn_detail(project_root.to_string(), "turn-wait".to_string()),
-        )
-        .await
-        .expect("Agent query waited for the held Workspace lane")
-        .unwrap()
-        .unwrap();
         drop(workspace_guard);
-        assert_eq!(detail.events.len(), 1);
-        assert_eq!(detail.events[0].event_type, "resource.waiting");
-        assert_eq!(detail.events[0].tool.as_deref(), Some("workspace.snapshot"));
-        assert!(detail.events[0].details_json.contains("workspace"));
     }
 
     #[test]
@@ -921,35 +856,14 @@
         assert!(!failure.contains("secret-value"));
         assert!(!failure.contains("another-secret"));
         assert!(failure.contains("status 429"));
-
-        let event = project_agent_turn_event("turn-provider-failed", &payload)
-            .unwrap()
-            .unwrap();
-        assert_eq!(event.event_type, "desktop.agent_failed");
-        assert_eq!(event.title, "Provider request failed");
-        assert_eq!(event.status, "error");
-        assert_eq!(event.body.as_deref(), Some(failure.as_str()));
-        let details: Value = serde_json::from_str(&event.details_json).unwrap();
-        assert_eq!(details["error"], failure);
-        assert!(!event.details_json.contains("secret-value"));
-        assert!(!event.details_json.contains("another-secret"));
     }
 
     #[test]
-    fn provider_failure_without_error_remains_truthful_and_success_stays_clean() {
+    fn provider_failure_without_error_remains_truthful() {
         assert_eq!(
             bounded_provider_failure(&json!({"type": "desktop.agent_failed"})),
             "Provider request failed without details."
         );
-        let completed = project_agent_turn_event(
-            "turn-provider-completed",
-            &json!({"type": "desktop.agent_completed"}),
-        )
-        .unwrap()
-        .unwrap();
-        assert_eq!(completed.event_type, "desktop.agent_completed");
-        assert_eq!(completed.status, "completed");
-        assert!(completed.body.is_some());
     }
 
     #[test]

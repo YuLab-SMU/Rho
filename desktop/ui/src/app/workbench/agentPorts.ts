@@ -14,7 +14,6 @@ export type AgentCorePorts = Pick<
   | "getAgentTurnDetail"
   | "listAgentConversations"
   | "listAgentTurns"
-  | "loadAgentLlmSettings"
   | "loadResources"
   | "previewAgentContext"
   | "readResource"
@@ -22,7 +21,6 @@ export type AgentCorePorts = Pick<
   | "respondAgentApproval"
   | "retryAgentRuntime"
   | "retryAgentTurn"
-  | "selectAgentChatModel"
   | "subscribeAgentInvalidated"
   | "subscribeAgentTurnEvents"
   | "subscribeResourcesInvalidated"
@@ -39,7 +37,6 @@ export function createAgentCorePorts(source: AgentCorePorts): AgentCorePorts {
     getAgentTurnDetail: (turnId) => source.getAgentTurnDetail(turnId),
     listAgentConversations: () => source.listAgentConversations(),
     listAgentTurns: (conversationId) => source.listAgentTurns(conversationId),
-    loadAgentLlmSettings: () => source.loadAgentLlmSettings(),
     loadResources: () => source.loadResources(),
     previewAgentContext: (request) => source.previewAgentContext(request),
     readResource: (request) => source.readResource(request),
@@ -47,7 +44,6 @@ export function createAgentCorePorts(source: AgentCorePorts): AgentCorePorts {
     respondAgentApproval: (request) => source.respondAgentApproval(request),
     retryAgentRuntime: () => source.retryAgentRuntime(),
     retryAgentTurn: (turnId) => source.retryAgentTurn(turnId),
-    selectAgentChatModel: (request) => source.selectAgentChatModel(request),
     subscribeAgentInvalidated: (listener) => source.subscribeAgentInvalidated(listener),
     subscribeAgentTurnEvents: (listener) => source.subscribeAgentTurnEvents(listener),
     subscribeResourcesInvalidated: (listener) => source.subscribeResourcesInvalidated(listener),

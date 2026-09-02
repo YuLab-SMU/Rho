@@ -14,24 +14,22 @@ export const createAgentRuntimeCommands = (__TAURI_INVOKE: AgentRuntimeInvoke) =
 });
 
 /* Types */
-export type AgentDependencyStatus = {
-	package: string,
+export type AcpAgentCandidateStatus = {
+	agent_id: string,
+	display_name: string,
 	status: string,
-	installed_version: string | null,
-	required_version: string,
-	resolved_path: string | null,
+	protocol: string | null,
+	executable: string | null,
 	detail: string | null,
-	remediation: string | null,
 };
 
 export type AgentRuntimeStatusView = {
 	available: boolean,
 	status: string,
-	rscript: string | null,
-	r_version: string | null,
-	aisdk_version: string | null,
-	provider_adapters_available: boolean,
-	provider_health: string,
-	dependencies: AgentDependencyStatus[],
+	active_agent_id: string | null,
+	active_agent_label: string | null,
+	protocol: string | null,
+	executable: string | null,
+	candidates: AcpAgentCandidateStatus[],
 	error: string | null,
 };

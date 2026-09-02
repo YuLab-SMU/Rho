@@ -22,9 +22,8 @@ describe("Workbench projection transport", () => {
     expect(diagnostics).toMatchObject({
       available: true,
       status: "ready",
-      provider_adapters_available: true,
-      provider_health: "ready",
-      dependencies: [],
+      active_agent_id: "claude-code-acp",
+      protocol: "acp/1",
       error: null,
     });
   });

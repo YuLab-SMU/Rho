@@ -299,7 +299,7 @@
     }
 
     #[test]
-    fn candidate_workspace_snapshot_preserves_typed_system_and_agent_requests() {
+    fn candidate_workspace_snapshot_preserves_typed_system_requests() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
             let tempdir = TempDir::new().unwrap();
@@ -368,21 +368,6 @@
                 super::snapshot_workspace_with_state(&state).await.unwrap(),
                 response
             );
-            let adapter = super::ExtensionWorkspaceSnapshotAdapter::new(
-                Arc::clone(&host),
-                Arc::clone(&context),
-            );
-            let agent_result = rho_server::coordinator::WorkspaceSnapshotAdapter::snapshot(
-                &adapter,
-                json!({
-                    "arguments": {},
-                    "expected_workspace": super::expected_workspace(&identity),
-                }),
-                "agent_workspace_fixture".to_string(),
-            )
-            .await
-            .unwrap();
-            assert_eq!(agent_result, response);
 
             context.lock().await.broker.project_changed();
             let stale_error = super::snapshot_workspace_with_state(&state)
@@ -391,7 +376,7 @@
             assert!(stale_error.contains("stale after Workspace state changed"));
 
             let requests = requests.lock().unwrap();
-            assert_eq!(requests.len(), 3);
+            assert_eq!(requests.len(), 2);
             for request in requests.iter() {
                 assert_eq!(request["operation"], "snapshot");
                 assert!(request.get("code").is_none());
@@ -399,9 +384,7 @@
             }
             assert_eq!(requests[0]["origin"], "system");
             assert!(requests[0]["execution_id"].is_null());
-            assert_eq!(requests[1]["origin"], "agent");
-            assert_eq!(requests[1]["execution_id"], "agent_workspace_fixture");
-            assert_eq!(requests[2]["origin"], "system");
+            assert_eq!(requests[1]["origin"], "system");
         });
     }
 

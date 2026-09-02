@@ -104,7 +104,6 @@ pub struct UnavailableProject {
 pub enum ProjectSwitchBlockerKind {
     ActiveRun,
     AgentTurn,
-    AgentFileMutation,
     Approval,
     EnvironmentOperation,
 }
@@ -821,8 +820,8 @@ mod tests {
         let blocked = ProjectRestoreResponse::blocked(
             session,
             ProjectSwitchBlocker {
-                kind: ProjectSwitchBlockerKind::AgentFileMutation,
-                message: "Finish the pending file mutation.".to_string(),
+                kind: ProjectSwitchBlockerKind::AgentTurn,
+                message: "Stop the active Agent turn.".to_string(),
                 pending_count: 1,
                 run_id: None,
                 turn_id: Some("turn:fixture".to_string()),
@@ -846,7 +845,7 @@ mod tests {
         assert_eq!(ready["project"]["files"][0]["size_bytes"], 128);
         assert_eq!(ready["session"]["open_documents"][0]["cursor_end"], 9);
         assert_eq!(blocked["status"], "blocked");
-        assert_eq!(blocked["blocker"]["kind"], "agent_file_mutation");
+        assert_eq!(blocked["blocker"]["kind"], "agent_turn");
         assert_eq!(blocked["blocker"]["turn_id"], "turn:fixture");
         assert_eq!(unavailable["unavailable"]["path"], "/projects/missing");
         assert_eq!(fatal["reason_code"], "project_switch_restore_failed");

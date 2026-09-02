@@ -102,10 +102,6 @@ pub(crate) async fn delete_agent_conversation_state(
     let turn_ids = agent_store
         .conversation_turn_ids(project_root.clone(), conversation_id.clone())
         .await?;
-    ensure!(
-        !state.agent_file_mutations.has_any_turn(&turn_ids),
-        "Wait for the selected Conversation's file operation before deleting it."
-    );
     let deleted_turns = agent_store
         .delete_conversation(project_root, conversation_id.clone())
         .await?;

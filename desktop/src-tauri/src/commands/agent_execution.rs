@@ -854,9 +854,6 @@ pub(crate) async fn clear_agent_history(state: State<'_, AppState>) -> Result<Va
     }
     let root = state.project_root.read().await.clone();
     let project_root = durable_project_root(&root);
-    if state.agent_file_mutations.blocker(&project_root).is_some() {
-        return Err("Wait for Agent file operations before clearing history.".to_string());
-    }
     let deleted = store_executor(&state)
         .await
         .map_err(display_error)?
@@ -913,7 +910,7 @@ pub(crate) async fn cancel_agent_turn_state(
         .approvals
         .cancel_turn(&turn_id, "Agent turn cancelled by the user.")
         .await;
-    let cancelled_file_mutations = state.agent_file_mutations.cancel_queued_turn(&turn_id);
+    let cancelled_file_mutations = 0usize;
     let active_workspace_run = state.agent_workspace_lane.cancel_turn(&turn_id);
     let mut joined_after_interrupt = false;
     if let Some(run_id) = active_workspace_run.as_deref() {

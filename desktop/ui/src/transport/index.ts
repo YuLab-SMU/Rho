@@ -18,8 +18,6 @@ export type {
   AgentTurnUpdateFrame,
 } from "./agent-events";
 export type { AgentRuntimeTransport } from "./agent-runtime";
-export type { AgentSettingsTransport } from "./agent-settings";
-export type { AgentFileTransport } from "./agent-file";
 export type { PluginSurfaceTransport } from "./plugin-surface";
 export type { ProjectTransport } from "./project";
 export type { KernelTransport } from "./kernel-generated";
@@ -71,24 +69,13 @@ export type {
   DomainSurfaceItem,
   AgentApprovalDecisionRequest,
   AgentApprovalRequest,
-  AgentFileApplyRequest,
-  AgentFileMutationResponse,
-  AgentFileUndoRequest,
   AgentConversationSummary,
-  AgentDependencyDiagnostics,
   AgentRuntimeDiagnostics,
   AgentMode,
   AgentTurnDetail,
   AgentContextPlanItem,
   AgentContextPlanPreview,
   AgentContextPreviewRequest,
-  AgentContextCapacityRequest,
-  AgentLlmCredentialRevealView,
-  AgentLlmSettingsView,
-  AgentModelDiscoveryResponse,
-  AgentModelContextCapacity,
-  AgentModelCapabilityDeclarationRequest,
-  AgentModelProfile,
   AgentTurnEvent,
   AgentTurnSummary,
   RunAgentRequest,
@@ -202,9 +189,3 @@ export type {
   WorkspacePreparationProgressState,
   WorkspacePreparationStage,
 } from "./types";
-export {
-  buildAddedModelProfile,
-  CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
-  CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
-  MODEL_CAPABILITY_NAMES,
-} from "./agent-settings";

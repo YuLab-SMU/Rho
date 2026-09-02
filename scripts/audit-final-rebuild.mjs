@@ -93,7 +93,6 @@ const environmentCutSources = [
   "crates/rho-server/src/coordinator/agent_authorization.rs",
   "crates/rho-server/src/coordinator/agent_execution.rs",
   "crates/rho-server/src/coordinator/workspace_protocol.rs",
-  "r/rho.agent/R/aisdk_adapter.R",
   "r/rho.bridge/R/workspace.R",
   "r/rho.bridge/NAMESPACE",
   "crates/rho-store/src/migration.rs",

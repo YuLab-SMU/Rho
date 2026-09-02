@@ -4,7 +4,6 @@ use std::fs;
 use std::future::Future;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::UNIX_EPOCH;
@@ -18,7 +17,7 @@ use rho_kernel::{ArkLaunchConfig, ArkSession, CorrelatedKernelEvent, KernelEvent
 use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, OperationClass};
 use rho_store::{
     AgentConversationTurn, AgentRepository, AgentTurnContextItemDraft, AgentTurnEventDraft,
-    AgentTurnFinish, ApprovalDecisionRecord, ApprovalRequestDraft, ArtifactRecordDraft,
+    AgentTurnFinish, ArtifactRecordDraft,
     BorrowedStore, EnvironmentSnapshotDraft, PlotArtifactDraft, RunDraft, RunErrorRange, RunFinish,
     Store, StoreConnection, StoreExecutor, StoreExecutorOperationError, normalize_project_root,
 };
@@ -28,15 +27,13 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
-use crate::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
+use crate::workspace_lane::WorkspaceBrokerLane;
 
 include!("coordinator/shared_types.rs");
 include!("coordinator/startup.rs");
 include!("coordinator/workspace_dispatch.rs");
 include!("coordinator/agent_context.rs");
 include!("coordinator/acp_execution.rs");
-include!("coordinator/agent_execution.rs");
-include!("coordinator/agent_authorization.rs");
 include!("coordinator/environment.rs");
 include!("coordinator/workspace_protocol.rs");
 

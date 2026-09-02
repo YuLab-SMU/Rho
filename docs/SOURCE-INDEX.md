@@ -36,7 +36,6 @@ Sources:
 - `scripts/generate-rsr-contract-fixtures.mjs`
 - `scripts/test-*-bindings.mjs`
 - `scripts/test-*config*.mjs`
-- `scripts/test-agent-credential-authority.mjs`
 - `scripts/test-generated-bindings.mjs`
 - `scripts/test-generated-transport-boundary.mjs`
 - `scripts/test-tauri-command-inventory.mjs`
@@ -231,20 +230,6 @@ Sources:
 Checks:
 
 - `rust.public`: `["node","scripts/run-test-command.mjs","--timeout-seconds","120","--label","rust public interfaces","--","cargo","test","-p","rho-cli","-p","rho-mcp","--locked"]`
-
-## `r-agent`
-
-Documentation:
-
-- None.
-
-Sources:
-
-- `r/rho.agent/**`
-
-Checks:
-
-- `r.agent`: `["Rscript","-e","testthat::test_local('r/rho.agent')"]`
 
 ## `r-runtime`
 

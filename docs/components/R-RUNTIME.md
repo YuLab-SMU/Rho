@@ -17,17 +17,12 @@ conditions, and object summaries have byte/item limits. Project file mutation
 is not a Workspace side channel; it uses the sandbox patch and Broker commit
 path.
 
-## First-party Provider adapter
-
-`r/rho.agent` contains bounded translation helpers for the first-party aisdk
-adapter. It maps visible deltas, provider plans, canonical capability requests,
-and terminal events. Private reasoning is discarded. Child environment keys
-are an exact allowlist supplied by the Secret Broker.
+## External Agent client
 
 External Agent lifecycle, model loops, tools, and sessions are not implemented
 by Rho. `rho-acp-client` connects to an installed ACP Agent and projects only
-public protocol events; effects still enter `rho-control-plane`. The R adapter
-is legacy and is removed after the ACP client cutover.
+public protocol events; effects still enter `rho-control-plane`. No Agent R
+package or aisdk adapter is part of the Runtime support environment.
 
 Package APIs are defined by `DESCRIPTION`, `NAMESPACE`, source, and adjacent
 tests.

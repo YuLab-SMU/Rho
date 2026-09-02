@@ -6,9 +6,6 @@ import { applyVibePageMutation, exportVibePage } from "./vibe-model";
 import type {
   AgentApprovalDecisionRequest,
   AgentConversationSummary,
-  AgentContextCapacityRequest,
-  AgentLlmCredentialRevealView,
-  AgentLlmSettingsView,
   AgentMode,
   AgentRuntimeDiagnostics,
   AgentTurnDetail,
@@ -89,7 +86,6 @@ import type {
   WorkspacePreparationProgress,
   WorkspacePreparationProgressListener,
 } from "./types";
-import { MODEL_CAPABILITY_NAMES } from "./agent-settings";
 import type { AgentTurnEventFrame } from "./agent-events";
 import { INVALIDATION_TOPICS } from "./invalidation-contract";
 import { createMockEvidenceGraphTransport } from "./evidence-graph.mock";
@@ -753,137 +749,24 @@ export function createMockUiKernelTransport(
   const workbenchListeners = new Set<() => void>();
   const agentNow = "2026-08-22T12:00:00Z";
   const agentProjectRoot = current.project.display_path;
-  let agentConfigSnapshotGeneration = 1;
-  let agentLlmSettings: AgentLlmSettingsView = {
-    schema_version: 6,
-    revision: 1,
-    config_store: {
-      home_path: "/mock/home/.rho",
-      config_path: "/mock/home/.rho/config.yaml",
-      status: "loaded",
-      detail: null,
-      found_schema_version: 6,
-      config_snapshot_id: "mock-config-snapshot-1",
-      permission_issues: [],
-    },
-    selected_model_id: "mock-profile",
-    providers: [{
-      id: "mock-provider",
-      display_name: "Mock Provider",
-      kind: "openai_compatible",
-      registered_provider_id: null,
-      api_key_env: "MOCK_API_KEY",
-      api_key_required: true,
-      base_url: "https://example.invalid/v1",
-      base_url_env: null,
-      wire_api: "chat_completions",
-      disable_stream_options: false,
-      credential_status: "detected",
-      credential_effective_source: "config_file",
-      env_shadows_file: false,
-      session_credential_present: false,
-      config_file_credential_present: true,
-      effective_base_url: "https://example.invalid/v1",
-      base_url_source: "configured",
-    }],
-    models: [{
-      id: "mock-profile",
-      provider_id: "mock-provider",
-      display_name: "Mock model",
-      model_id: "mock-model",
-      enabled: true,
-      model_type: { value: "language", source: "aisdk_catalog" },
-      capabilities: {
-        function_call: { value: "yes", source: "aisdk_catalog" },
-        reasoning: { value: "unknown", source: "unknown" },
-        vision_input: { value: "unknown", source: "unknown" },
-        image_output: { value: "unknown", source: "unknown" },
-        image_edit: { value: "unknown", source: "unknown" },
-        audio_input: { value: "unknown", source: "unknown" },
-        audio_output: { value: "unknown", source: "unknown" },
-        structured_output: { value: "unknown", source: "unknown" },
-        web_search: { value: "unknown", source: "unknown" },
-      },
-      selected: true,
-      context_window_tokens: 32_768,
-      reserved_output_tokens: 4_096,
-      context_capacity_source: "conservative_default",
-      last_test: null,
-      provider_display_name: "Mock Provider",
-      selector_status: "ready",
-      act_enabled: true,
-    }],
-    selected_model: {
-      id: "mock-profile",
-      display_name: "Mock model",
-      provider_display_name: "Mock Provider",
-      selector_status: "ready",
-      tool_calling: "yes",
-      act_enabled: true,
-    },
-    capability_routes: [{
-      capability: "agent.chat",
-      label: "Chat",
-      description: "Ordinary Agent conversation",
-      model_id: "mock-profile",
-      model_display_name: "Mock model",
-      provider_display_name: "Mock Provider",
-      model_type: "language",
-      required_model_capabilities: [],
-      configured: true,
-      inherited_from: null,
-      compatibility: "compatible",
-      credential_status: "detected",
-      consumer_status: "ready",
-    }, {
-      capability: "agent.act",
-      label: "Act",
-      description: "Tool-enabled Act turns",
-      model_id: "mock-profile",
-      model_display_name: "Mock model",
-      provider_display_name: "Mock Provider",
-      model_type: "language",
-      required_model_capabilities: ["function_call"],
-      configured: false,
-      inherited_from: "agent.chat",
-      compatibility: "compatible",
-      credential_status: "detected",
-      consumer_status: "ready",
-    }],
-    user_environ: {
-      path: "/mock/home/.Renviron",
-      source: "not_used_for_agent_credentials",
-    },
-    validation_error: null,
-  };
   let agentRuntimeDiagnostics: AgentRuntimeDiagnostics = {
     available: agentRuntimeReady,
     status: agentRuntimeReady ? "ready" : "needs_attention",
-    rscript: "/opt/R/4.6.1/bin/Rscript",
-    r_version: "4.6.1",
-    aisdk_version: agentRuntimeReady ? "1.5.0" : "1.4.12",
-    provider_adapters_available: agentRuntimeReady,
-    provider_health: agentRuntimeReady ? "ready" : "not_checked",
-    dependencies: agentRuntimeReady ? [] : [{
-      package: "aisdk",
-      status: "incompatible_version",
-      installed_version: "1.4.12",
-      required_version: "1.5.0",
-      resolved_path: "/project/renv/library/R-4.6/aarch64-apple-darwin/aisdk",
-      detail: "The installed namespace is older than Rho's Agent API contract.",
-      remediation: "CRAN currently provides 1.4.12; install the reviewed >= 1.5.0 source instead of using a CRAN-only command.",
-    }, {
-      package: "aisdk.providers",
-      status: "missing",
-      installed_version: null,
-      required_version: "0.1.0",
-      resolved_path: null,
-      detail: "Registered Provider adapters are unavailable.",
-      remediation: "Install aisdk.providers in the isolated Agent dependency environment.",
-    }],
+    active_agent_id: agentRuntimeReady ? "claude-code-acp" : null,
+    active_agent_label: agentRuntimeReady ? "Claude Code" : null,
+    protocol: agentRuntimeReady ? "acp/1" : null,
+    executable: agentRuntimeReady ? "/usr/local/bin/claude-code-acp" : null,
+    candidates: agentRuntimeReady ? [{
+      agent_id: "claude-code-acp",
+      display_name: "Claude Code",
+      status: "ready",
+      protocol: "acp/1",
+      executable: "/usr/local/bin/claude-code-acp",
+      detail: "External ACP Agent executable discovered.",
+    }] : [],
     error: agentRuntimeReady
       ? null
-      : "Agent dependencies need attention. Workspace R remains available.",
+      : "No ACP Agent available. Workspace R remains available.",
   };
   let nextConversation = 2;
   let nextTurn = 2;
@@ -1502,52 +1385,6 @@ export function createMockUiKernelTransport(
     restored_root: null,
     restart_required: false,
   });
-  // SETTINGS-UX2B mock parity helpers mirroring desktop/src-tauri/src/agent_llm.rs.
-  const sameCapabilityEvidence = (
-    left: AgentLlmSettingsView["models"][number]["capabilities"],
-    right: AgentLlmSettingsView["models"][number]["capabilities"],
-  ): boolean => {
-    const names = new Set([...Object.keys(left), ...Object.keys(right)]);
-    return [...names].every((name) =>
-      left[name]?.value === right[name]?.value && left[name]?.source === right[name]?.source
-    );
-  };
-  const assertAgentConfigGate = (request: {
-    readonly expectedRevision: number;
-    readonly expectedConfigSnapshotId: string;
-  }) => {
-    if (request.expectedRevision !== agentLlmSettings.revision
-        || request.expectedConfigSnapshotId !== agentLlmSettings.config_store.config_snapshot_id) {
-      throw new Error("Model settings or config.yaml changed while this editor was open. Reload and try again.");
-    }
-  };
-  const nextAgentConfigSnapshotId = () =>
-    `mock-config-snapshot-${++agentConfigSnapshotGeneration}`;
-  const applyContextCapacity = (request: AgentContextCapacityRequest): AgentLlmSettingsView => {
-    assertAgentConfigGate(request);
-    if (request.contextWindowTokens < 4_096
-        || request.reservedOutputTokens < 256
-        || request.reservedOutputTokens >= request.contextWindowTokens) {
-      throw new Error("Reserved output tokens must be at least 256 and smaller than the context window.");
-    }
-    const model = agentLlmSettings.models.find((candidate) => candidate.id === request.modelId);
-    if (model == null) throw new Error(`Unknown model: ${request.modelId}`);
-    agentLlmSettings = {
-      ...agentLlmSettings,
-      revision: agentLlmSettings.revision + 1,
-      config_store: {
-        ...agentLlmSettings.config_store,
-        config_snapshot_id: nextAgentConfigSnapshotId(),
-      },
-      models: agentLlmSettings.models.map((candidate) => candidate.id === request.modelId ? {
-        ...candidate,
-        context_window_tokens: request.contextWindowTokens,
-        reserved_output_tokens: request.reservedOutputTokens,
-        context_capacity_source: "user_declared",
-      } : candidate),
-    };
-    return structuredClone(agentLlmSettings);
-  };
   const evidenceGraphTransport = createMockEvidenceGraphTransport();
   const authorityTransport = createMockAuthorityTransport();
   return {
@@ -1687,7 +1524,8 @@ export function createMockUiKernelTransport(
           rscript: "/mock/Rscript",
           r_version: "4.5.1",
           agent_available: true,
-          aisdk_version: "mock",
+          acp_agent: "claude-code-acp",
+          acp_protocol: "acp/1",
         },
       } satisfies AppInfo;
     },
@@ -2935,376 +2773,14 @@ export function createMockUiKernelTransport(
       const snapshot = structuredClone(frame);
       for (const listener of agentTurnEventListeners) listener(snapshot);
     },
-    async loadAgentLlmSettings() {
-      return structuredClone(agentLlmSettings);
-    },
-    async connectProvider(request) {
-      assertAgentConfigGate(request);
-      const modelId = request.provider.registered_provider_id === "deepseek" ? "deepseek-chat" : "default-model";
-      const template = agentLlmSettings.models[0];
-      if (template == null) throw new Error("Mock Provider onboarding requires a model template.");
-      const model = {
-        ...structuredClone(template),
-        id: `model-${modelId}`,
-        provider_id: request.provider.id,
-        display_name: modelId === "deepseek-chat" ? "DeepSeek Chat" : "Default model",
-        model_id: modelId,
-        selected: agentLlmSettings.models.length === 0,
-      };
-      const projected = {
-        ...structuredClone(request.provider),
-        credential_status: request.provider.api_key_required ? "detected" : "not_required",
-        credential_effective_source: request.provider.api_key_required ? "session" : "not_configured",
-        env_shadows_file: false,
-        session_credential_present: request.provider.api_key_required,
-        config_file_credential_present: false,
-        effective_base_url: request.provider.base_url,
-        base_url_source: request.provider.base_url == null ? "provider_default" : "configured",
-      };
-      agentLlmSettings = {
-        ...agentLlmSettings,
-        revision: agentLlmSettings.revision + 1,
-        config_store: {
-          ...agentLlmSettings.config_store,
-          status: "loaded",
-          config_snapshot_id: nextAgentConfigSnapshotId(),
-        },
-        providers: [...agentLlmSettings.providers, projected],
-        models: [...agentLlmSettings.models, model],
-      };
-      return {
-        settings: structuredClone(agentLlmSettings),
-        discovery: {
-          status: "ready",
-          provider_id: request.provider.id,
-          models: [{
-            id: modelId,
-            display_name: model.display_name,
-            model_type: structuredClone(model.model_type),
-            capabilities: structuredClone(model.capabilities),
-          }],
-          truncated: false,
-          message: "Loaded 1 available model.",
-          error_class: null,
-        },
-      };
-    },
-    async saveProvider(request) {
-      assertAgentConfigGate(request);
-      const existing = agentLlmSettings.providers.some((provider) => provider.id === request.provider.id);
-      const projected = {
-        ...structuredClone(request.provider),
-        credential_status: "not_checked",
-        credential_effective_source: "not_configured",
-        env_shadows_file: false,
-        session_credential_present: false,
-        config_file_credential_present: false,
-        effective_base_url: request.provider.base_url,
-        base_url_source: request.provider.base_url == null ? "provider_default" : "configured",
-      };
-      agentLlmSettings = {
-        ...agentLlmSettings,
-        revision: agentLlmSettings.revision + 1,
-        config_store: {
-          ...agentLlmSettings.config_store,
-          status: "loaded",
-          config_snapshot_id: nextAgentConfigSnapshotId(),
-        },
-        providers: existing
-          ? agentLlmSettings.providers.map((provider) => provider.id === projected.id ? projected : provider)
-          : [...agentLlmSettings.providers, projected],
-      };
-      return structuredClone(agentLlmSettings);
-    },
-    async deleteProvider(request) {
-      assertAgentConfigGate(request);
-      agentLlmSettings = {
-        ...agentLlmSettings,
-        revision: agentLlmSettings.revision + 1,
-        config_store: {
-          ...agentLlmSettings.config_store,
-          config_snapshot_id: nextAgentConfigSnapshotId(),
-        },
-        providers: agentLlmSettings.providers.filter((provider) => provider.id !== request.providerId),
-        models: agentLlmSettings.models.filter((model) => model.provider_id !== request.providerId),
-      };
-      return structuredClone(agentLlmSettings);
-    },
-    async discoverProviderModels(providerId) {
-      const provider = agentLlmSettings.providers.find((candidate) => candidate.id === providerId);
-      if (provider == null) throw new Error("Provider changed while models were refreshing.");
-      return {
-        status: provider.credential_status === "detected" ? "ready" : "error",
-        provider_id: providerId,
-        models: agentLlmSettings.models
-          .filter((model) => model.provider_id === providerId)
-          .map((model) => ({
-            id: model.model_id,
-            display_name: model.display_name,
-            model_type: structuredClone(model.model_type),
-            capabilities: structuredClone(model.capabilities),
-          })),
-        truncated: false,
-        message: provider.credential_status === "detected"
-          ? "Loaded available models."
-          : "The API key was not accepted.",
-        error_class: provider.credential_status === "detected" ? null : "credential_missing",
-      };
-    },
-    async testProviderModel(request) {
-      assertAgentConfigGate(request);
-      const model = agentLlmSettings.models.find((candidate) => candidate.id === request.modelId);
-      if (model == null) throw new Error("Model changed while the connection test was running.");
-      agentLlmSettings = {
-        ...agentLlmSettings,
-        revision: agentLlmSettings.revision + 1,
-        config_store: {
-          ...agentLlmSettings.config_store,
-          config_snapshot_id: nextAgentConfigSnapshotId(),
-        },
-        models: agentLlmSettings.models.map((candidate) => candidate.id === request.modelId ? {
-          ...candidate,
-          last_test: {
-            status: "ready",
-            checked_at: agentNow,
-            latency_ms: 48,
-            error_class: null,
-            message: "Connection ready.",
-          },
-        } : candidate),
-      };
-      return structuredClone(agentLlmSettings);
-    },
-    async viewProviderCredential(providerId): Promise<AgentLlmCredentialRevealView> {
-      // CRED-REVEAL-1C browser/mock parity: one click resolves one labelled
-      // mock value (never a real secret shape) for a detected credential, and
-      // fails closed with the same outcome vocabulary as the real command.
-      const provider = agentLlmSettings.providers.find((candidate) => candidate.id === providerId);
-      if (provider == null) throw new Error("Provider changed while this credential screen was open.");
-      return provider.credential_status === "detected"
-        ? {
-          outcome: "revealed",
-          credential: `mock-${provider.credential_effective_source}-api-key`,
-          source: provider.credential_effective_source,
-          env_shadows_file: provider.env_shadows_file,
-        }
-        : {
-          outcome: "credential_missing",
-          credential: null,
-          source: null,
-          env_shadows_file: false,
-        };
-    },
-    async saveProviderCredential(request) {
-      void request.credential;
-      assertAgentConfigGate(request);
-      const provider = agentLlmSettings.providers.find((candidate) => candidate.id === request.providerId);
-      if (provider == null) throw new Error("Provider changed while this credential screen was open.");
-      const replacing = request.target === "session"
-        ? provider.session_credential_present
-        : provider.config_file_credential_present;
-      if (replacing && !request.confirmReplace) {
-        throw new Error("An API key is already saved in that target. Confirm replacement to overwrite it.");
-      }
-      const durable = request.target === "config_file";
-      agentLlmSettings = {
-        ...agentLlmSettings,
-        revision: durable ? agentLlmSettings.revision + 1 : agentLlmSettings.revision,
-        // Every accepted request consumes its opaque snapshot capability,
-        // including session-only writes whose durable revision is unchanged.
-        config_store: {
-          ...agentLlmSettings.config_store,
-          config_snapshot_id: nextAgentConfigSnapshotId(),
-        },
-        providers: agentLlmSettings.providers.map((candidate) => {
-          if (candidate.id !== request.providerId) return candidate;
-          const environmentEffective = candidate.credential_effective_source === "environment";
-          const sessionPresent = request.target === "session" || candidate.session_credential_present;
-          const filePresent = request.target === "config_file" || candidate.config_file_credential_present;
-          return {
-            ...candidate,
-            credential_status: "detected",
-            credential_effective_source: sessionPresent
-              ? "session"
-              : environmentEffective
-                ? "environment"
-                : "config_file",
-            session_credential_present: sessionPresent,
-            config_file_credential_present: filePresent,
-            env_shadows_file: !sessionPresent && environmentEffective && filePresent,
-          };
-        }),
-      };
-      return structuredClone(agentLlmSettings);
-    },
-    async repairAgentConfigPermissions(request) {
-      assertAgentConfigGate(request);
-      if (request.expectedConfigPath !== agentLlmSettings.config_store.config_path) {
-        throw new Error("The resolved config.yaml path changed. Reload before repairing permissions.");
-      }
-      agentLlmSettings = {
-        ...agentLlmSettings,
-        config_store: {
-          ...agentLlmSettings.config_store,
-          config_snapshot_id: nextAgentConfigSnapshotId(),
-          permission_issues: [],
-        },
-      };
-      return structuredClone(agentLlmSettings);
-    },
-    async selectAgentChatModel(request) {
-      assertAgentConfigGate(request);
-      const model = agentLlmSettings.models.find((candidate) => candidate.id === request.modelId);
-      if (model == null || !model.enabled || model.model_type.value !== "language") {
-        throw new Error("Choose an enabled language model for Chat.");
-      }
-      agentLlmSettings = {
-        ...agentLlmSettings,
-        revision: agentLlmSettings.revision + 1,
-        config_store: {
-          ...agentLlmSettings.config_store,
-          config_snapshot_id: nextAgentConfigSnapshotId(),
-        },
-        selected_model_id: model.id,
-        selected_model: {
-          id: model.id,
-          display_name: model.display_name,
-          provider_display_name: model.provider_display_name,
-          selector_status: model.selector_status,
-          tool_calling: model.capabilities.function_call?.value ?? "unknown",
-          act_enabled: model.act_enabled,
-        },
-        models: agentLlmSettings.models.map((candidate) => ({
-          ...candidate,
-          selected: candidate.id === model.id,
-        })),
-        capability_routes: agentLlmSettings.capability_routes.map((route) =>
-          route.capability === "agent.chat" ? {
-            ...route,
-            model_id: model.id,
-            model_display_name: model.display_name,
-            provider_display_name: model.provider_display_name,
-            model_type: model.model_type.value,
-            configured: true,
-            compatibility: model.selector_status,
-            credential_status: agentLlmSettings.providers.find(
-              (provider) => provider.id === model.provider_id,
-            )?.credential_status ?? "unchecked",
-          } : route
-        ),
-      };
-      return structuredClone(agentLlmSettings);
-    },
-    async setAgentContextCapacity(request: AgentContextCapacityRequest) {
-      return applyContextCapacity(request);
-    },
-    async setModelContextCapacity(request) {
-      return applyContextCapacity(request);
-    },
-    async saveModel(request) {
-      assertAgentConfigGate(request);
-      const { model } = request;
-      const existing = agentLlmSettings.models.find((candidate) => candidate.id === model.id);
-      if (existing != null) {
-        if (existing.model_type.value !== model.model_type.value
-            || existing.model_type.source !== model.model_type.source
-            || !sameCapabilityEvidence(existing.capabilities, model.capabilities)) {
-          throw new Error("Use the capability declaration command to change model evidence.");
-        }
-        if (!model.enabled && existing.enabled
-            && agentLlmSettings.capability_routes.some((route) => route.model_id === model.id)) {
-          throw new Error("Reassign this model's capability routes before disabling it.");
-        }
-      }
-      const provider = agentLlmSettings.providers.find((candidate) => candidate.id === model.provider_id);
-      const viewModel: AgentLlmSettingsView["models"][number] = {
-        ...structuredClone(model),
-        provider_display_name: provider?.display_name ?? model.provider_id,
-        selected: existing?.selected ?? agentLlmSettings.selected_model_id === model.id,
-        selector_status: existing?.selector_status ?? "ready",
-        act_enabled: model.enabled && model.capabilities.function_call?.value === "yes",
-      };
-      agentLlmSettings = {
-        ...agentLlmSettings,
-        revision: agentLlmSettings.revision + 1,
-        config_store: {
-          ...agentLlmSettings.config_store,
-          config_snapshot_id: nextAgentConfigSnapshotId(),
-        },
-        models: existing == null
-          ? [...agentLlmSettings.models, viewModel]
-          : agentLlmSettings.models.map((candidate) => candidate.id === model.id ? viewModel : candidate),
-      };
-      return structuredClone(agentLlmSettings);
-    },
-    async deleteModel(request) {
-      assertAgentConfigGate(request);
-      const model = agentLlmSettings.models.find((candidate) => candidate.id === request.modelId);
-      if (model == null) throw new Error(`Unknown model: ${request.modelId}`);
-      if (agentLlmSettings.capability_routes.some((route) => route.model_id === request.modelId)) {
-        throw new Error("Reassign or remove this model's capability routes before deleting it.");
-      }
-      agentLlmSettings = {
-        ...agentLlmSettings,
-        revision: agentLlmSettings.revision + 1,
-        config_store: {
-          ...agentLlmSettings.config_store,
-          config_snapshot_id: nextAgentConfigSnapshotId(),
-        },
-        models: agentLlmSettings.models.filter((candidate) => candidate.id !== request.modelId),
-      };
-      return structuredClone(agentLlmSettings);
-    },
-    async declareModelCapability(request) {
-      assertAgentConfigGate(request);
-      const model = agentLlmSettings.models.find((candidate) => candidate.id === request.modelId);
-      if (model == null) throw new Error(`Unknown model: ${request.modelId}`);
-      let modelType = model.model_type;
-      let capabilities = model.capabilities;
-      if (request.capability === "model_type") {
-        if (!["language", "embedding", "image", "unknown"].includes(request.value)) {
-          throw new Error("Model type must be language, embedding, image or unknown.");
-        }
-        modelType = { value: request.value, source: "user_declared" };
-      } else {
-        if (!(MODEL_CAPABILITY_NAMES as readonly string[]).includes(request.capability)) {
-          throw new Error(`Unsupported model capability: ${request.capability}`);
-        }
-        if (!["yes", "no", "unknown"].includes(request.value)) {
-          throw new Error("Capability values must be yes, no or unknown.");
-        }
-        capabilities = {
-          ...capabilities,
-          [request.capability]: { value: request.value, source: "user_declared" },
-        };
-      }
-      agentLlmSettings = {
-        ...agentLlmSettings,
-        revision: agentLlmSettings.revision + 1,
-        config_store: {
-          ...agentLlmSettings.config_store,
-          config_snapshot_id: nextAgentConfigSnapshotId(),
-        },
-        models: agentLlmSettings.models.map((candidate) => candidate.id === request.modelId ? {
-          ...candidate,
-          model_type: modelType,
-          capabilities,
-          act_enabled: candidate.enabled && capabilities.function_call?.value === "yes",
-        } : candidate),
-      };
-      return structuredClone(agentLlmSettings);
-    },
     async previewAgentContext(request) {
       const reference = request.runtime_output_context;
-      const selectedModel = agentLlmSettings.models.find((model) => model.selected)
-        ?? agentLlmSettings.models[0];
-      if (selectedModel == null) throw new Error("Mock Agent has no configured model.");
       return {
         plan_digest: mockContextPlanDigest(request.prompt, reference),
-        context_window_tokens: selectedModel.context_window_tokens,
-        reserved_output_tokens: selectedModel.reserved_output_tokens,
+        context_window_tokens: 128_000,
+        reserved_output_tokens: 4_096,
         estimated_input_tokens: request.prompt.length + (reference?.payload_bytes ?? 0),
-        capacity_source: selectedModel.context_capacity_source,
+        capacity_source: "conservative_default",
         items: [{
           context_item_id: "agent-context:mock-current-request",
           ordinal: 0,
@@ -3334,9 +2810,9 @@ export function createMockUiKernelTransport(
           disposition: "complete",
           reason_code: null,
         }])],
-        model_profile_id: selectedModel.id,
-        model_display_name: selectedModel.display_name,
-        settings_revision: agentLlmSettings.revision,
+        model_profile_id: "external-acp",
+        model_display_name: "External ACP Agent",
+        settings_revision: 1,
         conversation_id: request.conversation_id,
         runtime_output_context: reference,
       };
@@ -3540,62 +3016,6 @@ export function createMockUiKernelTransport(
     async retryRun(runId) {
       notifyAgent();
       return { status: "started", parent_run_id: runId };
-    },
-    async applyAgentFileEdit(request) {
-      notifyAgent();
-      return {
-        status: "applied",
-        path: request.path,
-        content: request.before_content,
-        start: 0,
-        end: request.before_content.length,
-        after_sha256: "a".repeat(64),
-        project: {
-          root: activeProjectPath,
-          files: [{
-            path: request.path,
-            name: request.path.split("/").at(-1) ?? request.path,
-            kind: "file",
-            size_bytes: request.before_content.length,
-          }],
-          truncated: false,
-        },
-        workspace: {
-          workspace_id: `workspace:${current.project.project_id}`,
-          kernel_instance_id: "kernel:mock",
-          execution_seq: 0,
-          state_revision: 0,
-          project_revision: current.context.project_revision,
-        },
-      };
-    },
-    async undoAgentFileEdit(request) {
-      notifyAgent();
-      return {
-        status: "undone",
-        path: request.path,
-        content: request.created ? null : request.before_content,
-        start: 0,
-        end: 0,
-        after_sha256: request.created ? null : "b".repeat(64),
-        project: {
-          root: activeProjectPath,
-          files: request.created ? [] : [{
-            path: request.path,
-            name: request.path.split("/").at(-1) ?? request.path,
-            kind: "file",
-            size_bytes: request.before_content.length,
-          }],
-          truncated: false,
-        },
-        workspace: {
-          workspace_id: `workspace:${current.project.project_id}`,
-          kernel_instance_id: "kernel:mock",
-          execution_seq: 0,
-          state_revision: 0,
-          project_revision: current.context.project_revision,
-        },
-      };
     },
     publishResources(next: ResourceRegistrySnapshot) {
       resources = copyResources(next);

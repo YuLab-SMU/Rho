@@ -1,6 +1,5 @@
 import {
   createAgentRuntimeCommands,
-  type AgentDependencyStatus as AgentDependencyStatusWire,
   type AgentRuntimeInvoke,
   type AgentRuntimeStatusView as AgentRuntimeStatusWire,
 } from "./generated/agent-runtime";
@@ -13,7 +12,6 @@ type DeepReadonly<T> = T extends (...args: never[]) => unknown
       ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
       : T;
 
-export type AgentDependencyDiagnostics = DeepReadonly<AgentDependencyStatusWire>;
 export type AgentRuntimeDiagnostics = DeepReadonly<AgentRuntimeStatusWire>;
 
 export interface AgentRuntimeTransport {

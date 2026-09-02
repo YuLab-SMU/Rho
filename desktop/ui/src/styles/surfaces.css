@@ -722,6 +722,27 @@
   .rho-settings-section-heading p,
   .rho-settings-intro { margin: var(--rho-space-1) 0 0; color: var(--rho-muted); font-size: var(--rho-text-ui); line-height: 1.5; }
   .rho-settings-section-heading > span { flex: 0 0 auto; color: var(--rho-muted); font: var(--rho-text-caption)/1.4 var(--rho-font-mono); }
+  .rho-settings-acp,
+  .rho-settings-components { display: grid; gap: var(--rho-space-4); }
+  .rho-settings-acp > header,
+  .rho-settings-components > header { display: flex; align-items: start; justify-content: space-between; gap: var(--rho-space-4); }
+  .rho-settings-acp h2,
+  .rho-settings-components h2 { margin: var(--rho-space-1) 0 0; font-size: var(--rho-text-head); }
+  .rho-settings-acp p,
+  .rho-settings-components p { margin: var(--rho-space-1) 0 0; color: var(--rho-muted); line-height: 1.5; }
+  .rho-settings-acp-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--rho-space-2); margin: 0; }
+  .rho-settings-acp-facts > div { display: grid; gap: var(--rho-space-1); padding: var(--rho-space-3); border: var(--rho-border); background: var(--rho-panel); }
+  .rho-settings-acp-facts dt { color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  .rho-settings-acp-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+  .rho-settings-acp-boundary { display: grid; gap: var(--rho-space-1); padding: var(--rho-space-3); border-left: 3px solid var(--rho-line-strong); background: var(--rho-panel); }
+  .rho-settings-acp-boundary span { color: var(--rho-ink-2); line-height: 1.5; }
+  .rho-settings-acp-list,
+  .rho-settings-components-list { display: grid; gap: var(--rho-space-2); }
+  .rho-settings-acp-list article,
+  .rho-settings-components-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--rho-space-1) var(--rho-space-3); padding: var(--rho-space-3); border-bottom: var(--rho-border); }
+  .rho-settings-acp-list article > div { display: grid; gap: var(--rho-space-1); }
+  .rho-settings-acp-list code,
+  .rho-settings-components-list code { min-width: 0; overflow-wrap: anywhere; color: var(--rho-muted); font-size: var(--rho-text-caption); }
   .rho-settings-section {
     display: grid;
     min-width: 0;
@@ -1327,29 +1348,6 @@
     background: var(--rho-warn-tint);
   }
   .rho-agent-approval button { margin-right: var(--rho-space-1); }
-  .rho-agent-file-proposal {
-    margin-top: var(--rho-space-3);
-    padding: var(--rho-space-3);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    background: var(--rho-panel);
-  }
-  .rho-agent-file-proposal > header { display: flex; align-items: center; justify-content: space-between; gap: var(--rho-space-2); font-size: var(--rho-text-caption); }
-  .rho-agent-file-proposal > header strong { color: var(--rho-ink); font-weight: var(--rho-weight-semibold); text-transform: capitalize; }
-  .rho-agent-file-proposal > header code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rho-agent-file-proposal > pre {
-    max-height: 14rem;
-    overflow: auto;
-    padding: var(--rho-space-3);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    color: var(--rho-ink);
-    background: var(--rho-paper);
-    font: var(--rho-text-ui)/1.5 var(--rho-font-mono);
-    white-space: pre-wrap;
-  }
-  .rho-agent-file-proposal > div { display: flex; justify-content: flex-end; gap: var(--rho-space-1); }
-  .rho-agent-file-outcome { display: block; margin: var(--rho-space-2) 0; color: var(--rho-muted); font-size: var(--rho-text-caption); letter-spacing: 0.04em; text-transform: uppercase; }
   .rho-agent-composer {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

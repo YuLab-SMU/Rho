@@ -1,13 +1,9 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, ensure};
 use rho_core::ExecutionOrigin;
 use rho_extension_runtime::{BoundedJson, ExtensionHost, InternalExtensionRuntimeMode};
-use rho_server::coordinator::{AgentPluginContributionAdapter, WorkspaceSnapshotAdapter};
 use rho_server::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
-use rho_store::StoreExecutor;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tauri::State;
@@ -19,7 +15,7 @@ use crate::internal_extensions::{
 use crate::project::project_path;
 use crate::{
     AppState, dispatch_workspace_request, dispatch_workspace_request_with_execution_id,
-    display_error, workspace_plugins,
+    display_error,
 };
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
@@ -311,95 +307,6 @@ async fn call_extension_workspace_snapshot(
         return Err("Workspace Snapshot result is stale after Workspace state changed".to_string());
     }
     Ok(result.payload.into_value())
-}
-
-pub(crate) struct ExtensionWorkspaceSnapshotAdapter {
-    extension_host: Arc<ExtensionHost>,
-    context: Arc<WorkspaceBrokerLane>,
-}
-
-impl ExtensionWorkspaceSnapshotAdapter {
-    pub(crate) fn new(
-        extension_host: Arc<ExtensionHost>,
-        context: Arc<WorkspaceBrokerLane>,
-    ) -> Self {
-        Self {
-            extension_host,
-            context,
-        }
-    }
-}
-
-impl WorkspaceSnapshotAdapter for ExtensionWorkspaceSnapshotAdapter {
-    fn snapshot<'a>(
-        &'a self,
-        payload: Value,
-        execution_id: String,
-    ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'a>> {
-        Box::pin(async move {
-            let expected_workspace = serde_json::from_value(
-                payload
-                    .get("expected_workspace")
-                    .cloned()
-                    .context("Agent Workspace Snapshot omitted expected_workspace")?,
-            )
-            .context("decoding Agent Workspace Snapshot expected_workspace")?;
-            call_extension_workspace_snapshot(
-                self.extension_host.as_ref(),
-                Arc::clone(&self.context),
-                expected_workspace,
-                ExecutionOrigin::Agent,
-                Some(execution_id),
-            )
-            .await
-            .map_err(anyhow::Error::msg)
-        })
-    }
-}
-
-pub(crate) struct WorkspacePluginAgentAdapter {
-    registry: Arc<workspace_plugins::PendingPluginPermissionRegistry>,
-    context: workspace_plugins::PluginRuntimeContext,
-    store_executor: StoreExecutor,
-}
-
-impl WorkspacePluginAgentAdapter {
-    pub(crate) fn new(
-        registry: Arc<workspace_plugins::PendingPluginPermissionRegistry>,
-        context: workspace_plugins::PluginRuntimeContext,
-        store_executor: StoreExecutor,
-    ) -> Self {
-        Self {
-            registry,
-            context,
-            store_executor,
-        }
-    }
-}
-
-impl AgentPluginContributionAdapter for WorkspacePluginAgentAdapter {
-    fn invoke<'a>(
-        &'a self,
-        contribution_id: &'a str,
-        input: Value,
-    ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'a>> {
-        let registry = Arc::clone(&self.registry);
-        let context = self.context.clone();
-        let store_executor = self.store_executor.clone();
-        let contribution_id = contribution_id.to_string();
-        Box::pin(async move {
-            workspace_plugins::run_store_service(&store_executor, move |store| {
-                registry.invoke_file_contribution(
-                    &context,
-                    &contribution_id,
-                    rho_extension_runtime::ContributionInvocationOrigin::AgentTool,
-                    input,
-                    store,
-                )
-            })
-            .await
-        })
-    }
 }
 
 pub(crate) async fn snapshot_workspace_with_state(state: &AppState) -> Result<Value, String> {

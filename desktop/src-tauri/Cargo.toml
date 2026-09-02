@@ -36,7 +36,6 @@ rho-workspace = { path = "../../crates/rho-workspace" }
 rfd = "0.15"
 serde.workspace = true
 serde_json.workspace = true
-serde_norway = "0.9.42"
 semver = "1.0"
 sha2 = "0.10"
 specta.workspace = true
@@ -46,7 +45,6 @@ tempfile.workspace = true
 tar = "0.4"
 tokio.workspace = true
 uuid.workspace = true
-zeroize.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Debug-only acceptance bridge viewport capture. Versions match the committed

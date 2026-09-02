@@ -28,9 +28,6 @@
     "frontend.contracts": {
       "command": ["npm", "--prefix", "desktop", "run", "rsr:check:contracts"]
     },
-    "r.agent": {
-      "command": ["Rscript", "-e", "testthat::test_local('r/rho.agent')"]
-    },
     "r.bridge": {
       "command": ["Rscript", "-e", "testthat::test_local('r/rho.bridge')"]
     },
@@ -155,7 +152,6 @@
         "scripts/generate-rsr-contract-fixtures.mjs",
         "scripts/test-*-bindings.mjs",
         "scripts/test-*config*.mjs",
-        "scripts/test-agent-credential-authority.mjs",
         "scripts/test-generated-bindings.mjs",
         "scripts/test-generated-transport-boundary.mjs",
         "scripts/test-tauri-command-inventory.mjs"
@@ -202,12 +198,6 @@
         "rust-toolchain.toml"
       ],
       "checks": ["rust.evidence-graph", "rust.store", "rust.workspace"]
-    },
-    "r-agent": {
-      "sources": [
-        "r/rho.agent/**"
-      ],
-      "checks": ["r.agent"]
     },
     "r-runtime": {
       "sources": [

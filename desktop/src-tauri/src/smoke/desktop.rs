@@ -290,86 +290,14 @@ pub(crate) async fn smoke_test(include_agent: bool) -> Result<Value> {
     .await?;
     let phase2_wasm_host = smoke_wasm_plugin_host(&config.store_path, &project_a_root)?;
     let agent = if include_agent {
-        let turn_id = format!("smoke_turn_{}", Uuid::new_v4());
-        let conversation_id = format!("conversation_{turn_id}");
-        let prompt =
-            "请检查 rho_desktop_smoke 对象，告诉我它有多少行和多少列。不要修改工作区。".to_string();
-        let resolved_model = agent_llm::resolve_model_for_turn(
-            &config.data_dir,
-            &config.rscript,
-            None,
-            "ask",
-        )?;
-        let agent_project_root;
-        {
-            let context_guard = context.lock().await;
-            let identity = context_guard.broker.identity().clone();
-            agent_project_root = store
-                .active_project_root()?
-                .context("Cannot run Agent smoke without an active project identity")?;
-            store.create_agent_turn(&AgentTurnDraft {
-                turn_id: turn_id.clone(),
-                project_root: agent_project_root.clone(),
-                mode: "ask".to_string(),
-                prompt: prompt.clone(),
-                model: resolved_model.effective_model_ref.clone(),
-                workspace_id: identity.workspace_id,
-                state_revision_before: identity.state_revision as i64,
-                project_revision_before: identity.project_revision as i64,
-            })?;
-            store.append_agent_turn_event(&AgentTurnEventDraft {
-                turn_id: turn_id.clone(),
-                event_type: "agent.user_prompt".to_string(),
-                title: "You".to_string(),
-                body: Some(prompt.clone()),
-                status: "completed".to_string(),
-                tool: None,
-                request_id: None,
-                code: None,
-                details_json: serde_json::to_string(
-                    &json!({"prompt": prompt.clone(), "mode": "ask"}),
-                )?,
-            })?;
-        }
-        let agent_store = StoreExecutor::open(&config.store_path)
-            .await?
-            .agent_repository();
-        let credential_environment_names =
-            resolved_model.credential_environment_names.clone();
-        let result = run_agent_turn(
-            session.as_ref(),
-            context.clone(),
-            agent_store,
-            agent_project_root,
-            config.rscript.clone(),
-            Some(config.process_path.clone()),
-            config.agent_package.clone(),
-            resolved_model.effective_model_ref.clone(),
-            Some(resolved_model.runtime_profile),
-            None,
-            credential_environment_names,
-            None,
-            prompt,
-            "ask".to_string(),
-            turn_id,
-            conversation_id,
-            Arc::new(AgentWorkspaceLane::default()),
-            Arc::new(PendingApprovalRegistry::default()),
-            false,
-            None,
-            None,
-            None,
-            AgentRuntimeAdapters::default(),
-            Vec::new(),
-        )
-        .await?;
-        let completed = result["events"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .any(|event| event["type"] == "chat.message_completed");
-        ensure!(completed, "desktop Agent turn omitted its final message");
-        Some(json!({"completed": true, "model": result["model"]}))
+        let discovered = rho_acp_client::discover_external_acp_agent(&config.process_path)
+            .context("desktop smoke requested an external ACP Agent, but none was installed")?;
+        Some(json!({
+            "ready": true,
+            "provider": discovered.display_name,
+            "protocol": discovered.protocol,
+            "executable": discovered.executable,
+        }))
     } else {
         None
     };

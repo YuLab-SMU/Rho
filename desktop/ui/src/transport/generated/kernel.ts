@@ -41,7 +41,8 @@ export type AppRuntimeInfo = {
 	rscript: string | null,
 	r_version: string | null,
 	agent_available: boolean | null,
-	aisdk_version: string | null,
+	acp_agent: string | null,
+	acp_protocol: string | null,
 };
 
 export type ApplicationComponentId = string;

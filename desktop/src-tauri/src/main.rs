@@ -2,7 +2,6 @@
 
 mod acceptance_bridge;
 mod acp_runtime;
-mod agent_llm;
 mod application_lifecycle;
 mod application_state;
 mod check_runtime;
@@ -48,26 +47,11 @@ use workspace_lifecycle::*;
 use commands::agent_execution::interrupt_all_agent_tasks;
 #[cfg(test)]
 use commands::agent_execution::{agent_retry_source, cancel_agent_turn_state};
-use commands::agent_files::AgentFileMutationRegistry;
-#[cfg(test)]
-use commands::agent_files::recover_incomplete_agent_file_mutations;
-#[cfg(test)]
-use commands::agent_files::{
-    AgentFileApplyRequest, AgentFileApplyTestControl, AgentFileUndoRequest,
-    PersistedAgentFileProposal, append_agent_file_mutation_event, apply_agent_file_edit_state,
-    classify_agent_file_postwrite_failure, classify_agent_file_write_failure,
-    ensure_agent_file_proposal_turn_terminal, persist_agent_file_mutation_event_to_store,
-    undo_agent_file_edit_state, validate_persisted_agent_file_proposal_structure,
-};
 #[cfg(test)]
 use commands::render::RenderJobState;
 use commands::render::render_job_is_terminal;
 #[cfg(test)]
 use commands::render::{attach_render_artifact, finish_render_job, reconcile_render_job};
-#[cfg(test)]
-use commands::workspace::ExtensionWorkspaceSnapshotAdapter;
-#[cfg(test)]
-use commands::workspace::expected_workspace;
 #[cfg(test)]
 use commands::workspace::{
     ExecuteRequest, ExecuteSourceRange, snapshot_workspace_with_state,
@@ -78,11 +62,6 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock as SyncRwLock};
 
-use agent_llm::AgentModelTestControl;
-#[cfg(test)]
-use agent_llm::{
-    AgentContextCapacityRequest, AgentLlmSettingsView, AgentModelProfile, AgentProviderProfile,
-};
 use anyhow::Context;
 #[cfg(test)]
 use project::durable_project_root;
@@ -190,10 +169,6 @@ fn main() {
                 ),
                 agent_tasks: Arc::new(Mutex::new(HashMap::new())),
                 agent_workspace_lane: Arc::new(AgentWorkspaceLane::default()),
-                agent_file_mutations: Arc::new(AgentFileMutationRegistry::default()),
-                #[cfg(test)]
-                agent_file_apply_test_control: AgentFileApplyTestControl::default(),
-                agent_llm_test_control: AgentModelTestControl::default(),
                 switch_test_control: SwitchTestControl::default(),
                 shutdown_started: AtomicBool::new(false),
                 render_jobs: Arc::new(Mutex::new(HashMap::new())),
@@ -321,8 +296,6 @@ fn main() {
             commands::project_session::project_write_file,
             commands::project_session::project_create_file,
             commands::project_session::project_delete_file,
-            commands::agent_files::apply_agent_file_edit,
-            commands::agent_files::undo_agent_file_edit,
             commands::workspace::execute_r,
             commands::workspace::snapshot_workspace,
             commands::workspace::inspect_object,
@@ -379,27 +352,6 @@ fn main() {
             commands::runs::retry_run,
             commands::agent_execution::run_agent,
             commands::agent_execution::agent_context_preview,
-            commands::agent_llm::agent_llm_settings,
-            commands::agent_llm::agent_llm_connect_provider,
-            commands::agent_llm::agent_llm_save_provider,
-            commands::agent_llm::agent_llm_delete_provider,
-            commands::agent_llm::agent_llm_set_credential,
-            commands::agent_llm::agent_llm_delete_credential,
-            commands::agent_llm::agent_llm_view_credential,
-            commands::agent_llm::agent_llm_save_model,
-            commands::agent_llm::agent_llm_set_context_capacity,
-            commands::agent_llm::agent_llm_declare_model_capability,
-            commands::agent_llm::agent_llm_delete_model,
-            commands::agent_llm::agent_llm_select_model,
-            commands::agent_llm::agent_llm_save_capability_route,
-            commands::agent_llm::agent_llm_delete_capability_route,
-            commands::agent_llm::agent_llm_declare_model_capabilities,
-            commands::agent_llm::agent_llm_refresh_credentials,
-            commands::agent_llm::agent_llm_repair_config_permissions,
-            commands::agent_llm::agent_llm_test_model,
-            commands::agent_llm::agent_llm_cancel_test,
-            commands::agent_llm::agent_llm_catalog,
-            commands::agent_llm::agent_llm_discover_models,
             commands::agent_conversation::list_agent_conversations,
             commands::agent_conversation::create_agent_conversation,
             commands::agent_conversation::list_agent_turns,

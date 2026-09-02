@@ -3498,11 +3498,8 @@ describe("Studio foundation app", () => {
     expect(container.querySelector(".rho-recent-closed")?.textContent).toContain("Recently closed views");
     expect(container.querySelector("[data-surface-id='rho.agent']")?.textContent).toContain("Project direction");
     const agent = container.querySelector("[data-surface-id='rho.agent']");
-    expect(agent?.textContent).toContain("aisdk");
-    expect(agent?.textContent).toContain("1.4.12");
-    expect(agent?.textContent).toContain("required:  >= 1.5.0");
-    expect(agent?.textContent).toContain("CRAN currently provides 1.4.12");
-    expect(agent?.textContent).toContain("/project/renv/library/R-4.6/aarch64-apple-darwin/aisdk");
+    expect(agent?.textContent).toContain("External ACP Agent");
+    expect(agent?.textContent).toContain("needs_attention");
     expect(agent?.textContent).toContain("Copy diagnostics");
     expect(document.documentElement.dataset.rsrReady).toBe("true");
   });
@@ -6770,30 +6767,6 @@ describe("Studio foundation app", () => {
     });
     expect(runs.querySelector("[role='alert']")).toBeNull();
     expect(runs.querySelector("[data-domain-id='run:mock-1']")).not.toBeNull();
-  });
-
-  it("reviews Agent file proposals through the shared Resource document and broker mutation", async () => {
-    const transport = createMockUiKernelTransport();
-    const apply = vi.spyOn(transport, "applyAgentFileEdit");
-    const { container } = await renderApp(transport);
-    const proposal = container.querySelector<HTMLElement>(".rho-agent-file-proposal");
-    if (proposal == null) throw new Error("Agent file proposal is missing");
-    expect(proposal?.textContent).toContain("analysis.R");
-    expect(proposal?.textContent).toContain("Reviewed by Agent");
-    const applyButton = [...proposal.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent === "Apply")!;
-    await act(async () => {
-      applyButton.click();
-      for (let index = 0; index < 12; index += 1) await Promise.resolve();
-    });
-    expect(apply).toHaveBeenCalledOnce();
-    expect(apply.mock.calls[0]?.[0]).toMatchObject({
-      turn_id: "agent-turn:mock-1",
-      proposal_event_id: 3,
-      path: "analysis.R",
-      before_content: "library(ggplot2)\nplot(mtcars$wt, mtcars$mpg)\n",
-    });
-    expect(proposal.textContent).toContain("Undo applied edit");
   });
 
   it("opens repeated file modes and makes immutable previews visibly stale after save", async () => {

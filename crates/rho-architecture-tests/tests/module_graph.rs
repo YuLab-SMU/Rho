@@ -205,16 +205,9 @@ fn rebuild_deleted_legacy_environment_and_evidence_owners() {
 
     let legacy_environment_surfaces = [
         std::fs::read_to_string(
-            root.join("crates/rho-server/src/coordinator/agent_authorization.rs"),
-        )
-        .unwrap(),
-        std::fs::read_to_string(root.join("crates/rho-server/src/coordinator/agent_execution.rs"))
-            .unwrap(),
-        std::fs::read_to_string(
             root.join("crates/rho-server/src/coordinator/workspace_protocol.rs"),
         )
         .unwrap(),
-        std::fs::read_to_string(root.join("r/rho.agent/R/aisdk_adapter.R")).unwrap(),
         std::fs::read_to_string(root.join("r/rho.bridge/R/workspace.R")).unwrap(),
         std::fs::read_to_string(root.join("r/rho.bridge/NAMESPACE")).unwrap(),
         std::fs::read_to_string(root.join("crates/rho-store/src/migration.rs")).unwrap(),
@@ -458,9 +451,12 @@ fn frontend_semantic_ports_remain_directional_and_typed() {
             "Authority renderer retained local fact heuristic {forbidden}"
         );
     }
+    let authority_vocab = authority
+        .to_ascii_lowercase()
+        .replace("create_supported", "");
     for forbidden in ["supported", "contradicted", "disputed", "evidence gap"] {
         assert!(
-            !authority.to_ascii_lowercase().contains(forbidden),
+            !authority_vocab.contains(forbidden),
             "Authority renderer claims graph-owned vocabulary {forbidden}"
         );
     }

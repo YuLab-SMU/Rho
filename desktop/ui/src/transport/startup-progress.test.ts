@@ -16,7 +16,12 @@ function runtimeReady(rVersion = "4.5.1") {
       r_version: rVersion,
       agent_runtime: {
         available: false,
-        aisdk_version: null,
+        status: "checking",
+        active_agent_id: null,
+        active_agent_label: null,
+        protocol: null,
+        executable: null,
+        candidates: [],
         error: null,
       },
     },

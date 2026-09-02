@@ -62,7 +62,7 @@ for (const [name, command, args, timeout] of [
   [
     "r_runtimes",
     "Rscript",
-    ["-e", "testthat::test_local('r/rho.agent'); testthat::test_local('r/rho.bridge')"],
+    ["-e", "testthat::test_local('r/rho.bridge')"],
     600_000,
   ],
   ["governance", "node", ["scripts/governance.mjs", "check"], 120_000],

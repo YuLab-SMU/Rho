@@ -40,7 +40,7 @@
     "active": true,
     "license": "AGPL-3.0-only",
     "shortDescription": "An agent-native scientific workbench for R",
-    "longDescription": "Rho is a lightweight R workbench with an Ark-backed live session and an aisdk-powered AI collaborator."
+    "longDescription": "Rho is a lightweight R workbench with an Ark-backed live session and external ACP Agent integration."
   },
   "plugins": {
     "updater": {

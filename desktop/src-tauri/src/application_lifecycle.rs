@@ -14,7 +14,7 @@ use rho_store::normalize_project_root;
 use crate::commands::agent_execution::interrupt_all_agent_tasks;
 use crate::startup_runtime::{display_error, write_startup_log};
 use crate::workspace_lifecycle::teardown_workspace_plugins_for_boundary;
-use crate::{AppState, agent_llm, runtime_registry};
+use crate::{AppState, runtime_registry};
 
 pub(crate) async fn shutdown_application(state: &AppState) -> Result<(), String> {
     write_startup_log("Rho desktop shutdown started");
@@ -27,11 +27,6 @@ pub(crate) async fn shutdown_application(state: &AppState) -> Result<(), String>
     )
     .await
     .map_err(display_error)?;
-
-    if let Err(error) = agent_llm::cancel_test(&state.agent_llm_test_control) {
-        write_startup_log(&format!("Agent model test shutdown failed: {error:#}"));
-    }
-    agent_llm::clear_session_credentials();
 
     let plugin_project_root = {
         let root = state.project_root.read().await.clone();

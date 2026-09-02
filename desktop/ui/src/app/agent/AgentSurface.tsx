@@ -3,8 +3,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type {
   AgentConversationSummary,
   AgentContextPlanPreview,
-  AgentFileMutationResponse,
-  AgentLlmSettingsView,
   AgentMode,
   AgentRuntimeDiagnostics,
   AgentTurnDetail,
@@ -21,18 +19,8 @@ import { AgentActivity } from "./AgentActivity";
 import { AgentApprovalPanel } from "./AgentApprovalPanel";
 import { AgentCurrentWork, AgentRunningRow } from "./AgentCurrentWork";
 import { AgentGoal } from "./AgentGoal";
-import {
-  AgentProposalDiff,
-  agentFileProposalOutcome,
-  parseAgentFileProposal,
-  type AgentFileProposal,
-  type AgentFileProposalReview,
-  type AgentFileUndoState,
-  type AgentProposalDiffState,
-} from "./AgentFileProposal";
 import type { AgentEvidencePorts } from "../workbench/evidenceGraphPorts";
 import type { AgentCorePorts, AgentEnvironmentPort } from "../workbench/agentPorts";
-import { announceAgentSettingsChanged, subscribeAgentSettingsChanged } from "./settings-events";
 import {
   agentStudioPresentationKey,
   parseAgentStudioPresentation,
@@ -45,19 +33,11 @@ export interface AgentSurfaceState {
   readonly conversation_id: string | null;
   readonly mode: AgentMode;
   readonly composer: string;
-  readonly auto_approve: boolean;
-  readonly file_decisions: Readonly<Record<string, "rejected">>;
   readonly studio_presentations?: Readonly<Record<
     string,
     "presenting" | "presented" | "failed"
   >>;
 }
-
-export type {
-  AgentFileProposal,
-  AgentFileProposalReview,
-  AgentFileUndoState,
-} from "./AgentFileProposal";
 
 interface AgentQueueItem {
   readonly id: string;
@@ -106,14 +86,10 @@ function initialAgentSurfaceState(instance: SurfaceInstance): AgentSurfaceState 
     conversation_id: typeof candidate.conversation_id === "string"
       ? candidate.conversation_id
       : null,
-    // One autonomous goal loop replaces the former user-selected Ask/Plan/Act modes.
+    // Autonomous goal loop: one loop replaces the former user-selected Ask/Plan/Act modes.
     // The legacy transport still calls this value `act` until its wire contract is retired.
     mode: "act",
     composer: typeof candidate.composer === "string" ? candidate.composer : "",
-    auto_approve: candidate.auto_approve === true,
-    file_decisions: typeof candidate.file_decisions === "object" && candidate.file_decisions != null
-      ? candidate.file_decisions as Readonly<Record<string, "rejected">>
-      : {},
     studio_presentations: studioPresentationStates(candidate.studio_presentations),
   };
 }
@@ -128,21 +104,6 @@ function agentTurnStatusLabel(status: AgentTurnSummary["status"]): string {
   }
 }
 
-function formatContextTokens(tokens: number): string {
-  if (tokens >= 1_000_000) {
-    const millions = tokens / 1_000_000;
-    return `${Number.isInteger(millions) ? millions.toFixed(0) : millions.toFixed(1)}M`;
-  }
-  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}k`;
-  return String(tokens);
-}
-
-function modelReadinessLabel(model: AgentLlmSettingsView["models"][number]): string {
-  if (model.act_enabled) return "Tools ready";
-  if (model.model_type.value === "unknown") return "Capabilities unverified";
-  return model.selector_status.replaceAll("_", " ");
-}
-
 function agentErrorMessage(error: unknown): string {
   return error instanceof Error && error.message.trim() !== ""
     ? error.message
@@ -155,15 +116,6 @@ const AGENT_SUGGESTIONS: readonly string[] = [
   "Draft a reproducible analysis plan",
 ];
 
-const POSTURE_OPTIONS = [{
-  id: "ask",
-  label: "Ask every time",
-  hint: "Every tool action waits for your approval.",
-}, {
-  id: "auto",
-  label: "Auto-approve project tools for this conversation",
-  hint: "The Broker still evaluates every effect and asks whenever policy requires it.",
-}] as const;
 export function AgentSurface({
   instance,
   transport,
@@ -175,12 +127,9 @@ export function AgentSurface({
   persist,
   pinTask,
   presentInStudio,
-  applyFileProposal,
-  undoFileProposal,
   reportError,
   runtimeOutputContext,
   setRuntimeOutputContext,
-  openModelSettings,
 }: {
   readonly instance: SurfaceInstance;
   readonly transport: AgentCorePorts;
@@ -201,17 +150,9 @@ export function AgentSurface({
     turn: AgentTurnSummary,
     presentation: AgentStudioPresentation,
   ) => Promise<void>;
-  readonly applyFileProposal: (
-    turn: AgentTurnSummary,
-    eventId: number,
-    proposal: AgentFileProposal,
-    review?: AgentFileProposalReview,
-  ) => Promise<{ readonly response: AgentFileMutationResponse; readonly beforeContent: string }>;
-  readonly undoFileProposal: (request: AgentFileUndoState) => Promise<void>;
   readonly reportError: (error: unknown) => void;
   readonly runtimeOutputContext: RuntimeOutputReference | null;
   readonly setRuntimeOutputContext: (reference: RuntimeOutputReference | null) => void;
-  readonly openModelSettings: (providerId: string | null, modelId: string | null) => void;
 }) {
   const [view, setView] = useState(() => initialAgentSurfaceState(instance));
   const viewRef = useRef(view);
@@ -222,7 +163,6 @@ export function AgentSurface({
   const [details, setDetails] = useState<ReadonlyMap<string, AgentTurnDetail>>(() => new Map());
   const detailsRef = useRef<ReadonlyMap<string, AgentTurnDetail>>(new Map());
   const [busy, setBusy] = useState(false);
-  const [fileUndo, setFileUndo] = useState<AgentFileUndoState | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<AgentRuntimeDiagnostics | null>(null);
@@ -231,20 +171,12 @@ export function AgentSurface({
     readonly plan: AgentContextPlanPreview;
   } | null>(null);
   const [contextReviewBusy, setContextReviewBusy] = useState(false);
-  const [llmSettings, setLlmSettings] = useState<AgentLlmSettingsView | null>(null);
-  const llmSettingsGenerationRef = useRef(0);
-  const [modelSwitchBusy, setModelSwitchBusy] = useState(false);
-  const [modelQuery, setModelQuery] = useState("");
   const [queue, setQueue] = useState<readonly AgentQueueItem[]>([]);
   const queueRef = useRef<readonly AgentQueueItem[]>([]);
   const queueSequenceRef = useRef(0);
   const dispatchingRef = useRef(false);
   const dispatchHaltedRef = useRef(false);
   const dispatchReconcileRef = useRef(false);
-  const [proposalDiffs, setProposalDiffs] = useState<ReadonlyMap<string, AgentProposalDiffState>>(
-    () => new Map(),
-  );
-  const proposalDiffsRef = useRef<ReadonlyMap<string, AgentProposalDiffState>>(new Map());
   const presentationInFlightRef = useRef<Set<string>>(new Set());
   const frameRefreshScheduledRef = useRef(false);
   const lastFrameEventIdRef = useRef<number | null>(null);
@@ -283,7 +215,6 @@ export function AgentSurface({
     dispatchingRef.current = false;
     dispatchHaltedRef.current = false;
     dispatchReconcileRef.current = false;
-    proposalDiffsRef.current = new Map();
     presentationInFlightRef.current = new Set();
     frameRefreshScheduledRef.current = false;
     lastFrameEventIdRef.current = null;
@@ -291,7 +222,6 @@ export function AgentSurface({
     setTurns([]);
     setDetails(new Map());
     setQueue([]);
-    setProposalDiffs(new Map());
     setBusy(false);
     setContextReviewBusy(false);
     return () => {
@@ -559,16 +489,6 @@ export function AgentSurface({
     transport,
   ]);
 
-  useEffect(() => transport.subscribeResourcesInvalidated(() => {
-    proposalDiffsRef.current = new Map();
-    setProposalDiffs(new Map());
-  }), [
-    instance.activation_generation,
-    instance.instance_id,
-    instance.project_id,
-    transport,
-  ]);
-
   useEffect(() => {
     let active = true;
     void transport.getAgentRuntimeDiagnostics()
@@ -576,25 +496,6 @@ export function AgentSurface({
       .catch((error: unknown) => { if (active) reportError(error); });
     return () => { active = false; };
   }, [health?.state, reportError, transport]);
-
-  const reloadLlmSettings = useCallback(() => {
-    const generation = llmSettingsGenerationRef.current + 1;
-    llmSettingsGenerationRef.current = generation;
-    void transport.loadAgentLlmSettings()
-      .then((settings) => {
-        if (llmSettingsGenerationRef.current === generation) setLlmSettings(settings);
-      })
-      .catch((error: unknown) => {
-        if (llmSettingsGenerationRef.current === generation) reportError(error);
-      });
-  }, [reportError, transport]);
-  useEffect(() => {
-    reloadLlmSettings();
-    return () => { llmSettingsGenerationRef.current += 1; };
-  }, [reloadLlmSettings]);
-  useEffect(() => subscribeAgentSettingsChanged((source) => {
-    if (source !== "agent") reloadLlmSettings();
-  }), [reloadLlmSettings]);
 
   const viewStateWriteBlocked = busy || contextReviewBusy;
   const commitView = (
@@ -609,29 +510,6 @@ export function AgentSurface({
     viewRef.current = next;
     setView(next);
     if (durable) void persist(next).catch(reportError);
-  };
-  const selectChatModel = async (modelId: string) => {
-    if (llmSettings == null || modelSwitchBusy) return;
-    const activationVersion = activationVersionRef.current;
-    const mutation = beginMutation("agent-chat-model-select");
-    if (mutation == null) return;
-    setModelSwitchBusy(true);
-    try {
-      const settings = await transport.selectAgentChatModel({
-        modelId,
-        expectedRevision: llmSettings.revision,
-        expectedConfigSnapshotId: llmSettings.config_store.config_snapshot_id,
-      });
-      if (!activationIsCurrent(activationVersion)) return;
-      setLlmSettings(settings);
-      announceAgentSettingsChanged("agent");
-      setContextPreview(null);
-    } catch (error: unknown) {
-      if (activationIsCurrent(activationVersion)) reportError(error);
-    } finally {
-      if (activationIsCurrent(activationVersion)) setModelSwitchBusy(false);
-      endMutation(mutation);
-    }
   };
   const selectConversation = async (
     conversationId: string,
@@ -689,109 +567,6 @@ export function AgentSurface({
     const current = viewRef.current;
     return current.conversation_id === turn.conversation_id
       && conversationRequestIsAvailable(current);
-  };
-  const rejectFileProposal = async (turn: AgentTurnSummary, key: string) => {
-    if (!turnMutationIsAvailable(turn) || viewRef.current.file_decisions[key] === "rejected") return;
-    const activationVersion = activationVersionRef.current;
-    const mutation = beginMutation("agent-file-reject");
-    if (mutation == null) return;
-    try {
-      if (!turnMutationIsAvailable(turn) || viewRef.current.file_decisions[key] === "rejected") return;
-      const current = viewRef.current;
-      const next = {
-        ...current,
-        file_decisions: { ...current.file_decisions, [key]: "rejected" as const },
-      };
-      await persist(next);
-      if (!activationIsCurrent(activationVersion)) return;
-      const latest = viewRef.current;
-      const adopted = {
-        ...latest,
-        file_decisions: { ...latest.file_decisions, [key]: "rejected" as const },
-      };
-      viewRef.current = adopted;
-      setView(adopted);
-    } catch (error: unknown) {
-      if (activationIsCurrent(activationVersion)) reportError(error);
-    } finally {
-      endMutation(mutation);
-    }
-  };
-  const storeProposalDiff = (key: string, state: AgentProposalDiffState | undefined) => {
-    const next = new Map(proposalDiffsRef.current);
-    if (state == null) next.delete(key);
-    else next.set(key, state);
-    proposalDiffsRef.current = next;
-    setProposalDiffs(next);
-  };
-  const loadProposalDiff = async (
-    turn: AgentTurnSummary,
-    eventId: number,
-    proposal: AgentFileProposal,
-  ) => {
-    const key = `${turn.turn_id}:${eventId}`;
-    if (proposalDiffsRef.current.has(key) || !turnMutationIsAvailable(turn)) return;
-    const activationVersion = activationVersionRef.current;
-    storeProposalDiff(key, { status: "loading" });
-    try {
-      if (proposal.operation === "create") {
-        if (activationIsCurrent(activationVersion) && turnMutationIsAvailable(turn)) {
-          storeProposalDiff(key, {
-            status: "ready",
-            before: "",
-            expected_disk_sha256: null,
-          });
-        }
-        return;
-      }
-      const registry = await transport.loadResources();
-      const matches = (candidate: {
-        readonly resource_provider_id: string;
-        readonly resource_kind: string;
-        readonly resource_id: string;
-      }) => candidate.resource_provider_id === "rho.project-files"
-        && candidate.resource_kind === "project_file"
-        && candidate.resource_id === proposal.path;
-      let descriptor = registry.resources.find(matches);
-      if (descriptor == null) {
-        const resolved = await transport.resolveResource({
-          project_id: registry.project_id,
-          resource_provider_id: "rho.project-files",
-          resource_kind: "project_file",
-          resource_id: proposal.path,
-          expected_project_revision: registry.project_revision,
-          expected_snapshot_revision: registry.snapshot_revision,
-        });
-        descriptor = resolved.resources.find(matches);
-      }
-      if (descriptor == null || descriptor.status !== "ready" || descriptor.content_sha256 == null) {
-        if (activationIsCurrent(activationVersion)) storeProposalDiff(key, { status: "unavailable" });
-        return;
-      }
-      const content = await transport.readResource({
-        target: {
-          project_id: registry.project_id,
-          resource_provider_id: descriptor.resource_provider_id,
-          resource_kind: descriptor.resource_kind,
-          resource_id: descriptor.resource_id,
-          expected_project_revision: registry.project_revision,
-          expected_resource_revision: descriptor.resource_revision,
-        },
-        consistency: "shared_document",
-      });
-      if (activationIsCurrent(activationVersion) && turnMutationIsAvailable(turn)) {
-        storeProposalDiff(key, {
-          status: "ready",
-          before: content.content,
-          expected_disk_sha256: descriptor.content_sha256,
-        });
-      }
-    } catch (error: unknown) {
-      if (activationIsCurrent(activationVersion)) {
-        reportError(error);
-        storeProposalDiff(key, { status: "unavailable" });
-      }
-    }
   };
   const pinTurn = async (turn: AgentTurnSummary) => {
     if (!turnMutationIsAvailable(turn)) return;
@@ -893,7 +668,7 @@ export function AgentSurface({
       mode: current.mode,
       task_kind: "agent_turn",
       model_id: null,
-      auto_approve: current.auto_approve,
+      auto_approve: false,
       editor_context: null,
       conversation_id: current.conversation_id,
       runtime_output_context: runtimeSnapshot,
@@ -1097,41 +872,12 @@ export function AgentSurface({
     }
   }, [details, presentStudio, turns, view.studio_presentations]);
   const displayMode = instance.mode_id ?? "conversation";
-  const chatRoute = llmSettings?.capability_routes.find((route) => route.capability === "agent.chat");
-  const actRoute = llmSettings?.capability_routes.find((route) => route.capability === "agent.act");
-  const chatModelLabel = chatRoute?.model_display_name
-    ?? llmSettings?.selected_model?.display_name
-    ?? (llmSettings == null ? "Loading model…" : "Set up a model");
-  const activeChatModelId = chatRoute?.model_id ?? llmSettings?.selected_model_id ?? null;
-  const activeChatModel = llmSettings?.models.find((model) => model.id === activeChatModelId) ?? null;
-  const activeProviderId = activeChatModel?.provider_id ?? null;
-  const chatReady = chatRoute?.consumer_status === "ready";
-  const actReady = actRoute?.consumer_status === "ready";
-  const modeReady = actReady;
-  const switchableModels = (llmSettings?.models ?? [])
-    .filter((model) => model.enabled && ["language", "unknown"].includes(model.model_type.value));
-  const normalizedModelQuery = modelQuery.trim().toLowerCase();
-  const filteredModels = normalizedModelQuery === "" ? switchableModels : switchableModels.filter((model) =>
-    model.display_name.toLowerCase().includes(normalizedModelQuery) ||
-    model.model_id.toLowerCase().includes(normalizedModelQuery) ||
-    model.provider_display_name.toLowerCase().includes(normalizedModelQuery));
-  const modelGroups = new Map<string, Array<(typeof switchableModels)[number]>>();
-  for (const model of filteredModels) {
-    const group = modelGroups.get(model.provider_display_name);
-    if (group == null) modelGroups.set(model.provider_display_name, [model]);
-    else group.push(model);
-  }
-  const setupIssue = llmSettings == null ? null
-    : llmSettings.models.length === 0 ? "Connect a model service to start using Agent."
-      : chatRoute?.consumer_status === "needs_credential" ? "Add the Provider API key to use this model."
-        : !chatReady ? "Choose a usable chat model in Provider Settings."
-          : !actReady ? "Autonomous work needs a model with verified tool calling."
-            : null;
+  const agentLabel = runtimeDiagnostics?.active_agent_label ?? "External ACP Agent";
+  const modeReady = runtimeDiagnostics?.available === true;
   const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
   const currentQueue = view.conversation_id == null
     ? []
     : queue.filter((item) => item.conversation_id === view.conversation_id);
-  const postureLabel = view.auto_approve ? "Auto-approve tools" : "Ask every time";
   const validationMatchesView = conversationValidation.conversationId === view.conversation_id;
   const conversationValidationPending = !validationMatchesView || conversationValidation.status === "pending";
   const selectedConversationUnavailable = validationMatchesView
@@ -1151,9 +897,7 @@ export function AgentSurface({
       : selectedConversationUnavailable
         ? "Select No conversation or a listed conversation before sending."
         : !modeReady
-          ? actRoute == null
-            ? "No agent.act route is configured for autonomous work."
-            : `The agent.act model is ${actRoute.consumer_status.replaceAll("_", " ")}.`
+          ? "No external ACP Agent is available."
           : null;
   const turnMutationRenderBlocked = (turn: AgentTurnSummary) => busy
     || conversationRequestBlocked
@@ -1205,25 +949,15 @@ export function AgentSurface({
       if (activationIsCurrent(activationVersion)) reportError(error);
     }
   };
-  const diagnosticsText = runtimeDiagnostics == null ? "Agent runtime diagnostics are loading." : [
-    "R",
-    `  executable: ${runtimeDiagnostics.rscript ?? "not resolved"}`,
-    `  version:    ${runtimeDiagnostics.r_version ?? "unknown"}`,
+  const diagnosticsText = runtimeDiagnostics == null ? "ACP Agent discovery is loading." : [
+    "External ACP Agent",
+    `  label:      ${runtimeDiagnostics.active_agent_label ?? "not resolved"}`,
+    `  id:         ${runtimeDiagnostics.active_agent_id ?? "not resolved"}`,
+    `  protocol:   ${runtimeDiagnostics.protocol ?? "unknown"}`,
+    `  executable: ${runtimeDiagnostics.executable ?? "not resolved"}`,
+    `  status:     ${runtimeDiagnostics.status}`,
     "",
-    "Agent runtime",
-    ...runtimeDiagnostics.dependencies.flatMap((dependency) => [
-      `  ${dependency.package}:`,
-      `    installed: ${dependency.installed_version ?? "missing"}`,
-      `    required:  >= ${dependency.required_version}`,
-      `    status:    ${dependency.status}`,
-      `    path:      ${dependency.resolved_path ?? "not resolved"}`,
-      ...(dependency.detail == null ? [] : [`    detail:    ${dependency.detail}`]),
-      ...(dependency.remediation == null ? [] : [`    fix:       ${dependency.remediation}`]),
-    ]),
-    "",
-    `Provider adapters: ${runtimeDiagnostics.provider_adapters_available ? "ready" : "unavailable"}`,
-    `Provider health:   ${runtimeDiagnostics.provider_health}`,
-    "Workspace R remains independent and available when healthy.",
+    "Rho is an ACP client. Provider permission requests are denied unless an exact Rho Broker capability admits the effect.",
   ].join("\n");
   const idleConversation = !loading
     && refreshError == null
@@ -1266,10 +1000,6 @@ export function AgentSurface({
           </details>
         </div>
       )}
-      {setupIssue != null && <div className="rho-agent-model-setup" role="status">
-        <div><strong>Model setup needs attention</strong><span>{setupIssue}</span></div>
-        <button type="button" onClick={() => openModelSettings(activeProviderId, activeChatModelId)}>Open Provider Settings</button>
-      </div>}
       <header className="rho-agent-toolbar">
         <select
           aria-label={`Conversation for ${instance.instance_id}`}
@@ -1291,19 +1021,16 @@ export function AgentSurface({
           ))}
         </select>
         <button type="button" className="rho-agent-toolbar-action" disabled={busy} onClick={() => void newConversation()}>New</button>
-        <button type="button" className="rho-agent-toolbar-action" disabled={busy} onClick={() => {
-          openModelSettings(activeProviderId, activeChatModelId);
-        }}>Models</button>
       </header>
       {!idleConversation && <section className="rho-agent-overview" aria-label="Agent status and policy">
         <div>
           <span className="rho-agent-section-label">Autonomous Agent</span>
           <strong>Goal-driven scientific work</strong>
-          <p>Rho observes current context, plans internally, requests governed effects, and re-observes committed results.</p>
+          <p>The external Agent plans and works through ACP. Rho supplies bounded context, governs effects, and re-observes authoritative results.</p>
         </div>
         <dl>
-          <div><dt>Provider</dt><dd>{chatModelLabel}</dd></div>
-          <div><dt>Permission</dt><dd>{postureLabel}</dd></div>
+          <div><dt>Agent</dt><dd>{agentLabel}</dd></div>
+          <div><dt>Authority</dt><dd>Rho Broker</dd></div>
           <div><dt>State</dt><dd>{activeTurn == null ? "Ready" : agentTurnStatusLabel(activeTurn.status)}</dd></div>
         </dl>
       </section>}
@@ -1351,20 +1078,14 @@ export function AgentSurface({
           </div>}
           {turns.map((turn) => {
             const detail = details.get(turn.turn_id);
-            const proposals = detail?.events.flatMap((event) => {
-              const proposal = parseAgentFileProposal(event);
-              return proposal == null ? [] : [{ event, proposal }];
-            }) ?? [];
             const presentations = (detail?.events.flatMap((event) => {
               const parsed = parseAgentStudioPresentation(event);
               return parsed == null ? [] : [parsed];
             }) ?? []).slice(-1);
             const waitingApprovals = detail?.approvals.filter((approval) => approval.status === "waiting") ?? [];
-            const proposalEventIds = new Set(proposals.map(({ event }) => event.id));
             const presentationEventIds = new Set(presentations.map(({ event }) => event.id));
             const activityEvents = detail?.events.filter((event) =>
               (event.tool != null || event.code != null)
-              && !proposalEventIds.has(event.id)
               && !presentationEventIds.has(event.id)) ?? [];
             const contextItems = detail?.context_items ?? [];
             return (
@@ -1424,7 +1145,7 @@ export function AgentSurface({
                           presentation.show_environment ? "Environment" : null,
                         ].filter((item) => item != null).join(" · ")}</small>
                       </div>
-                      <span className="rho-agent-file-outcome" role={status === "presenting" ? "status" : undefined}>
+                      <span className="rho-agent-studio-outcome" role={status === "presenting" ? "status" : undefined}>
                         {status === "presented" ? "ready in Studio"
                           : status === "failed" ? "arrangement failed"
                             : "arranging Studio…"}
@@ -1436,111 +1157,6 @@ export function AgentSurface({
                           onClick={() => void presentStudio(turn, event.id, presentation)}
                         >Retry in Studio</button>
                       )}
-                    </section>
-                  );
-                })}
-                {proposals.map(({ event, proposal }) => {
-                  const key = `${turn.turn_id}:${event.id}`;
-                  const outcome = detail == null ? null : agentFileProposalOutcome(detail, event.id);
-                  const rejected = view.file_decisions[key] === "rejected";
-                  const diffState = proposalDiffs.get(key);
-                  return (
-                    <section className="rho-agent-file-proposal" data-proposal-key={key} key={key}>
-                      <header>
-                        <span className="rho-agent-decision-kind">File change</span>
-                        <strong>{proposal.operation.replaceAll("_", " ")}</strong>
-                        <code>{proposal.path}</code>
-                        {outcome != null && <span className="rho-agent-file-outcome">{outcome}</span>}
-                        {rejected && outcome == null && <span className="rho-agent-file-outcome">rejected in this view</span>}
-                        {outcome == null && !rejected && (
-                          <div className="rho-agent-decision-actions">
-                            <button type="button" disabled={turnMutationRenderBlocked(turn) || turn.status === "running" || turn.status === "waiting"} onClick={() => {
-                              if (!turnMutationIsAvailable(turn) || viewRef.current.file_decisions[key] === "rejected") return;
-                              const activationVersion = activationVersionRef.current;
-                              const mutation = beginMutation("agent-file-apply");
-                              if (mutation == null) return;
-                              if (!turnMutationIsAvailable(turn) || viewRef.current.file_decisions[key] === "rejected") {
-                                endMutation(mutation);
-                                return;
-                              }
-                              void (async () => {
-                                try {
-                                  const review = diffState?.status === "ready"
-                                    && (proposal.operation === "append" || proposal.operation === "create")
-                                    ? {
-                                        before_content: diffState.before,
-                                        expected_disk_sha256: diffState.expected_disk_sha256,
-                                      }
-                                    : undefined;
-                                  const { response, beforeContent } = await applyFileProposal(
-                                    turn,
-                                    event.id,
-                                    proposal,
-                                    review,
-                                  );
-                                  if (!activationIsCurrent(activationVersion)) return;
-                                  if (response.after_sha256 != null) {
-                                    setFileUndo({
-                                      turn_id: turn.turn_id,
-                                      proposal_event_id: event.id,
-                                      path: proposal.path,
-                                      expected_after_sha256: response.after_sha256,
-                                      before_content: beforeContent,
-                                      created: proposal.operation === "create",
-                                    });
-                                  }
-                                  storeProposalDiff(key, undefined);
-                                  await refreshCurrent(activationVersion);
-                                } catch (error: unknown) {
-                                  if (activationIsCurrent(activationVersion)) {
-                                    storeProposalDiff(key, undefined);
-                                    reportError(error);
-                                  }
-                                } finally {
-                                  endMutation(mutation);
-                                }
-                              })();
-                            }}>Apply</button>
-                            <button
-                              type="button"
-                              disabled={turnMutationRenderBlocked(turn)}
-                              onClick={() => void rejectFileProposal(turn, key)}
-                            >Reject</button>
-                          </div>
-                        )}
-                        {fileUndo?.turn_id === turn.turn_id && fileUndo.proposal_event_id === event.id && (
-                          <button type="button" disabled={turnMutationRenderBlocked(turn)} onClick={() => {
-                            if (!turnMutationIsAvailable(turn)) return;
-                            const activationVersion = activationVersionRef.current;
-                            const mutation = beginMutation("agent-file-undo");
-                            if (mutation == null) return;
-                            if (!turnMutationIsAvailable(turn)) {
-                              endMutation(mutation);
-                              return;
-                            }
-                            void (async () => {
-                              try {
-                                await undoFileProposal(fileUndo);
-                                if (!activationIsCurrent(activationVersion)) return;
-                                setFileUndo(null);
-                                await refreshCurrent(activationVersion);
-                              } catch (error: unknown) {
-                                if (activationIsCurrent(activationVersion)) reportError(error);
-                              } finally {
-                                endMutation(mutation);
-                              }
-                            })();
-                          }}>Undo applied edit</button>
-                        )}
-                      </header>
-                      <details className="rho-agent-file-content" onToggle={(toggleEvent) => {
-                        if (toggleEvent.currentTarget.open) {
-                          void loadProposalDiff(turn, event.id, proposal);
-                        }
-                      }}>
-                        <summary onClick={() => void loadProposalDiff(turn, event.id, proposal)}>Diff</summary>
-                        <AgentProposalDiff proposal={proposal} state={diffState} />
-                      </details>
                     </section>
                   );
                 })}
@@ -1623,98 +1239,10 @@ export function AgentSurface({
             <div className="rho-agent-autonomous-badge" role="status" title="Observe, plan, request governed effects, then re-observe">
               Governed agent
             </div>
-            <details className="rho-agent-posture-menu">
-              <summary
-                aria-label={`Permission posture: ${postureLabel}`}
-                aria-disabled={viewStateWriteBlocked}
-                onClick={(event) => {
-                  if (viewStateWriteBlocked) event.preventDefault();
-                }}
-              ><span>{postureLabel}</span></summary>
-              <div role="menu" aria-label="Permission posture choices">
-                {POSTURE_OPTIONS.map((option) => {
-                  const active = (option.id === "auto") === view.auto_approve;
-                  return (
-                    <div className="rho-agent-posture-option" key={option.id}>
-                      <button
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={active}
-                        className={option.id === "auto" ? "rho-agent-auto-approve" : undefined}
-                        disabled={viewStateWriteBlocked}
-                        onClick={(event) => {
-                          event.currentTarget.closest("details")!.open = false;
-                          commitView((current) => ({ ...current, auto_approve: option.id === "auto" }));
-                        }}
-                      >{option.label}</button>
-                      <small>{option.hint}</small>
-                    </div>
-                  );
-                })}
-              </div>
-            </details>
+            <div className="rho-agent-external-provider" title="Agent implementation and model selection belong to the external ACP process">
+              {agentLabel} · {runtimeDiagnostics?.protocol ?? "ACP"}
+            </div>
             {!idleConversation && <small className="rho-agent-mode-hint">Observe → plan → request effect → re-observe</small>}
-            <details className="rho-agent-model-menu">
-              <summary aria-label={`Chat model: ${chatModelLabel}`} aria-busy={modelSwitchBusy} aria-disabled={busy || modelSwitchBusy} onClick={(event) => {
-                if (mutationRef.current != null || busy || modelSwitchBusy) {
-                  event.preventDefault();
-                  return;
-                }
-                const menu = event.currentTarget.closest("details");
-                if (menu != null && !menu.open) setModelQuery("");
-              }}>
-                <span>{chatModelLabel}</span>
-              </summary>
-              <div role="menu" aria-label="Chat model choices">
-                {switchableModels.length > 6 && (
-                  <input
-                    className="rho-agent-model-search"
-                    type="search"
-                    aria-label="Search chat models"
-                    placeholder="Search models…"
-                    value={modelQuery}
-                    disabled={busy || modelSwitchBusy}
-                    onChange={(event) => setModelQuery(event.target.value)}
-                  />
-                )}
-                {switchableModels.length === 0 && <span className="rho-agent-model-empty">No chat model is configured.</span>}
-                {switchableModels.length > 0 && filteredModels.length === 0 && (
-                  <span className="rho-agent-model-empty">No model matches the search.</span>
-                )}
-                {[...modelGroups].map(([provider, models]) => (
-                  <div className="rho-agent-model-group" key={provider}>
-                    <div className="rho-agent-model-group-label">{provider}</div>
-                    {models.map((model) => {
-                      const active = model.id === activeChatModelId;
-                      return (
-                        <button
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={active}
-                          disabled={busy || modelSwitchBusy}
-                          key={model.id}
-                          onClick={(event) => {
-                            event.currentTarget.closest("details")!.open = false;
-                            void selectChatModel(model.id);
-                          }}
-                        >
-                          <span className="rho-agent-model-row">
-                            <span className="rho-agent-model-check" aria-hidden="true">{active ? "✓" : ""}</span>
-                            <span className="rho-agent-model-name">{model.display_name}</span>
-                            <code className="rho-agent-model-id">{model.model_id}</code>
-                          </span>
-                          <small>{formatContextTokens(model.context_window_tokens)} context · {modelReadinessLabel(model)}</small>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-                <button type="button" className="rho-agent-manage-models" onClick={(event) => {
-                  event.currentTarget.closest("details")!.open = false;
-                  openModelSettings(activeProviderId, activeChatModelId);
-                }}>Manage models…</button>
-              </div>
-            </details>
             {composerBlockedReason != null && view.composer.trim() !== "" && (
               <small className="rho-agent-submit-block" role="status" title={composerBlockedReason}>{composerBlockedReason}</small>
             )}

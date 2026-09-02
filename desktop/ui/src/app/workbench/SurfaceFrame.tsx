@@ -9,7 +9,6 @@ import {
 import { createPortal } from "react-dom";
 
 import type {
-  AgentFileMutationResponse,
   AgentTurnSummary,
   PluginSurfaceDocumentRequest,
   ResourceDescriptor,
@@ -34,12 +33,7 @@ import {
   RuntimeCenterSurface,
   type RuntimeConsoleAttachment,
 } from "../authority/RuntimeCenterSurface";
-import type {
-  AgentFileProposal,
-  AgentFileProposalReview,
-  AgentFileUndoState,
-  AgentSurfaceState,
-} from "../agent/AgentSurface";
+import type { AgentSurfaceState } from "../agent/AgentSurface";
 import type { AgentStudioPresentation } from "../agent/studio-presentation";
 import { CheckResultView } from "../CheckResultView";
 import { DOMAIN_SURFACE_IDS, DomainSurfaceView } from "../DomainSurfaceView";
@@ -157,13 +151,6 @@ interface SurfaceFrameProps {
     turn: AgentTurnSummary,
     presentation: AgentStudioPresentation,
   ) => Promise<void>;
-  readonly applyAgentFileProposal: (
-    turn: AgentTurnSummary,
-    eventId: number,
-    proposal: AgentFileProposal,
-    review?: AgentFileProposalReview,
-  ) => Promise<{ readonly response: AgentFileMutationResponse; readonly beforeContent: string }>;
-  readonly undoAgentFileProposal: (request: AgentFileUndoState) => Promise<void>;
   readonly openNavigatorFile: (descriptor: ResourceDescriptor) => Promise<void>;
   readonly openSurfaceById: (surfaceId: string, viewStateOverride?: unknown) => void;
   readonly openPlot: (plotId: string) => void;
@@ -207,7 +194,7 @@ export function SurfaceFrame({
   pluginTransport, surfaceFactories, pluginDocumentRequest, projectRevision, openFindingReference,
   agentHealth, createAgentConversation, runAgentConversation, persistAgentViewState,
   persistSurfaceViewState, pinAgentTask, presentAgentTurnInStudio,
-  applyAgentFileProposal, undoAgentFileProposal, openNavigatorFile, openSurfaceById, openPlot,
+  openNavigatorFile, openSurfaceById, openPlot,
   agentRuntimeOutputContext, setAgentRuntimeOutputContext,
   embedded, dockviewHosted,
 }: SurfaceFrameProps) {
@@ -599,16 +586,9 @@ export function SurfaceFrame({
           persist={persistAgentViewState}
           pinTask={pinAgentTask}
           presentInStudio={presentAgentTurnInStudio}
-          applyFileProposal={applyAgentFileProposal}
-          undoFileProposal={undoAgentFileProposal}
           reportError={reportError}
           runtimeOutputContext={agentRuntimeOutputContext}
           setRuntimeOutputContext={setAgentRuntimeOutputContext}
-          openModelSettings={(providerId, modelId) => openSurfaceById("rho.settings", {
-            module_id: "providers",
-            provider_id: providerId,
-            model_id: modelId,
-          })}
         />
       )}
       {instance.surface_id === "rho.runtimes" && (

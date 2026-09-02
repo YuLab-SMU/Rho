@@ -68,7 +68,8 @@ try {
   assert.match(generated, /agentRuntimeStatus: \(\) =>/);
   assert.match(generated, /agentRuntimeRetry: \(\) =>/);
   assert.match(generated, /export type AgentRuntimeStatusView/);
-  for (const field of ["status", "rscript", "r_version", "provider_adapters_available", "provider_health", "dependencies"]) {
+  assert.match(generated, /export type AcpAgentCandidateStatus/);
+  for (const field of ["status", "active_agent_id", "active_agent_label", "protocol", "executable", "candidates"]) {
     assert.match(generated, new RegExp(`\\n\\t${field}:`), `${field} must be required in the response view`);
     assert.doesNotMatch(generated, new RegExp(`\\n\\t${field}\\?:`));
   }
@@ -80,7 +81,7 @@ try {
     assert.equal(count(generated, `"${command}"`), 1, `${command} must be generated exactly once`);
     assert.equal(count(tauri, `"${command}"`), 0, `${command} must not remain handwritten`);
   }
-  for (const typeName of ["AgentDependencyDiagnostics", "AgentRuntimeDiagnostics"]) {
+  for (const typeName of ["AgentRuntimeDiagnostics"]) {
     assert.doesNotMatch(
       types,
       new RegExp(`export (?:interface|type) ${typeName}\\b`),

@@ -117,7 +117,6 @@ lifecycle.
 | Secrets | `crates/rho-secret-broker` |
 | Artifacts and transfer | `crates/rho-artifact-store` |
 | Desktop contracts and UI | `crates/rho-ui-contract`, `desktop/` |
-| First-party R adapter | `r/rho.agent` |
 | Telemetry | `crates/rho-telemetry` |
 | Extension runtime and authoring | `crates/rho-extension-runtime`, `crates/rho-plugin-dev` |
 | Public observer tools | `crates/rho-cli`, `crates/rho-mcp` |
