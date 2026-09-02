@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - "fuzz/**"
-      - "crates/rho-agent-host/src/protocol/**"
       - "crates/rho-protocol/src/**"
       - "crates/rho-sandbox/src/**"
   schedule:

@@ -259,6 +259,34 @@ fn target_dependency_graph_allows_only_declared_edges() {
 }
 
 #[test]
+fn retired_in_process_agent_runtime_is_absent() {
+    let root = repo_root();
+    for removed in [
+        "r/rho.agent",
+        "crates/rho-agent-host",
+        "crates/rho-agent-transport",
+    ] {
+        assert!(
+            !root.join(removed).exists(),
+            "retired in-process Agent path remains: {removed}"
+        );
+    }
+    let manifests = [
+        std::fs::read_to_string(root.join("Cargo.toml")).unwrap(),
+        std::fs::read_to_string(root.join("Cargo.lock")).unwrap(),
+        std::fs::read_to_string(root.join("desktop/src-tauri/Cargo.toml")).unwrap(),
+        std::fs::read_to_string(root.join("crates/rho-server/Cargo.toml")).unwrap(),
+    ]
+    .join("\n");
+    for crate_name in ["rho-agent-host", "rho-agent-transport"] {
+        assert!(
+            !manifests.contains(crate_name),
+            "retired Agent crate remains in workspace manifests: {crate_name}"
+        );
+    }
+}
+
+#[test]
 fn protocol_crate_has_no_adapter_runtime_or_authority_dependency() {
     let manifest = crate_manifest("rho-protocol");
     let deps = dependency_names(&manifest);

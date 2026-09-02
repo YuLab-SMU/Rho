@@ -854,10 +854,13 @@ mod tests {
         );
         assert_eq!(response["result"]["findings"][0]["severity"], "warning");
         assert_eq!(
-            response["result"]["findings"][0]["reference"][0]["kind"],
+            response["result"]["findings"][0]["references"][0]["kind"],
             "source_range"
         );
-        assert_eq!(response["result"]["findings"][0]["reference"][0]["line"], 2);
+        assert_eq!(
+            response["result"]["findings"][0]["references"][0]["line"],
+            2
+        );
         assert_eq!(run_request["expected_project_revision"], 1);
         assert_eq!(result_request["result_id"], "check-result:7");
     }

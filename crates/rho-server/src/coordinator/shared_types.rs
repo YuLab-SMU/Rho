@@ -297,24 +297,9 @@ pub struct ProjectSkillSummary {
     pub references: Vec<String>,
 }
 
-fn hide_console_window(_command: &mut tokio::process::Command) {
-    #[cfg(windows)]
-    _command.creation_flags(0x0800_0000);
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ApprovalResponseInput {
-    pub decision: String,
-    pub reason: Option<String>,
-}
-
-#[derive(Default)]
-pub struct PendingApprovalRegistry {
-    waiters: Mutex<std::collections::HashMap<String, PendingApprovalWaiter>>,
-}
-
 #[derive(Default)]
 pub struct AgentWorkspaceLane {
+    #[cfg(test)]
     gate: Mutex<()>,
     state: StdMutex<AgentWorkspaceLaneState>,
 }
@@ -331,6 +316,7 @@ struct AgentWorkspaceExecution {
     run_id: String,
 }
 
+#[cfg(test)]
 struct AgentWorkspaceExecutionGuard<'a> {
     lane: &'a AgentWorkspaceLane,
     turn_id: String,
@@ -358,6 +344,7 @@ impl AgentWorkspaceLane {
             .remove(turn_id);
     }
 
+    #[cfg(test)]
     fn begin_execution<'a>(
         &'a self,
         turn_id: &str,
@@ -383,6 +370,7 @@ impl AgentWorkspaceLane {
     }
 }
 
+#[cfg(test)]
 impl Drop for AgentWorkspaceExecutionGuard<'_> {
     fn drop(&mut self) {
         let mut state = self
@@ -398,6 +386,17 @@ impl Drop for AgentWorkspaceExecutionGuard<'_> {
             state.active = None;
         }
     }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ApprovalResponseInput {
+    pub decision: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Default)]
+pub struct PendingApprovalRegistry {
+    waiters: Mutex<std::collections::HashMap<String, PendingApprovalWaiter>>,
 }
 
 struct PendingApprovalWaiter {

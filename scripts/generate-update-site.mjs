@@ -393,9 +393,9 @@ function fakeCandidateRecord(version) {
     browser_download_url: `${REPOSITORY}/releases/download/v${version}/rho-${version}-acceptance.json`,
   });
   const checks = {
-    windows_x86_64: ["release_metadata", "rust_workspace", "rho_bridge", "rho_agent", "frontend", "workspace_smoke", ...(twoStageWindows ? ["authenticode_binary", "authenticode_installer", "installed_payload_signature", "signpath_binary_request_binding", "signpath_installer_request_binding", "free_trial_self_signed"] : ["authenticode", "signpath_request_binding", "free_trial_self_signed"])],
-    macos_aarch64: ["release_metadata", "rust_workspace", "rho_bridge", "rho_agent", "frontend", "workspace_smoke", "arm64", "codesign", "entitlements", "notarization", "notary_binding", "staple", "gatekeeper", "license_boundary"],
-    linux_x86_64: ["release_metadata", "rust_workspace", "rho_bridge", "rho_agent", "frontend", "workspace_smoke", "x86_64", "appimage", "apprun", "license_boundary", "native_updater_signature"],
+    windows_x86_64: ["release_metadata", "rust_workspace", "rho_bridge", "frontend", "workspace_smoke", ...(twoStageWindows ? ["authenticode_binary", "authenticode_installer", "installed_payload_signature", "signpath_binary_request_binding", "signpath_installer_request_binding", "free_trial_self_signed"] : ["authenticode", "signpath_request_binding", "free_trial_self_signed"])],
+    macos_aarch64: ["release_metadata", "rust_workspace", "rho_bridge", "frontend", "workspace_smoke", "arm64", "codesign", "entitlements", "notarization", "notary_binding", "staple", "gatekeeper", "license_boundary"],
+    linux_x86_64: ["release_metadata", "rust_workspace", "rho_bridge", "frontend", "workspace_smoke", "x86_64", "appimage", "apprun", "license_boundary", "native_updater_signature"],
   };
   record.platform_evidence = Object.fromEntries(candidatePlatforms.map((platform) => [platform, {
     size_bytes: platforms[platform].evidence.size_bytes,

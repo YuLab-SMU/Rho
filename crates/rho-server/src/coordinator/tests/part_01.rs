@@ -1,6 +1,5 @@
     use super::*;
     use std::fs;
-    use std::sync::Mutex as StdMutex;
     use tempfile::TempDir;
 
     #[tokio::test]

@@ -1,15 +1,12 @@
 use std::collections::VecDeque;
 use std::env;
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand};
-use rho_agent_transport::{AgentAuthenticator, read_async_frame};
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use serde::Serialize;
-use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, Parser)]
 #[command(name = "rho-server", about = "Rho Phase 0 runtime probes")]
@@ -22,13 +19,6 @@ struct Cli {
 enum Commands {
     /// Report local toolchain and runtime availability.
     Doctor,
-    /// Spawn a real Agent R process and verify the authenticated side channel.
-    ProbeAgentR {
-        #[arg(long, default_value = "Rscript")]
-        rscript: PathBuf,
-        #[arg(long, default_value = "r/rho.agent")]
-        agent_package: PathBuf,
-    },
     /// Launch Ark directly and execute one R expression.
     ProbeArk {
         #[arg(long)]
@@ -41,23 +31,6 @@ enum Commands {
         stdin: Vec<String>,
         #[arg(long)]
         interrupt_after_ms: Option<u64>,
-    },
-    /// Run Agent R -> broker -> Ark -> rho.bridge -> SQLite end to end.
-    ProbeCoordinator {
-        #[arg(long)]
-        kernelspec: PathBuf,
-        #[arg(long, default_value = "Rscript")]
-        rscript: PathBuf,
-        #[arg(long, default_value = "r/rho.agent")]
-        agent_package: PathBuf,
-        #[arg(long, default_value = "r/rho.bridge")]
-        bridge_package: PathBuf,
-        #[arg(long, default_value = ".rho/state/phase0-probe.sqlite")]
-        store: PathBuf,
-        #[arg(long)]
-        model: Option<String>,
-        #[arg(long, default_value = "Run the required Workspace R verification now.")]
-        prompt: String,
     },
     /// Ask Ark whether R input is complete, incomplete, invalid, or unknown.
     ProbeCompleteness {
@@ -98,10 +71,6 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Doctor => doctor(),
-        Commands::ProbeAgentR {
-            rscript,
-            agent_package,
-        } => probe_agent_r(rscript, agent_package).await,
         Commands::ProbeArk {
             kernelspec,
             code,
@@ -109,26 +78,6 @@ async fn main() -> Result<()> {
             stdin,
             interrupt_after_ms,
         } => probe_ark(kernelspec, code, connection_file, stdin, interrupt_after_ms).await,
-        Commands::ProbeCoordinator {
-            kernelspec,
-            rscript,
-            agent_package,
-            bridge_package,
-            store,
-            model,
-            prompt,
-        } => {
-            rho_server::coordinator::probe(
-                kernelspec,
-                rscript,
-                agent_package,
-                bridge_package,
-                store,
-                model,
-                prompt,
-            )
-            .await
-        }
         Commands::ProbeCompleteness { kernelspec, code } => {
             probe_completeness(kernelspec, code).await
         }
@@ -343,102 +292,6 @@ async fn probe_completeness(kernelspec: PathBuf, code: Vec<String>) -> Result<()
     Ok(())
 }
 
-/// Multi-line Agent R readiness probe program. Per the active
-/// `windows-agent-r-script-launch-repair-spec` invariant, Agent R code is
-/// transported in a flushed UTF-8 temporary `.R` file, never as a multi-line
-/// `-e` argument (the pattern that failed Windows turns with `0xc0000005`).
-fn agent_r_probe_script() -> &'static str {
-    r#"
-args <- commandArgs(TRUE)
-source(file.path(args[[2]], "R", "aaa-state.R"))
-source(file.path(args[[2]], "R", "transport.R"))
-token <- readLines(file("stdin"), n = 1L, warn = FALSE)
-connection <- rho_agent_connect(port = as.integer(args[[1]]), token = token)
-cat("agent stdout contamination probe\n")
-message("agent stderr contamination probe")
-rho_agent_emit("probe", list(ok = TRUE))
-close(connection)
-"#
-}
-
-fn write_agent_r_probe_script() -> Result<tempfile::NamedTempFile> {
-    use std::io::Write;
-
-    let mut script_file = tempfile::Builder::new()
-        .prefix("rho-agent-r-probe-")
-        .suffix(".R")
-        .tempfile()
-        .context("creating Agent R probe script file")?;
-    script_file
-        .write_all(agent_r_probe_script().as_bytes())
-        .context("writing Agent R probe script file")?;
-    script_file
-        .flush()
-        .context("flushing Agent R probe script file")?;
-    Ok(script_file)
-}
-
-fn agent_r_probe_args(script_path: &Path, port: u16, agent_package: &Path) -> Vec<OsString> {
-    vec![
-        script_path.as_os_str().to_os_string(),
-        OsString::from(port.to_string()),
-        agent_package.as_os_str().to_os_string(),
-    ]
-}
-
-async fn probe_agent_r(rscript: PathBuf, agent_package: PathBuf) -> Result<()> {
-    let mut authenticator = AgentAuthenticator::bind().await?;
-    let address = authenticator.local_addr()?;
-    let token = authenticator.bootstrap_token()?.to_string();
-    let script_file = write_agent_r_probe_script()?;
-    let args = agent_r_probe_args(script_file.path(), address.port(), &agent_package);
-
-    let mut child = tokio::process::Command::new(rscript)
-        .args(&args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("spawning Agent R probe")?;
-    let mut stdin = child.stdin.take().context("opening Agent R stdin")?;
-    stdin.write_all(format!("{token}\n").as_bytes()).await?;
-    stdin.shutdown().await?;
-
-    let mut agent = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        authenticator.authenticate_next(),
-    )
-    .await
-    .context("timed out waiting for Agent R authentication")??;
-    let event = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        read_async_frame(&mut agent.stream),
-    )
-    .await
-    .context("timed out waiting for Agent R probe event")??;
-    let output = child.wait_with_output().await?;
-    ensure!(
-        output.status.success(),
-        "Agent R probe exited with {}",
-        output.status
-    );
-    ensure!(event.payload["type"] == "probe" && event.payload["ok"] == true);
-
-    println!(
-        "{}",
-        serde_json::json!({
-            "type": "agent_r_probe",
-            "peer": agent.peer,
-            "event": event,
-            "stdout": String::from_utf8_lossy(&output.stdout),
-            "stderr": String::from_utf8_lossy(&output.stderr),
-            "token_transport": "stdin",
-            "protocol_transport": "loopback_tcp"
-        })
-    );
-    Ok(())
-}
-
 fn doctor() -> Result<()> {
     let report = DoctorReport {
         platform: env::consts::OS.to_string(),
@@ -561,40 +414,4 @@ fn is_file(path: &Path) -> bool {
     path.metadata()
         .map(|value| value.is_file())
         .unwrap_or(false)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::Path;
-
-    #[test]
-    fn agent_r_probe_script_uses_a_flushed_utf8_r_file_instead_of_inline_e() {
-        let script_file = write_agent_r_probe_script().unwrap();
-        let script_path = script_file.path();
-        let args = agent_r_probe_args(script_path, 4321, Path::new("r/rho.agent"));
-
-        assert_eq!(
-            script_path.extension().and_then(|value| value.to_str()),
-            Some("R")
-        );
-        assert_eq!(
-            std::fs::read_to_string(script_path).unwrap(),
-            agent_r_probe_script()
-        );
-        assert_eq!(
-            args,
-            vec![
-                script_path.as_os_str().to_os_string(),
-                OsString::from("4321"),
-                Path::new("r/rho.agent").as_os_str().to_os_string(),
-            ]
-        );
-        assert!(!args.iter().any(|arg| arg == "-e"));
-        assert!(
-            !args
-                .iter()
-                .any(|arg| arg.to_string_lossy().contains("rho_agent_connect"))
-        );
-    }
 }

@@ -66,7 +66,7 @@
                 .registry()
                 .resolve_application_surfaces()
                 .unwrap();
-            assert_eq!(surfaces.factories().len(), 23);
+            assert_eq!(surfaces.factories().len(), 24);
             assert_eq!(
                 surfaces
                     .factories()
@@ -82,6 +82,7 @@
                     "rho.agent",
                     "rho.settings",
                     "rho.environment",
+                    "rho.runtimes",
                     "rho.navigator",
                     "rho.claims",
                     "rho.evidence-graph",
@@ -256,7 +257,7 @@
                     .unwrap()
                     .factories()
                     .len(),
-                17
+                24
             );
             assert_eq!(
                 candidate
@@ -848,9 +849,10 @@
                 )
                 .await
             });
-            // Full-workspace parallel tests can briefly starve this task while
-            // the switch remains bounded; five seconds avoids a scheduler-only
-            // failure without relaxing the stale-generation assertion.
+            // Project root commits before the new candidate is published, and
+            // publication waits for this in-flight lease to drain. Waiting for
+            // B's generation before release would deadlock; waiting for the
+            // committed root is the earliest fail-closed signal.
             tokio::time::timeout(Duration::from_secs(5), async {
                 loop {
                     if *state.project_root.read().await == project_b {
@@ -864,7 +866,11 @@
             release.add_permits(1);
 
             let error = old_call.await.unwrap().unwrap_err();
-            assert!(error.contains("stale activation generation"));
+            assert!(
+                error.contains("stale activation generation")
+                    || error.contains("Run History result is stale after a project switch"),
+                "late Run History result must fail closed after a project switch, got: {error}"
+            );
             assert_eq!(switch.await.unwrap().unwrap().status, "ready");
             assert_run_summaries_equal(
                 list_runs_with_state(None, state.as_ref()).await.unwrap(),

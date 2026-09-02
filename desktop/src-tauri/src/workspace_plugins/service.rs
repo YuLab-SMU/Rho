@@ -18,7 +18,6 @@ use crate::internal_extensions::extension_project_scope_id;
 
 pub(crate) struct AgentPluginProjectionSnapshot {
     pub project_root: String,
-    pub runtime_context: PluginRuntimeContext,
     pub projection: WorkspacePluginAgentProjection,
 }
 
@@ -75,7 +74,6 @@ pub(crate) async fn agent_plugin_projection_snapshot(
         let projection = registry.agent_projection(&runtime_context, store)?;
         Ok(AgentPluginProjectionSnapshot {
             project_root,
-            runtime_context,
             projection,
         })
     })

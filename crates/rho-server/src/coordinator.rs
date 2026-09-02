@@ -1,32 +1,26 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::ffi::OsString;
 use std::fs;
-use std::future::Future;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result, bail, ensure};
-use rho_agent_transport::{
-    AgentAuthenticator, AuthenticatedAgent, read_async_frame, write_async_frame,
-};
 use rho_core::{BrokerState, ExecutionOrigin, ExecutionRequest};
-use rho_kernel::{ArkLaunchConfig, ArkSession, CorrelatedKernelEvent, KernelEvent};
+use rho_kernel::{ArkSession, CorrelatedKernelEvent, KernelEvent};
 use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, OperationClass};
 use rho_store::{
     AgentConversationTurn, AgentRepository, AgentTurnContextItemDraft, AgentTurnEventDraft,
-    AgentTurnFinish, ArtifactRecordDraft,
-    BorrowedStore, EnvironmentSnapshotDraft, PlotArtifactDraft, RunDraft, RunErrorRange, RunFinish,
-    Store, StoreConnection, StoreExecutor, StoreExecutorOperationError, normalize_project_root,
+    AgentTurnFinish, ArtifactRecordDraft, BorrowedStore, EnvironmentSnapshotDraft,
+    PlotArtifactDraft, RunDraft, RunErrorRange, RunFinish, Store, StoreConnection, StoreExecutor,
+    StoreExecutorOperationError,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
+#[cfg(test)]
 use crate::workspace_lane::WorkspaceBrokerLane;
 
 include!("coordinator/shared_types.rs");

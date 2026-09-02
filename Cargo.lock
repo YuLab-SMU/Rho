@@ -4156,17 +4156,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-agent-transport"
-version = "0.4.1-dev.22"
-dependencies = [
- "rand 0.9.5",
- "rho-protocol",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
 name = "rho-architecture-tests"
 version = "0.4.1-dev.22"
 dependencies = [
@@ -4450,7 +4439,6 @@ dependencies = [
  "rand 0.9.5",
  "reqwest 0.12.28",
  "rho-acp-client",
- "rho-agent-transport",
  "rho-core",
  "rho-extension-runtime",
  "rho-kernel",

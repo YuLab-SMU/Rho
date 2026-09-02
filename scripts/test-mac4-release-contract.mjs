@@ -29,6 +29,8 @@ assert.ok(lockLocalVersions.length >= 9, "Expected local Rho workspace packages 
 assert.ok(lockLocalVersions.every((version) => version === expectedVersion), "Cargo.lock local package versions must match the candidate");
 
 const build = read(".github/workflows/candidate-build-draft.yml");
+assert.doesNotMatch(build, /r\/rho\.agent/);
+assert.doesNotMatch(build, /rho_agent/);
 assert.equal(
   count(build, /cargo test --workspace --locked --no-fail-fast/g),
   3,
@@ -273,6 +275,7 @@ assert.match(draftJob, /body: releaseNotes\.body/);
 assert.match(draftJob, /checked\.data\.body !== releaseNotes\.body/);
 
 const candidateTool = read("scripts/candidate-release.mjs");
+assert.doesNotMatch(candidateTool, /"rho_agent"/);
 assert.match(candidateTool, /rho_candidate_rehearsal_evidence/);
 assert.match(candidateTool, /REHEARSAL_REPOSITORY = "YuLab-SMU\/Rho_for_mac"/);
 assert.match(candidateTool, /CANDIDATE_REPOSITORY = "YuLab-SMU\/Rho"/);

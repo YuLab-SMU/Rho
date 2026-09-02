@@ -21,7 +21,6 @@ members = [
   "crates/rho-telemetry",
   "crates/rho-architecture-tests",
   "crates/rho-kernel",
-  "crates/rho-agent-transport",
   "crates/rho-core",
   "crates/rho-server",
   "crates/rho-cli",

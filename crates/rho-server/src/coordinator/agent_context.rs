@@ -18,8 +18,10 @@ fn bounded_agent_context_text(value: &str, max_chars: usize) -> String {
     output
 }
 
+#[cfg(test)]
 const MAX_PROVIDER_FAILURE_BYTES: usize = 2 * 1024;
 
+#[cfg(test)]
 fn bounded_provider_failure(payload: &Value) -> String {
     let value = payload
         .get("error")
@@ -800,4 +802,3 @@ pub fn preview_agent_context_plan(
         items: plan.receipts,
     })
 }
-

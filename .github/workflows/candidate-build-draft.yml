@@ -118,7 +118,6 @@ jobs:
         run: |
           Rscript -e "if (!requireNamespace('remotes', quietly = TRUE)) install.packages('remotes')"
           Rscript -e "remotes::install_deps('r/rho.bridge', dependencies = TRUE, upgrade = 'never')"
-          Rscript -e "remotes::install_deps('r/rho.agent', dependencies = TRUE, upgrade = 'never')"
 
       - name: Install Windows GNU Rust toolchain
         shell: pwsh
@@ -145,7 +144,6 @@ jobs:
           cargo fmt --all -- --check
           cargo test --workspace --locked --no-fail-fast
           Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
-          Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
           npm ci --prefix desktop
           npm --prefix desktop run rsr:release
 
@@ -855,7 +853,7 @@ jobs:
         run: |
           $artifact = "target\candidate\Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
           $evidence = "target\candidate\rho-$($env:CANDIDATE_VERSION)-windows-x86_64-evidence.json"
-          $checks = "release_metadata,rust_workspace,rho_bridge,rho_agent,frontend,workspace_smoke"
+          $checks = "release_metadata,rust_workspace,rho_bridge,frontend,workspace_smoke"
           $arguments = @(
             "scripts/candidate-release.mjs",
             "--mode", "platform",
@@ -942,7 +940,6 @@ jobs:
           set -euo pipefail
           Rscript -e "if (!requireNamespace('remotes', quietly = TRUE)) install.packages('remotes')"
           Rscript -e "remotes::install_deps('r/rho.bridge', dependencies = TRUE, upgrade = 'never')"
-          Rscript -e "remotes::install_deps('r/rho.agent', dependencies = TRUE, upgrade = 'never')"
 
       - name: Install native Rust toolchain
         shell: bash
@@ -966,7 +963,6 @@ jobs:
           cargo fmt --all -- --check
           cargo test --workspace --locked --no-fail-fast
           Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
-          Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
           npm ci --prefix desktop
           npm --prefix desktop run rsr:release
 
@@ -1381,7 +1377,7 @@ jobs:
           CANDIDATE_COMMIT: ${{ needs.identity.outputs.commit }}
         run: |
           set -euo pipefail
-          node scripts/candidate-release.mjs --mode platform --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --platform macos_aarch64 --artifact "target/candidate/Rho_${CANDIDATE_VERSION}_aarch64.dmg" --output "target/candidate/rho-${CANDIDATE_VERSION}-macos-aarch64-evidence.json" --checks release_metadata,rust_workspace,rho_bridge,rho_agent,frontend,workspace_smoke,arm64,codesign,entitlements,notarization,notary_binding,staple,gatekeeper,license_boundary,native_updater_archive
+          node scripts/candidate-release.mjs --mode platform --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --platform macos_aarch64 --artifact "target/candidate/Rho_${CANDIDATE_VERSION}_aarch64.dmg" --output "target/candidate/rho-${CANDIDATE_VERSION}-macos-aarch64-evidence.json" --checks release_metadata,rust_workspace,rho_bridge,frontend,workspace_smoke,arm64,codesign,entitlements,notarization,notary_binding,staple,gatekeeper,license_boundary,native_updater_archive
 
       - name: Sign final notarized macOS updater archive
         if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
@@ -1463,7 +1459,6 @@ jobs:
         run: |
           Rscript -e "if (!requireNamespace('remotes', quietly = TRUE)) install.packages('remotes')"
           Rscript -e "remotes::install_deps('r/rho.bridge', dependencies = TRUE, upgrade = 'never')"
-          Rscript -e "remotes::install_deps('r/rho.agent', dependencies = TRUE, upgrade = 'never')"
 
       - name: Install pinned Linux Rust toolchain
         shell: bash
@@ -1490,7 +1485,6 @@ jobs:
           cargo fmt --all -- --check
           cargo test --workspace --locked --no-fail-fast
           Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
-          Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
           npm ci --prefix desktop
           npm --prefix desktop run rsr:release
 
@@ -1528,7 +1522,7 @@ jobs:
           mkdir -p target/candidate
           cp "$artifact" "target/candidate/$(basename "$artifact")"
           cp "$signature" "target/candidate/$(basename "$signature")"
-          node scripts/candidate-release.mjs --mode platform --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --platform linux_x86_64 --artifact "target/candidate/$(basename "$artifact")" --output "target/candidate/rho-${CANDIDATE_VERSION}-linux-x86_64-evidence.json" --checks release_metadata,rust_workspace,rho_bridge,rho_agent,frontend,workspace_smoke,x86_64,appimage,apprun,license_boundary,native_updater_signature
+          node scripts/candidate-release.mjs --mode platform --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --platform linux_x86_64 --artifact "target/candidate/$(basename "$artifact")" --output "target/candidate/rho-${CANDIDATE_VERSION}-linux-x86_64-evidence.json" --checks release_metadata,rust_workspace,rho_bridge,frontend,workspace_smoke,x86_64,appimage,apprun,license_boundary,native_updater_signature
 
       - name: Upload immutable Linux candidate and updater inputs
         uses: actions/upload-artifact@v4
