@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "63c2b6f7f50b5f7c483e16a4b358d661cd3b6189b4a4859b329c1b9d8bb8c612";
+const EXPECTED_HANDLER_DIGEST = "88b5a74c1c72b7e11e8b49764d712e68e769da6e944c3e12f25e93e141a2c9f9";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [
@@ -91,12 +91,8 @@ const AGENT_CONVERSATION_COMMANDS = [
 ];
 
 const AGENT_EXECUTION_COMMANDS = [
-  "agent_context_preview",
   "cancel_agent_turn",
-  "clear_agent_history",
   "get_agent_turn_detail",
-  "list_approval_requests",
-  "respond_approval",
   "retry_agent_turn",
   "run_agent",
 ];

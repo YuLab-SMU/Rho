@@ -56,7 +56,7 @@ const generatedProgram = inventory
   .map((file) => readFileSync(join(dist, file), "utf8"))
   .join("\n");
 assert.doesNotMatch(generatedProgram, /AGENT_UX_SUCCESS_FIXTURE/u);
-for (const marker of ["Autonomous goal loop", "Goal-driven scientific work"]) {
+for (const marker of ["Start a conversation", "Observe → plan → request effect → re-observe"]) {
   assert.match(generatedProgram, new RegExp(marker, "u"), `production bundle is missing ${marker}`);
 }
 
@@ -65,7 +65,11 @@ for (const marker of ["createStartupController", "StartupLedgerView", "Workbench
   assert.match(app, new RegExp(marker, "u"), `production App is missing ${marker}`);
 }
 assert.doesNotMatch(app, /AGENT_UX_SUCCESS_FIXTURE|AgentSurfaceVNext/u);
-assert.doesNotMatch(read("desktop/ui/src/app/agent/AgentSurface.tsx"), /className=["']rho-agent-mode["']/u);
+const agentSurface = read("desktop/ui/src/app/agent/AgentSurface.tsx");
+assert.doesNotMatch(agentSurface, /className=["']rho-agent-mode["']/u);
+for (const gating of ["rho-agent-approval", "respondAgentApproval", "rho-agent-context-preview"]) {
+  assert.ok(!agentSurface.includes(gating), `Agent surface gates instead of observing: ${gating}`);
+}
 
 const transport = read("desktop/ui/src/transport/index.ts");
 assert.match(transport, /isTauri\(\)/u);

@@ -71,7 +71,7 @@ try {
   assert.match(generated, /listAgentTurns: \(conversationId: string \| null, limit: number \| null\)/);
   assert.match(facet, /export interface AgentConversationTransport/);
   assert.match(facet, /createTauriAgentConversationTransport/);
-  assert.match(facet, /unsupported mode/);
+  assert.doesNotMatch(facet, /unsupported mode|"ask" \| "plan" \| "act"/);
   assert.match(tauri, /\.\.\.createTauriAgentConversationTransport\(invoke\)/);
 
   for (const command of commandNames) {

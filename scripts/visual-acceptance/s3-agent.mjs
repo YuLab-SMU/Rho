@@ -1,9 +1,9 @@
-// S3: one bounded, read-only Agent Ask through the current agent.chat route.
+// S3: one bounded, read-only Agent turn through the current agent.chat route.
 //
 // Agent availability is detected through the product path, not an operator
 // assertion or a secret-bearing environment dump. The scenario first renders
-// the Agent surface, reviews the context for one Ask-mode prompt, and submits
-// that prompt through a canonical V6 config and agent.chat route. The fixture's
+// the Agent surface, then submits one read-only prompt through a canonical V6
+// config and agent.chat route. The fixture's
 // declared credential environment name is deliberately absent, so only a
 // precise missing-credential / unavailable-credential-source outcome becomes
 // an auditable SKIP with bounded, redacted product evidence. Authentication
@@ -121,12 +121,9 @@ async function isolateSurface(ctx, surfaceId, timeoutMs = 30_000) {
 }
 
 const AGENT_SURFACE = '[data-surface-id="rho.agent"]';
-const MODE_BUTTONS = `${AGENT_SURFACE} .rho-agent-mode button`;
 const COMPOSER = `${AGENT_SURFACE} .rho-agent-composer textarea`;
-const REVIEW_BUTTON = `${AGENT_SURFACE} .rho-agent-context-controls .rho-agent-review-context`;
-const SEND_BUTTON = `${AGENT_SURFACE} .rho-agent-context-controls .rho-primary-action`;
-const CONTEXT_PREVIEW = `${AGENT_SURFACE} .rho-agent-context-preview`;
-const TURNS = `${AGENT_SURFACE} .rho-agent-turn`;
+const SEND_BUTTON = `${AGENT_SURFACE} .rho-agent-composer-actions .rho-primary-action`;
+const STREAM_ITEMS = `${AGENT_SURFACE} .rho-agent-stream-item`;
 const ACTION_ERROR = ".rho-action-error";
 const PROMPT = "Reply with exactly RHO_AGENT_OK. Do not call tools, run code, or modify files.";
 
@@ -135,22 +132,17 @@ async function queriedText(ctx, selector) {
   return records[0]?.text?.trim() ?? "";
 }
 
-async function agentTurns(ctx) {
-  const records = await ctx.query(TURNS, { all: true, attribute: "class" });
+async function streamItems(ctx) {
+  const records = await ctx.query(STREAM_ITEMS, { all: true, attribute: "class" });
   return records.map((record) => ({ className: record.value ?? "", text: record.text ?? "" }));
 }
 
-function terminalTurns(turns) {
-  return turns.filter((turn) => /rho-agent-turn-(completed|failed|cancelled)/.test(turn.className));
+function itemIdentity(item) {
+  return `${item.className}\u001f${item.text}`;
 }
 
-function turnIdentity(turn) {
-  return `${turn.className}\u001f${turn.text}`;
-}
-
-function terminalStatus(turn) {
-  const matched = turn.className.match(/rho-agent-turn-(completed|failed|cancelled)/);
-  return matched?.[1] ?? "unknown";
+function itemsOfKind(items, kind) {
+  return items.filter((item) => item.className.includes(`rho-agent-stream-${kind}`));
 }
 
 function unavailableCredentialReason(message) {
@@ -191,91 +183,66 @@ function unavailableDetection(message, evidenceSource, extra = {}) {
   };
 }
 
-async function waitForRestrictedAsk(ctx, beforeTurnKeys, previousActionError) {
-  return waitUntil("restricted Agent Ask terminal state", async () => {
+async function waitForRestrictedTurn(ctx, beforeItemKeys, previousActionError) {
+  return waitUntil("restricted Agent turn terminal state", async () => {
     const actionError = await queriedText(ctx, ACTION_ERROR);
     if (actionError && actionError !== previousActionError) {
       return { kind: "submission_error", message: actionError };
     }
-    const turns = terminalTurns(await agentTurns(ctx));
-    const terminal = turns.find((turn) => !beforeTurnKeys.has(turnIdentity(turn)));
-    return terminal == null ? null : { kind: "terminal", terminal };
+    const items = await streamItems(ctx);
+    const failed = itemsOfKind(items, "failure")
+      .find((item) => !beforeItemKeys.has(itemIdentity(item)));
+    if (failed != null) return { kind: "terminal", status: "failed", item: failed };
+    const answered = itemsOfKind(items, "answer")
+      .find((item) => !beforeItemKeys.has(itemIdentity(item)));
+    if (answered != null) return { kind: "terminal", status: "completed", item: answered };
+    return null;
   }, { timeoutMs: 300_000, intervalMs: 1_000 });
 }
 
 async function runCredentialDetection(ctx) {
-  const beforeTurnKeys = new Set(terminalTurns(await agentTurns(ctx)).map(turnIdentity));
+  const beforeItemKeys = new Set((await streamItems(ctx)).map(itemIdentity));
   const previousActionError = await queriedText(ctx, ACTION_ERROR);
 
   await ctx.act({ kind: "type", selector: COMPOSER, text: PROMPT });
-  await waitUntil("Agent context review enabled", async () => {
-    const matches = await ctx.query(REVIEW_BUTTON, { attribute: "disabled" });
-    return matches.length > 0 && matches[0].value == null ? true : null;
-  }, { timeoutMs: 60_000 });
-  await ctx.act({ kind: "click", selector: REVIEW_BUTTON });
-
-  const context = await waitUntil("Agent context preview", async () => {
-    const preview = await queriedText(ctx, CONTEXT_PREVIEW);
-    if (preview) return { preview };
-    const actionError = await queriedText(ctx, ACTION_ERROR);
-    if (actionError && actionError !== previousActionError) return { error: actionError };
-    return null;
-  }, { timeoutMs: 60_000 });
-  if (context.error) {
-    const unavailable = unavailableDetection(
-      context.error,
-      "current agent.chat context resolution",
-    );
-    if (unavailable != null) return unavailable;
-    throw new AssertionFailure(`Agent context review failed: ${redactEvidence(context.error)}`);
-  }
-
   await waitUntil("Agent send enabled", async () => {
     const matches = await ctx.query(SEND_BUTTON, { attribute: "disabled" });
     return matches.length > 0 && matches[0].value == null ? true : null;
   }, { timeoutMs: 60_000 });
   await ctx.act({ kind: "click", selector: SEND_BUTTON });
 
-  const outcome = await waitForRestrictedAsk(ctx, beforeTurnKeys, previousActionError);
+  const outcome = await waitForRestrictedTurn(ctx, beforeItemKeys, previousActionError);
   if (outcome.kind === "submission_error") {
     const unavailable = unavailableDetection(
       outcome.message,
       "current agent.chat turn admission",
-      { context_preview: truncate(context.preview, 300) },
     );
     if (unavailable != null) return unavailable;
-    throw new AssertionFailure(`Agent Ask submission failed: ${redactEvidence(outcome.message)}`);
+    throw new AssertionFailure(`Agent turn submission failed: ${redactEvidence(outcome.message)}`);
   }
 
-  const status = terminalStatus(outcome.terminal);
-  if (status === "completed") {
-    const answers = await ctx.query(`${AGENT_SURFACE} .rho-agent-answer`, { all: true });
-    const finalAnswer = answers.map((answer) => answer.text?.trim() ?? "").filter(Boolean).at(-1) ?? "";
+  if (outcome.status === "completed") {
+    const finalAnswer = outcome.item.text.trim();
     if (!finalAnswer) {
-      throw new AssertionFailure("restricted Agent Ask completed but rendered no final answer");
+      throw new AssertionFailure("restricted Agent turn completed but rendered no final answer");
     }
     return {
       agent_state: "usable",
       credential_state: "usable",
       configuration_state: "available",
-      evidence_source: "completed restricted Ask on current agent.chat route",
-      terminal_status: status,
-      context_preview: truncate(context.preview, 300),
-      terminal_text: truncate(outcome.terminal.text, 500),
+      evidence_source: "completed restricted turn on current agent.chat route",
+      terminal_status: outcome.status,
       final_answer: truncate(finalAnswer, 500),
     };
   }
   const unavailable = unavailableDetection(
-    outcome.terminal.text,
+    outcome.item.text,
     "current agent.chat terminal turn",
-    {
-      terminal_status: status,
-      context_preview: truncate(context.preview, 300),
-    },
+    { terminal_status: outcome.status },
   );
   if (unavailable != null) return unavailable;
   throw new AssertionFailure(
-    `restricted Agent Ask ended ${status}: ${redactEvidence(outcome.terminal.text)}`,
+    `restricted Agent turn ended ${outcome.status}: ${redactEvidence(outcome.item.text)}`,
   );
 }
 
@@ -286,32 +253,30 @@ export default async function s3(ctx) {
     const isolation = await isolateSurface(ctx, "rho.agent");
     const snapshot = isolation.snapshot;
     assertEqual(snapshot.kernel?.agent_health, "ready", "Agent runtime health");
-    const buttons = await waitUntil("Agent mode controls", async () => {
-      const found = await ctx.query(MODE_BUTTONS, { all: true, attribute: "aria-pressed" });
-      const labels = found.map((button) => (button.text ?? "").trim().toLowerCase());
-      return ["ask", "plan", "act"].every((mode) => labels.includes(mode)) ? found : null;
+    const composer = await waitUntil("Agent composer", async () => {
+      const found = await ctx.query(COMPOSER);
+      return found.length > 0 ? found : null;
     }, { timeoutMs: 20_000 });
-    const composer = await ctx.query(COMPOSER);
-    if (composer.length === 0) {
-      throw new AssertionFailure(`Agent composer not found via ${COMPOSER}`);
+    const send = await ctx.query(SEND_BUTTON);
+    if (send.length === 0) {
+      throw new AssertionFailure(`Agent Send control not found via ${SEND_BUTTON}`);
     }
-    const ask = buttons.find((button) => (button.text ?? "").trim().toLowerCase() === "ask");
-    if (ask?.value !== "true") {
-      await ctx.act({ kind: "click", selector: `${MODE_BUTTONS}:first-child` });
-    }
-    await waitUntil("Ask mode selected", async () => {
-      const found = await ctx.query(MODE_BUTTONS, { all: true, attribute: "aria-pressed" });
-      const current = found.find((button) => (button.text ?? "").trim().toLowerCase() === "ask");
-      return current?.value === "true" ? true : null;
-    }, { timeoutMs: 10_000 });
-    const hint = await queriedText(ctx, `${AGENT_SURFACE} .rho-agent-mode-hint`);
+    const loopHint = await queriedText(ctx, `${AGENT_SURFACE} .rho-agent-composer-hint`);
+    const streamItemCount = (await ctx.query(STREAM_ITEMS, { all: true })).length;
+    // Rho exposes and executes; the Agent owns its permission model. The surface
+    // must therefore offer no approval, permission, or workflow-mode control.
+    const gatingControls = (await ctx.query(`${AGENT_SURFACE} button`, { all: true }))
+      .map((button) => (button.text ?? "").trim().toLowerCase())
+      .filter((label) => ["approve", "deny", "allow", "reject", "ask", "plan", "act"].includes(label));
+    assertEqual(gatingControls.length, 0, "Agent surface gating controls");
     return {
       projectPath: ready.projectPath,
       agentHealth: snapshot.kernel?.agent_health,
-      modes: buttons.map((button) => (button.text ?? "").trim().toLowerCase()),
-      askSelected: true,
-      modeHint: hint,
-      composerPresent: true,
+      composerPresent: composer.length > 0,
+      sendPresent: true,
+      loopHint,
+      streamItemCount,
+      gatingControls,
       closedPlacements: isolation.closed,
       retainedPlacements: isolation.retained,
       mountedSurfaceIds: isolation.mountedIds,
@@ -319,8 +284,8 @@ export default async function s3(ctx) {
   }, {
     screenshot: "s3-agent-surface",
     criteria: [
-      "Ask/Plan/Act 模式控件均可见，Ask 的选中态明确，模式提示文案可读",
-      "独立 Agent 组件充分使用工作区；时间线、composer、Review context 与 Send 控件边界清楚，无重叠或裁切",
+      "Agent 只呈现一条连续时间线和一个 composer，没有模式切换、审批或权限控件",
+      "独立 Agent 组件充分使用工作区；时间线、composer 与 Send 控件边界清楚，无重叠或裁切",
       "空会话状态（若展示）与当前 working-project 上下文一致，页面无凭据或密钥文本泄漏",
       "画面只保留 Agent placement，未残留 Navigator、Console、Environment 等默认三栏组件，且没有页级横向滚动条",
     ],
@@ -331,7 +296,7 @@ export default async function s3(ctx) {
     detection = await runCredentialDetection(ctx);
     return {
       ...detection,
-      detection_contract: "fresh isolated Rho home with a canonical V6 agent.chat route and an intentionally absent declared credential; one Ask-mode prompt; no tools, code execution, file mutation, credential value, or ambient environment inspection",
+      detection_contract: "fresh isolated Rho home with a canonical V6 agent.chat route and an intentionally absent declared credential; one read-only prompt; no tools, code execution, file mutation, credential value, or ambient environment inspection",
     };
   });
 
@@ -345,11 +310,11 @@ export default async function s3(ctx) {
       `terminal=${detection?.terminal_status ?? "unknown"}`,
       `evidence=${detection?.product_error ?? "no credential evidence returned"}`,
     ].join("; ");
-    ctx.skipGate("s3", "agent-ask-turn", reason);
+    ctx.skipGate("s3", "agent-turn", reason);
     return;
   }
 
-  await ctx.gate("s3", "agent-ask-turn", async () => {
+  await ctx.gate("s3", "agent-turn", async () => {
     assertEqual(detection.terminal_status, "completed", "restricted Agent turn status");
     if (!detection.final_answer?.trim()) {
       throw new AssertionFailure("restricted Agent turn has no rendered final answer");
@@ -359,24 +324,29 @@ export default async function s3(ctx) {
         `restricted Agent answer did not contain RHO_AGENT_OK: ${redactEvidence(detection.final_answer)}`,
       );
     }
-    const proposals = await ctx.query(`${AGENT_SURFACE} .rho-agent-file-proposal`, { all: true });
-    const approvals = await ctx.query(`${AGENT_SURFACE} .rho-agent-approval`, { all: true });
-    assertEqual(proposals.length, 0, "restricted Agent file proposals");
-    assertEqual(approvals.length, 0, "restricted Agent approval requests");
+    const running = await ctx.query(`${AGENT_SURFACE} .rho-agent-running`, { all: true });
+    assertEqual(running.length, 0, "restricted Agent turn still marked running");
+    const failures = itemsOfKind(await streamItems(ctx), "failure");
+    assertEqual(failures.length, 0, "restricted Agent turn failure items");
+    const gatingControls = (await ctx.query(`${AGENT_SURFACE} button`, { all: true }))
+      .map((button) => (button.text ?? "").trim().toLowerCase())
+      .filter((label) => ["approve", "deny", "allow", "reject"].includes(label));
+    assertEqual(gatingControls.length, 0, "restricted Agent approval controls");
     return {
       prompt: PROMPT,
       outcome: detection.terminal_status,
       answer: truncate(detection.final_answer, 300),
-      fileProposalCount: proposals.length,
-      approvalCount: approvals.length,
+      runningIndicatorCount: running.length,
+      failureItemCount: failures.length,
+      approvalControlCount: gatingControls.length,
     };
   }, {
-    screenshot: "s3-agent-ask-turn",
+    screenshot: "s3-agent-turn",
     criteria: [
-      "Ask 模式仍有明确选中态，完成的 turn 与 composer 分区清楚",
-      "turn 的最终回答完整显示 RHO_AGENT_OK，且未显示 failed/cancelled 状态或错误文案",
-      "该只读 Ask 没有文件修改提案、审批卡片或运行中指示器",
-      "模型元信息在 Details 区域内不挤压正文，时间线与 composer 无重叠或裁切",
+      "时间线按发生顺序呈现该 turn，完成的回答与 composer 分区清楚",
+      "最终回答完整显示 RHO_AGENT_OK，且没有失败项、错误文案或运行中指示器",
+      "该只读 turn 没有任何审批、授权或权限控件",
+      "时间线正文不被挤压或裁切，与 composer 无重叠",
     ],
   });
 }

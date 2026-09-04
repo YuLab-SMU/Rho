@@ -114,7 +114,6 @@ export function validateAgentComposerGeometry({
   surface,
   composer,
   controls,
-  mode,
   textarea,
   elements,
 }) {
@@ -134,12 +133,11 @@ export function validateAgentComposerGeometry({
   assertNoHorizontalOverflow(surface, "Agent surface");
   assertNoHorizontalOverflow(composer, "Agent composer");
   assertNoHorizontalOverflow(controls, "Agent composer controls");
-  assertNoHorizontalOverflow(mode, "Agent mode group");
 
   const visibleElements = elements.filter(
     ({ geometry }) => geometry?.rect != null && geometry.rect.width > 0 && geometry.rect.height > 0,
   );
-  if (visibleElements.length < 8) {
+  if (visibleElements.length < 2) {
     throw new Error(`Agent composer exposed only ${visibleElements.length} measurable leaf controls`);
   }
   for (const [index, element] of visibleElements.entries()) {
@@ -490,12 +488,8 @@ export default async function s0(ctx) {
       "Agent composer",
     );
     const controls = requiredGeometry(
-      await ctx.query('.rho-agent-surface .rho-agent-context-controls', { geometry: true }),
+      await ctx.query('.rho-agent-surface .rho-agent-composer-actions', { geometry: true }),
       "Agent composer controls",
-    );
-    const mode = requiredGeometry(
-      await ctx.query('.rho-agent-surface .rho-agent-mode', { geometry: true }),
-      "Agent mode group",
     );
     const textarea = requiredGeometry(
       await ctx.query('.rho-agent-surface .rho-agent-composer textarea', { geometry: true }),
@@ -504,10 +498,8 @@ export default async function s0(ctx) {
 
     const controlRecords = await ctx.query([
       '.rho-agent-surface .rho-agent-composer textarea',
-      '.rho-agent-surface .rho-agent-context-controls > button',
-      '.rho-agent-surface .rho-agent-mode button',
-      '.rho-agent-surface .rho-agent-mode-hint',
-      '.rho-agent-surface .rho-agent-model-menu > summary',
+      '.rho-agent-surface .rho-agent-composer-actions > button',
+      '.rho-agent-surface .rho-agent-composer-hint',
     ].join(", "), { all: true, geometry: true });
     const validation = validateAgentComposerGeometry({
       page,
@@ -515,7 +507,6 @@ export default async function s0(ctx) {
       surface: agentSurface,
       composer,
       controls,
-      mode,
       textarea,
       elements: controlRecords.map((record) => ({ text: record.text ?? "", geometry: record.geometry })),
     });

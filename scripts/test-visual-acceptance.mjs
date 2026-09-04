@@ -520,7 +520,7 @@ const canonicalTemporaryRoot = fs.realpathSync(os.tmpdir());
 }
 
 // The real-debug S0 first-view gate must reject the pre-Studio narrow composer
-// failure, where text ink escaped individual Ask/Plan/Act cells and the
+// failure, where text ink escaped an individual composer control and the
 // textarea collapsed into a near-vertical column even though outer grid boxes
 // still reported contained geometry.
 {
@@ -552,7 +552,7 @@ const canonicalTemporaryRoot = fs.realpathSync(os.tmpdir());
   const textarea = geometry({ width: 154, height: 60, top: 0 });
   const elements = [
     { text: "", geometry: textarea },
-    ...["Review context", "Send", "Ask", "Plan", "Act", "Ask about this project", "DeepSeek V4 Flash"]
+    ...["Send", "Observe → plan → request effect → re-observe"]
       .map((text, index) => ({ text, geometry: geometry({ width: 120, top: 70 + index * 40 }) })),
   ];
   const fixture = {
@@ -565,15 +565,14 @@ const canonicalTemporaryRoot = fs.realpathSync(os.tmpdir());
     surface: geometry({ clientWidth: 180, width: 180, height: 536 }),
     composer: geometry({ clientWidth: 170, width: 172, height: 300 }),
     controls: geometry({ clientWidth: 154, width: 154, height: 220 }),
-    mode: geometry({ clientWidth: 154, width: 154, height: 36 }),
     textarea,
     elements,
   };
-  assert.equal(validateAgentComposerGeometry(fixture).measurableControls, 8);
+  assert.equal(validateAgentComposerGeometry(fixture).measurableControls, 3);
   assert.throws(
     () => validateAgentComposerGeometry({
       ...fixture,
-      elements: fixture.elements.map((element) => element.text === "Ask"
+      elements: fixture.elements.map((element) => element.text === "Send"
         ? {
             ...element,
             geometry: geometry({ clientWidth: 20, scrollWidth: 48, width: 20, top: element.geometry.rect.top }),
@@ -581,12 +580,12 @@ const canonicalTemporaryRoot = fs.realpathSync(os.tmpdir());
         : element),
     }),
     /visible horizontal content overflow/,
-    "an individual visible-overflow mode button fails even when its outer mode grid fits",
+    "an individual visible-overflow composer control fails even when its outer row fits",
   );
   assert.throws(
     () => validateAgentComposerGeometry({
       ...fixture,
-      elements: fixture.elements.map((element) => element.text === "Ask"
+      elements: fixture.elements.map((element) => element.text === "Send"
         ? {
             ...element,
             geometry: geometry({
@@ -1590,14 +1589,9 @@ async function reviewFrame(runDirectory, frame, verdict = "pass") {
   assert.match(vibeAgentBrowserSource, /rho-vibe-exploration-link-exact/, "browser/mock separately proves the exact manuscript-reference host path");
   assert.match(vibeAgentBrowserSource, /article\[data-surface-id\][\s\S]{0,160}?count\(\), 0/, "browser/mock requires zero mounted Studio Surfaces");
   for (const trustedAction of [
-    "Approve",
-    "Reject",
-    "Apply",
-    "Undo applied edit",
+    "Send",
     "Stop",
     "Retry",
-    "Context",
-    "Send",
   ]) {
     assert.match(
       vibeAgentBrowserSource,
@@ -1605,7 +1599,6 @@ async function reviewFrame(runDirectory, frame, verdict = "pass") {
       `browser/mock checks the real trusted Agent action label ${trustedAction}`,
     );
   }
-  assert.match(vibeAgentBrowserSource, /Auto-approve project tools for this conversation/, "browser/mock checks the real trusted auto-approve label");
   assert.match(vibeAgentBrowserSource, /element\.scrollTop = element\.scrollHeight/, "720×450 evidence scrolls the local host to its footer");
   assert.match(vibeAgentBrowserSource, /candidate = candidate\.parentElement/, "720×450 evidence inspects the full host ancestor chain");
   assert.match(vibeAgentBrowserSource, /document\.scrollingElement/, "720×450 evidence includes page-level vertical overflow");

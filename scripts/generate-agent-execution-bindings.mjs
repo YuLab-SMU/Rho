@@ -9,10 +9,5 @@ runTauriSpectaBindingGenerator({
   outputEnvironment: "RHO_AGENT_EXECUTION_BINDINGS_PATH",
   factoryName: "createAgentExecutionCommands",
   invokeTypeName: "AgentExecutionInvoke",
-  rustSources: "rho-store/runtime_output + rho-desktop/commands/agent_execution",
-  externalTypes: [
-    { name: "RuntimeExecutionStatus", from: "./runtime-output" },
-    { name: "RuntimeOutputReference", from: "./runtime-output" },
-    { name: "RuntimeOutputState", from: "./runtime-output" },
-  ],
+  rustSources: "rho-desktop/commands/agent_execution",
 });

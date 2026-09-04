@@ -526,10 +526,19 @@ try {
     }
     const mountedAgentSurface = page.locator("article[data-surface-id='rho.agent']");
     await mountedAgentSurface.waitFor();
-    await mountedAgentSurface.getByRole("region", { name: "Agent Environment Doctor" }).waitFor();
-    const mountedConversationPicker = mountedAgentSurface.getByLabel(/^Conversation for /);
-    if (await mountedConversationPicker.inputValue() !== "agent-conversation:mock-shared") {
-      throw new Error("the mounted Agent fixture did not begin on its declared default Conversation");
+    // Rho exposes and executes; the Agent owns its permission model. The surface
+    // therefore has no conversation picker, mode selector, approval row, or
+    // pre-flight context review, and conversation identity is durable state only.
+    for (const retired of [
+      "select",
+      ".rho-agent-mode",
+      ".rho-agent-approval",
+      ".rho-agent-context-preview",
+      ".rho-agent-context-chip",
+    ]) {
+      if (await mountedAgentSurface.locator(retired).count() !== 0) {
+        throw new Error(`the Agent surface still mounts the retired control ${retired}`);
+      }
     }
     const initialAgentEvidence = (await evidence(page)).agentInstances?.find(
       (instance) => instance.id === "instance:agent-shared",
@@ -537,118 +546,53 @@ try {
     if (initialAgentEvidence == null) {
       throw new Error("the mounted Agent fixture did not expose exact durable evidence");
     }
-    const newConversationButton = mountedAgentSurface.getByRole("button", { name: "New", exact: true });
-    await newConversationButton.click();
-    await page.waitForFunction(({ generation, instanceId, surfaceRevision }) => {
-      const agent = document.querySelector("article[data-surface-id='rho.agent']");
-      const picker = agent?.querySelector("select");
-      const button = [...(agent?.querySelectorAll("button") ?? [])]
-        .find((candidate) => candidate.textContent === "New");
-      const hook = document.querySelector("#rsrPreviewEvidence");
-      const durable = hook == null
-        ? null
-        : JSON.parse(hook.textContent ?? "{}").agentInstances?.find(
-          (instance) => instance.id === instanceId,
-        );
-      return picker instanceof HTMLSelectElement
-        && picker.value.startsWith("agent-conversation:mock-")
-        && picker.value !== "agent-conversation:mock-shared"
-        && button instanceof HTMLButtonElement
-        && !button.disabled
-        && durable?.generation === generation
-        && durable?.conversationId === picker.value
-        && durable.surfaceRevision > surfaceRevision;
-    }, {
-      generation: initialAgentEvidence.generation,
-      instanceId: initialAgentEvidence.id,
-      surfaceRevision: initialAgentEvidence.surfaceRevision,
-    });
-    if (!await newConversationButton.isEnabled()) {
-      throw new Error("the Agent New workflow did not settle its exact durable selection");
+    if (initialAgentEvidence.conversationId !== "agent-conversation:mock-shared") {
+      throw new Error("the mounted Agent fixture did not begin on its declared default Conversation");
     }
-    const createdConversationId = await mountedConversationPicker.inputValue();
-    if (createdConversationId !== "agent-conversation:mock-2") {
-      throw new Error(`Agent New selected ${createdConversationId} instead of its exact returned Conversation`);
-    }
+    await mountedAgentSurface.locator("[data-turn-id='agent-turn:mock-1']").first().waitFor();
+    await mountedAgentSurface
+      .getByText("What should we inspect first?", { exact: true })
+      .first()
+      .waitFor();
 
-    const createdAgentEvidence = (await evidence(page)).agentInstances?.find(
-      (instance) => instance.id === initialAgentEvidence.id,
-    );
-    if (createdAgentEvidence == null) {
-      throw new Error("the Agent New workflow did not retain exact durable evidence");
-    }
-    await mountedConversationPicker.selectOption("");
-    await page.waitForFunction(({ generation, instanceId, surfaceRevision }) => {
-      const agent = document.querySelector("article[data-surface-id='rho.agent']");
-      const picker = agent?.querySelector("select");
-      const hook = document.querySelector("#rsrPreviewEvidence");
-      const durable = hook == null
-        ? null
-        : JSON.parse(hook.textContent ?? "{}").agentInstances?.find(
-          (instance) => instance.id === instanceId,
-        );
-      return picker instanceof HTMLSelectElement
-        && picker.value === ""
-        && durable?.generation === generation
-        && durable?.conversationId == null
-        && durable.surfaceRevision > surfaceRevision;
-    }, {
-      generation: createdAgentEvidence.generation,
-      instanceId: createdAgentEvidence.id,
-      surfaceRevision: createdAgentEvidence.surfaceRevision,
-    });
-
-    const emptyAgentEvidence = (await evidence(page)).agentInstances?.find(
-      (instance) => instance.id === initialAgentEvidence.id,
-    );
-    if (emptyAgentEvidence == null) {
-      throw new Error("the no-conversation Agent state did not expose durable evidence");
-    }
-    const sendPrompt = "Trace the exact no-conversation Send identity";
+    const sendPrompt = "Trace the exact Agent Send identity";
     const agentComposer = mountedAgentSurface.locator(".rho-agent-composer textarea");
     await agentComposer.fill(sendPrompt);
     const sendButton = mountedAgentSurface.getByRole("button", { name: "Send", exact: true });
     await sendButton.click();
     await page.waitForFunction(({ generation, instanceId, surfaceRevision, prompt }) => {
       const agent = document.querySelector("article[data-surface-id='rho.agent']");
-      const picker = agent?.querySelector("select");
-      const exactTurn = agent?.querySelector("[data-turn-id='agent-turn:mock-2']");
-      const newButton = [...(agent?.querySelectorAll("button") ?? [])]
-        .find((candidate) => candidate.textContent === "New");
+      const exactTurnItems = agent?.querySelectorAll("[data-turn-id='agent-turn:mock-2']") ?? [];
+      const surfaceText = agent?.textContent ?? "";
       const hook = document.querySelector("#rsrPreviewEvidence");
       const durable = hook == null
         ? null
         : JSON.parse(hook.textContent ?? "{}").agentInstances?.find(
           (instance) => instance.id === instanceId,
         );
-      return picker instanceof HTMLSelectElement
-        && picker.value === "agent-conversation:mock-3"
+      return exactTurnItems.length > 0
+        && surfaceText.includes(prompt)
+        && surfaceText.includes(`Mock act response for: ${prompt}`)
         && durable?.generation === generation
-        && durable?.conversationId === picker.value
-        && durable.surfaceRevision > surfaceRevision
-        && exactTurn instanceof HTMLElement
-        && exactTurn.textContent?.includes(prompt)
-        && exactTurn.textContent?.includes(`Mock act response for: ${prompt}`)
-        && newButton instanceof HTMLButtonElement
-        && !newButton.disabled;
+        && durable?.conversationId === "agent-conversation:mock-shared"
+        && durable.surfaceRevision > surfaceRevision;
     }, {
-      generation: emptyAgentEvidence.generation,
-      instanceId: emptyAgentEvidence.id,
-      surfaceRevision: emptyAgentEvidence.surfaceRevision,
+      generation: initialAgentEvidence.generation,
+      instanceId: initialAgentEvidence.id,
+      surfaceRevision: initialAgentEvidence.surfaceRevision,
       prompt: sendPrompt,
-    });
+    }, { timeout: 30_000, polling: 250 });
     if (await sendButton.isEnabled()) {
       throw new Error("the settled Agent Send left an empty composer unexpectedly actionable");
     }
     if (await agentComposer.inputValue() !== "") {
-      throw new Error("the no-conversation Agent Send workflow did not clear the admitted composer");
+      throw new Error("the Agent Send workflow did not clear the admitted composer");
     }
-    const mismatchedConversationId = await mountedConversationPicker.inputValue();
-    if (mismatchedConversationId !== "agent-conversation:mock-3") {
-      throw new Error("the no-conversation Agent Send did not retain its exact returned Conversation");
-    }
-    if (mismatchedConversationId === "agent-conversation:mock-shared") {
-      throw new Error("the mounted Agent fixture did not retain its distinct empty Conversation");
+    const settledAgentEvidence = (await evidence(page)).agentInstances?.find(
+      (instance) => instance.id === initialAgentEvidence.id,
+    );
+    if (settledAgentEvidence?.conversationId !== "agent-conversation:mock-shared") {
+      throw new Error("the Agent Send workflow did not retain its exact Conversation");
     }
 
     await page.getByRole("button", { name: "Vibe", exact: true }).click();
@@ -736,23 +680,15 @@ try {
       }
     }
     for (const trustedAction of [
-      "Approve",
-      "Reject",
-      "Apply",
-      "Undo applied edit",
+      "Send",
       "Stop",
       "Retry",
-      "Context",
-      "Send",
     ]) {
       if (await agentRecordHost.getByRole("button", { name: trustedAction, exact: true }).count() !== 0) {
         throw new Error(`Vibe Agent public record exposed trusted action: ${trustedAction}`);
       }
     }
-    if (await agentRecordHost.getByText(
-      "Auto-approve project tools for this conversation",
-      { exact: true },
-    ).count() !== 0 || await agentRecordHost.locator("textarea, .rho-agent-approval, .rho-agent-file-proposal").count() !== 0) {
+    if (await agentRecordHost.locator("textarea, .rho-agent-composer").count() !== 0) {
       throw new Error("Vibe Agent public record exposed trusted Agent controls");
     }
 
@@ -760,15 +696,18 @@ try {
     await page.locator('.rho-statusbar[data-workspace-mode="studio"]').waitFor();
     const exactAgentSurface = page.locator("article.rho-surface-focused[data-surface-id='rho.agent']");
     await exactAgentSurface.waitFor();
-    const conversationPicker = exactAgentSurface.getByLabel(/^Conversation for /);
-    if (await conversationPicker.inputValue() !== "agent-conversation:mock-shared") {
-      throw new Error("the explicit Studio handoff did not preserve the exact Agent Conversation");
-    }
-    if (await exactAgentSurface.getAttribute("data-instance-id") === "instance:agent-shared") {
+    const handoffInstanceId = await exactAgentSurface.getAttribute("data-instance-id");
+    if (handoffInstanceId === "instance:agent-shared") {
       throw new Error("the explicit Studio handoff reused the mismatched default Agent instance");
     }
-    await exactAgentSurface.locator('[data-turn-id="agent-turn:mock-1"]').waitFor();
-    await exactAgentSurface.getByText("What should we inspect first?", { exact: true }).waitFor();
+    const handoffEvidence = (await evidence(page)).agentInstances?.find(
+      (instance) => instance.id === handoffInstanceId,
+    );
+    if (handoffEvidence?.conversationId !== "agent-conversation:mock-shared") {
+      throw new Error("the explicit Studio handoff did not preserve the exact Agent Conversation");
+    }
+    await exactAgentSurface.locator('[data-turn-id="agent-turn:mock-1"]').first().waitFor();
+    await exactAgentSurface.getByText("What should we inspect first?", { exact: true }).first().waitFor();
     await page.getByRole("button", { name: "Vibe", exact: true }).click();
     await page.locator('.rho-statusbar[data-workspace-mode="vibe"]').waitFor();
     await vibeWorkspace.waitFor();

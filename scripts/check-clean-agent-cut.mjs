@@ -31,11 +31,11 @@ const agent = await source("desktop/ui/src/app/agent/AgentSurface.tsx");
 if (!workbench.includes("<SurfaceFrame")) errors.push("WorkbenchRoot does not route real surfaces");
 if (!router.includes("<AgentSurface")) errors.push("SurfaceFrame does not mount the Agent subsystem");
 for (const required of [
-  "Autonomous goal loop",
-  "Goal-driven scientific work",
-  "Observe → plan → request effect → re-observe",
   "listAgentConversations",
   "subscribeAgentTurnEvents",
+  "runConversation",
+  "rho-agent-stream-item",
+  "Observe → plan → request effect → re-observe",
 ]) {
   if (!agent.includes(required)) errors.push(`Agent integration is missing ${JSON.stringify(required)}`);
 }
@@ -44,19 +44,18 @@ for (const removed of [
   "Ask about this project",
   "Shape a reviewable approach",
   "Work with project tools",
+  "rho-agent-approval",
+  "respondAgentApproval",
+  "rho-agent-context-preview",
 ]) {
-  if (agent.includes(removed)) errors.push(`Agent still exposes removed workflow mode ${JSON.stringify(removed)}`);
+  if (agent.includes(removed)) errors.push(`Agent still gates instead of observing: ${JSON.stringify(removed)}`);
 }
 
 for (const harness of [
   "desktop/src-tauri/src/commands/agent/workbench_vnext.rs",
   "desktop/src-tauri/src/commands/jobs/mod.rs",
 ]) {
-  const text = await source(harness);
-  const production = text.split("#[cfg(test)]")[0];
-  if (production.includes("#[tauri::command]")) {
-    errors.push(`fixture-backed harness is registered as a production command: ${harness}`);
-  }
+  if (existsSync(path.join(root, harness))) errors.push(`fixture-backed harness remains: ${harness}`);
 }
 
 const manifest = await source("Cargo.toml");

@@ -68,9 +68,9 @@
       "compatibility_allowed": false
     },
     {
-      "edge": "MCP -> authority/store direct read",
+      "edge": "MCP -> Store/Authority implementation",
       "current_source": "crates/rho-mcp/Cargo.toml",
-      "replacement_owner": "rho-mcp projected from Capability Registry without authority",
+      "replacement_owner": "rho-mcp -> authenticated turn-scoped Agent Gateway -> typed owner ports",
       "delete_work_package": "P4-05",
       "compatibility_allowed": false
     },

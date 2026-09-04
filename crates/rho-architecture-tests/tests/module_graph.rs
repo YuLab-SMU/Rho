@@ -14,14 +14,11 @@ const TARGET_CRATES: &[&str] = &[
     "rho-artifact-store",
     "rho-secret-broker",
     "rho-sandbox",
-    "rho-event-hub",
     "rho-execution",
     "rho-control-plane",
     "rho-acp-client",
     "rho-workspace",
     "rho-runner",
-    "rho-test-support",
-    "rho-telemetry",
     "rho-ui-contract",
 ];
 
@@ -35,8 +32,6 @@ const NEW_BOUNDARY_CRATES: &[&str] = &[
     "rho-acp-client",
     "rho-workspace",
     "rho-runner",
-    "rho-test-support",
-    "rho-telemetry",
 ];
 
 fn repo_root() -> PathBuf {
@@ -97,31 +92,14 @@ fn target_dependency_allowlist() -> BTreeMap<&'static str, BTreeSet<&'static str
         ("rho-artifact-store", BTreeSet::from(["rho-protocol"])),
         ("rho-secret-broker", BTreeSet::from(["rho-protocol"])),
         ("rho-sandbox", BTreeSet::from(["rho-protocol"])),
-        ("rho-event-hub", BTreeSet::from(["rho-protocol"])),
         ("rho-execution", BTreeSet::from(["rho-protocol"])),
         (
             "rho-control-plane",
-            BTreeSet::from([
-                "rho-protocol",
-                "rho-store",
-                "rho-artifact-store",
-                "rho-sandbox",
-                "rho-secret-broker",
-                "rho-execution",
-                "rho-environment",
-            ]),
+            BTreeSet::from(["rho-protocol", "rho-sandbox"]),
         ),
         ("rho-acp-client", BTreeSet::new()),
-        (
-            "rho-workspace",
-            BTreeSet::from(["rho-protocol", "rho-control-plane", "rho-execution"]),
-        ),
-        (
-            "rho-runner",
-            BTreeSet::from(["rho-protocol", "rho-artifact-store", "rho-execution"]),
-        ),
-        ("rho-test-support", BTreeSet::from(["rho-protocol"])),
-        ("rho-telemetry", BTreeSet::from(["rho-protocol"])),
+        ("rho-workspace", BTreeSet::from(["rho-protocol"])),
+        ("rho-runner", BTreeSet::from(["rho-protocol"])),
         ("rho-ui-contract", BTreeSet::from(["rho-protocol"])),
     ])
 }
@@ -489,8 +467,6 @@ fn frontend_semantic_ports_remain_directional_and_typed() {
         );
     }
     let agent_ports = std::fs::read_to_string(root.join("workbench/agentPorts.ts")).unwrap();
-    let agent_environment =
-        std::fs::read_to_string(root.join("agent/AgentEnvironmentPanel.tsx")).unwrap();
     for forbidden in [
         "reobserveEnvironment",
         "configureSshTarget",
@@ -498,8 +474,8 @@ fn frontend_semantic_ports_remain_directional_and_typed() {
         "environment.request_apply_plan",
     ] {
         assert!(
-            !agent_ports.contains(forbidden) && !agent_environment.contains(forbidden),
-            "Agent Environment UI retained direct mutation authority {forbidden}"
+            !agent_ports.contains(forbidden),
+            "Agent port facade retained direct mutation authority {forbidden}"
         );
     }
     let evidence_production = read_tree_without_tests(&root.join("evidence"));
@@ -539,9 +515,9 @@ fn frontend_semantic_ports_remain_directional_and_typed() {
 fn frontend_composition_roots_shrink_behind_owned_modules() {
     let root = repo_root().join("desktop/ui/src/app");
     for (relative, maximum_lines) in [
-        ("workbench/WorkbenchRoot.tsx", 3_000),
-        ("workbench/SurfaceFrame.tsx", 700),
-        ("agent/AgentSurface.tsx", 1_750),
+        ("workbench/WorkbenchRoot.tsx", 2_800),
+        ("workbench/SurfaceFrame.tsx", 680),
+        ("agent/AgentSurface.tsx", 500),
     ] {
         let source = std::fs::read_to_string(root.join(relative)).unwrap();
         let lines = source.lines().count();
@@ -557,15 +533,8 @@ fn frontend_composition_roots_shrink_behind_owned_modules() {
         "authority/RunsSurface.tsx",
         "authority/JobsSurface.tsx",
         "authority/ArtifactsSurface.tsx",
-        "authority/ApprovalsSurface.tsx",
         "authority/RevisionsSurface.tsx",
         "authority/EnvironmentHealthPanel.tsx",
-        "agent/AgentActivity.tsx",
-        "agent/AgentApprovalPanel.tsx",
-        "agent/AgentEvidencePanel.tsx",
-        "agent/AgentGapPanel.tsx",
-        "agent/AgentFinalAnswer.tsx",
-        "agent/AgentEnvironmentPanel.tsx",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -708,7 +677,7 @@ fn deletion_map_covers_old_agent_control_paths_without_compatibility() {
         "workbench_vnext.rs::fixture-backed-command",
         "jobs/mod.rs::fixture-backed-command",
         "production App -> AGENT_UX_SUCCESS_FIXTURE",
-        "MCP -> authority/store direct read",
+        "MCP -> Store/Authority implementation",
         "ACP -> remote execution",
     ] {
         assert!(
@@ -769,11 +738,11 @@ fn production_integration_preserves_workbench_and_replaces_only_agent_experience
     let agent_source =
         std::fs::read_to_string(root.join("desktop/ui/src/app/agent/AgentSurface.tsx")).unwrap();
     for required in [
-        "Autonomous goal loop",
-        "Goal-driven scientific work",
-        "Observe → plan → request effect → re-observe",
         "listAgentConversations",
         "subscribeAgentTurnEvents",
+        "runConversation",
+        "rho-agent-stream-item",
+        "Observe → plan → request effect → re-observe",
     ] {
         assert!(
             agent_source.contains(required),
@@ -785,22 +754,89 @@ fn production_integration_preserves_workbench_and_replaces_only_agent_experience
         "Ask about this project",
         "Shape a reviewable approach",
         "Work with project tools",
+        "rho-agent-approval",
+        "respondAgentApproval",
+        "rho-agent-context-preview",
     ] {
         assert!(
             !agent_source.contains(removed_mode_surface),
-            "autonomous Agent retained user mode surface {removed_mode_surface}"
+            "Agent surface gates instead of observing: {removed_mode_surface}"
+        );
+    }
+    for deleted_section in [
+        "agent/AgentApprovalPanel.tsx",
+        "agent/AgentActivity.tsx",
+        "agent/AgentEvidencePanel.tsx",
+        "agent/AgentEnvironmentPanel.tsx",
+    ] {
+        assert!(
+            !root
+                .join(format!("desktop/ui/src/app/{deleted_section}"))
+                .exists(),
+            "Agent gating or duplicated exposure section was reintroduced: {deleted_section}"
         );
     }
 
-    for fixture_harness in [
+    for deleted_fixture_harness in [
         "desktop/src-tauri/src/commands/agent/workbench_vnext.rs",
         "desktop/src-tauri/src/commands/jobs/mod.rs",
     ] {
-        let source = std::fs::read_to_string(root.join(fixture_harness)).unwrap();
-        let production = source.split("#[cfg(test)]").next().unwrap();
         assert!(
-            !production.contains("#[tauri::command]"),
-            "fixture-backed harness must not register a production command: {fixture_harness}"
+            !root.join(deleted_fixture_harness).exists(),
+            "fixture-backed harness remains: {deleted_fixture_harness}"
+        );
+    }
+}
+
+#[test]
+fn external_agent_receives_rho_state_and_live_owner_capabilities_without_policy_gating() {
+    let root = repo_root();
+    let acp = std::fs::read_to_string(root.join("crates/rho-acp-client/src/lib.rs")).unwrap();
+    for required in [
+        "FileSystemCapabilities",
+        "CreateTerminalRequest",
+        "with_stdio_mcp_server",
+        "RequestPermissionOutcome::Selected",
+    ] {
+        assert!(
+            acp.contains(required),
+            "ACP client exposure is missing {required}"
+        );
+    }
+    let mcp = std::fs::read_to_string(root.join("crates/rho-mcp/src/lib.rs")).unwrap();
+    for required in [
+        "rho_capabilities",
+        "rho_state",
+        "rho_execute",
+        "RHO_AGENT_GATEWAY_TOKEN",
+    ] {
+        assert!(
+            mcp.contains(required),
+            "Rho MCP exposure is missing {required}"
+        );
+    }
+    let gateway =
+        std::fs::read_to_string(root.join("desktop/src-tauri/src/agent_gateway.rs")).unwrap();
+    for required in [
+        "dispatch_workspace_request",
+        "environment_health_for_state",
+        "CapabilityRegistry::canonical",
+        "monitor.observe",
+    ] {
+        assert!(
+            gateway.contains(required),
+            "Agent Gateway is missing {required}"
+        );
+    }
+    for forbidden in [
+        "evaluate_policy",
+        "BrokerAdmissionOutcome",
+        "PatchApprovalBinding",
+        "request_permission",
+    ] {
+        assert!(
+            !gateway.contains(forbidden),
+            "Agent Gateway reintroduced a Rho-owned gate: {forbidden}"
         );
     }
 }

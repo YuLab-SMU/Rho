@@ -63,8 +63,7 @@ async function assertAgentHostBoundary(ctx, expectedCatalogCount) {
   );
   const trustedControls = await ctx.query(
     `${VIBE_AGENT_HOST_SELECTORS.host} textarea, `
-      + `${VIBE_AGENT_HOST_SELECTORS.host} .rho-agent-approval, `
-      + `${VIBE_AGENT_HOST_SELECTORS.host} .rho-agent-file-proposal, `
+      + `${VIBE_AGENT_HOST_SELECTORS.host} .rho-agent-composer, `
       + `${VIBE_AGENT_HOST_SELECTORS.host} [data-surface-id]`,
     { all: true },
   );

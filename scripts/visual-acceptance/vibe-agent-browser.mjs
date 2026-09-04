@@ -293,19 +293,14 @@ async function inspectExactAgentHost(page, frame) {
     .map(normalizedText);
   assert.deepEqual(labels, ["在 Studio 中继续探索", "在 Studio 中深入检查"]);
   assert.equal(
-    await host.locator("textarea, .rho-agent-approval, .rho-agent-file-proposal, [data-surface-id]").count(),
+    await host.locator("textarea, .rho-agent-composer, [data-surface-id]").count(),
     0,
     "read-only Vibe host must omit trusted Agent controls",
   );
   const trustedAgentActions = [
-    "Approve",
-    "Reject",
-    "Apply",
-    "Undo applied edit",
+    "Send",
     "Stop",
     "Retry",
-    "Context",
-    "Send",
   ];
   for (const trustedAction of trustedAgentActions) {
     assert.equal(
@@ -314,14 +309,6 @@ async function inspectExactAgentHost(page, frame) {
       `read-only Vibe host must omit trusted Agent action ${trustedAction}`,
     );
   }
-  assert.equal(
-    await host.getByText(
-      "Auto-approve project tools for this conversation",
-      { exact: true },
-    ).count(),
-    0,
-    "read-only Vibe host must omit the trusted auto-approve control",
-  );
   const publicText = normalizedText(await host.textContent());
   for (const privateText of [
     "analysis.R",

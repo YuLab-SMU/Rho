@@ -51,7 +51,7 @@ export const SCENARIOS = Object.freeze([
   { id: "s0", file: "s0-startup.mjs", title: "Startup, project open, first-view file tree" },
   { id: "s1", file: "s1-workbench-tour.mjs", title: "Workbench tour: Console, Environment, Data Viewer, Plots, Runs, Problems" },
   { id: "s2", file: "s2-qc-workflow.mjs", title: "Single-cell QC workflow with deterministic expectations" },
-  { id: "s3", file: "s3-agent.mjs", title: "Agent Ask/Plan/Act (canonical V6 route; truthful SKIP without credentials)" },
+  { id: "s3", file: "s3-agent.mjs", title: "External ACP Agent (truthful SKIP when unavailable)" },
   { id: "s7", file: "s7-git-review.mjs", title: "Reviewable Git mutations and conflict banner" },
   { id: "s8", file: "s8-persistence-boundaries.mjs", title: "Persistence, project switching, and boundary projects" },
   { id: "s9", file: "s9-vibe.mjs", title: "Vibe information flow: wide/intermediate overview, focus modes, and narrow reading" },

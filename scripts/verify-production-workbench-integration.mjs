@@ -29,15 +29,18 @@ for (const marker of ["AGENT_UX_SUCCESS_FIXTURE", "AgentSurfaceVNext"]) {
   if (app.includes(marker)) errors.push(`production_app_fixture:${marker}`);
 }
 for (const marker of [
-  "Autonomous goal loop",
-  "Goal-driven scientific work",
-  "Observe → plan → request effect → re-observe",
   "listAgentConversations",
   "subscribeAgentTurnEvents",
+  "runConversation",
+  "rho-agent-stream-item",
+  "Observe → plan → request effect → re-observe",
 ]) {
   if (!agent.includes(marker)) errors.push(`agent_surface_missing:${marker}`);
 }
 if (/className=["']rho-agent-mode["']/u.test(agent)) errors.push("agent_mode_selector_present");
+for (const gating of ["rho-agent-approval", "respondAgentApproval", "rho-agent-context-preview"]) {
+  if (agent.includes(gating)) errors.push(`agent_gating_ui_present:${gating}`);
+}
 
 const distAssets = path.join(root, "desktop/dist/assets");
 const generatedFiles = (await readdir(distAssets))
@@ -46,7 +49,7 @@ const generatedFiles = (await readdir(distAssets))
 const generatedProgram = (
   await Promise.all(generatedFiles.map((name) => readFile(path.join(distAssets, name), "utf8")))
 ).join("\n");
-for (const marker of ["Autonomous goal loop", "Goal-driven scientific work"]) {
+for (const marker of ["Start a conversation", "Observe → plan → request effect → re-observe"]) {
   if (!generatedProgram.includes(marker)) errors.push(`production_bundle_missing:${marker}`);
 }
 if (generatedProgram.includes("AGENT_UX_SUCCESS_FIXTURE")) errors.push("production_bundle_contains_fixture");
