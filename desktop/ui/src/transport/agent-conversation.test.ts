@@ -19,17 +19,14 @@ const conversation = {
   turn_count: 1,
   status: "completed",
   latest_turn_id: "agent-turn:1",
-  latest_mode: "ask",
   latest_prompt_preview: "Review the model",
   terminal_reason: "completed",
-  pending_request_id: null,
 } satisfies AgentConversationSummary;
 
 const turn = {
   turn_id: "agent-turn:1",
   conversation_id: conversation.conversation_id,
   project_root: conversation.project_root,
-  mode: "ask",
   status: "completed",
   started_at: conversation.created_at,
   finished_at: conversation.updated_at,
@@ -43,7 +40,6 @@ const turn = {
   project_revision_after: 7,
   final_message: "Looks sound.",
   error_message: null,
-  pending_request_id: null,
   retry_of_turn_id: null,
   terminal_reason: "completed",
 } satisfies AgentTurnSummary;
@@ -75,18 +71,12 @@ describe("Agent conversation generated transport", () => {
     ]);
   });
 
-  it("preserves backend rejection and rejects an unknown stored mode", async () => {
+  it("preserves backend rejection", async () => {
     const rejected = createTauriAgentConversationTransport(async () => {
       throw new Error("Agent Conversation belongs to another project");
     });
     await expect(rejected.listAgentConversations(10)).rejects.toThrow("another project");
 
-    const incompatible = createTauriAgentConversationTransport(async <T,>() => ([{
-      ...turn,
-      mode: "unsafe-mode",
-    }]) as T);
-    await expect(incompatible.listAgentTurns(conversation.conversation_id))
-      .rejects.toThrow("unsupported mode");
   });
 
   it("keeps browser/mock mode assignable to the narrow conversation facet", async () => {

@@ -40,18 +40,18 @@ describe("Vibe exact Studio target mapping", () => {
     });
   });
 
-  it("maps Agent view and compose intents to one exact conversation", () => {
-    expect(exactAgentSurfaceRequest("conversation:4", false)).toMatchObject({
+  it("maps an Agent intent to one exact conversation", () => {
+    expect(exactAgentSurfaceRequest("conversation:4")).toMatchObject({
       surfaceId: "rho.agent",
       modeId: "conversation",
       viewState: {
         conversation_id: "conversation:4",
-        mode: "act",
         composer: "",
-        auto_approve: false,
       },
+      exactIdentityKey: "conversation_id",
+      exactIdentity: "conversation:4",
+      mayCreate: true,
     });
-    expect(exactAgentSurfaceRequest("conversation:4", true).modeId).toBe("composer");
   });
 
   it("finds only an exact typed view-state identity", () => {

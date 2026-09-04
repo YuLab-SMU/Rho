@@ -15,7 +15,7 @@ export const createAuthorityCommands = (__TAURI_INVOKE: AuthorityInvoke) => ({
 });
 
 /* Types */
-export type AuthorityKindViewV1 = "run" | "job" | "artifact" | "approval" | "patch" | "revision" | "environment_snapshot" | "source_anchor" | "check_finding" | "agent_turn";
+export type AuthorityKindViewV1 = "run" | "job" | "artifact" | "patch" | "revision" | "environment_snapshot" | "source_anchor" | "check_finding" | "agent_turn";
 
 export type AuthorityObservationViewV1 = {
 	reference: AuthorityReferenceViewV1,
@@ -63,4 +63,4 @@ export type AuthorityResolveResponseV1 = {
 	observations: AuthorityObservationViewV1[],
 };
 
-export type AuthorityStatusViewV1 = "pending" | "running" | "present" | "succeeded" | "failed" | "uncertain" | "cancelled" | "committed" | "approved" | "rejected" | "missing" | "stale";
+export type AuthorityStatusViewV1 = "pending" | "running" | "present" | "succeeded" | "failed" | "uncertain" | "cancelled" | "committed" | "missing" | "stale";

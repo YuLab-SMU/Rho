@@ -339,11 +339,6 @@ pub fn application_command_definitions_v1() -> Result<Vec<CommandDefinitionV1>, 
             "Open durable artifact authority records.",
         ),
         (
-            "approvals",
-            "Open Approvals",
-            "Open broker-owned approval receipts.",
-        ),
-        (
             "revisions",
             "Open Revisions",
             "Open current project and Workspace revisions.",

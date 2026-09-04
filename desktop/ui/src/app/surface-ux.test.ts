@@ -13,7 +13,7 @@ import {
 } from "./surface-ux";
 
 const EXPECTED_FIRST_PARTY = [
-  "rho.agent", "rho.approvals", "rho.artifacts", "rho.check-result",
+  "rho.agent", "rho.artifacts", "rho.check-result",
   "rho.claim-trace", "rho.claims", "rho.console", "rho.environment",
   "rho.evidence-gaps", "rho.evidence-graph", "rho.file-preview", "rho.file-source",
   "rho.git", "rho.help", "rho.jobs", "rho.logs", "rho.navigator",

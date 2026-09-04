@@ -68,83 +68,6 @@ describe("Studio foundation app", () => {
     return { container, transport };
   }
 
-  it("turns an Agent Studio presentation into an independent code-and-results Scene", async () => {
-    const transport = createMockUiKernelTransport();
-    const runtimeSnapshot = await transport.loadRuntimes();
-    const surfaceSnapshot = await transport.loadSurfaces();
-    const runtime = runtimeSnapshot.instances.find((candidate) => candidate.primary_scientific_runtime);
-    const console = surfaceSnapshot.catalog.instances.find((candidate) => candidate.surface_id === "rho.console");
-    if (runtime == null || console == null) throw new Error("mock execution target is unavailable");
-    const started = await transport.startRuntimeExecution({
-      runtime: {
-        project_id: runtimeSnapshot.project_id,
-        runtime_provider_id: runtime.runtime_provider_id,
-        runtime_instance_id: runtime.runtime_instance_id,
-        activation_generation: runtime.activation_generation,
-        expected_project_revision: runtimeSnapshot.project_revision,
-        expected_state_revision: runtime.state_revision,
-      },
-      console_instance_id: console.instance_id,
-      expected_console_revision: console.surface_revision,
-      code: "summary(iris)",
-      source_context: null,
-    });
-    const detail = await transport.getAgentTurnDetail("agent-turn:mock-1");
-    if (detail == null) throw new Error("mock Agent turn is unavailable");
-    transport.getAgentTurnDetail = vi.fn(async (turnId) => turnId === detail.turn.turn_id ? {
-      ...detail,
-      events: [...detail.events, {
-        id: 4,
-        turn_id: detail.turn.turn_id,
-        timestamp: "2026-08-28T12:00:00Z",
-        event_type: "tool.call_completed",
-        title: "Studio presentation prepared",
-        body: JSON.stringify({
-          kind: "rho.studio_presentation",
-          title: "Analysis results",
-          code_paths: ["analysis.R"],
-          execution_id: started.execution.execution_id,
-          plot_id: null,
-          show_plots: true,
-          show_environment: false,
-        }),
-        status: "completed",
-        tool: "present_in_studio",
-        request_id: null,
-        code: null,
-        details_json: "{}",
-      }],
-    } : null);
-    const duplicate = vi.spyOn(transport, "duplicateUiProfileScene");
-    const open = vi.spyOn(transport, "openSurface");
-    const apply = vi.spyOn(transport, "applyStudio");
-    const { container } = await renderApp(transport);
-    await act(async () => {
-      for (let index = 0; index < 60; index += 1) await Promise.resolve();
-    });
-
-    expect(duplicate).toHaveBeenCalledOnce();
-    expect(open.mock.calls.map(([request]) => request.surface_id)).toEqual(expect.arrayContaining([
-      "rho.file-source",
-      "rho.console",
-      "rho.plots",
-    ]));
-    expect(apply.mock.calls.some(([request]) => request.edit.kind === "replace_root")).toBe(true);
-    const profile = await transport.loadUiProfile();
-    expect(profile.profile.studio_scenes).toHaveLength(2);
-    expect(profile.profile.studio_scenes.find(
-      (scene) => scene.scene_id === profile.profile.active_studio_scene_id,
-    )?.label).toBe("Result · Analysis results");
-    const surfaces = await transport.loadSurfaces();
-    const agent = surfaces.catalog.instances.find((instance) => instance.surface_id === "rho.agent");
-    expect(agent?.view_state).toEqual(expect.objectContaining({
-      studio_presentations: { "agent-turn:mock-1:4": "presented" },
-    }));
-    expect(container.querySelector("[data-surface-id='rho.agent']")).toBeNull();
-    expect(container.querySelector("[data-surface-id='rho.console'] .rho-console-command")?.textContent)
-      .toContain("summary(iris)");
-  });
-
   it("recovers an unavailable saved project through the project picker instead of Rscript", async () => {
     const transport = createMockUiKernelTransport();
     transport.prepareWorkspace = vi.fn(async () => ({
@@ -1529,281 +1452,6 @@ describe("Studio foundation app", () => {
     expect(container.querySelector(".rho-action-error")).toBeNull();
   });
 
-  it("creates and persists Agent New as one exact admitted workflow", async () => {
-    const transport = createMockUiKernelTransport();
-    const createAgentConversation = transport.createAgentConversation.bind(transport);
-    const updateSurface = transport.updateSurface.bind(transport);
-    const advanceProjectRevision = async () => {
-      const [kernel, surfaces, studio, runtimes, resources] = await Promise.all([
-        transport.loadSnapshot(),
-        transport.loadSurfaces(),
-        transport.loadStudio(),
-        transport.loadRuntimes(),
-        transport.loadResources(),
-      ]);
-      const nextProjectRevision = kernel.context.project_revision + 1;
-      transport.publishSurfaces({ ...surfaces, project_revision: nextProjectRevision });
-      transport.publishStudio({ ...studio, project_revision: nextProjectRevision });
-      transport.publishRuntimes({ ...runtimes, project_revision: nextProjectRevision });
-      transport.publishResources({ ...resources, project_revision: nextProjectRevision });
-      transport.publish({
-        ...kernel,
-        context: { ...kernel.context, project_revision: nextProjectRevision },
-      });
-      return nextProjectRevision;
-    };
-    let createdConversationId: string | null = null;
-    let createdProjectRevision: number | null = null;
-    const create = vi.fn(async () => {
-      const conversation = await createAgentConversation();
-      createdConversationId = conversation.conversation_id;
-      createdProjectRevision = await advanceProjectRevision();
-      return conversation;
-    });
-    let markPersistRequested = () => {};
-    const persistRequested = new Promise<void>((resolve) => { markPersistRequested = resolve; });
-    let releasePersist = () => {};
-    const persistBlocked = new Promise<void>((resolve) => { releasePersist = resolve; });
-    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
-      if (
-        request.target.instance_id === "instance:agent-shared"
-        && request.mutation.kind === "set_view_state"
-        && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
-          === createdConversationId
-      ) {
-        markPersistRequested();
-        await persistBlocked;
-      }
-      return updateSurface(request);
-    });
-    transport.createAgentConversation = create;
-    transport.updateSurface = update;
-    const initialAgent = (await transport.loadSurfaces()).catalog.instances.find(
-      (instance) => instance.instance_id === "instance:agent-shared",
-    )!;
-    const { container } = await renderApp(transport);
-    const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
-    const picker = agent.querySelector<HTMLSelectElement>("select[aria-label^='Conversation for']")!;
-    const initialConversationId = picker.value;
-    const newButton = [...agent.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
-      .find((button) => button.textContent === "New")!;
-
-    await act(async () => {
-      newButton.click();
-      await persistRequested;
-    });
-    expect(createdConversationId).toMatch(/^agent-conversation:mock-/u);
-    expect(create).toHaveBeenCalledOnce();
-    expect(picker.value).toBe(initialConversationId);
-    const persisted = update.mock.calls.find(([request]) => (
-      request.target.instance_id === "instance:agent-shared"
-      && request.mutation.kind === "set_view_state"
-      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
-        === createdConversationId
-    ));
-    expect(persisted).toBeDefined();
-    expect(persisted![0].target.expected_project_revision).toBe(createdProjectRevision);
-    expect(persisted![0].target.activation_generation).toBe(initialAgent.activation_generation);
-    const persistedIndex = update.mock.calls.findIndex((call) => call === persisted);
-    expect(create.mock.invocationCallOrder[0])
-      .toBeLessThan(update.mock.invocationCallOrder[persistedIndex]!);
-
-    await act(async () => {
-      releasePersist();
-      await vi.waitFor(() => expect(container.querySelector<HTMLSelectElement>(
-        "[data-surface-id='rho.agent'] select[aria-label^='Conversation for']",
-      )?.value).toBe(createdConversationId));
-      await settle();
-    });
-    expect((await transport.loadSurfaces()).catalog.instances.find(
-      (instance) => instance.instance_id === initialAgent.instance_id,
-    )?.view_state).toMatchObject({ conversation_id: createdConversationId });
-    expect(container.querySelector(".rho-action-error")).toBeNull();
-  });
-
-  it("keeps failed Agent creation and stale selection persistence truthful, then recovers", async () => {
-    const transport = createMockUiKernelTransport();
-    const createAgentConversation = transport.createAgentConversation.bind(transport);
-    const updateSurface = transport.updateSurface.bind(transport);
-    const createdConversationIds: string[] = [];
-    const create = vi.fn(async () => {
-      if (create.mock.calls.length === 1) {
-        throw new Error("Agent conversation creation rejected for test.");
-      }
-      const conversation = await createAgentConversation();
-      createdConversationIds.push(conversation.conversation_id);
-      return conversation;
-    });
-    let rejectFirstSelectionPersist = true;
-    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
-      const conversationId = request.mutation.kind === "set_view_state"
-        ? (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
-        : null;
-      if (
-        rejectFirstSelectionPersist
-        && request.target.instance_id === "instance:agent-shared"
-        && typeof conversationId === "string"
-        && conversationId !== "agent-conversation:mock-shared"
-      ) {
-        rejectFirstSelectionPersist = false;
-        throw new Error("Agent selection persist stale for test.");
-      }
-      return updateSurface(request);
-    });
-    transport.createAgentConversation = create;
-    transport.updateSurface = update;
-    const { container } = await renderApp(transport);
-    const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
-    const picker = agent.querySelector<HTMLSelectElement>("select[aria-label^='Conversation for']")!;
-    const newButton = () => [...agent.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
-      .find((button) => button.textContent === "New")!;
-
-    await act(async () => {
-      newButton().click();
-      await settle();
-    });
-    await act(async () => {
-      await vi.waitFor(() => expect(container.querySelector(".rho-action-error")?.textContent)
-        .toContain("Agent conversation creation rejected for test."));
-    });
-    expect(picker.value).toBe("agent-conversation:mock-shared");
-
-    await act(async () => {
-      newButton().click();
-      await vi.waitFor(() => expect(createdConversationIds).toHaveLength(1));
-      await settle();
-    });
-    await act(async () => {
-      await vi.waitFor(() => expect(container.querySelector(".rho-action-error")?.textContent)
-        .toContain("Agent selection persist stale for test."));
-    });
-    const durableButUnselectedId = createdConversationIds[0]!;
-    expect([...picker.options].map((option) => option.value)).toContain(durableButUnselectedId);
-    expect(picker.value).toBe("agent-conversation:mock-shared");
-
-    await act(async () => {
-      newButton().click();
-      await vi.waitFor(() => expect(createdConversationIds).toHaveLength(2));
-      await vi.waitFor(() => expect(picker.value).toBe(createdConversationIds[1]));
-      await settle();
-    });
-    expect(picker.value).not.toBe(durableButUnselectedId);
-    expect(container.querySelector(".rho-action-error")).toBeNull();
-  });
-
-  it("rejects a queued picker persist after exact Agent activation replacement and recovers", async () => {
-    const transport = createMockUiKernelTransport();
-    const updateSurface = transport.updateSurface.bind(transport);
-    const firstCandidate = await transport.createAgentConversation();
-    const replacementCandidate = await transport.createAgentConversation();
-    const initialSurfaces = await transport.loadSurfaces();
-    const initialAgent = initialSurfaces.catalog.instances.find(
-      (instance) => instance.instance_id === "instance:agent-shared",
-    )!;
-    let releaseQueue = () => {};
-    const queueGate = new Promise<void>((resolve) => { releaseQueue = resolve; });
-    let queueIsBlocked = false;
-    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
-      if (
-        !queueIsBlocked
-        && request.target.instance_id === initialAgent.instance_id
-        && request.mutation.kind === "set_view_state"
-        && (request.mutation.view_state as { auto_approve?: unknown }).auto_approve === true
-      ) {
-        queueIsBlocked = true;
-        await queueGate;
-        return transport.loadSurfaces();
-      }
-      return updateSurface(request);
-    });
-    transport.updateSurface = update;
-    const { container } = await renderApp(transport);
-    const currentAgent = () => container.querySelector<HTMLElement>(
-      "[data-surface-id='rho.agent']",
-    )!;
-    const currentPicker = () => currentAgent().querySelector<HTMLSelectElement>(
-      "select[aria-label^='Conversation for']",
-    )!;
-    const initialPicker = currentPicker();
-
-    await act(async () => {
-      currentAgent().querySelector<HTMLButtonElement>(".rho-agent-auto-approve")!.click();
-      await vi.waitFor(() => expect(queueIsBlocked).toBe(true));
-    });
-    await act(async () => {
-      initialPicker.value = firstCandidate.conversation_id;
-      initialPicker.dispatchEvent(new Event("change", { bubbles: true }));
-      await settle();
-    });
-    expect(update.mock.calls.some(([request]) => (
-      request.mutation.kind === "set_view_state"
-      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
-        === firstCandidate.conversation_id
-    ))).toBe(false);
-
-    const replacementGeneration = initialAgent.activation_generation + 1;
-    const replacementSurfaces = structuredClone(await transport.loadSurfaces());
-    const replacementInstances = replacementSurfaces.catalog.instances.map(
-      (instance) => instance.instance_id === initialAgent.instance_id
-        ? {
-            ...instance,
-            activation_generation: replacementGeneration,
-            surface_revision: instance.surface_revision + 1,
-            view_state: initialAgent.view_state,
-        }
-        : instance,
-    );
-    await act(async () => {
-      transport.publishSurfaces({
-        ...replacementSurfaces,
-        catalog: { ...replacementSurfaces.catalog, instances: replacementInstances },
-      });
-      await vi.waitFor(() => expect(currentPicker()).not.toBe(initialPicker));
-    });
-    expect(currentPicker().value).toBe("agent-conversation:mock-shared");
-
-    await act(async () => {
-      releaseQueue();
-      await settle();
-      await settle();
-    });
-    expect(update.mock.calls.some(([request]) => (
-      request.mutation.kind === "set_view_state"
-      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
-        === firstCandidate.conversation_id
-    ))).toBe(false);
-    expect(currentPicker().value).toBe("agent-conversation:mock-shared");
-    expect((await transport.loadSurfaces()).catalog.instances.find(
-      (instance) => instance.instance_id === initialAgent.instance_id,
-    )).toMatchObject({
-      activation_generation: replacementGeneration,
-      view_state: { conversation_id: "agent-conversation:mock-shared" },
-    });
-    expect(container.querySelector(".rho-action-error")).toBeNull();
-
-    await act(async () => {
-      currentPicker().value = replacementCandidate.conversation_id;
-      currentPicker().dispatchEvent(new Event("change", { bubbles: true }));
-      await vi.waitFor(() => expect(currentPicker().value)
-        .toBe(replacementCandidate.conversation_id));
-      await settle();
-    });
-    const replacementPersist = update.mock.calls.find(([request]) => (
-      request.mutation.kind === "set_view_state"
-      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
-        === replacementCandidate.conversation_id
-    ));
-    expect(replacementPersist).toBeDefined();
-    expect(replacementPersist![0].target).toMatchObject({
-      instance_id: initialAgent.instance_id,
-      activation_generation: replacementGeneration,
-    });
-    expect((await transport.loadSurfaces()).catalog.instances.find(
-      (instance) => instance.instance_id === initialAgent.instance_id,
-    )?.view_state).toMatchObject({ conversation_id: replacementCandidate.conversation_id });
-    expect(container.querySelector(".rho-action-error")).toBeNull();
-  });
-
   it("keeps an accepted no-conversation Agent Send exactly once across persist failure and recovery", async () => {
     const transport = createMockUiKernelTransport();
     const initialKernel = await transport.loadSnapshot();
@@ -1829,9 +1477,7 @@ describe("Studio foundation app", () => {
                 surface_revision: instance.surface_revision + 1,
                 view_state: {
                   conversation_id: null,
-                  mode: "ask",
                   composer: "",
-                  auto_approve: false,
                 },
               }
             : instance
@@ -1899,9 +1545,8 @@ describe("Studio foundation app", () => {
     const currentAgent = () => container.querySelector<HTMLElement>(
       "[data-surface-id='rho.agent']",
     )!;
-    const currentPicker = () => currentAgent().querySelector<HTMLSelectElement>(
-      "select[aria-label^='Conversation for']",
-    )!;
+    const currentConversationId = () => currentAgent()
+      .querySelector<HTMLElement>(".rho-agent-surface")?.dataset.conversationId ?? null;
     const currentComposer = () => currentAgent().querySelector<HTMLTextAreaElement>(
       ".rho-agent-composer textarea",
     )!;
@@ -1913,11 +1558,11 @@ describe("Studio foundation app", () => {
     });
     expect(currentComposer().value).toBe("Start a durable Agent task");
     expect(currentAgent().querySelector<HTMLButtonElement>(
-      ".rho-agent-context-controls .rho-primary-action",
+      ".rho-agent-composer-actions .rho-primary-action",
     )!.disabled).toBe(false);
     await act(async () => {
       currentAgent().querySelector<HTMLButtonElement>(
-        ".rho-agent-context-controls .rho-primary-action",
+        ".rho-agent-composer-actions .rho-primary-action",
       )!.click();
       await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
       await vi.waitFor(() => expect(update.mock.calls.some(([request]) => (
@@ -1927,7 +1572,7 @@ describe("Studio foundation app", () => {
     });
     expect(run).toHaveBeenCalledOnce();
     expect(run.mock.calls[0]?.[0].conversation_id).toBeNull();
-    expect(currentPicker().value).toBe(createdConversationIds[0]);
+    expect(currentConversationId()).toBe(createdConversationIds[0]);
     expect(currentComposer().value).toBe("");
     const firstPersist = update.mock.calls.find(([request]) => (
       request.target.instance_id === initialAgent.instance_id
@@ -1947,16 +1592,14 @@ describe("Studio foundation app", () => {
       await vi.waitFor(() => expect(container.querySelector(".rho-action-error")?.textContent)
         .toContain("Agent Send selection persist stale for test."));
     });
-    expect(currentPicker().value).toBe(createdConversationIds[0]);
+    expect(currentConversationId()).toBe(createdConversationIds[0]);
     expect(currentComposer().value).toBe("");
-    expect([...currentPicker().options].map((option) => option.value))
-      .toContain(createdConversationIds[0]);
     expect((await transport.loadSurfaces()).catalog.instances.find(
       (instance) => instance.instance_id === initialAgent.instance_id,
     )?.view_state).toMatchObject({ conversation_id: null });
 
     const sendAfterFailure = currentAgent().querySelector<HTMLButtonElement>(
-      ".rho-agent-context-controls .rho-primary-action",
+      ".rho-agent-composer-actions .rho-primary-action",
     )!;
     expect(sendAfterFailure.disabled).toBe(true);
     await act(async () => {
@@ -2009,9 +1652,7 @@ describe("Studio foundation app", () => {
                 surface_revision: instance.surface_revision + 1,
                 view_state: {
                   conversation_id: null,
-                  mode: "ask",
                   composer: "",
-                  auto_approve: false,
                 },
               }
             : instance
@@ -2070,9 +1711,11 @@ describe("Studio foundation app", () => {
     const persistBlocked = new Promise<void>((resolve) => { releasePersist = resolve; });
     const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
       if (
-        update.mock.calls.length >= 1
+        createdConversationId != null
         && request.target.instance_id === initialAgent.instance_id
         && request.mutation.kind === "set_view_state"
+        // A composer-draft persist carries no conversation yet, so require the
+        // accepted id instead of matching the null placeholder against itself.
         && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
           === createdConversationId
       ) {
@@ -2113,7 +1756,7 @@ describe("Studio foundation app", () => {
     });
     await act(async () => {
       currentAgent().querySelector<HTMLButtonElement>(
-        ".rho-agent-context-controls .rho-primary-action",
+        ".rho-agent-composer-actions .rho-primary-action",
       )!.click();
       await runRequested;
     });
@@ -2153,17 +1796,14 @@ describe("Studio foundation app", () => {
     });
     expect(update.mock.invocationCallOrder[update.mock.calls.indexOf(persisted!)])
       .toBeLessThan(broker.mock.invocationCallOrder[0]!);
-    const targetPicker = () => currentAgent().querySelector<HTMLSelectElement>(
-      "select[aria-label^='Conversation for']",
-    )!;
-    expect(targetPicker().value === createdConversationId).toBe(sameRoot);
-    const targetConversationIds = [...targetPicker().options].map((option) => option.value);
-    expect(targetConversationIds.includes(createdConversationId!)).toBe(sameRoot);
+    const targetConversationIdOf = () => currentAgent()
+      .querySelector<HTMLElement>(".rho-agent-surface")?.dataset.conversationId ?? null;
+    expect(targetConversationIdOf() === createdConversationId).toBe(sameRoot);
     if (!sameRoot) {
       expect(currentAgent().textContent).not.toContain("Admitted before project transition");
     }
     expect(container.querySelector(".rho-action-error")).toBeNull();
-    const targetConversationId = targetPicker().value;
+    const targetConversationId = targetConversationIdOf();
 
     await act(async () => {
       setValue.call(currentComposer(), "Target activation retry");
@@ -2172,160 +1812,13 @@ describe("Studio foundation app", () => {
     });
     await act(async () => {
       currentAgent().querySelector<HTMLButtonElement>(
-        ".rho-agent-context-controls .rho-primary-action",
+        ".rho-agent-composer-actions .rho-primary-action",
       )!.click();
       await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
       await vi.waitFor(() => expect(currentComposer().value).toBe(""));
       await settle();
     });
     expect(run.mock.calls[1]?.[0].conversation_id).toBe(targetConversationId || null);
-    expect(container.querySelector(".rho-action-error")).toBeNull();
-  });
-
-  it.each([
-    ["A→B", false],
-    ["same-root A1→A2", true],
-  ])("drains Agent New before %s and isolates the accepted target activation", async (
-    _label,
-    sameRoot,
-  ) => {
-    const projectA = "/projects/project-a";
-    const projectB = "/projects/project-b";
-    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
-    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
-    const createAgentConversation = transport.createAgentConversation.bind(transport);
-    const updateSurface = transport.updateSurface.bind(transport);
-    const openProject = transport.openProject.bind(transport);
-    const initialSurfaces = await transport.loadSurfaces();
-    const initialAgent = initialSurfaces.catalog.instances.find(
-      (instance) => instance.instance_id === "instance:agent-shared",
-    )!;
-    const advanceProjectRevision = async () => {
-      const [kernel, surfaces, studio, runtimes, resources] = await Promise.all([
-        transport.loadSnapshot(),
-        transport.loadSurfaces(),
-        transport.loadStudio(),
-        transport.loadRuntimes(),
-        transport.loadResources(),
-      ]);
-      const nextProjectRevision = kernel.context.project_revision + 1;
-      transport.publishSurfaces({ ...surfaces, project_revision: nextProjectRevision });
-      transport.publishStudio({ ...studio, project_revision: nextProjectRevision });
-      transport.publishRuntimes({ ...runtimes, project_revision: nextProjectRevision });
-      transport.publishResources({ ...resources, project_revision: nextProjectRevision });
-      transport.publish({
-        ...kernel,
-        context: { ...kernel.context, project_revision: nextProjectRevision },
-      });
-      return nextProjectRevision;
-    };
-    let markCreateRequested = () => {};
-    const createRequested = new Promise<void>((resolve) => { markCreateRequested = resolve; });
-    let releaseCreate = () => {};
-    const createBlocked = new Promise<void>((resolve) => { releaseCreate = resolve; });
-    let createdConversationId: string | null = null;
-    let createdProjectRevision: number | null = null;
-    const create = vi.fn(async () => {
-      if (create.mock.calls.length === 1) {
-        markCreateRequested();
-        await createBlocked;
-      }
-      const conversation = await createAgentConversation();
-      if (create.mock.calls.length === 1) {
-        createdConversationId = conversation.conversation_id;
-        createdProjectRevision = await advanceProjectRevision();
-      }
-      return conversation;
-    });
-    let markPersistRequested = () => {};
-    const persistRequested = new Promise<void>((resolve) => { markPersistRequested = resolve; });
-    let releasePersist = () => {};
-    const persistBlocked = new Promise<void>((resolve) => { releasePersist = resolve; });
-    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
-      if (
-        request.target.instance_id === initialAgent.instance_id
-        && request.mutation.kind === "set_view_state"
-        && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
-          === createdConversationId
-      ) {
-        markPersistRequested();
-        await persistBlocked;
-      }
-      return updateSurface(request);
-    });
-    const broker = vi.fn((path: string) => openProject(path));
-    transport.createAgentConversation = create;
-    transport.updateSurface = update;
-    transport.openProject = broker;
-    if (sameRoot) transport.pickProjectDirectory = vi.fn(() => broker(projectA));
-    const { container } = await renderApp(transport);
-    const menu = await openRhoMenu(container);
-    const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
-
-    await act(async () => {
-      [...agent.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
-        .find((button) => button.textContent === "New")!
-        .click();
-      await createRequested;
-    });
-    await act(async () => {
-      const target = sameRoot
-        ? menu.querySelector<HTMLButtonElement>(".rho-rho-project")!
-        : menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
-      target.click();
-      await settle();
-    });
-    expect(broker).not.toHaveBeenCalled();
-
-    await act(async () => {
-      releaseCreate();
-      await persistRequested;
-    });
-    expect(broker).not.toHaveBeenCalled();
-    const persisted = update.mock.calls.find(([request]) => (
-      request.target.instance_id === initialAgent.instance_id
-      && request.mutation.kind === "set_view_state"
-      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
-        === createdConversationId
-    ));
-    expect(persisted).toBeDefined();
-    expect(persisted![0].target.expected_project_revision).toBe(createdProjectRevision);
-    expect(persisted![0].target.activation_generation).toBe(initialAgent.activation_generation);
-
-    await act(async () => {
-      releasePersist();
-      await settle();
-    });
-    await act(async () => {
-      await vi.waitFor(() => expect(broker).toHaveBeenCalledOnce());
-      await vi.waitFor(() => expect(
-        container.querySelector("[data-surface-id='rho.agent']"),
-      ).not.toBeNull());
-    });
-    expect(createdConversationId).not.toBeNull();
-    expect(create.mock.invocationCallOrder[0])
-      .toBeLessThan(broker.mock.invocationCallOrder[0]!);
-    expect(update.mock.invocationCallOrder[update.mock.calls.indexOf(persisted!)])
-      .toBeLessThan(broker.mock.invocationCallOrder[0]!);
-    const targetAgent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
-    const targetPicker = targetAgent.querySelector<HTMLSelectElement>(
-      "select[aria-label^='Conversation for']",
-    )!;
-    expect(targetPicker.value === createdConversationId).toBe(sameRoot);
-    expect([...targetPicker.options].some((option) => option.value === createdConversationId))
-      .toBe(sameRoot);
-    expect(container.querySelector(".rho-action-error")).toBeNull();
-
-    await act(async () => {
-      [...targetAgent.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
-        .find((button) => button.textContent === "New")!
-        .click();
-      await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(2));
-      await vi.waitFor(() => expect(container.querySelector<HTMLSelectElement>(
-        "[data-surface-id='rho.agent'] select[aria-label^='Conversation for']",
-      )?.value).not.toBe(createdConversationId));
-      await settle();
-    });
     expect(container.querySelector(".rho-action-error")).toBeNull();
   });
 
@@ -3299,7 +2792,6 @@ describe("Studio foundation app", () => {
       releaseReference();
       for (let index = 0; index < 16; index += 1) await Promise.resolve();
     });
-    expect(container.querySelector(".rho-agent-context-chip")).toBeNull();
     expect(container.querySelector(".rho-action-error")).toBeNull();
 
     const currentReady = structuredClone(await transport.loadSnapshot());
@@ -5114,99 +4606,6 @@ describe("Studio foundation app", () => {
     expect(history.querySelector(".rho-runtime-history-code")?.textContent).not.toBe("answer()");
   });
 
-  it("adds an immutable History output reference to Agent only after an explicit context review", async () => {
-    const transport = createMockUiKernelTransport();
-    transport.queueRuntimeEvents([{
-      sequence: 1,
-      runtime_instance_id: "runtime:workspace-r",
-      console_instance_id: "instance:console-a",
-      kind: "workspace_result",
-      payload: {
-        execution: {
-          ok: true,
-          code: "summary(mtcars)",
-          stdout: "summary output",
-          value: "summary value",
-          messages: ["summary message"],
-          warnings: [],
-          error: null,
-        },
-      },
-    }]);
-    const ready = structuredClone(await transport.loadSnapshot());
-    (ready.health as { agent: typeof ready.health.agent }).agent = {
-      state: "ready",
-      label: "Agent runtime ready",
-      detail: null,
-    };
-    (ready.context as { agent_health: "ready" }).agent_health = "ready";
-    transport.publish(ready);
-    const createReference = vi.spyOn(transport, "createRuntimeOutputReference");
-    const preview = vi.spyOn(transport, "previewAgentContext");
-    const runAgent = vi.spyOn(transport, "runAgent");
-    const { container } = await renderApp(transport);
-    const consoleView = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
-    const consoleComposer = consoleView.querySelector<HTMLTextAreaElement>("textarea")!;
-    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
-    await act(async () => {
-      setValue.call(consoleComposer, "summary(mtcars)");
-      consoleComposer.dispatchEvent(new Event("input", { bubbles: true }));
-      consoleComposer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
-      for (let index = 0; index < 16; index += 1) await Promise.resolve();
-    });
-
-    await openInspector(container);
-    await act(async () => {
-      container.querySelector<HTMLElement>("[data-surface-factory='rho.runs']")!
-        .querySelector<HTMLButtonElement>("button")!.click();
-      for (let index = 0; index < 16; index += 1) await Promise.resolve();
-    });
-    const history = container.querySelector<HTMLElement>("[data-surface-id='rho.runs']")!;
-    const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-    await act(async () => {
-      const start = history.querySelector<HTMLInputElement>("[aria-label='Agent context start chunk']")!;
-      const end = history.querySelector<HTMLInputElement>("[aria-label='Agent context end chunk']")!;
-      setInput.call(start, "2");
-      start.dispatchEvent(new Event("input", { bubbles: true }));
-      setInput.call(end, "3");
-      end.dispatchEvent(new Event("input", { bubbles: true }));
-      [...history.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Use output in Agent")!.click();
-      for (let index = 0; index < 16; index += 1) await Promise.resolve();
-    });
-
-    const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
-    expect(createReference).toHaveBeenCalledWith(expect.stringMatching(/^runtime-execution:/), 2, 3);
-    expect(agent.querySelector(".rho-agent-context-chip")?.textContent).toContain("Chunks 2–3");
-    const composer = agent.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
-    await act(async () => {
-      setValue.call(composer, "Explain this Runtime result");
-      composer.dispatchEvent(new Event("input", { bubbles: true }));
-      await settle();
-      [...agent.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Review context")!.click();
-      await settle();
-    });
-    expect(preview).toHaveBeenCalledOnce();
-    expect(preview.mock.calls[0]?.[0].runtime_output_context?.execution_id).toMatch(/^runtime-execution:/);
-    expect(preview.mock.calls[0]?.[0].runtime_output_context).toMatchObject({
-      start_sequence: 2,
-      end_sequence: 3,
-    });
-    expect(agent.querySelector(".rho-agent-context-preview")?.textContent).toContain("runtime output");
-
-    await act(async () => {
-      [...agent.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Send")!.click();
-      for (let index = 0; index < 16; index += 1) await Promise.resolve();
-    });
-    expect(runAgent).toHaveBeenCalledOnce();
-    expect(runAgent.mock.calls[0]?.[0].runtime_output_context).not.toBeNull();
-    expect(runAgent.mock.calls[0]?.[0].context_plan_digest).toMatch(/^[0-9a-f]{64}$/);
-    expect(agent.textContent).toContain("Context used");
-    expect(agent.querySelector(".rho-agent-context-chip")).toBeNull();
-  });
-
   it("searches the durable Console journal beyond the mounted transcript and reports incomplete scope", async () => {
     const transport = createMockUiKernelTransport();
     const startExecution = vi.spyOn(transport, "startRuntimeExecution");
@@ -5312,7 +4711,7 @@ describe("Studio foundation app", () => {
     expect(policy.textContent).toContain("policy r1");
   });
 
-  it("does not attach Runtime output to an ordinary Agent turn", async () => {
+  it("forwards only the user prompt and Conversation identity to an Agent turn", async () => {
     const transport = createMockUiKernelTransport();
     const ready = structuredClone(await transport.loadSnapshot());
     (ready.health as { agent: typeof ready.health.agent }).agent = {
@@ -5333,34 +4732,10 @@ describe("Studio foundation app", () => {
       composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
       for (let index = 0; index < 16; index += 1) await Promise.resolve();
     });
-    expect(runAgent.mock.calls[0]?.[0].runtime_output_context).toBeNull();
-    expect(runAgent.mock.calls[0]?.[0].context_plan_digest).toBeNull();
-  });
-
-  it("keeps model configuration in Settings and deep-links there from Agent", async () => {
-    const transport = createMockUiKernelTransport();
-    const ready = structuredClone(await transport.loadSnapshot());
-    (ready.health as { agent: typeof ready.health.agent }).agent = {
-      state: "ready",
-      label: "Agent runtime ready",
-      detail: null,
-    };
-    (ready.context as { agent_health: "ready" }).agent_health = "ready";
-    transport.publish(ready);
-    const { container } = await renderApp(transport);
-    const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
-    expect(agent.querySelector(".rho-agent-capacity")).toBeNull();
-
-    await act(async () => {
-      [...agent.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Models")!.click();
-      await settle();
+    expect(runAgent.mock.calls[0]?.[0]).toEqual({
+      prompt: "Summarize the project",
+      conversation_id: null,
     });
-    const settings = container.querySelector<HTMLElement>("[data-surface-id='rho.settings']")!;
-    expect(settings).not.toBeNull();
-    expect(settings.textContent).toContain("Mock Provider · Model");
-    expect(settings.textContent).toContain("mock-model");
-    expect(settings.textContent).toContain("What this model can do");
   });
 
   it("exposes Console busy state with a reachable Stop control", async () => {
@@ -5688,9 +5063,7 @@ describe("Studio foundation app", () => {
     if (mountedAgentBeforeHandoff == null) throw new Error("Mock Agent instance is missing");
     (mountedAgentBeforeHandoff as { view_state: unknown }).view_state = {
       conversation_id: null,
-      mode: "ask",
       composer: "",
-      auto_approve: false,
     };
     const agentInstanceIdsBeforeHandoff = new Set(
       surfacesBeforeHandoff.catalog.instances
@@ -5740,9 +5113,7 @@ describe("Studio foundation app", () => {
       instance_disposition: "new_instance",
       view_state: expect.objectContaining({
         conversation_id: "agent-conversation:mock-shared",
-        mode: "act",
         composer: "",
-        auto_approve: false,
       }),
     }));
     const surfacesAfterHandoff = await transport.loadSurfaces();
@@ -5761,9 +5132,9 @@ describe("Studio foundation app", () => {
       `[data-surface-id='rho.agent'][data-instance-id='${createdExactAgentId}']`,
     )!;
     expect(agent).not.toBeNull();
-    expect(agent.querySelector<HTMLSelectElement>(
-      `[aria-label='Conversation for ${createdExactAgentId}']`,
-    )?.value).toBe("agent-conversation:mock-shared");
+    expect(agent.querySelector(
+      ".rho-agent-surface[data-conversation-id='agent-conversation:mock-shared']",
+    )).not.toBeNull();
     expect(agent.textContent).toContain("What should we inspect first?");
 
     await act(async () => {
@@ -6437,17 +5808,24 @@ describe("Studio foundation app", () => {
   it("keeps completed Agent metadata quiet and exposes Broker posture without workflow modes", async () => {
     const { container } = await renderApp();
     const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
-    const completed = agent.querySelector<HTMLElement>(".rho-agent-turn-completed")!;
-    expect(completed.querySelector(":scope > header > code")).toBeNull();
-    expect(completed.querySelector(":scope > header > .rho-agent-turn-status")).toBeNull();
-    expect(completed.querySelector(".rho-agent-turn-meta summary")?.textContent).toBe("Details");
-    expect(agent.querySelector(".rho-agent-mode")).toBeNull();
-    expect(agent.querySelector(".rho-agent-auto-approve")?.textContent)
-      .toContain("Auto-approve project tools for this conversation");
-    expect(agent.querySelector(".rho-agent-mode-hint")?.textContent)
-      .toBe("Observe → plan → request effect → re-observe");
-    expect(agent.querySelector(".rho-agent-overview")?.textContent)
-      .toContain("Goal-driven scientific work");
+    const seeded = agent.querySelector<HTMLElement>(".rho-agent-stream-item");
+    expect(seeded?.dataset.turnId).toBe("agent-turn:mock-1");
+    for (const retired of [
+      ".rho-agent-turn",
+      ".rho-agent-mode",
+      ".rho-agent-auto-approve",
+      ".rho-agent-overview",
+      ".rho-agent-approval",
+      "select",
+    ]) {
+      expect(agent.querySelector(retired)).toBeNull();
+    }
+    expect(agent.textContent).not.toContain("Auto-approve project tools for this conversation");
+    expect(agent.textContent).not.toContain("Goal-driven scientific work");
+    for (const label of [...agent.querySelectorAll<HTMLButtonElement>("button")]
+      .map((button) => button.textContent)) {
+      expect(["Send", "Stop", "Retry"]).toContain(label);
+    }
   });
 
   it("makes read-only Authority health the primary Environment view", async () => {

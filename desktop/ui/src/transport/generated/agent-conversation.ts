@@ -26,17 +26,14 @@ export type AgentConversationSummary = {
 	turn_count: number,
 	status: string,
 	latest_turn_id: string | null,
-	latest_mode: string | null,
 	latest_prompt_preview: string | null,
 	terminal_reason: string | null,
-	pending_request_id: string | null,
 };
 
 export type AgentTurnSummary = {
 	turn_id: string,
 	conversation_id: string,
 	project_root: string,
-	mode: string,
 	status: string,
 	started_at: string,
 	finished_at: string | null,
@@ -50,7 +47,6 @@ export type AgentTurnSummary = {
 	project_revision_after: number | null,
 	final_message: string | null,
 	error_message: string | null,
-	pending_request_id: string | null,
 	retry_of_turn_id: string | null,
 	terminal_reason: string | null,
 };

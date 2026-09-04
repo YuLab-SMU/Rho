@@ -55,17 +55,14 @@ export function exactSurfaceRequestForTarget(
 
 export function exactAgentSurfaceRequest(
   conversationId: string,
-  compose: boolean,
 ): VibeExactSurfaceRequest {
   const id = nonEmptyIdentity(conversationId);
   return {
     surfaceId: "rho.agent",
-    modeId: compose ? "composer" : "conversation",
+    modeId: "conversation",
     viewState: {
       conversation_id: id,
-      mode: "act",
       composer: "",
-      auto_approve: false,
     },
     exactIdentityKey: "conversation_id",
     exactIdentity: id,

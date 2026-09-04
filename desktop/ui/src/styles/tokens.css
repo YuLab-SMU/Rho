@@ -112,8 +112,7 @@
     --rho-toolbar-slot-max: 18rem;
 
     /* Reading measure. Agent output is long-form, so a wide pane widens the
-       gutters instead of the line. Prose stays tighter than mixed content. */
+       gutters instead of the line. */
     --rho-agent-measure: 52rem;
-    --rho-agent-prose: 34rem;
   }
 }

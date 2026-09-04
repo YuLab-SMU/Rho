@@ -71,7 +71,7 @@ export type ProjectSwitchBlocker = {
 	operation_status: string | null,
 };
 
-export type ProjectSwitchBlockerKind = "active_run" | "agent_turn" | "agent_file_mutation" | "approval" | "environment_operation";
+export type ProjectSwitchBlockerKind = "active_run" | "agent_turn" | "environment_operation";
 
 export type UnavailableProject = {
 	path: string,

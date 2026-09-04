@@ -24,14 +24,6 @@ const observations: readonly AuthorityObservationViewV1[] = [{
   observed_at: observedAt,
   limitations: [],
 }, {
-  reference: { kind: "approval", authority_id: "approval:mock-1" },
-  status: "approved",
-  digest: `sha256:${"b".repeat(64)}`,
-  project_revision: 4,
-  state_revision: 3,
-  observed_at: observedAt,
-  limitations: [],
-}, {
   reference: { kind: "environment_snapshot", authority_id: "environment:mock-1" },
   status: "present",
   digest: `sha256:${"c".repeat(64)}`,

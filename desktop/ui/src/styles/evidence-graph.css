@@ -211,30 +211,9 @@
   .rho-claim-draft button { justify-self: end; }
   .rho-evidence-empty-copy { margin: 0; color: var(--rho-muted); font-size: var(--rho-text-ui); }
 
-  .rho-agent-evidence-composition {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--rho-space-3);
-  }
-  .rho-agent-evidence-section,
-  .rho-agent-final-answer {
-    display: grid;
-    gap: var(--rho-space-2);
-    padding: var(--rho-space-3);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    background: var(--rho-panel);
-  }
-  .rho-agent-evidence-heading,
-  .rho-agent-evidence-section li { display: flex; justify-content: space-between; gap: var(--rho-space-2); }
-  .rho-agent-evidence-section ul { display: grid; gap: var(--rho-space-1); margin: 0; padding: 0; list-style: none; }
-  .rho-agent-evidence-section p,
-  .rho-agent-final-answer p { margin: 0; }
-
   @container (max-width: 680px) {
     .rho-claims-layout { grid-template-columns: minmax(0, 1fr); overflow: auto; }
     .rho-claims-layout > .rho-evidence-node-grid { max-height: 18rem; border-right: 0; border-bottom: var(--rho-border); }
-    .rho-agent-evidence-composition { grid-template-columns: minmax(0, 1fr); }
   }
   @container (max-width: 520px) {
     .rho-evidence-edges li { grid-template-columns: auto minmax(0, 1fr); }

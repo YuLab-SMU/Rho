@@ -54,7 +54,7 @@ function instances(): ReadonlyMap<string, SurfaceInstance> {
     view_group_id: null,
     resource_binding: null,
     runtime_binding: null,
-    view_state: { conversation_id: "conversation:exact", mode: "ask", composer: "", auto_approve: false },
+    view_state: { conversation_id: "conversation:exact", composer: "" },
   } as SurfaceInstance], ["instance:check", {
     project_id: "project:alpha",
     instance_id: "instance:check",

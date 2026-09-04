@@ -9,7 +9,6 @@ import {
 import { createPortal } from "react-dom";
 
 import type {
-  AgentTurnSummary,
   PluginSurfaceDocumentRequest,
   ResourceDescriptor,
   ResourceRegistrySnapshot,
@@ -19,7 +18,6 @@ import type {
   RuntimeExecutionSourceContext,
   RuntimeOutputFollowFrame,
   RuntimeOutputPage,
-  RuntimeOutputReference,
   RunAgentRequest,
   RuntimeOutputSearchResult,
   RuntimeRegistrySnapshot,
@@ -34,7 +32,6 @@ import {
   type RuntimeConsoleAttachment,
 } from "../authority/RuntimeCenterSurface";
 import type { AgentSurfaceState } from "../agent/AgentSurface";
-import type { AgentStudioPresentation } from "../agent/studio-presentation";
 import { CheckResultView } from "../CheckResultView";
 import { DOMAIN_SURFACE_IDS, DomainSurfaceView } from "../DomainSurfaceView";
 import { FileResourceView } from "../FileResourceView";
@@ -66,10 +63,7 @@ import { surfaceUxProfile } from "../surface-ux";
 import { SurfaceRouter } from "./SurfaceRouter";
 import { createAuthorityPorts } from "./authorityPorts";
 import { createAgentCorePorts } from "./agentPorts";
-import {
-  agentEvidencePorts,
-  createEvidenceGraphPorts,
-} from "./evidenceGraphPorts";
+import { createEvidenceGraphPorts } from "./evidenceGraphPorts";
 import { createResultsPorts } from "./resultsPorts";
 
 interface SurfaceFrameProps {
@@ -136,9 +130,6 @@ interface SurfaceFrameProps {
   readonly projectRevision: number;
   readonly openFindingReference: (path: string) => Promise<void>;
   readonly agentHealth: { readonly state: string; readonly label: string; readonly detail: string | null } | null;
-  readonly createAgentConversation: (
-    current: AgentSurfaceState,
-  ) => Promise<AgentSurfaceState>;
   readonly runAgentConversation: (
     current: AgentSurfaceState,
     request: RunAgentRequest,
@@ -146,16 +137,9 @@ interface SurfaceFrameProps {
   ) => Promise<AgentSurfaceState>;
   readonly persistAgentViewState: (viewState: AgentSurfaceState) => Promise<void>;
   readonly persistSurfaceViewState: (viewState: unknown) => Promise<void>;
-  readonly pinAgentTask: (turn: AgentTurnSummary) => Promise<void>;
-  readonly presentAgentTurnInStudio: (
-    turn: AgentTurnSummary,
-    presentation: AgentStudioPresentation,
-  ) => Promise<void>;
   readonly openNavigatorFile: (descriptor: ResourceDescriptor) => Promise<void>;
   readonly openSurfaceById: (surfaceId: string, viewStateOverride?: unknown) => void;
   readonly openPlot: (plotId: string) => void;
-  readonly agentRuntimeOutputContext: RuntimeOutputReference | null;
-  readonly setAgentRuntimeOutputContext: (reference: RuntimeOutputReference | null) => boolean;
   readonly embedded: boolean;
   readonly dockviewHosted: boolean;
 }
@@ -192,16 +176,14 @@ export function SurfaceFrame({
   reloadResource, renameResource, deleteResource,
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
   pluginTransport, surfaceFactories, pluginDocumentRequest, projectRevision, openFindingReference,
-  agentHealth, createAgentConversation, runAgentConversation, persistAgentViewState,
-  persistSurfaceViewState, pinAgentTask, presentAgentTurnInStudio,
+  agentHealth, runAgentConversation, persistAgentViewState,
+  persistSurfaceViewState,
   openNavigatorFile, openSurfaceById, openPlot,
-  agentRuntimeOutputContext, setAgentRuntimeOutputContext,
   embedded, dockviewHosted,
 }: SurfaceFrameProps) {
   const authorityPorts = createAuthorityPorts(pluginTransport);
   const agentCore = createAgentCorePorts(pluginTransport);
   const evidencePorts = createEvidenceGraphPorts(pluginTransport);
-  const agentEvidence = agentEvidencePorts(evidencePorts);
   const resultsPorts = createResultsPorts(pluginTransport);
   const [draft, setDraft] = useState(() => initialDraft(instance, draftCache));
   const [consoleController] = useState(() => new ConsoleInstanceController(
@@ -578,17 +560,10 @@ export function SurfaceFrame({
         <AgentSurface
           instance={instance}
           transport={agentCore}
-          evidencePorts={agentEvidence}
-          environmentPort={authorityPorts.environment}
           health={agentHealth}
-          createConversation={createAgentConversation}
           runConversation={runAgentConversation}
           persist={persistAgentViewState}
-          pinTask={pinAgentTask}
-          presentInStudio={presentAgentTurnInStudio}
           reportError={reportError}
-          runtimeOutputContext={agentRuntimeOutputContext}
-          setRuntimeOutputContext={setAgentRuntimeOutputContext}
         />
       )}
       {instance.surface_id === "rho.runtimes" && (

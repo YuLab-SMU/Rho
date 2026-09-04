@@ -1,4 +1,4 @@
-/* Agent Surface (rho.agent): task-first information hierarchy for Studio.
+/* Agent Surface (rho.agent): one continuous stream plus a composer.
    Refines the base Agent rules in surfaces.css inside the same `surfaces`
    layer; every value comes from tokens.css. Imported by agent/AgentSurface.tsx,
    which the bundler orders before foundation.css, so every selector is scoped
@@ -13,571 +13,82 @@
   section.rho-agent-surface { font-size: var(--rho-text-body); }
   section.rho-agent-surface :where(strong, b) { font-weight: var(--rho-weight-semibold); }
 
-  /* --- Toolbar: conversation context + quiet secondary actions --------------- */
-  section.rho-agent-surface .rho-agent-toolbar { align-items: center; }
-  section.rho-agent-surface .rho-agent-toolbar-action {
-    flex: 0 0 auto;
-    min-height: var(--rho-control-small);
-    padding: var(--rho-space-1) var(--rho-space-3);
-    border-color: transparent;
-    color: var(--rho-ink-2);
-    background: transparent;
-    font-size: var(--rho-text-caption);
-  }
-  section.rho-agent-surface .rho-agent-toolbar-action:hover:not(:disabled) { border-color: transparent; color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
-  section.rho-agent-surface .rho-agent-toolbar-action:active:not(:disabled) { background: var(--rho-fill-2); }
-  section.rho-agent-surface .rho-agent-toolbar-action[aria-expanded="true"] { color: var(--rho-ink); background: var(--rho-fill-2); }
-  section.rho-agent-surface .rho-agent-model-setup { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--rho-space-3); padding: var(--rho-space-2) var(--rho-space-3); border-bottom: var(--rho-border); border-left: 3px solid var(--rho-warn); background: var(--rho-warn-tint); }
-  section.rho-agent-surface .rho-agent-model-setup > div { display: grid; min-width: 0; flex: 1 1 12rem; gap: var(--rho-space-1); }
-  section.rho-agent-surface .rho-agent-model-setup strong { font-size: var(--rho-text-ui); }
-  section.rho-agent-surface .rho-agent-model-setup span { color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
-  section.rho-agent-surface .rho-agent-model-setup button { flex: 0 0 auto; min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); }
-
-  section.rho-agent-surface .rho-agent-overview {
+  /* --- Stream: one item per thing the Agent did, in the order it happened ----- */
+  section.rho-agent-surface .rho-agent-timeline {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.42fr);
-    gap: var(--rho-space-6);
-    margin: 0;
-    padding: var(--rho-space-4) var(--rho-space-5);
-    border: 0;
-    border-bottom: var(--rho-border);
-    border-radius: 0;
-    background: var(--rho-paper);
-    box-shadow: none;
+    align-content: start;
+    gap: var(--rho-space-3);
+    padding: var(--rho-space-4);
   }
-  section.rho-agent-surface .rho-agent-overview > div { display: grid; align-content: start; gap: var(--rho-space-1); }
-  section.rho-agent-surface .rho-agent-overview > div > strong { font-size: var(--rho-text-head); }
-  section.rho-agent-surface .rho-agent-overview p { max-width: 48rem; margin: 0; color: var(--rho-ink-2); font-size: var(--rho-text-ui); }
-  section.rho-agent-surface .rho-agent-overview dl { display: grid; align-content: start; gap: var(--rho-space-2); margin: 0; padding-left: var(--rho-space-5); border-left: var(--rho-border); }
-  section.rho-agent-surface .rho-agent-overview dl > div { display: flex; justify-content: space-between; gap: var(--rho-space-3); }
-  section.rho-agent-surface .rho-agent-overview dt { color: var(--rho-muted); font-size: var(--rho-text-caption); }
-  section.rho-agent-surface .rho-agent-overview dd { margin: 0; overflow: hidden; font-size: var(--rho-text-caption); font-weight: var(--rho-weight-medium); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-  section.rho-agent-surface .rho-agent-environment-doctor {
+  section.rho-agent-surface .rho-agent-stream-item {
     display: grid;
     gap: var(--rho-space-2);
+    max-width: var(--rho-agent-measure);
     padding: var(--rho-space-3) var(--rho-space-4);
-    border-block: var(--rho-border);
-    background: var(--rho-panel);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-2);
+    background: var(--rho-paper);
   }
-  section.rho-agent-surface .rho-agent-environment-doctor > header { display: flex; justify-content: space-between; gap: var(--rho-space-2); }
-  section.rho-agent-surface .rho-agent-environment-doctor p { margin: 0; color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
-  section.rho-agent-surface .rho-agent-environment-doctor ul { display: grid; gap: var(--rho-space-1); margin: 0; padding-inline-start: var(--rho-space-5); }
-  section.rho-agent-surface .rho-agent-environment-doctor li { display: grid; gap: var(--rho-space-1); }
-  section.rho-agent-surface .rho-agent-environment-uncertainty { color: var(--rho-warn); }
-  section.rho-agent-surface .rho-agent-environment-doctor[data-state="local_ready"],
-  section.rho-agent-surface .rho-agent-environment-doctor[data-state="unbound"],
-  section.rho-agent-surface .rho-agent-environment-doctor[data-state="ready"] { gap: var(--rho-space-1); padding-block: var(--rho-space-2); }
-  section.rho-agent-surface .rho-agent-environment-doctor[data-state="unbound"] > header > span { color: var(--rho-muted); font-size: var(--rho-text-caption); }
-  /* Settled Authority state: one line, full wording behind the disclosure. */
-  section.rho-agent-surface .rho-agent-environment-settled > summary {
+  section.rho-agent-surface .rho-agent-stream-item > header {
     display: flex;
     align-items: baseline;
-    gap: var(--rho-space-3);
-    cursor: pointer;
-    list-style: none;
-    font-size: var(--rho-text-caption);
+    gap: var(--rho-space-2);
   }
-  section.rho-agent-surface .rho-agent-environment-settled > summary::-webkit-details-marker { display: none; }
-  section.rho-agent-surface .rho-agent-environment-settled > summary::after { content: "▾"; flex: 0 0 auto; color: var(--rho-muted); }
-  section.rho-agent-surface .rho-agent-environment-settled[open] > summary::after { content: "▴"; }
-  section.rho-agent-surface .rho-agent-environment-settled > summary:hover { color: var(--rho-ink); }
-  section.rho-agent-surface .rho-agent-environment-settled .rho-agent-section-label { flex: 0 0 auto; }
-  section.rho-agent-surface .rho-agent-environment-state { min-width: 0; overflow: hidden; color: var(--rho-ink); text-overflow: ellipsis; white-space: nowrap; }
-  section.rho-agent-surface .rho-agent-environment-aside { flex: 0 1 auto; min-width: 0; margin-left: auto; overflow: hidden; color: var(--rho-muted); text-overflow: ellipsis; white-space: nowrap; }
-  section.rho-agent-surface .rho-agent-environment-settled > :not(summary) { margin-top: var(--rho-space-2); }
-
-  section.rho-agent-surface .rho-agent-current-work-header {
-    position: sticky;
-    z-index: 2;
-    top: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--rho-space-3);
-    padding: var(--rho-space-3) var(--rho-space-5);
-    border-bottom: var(--rho-border);
-    background: color-mix(in srgb, var(--rho-panel) 94%, transparent);
-    backdrop-filter: blur(10px);
-  }
-  section.rho-agent-surface .rho-agent-current-work-header > div { display: grid; min-width: 0; gap: var(--rho-space-1); }
-  section.rho-agent-surface .rho-agent-current-work-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  section.rho-agent-surface .rho-agent-current-work-header > span { flex: 0 0 auto; color: var(--rho-muted); font-size: var(--rho-text-caption); }
-
-  /* --- Timeline: reading order and truthful state copy ----------------------- */
-  /* Separators stay full-bleed so turn boundaries read across the whole pane,
-     while the content inside them holds a measure: extra pane width becomes
-     gutter, not line length. */
-  section.rho-agent-surface .rho-agent-turn,
-  section.rho-agent-surface .rho-agent-current-work-header {
-    padding-inline: max(var(--rho-space-5), (100% - var(--rho-agent-measure)) / 2);
-  }
-  /* An idle conversation has one small block; center it in the pane instead of
-     stranding it above empty space. */
-  section.rho-agent-surface .rho-agent-timeline-idle { display: grid; align-content: safe center; }
-  section.rho-agent-surface .rho-agent-loading { margin: 0; padding: var(--rho-space-2) var(--rho-space-1); color: var(--rho-muted); font-size: var(--rho-text-ui); }
-
-  section.rho-agent-surface .rho-agent-section-label {
-    display: block;
+  section.rho-agent-surface .rho-agent-stream-kind {
     color: var(--rho-muted);
     font-size: var(--rho-text-caption);
     font-weight: var(--rho-weight-semibold);
-    letter-spacing: 0.075em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
-  section.rho-agent-surface .rho-agent-goal { margin-top: var(--rho-space-3); }
-  section.rho-agent-surface .rho-agent-goal .rho-agent-prompt { margin-top: var(--rho-space-2); color: var(--rho-ink); font-size: var(--rho-text-body); line-height: 1.5; }
-
-  /* Text status chips: state is carried by words, color only supports them. */
-  section.rho-agent-surface .rho-agent-turn-status {
-    padding: 0 var(--rho-space-2);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    font-size: var(--rho-text-caption);
+  section.rho-agent-surface .rho-agent-stream-item > p {
+    margin: 0;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
   }
-  section.rho-agent-surface .rho-agent-turn-status-running,
-  section.rho-agent-surface .rho-agent-turn-status-waiting { border-color: var(--rho-warn); color: var(--rho-warn); background: var(--rho-warn-tint); }
-  section.rho-agent-surface .rho-agent-turn-status-failed { border-color: var(--rho-danger); color: var(--rho-danger); background: var(--rho-danger-tint); }
-  section.rho-agent-surface .rho-agent-turn-status-cancelled { color: var(--rho-muted); background: var(--rho-fill); }
-
-  /* Failure and cancellation read differently from an ordinary answer. */
-  section.rho-agent-surface .rho-agent-turn-failure {
-    margin-top: var(--rho-space-3);
-    padding: var(--rho-space-2) var(--rho-space-3);
+  section.rho-agent-surface .rho-agent-stream-item > pre {
+    max-height: 16rem;
+    margin: 0;
+    padding: var(--rho-space-3);
+    overflow: auto;
     border: var(--rho-border);
-    border-left: 3px solid var(--rho-danger);
     border-radius: var(--rho-radius-1);
+    color: var(--rho-ink-2);
+    background: var(--rho-panel);
+    font: var(--rho-text-ui)/1.5 var(--rho-font-mono);
+    white-space: pre-wrap;
+  }
+
+  /* The kind label is the primary signal; the accent edge only reinforces it, so
+     colour is never the sole carrier of meaning. */
+  section.rho-agent-surface .rho-agent-stream-prompt {
+    border-left: 3px solid var(--rho-ink);
+    background: var(--rho-fill);
+  }
+  section.rho-agent-surface .rho-agent-stream-event { border-color: transparent; background: transparent; }
+  section.rho-agent-surface .rho-agent-stream-tool { border-left: 3px solid var(--rho-accent); }
+  section.rho-agent-surface .rho-agent-stream-tool > p { color: var(--rho-ink-2); }
+  section.rho-agent-surface .rho-agent-stream-failure {
+    border-left: 3px solid var(--rho-danger);
     background: var(--rho-danger-tint);
   }
-  section.rho-agent-surface .rho-agent-turn-failure > strong { display: block; color: var(--rho-danger); font-size: var(--rho-text-ui); }
-  section.rho-agent-surface .rho-agent-turn-failure .rho-agent-turn-error { margin: var(--rho-space-1) 0 0; }
-  section.rho-agent-surface .rho-agent-turn-cancelled {
-    margin: var(--rho-space-3) 0 0;
-    padding: var(--rho-space-2) var(--rho-space-3);
-    border-left: 3px solid var(--rho-muted);
-    color: var(--rho-ink-2);
-    background: var(--rho-fill);
-    font-size: var(--rho-text-ui);
-  }
+  section.rho-agent-surface .rho-agent-stream-failure > p { color: var(--rho-danger); }
 
-  /* --- Decision blocks: approval and file change are structurally distinct --- */
-  section.rho-agent-surface .rho-agent-decision-header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--rho-space-2); min-width: 0; }
-  section.rho-agent-surface .rho-agent-decision-kind {
-    flex: 0 0 auto;
-    color: var(--rho-muted);
-    font-size: var(--rho-text-caption);
-    font-weight: var(--rho-weight-semibold);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-  section.rho-agent-surface .rho-agent-decision-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--rho-space-1); margin-top: var(--rho-space-2); }
-  section.rho-agent-surface .rho-agent-decision-actions button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); font-size: var(--rho-text-caption); }
-  section.rho-agent-surface .rho-agent-approval .rho-agent-decision-actions button { margin-right: 0; }
-  section.rho-agent-surface .rho-agent-approval pre { max-height: 6rem; }
-
-  /* A completed Agent turn can hand its committed work to Studio without
-     adding narrative blocks to Vibe. The row reports the durable handoff. */
-  section.rho-agent-surface .rho-agent-studio-presentation {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    align-items: center;
-    gap: var(--rho-space-3);
-    margin-top: var(--rho-space-3);
-    padding: var(--rho-space-3);
-    border: var(--rho-border);
-    border-left: 3px solid var(--rho-ink);
-    border-radius: var(--rho-radius-1);
-    background: var(--rho-panel);
-  }
-  section.rho-agent-surface .rho-agent-studio-presentation > div {
-    display: grid;
-    min-width: 0;
-    gap: var(--rho-space-1);
-  }
-  section.rho-agent-surface .rho-agent-studio-presentation strong,
-  section.rho-agent-surface .rho-agent-studio-presentation small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  section.rho-agent-surface .rho-agent-studio-presentation small { color: var(--rho-muted); font-size: var(--rho-text-caption); }
-  section.rho-agent-surface .rho-agent-studio-presentation button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); }
-  section.rho-agent-surface .rho-agent-studio-outcome { color: var(--rho-muted); font-size: var(--rho-text-caption); letter-spacing: 0.04em; text-transform: uppercase; }
-
-  /* Per-turn activity reads as terse one-line narration rows; code payloads
-     and context byte evidence stay behind their own disclosures. */
-  section.rho-agent-surface .rho-agent-activity { display: grid; gap: var(--rho-space-1); margin-top: var(--rho-space-2); padding-top: var(--rho-space-2); border-top: var(--rho-border); }
-  section.rho-agent-surface .rho-agent-activity-row {
+  /* --- Composer ---------------------------------------------------------------- */
+  section.rho-agent-surface .rho-agent-composer-actions {
+    grid-column: 1 / -1;
     display: flex;
-    align-items: baseline;
-    gap: var(--rho-space-2);
-    min-width: 0;
-    color: var(--rho-ink-2);
-    font-size: var(--rho-text-caption);
-  }
-  section.rho-agent-surface .rho-agent-activity-row::before { content: "–"; flex: 0 0 auto; color: var(--rho-muted); }
-  section.rho-agent-surface .rho-agent-activity .rho-agent-code-review,
-  section.rho-agent-surface .rho-agent-activity .rho-agent-context-used { margin-top: 0; }
-  /* A source that contributed nothing is still named, but it is one dim line
-     rather than a full priced entry competing with the sources that did. */
-  section.rho-agent-surface .rho-agent-context-withheld { color: var(--rho-muted); }
-  section.rho-agent-surface .rho-agent-context-withheld strong { font-weight: var(--rho-weight-regular); }
-  section.rho-agent-surface .rho-agent-activity .rho-agent-code-review > summary { cursor: pointer; color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
-  section.rho-agent-surface .rho-agent-activity .rho-agent-code-review > summary:hover { color: var(--rho-ink); }
-
-  /* Empty state: a centered greeting block with the truthful how-to copy. */
-  section.rho-agent-surface .rho-agent-empty { justify-items: center; padding: var(--rho-space-6) var(--rho-space-5); text-align: center; }
-  section.rho-agent-surface .rho-agent-empty strong { font-size: var(--rho-text-head); font-weight: var(--rho-weight-medium); }
-  section.rho-agent-surface .rho-agent-empty > span { max-width: 26rem; }
-
-  /* Empty-state suggestions fill (never send) the composer. */
-  section.rho-agent-surface .rho-agent-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--rho-space-2); margin-top: var(--rho-space-3); }
-  section.rho-agent-surface .rho-agent-suggestions button {
-    min-height: var(--rho-control-small);
-    padding: var(--rho-space-2) var(--rho-space-4);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    color: var(--rho-ink-2);
-    background: transparent;
-    box-shadow: none;
-    font-size: var(--rho-text-caption);
-  }
-  section.rho-agent-surface .rho-agent-suggestions button:hover:not(:disabled) { color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
-
-  /* --- Composer dock: one container with status, input, and control row ------ */
-  section.rho-agent-surface .rho-agent-composer {
-    grid-template-columns: minmax(0, 1fr);
-    margin: 0;
-    border: 0;
-    border-top: var(--rho-border);
-    border-radius: 0;
-    box-shadow: none;
-    transition: border-color var(--rho-motion-fast) var(--rho-ease-out), box-shadow var(--rho-motion-fast) var(--rho-ease-out);
-  }
-  section.rho-agent-surface .rho-agent-composer:focus-within { border-color: var(--rho-line-strong); box-shadow: inset 0 1px 0 var(--rho-line-strong); }
-  section.rho-agent-surface .rho-agent-composer > .rho-agent-running {
-    grid-column: 1 / -1;
-    margin: calc(-1 * var(--rho-space-3)) calc(-1 * var(--rho-space-3)) var(--rho-space-1);
-    border-radius: 0;
-  }
-  section.rho-agent-surface .rho-agent-composer textarea {
-    grid-column: 1 / -1;
-    border-color: transparent;
-    background: transparent;
-  }
-  section.rho-agent-surface .rho-agent-composer textarea:focus-visible { outline: none; }
-  section.rho-agent-surface .rho-agent-composer-idle textarea { min-height: 3rem; max-height: 7rem; padding-block: var(--rho-space-2); }
-
-  /* Final prose is the conclusion of the turn; graph-backed evidence remains
-     adjacent but visually subordinate and never impersonates authority. */
-  section.rho-agent-surface .rho-agent-final-answer {
-    margin-top: var(--rho-space-4);
-    padding: var(--rho-space-3) var(--rho-space-4);
-    border: 0;
-    border-left: 3px solid var(--rho-ink);
-    border-radius: 0;
-    background: var(--rho-panel);
-  }
-  section.rho-agent-surface .rho-agent-final-answer .rho-agent-answer { margin-top: var(--rho-space-2); }
-  /* Continuous prose reads tighter than the mixed content around it. */
-  section.rho-agent-surface .rho-agent-answer,
-  section.rho-agent-surface .rho-agent-goal .rho-agent-prompt { max-width: var(--rho-agent-prose); }
-
-  /* Rendered Markdown stays inside the surface type scale: a model heading is
-     structure, not permission to introduce a new size. */
-  section.rho-agent-surface .rho-agent-answer > :first-child { margin-top: 0; }
-  section.rho-agent-surface .rho-agent-answer > :last-child { margin-bottom: 0; }
-  section.rho-agent-surface .rho-agent-answer p,
-  section.rho-agent-surface .rho-agent-answer ul,
-  section.rho-agent-surface .rho-agent-answer ol,
-  section.rho-agent-surface .rho-agent-answer blockquote,
-  section.rho-agent-surface .rho-agent-answer pre,
-  section.rho-agent-surface .rho-agent-answer table { margin: var(--rho-space-3) 0; }
-  section.rho-agent-surface .rho-agent-answer h1,
-  section.rho-agent-surface .rho-agent-answer h2,
-  section.rho-agent-surface .rho-agent-answer h3,
-  section.rho-agent-surface .rho-agent-answer h4,
-  section.rho-agent-surface .rho-agent-answer h5,
-  section.rho-agent-surface .rho-agent-answer h6 {
-    margin: var(--rho-space-4) 0 var(--rho-space-2);
-    font-size: var(--rho-text-body);
-    font-weight: var(--rho-weight-semibold);
-  }
-  section.rho-agent-surface .rho-agent-answer h1,
-  section.rho-agent-surface .rho-agent-answer h2 { font-size: var(--rho-text-title); }
-  section.rho-agent-surface .rho-agent-answer ul,
-  section.rho-agent-surface .rho-agent-answer ol { padding-inline-start: var(--rho-space-6); }
-  section.rho-agent-surface .rho-agent-answer li { margin: var(--rho-space-1) 0; }
-  section.rho-agent-surface .rho-agent-answer li > p { margin: 0; }
-  section.rho-agent-surface .rho-agent-answer code {
-    padding: 0 var(--rho-space-1);
-    border-radius: var(--rho-radius-xs);
-    background: var(--rho-fill);
-    font-family: var(--rho-font-mono);
-    font-size: var(--rho-text-ui);
-  }
-  section.rho-agent-surface .rho-agent-answer pre {
-    max-width: 100%;
-    padding: var(--rho-space-3);
-    overflow-x: auto;
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    background: var(--rho-panel);
-  }
-  section.rho-agent-surface .rho-agent-answer pre code { padding: 0; background: none; }
-  section.rho-agent-surface .rho-agent-answer blockquote {
-    padding-left: var(--rho-space-4);
-    border-left: 3px solid var(--rho-line);
-    color: var(--rho-ink-2);
-  }
-  section.rho-agent-surface .rho-agent-answer hr { margin: var(--rho-space-4) 0; border: 0; border-top: var(--rho-border); }
-  section.rho-agent-surface .rho-agent-answer table { border-collapse: collapse; font-size: var(--rho-text-ui); }
-  section.rho-agent-surface .rho-agent-answer th,
-  section.rho-agent-surface .rho-agent-answer td { padding: var(--rho-space-1) var(--rho-space-3); border: var(--rho-border); text-align: left; }
-  /* Inert by construction: the anchor carries no href, so it must not look
-     clickable while still showing where the model pointed. */
-  section.rho-agent-surface .rho-agent-md-link { color: var(--rho-ink); text-decoration: underline dotted; }
-  section.rho-agent-surface .rho-agent-evidence-composition {
-    margin-top: var(--rho-space-3);
+    align-items: center;
+    justify-content: flex-end;
     gap: var(--rho-space-3);
   }
-  section.rho-agent-surface .rho-agent-evidence-section {
-    padding: var(--rho-space-3);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    background: var(--rho-paper);
-  }
-
-  section.rho-agent-surface .rho-agent-queue {
-    grid-column: 1 / -1;
-    display: grid;
-    gap: var(--rho-space-1);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  section.rho-agent-surface .rho-agent-queue-item {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--rho-space-2);
-    padding: var(--rho-space-1) var(--rho-space-2);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    background: var(--rho-fill);
-    font-size: var(--rho-text-caption);
-  }
-  section.rho-agent-surface .rho-agent-queue-label { color: var(--rho-muted); font-weight: var(--rho-weight-semibold); text-transform: uppercase; }
-  section.rho-agent-surface .rho-agent-queue-prompt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  section.rho-agent-surface .rho-agent-queue-actions { display: flex; gap: var(--rho-space-1); }
-  section.rho-agent-surface .rho-agent-queue-actions button { min-width: var(--rho-control-small); min-height: var(--rho-control-small); padding: 0; }
-
-  section.rho-agent-surface .rho-agent-context-controls { align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: var(--rho-space-2); }
-  section.rho-agent-surface .rho-agent-context-controls > button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); font-size: var(--rho-text-caption); }
-  /* Review context is a quiet ghost action; Send stays the only solid control.
-     The gate and the send it guards sit together at the trailing edge, so the
-     row reads as settings on the left and the submit sequence on the right. */
-  section.rho-agent-surface .rho-agent-review-context { margin-inline-start: auto; border-color: transparent; color: var(--rho-ink-2); background: transparent; }
-  section.rho-agent-surface .rho-agent-review-context:hover:not(:disabled) { border-color: transparent; color: var(--rho-accent-ink); background: var(--rho-accent-tint); box-shadow: none; }
-  section.rho-agent-surface .rho-agent-review-context:active:not(:disabled) { background: var(--rho-fill-2); }
-  section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { font-size: var(--rho-text-ui); }
-  /* Names the unmet gate next to the control it disables. */
-  section.rho-agent-surface .rho-agent-submit-block {
-    flex: 0 1 auto;
-    min-width: 0;
-    margin-inline-start: auto;
-    overflow: hidden;
-    color: var(--rho-warn);
-    font-size: var(--rho-text-caption);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  section.rho-agent-surface .rho-agent-submit-block ~ .rho-agent-review-context { margin-inline-start: 0; }
-
-  section.rho-agent-surface .rho-agent-autonomous-badge {
-    flex: 0 0 auto;
-    min-height: var(--rho-control-small);
-    padding: var(--rho-space-1) var(--rho-space-3);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    color: var(--rho-ink-2);
-    background: var(--rho-fill);
-    font-size: var(--rho-text-caption);
-    font-weight: var(--rho-weight-semibold);
-  }
-  section.rho-agent-surface .rho-agent-mode-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--rho-muted); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-
-  section.rho-agent-surface .rho-agent-posture-menu { position: relative; flex: 0 0 auto; }
-  section.rho-agent-surface .rho-agent-posture-menu > summary {
-    display: flex;
-    align-items: center;
-    gap: var(--rho-space-1);
-    min-height: var(--rho-control-small);
-    padding: var(--rho-space-1) var(--rho-space-2);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    color: var(--rho-ink-2);
-    background: var(--rho-paper);
-    font-size: var(--rho-text-caption);
-    list-style: none;
-    cursor: pointer;
-  }
-  section.rho-agent-surface .rho-agent-posture-menu > summary::-webkit-details-marker { display: none; }
-  section.rho-agent-surface .rho-agent-posture-menu > summary::after { content: "▾"; color: var(--rho-muted); }
-  section.rho-agent-surface .rho-agent-posture-menu > summary:hover,
-  section.rho-agent-surface .rho-agent-posture-menu[open] > summary { border-color: var(--rho-accent); color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
-  section.rho-agent-surface .rho-agent-posture-menu > div {
-    position: absolute;
-    z-index: 4;
-    bottom: calc(100% + var(--rho-space-1));
-    left: 0;
-    display: grid;
-    width: var(--rho-toolbar-popover-width);
-    max-width: calc(100cqw - var(--rho-space-7));
-    gap: var(--rho-space-1);
-    padding: var(--rho-space-1);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    background: var(--rho-paper);
-    box-shadow: var(--rho-shadow-float);
-  }
-  section.rho-agent-surface .rho-agent-posture-option { display: grid; }
-  section.rho-agent-surface .rho-agent-posture-option > button {
-    min-height: var(--rho-control-small);
-    padding: var(--rho-space-2) var(--rho-space-3);
-    border-color: transparent;
-    color: var(--rho-ink-2);
-    background: transparent;
-    text-align: left;
-  }
-  section.rho-agent-surface .rho-agent-posture-option > button:hover:not(:disabled) { color: var(--rho-ink); background: var(--rho-fill); }
-  section.rho-agent-surface .rho-agent-posture-option > button[aria-checked="true"] { color: var(--rho-ink); font-weight: var(--rho-weight-semibold); }
-  section.rho-agent-surface .rho-agent-posture-option > small,
-  section.rho-agent-surface .rho-agent-posture-note { margin: 0; padding: 0 var(--rho-space-3) var(--rho-space-2); color: var(--rho-muted); font-size: var(--rho-text-caption); }
-
-  /* Chat-model chip: revision-checked switching through the existing route. */
-  section.rho-agent-surface .rho-agent-model-menu { position: relative; flex: 0 0 auto; }
-  section.rho-agent-surface .rho-agent-model-menu > summary {
-    display: flex;
-    align-items: center;
-    gap: var(--rho-space-1);
-    max-width: 11rem;
-    min-height: var(--rho-control-small);
-    padding: var(--rho-space-1) var(--rho-space-2);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    color: var(--rho-ink-2);
-    background: var(--rho-paper);
-    font-size: var(--rho-text-caption);
-    list-style: none;
-    cursor: pointer;
-  }
-  section.rho-agent-surface .rho-agent-model-menu > summary::-webkit-details-marker { display: none; }
-  section.rho-agent-surface .rho-agent-model-menu > summary > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  section.rho-agent-surface .rho-agent-model-menu > summary::after { content: "▾"; flex: 0 0 auto; color: var(--rho-muted); }
-  section.rho-agent-surface .rho-agent-model-menu > summary:hover { border-color: var(--rho-accent); color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
-  section.rho-agent-surface .rho-agent-model-menu[open] > summary { border-color: var(--rho-accent); color: var(--rho-accent-ink); background: var(--rho-accent-tint); }
-  section.rho-agent-surface .rho-agent-model-menu > div {
-    position: absolute;
-    z-index: 4;
-    bottom: calc(100% + var(--rho-space-1));
-    /* The chip sits near the surface's right edge; anchor right so the
-       popover opens leftward and never clips out of the surface/viewport. */
-    right: 0;
-    display: grid;
-    width: max-content;
-    min-width: 14rem;
-    max-width: 20rem;
-    max-height: 20rem;
-    overflow: auto;
-    gap: var(--rho-space-1);
-    padding: var(--rho-space-1);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    background: var(--rho-paper);
-    box-shadow: var(--rho-shadow-float);
-  }
-  section.rho-agent-surface .rho-agent-model-search {
-    width: 100%;
-    min-height: var(--rho-control-small);
-    padding: var(--rho-space-1) var(--rho-space-2);
-    border: var(--rho-border);
-    border-radius: var(--rho-radius-1);
-    color: var(--rho-ink);
-    background: var(--rho-paper);
-    font-size: var(--rho-text-caption);
-  }
-  section.rho-agent-surface .rho-agent-model-group { display: grid; gap: 0; }
-  section.rho-agent-surface .rho-agent-model-group-label {
-    padding: var(--rho-space-1) var(--rho-space-3) 0;
+  section.rho-agent-surface .rho-agent-composer-hint {
+    margin-right: auto;
     color: var(--rho-muted);
     font-size: var(--rho-text-caption);
-    font-weight: var(--rho-weight-semibold);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
   }
-  section.rho-agent-surface .rho-agent-model-row { display: grid; grid-template-columns: var(--rho-space-4) minmax(0, 1fr) auto; align-items: baseline; gap: var(--rho-space-2); }
-  section.rho-agent-surface .rho-agent-model-check { color: var(--rho-ink); }
-  section.rho-agent-surface .rho-agent-model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  section.rho-agent-surface .rho-agent-model-id { max-width: 8rem; overflow: hidden; color: var(--rho-muted); font-size: var(--rho-text-caption); text-overflow: ellipsis; white-space: nowrap; }
-  section.rho-agent-surface .rho-agent-model-menu > div > button {
-    display: grid;
-    gap: 0;
-    min-height: 0;
-    padding: var(--rho-space-2) var(--rho-space-3);
-    border-color: transparent;
-    color: var(--rho-ink-2);
-    background: transparent;
-    font-size: var(--rho-text-ui);
-    font-weight: var(--rho-weight-regular);
-    text-align: left;
-  }
-  section.rho-agent-surface .rho-agent-model-menu > div > button:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
-  section.rho-agent-surface .rho-agent-model-menu > div > button[aria-checked="true"] { color: var(--rho-ink); font-weight: var(--rho-weight-semibold); }
-  section.rho-agent-surface .rho-agent-model-menu > div > button > small { overflow: hidden; color: var(--rho-muted); font-size: var(--rho-text-caption); text-overflow: ellipsis; white-space: nowrap; }
-  section.rho-agent-surface .rho-agent-model-empty { padding: var(--rho-space-2) var(--rho-space-3); color: var(--rho-muted); font-size: var(--rho-text-caption); }
-  section.rho-agent-surface .rho-agent-model-menu > div > .rho-agent-manage-models { margin-top: var(--rho-space-1); padding-top: var(--rho-space-2); border-top: var(--rho-border); color: var(--rho-accent-ink); font-weight: var(--rho-weight-semibold); }
-
-  section.rho-agent-surface .rho-agent-diff-note { margin: var(--rho-space-2) 0; color: var(--rho-muted); font-size: var(--rho-text-caption); }
-  section.rho-agent-surface .rho-agent-diff { margin-top: var(--rho-space-2); border: var(--rho-border); border-radius: var(--rho-radius-1); overflow: hidden; font-family: var(--rho-font-mono); font-size: var(--rho-text-caption); }
-  section.rho-agent-surface .rho-agent-diff-summary,
-  section.rho-agent-surface .rho-agent-diff-hunk-header { padding: var(--rho-space-1) var(--rho-space-2); color: var(--rho-muted); background: var(--rho-fill); }
-  section.rho-agent-surface .rho-agent-diff-gap { padding: 0 var(--rho-space-2); color: var(--rho-muted); }
-  section.rho-agent-surface .rho-agent-diff-line { display: grid; grid-template-columns: var(--rho-space-4) minmax(0, 1fr); }
-  section.rho-agent-surface .rho-agent-diff-add { background: var(--rho-ok-tint); }
-  section.rho-agent-surface .rho-agent-diff-remove { background: var(--rho-danger-tint); }
-  section.rho-agent-surface .rho-agent-diff-sign { padding-left: var(--rho-space-1); color: var(--rho-muted); user-select: none; }
-  section.rho-agent-surface .rho-agent-diff-text { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
-
-  /* The degraded banner must stay compact: the retry action wraps below the
-     copy instead of crushing it to zero width on narrow surfaces. */
-  section.rho-agent-surface .rho-agent-degraded-row { flex-wrap: wrap; }
-  section.rho-agent-surface .rho-agent-degraded-row > div { flex: 1 1 12rem; }
-
-  /* --- Narrow surfaces -------------------------------------------------------- */
-  @container (max-width: 420px) {
-    section.rho-agent-surface .rho-agent-toolbar { flex-wrap: wrap; }
-    section.rho-agent-surface .rho-agent-overview { grid-template-columns: minmax(0, 1fr); }
-    section.rho-agent-surface .rho-agent-overview dl { padding-top: var(--rho-space-3); padding-left: 0; border-top: var(--rho-border); border-left: 0; }
-    section.rho-agent-surface .rho-agent-toolbar select { flex: 1 1 100%; }
-    section.rho-agent-surface .rho-agent-turn { padding: var(--rho-space-3); }
-    section.rho-agent-surface .rho-agent-review-context { margin-inline-start: 0; }
-    section.rho-agent-surface .rho-agent-studio-presentation { grid-template-columns: minmax(0, 1fr) auto; }
-    section.rho-agent-surface .rho-agent-studio-presentation button { grid-column: 1 / -1; justify-self: end; }
-  }
-  @container (max-width: 300px) {
-    section.rho-agent-surface .rho-agent-model-setup { align-items: stretch; }
-    section.rho-agent-surface .rho-agent-model-setup > div { flex-basis: 100%; }
-    section.rho-agent-surface .rho-agent-model-setup > button { width: 100%; }
-    section.rho-agent-surface .rho-agent-overview { padding: var(--rho-space-3); }
-    section.rho-agent-surface .rho-agent-environment-doctor { padding-inline: var(--rho-space-3); }
-    section.rho-agent-surface .rho-agent-current-work-header { padding-inline: var(--rho-space-3); }
-  }
-  @container (max-width: 620px) {
-    section.rho-agent-surface .rho-agent-evidence-composition { grid-template-columns: minmax(0, 1fr); }
-  }
-  @container (max-width: 300px) {
-    section.rho-agent-surface .rho-agent-turn-meta > div { max-width: calc(100cqw - var(--rho-space-7)); }
-    section.rho-agent-surface .rho-agent-model-menu > div { max-width: calc(100cqw - var(--rho-space-7)); }
-    section.rho-agent-surface .rho-agent-context-controls > button { flex: 1 1 auto; }
+  section.rho-agent-surface .rho-agent-composer-actions > button {
+    min-height: var(--rho-target-min);
+    padding: var(--rho-space-1) var(--rho-space-4);
   }
 }

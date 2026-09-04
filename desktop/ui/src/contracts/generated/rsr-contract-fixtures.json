@@ -1102,31 +1102,6 @@
         },
         {
           "definition": {
-            "command_id": "rho.surface.open.approvals",
-            "label": "Open Approvals",
-            "purpose": "Open broker-owned approval receipts.",
-            "input_schema": {
-              "properties": {},
-              "type": "object"
-            },
-            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
-            "availability_predicate_id": "rho.predicate.project-ready",
-            "placement_tags": [
-              "palette",
-              "surface_local"
-            ],
-            "origin": {
-              "kind": "application",
-              "component_id": "rho.approvals"
-            }
-          },
-          "activation_generation": 1,
-          "availability": {
-            "state": "available"
-          }
-        },
-        {
-          "definition": {
             "command_id": "rho.surface.open.artifacts",
             "label": "Open Artifacts",
             "purpose": "Open durable artifact authority records.",

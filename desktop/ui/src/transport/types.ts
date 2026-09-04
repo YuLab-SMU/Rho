@@ -167,26 +167,17 @@ export type {
 export type {
   AgentConversationSummary,
   AgentConversationTransport,
-  AgentMode,
   AgentTurnSummary,
 } from "./agent-conversation";
 
 export type {
-  AgentApprovalRequest,
-  AgentContextPlanItem,
   AgentTurnDetail,
   AgentTurnDetailTransport,
   AgentTurnEvent,
 } from "./agent-turn";
 
 export type {
-  AgentApprovalDecisionRequest,
-  AgentApprovalDeliveryResponse,
-  AgentContextPlanPreview,
-  AgentContextPreviewRequest,
-  AgentEditorContext,
   AgentExecutionTransport,
-  AgentTaskKind,
   AgentTurnCancelResponse,
   RunAgentRequest,
   RunAgentResponse,

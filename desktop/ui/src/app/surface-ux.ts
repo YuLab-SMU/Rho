@@ -96,10 +96,6 @@ export const FIRST_PARTY_SURFACE_CATALOG: Readonly<Record<string, SurfaceCatalog
     visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 42,
     handoffTargets: ["rho.runs", "rho.plots"],
   },
-  "rho.approvals": {
-    visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 43,
-    handoffTargets: ["rho.agent"],
-  },
   "rho.revisions": {
     visibility: "contextual", capabilityGroup: "results", flowStage: "results", composeOrder: 44,
     handoffTargets: ["rho.runs"],
@@ -264,11 +260,6 @@ export const FIRST_PARTY_SURFACE_UX: Readonly<Record<string, SurfaceUxProfile>> 
     label: "Artifacts", primaryTask: "Inspect durable artifact identity", defaultFocus: "Newest artifact",
     primaryAction: "Refresh", actionBudget: 2, areaRole: "support", narrowBehavior: "stack",
     emptyState: "Durable artifacts will appear here.",
-  },
-  "rho.approvals": {
-    label: "Approvals", primaryTask: "Review broker-owned approval receipts", defaultFocus: "Newest approval",
-    primaryAction: "Refresh", actionBudget: 2, areaRole: "context", narrowBehavior: "stack",
-    emptyState: "Approval receipts will appear here.",
   },
   "rho.revisions": {
     label: "Revisions", primaryTask: "Inspect current authority revisions", defaultFocus: "Project revision",

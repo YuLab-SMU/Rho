@@ -29,7 +29,7 @@ export const createEvidenceGraphCommands = (__TAURI_INVOKE: EvidenceGraphInvoke)
 });
 
 /* Types */
-export type AuthorityKindViewV1 = "run" | "job" | "artifact" | "approval" | "patch" | "revision" | "environment_snapshot" | "source_anchor" | "check_finding" | "agent_turn";
+export type AuthorityKindViewV1 = "run" | "job" | "artifact" | "patch" | "revision" | "environment_snapshot" | "source_anchor" | "check_finding" | "agent_turn";
 
 export type ClaimListRequestV1 = {
 	cursor: string | null,
@@ -154,7 +154,7 @@ export type EvidenceMutationViewV1 = {
 
 export type EvidenceNodeId = string;
 
-export type EvidenceNodeKindV1 = "claim" | "source_range" | "run" | "artifact" | "environment_snapshot" | "approval" | "check_finding" | "external_citation" | "agent_turn";
+export type EvidenceNodeKindV1 = "claim" | "source_range" | "run" | "artifact" | "environment_snapshot" | "check_finding" | "external_citation" | "agent_turn";
 
 export type EvidenceNodeViewV1 = {
 	node_id: EvidenceNodeId,
@@ -173,7 +173,7 @@ export type EvidenceNodeViewV1 = {
 
 export type EvidencePolarityV1 = "support" | "conflict" | "neutral";
 
-export type EvidencePredicateV1 = "supports" | "contradicts" | "derived_from" | "generated_by" | "observed_in" | "approved_by" | "uses_environment" | "cites" | "stale_after" | "requires_recheck";
+export type EvidencePredicateV1 = "supports" | "contradicts" | "derived_from" | "generated_by" | "observed_in" | "uses_environment" | "cites" | "stale_after" | "requires_recheck";
 
 export type EvidencePromotionRequestV1 = {
 	record_kind: EvidenceRecordKindV1,

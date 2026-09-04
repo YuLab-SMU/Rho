@@ -13,12 +13,6 @@ export interface EvidenceGraphPorts {
   readonly promotion: EvidencePromotionTransport;
 }
 
-export interface AgentEvidencePorts {
-  readonly authority: AuthorityReadTransport;
-  readonly graph: EvidenceGraphReadTransport;
-  readonly draft: EvidenceDraftTransport;
-}
-
 type EvidencePortSource = AuthorityReadTransport
   & EvidenceGraphReadTransport
   & EvidenceGraphAdminTransport
@@ -59,8 +53,4 @@ export function createEvidenceGraphPorts(source: EvidencePortSource): EvidenceGr
   };
   cache.set(source as object, ports);
   return ports;
-}
-
-export function agentEvidencePorts(ports: EvidenceGraphPorts): AgentEvidencePorts {
-  return { authority: ports.authority, graph: ports.graph, draft: ports.draft };
 }

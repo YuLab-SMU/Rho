@@ -1,11 +1,9 @@
 import { checkedAgentTurnSummary, type AgentTurnSummary } from "./agent-conversation";
 import {
   createAgentTurnCommands,
-  type AgentTurnContextItem as AgentTurnContextItemWire,
   type AgentTurnDetailView as AgentTurnDetailWire,
   type AgentTurnEvent as AgentTurnEventWire,
   type AgentTurnInvoke,
-  type ApprovalRequestSummary as AgentApprovalRequestWire,
 } from "./generated/agent-turn";
 
 type DeepReadonly<T> = T extends (...args: never[]) => unknown
@@ -17,17 +15,8 @@ type DeepReadonly<T> = T extends (...args: never[]) => unknown
       : T;
 
 export type AgentTurnEvent = DeepReadonly<AgentTurnEventWire>;
-export type AgentApprovalRequest = DeepReadonly<AgentApprovalRequestWire>;
-export type AgentContextPlanItem = Omit<
-  DeepReadonly<AgentTurnContextItemWire>,
-  "context_item_id" | "turn_id" | "project_root"
->;
-export type AgentTurnDetail = Omit<
-  DeepReadonly<AgentTurnDetailWire>,
-  "turn" | "context_items"
-> & {
+export type AgentTurnDetail = Omit<DeepReadonly<AgentTurnDetailWire>, "turn"> & {
   readonly turn: AgentTurnSummary;
-  readonly context_items: readonly AgentContextPlanItem[];
 };
 
 export interface AgentTurnDetailTransport {

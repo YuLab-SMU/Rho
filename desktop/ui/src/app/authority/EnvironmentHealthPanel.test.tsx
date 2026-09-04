@@ -7,7 +7,6 @@ import {
   mockEnvironmentHealth,
   mockLocalEnvironmentObservation,
 } from "../../transport/environment.mock";
-import { AgentEnvironmentPanel } from "../agent/AgentEnvironmentPanel";
 import type { AuthorityEnvironmentPort } from "../workbench/authorityPorts";
 import { EnvironmentHealthPanel } from "./EnvironmentHealthPanel";
 
@@ -35,7 +34,7 @@ async function render(element: ReactNode) {
   return host;
 }
 
-describe("Environment Authority and Agent Doctor", () => {
+describe("Environment Authority panel", () => {
   function port(health = mockEnvironmentHealth()): AuthorityEnvironmentPort {
     return {
       environmentHealth: vi.fn(async () => health),
@@ -62,7 +61,7 @@ describe("Environment Authority and Agent Doctor", () => {
     expect(host.textContent).toContain("Workspace R running");
   });
 
-  it("shows a materialized plan before approval or execution", async () => {
+  it("shows a materialized plan before execution", async () => {
     const base = mockEnvironmentHealth();
     const pending = {
       ...base,
@@ -74,7 +73,7 @@ describe("Environment Authority and Agent Doctor", () => {
       mode="plans"
       reportError={vi.fn()}
     />);
-    expect(host.textContent).toContain("Awaiting exact approval");
+    expect(host.textContent).toContain("Materialized plan");
     expect(host.textContent).toContain(base.latest_operation!.plan.plan_id);
     expect(host.textContent).not.toContain("Operation activity");
   });
@@ -107,50 +106,6 @@ describe("Environment Authority and Agent Doctor", () => {
     expect(host.textContent).toContain("Workspace R running");
     expect(host.textContent).not.toContain("No materialized plan");
     expect(host.textContent).not.toContain("No verified Environment receipt");
-  });
-
-  it("Agent Doctor cites Environment Authority and exposes uncertainty without installing", async () => {
-    const base = mockEnvironmentHealth();
-    const health = {
-      ...base,
-      status: "blocked_by_incident",
-      workspace: {
-        ...base.workspace,
-        phase: "blocked_by_incident",
-        reobserve_required: true,
-      },
-      incidents: [{
-        incident_id: "environment_incident_mock",
-        kind: "namespace_load_failure",
-        subject: "DESeq2",
-        detail: "Namespace did not load.",
-        status: "open",
-        detected_at: base.observed_at,
-        resolved_at: null,
-      }],
-    } as const;
-    const host = await render(<AgentEnvironmentPanel port={port(health)} reportError={vi.fn()} />);
-    expect(host.textContent).toContain("Environment Doctor");
-    expect(host.textContent).toContain("authority: succeeded");
-    expect(host.textContent).toContain("namespace load failure");
-    expect(host.textContent).toContain("cannot install directly");
-  });
-
-  it("lets Agent cite the local observation without claiming formal reproducibility", async () => {
-    const base = mockEnvironmentHealth();
-    const local = {
-      ...base,
-      status: "local_ready",
-      binding: null,
-      local_observation: mockLocalEnvironmentObservation(),
-      incidents: [],
-    } as const;
-    const host = await render(<AgentEnvironmentPanel port={port(local)} reportError={vi.fn()} />);
-    expect(host.textContent).toContain("Ready for local work");
-    expect(host.textContent).toContain("R version 4.5.2");
-    expect(host.textContent).toContain("local observation");
-    expect(host.textContent).toContain("formal reproducibility remain unverified");
-    expect(host.textContent).not.toContain("No open Environment incident");
   });
 
   it("recovers from an unavailable Authority projection without exposing local paths", async () => {

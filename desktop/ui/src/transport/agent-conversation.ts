@@ -13,11 +13,8 @@ type DeepReadonly<T> = T extends (...args: never[]) => unknown
       ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
       : T;
 
-export type AgentMode = "ask" | "plan" | "act";
 export type AgentConversationSummary = DeepReadonly<AgentConversationSummaryWire>;
-export type AgentTurnSummary = Omit<DeepReadonly<AgentTurnSummaryWire>, "mode"> & {
-  readonly mode: AgentMode;
-};
+export type AgentTurnSummary = DeepReadonly<AgentTurnSummaryWire>;
 
 export interface AgentConversationTransport {
   listAgentConversations(limit?: number): Promise<readonly AgentConversationSummary[]>;
@@ -29,9 +26,6 @@ export interface AgentConversationTransport {
 }
 
 export function checkedAgentTurnSummary(turn: AgentTurnSummaryWire): AgentTurnSummary {
-  if (turn.mode !== "ask" && turn.mode !== "plan" && turn.mode !== "act") {
-    throw new Error(`Agent Turn returned an unsupported mode: ${turn.mode}`);
-  }
   return turn as AgentTurnSummary;
 }
 

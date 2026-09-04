@@ -33,10 +33,8 @@ function conversation(
     turn_count: 1,
     status: "completed",
     latest_turn_id: "turn:one",
-    latest_mode: "act",
     latest_prompt_preview: "Use donor-aware analysis.",
     terminal_reason: null,
-    pending_request_id: null,
     ...overrides,
   };
 }
@@ -46,7 +44,6 @@ function turn(overrides: Partial<AgentTurnSummary> = {}): AgentTurnSummary {
     turn_id: "turn:one",
     conversation_id: "conversation:one",
     project_root: "/projects/rho",
-    mode: "act",
     status: "completed",
     started_at: NOW,
     finished_at: NOW,
@@ -60,7 +57,6 @@ function turn(overrides: Partial<AgentTurnSummary> = {}): AgentTurnSummary {
     project_revision_after: 8,
     final_message: "The recorded Agent run finished.",
     error_message: null,
-    pending_request_id: null,
     retry_of_turn_id: null,
     terminal_reason: null,
     ...overrides,
@@ -95,8 +91,6 @@ function detail(
   return {
     turn: summary,
     events,
-    approvals: [],
-    context_items: [],
   };
 }
 
@@ -522,16 +516,13 @@ describe("Vibe autonomous exploration panel", () => {
     expect(container.querySelector(".rho-vibe-agent-record-host")).toBeNull();
   });
 
-  it("shows waiting attention and marks a manuscript relationship only for exact identifiers", async () => {
+  it("shows failed-turn attention and marks a manuscript relationship only for exact identifiers", async () => {
     const waitingConversation = conversation({
-      status: "waiting",
-      pending_request_id: "approval:one",
+      status: "failed",
     });
     const waitingTurn = turn({
-      status: "waiting",
-      finished_at: null,
+      status: "failed",
       final_message: null,
-      pending_request_id: "approval:one",
     });
     const harness = createTransport({
       conversations: [waitingConversation],

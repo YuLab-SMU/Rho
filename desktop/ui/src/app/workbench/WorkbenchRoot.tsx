@@ -18,13 +18,11 @@ import {
 } from "../../transport";
 import type { WorkbenchMutationLease } from "../../transport/workbench-store";
 import type {
-  AgentTurnSummary,
   PluginSurfaceDocumentRequest,
   ProjectSwitchResponse,
   ResourceDescriptor,
   RuntimeDescriptor,
   RuntimeProviderRegistration,
-  RuntimeOutputReference,
   LayoutBasis,
   SceneEdit,
   SurfaceInstance,
@@ -92,10 +90,6 @@ import {
 } from "../controllers/console-instance-controller";
 import { ConsoleRequirementController } from "../controllers/console-requirement-controller";
 import { StudioMutationController } from "../controllers/studio-mutation-controller";
-import { type AgentStudioPresentation } from "../agent/studio-presentation";
-import {
-  presentAgentTurnInStudio as applyAgentStudioPresentation,
-} from "../controllers/agent-studio-presentation-controller";
 import { SurfaceInstanceMutationController } from "../controllers/surface-instance-mutation-controller";
 import {
   COMPOSE_FLOW_STAGES,
@@ -179,7 +173,6 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
   const [projectSwitching, setProjectSwitching] = useState(false);
   const [projectSwitchTarget, setProjectSwitchTarget] = useState<string | null>(null);
   const [projectSwitchError, setProjectSwitchError] = useState<string | null>(null);
-  const [agentRuntimeOutputContext, setAgentRuntimeOutputContext] = useState<RuntimeOutputReference | null>(null);
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryLoad>(() =>
     loadProjectHistory(window.localStorage)
   );
@@ -354,9 +347,6 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
       workbenchOperationTrace.reset();
       traceProjectRef.current = projectionProjectId;
     }
-  }, [projectionProjectId]);
-  useEffect(() => {
-    setAgentRuntimeOutputContext(null);
   }, [projectionProjectId]);
   const projectProjectionsCoherent = projection != null;
   const toolbarProjectId = profile?.project_id ?? null;
@@ -853,7 +843,7 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
         }
       : null;
     const defaultViewState = definition.surface_id === "rho.agent"
-      ? { conversation_id: null, mode: "act", composer: "", auto_approve: false }
+      ? { conversation_id: null, composer: "" }
       : definition.surface_id === "rho.console"
         ? { draft: "", history: [], history_cursor: null, filter: "", scroll_top: 0, outputs: [] }
         : {};
@@ -1267,7 +1257,7 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
       }
       conversationId = created.conversation_id;
     }
-    const request = exactAgentSurfaceRequest(conversationId, compose);
+    const request = exactAgentSurfaceRequest(conversationId);
     prevalidateExactSurfaceRequest(request);
     vibeReturnPointRef.current = returnPoint;
     await setWorkspaceModeReconciled("studio");
@@ -1344,9 +1334,7 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
         const conversation = await pluginTransport.createAgentConversation();
         await openFactory(factory, {
           conversation_id: conversation.conversation_id,
-          mode: "act",
           composer: "",
-          auto_approve: false,
         }, lease);
       });
       setCommandSearchOpen(false);
@@ -1460,95 +1448,6 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
     }
     });
     setCommandSearchOpen(false);
-  };
-  const pinAgentTask = async (turn: AgentTurnSummary) => {
-    if (profile == null) throw new Error("The Project UI Profile is unavailable.");
-    const sourceScope = assertRenderedActionScope();
-    if (sourceScope.projectId !== profile.project_id) {
-      throw new Error("The Agent task belongs to another project.");
-    }
-    const sourceProjectId = sourceScope.projectId;
-    return withMutationAdmission(sourceProjectId, undefined, async (lease) => {
-      await profileStore.refresh();
-      const latest = profileStore.getProfileSnapshot();
-      if (latest.status !== "ready") throw new Error("The Project UI Profile is unavailable.");
-      const latestProfile = latest.snapshot.profile;
-      if (latestProfile.project_id !== sourceProjectId) {
-        throw new Error("The Agent task belongs to a previous project activation.");
-      }
-      const activePage = latestProfile.vibe_pages.find(
-        (page) => page.page_id === latestProfile.active_vibe_page_id,
-      );
-      if (activePage == null) throw new Error("The active Vibe Page is unavailable.");
-      const block = {
-        block_id: `vibe-block:${crypto.randomUUID().replaceAll("-", "")}`,
-        content: {
-          kind: "task_ref" as const,
-          task_id: turn.turn_id,
-          label: `${turn.mode.toUpperCase()} · ${turn.prompt_preview.slice(0, 96)}`,
-        },
-      };
-      const sections = activePage.sections.length === 0
-        ? [{
-            section_id: `vibe-section:${crypto.randomUUID().replaceAll("-", "")}`,
-            heading: "Agent tasks",
-            layout: { kind: "flow" as const },
-            blocks: [block],
-          }]
-        : activePage.sections.map((section, index) => {
-            if (index !== activePage.sections.length - 1) return section;
-            if (section.layout.kind === "flow") {
-              return { ...section, blocks: [...section.blocks, block] };
-            }
-            const nextRow = section.layout.placements.reduce(
-              (maximum, placement) => Math.max(maximum, placement.row_start),
-              0,
-            ) + 1;
-            return {
-              ...section,
-              blocks: [...section.blocks, block],
-              layout: {
-                ...section.layout,
-                placements: [...section.layout.placements, {
-                  block_id: block.block_id,
-                  row_start: nextRow,
-                  column_start: 1,
-                  column_span: 12,
-                }],
-              },
-            };
-          });
-      await profileStore.applyPage({
-        target: {
-          project_id: latestProfile.project_id,
-          expected_profile_revision: latestProfile.revision,
-        },
-        page_id: activePage.page_id,
-        expected_page_revision: activePage.page_revision,
-        mutation: {
-          kind: "replace_sections",
-          sections,
-          focused_block_id: block.block_id,
-        },
-      }, lease);
-    });
-  };
-  const presentAgentTurnInStudio = async (
-    turn: AgentTurnSummary,
-    presentation: AgentStudioPresentation,
-  ) => {
-    const sourceScope = assertRenderedActionScope();
-    return withMutationAdmission(sourceScope.projectId, undefined, (lease) => (
-      applyAgentStudioPresentation({
-        projectId: sourceScope.projectId,
-        turn,
-        presentation,
-        store,
-        transport: pluginTransport,
-        lease,
-        allocateLayoutNodeId,
-      })
-    ));
   };
   const createConsoleRequirementController = (lease: WorkbenchMutationLease) => (
     new ConsoleRequirementController({
@@ -1932,31 +1831,6 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
         await openResource(descriptor, "rho.file-source", "source");
       }}
       agentHealth={snapshot?.health.agent ?? null}
-      createAgentConversation={async (currentViewState) => {
-        const workflowScope = hostScope;
-        reportProjectWorkflowAction(workflowScope, null);
-        try {
-          return await withMutationAdmission(workflowScope.projectId, undefined, async (lease) => {
-            const conversation = await pluginTransport.createAgentConversation();
-            await store.refresh();
-            const nextViewState = {
-              ...currentViewState,
-              conversation_id: conversation.conversation_id,
-            };
-            await surfaceMutationController.updateExact(instance, {
-              kind: "set_view_state",
-              view_state: nextViewState,
-            }, lease);
-            return nextViewState;
-          });
-        } catch (error: unknown) {
-          reportProjectWorkflowAction(
-            workflowScope,
-            boundedFailureMessage(error, "Agent conversation could not be created or selected."),
-          );
-          throw error;
-        }
-      }}
       runAgentConversation={async (currentViewState, request, onAccepted) => {
         const workflowScope = hostScope;
         reportProjectWorkflowAction(workflowScope, null);
@@ -1999,20 +1873,11 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
         });
         reportActionError(null);
       }}
-      pinAgentTask={pinAgentTask}
-      presentAgentTurnInStudio={presentAgentTurnInStudio}
       embedded={embedded}
       dockviewHosted={gestureOwner === "dockview"}
       openNavigatorFile={openNavigatorFile}
       openSurfaceById={openSurfaceById}
       openPlot={(plotId) => run(openPlotArtifact(plotId))}
-      agentRuntimeOutputContext={agentRuntimeOutputContext}
-      setAgentRuntimeOutputContext={(reference) => {
-        if (!projectTransitionEpochController.accepts(hostScope)) return false;
-        if (reference != null && reference.project_id !== hostScope.projectId) return false;
-        setAgentRuntimeOutputContext(reference);
-        return true;
-      }}
     />;
   };
   const activeVibePage = profile?.vibe_pages.find(
@@ -2112,7 +1977,6 @@ export function WorkbenchRoot({ transport }: WorkbenchRootProps) {
         setProjectSwitchTarget(target);
         setProjectSwitchError(null);
         setActionError(null);
-        setAgentRuntimeOutputContext(null);
         verificationScopeRef.current = null;
         vibeReturnPointRef.current = null;
       },

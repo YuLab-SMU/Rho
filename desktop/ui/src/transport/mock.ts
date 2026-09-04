@@ -4,9 +4,7 @@ import { projectLabel } from "./normalize";
 import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
 import { applyVibePageMutation, exportVibePage } from "./vibe-model";
 import type {
-  AgentApprovalDecisionRequest,
   AgentConversationSummary,
-  AgentMode,
   AgentRuntimeDiagnostics,
   AgentTurnDetail,
   AgentTurnEvent,
@@ -51,7 +49,6 @@ import type {
   RuntimeOutputFollowFrame,
   RuntimeOutputPage,
   RuntimeOutputPageRequest,
-  RuntimeOutputReference,
   RuntimeOutputSearchRequest,
   RuntimeOutputSearchResult,
   RuntimeOutputPolicyUpdate,
@@ -286,7 +283,7 @@ export function createMockUiKernelTransport(
   let resources = copyResources(generatedResources);
   let profile = copyProfile(generatedProfile);
   const firstPartyFactorySpecs = [
-    ["rho.agent", "Agent", [["conversation", "Conversation"], ["activity", "Activity"], ["composer", "Composer"]], false],
+    ["rho.agent", "Agent", [["conversation", "Conversation"]], false],
     ["rho.settings", "Settings", [["settings", "Settings"]], false],
     ["rho.environment", "Environment", [["health", "Health"], ["plans", "Plans"], ["activity", "Activity"]], false],
     ["rho.navigator", "Navigator", [["files", "Files"], ["runs", "History"]], false],
@@ -297,7 +294,6 @@ export function createMockUiKernelTransport(
     ["rho.runs", "History", [["history", "History"]], false],
     ["rho.jobs", "Jobs", [["queue", "Queue"]], false],
     ["rho.artifacts", "Artifacts", [["list", "List"]], false],
-    ["rho.approvals", "Approvals", [["list", "List"]], false],
     ["rho.revisions", "Revisions", [["current", "Current"]], false],
     ["rho.problems", "Problems", [["list", "List"]], true],
     ["rho.plots", "Plots", [["gallery", "Gallery"], ["single", "Single"]], false],
@@ -356,7 +352,7 @@ export function createMockUiKernelTransport(
     resource_binding: null,
     runtime_binding: null,
     view_group_id: null,
-    view_state: { conversation_id: "agent-conversation:mock-shared", mode: "act", composer: "", auto_approve: false },
+    view_state: { conversation_id: "agent-conversation:mock-shared", composer: "" },
     lifecycle_state: "active",
   };
   (surfaces.catalog.instances as unknown as SurfaceInstance[]).push(mockAgentInstance);
@@ -716,10 +712,6 @@ export function createMockUiKernelTransport(
         || (policy.max_runtime_execution_rows != null && rows.length >= policy.max_runtime_execution_rows),
     };
   };
-  const mockContextPlanDigest = (prompt: string, reference: RuntimeOutputReference | null) => {
-    const nibble = (prompt.length + (reference?.end_sequence ?? 0)) % 16;
-    return nibble.toString(16).repeat(64);
-  };
   const documents = new Map<string, {
     content: string;
     baseContent: string;
@@ -781,16 +773,13 @@ export function createMockUiKernelTransport(
     turn_count: 1,
     status: "completed",
     latest_turn_id: "agent-turn:mock-1",
-    latest_mode: "act",
     latest_prompt_preview: "What should we inspect first?",
     terminal_reason: "completed",
-    pending_request_id: null,
   }];
   const agentTurns: AgentTurnSummary[] = [{
     turn_id: "agent-turn:mock-1",
     conversation_id: "agent-conversation:mock-shared",
     project_root: agentProjectRoot,
-    mode: "act",
     status: "completed",
     started_at: agentNow,
     finished_at: agentNow,
@@ -804,7 +793,6 @@ export function createMockUiKernelTransport(
     project_revision_after: current.context.project_revision,
     final_message: "Start with the project structure and runtime health.",
     error_message: null,
-    pending_request_id: null,
     retry_of_turn_id: null,
     terminal_reason: "completed",
   }];
@@ -852,8 +840,6 @@ export function createMockUiKernelTransport(
       code: null,
       details_json: JSON.stringify({ success: true }),
     }],
-    approvals: [],
-    context_items: [],
   }]]);
   const notifyWorkbench = () => {
     emitInvalidation("workbench", () => {
@@ -2748,10 +2734,8 @@ export function createMockUiKernelTransport(
         turn_count: 0,
         status: "empty",
         latest_turn_id: null,
-        latest_mode: null,
         latest_prompt_preview: null,
         terminal_reason: null,
-        pending_request_id: null,
       };
       agentConversations.unshift(conversation);
       notifyAgent();
@@ -2773,55 +2757,7 @@ export function createMockUiKernelTransport(
       const snapshot = structuredClone(frame);
       for (const listener of agentTurnEventListeners) listener(snapshot);
     },
-    async previewAgentContext(request) {
-      const reference = request.runtime_output_context;
-      return {
-        plan_digest: mockContextPlanDigest(request.prompt, reference),
-        context_window_tokens: 128_000,
-        reserved_output_tokens: 4_096,
-        estimated_input_tokens: request.prompt.length + (reference?.payload_bytes ?? 0),
-        capacity_source: "conservative_default",
-        items: [{
-          context_item_id: "agent-context:mock-current-request",
-          ordinal: 0,
-          source_kind: "current_request",
-          source_id: null,
-          source_revision: "1",
-          source_sha256: "a".repeat(64),
-          trust_class: "user_instruction",
-          capacity_source: "conservative",
-          original_bytes: request.prompt.length,
-          included_bytes: request.prompt.length,
-          estimated_tokens: request.prompt.length,
-          disposition: "complete",
-          reason_code: null,
-        }, ...(reference == null ? [] : [{
-          context_item_id: "agent-context:mock-runtime-output",
-          ordinal: 1,
-          source_kind: "runtime_output",
-          source_id: `${reference.execution_id}:${reference.start_sequence}-${reference.end_sequence}`,
-          source_revision: `sequence:${reference.end_sequence}`,
-          source_sha256: reference.range_sha256,
-          trust_class: "explicit_project_data",
-          capacity_source: "conservative",
-          original_bytes: reference.payload_bytes,
-          included_bytes: reference.payload_bytes,
-          estimated_tokens: reference.payload_bytes,
-          disposition: "complete",
-          reason_code: null,
-        }])],
-        model_profile_id: "external-acp",
-        model_display_name: "External ACP Agent",
-        settings_revision: 1,
-        conversation_id: request.conversation_id,
-        runtime_output_context: reference,
-      };
-    },
     async runAgent(request) {
-      if (request.runtime_output_context != null
-          && request.context_plan_digest !== mockContextPlanDigest(request.prompt, request.runtime_output_context)) {
-        throw new Error("Agent context changed after review.");
-      }
       let conversation = agentConversations.find(
         (candidate) => candidate.conversation_id === request.conversation_id,
       );
@@ -2834,7 +2770,6 @@ export function createMockUiKernelTransport(
         turn_id: turnId,
         conversation_id: conversation.conversation_id,
         project_root: current.project.display_path,
-        mode: request.mode,
         status: "completed",
         started_at: startedAt,
         finished_at: startedAt,
@@ -2846,9 +2781,8 @@ export function createMockUiKernelTransport(
         workspace_id_after: "workspace:mock",
         state_revision_after: 4,
         project_revision_after: current.context.project_revision,
-        final_message: `Mock ${request.mode} response for: ${request.prompt}`,
+        final_message: `Mock response for: ${request.prompt}`,
         error_message: null,
-        pending_request_id: null,
         retry_of_turn_id: null,
         terminal_reason: "completed",
       };
@@ -2867,21 +2801,6 @@ export function createMockUiKernelTransport(
       agentDetails.set(turnId, {
         turn,
         events,
-        approvals: [],
-        context_items: request.runtime_output_context == null ? [] : [{
-          ordinal: 1,
-          source_kind: "runtime_output",
-          source_id: `${request.runtime_output_context.execution_id}:${request.runtime_output_context.start_sequence}-${request.runtime_output_context.end_sequence}`,
-          source_revision: `sequence:${request.runtime_output_context.end_sequence}`,
-          source_sha256: request.runtime_output_context.range_sha256,
-          trust_class: "explicit_project_data",
-          capacity_source: "conservative",
-          original_bytes: request.runtime_output_context.payload_bytes,
-          included_bytes: request.runtime_output_context.payload_bytes,
-          estimated_tokens: request.runtime_output_context.payload_bytes,
-          disposition: "complete",
-          reason_code: null,
-        }],
       });
       const conversationIndex = agentConversations.findIndex(
         (candidate) => candidate.conversation_id === conversation!.conversation_id,
@@ -2892,7 +2811,6 @@ export function createMockUiKernelTransport(
         turn_count: conversation.turn_count + 1,
         status: "completed",
         latest_turn_id: turnId,
-        latest_mode: request.mode,
         latest_prompt_preview: request.prompt,
         terminal_reason: "completed",
       };
@@ -2902,8 +2820,6 @@ export function createMockUiKernelTransport(
         turn_id: turnId,
         conversation_id: conversation.conversation_id,
         retry_of_turn_id: null,
-        auto_approve: request.auto_approve,
-        task_kind: request.task_kind,
       };
     },
     async retryAgentTurn(turnId) {
@@ -2911,14 +2827,7 @@ export function createMockUiKernelTransport(
       if (source == null) throw new Error("Mock Agent turn is unavailable.");
       const response = await this.runAgent({
         prompt: source.prompt_preview,
-        mode: source.mode as AgentMode,
-        task_kind: "agent_turn",
-        model_id: null,
-        auto_approve: false,
-        editor_context: null,
         conversation_id: source.conversation_id,
-        runtime_output_context: null,
-        context_plan_digest: null,
       });
       const created = agentTurns.find((turn) => turn.turn_id === response.turn_id)!;
       agentTurns[agentTurns.indexOf(created)] = { ...created, retry_of_turn_id: turnId };
@@ -2935,26 +2844,6 @@ export function createMockUiKernelTransport(
       };
       notifyAgent();
       return { status: "cancelled", turn_id: turnId };
-    },
-    async respondAgentApproval(request: AgentApprovalDecisionRequest) {
-      for (const [turnId, detail] of agentDetails) {
-        const index = detail.approvals.findIndex(
-          (approval) => approval.request_id === request.request_id,
-        );
-        if (index < 0) continue;
-        const approvals = [...detail.approvals];
-        approvals[index] = {
-          ...approvals[index]!,
-          decision: request.decision,
-          reason: request.reason,
-          status: request.decision === "approve" ? "approved" : "rejected",
-          responded_at: new Date().toISOString(),
-        };
-        agentDetails.set(turnId, { ...detail, approvals });
-        notifyAgent();
-        return { status: "delivered", request_id: request.request_id, turn_id: turnId };
-      }
-      throw new Error("Mock Agent approval is unavailable.");
     },
     async getAgentRuntimeDiagnostics() {
       return structuredClone(agentRuntimeDiagnostics);

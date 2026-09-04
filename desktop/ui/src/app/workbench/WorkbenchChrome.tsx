@@ -23,7 +23,6 @@ export function surfaceRailGlyph(surfaceId: string): string {
     case "rho.runs": return "↺";
     case "rho.jobs": return "◷";
     case "rho.artifacts": return "◇";
-    case "rho.approvals": return "✓";
     case "rho.revisions": return "#";
     case "rho.claims": return "C";
     case "rho.evidence-graph": return "⌘";

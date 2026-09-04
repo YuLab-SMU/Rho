@@ -159,13 +159,14 @@ export function projectExplorationStatus(
 export function projectExplorationConversation(
   conversation: AgentConversationSummary,
 ): ExplorationConversationView {
+  const status = projectExplorationStatus(conversation.status, conversation.terminal_reason);
   return {
     conversationId: conversation.conversation_id,
     title: boundedPublicText(conversation.title, 240) ?? "未命名探索",
     updatedAt: conversation.updated_at,
     turnCount: Math.max(0, conversation.turn_count),
-    status: projectExplorationStatus(conversation.status, conversation.terminal_reason),
-    needsAttention: conversation.pending_request_id != null,
+    status,
+    needsAttention: status.kind === "failed" || status.kind === "unknown",
     latestTurnId: conversation.latest_turn_id,
     latestTask: boundedPublicText(conversation.latest_prompt_preview, 320),
     legacyReadOnly: conversation.legacy_unthreaded,
@@ -225,12 +226,12 @@ export function projectExplorationTurn(
   detail: AgentTurnDetail | null,
 ): ExplorationTurnView {
   const matchingDetail = detail?.turn.turn_id === turn.turn_id ? detail : null;
-  const waitingApproval = matchingDetail?.approvals.some((approval) => approval.status === "waiting") === true;
   const errorMessage = boundedPublicText(turn.error_message, 4_000);
+  const status = projectExplorationStatus(turn.status, turn.terminal_reason);
   return {
     turnId: turn.turn_id,
     conversationId: turn.conversation_id,
-    status: projectExplorationStatus(turn.status, turn.terminal_reason),
+    status,
     task: fullTask(matchingDetail, turn.prompt_preview),
     finalMessage: boundedPublicText(turn.final_message, 16_000),
     errorMessage: errorMessage == null
@@ -239,7 +240,7 @@ export function projectExplorationTurn(
     startedAt: turn.started_at,
     finishedAt: turn.finished_at,
     retryOfTurnId: turn.retry_of_turn_id,
-    needsAttention: turn.pending_request_id != null || waitingApproval,
+    needsAttention: status.kind === "failed" || status.kind === "unknown",
     detailAvailable: matchingDetail != null,
     activities: projectExplorationActivities(matchingDetail?.events ?? []),
   };

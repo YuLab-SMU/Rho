@@ -17,7 +17,6 @@ pub enum AuthorityKindViewV1 {
     Run,
     Job,
     Artifact,
-    Approval,
     Patch,
     Revision,
     EnvironmentSnapshot,
@@ -37,8 +36,6 @@ pub enum AuthorityStatusViewV1 {
     Uncertain,
     Cancelled,
     Committed,
-    Approved,
-    Rejected,
     Missing,
     Stale,
 }

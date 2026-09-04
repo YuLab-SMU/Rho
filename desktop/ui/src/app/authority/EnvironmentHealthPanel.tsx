@@ -80,7 +80,7 @@ function PlanReview({ health }: { readonly health: EnvironmentHealthView }) {
   const plan = health.pending_plan ?? operation?.plan;
   if (plan == null) return <SurfaceTaskState tone="empty" title="No materialized plan" detail="An immutable exact plan appears here before Environment execution." role="status" />;
   return <section className="rho-environment-plan-review" aria-label="Immutable Environment plan">
-    <header><div><span className="rho-eyebrow">{health.pending_plan == null ? "Immutable exact plan" : "Awaiting exact approval"}</span><strong>{plan.intent.replaceAll("_", " ")}</strong></div><code>{plan.plan_id}</code></header>
+    <header><div><span className="rho-eyebrow">{health.pending_plan == null ? "Immutable exact plan" : "Materialized plan"}</span><strong>{plan.intent.replaceAll("_", " ")}</strong></div><code>{plan.plan_id}</code></header>
     <div className="rho-environment-plan-runtime"><strong>R {plan.runtime_version}</strong><span>{plan.runtime_ownership} · {plan.runtime_support_tier}</span><code>{plan.runtime_id}</code></div>
     <div className="rho-environment-plan-runtime"><strong>{plan.target_library_kind.replaceAll("_", " ")}</strong><span>Exact target library</span><code>{plan.target_library_path}</code><small>{plan.library_stack_digest}</small></div>
     <ul>{plan.package_actions.map((action) => <li key={`${action.package}:${action.action}`}>

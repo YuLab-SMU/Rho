@@ -1,4 +1,4 @@
-/* Authority surfaces answer whether a run, artifact, approval or revision
+/* Authority surfaces answer whether a run, artifact or revision
    actually exists. Receipt identity and state therefore lead the hierarchy. */
 
 @layer surfaces {

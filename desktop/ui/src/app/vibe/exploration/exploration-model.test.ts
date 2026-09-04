@@ -30,10 +30,8 @@ function conversation(
     turn_count: 1,
     status: "completed",
     latest_turn_id: "turn:one",
-    latest_mode: "act",
     latest_prompt_preview: "Check donor-level consistency.",
     terminal_reason: null,
-    pending_request_id: null,
     ...overrides,
   };
 }
@@ -43,7 +41,6 @@ function turn(overrides: Partial<AgentTurnSummary> = {}): AgentTurnSummary {
     turn_id: "turn:one",
     conversation_id: "conversation:one",
     project_root: "/projects/rho",
-    mode: "act",
     status: "completed",
     started_at: NOW,
     finished_at: NOW,
@@ -57,7 +54,6 @@ function turn(overrides: Partial<AgentTurnSummary> = {}): AgentTurnSummary {
     project_revision_after: 8,
     final_message: "The donor-level run finished; review its recorded output separately.",
     error_message: null,
-    pending_request_id: null,
     retry_of_turn_id: null,
     terminal_reason: null,
     ...overrides,
@@ -92,8 +88,6 @@ function detail(
   return {
     turn: summary,
     events,
-    approvals: [],
-    context_items: [],
   };
 }
 
@@ -299,11 +293,10 @@ describe("Vibe exploration truth projection", () => {
   });
 
   it("derives attention and exact-reference markers only from exact fields", () => {
-    const summary = turn({ status: "waiting", pending_request_id: "approval:one" });
+    const summary = turn({ status: "failed" });
     const projectedTurn = projectExplorationTurn(summary, detail(summary, []));
     const projectedConversation = projectExplorationConversation(conversation({
-      status: "waiting",
-      pending_request_id: "approval:one",
+      status: "failed",
     }));
 
     expect(projectedTurn.needsAttention).toBe(true);

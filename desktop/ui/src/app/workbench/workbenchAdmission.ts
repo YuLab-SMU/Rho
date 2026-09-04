@@ -112,7 +112,6 @@ const ADMISSION_GUARDED_TRANSPORT_METHODS = new Set<PropertyKey>([
   "runAgent",
   "retryAgentTurn",
   "cancelAgentTurn",
-  "respondAgentApproval",
   "retryAgentRuntime",
   "dispatchPluginSurfaceEvent",
   "runCheckProject",
