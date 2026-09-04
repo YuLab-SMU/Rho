@@ -1,7 +1,7 @@
 //! Asynchronous durable Environment operation request repository.
 
 use crate::{
-    EnvironmentIncidentRecord, EnvironmentOperationJournalRecord, EnvironmentPlanReviewRecord,
+    EnvironmentIncidentRecord, EnvironmentOperationJournalRecord, EnvironmentPlanRecord,
     EnvironmentStateCommit, EnvironmentStateProjection, Store, StoreExecutor, StoreExecutorError,
     query::required_project_root,
 };
@@ -21,27 +21,27 @@ impl StoreExecutor {
 }
 
 impl EnvironmentRepository {
-    pub async fn record_plan_for_review(
+    pub async fn record_plan(
         &self,
         project_root: String,
         plan: rho_protocol::MaterializedPackagePlanV1,
-    ) -> Result<EnvironmentPlanReviewRecord, StoreExecutorError> {
+    ) -> Result<EnvironmentPlanRecord, StoreExecutorError> {
         let project_root = required_project_root(&project_root)?;
         self.executor
             .call(move |connection| {
-                Store::borrowed(connection).record_environment_plan_for_review(&project_root, &plan)
+                Store::borrowed(connection).record_environment_plan(&project_root, &plan)
             })
             .await
     }
 
-    pub async fn latest_reviewable_plan(
+    pub async fn latest_plan(
         &self,
         project_root: String,
-    ) -> Result<Option<EnvironmentPlanReviewRecord>, StoreExecutorError> {
+    ) -> Result<Option<EnvironmentPlanRecord>, StoreExecutorError> {
         let project_root = required_project_root(&project_root)?;
         self.executor
             .call(move |connection| {
-                Store::borrowed(connection).latest_reviewable_environment_plan(&project_root)
+                Store::borrowed(connection).latest_environment_plan(&project_root)
             })
             .await
     }

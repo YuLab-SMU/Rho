@@ -8,10 +8,9 @@
 use rho_protocol::Envelope;
 
 use crate::{
-    AgentConversationDraft, AgentConversationSummary, AgentConversationTurn, AgentTurnContextItem,
-    AgentTurnContextItemDraft, AgentTurnDetail, AgentTurnDraft, AgentTurnEventDraft,
-    AgentTurnFinish, AgentTurnSummary, ApprovalDecisionRecord, ApprovalRequestSummary,
-    RuntimeOutputPage, Store, StoreExecutor, StoreExecutorError, query::required_project_root,
+    AgentConversationDraft, AgentConversationSummary, AgentConversationTurn, AgentTurnDetail,
+    AgentTurnDraft, AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, RuntimeOutputPage,
+    Store, StoreExecutor, StoreExecutorError, query::required_project_root,
 };
 
 #[derive(Clone, Debug)]
@@ -194,37 +193,6 @@ impl AgentRepository {
         Ok(event_id)
     }
 
-    pub async fn record_context_items(
-        &self,
-        project_root: String,
-        turn_id: String,
-        items: Vec<AgentTurnContextItemDraft>,
-    ) -> Result<Vec<AgentTurnContextItem>, StoreExecutorError> {
-        let project_root = required_project_root(&project_root)?;
-        self.executor
-            .call(move |connection| {
-                Store::borrowed(connection).record_agent_turn_context_items(
-                    &project_root,
-                    &turn_id,
-                    &items,
-                )
-            })
-            .await
-    }
-
-    pub async fn list_context_items(
-        &self,
-        project_root: String,
-        turn_id: String,
-    ) -> Result<Vec<AgentTurnContextItem>, StoreExecutorError> {
-        let project_root = required_project_root(&project_root)?;
-        self.executor
-            .call(move |connection| {
-                Store::borrowed(connection).list_agent_turn_context_items(&project_root, &turn_id)
-            })
-            .await
-    }
-
     pub async fn get_turn_detail(
         &self,
         project_root: String,
@@ -318,70 +286,10 @@ impl AgentRepository {
         Ok(())
     }
 
-    pub async fn list_approval_requests(
-        &self,
-        project_root: String,
-        limit: Option<usize>,
-        status: Option<String>,
-    ) -> Result<Vec<ApprovalRequestSummary>, StoreExecutorError> {
-        let project_root = required_project_root(&project_root)?;
-        self.executor
-            .call(move |connection| {
-                Store::borrowed(connection).list_approval_requests(
-                    &project_root,
-                    limit,
-                    status.as_deref(),
-                )
-            })
-            .await
-    }
-
-    pub async fn get_approval_request(
-        &self,
-        project_root: String,
-        request_id: String,
-    ) -> Result<Option<ApprovalRequestSummary>, StoreExecutorError> {
-        let project_root = required_project_root(&project_root)?;
-        self.executor
-            .call(move |connection| {
-                Store::borrowed(connection).get_approval_request(&project_root, &request_id)
-            })
-            .await
-    }
-
-    pub async fn resolve_approval_request(
-        &self,
-        request_id: String,
-        decision: ApprovalDecisionRecord,
-    ) -> Result<usize, StoreExecutorError> {
-        self.executor
-            .call(move |connection| {
-                Store::borrowed(connection).resolve_approval_request(&request_id, &decision)
-            })
-            .await
-    }
-
     pub async fn clear_history(&self, project_root: String) -> Result<usize, StoreExecutorError> {
         let project_root = required_project_root(&project_root)?;
         self.executor
             .call(move |connection| Store::borrowed(connection).clear_agent_history(&project_root))
-            .await
-    }
-
-    pub async fn interrupt_approvals(
-        &self,
-        turn_id: String,
-        reason: String,
-        terminal_outcome: String,
-    ) -> Result<usize, StoreExecutorError> {
-        self.executor
-            .call(move |connection| {
-                Store::borrowed(connection).interrupt_agent_approvals_with_outcome(
-                    &turn_id,
-                    &reason,
-                    &terminal_outcome,
-                )
-            })
             .await
     }
 }
@@ -391,7 +299,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::{ApprovalRequestDraft, StoreError};
+    use crate::StoreError;
 
     fn conversation(project_root: &str) -> AgentConversationDraft {
         AgentConversationDraft {
@@ -406,7 +314,6 @@ mod tests {
         AgentTurnDraft {
             turn_id: "turn-a".to_string(),
             project_root: project_root.to_string(),
-            mode: "ask".to_string(),
             prompt: "Inspect the project".to_string(),
             model: "test-model".to_string(),
             workspace_id: "workspace-a".to_string(),
@@ -674,70 +581,5 @@ mod tests {
             persisted.events[0].code.as_deref().map(str::len),
             Some(8_000)
         );
-    }
-
-    #[tokio::test]
-    async fn service_written_approval_request_publishes_before_response() {
-        let directory = TempDir::new().unwrap();
-        let executor = StoreExecutor::open(directory.path().join("rho.sqlite"))
-            .await
-            .unwrap();
-        let repository = executor.agent_repository();
-        let mut frames = executor.agent_turn_events().subscribe();
-        repository
-            .create_turn_with_conversation(
-                conversation("D:\\projects\\A\\"),
-                turn("D:\\projects\\A\\"),
-            )
-            .await
-            .unwrap();
-
-        let approval = ApprovalRequestDraft {
-            request_id: "approval-a".to_string(),
-            turn_id: "turn-a".to_string(),
-            project_root: "D:/projects/A".to_string(),
-            tool: "run_r".to_string(),
-            policy: "required".to_string(),
-            arguments_json: "{}".to_string(),
-            code: Some("mean(x)".to_string()),
-            workspace_id: "workspace-a".to_string(),
-            state_revision: 2,
-            project_revision: 3,
-        };
-        let waiting_event = AgentTurnEventDraft {
-            turn_id: "turn-a".to_string(),
-            event_type: "approval.requested".to_string(),
-            title: "Approval requested · run_r".to_string(),
-            body: Some("Workspace remains unchanged pending review.".to_string()),
-            status: "running".to_string(),
-            tool: Some("run_r".to_string()),
-            request_id: Some("approval-a".to_string()),
-            code: Some("mean(x)".to_string()),
-            details_json: "{}".to_string(),
-        };
-        let event_id = executor
-            .run_service(move |store| {
-                store.create_approval_request(&approval)?;
-                store.update_agent_turn_status("turn-a", "waiting")?;
-                store.append_agent_turn_event(&waiting_event)
-            })
-            .await
-            .unwrap();
-        executor.publish_agent_turn_event(event_id).await;
-
-        let frame = frames.try_recv().unwrap();
-        assert_eq!(frame.project_root, "D:/projects/A");
-        assert_eq!(frame.turn_id, "turn-a");
-        assert_eq!(frame.event.unwrap().event_type, "approval.requested");
-        let pending = repository
-            .list_approval_requests(
-                "D:/projects/A".to_string(),
-                None,
-                Some("waiting".to_string()),
-            )
-            .await
-            .unwrap();
-        assert_eq!(pending.len(), 1);
-        assert!(pending[0].decision.is_none());
     }
 }

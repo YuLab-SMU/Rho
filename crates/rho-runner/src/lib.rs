@@ -192,7 +192,7 @@ impl<P: RunnerProcessPort> RunnerCore<P> {
                 .get(&spec.environment.repository_profile_id)
                 != Some(&spec.environment.repository_profile_digest)
             || spec.argv.is_empty()
-            || matches!(spec.network, NetworkPolicy::UnrestrictedWithApproval)
+            || matches!(spec.network, NetworkPolicy::Unrestricted)
         {
             return Err(RunnerCoreError::SpecRejected);
         }
@@ -523,7 +523,7 @@ pub fn boundary() -> RunnerBoundary {
 pub fn accepts_only_structured_spec(spec: &ExecutionSpec) -> bool {
     spec.validate(&BTreeSet::new()).is_ok()
         && !spec.argv.is_empty()
-        && !matches!(spec.network, NetworkPolicy::UnrestrictedWithApproval)
+        && !matches!(spec.network, NetworkPolicy::Unrestricted)
         && !spec
             .argv
             .iter()

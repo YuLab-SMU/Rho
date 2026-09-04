@@ -113,7 +113,7 @@ pub struct EnvironmentManifestV1 {
 pub struct ExecutionProvenanceV1 {
     pub requested_by: String,
     pub capability_id: String,
-    pub policy_decision_id: String,
+    pub request_id: String,
     pub source_revision: String,
 }
 
@@ -315,7 +315,7 @@ impl ExecutionSpec {
             provenance: ExecutionProvenanceV1 {
                 requested_by: "system".to_string(),
                 capability_id: "execution.run".to_string(),
-                policy_decision_id: "policy_decision_default".to_string(),
+                request_id: "request_default".to_string(),
                 source_revision: "revision_unknown".to_string(),
             },
             retry_class: RetryClass::NonIdempotent,

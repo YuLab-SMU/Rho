@@ -1,6 +1,6 @@
 //! Dedicated application seam for project-scoped plugin permission facts.
 //!
-//! This lane is intentionally separate from Agent approvals and scientific
+//! This lane is intentionally separate from external Agent permissions and scientific
 //! environment requests. It normalizes one explicit project identity and
 //! delegates only P2-2 permission persistence operations; it performs no
 //! privileged filesystem, network, Workspace R, Wasm, UI, or handle action.

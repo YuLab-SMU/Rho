@@ -9,7 +9,7 @@
 //! ## Design constraints
 //!
 //! * No `tauri` / TUI / DOM dependency — depends only on `rho-store` types.
-//! * No new SQLite, runtime, project, credential, or approval authority.
+//! * No new SQLite, runtime, project, credential, or permission authority.
 //! * No schema / persistence / public protocol change.
 //! * Mutations are project-scoped: the normalized `project_root` is passed to
 //!   every underlying `Store` method so foreign-project rows are never touched.

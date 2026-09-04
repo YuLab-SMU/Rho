@@ -31,16 +31,7 @@ pub enum NetworkAccessMode {
     Deny,
     ProviderOnly { configured_origin: String },
     Allowlisted { domains: BTreeSet<String> },
-    UnrestrictedWithApproval,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct UnrestrictedNetworkApproval {
-    pub approval_id: String,
-    pub turn_id: TurnId,
-    pub destination_origin: String,
-    pub data_class: DataClass,
-    pub expires_at_ms: u64,
+    Unrestricted,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -49,8 +40,6 @@ pub struct NetworkRequest {
     pub url: String,
     pub data_class: DataClass,
     pub mode: NetworkAccessMode,
-    pub approval: Option<UnrestrictedNetworkApproval>,
-    pub now_ms: u64,
     pub response_byte_limit: usize,
 }
 
@@ -99,10 +88,6 @@ pub enum NetworkEnforcementError {
     ForbiddenAddress,
     #[error("DNS rebinding detected")]
     DnsRebinding,
-    #[error(
-        "unrestricted approval is missing, stale, reused, or bound to another turn/data/destination"
-    )]
-    InvalidApproval,
     #[error("network request/redirect/byte quota exceeded")]
     QuotaExceeded,
     #[error("network resolution failed")]
@@ -114,7 +99,6 @@ pub enum NetworkEnforcementError {
 #[derive(Debug)]
 pub struct NetworkEnforcer {
     platform_enforcement_available: bool,
-    used_approvals: BTreeSet<String>,
     requests: u32,
     total_bytes: u64,
 }
@@ -123,7 +107,6 @@ impl NetworkEnforcer {
     pub fn new(platform_enforcement_available: bool) -> Self {
         Self {
             platform_enforcement_available,
-            used_approvals: BTreeSet::new(),
             requests: 0,
             total_bytes: 0,
         }
@@ -142,7 +125,7 @@ impl NetworkEnforcer {
             return Err(NetworkEnforcementError::QuotaExceeded);
         }
         let mut destination = parse_destination(&request.url)?;
-        self.authorize(request, &destination, true)?;
+        self.authorize(request, &destination)?;
         let mut redirects_followed = 0;
         loop {
             let pinned_ip = resolve_and_pin(&destination, resolver)?;
@@ -165,7 +148,7 @@ impl NetworkEnforcer {
                     return Err(NetworkEnforcementError::QuotaExceeded);
                 }
                 let redirected = parse_redirect(&destination, &location)?;
-                self.authorize(request, &redirected, false)?;
+                self.authorize(request, &redirected)?;
                 destination = redirected;
                 redirects_followed += 1;
                 continue;
@@ -180,10 +163,9 @@ impl NetworkEnforcer {
     }
 
     fn authorize(
-        &mut self,
+        &self,
         request: &NetworkRequest,
         destination: &CanonicalDestination,
-        consume_approval: bool,
     ) -> Result<(), NetworkEnforcementError> {
         match &request.mode {
             NetworkAccessMode::Deny => Err(NetworkEnforcementError::Denied),
@@ -204,24 +186,7 @@ impl NetworkEnforcer {
                     Err(NetworkEnforcementError::NotAllowlisted)
                 }
             }
-            NetworkAccessMode::UnrestrictedWithApproval => {
-                let approval = request
-                    .approval
-                    .as_ref()
-                    .ok_or(NetworkEnforcementError::InvalidApproval)?;
-                if approval.turn_id != request.turn_id
-                    || approval.destination_origin != destination.origin()
-                    || approval.data_class != request.data_class
-                    || request.now_ms > approval.expires_at_ms
-                    || (consume_approval && self.used_approvals.contains(&approval.approval_id))
-                {
-                    return Err(NetworkEnforcementError::InvalidApproval);
-                }
-                if consume_approval {
-                    self.used_approvals.insert(approval.approval_id.clone());
-                }
-                Ok(())
-            }
+            NetworkAccessMode::Unrestricted => Ok(()),
         }
     }
 }

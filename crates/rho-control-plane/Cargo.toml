@@ -7,13 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-rho-artifact-store = { path = "../rho-artifact-store" }
-rho-execution = { path = "../rho-execution" }
-rho-environment = { path = "../rho-environment" }
 rho-protocol = { path = "../rho-protocol" }
 rho-sandbox = { path = "../rho-sandbox" }
-rho-secret-broker = { path = "../rho-secret-broker" }
-rho-store = { path = "../rho-store" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

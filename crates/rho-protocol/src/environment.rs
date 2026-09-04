@@ -1,7 +1,7 @@
 //! Canonical Environment Realization contracts.
 //!
 //! This module describes desired and realized state. It owns no discovery,
-//! approval, process execution, filesystem mutation, network access, secret
+//! permission decisions, process execution, filesystem mutation, network access, secret
 //! materialization or Workspace restart authority.
 
 use std::collections::BTreeSet;
@@ -672,7 +672,7 @@ pub struct EnvironmentOperationReceiptV1 {
     pub operation_id: OperationId,
     pub plan_id: EnvironmentPlanId,
     pub actor_id: String,
-    pub approval_effect_digest: AuthorityDigest,
+    pub effect_digest: AuthorityDigest,
     pub desired_before: EnvironmentDesiredRevisionId,
     pub desired_after: Option<EnvironmentDesiredRevisionId>,
     pub realization_before: EnvironmentRealizationRevisionId,
@@ -1182,7 +1182,7 @@ mod tests {
             operation_id: OperationId::new("operation_test").unwrap(),
             plan_id: MaterializedPackagePlanV1::new(body()).unwrap().plan_id,
             actor_id: "user".to_string(),
-            approval_effect_digest: digest('e'),
+            effect_digest: digest('e'),
             desired_before: EnvironmentDesiredRevisionId::new("env_desired_before").unwrap(),
             desired_after: Some(EnvironmentDesiredRevisionId::new("env_desired_after").unwrap()),
             realization_before: EnvironmentRealizationRevisionId::new("env_realized_before")

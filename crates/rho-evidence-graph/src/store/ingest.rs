@@ -232,26 +232,6 @@ fn apply_receipt(
                 )?;
             }
         }
-        AuthorityReceiptV1::Approval(value) => {
-            let approval = upsert_managed_node(
-                connection,
-                project_id,
-                &value.reference,
-                NodeKind::Approval,
-                &value.reference.authority_id,
-                &payload,
-            )?;
-            if let Some(reference) = &value.agent_turn_ref {
-                let turn = upsert_placeholder(connection, project_id, reference)?;
-                upsert_managed_edge(
-                    connection,
-                    project_id,
-                    &turn,
-                    &approval,
-                    EdgePredicate::ApprovedBy,
-                )?;
-            }
-        }
         AuthorityReceiptV1::Environment(value) => {
             upsert_managed_node(
                 connection,
@@ -547,7 +527,6 @@ fn authority_node_kind(kind: AuthorityKindV1) -> Option<NodeKind> {
     match kind {
         AuthorityKindV1::Run => Some(NodeKind::Run),
         AuthorityKindV1::Artifact => Some(NodeKind::Artifact),
-        AuthorityKindV1::Approval => Some(NodeKind::Approval),
         AuthorityKindV1::EnvironmentSnapshot => Some(NodeKind::EnvironmentSnapshot),
         AuthorityKindV1::SourceAnchor => Some(NodeKind::SourceRange),
         AuthorityKindV1::CheckFinding => Some(NodeKind::CheckFinding),

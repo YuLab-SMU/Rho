@@ -316,32 +316,6 @@ pub struct EnvironmentReceipt {
     pub captured_at: String,
 }
 
-/// Approval request summary (inspection only — no decide/continue/cancel).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ApprovalSummary {
-    /// Opaque approval request identifier.
-    pub request_id: String,
-    /// The Agent turn that requested approval.
-    pub turn_id: String,
-    /// Tool that requires approval (e.g. "run_r").
-    pub tool: String,
-    /// Approval policy: "ask", "plan", "act".
-    pub policy: String,
-    /// Current status: "pending", "approved", "rejected", "cancelled".
-    pub status: String,
-    /// Decision if resolved.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub decision: Option<String>,
-    /// Reason for the decision, if provided.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    /// When the request was created (RFC 3339).
-    pub requested_at: String,
-    /// When the request was resolved, if applicable (RFC 3339).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub responded_at: Option<String>,
-}
-
 /// Provenance link connecting a resource to its producing run and environment.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProvenanceLink {

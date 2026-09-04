@@ -1,13 +1,13 @@
 #![cfg(unix)]
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-};
+use std::{collections::BTreeMap, fs};
 
 use rho_control_plane::*;
 use rho_protocol::*;
-use rho_sandbox::staging::StagingArea;
+use rho_sandbox::{
+    snapshot::{SnapshotLimits, build_project_snapshot, diff_project_snapshot},
+    staging::StagingArea,
+};
 use sha2::{Digest, Sha256};
 
 fn digest(bytes: &[u8]) -> ArtifactDigest {
@@ -61,19 +61,8 @@ fn project_commit_applies_exact_patch_atomically_and_advances_revision_with_prov
             ("old.R".to_string(), &sealed_old),
         ]),
     };
-    let mut committer = BrokerProjectCommitter::open(project.path(), revision(4)).unwrap();
-    let approval = committer
-        .bind_approval(
-            &patch,
-            "approval_patch_success",
-            DestinationClass::LocalSandbox,
-            2000,
-            BTreeSet::new(),
-        )
-        .unwrap();
-    let outcome = committer
-        .commit(&prepared, &approval, DestinationClass::LocalSandbox, 1000)
-        .unwrap();
+    let mut committer = ProjectCommitter::open(project.path(), revision(4)).unwrap();
+    let outcome = committer.commit(&prepared).unwrap();
     let ProjectCommitOutcome::Committed {
         transition,
         event,
@@ -95,6 +84,55 @@ fn project_commit_applies_exact_patch_atomically_and_advances_revision_with_prov
         fs::read(project.path().join("old.R")).unwrap(),
         b"replaced\n"
     );
+}
+
+#[test]
+fn agent_requested_snapshot_delta_commits_without_a_second_rho_approval() {
+    let project = tempfile::tempdir().unwrap();
+    fs::write(project.path().join("analysis.R"), "x <- 1\n").unwrap();
+    fs::create_dir(project.path().join("data")).unwrap();
+    fs::write(project.path().join("data/old.csv"), "old\n").unwrap();
+    let baseline = build_project_snapshot(
+        project.path(),
+        ProjectRevision(4),
+        SnapshotLimits::default(),
+    )
+    .unwrap();
+
+    let workspace = tempfile::tempdir().unwrap();
+    fs::create_dir(workspace.path().join("data")).unwrap();
+    fs::write(workspace.path().join("analysis.R"), "x <- 2\n").unwrap();
+    fs::write(workspace.path().join(".Rprofile"), "options(width = 100)\n").unwrap();
+    let delta =
+        diff_project_snapshot(&baseline, workspace.path(), SnapshotLimits::default()).unwrap();
+    let staging = tempfile::tempdir().unwrap();
+    let staged = stage_snapshot_delta(&delta, staging.path(), "agent_turn_patch").unwrap();
+    let prepared = staged.prepared();
+    let mut committer = ProjectCommitter::open(project.path(), revision(4)).unwrap();
+
+    let outcome = committer.commit(&prepared).unwrap();
+    let ProjectCommitOutcome::Committed {
+        transition,
+        provenance,
+        ..
+    } = outcome
+    else {
+        panic!("Agent-requested delta must commit");
+    };
+    assert_eq!(transition.after.project_revision, ProjectRevision(5));
+    assert_eq!(
+        provenance.applied_paths,
+        vec![".Rprofile", "analysis.R", "data/old.csv"]
+    );
+    assert_eq!(
+        fs::read_to_string(project.path().join("analysis.R")).unwrap(),
+        "x <- 2\n"
+    );
+    assert_eq!(
+        fs::read_to_string(project.path().join(".Rprofile")).unwrap(),
+        "options(width = 100)\n"
+    );
+    assert!(!project.path().join("data/old.csv").exists());
 }
 
 #[test]
@@ -123,18 +161,9 @@ fn project_commit_stale_patch_never_overwrites_new_revision_or_bytes() {
         staging: &staging,
         sealed: BTreeMap::from([("file.R".to_string(), &sealed)]),
     };
-    let mut committer = BrokerProjectCommitter::open(project.path(), revision(4)).unwrap();
-    let approval = committer
-        .bind_approval(
-            &patch,
-            "approval_stale",
-            DestinationClass::LocalSandbox,
-            2000,
-            BTreeSet::new(),
-        )
-        .unwrap();
+    let mut committer = ProjectCommitter::open(project.path(), revision(4)).unwrap();
     assert!(matches!(
-        committer.commit(&prepared, &approval, DestinationClass::LocalSandbox, 1000),
+        committer.commit(&prepared),
         Err(ProjectCommitError::StaleRevision { .. })
     ));
     assert_eq!(
@@ -144,74 +173,7 @@ fn project_commit_stale_patch_never_overwrites_new_revision_or_bytes() {
 }
 
 #[test]
-fn project_commit_approval_binds_patch_revision_destination_expiry_and_single_use() {
-    let project = tempfile::tempdir().unwrap();
-    let staging_root = tempfile::tempdir().unwrap();
-    let mut staging = StagingArea::open(staging_root.path(), 1024).unwrap();
-    let sealed = staging.write_and_seal("file.R", b"new\n").unwrap();
-    let patch = CanonicalProjectPatch::new(
-        "patch_approval",
-        ProjectRevision(1),
-        staging.staging_root_digest().unwrap(),
-        PatchPathSemantics::CaseSensitive,
-        vec![PatchOperation::Create {
-            path: "file.R".to_string(),
-            staged: sealed.reference().clone(),
-            mode: 0o644,
-            hunk_count: 1,
-        }],
-    )
-    .unwrap();
-    let prepared = PreparedProjectPatch {
-        patch: &patch,
-        staging: &staging,
-        sealed: BTreeMap::from([("file.R".to_string(), &sealed)]),
-    };
-    let mut committer = BrokerProjectCommitter::open(project.path(), revision(1)).unwrap();
-    let approval = committer
-        .bind_approval(
-            &patch,
-            "approval_exact",
-            DestinationClass::LocalSandbox,
-            1500,
-            BTreeSet::new(),
-        )
-        .unwrap();
-    assert!(matches!(
-        committer.commit(&prepared, &approval, DestinationClass::LocalWorkspace, 1000),
-        Err(ProjectCommitError::InvalidApproval)
-    ));
-    assert!(matches!(
-        committer.commit(&prepared, &approval, DestinationClass::LocalSandbox, 1600),
-        Err(ProjectCommitError::InvalidApproval)
-    ));
-    committer
-        .commit(&prepared, &approval, DestinationClass::LocalSandbox, 1000)
-        .unwrap();
-    assert!(matches!(
-        committer.commit(&prepared, &approval, DestinationClass::LocalSandbox, 1000),
-        Err(ProjectCommitError::StaleRevision { .. }) | Err(ProjectCommitError::InvalidApproval)
-    ));
-}
-
-#[test]
-fn project_commit_high_risk_paths_default_deny_and_rename_cannot_bypass() {
-    for (path, expected) in [
-        (".git/hooks/pre-commit", HighRiskPathClass::GitHook),
-        (".Rprofile", HighRiskPathClass::StartupProfile),
-        (".Renviron", HighRiskPathClass::StartupProfile),
-        (
-            ".github/workflows/test.yml",
-            HighRiskPathClass::TaskOrBuildConfig,
-        ),
-        (
-            "config/credentials.json",
-            HighRiskPathClass::CredentialConfig,
-        ),
-        ("renv/activate.R", HighRiskPathClass::PackageActivation),
-    ] {
-        assert_eq!(classify_high_risk_path(path), Some(expected));
-    }
+fn project_commit_does_not_gate_startup_profile_paths() {
     let project = tempfile::tempdir().unwrap();
     fs::write(project.path().join("safe.R"), "safe\n").unwrap();
     let staging_root = tempfile::tempdir().unwrap();
@@ -233,24 +195,16 @@ fn project_commit_high_risk_paths_default_deny_and_rename_cannot_bypass() {
         staging: &staging,
         sealed: BTreeMap::new(),
     };
-    let mut committer = BrokerProjectCommitter::open(project.path(), revision(1)).unwrap();
-    let approval = committer
-        .bind_approval(
-            &patch,
-            "approval_risky",
-            DestinationClass::LocalSandbox,
-            2000,
-            BTreeSet::new(),
-        )
-        .unwrap();
+    let mut committer = ProjectCommitter::open(project.path(), revision(1)).unwrap();
     assert!(matches!(
-        committer.commit(&prepared, &approval, DestinationClass::LocalSandbox, 1000),
-        Err(ProjectCommitError::HighRiskDenied(
-            HighRiskPathClass::StartupProfile
-        ))
+        committer.commit(&prepared).unwrap(),
+        ProjectCommitOutcome::Committed { .. }
     ));
-    assert!(project.path().join("safe.R").exists());
-    assert!(!project.path().join(".Rprofile").exists());
+    assert!(!project.path().join("safe.R").exists());
+    assert_eq!(
+        fs::read_to_string(project.path().join(".Rprofile")).unwrap(),
+        "safe\n"
+    );
 }
 
 #[test]
@@ -286,24 +240,9 @@ fn project_commit_partial_multi_file_is_exact_reconcile_not_all_success() {
         staging: &staging,
         sealed: BTreeMap::from([("one".to_string(), &one), ("two".to_string(), &two)]),
     };
-    let mut committer = BrokerProjectCommitter::open(project.path(), revision(1)).unwrap();
-    let approval = committer
-        .bind_approval(
-            &patch,
-            "approval_partial",
-            DestinationClass::LocalSandbox,
-            2000,
-            BTreeSet::new(),
-        )
-        .unwrap();
+    let mut committer = ProjectCommitter::open(project.path(), revision(1)).unwrap();
     let outcome = committer
-        .commit_with_fault(
-            &prepared,
-            &approval,
-            DestinationClass::LocalSandbox,
-            1000,
-            Some(ProjectCommitFault::AfterOperation(0)),
-        )
+        .commit_with_fault(&prepared, Some(ProjectCommitFault::AfterOperation(0)))
         .unwrap();
     let ProjectCommitOutcome::ReconcileRequired {
         applied_paths,
@@ -351,24 +290,9 @@ fn project_commit_crash_after_all_files_before_revision_reconciles_to_success_on
         staging: &staging,
         sealed: BTreeMap::from([("file".to_string(), &sealed)]),
     };
-    let mut committer = BrokerProjectCommitter::open(project.path(), revision(2)).unwrap();
-    let approval = committer
-        .bind_approval(
-            &patch,
-            "approval_revision_pending",
-            DestinationClass::LocalSandbox,
-            2000,
-            BTreeSet::new(),
-        )
-        .unwrap();
+    let mut committer = ProjectCommitter::open(project.path(), revision(2)).unwrap();
     let outcome = committer
-        .commit_with_fault(
-            &prepared,
-            &approval,
-            DestinationClass::LocalSandbox,
-            1000,
-            Some(ProjectCommitFault::BeforeRevisionCommit),
-        )
+        .commit_with_fault(&prepared, Some(ProjectCommitFault::BeforeRevisionCommit))
         .unwrap();
     let ProjectCommitOutcome::ReconcileRequired {
         journal_id,
@@ -413,32 +337,17 @@ fn project_commit_external_conflict_disk_full_and_link_file_fail_truthfully() {
         staging: &staging,
         sealed: BTreeMap::from([("file".to_string(), &sealed)]),
     };
-    let mut committer = BrokerProjectCommitter::open(project.path(), revision(1)).unwrap();
-    let approval = committer
-        .bind_approval(
-            &patch,
-            "approval_conflict",
-            DestinationClass::LocalSandbox,
-            2000,
-            BTreeSet::new(),
-        )
-        .unwrap();
+    let mut committer = ProjectCommitter::open(project.path(), revision(1)).unwrap();
     fs::write(project.path().join("file"), "external").unwrap();
     assert!(matches!(
-        committer.commit(&prepared, &approval, DestinationClass::LocalSandbox, 1000),
+        committer.commit(&prepared),
         Err(ProjectCommitError::BaseDigestConflict(_))
     ));
     assert_eq!(fs::read(project.path().join("file")).unwrap(), b"external");
 
     fs::write(project.path().join("file"), "base").unwrap();
     assert!(matches!(
-        committer.commit_with_fault(
-            &prepared,
-            &approval,
-            DestinationClass::LocalSandbox,
-            1000,
-            Some(ProjectCommitFault::DiskFull)
-        ),
+        committer.commit_with_fault(&prepared, Some(ProjectCommitFault::DiskFull)),
         Err(ProjectCommitError::DiskFull)
     ));
     assert_eq!(fs::read(project.path().join("file")).unwrap(), b"base");

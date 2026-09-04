@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub(crate) const SCHEMA_VERSION: i64 = 19;
+pub(crate) const SCHEMA_VERSION: i64 = 20;
 const DEFAULT_LIMIT: usize = 50;
 const MAX_AGENT_LIST_LIMIT: usize = 100;
 const MAX_DIAGNOSTIC_LINE: u32 = 10_000_000;
@@ -39,7 +39,6 @@ mod plugin_permission_service;
 mod project;
 mod project_transition_repository;
 pub mod projections;
-pub mod provider_sessions;
 mod query;
 pub mod revisions;
 mod run;
@@ -55,8 +54,7 @@ mod workbench;
 pub use agent::{
     AgentConversationDraft, AgentConversationSummary, AgentConversationTurn, AgentTurnDetail,
     AgentTurnDraft, AgentTurnEvent, AgentTurnEventDraft, AgentTurnEventFrame, AgentTurnFinish,
-    AgentTurnSummary, AgentTurnUpdateFrame, ApprovalDecisionRecord, ApprovalRequestDraft,
-    ApprovalRequestSummary,
+    AgentTurnSummary, AgentTurnUpdateFrame,
 };
 pub use agent_repository::AgentRepository;
 pub use artifact::{
@@ -76,7 +74,7 @@ pub use compare::{
 pub use environment::{EnvironmentSnapshotDraft, EnvironmentSnapshotRecord};
 pub use environment_realization::{
     EnvironmentIncidentRecord, EnvironmentOperationActivity, EnvironmentOperationJournalRecord,
-    EnvironmentPlanReviewRecord, EnvironmentStateCommit, EnvironmentStateProjection,
+    EnvironmentPlanRecord, EnvironmentStateCommit, EnvironmentStateProjection,
 };
 pub use environment_repository::EnvironmentRepository;
 pub use executor::{StoreExecutor, StoreExecutorError, StoreExecutorOperationError};
@@ -103,14 +101,12 @@ pub use project::{
     PlotPayloadPruneResult, ProjectRetentionSummary, RetentionPolicy, RetentionScopeSummary,
 };
 pub use project_transition_repository::{ProjectTransitionRepository, ProjectTransitionSnapshot};
-pub use provider_sessions::*;
 pub use query::ProjectQueryService;
 pub use revisions::*;
 pub use run::{ProblemSummary, RunDetail, RunDraft, RunErrorRange, RunFinish, RunSummary};
 pub use run_repository::{RunCancelOutcome, RunRepository};
 pub use runtime_output::{
-    AgentTurnContextItem, AgentTurnContextItemDraft, RuntimeExecution,
-    RuntimeExecutionDeleteResult, RuntimeExecutionDraft, RuntimeExecutionFinish,
+    RuntimeExecution, RuntimeExecutionDeleteResult, RuntimeExecutionDraft, RuntimeExecutionFinish,
     RuntimeExecutionMutationOutcome, RuntimeOutputAppendResult, RuntimeOutputChunk,
     RuntimeOutputDraft, RuntimeOutputPage, RuntimeOutputPayload, RuntimeOutputPolicy,
     RuntimeOutputPolicyUpdate, RuntimeOutputPruneResult, RuntimeOutputSearchHit,
@@ -359,20 +355,15 @@ impl Store {
     fn assert_current_schema(&self) -> Result<(), StoreError> {
         migration::assert_not_null_project_identity(&self.connection, "runs")?;
         migration::assert_not_null_project_identity(&self.connection, "agent_turns")?;
-        migration::assert_not_null_project_identity(&self.connection, "approval_requests")?;
         migration::assert_not_null_project_identity(&self.connection, "plot_artifacts")?;
         migration::assert_not_null_project_identity(&self.connection, "authority_receipt_log")?;
         migration::assert_table_exists(&self.connection, "authority_receipt_log")?;
         migration::assert_index_exists(&self.connection, "idx_runs_project_started")?;
         migration::assert_index_exists(&self.connection, "idx_agent_turns_project_started")?;
-        migration::assert_index_exists(&self.connection, "idx_approval_requests_project_status")?;
         migration::assert_index_exists(&self.connection, "idx_plot_artifacts_project_created")?;
         migration::assert_index_exists(&self.connection, "idx_authority_receipt_log_project_seq")?;
-        migration::assert_table_exists(&self.connection, "environment_plan_reviews")?;
-        migration::assert_index_exists(
-            &self.connection,
-            "idx_environment_plan_reviews_project_status",
-        )?;
+        migration::assert_table_exists(&self.connection, "environment_plans")?;
+        migration::assert_index_exists(&self.connection, "idx_environment_plans_project_recorded")?;
         for column in [
             "error_start_line",
             "error_start_column",
@@ -839,15 +830,14 @@ where
         )?;
         transaction.execute(
             "INSERT INTO agent_turns(
-                turn_id, project_root, mode, prompt, prompt_preview, model, status, started_at,
+                turn_id, project_root, prompt, prompt_preview, model, status, started_at,
                 workspace_id_before, state_revision_before, project_revision_before
              ) VALUES(
-                ?1, ?2, ?3, ?4, ?5, ?6, 'running', ?7, ?8, ?9, ?10
+                ?1, ?2, ?3, ?4, ?5, 'running', ?6, ?7, ?8, ?9
              )",
             params![
                 draft.turn_id,
                 turn_project_root,
-                draft.mode,
                 draft.prompt,
                 prompt_preview,
                 draft.model,
@@ -961,15 +951,14 @@ where
         let prompt_preview = text_preview(&draft.prompt, 120);
         transaction.execute(
             "INSERT INTO agent_turns(
-                turn_id, project_root, mode, prompt, prompt_preview, model, status, started_at,
+                turn_id, project_root, prompt, prompt_preview, model, status, started_at,
                 workspace_id_before, state_revision_before, project_revision_before
              ) VALUES(
-                ?1, ?2, ?3, ?4, ?5, ?6, 'running', ?7, ?8, ?9, ?10
+                ?1, ?2, ?3, ?4, ?5, 'running', ?6, ?7, ?8, ?9
              )",
             params![
                 draft.turn_id,
                 project_root,
-                draft.mode,
                 draft.prompt,
                 prompt_preview,
                 draft.model,
@@ -1140,59 +1129,6 @@ where
             .map_err(StoreError::from)
     }
 
-    pub fn create_approval_request(
-        &mut self,
-        draft: &ApprovalRequestDraft,
-    ) -> Result<(), StoreError> {
-        self.connection.execute(
-            "INSERT INTO approval_requests(
-                request_id, turn_id, project_root, tool, policy, status, arguments_json, code,
-                workspace_id, state_revision, project_revision, requested_at
-             ) VALUES(
-                ?1, ?2, ?3, ?4, ?5, 'waiting', ?6, ?7, ?8, ?9, ?10, ?11
-             )",
-            params![
-                draft.request_id,
-                draft.turn_id,
-                draft.project_root,
-                draft.tool,
-                draft.policy,
-                draft.arguments_json,
-                draft.code,
-                draft.workspace_id,
-                draft.state_revision,
-                draft.project_revision,
-                Utc::now().to_rfc3339(),
-            ],
-        )?;
-        Ok(())
-    }
-
-    pub fn resolve_approval_request(
-        &mut self,
-        request_id: &str,
-        decision: &ApprovalDecisionRecord,
-    ) -> Result<usize, StoreError> {
-        let changed = self.connection.execute(
-            "UPDATE approval_requests
-             SET status = ?2,
-                 decision = ?3,
-                 reason = ?4,
-                 continuation_outcome = ?5,
-                 responded_at = ?6
-             WHERE request_id = ?1",
-            params![
-                request_id,
-                decision.status,
-                decision.decision,
-                decision.reason,
-                decision.continuation_outcome,
-                Utc::now().to_rfc3339(),
-            ],
-        )?;
-        Ok(changed)
-    }
-
     pub fn list_agent_turns(
         &self,
         project_root: &str,
@@ -1200,19 +1136,11 @@ where
     ) -> Result<Vec<AgentTurnSummary>, StoreError> {
         let mut statement = self.connection.prepare(
             "SELECT
-                agent_turns.turn_id, link.conversation_id, project_root, mode, status,
+                agent_turns.turn_id, link.conversation_id, project_root, status,
                 started_at, finished_at, prompt_preview, model,
                 workspace_id_before, state_revision_before, project_revision_before,
                 workspace_id_after, state_revision_after, project_revision_after,
                 final_message, error_message,
-                (
-                    SELECT request_id
-                    FROM approval_requests
-                    WHERE approval_requests.turn_id = agent_turns.turn_id
-                      AND status = 'waiting'
-                    ORDER BY requested_at DESC
-                    LIMIT 1
-                ) AS pending_request_id,
                 link.retry_of_turn_id,
                 link.terminal_reason
              FROM agent_turns
@@ -1249,18 +1177,10 @@ where
         let mut statement = self.connection.prepare(
             "SELECT
                 agent_turns.turn_id, link.conversation_id, agent_turns.project_root,
-                mode, status, started_at, finished_at, prompt_preview, model,
+                status, started_at, finished_at, prompt_preview, model,
                 workspace_id_before, state_revision_before, project_revision_before,
                 workspace_id_after, state_revision_after, project_revision_after,
                 final_message, error_message,
-                (
-                    SELECT request_id
-                    FROM approval_requests
-                    WHERE approval_requests.turn_id = agent_turns.turn_id
-                      AND status = 'waiting'
-                    ORDER BY requested_at DESC
-                    LIMIT 1
-                ) AS pending_request_id,
                 link.retry_of_turn_id,
                 link.terminal_reason
              FROM agent_turns
@@ -1305,17 +1225,8 @@ where
                  WHERE count_link.conversation_id = conversation.conversation_id) AS turn_count,
                 COALESCE(latest_turn.status, 'empty') AS status,
                 latest_turn.turn_id,
-                latest_turn.mode,
-                latest_turn.prompt_preview,
-                latest_link.terminal_reason,
-                (
-                    SELECT request_id
-                    FROM approval_requests
-                    WHERE approval_requests.turn_id = latest_turn.turn_id
-                      AND status = 'waiting'
-                    ORDER BY requested_at DESC
-                    LIMIT 1
-                ) AS pending_request_id
+                                latest_turn.prompt_preview,
+                latest_link.terminal_reason
              FROM agent_conversations AS conversation
              LEFT JOIN agent_conversation_turns AS latest_link
                ON latest_link.turn_id = (
@@ -1353,10 +1264,8 @@ where
                     turn_count: row.get(7)?,
                     status: row.get(8)?,
                     latest_turn_id: row.get(9)?,
-                    latest_mode: row.get(10)?,
-                    latest_prompt_preview: row.get(11)?,
-                    terminal_reason: row.get(12)?,
-                    pending_request_id: row.get(13)?,
+                    latest_prompt_preview: row.get(10)?,
+                    terminal_reason: row.get(11)?,
                 })
             },
         )?;
@@ -1389,15 +1298,8 @@ where
                      WHERE count_link.conversation_id = conversation.conversation_id),
                     COALESCE(latest_turn.status, 'empty'),
                     latest_turn.turn_id,
-                    latest_turn.mode,
-                    latest_turn.prompt_preview,
-                    latest_link.terminal_reason,
-                    (
-                        SELECT request_id FROM approval_requests
-                        WHERE approval_requests.turn_id = latest_turn.turn_id
-                          AND status = 'waiting'
-                        ORDER BY requested_at DESC LIMIT 1
-                    )
+                                        latest_turn.prompt_preview,
+                    latest_link.terminal_reason
                  FROM agent_conversations AS conversation
                  LEFT JOIN agent_conversation_turns AS latest_link
                    ON latest_link.turn_id = (
@@ -1426,10 +1328,8 @@ where
                         turn_count: row.get(7)?,
                         status: row.get(8)?,
                         latest_turn_id: row.get(9)?,
-                        latest_mode: row.get(10)?,
-                        latest_prompt_preview: row.get(11)?,
-                        terminal_reason: row.get(12)?,
-                        pending_request_id: row.get(13)?,
+                        latest_prompt_preview: row.get(10)?,
+                        terminal_reason: row.get(11)?,
                     })
                 },
             )
@@ -1589,7 +1489,7 @@ where
         }
         let mut statement = self.connection.prepare(
             "SELECT
-                agent_turns.turn_id, mode, status, prompt, final_message, error_message, started_at
+                agent_turns.turn_id, status, prompt, final_message, error_message, started_at
              FROM agent_turns
              JOIN agent_conversation_turns AS link ON link.turn_id = agent_turns.turn_id
              JOIN agent_conversations AS conversation
@@ -1612,12 +1512,11 @@ where
             |row| {
                 Ok(AgentConversationTurn {
                     turn_id: row.get(0)?,
-                    mode: row.get(1)?,
-                    status: row.get(2)?,
-                    prompt: row.get(3)?,
-                    final_message: row.get(4)?,
-                    error_message: row.get(5)?,
-                    started_at: row.get(6)?,
+                    status: row.get(1)?,
+                    prompt: row.get(2)?,
+                    final_message: row.get(3)?,
+                    error_message: row.get(4)?,
+                    started_at: row.get(5)?,
                 })
             },
         )?;
@@ -1643,7 +1542,7 @@ where
         self.connection
             .query_row(
                 "SELECT
-                    agent_turns.turn_id, mode, status, prompt, final_message, error_message,
+                    agent_turns.turn_id, status, prompt, final_message, error_message,
                     started_at
                  FROM agent_turns
                  JOIN agent_conversation_turns AS link
@@ -1659,44 +1558,15 @@ where
                 |row| {
                     Ok(AgentConversationTurn {
                         turn_id: row.get(0)?,
-                        mode: row.get(1)?,
-                        status: row.get(2)?,
-                        prompt: row.get(3)?,
-                        final_message: row.get(4)?,
-                        error_message: row.get(5)?,
-                        started_at: row.get(6)?,
+                        status: row.get(1)?,
+                        prompt: row.get(2)?,
+                        final_message: row.get(3)?,
+                        error_message: row.get(4)?,
+                        started_at: row.get(5)?,
                     })
                 },
             )
             .optional()
-            .map_err(StoreError::from)
-    }
-
-    pub fn list_approval_requests(
-        &self,
-        project_root: &str,
-        limit: Option<usize>,
-        status: Option<&str>,
-    ) -> Result<Vec<ApprovalRequestSummary>, StoreError> {
-        let mut statement = self.connection.prepare(
-            "SELECT
-                request_id, turn_id, project_root, tool, policy, status, decision, reason,
-                arguments_json, code, workspace_id, state_revision, project_revision,
-                requested_at, responded_at, continuation_outcome
-             FROM approval_requests
-             WHERE project_root = ?1 AND (?3 IS NULL OR status = ?3)
-             ORDER BY requested_at DESC
-             LIMIT ?2",
-        )?;
-        let rows = statement.query_map(
-            params![
-                normalize_project_root(project_root),
-                limit.unwrap_or(DEFAULT_LIMIT) as i64,
-                status
-            ],
-            agent::decode_approval_request,
-        )?;
-        rows.collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
     }
 
@@ -1711,18 +1581,10 @@ where
             .query_row(
                 "SELECT
                     agent_turns.turn_id, link.conversation_id, agent_turns.project_root,
-                    mode, status, started_at, finished_at, prompt_preview, model,
+                    status, started_at, finished_at, prompt_preview, model,
                     workspace_id_before, state_revision_before, project_revision_before,
                     workspace_id_after, state_revision_after, project_revision_after,
                     final_message, error_message,
-                    (
-                        SELECT request_id
-                        FROM approval_requests
-                        WHERE approval_requests.turn_id = agent_turns.turn_id
-                          AND status = 'waiting'
-                        ORDER BY requested_at DESC
-                        LIMIT 1
-                    ) AS pending_request_id,
                     link.retry_of_turn_id,
                     link.terminal_reason
                  FROM agent_turns
@@ -1749,26 +1611,7 @@ where
         let event_rows = event_statement.query_map([turn_id], agent::decode_agent_turn_event)?;
         let events = event_rows.collect::<Result<Vec<_>, _>>()?;
 
-        let mut approval_statement = self.connection.prepare(
-            "SELECT
-                request_id, turn_id, project_root, tool, policy, status, decision, reason,
-                arguments_json, code, workspace_id, state_revision, project_revision,
-                requested_at, responded_at, continuation_outcome
-             FROM approval_requests
-             WHERE project_root = ?1 AND turn_id = ?2
-             ORDER BY requested_at DESC",
-        )?;
-        let approval_rows = approval_statement.query_map(
-            params![&project_root, turn_id],
-            agent::decode_approval_request,
-        )?;
-        let approvals = approval_rows.collect::<Result<Vec<_>, _>>()?;
-
-        Ok(Some(AgentTurnDetail {
-            turn,
-            events,
-            approvals,
-        }))
+        Ok(Some(AgentTurnDetail { turn, events }))
     }
 
     pub fn recover_incomplete_agent_turns(&mut self) -> Result<usize, StoreError> {
@@ -1815,10 +1658,6 @@ where
         }
         let transaction = self.connection.transaction()?;
         transaction.execute(
-            "DELETE FROM approval_requests WHERE project_root = ?1",
-            [&project_root],
-        )?;
-        transaction.execute(
             "DELETE FROM agent_turn_events
              WHERE turn_id IN (SELECT turn_id FROM agent_turns WHERE project_root = ?1)",
             [&project_root],
@@ -1833,47 +1672,6 @@ where
         )?;
         transaction.commit()?;
         Ok(deleted)
-    }
-
-    pub fn recover_incomplete_approvals(&mut self) -> Result<usize, StoreError> {
-        let changed = self.connection.execute(
-            "UPDATE approval_requests
-             SET status = 'interrupted',
-                 decision = COALESCE(decision, 'cancel'),
-                 reason = COALESCE(reason, 'Approval interrupted by desktop restart'),
-                 continuation_outcome = COALESCE(continuation_outcome, 'desktop_restart'),
-                 responded_at = COALESCE(responded_at, ?1)
-             WHERE status = 'waiting'",
-            [Utc::now().to_rfc3339()],
-        )?;
-        Ok(changed)
-    }
-
-    pub fn interrupt_agent_approvals(
-        &mut self,
-        turn_id: &str,
-        reason: &str,
-    ) -> Result<usize, StoreError> {
-        self.interrupt_agent_approvals_with_outcome(turn_id, reason, "user_cancelled")
-    }
-
-    pub fn interrupt_agent_approvals_with_outcome(
-        &mut self,
-        turn_id: &str,
-        reason: &str,
-        terminal_outcome: &str,
-    ) -> Result<usize, StoreError> {
-        let changed = self.connection.execute(
-            "UPDATE approval_requests
-             SET status = 'interrupted',
-                 decision = COALESCE(decision, 'cancel'),
-                 reason = COALESCE(reason, ?2),
-                 continuation_outcome = COALESCE(continuation_outcome, ?3),
-                 responded_at = COALESCE(responded_at, ?4)
-             WHERE turn_id = ?1 AND status = 'waiting'",
-            params![turn_id, reason, terminal_outcome, Utc::now().to_rfc3339()],
-        )?;
-        Ok(changed)
     }
 
     pub fn create_plot_artifact(&mut self, draft: &PlotArtifactDraft) -> Result<(), StoreError> {
@@ -2369,26 +2167,6 @@ where
                     project_revision_after
                 ],
                 run::decode_run_detail,
-            )
-            .optional()
-            .map_err(StoreError::from)
-    }
-
-    pub fn get_approval_request(
-        &self,
-        project_root: &str,
-        request_id: &str,
-    ) -> Result<Option<ApprovalRequestSummary>, StoreError> {
-        self.connection
-            .query_row(
-                "SELECT
-                    request_id, turn_id, project_root, tool, policy, status, decision, reason,
-                    arguments_json, code, workspace_id, state_revision, project_revision,
-                    requested_at, responded_at, continuation_outcome
-                 FROM approval_requests
-                 WHERE project_root = ?1 AND request_id = ?2",
-                params![project_root, request_id],
-                agent::decode_approval_request,
             )
             .optional()
             .map_err(StoreError::from)
@@ -3252,92 +3030,6 @@ mod tests {
     }
 
     #[test]
-    fn persists_agent_turns_and_approval_requests() {
-        let directory = TempDir::new().unwrap();
-        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
-        store
-            .create_agent_turn(&AgentTurnDraft {
-                turn_id: "turn_1".to_string(),
-                project_root: "D:/Rho/project".to_string(),
-                mode: "act".to_string(),
-                prompt: "请汇总 qc".to_string(),
-                model: "deepseek:deepseek-v4-flash".to_string(),
-                workspace_id: "ws_test".to_string(),
-                state_revision_before: 3,
-                project_revision_before: 1,
-            })
-            .unwrap();
-        store
-            .append_agent_turn_event(&AgentTurnEventDraft {
-                turn_id: "turn_1".to_string(),
-                event_type: "agent.user_prompt".to_string(),
-                title: "You".to_string(),
-                body: Some("请汇总 qc".to_string()),
-                status: "completed".to_string(),
-                tool: None,
-                request_id: None,
-                code: None,
-                details_json: "{}".to_string(),
-            })
-            .unwrap();
-        store
-            .create_approval_request(&ApprovalRequestDraft {
-                request_id: "req_1".to_string(),
-                turn_id: "turn_1".to_string(),
-                project_root: "D:/Rho/project".to_string(),
-                tool: "run_r".to_string(),
-                policy: "required".to_string(),
-                arguments_json: "{\"code\":\"summary(qc)\"}".to_string(),
-                code: Some("summary(qc)".to_string()),
-                workspace_id: "ws_test".to_string(),
-                state_revision: 3,
-                project_revision: 1,
-            })
-            .unwrap();
-
-        let turns = store.list_agent_turns("D:/Rho/project", None).unwrap();
-        assert_eq!(turns.len(), 1);
-        assert_eq!(turns[0].pending_request_id.as_deref(), Some("req_1"));
-
-        store
-            .resolve_approval_request(
-                "req_1",
-                &ApprovalDecisionRecord {
-                    decision: "approve".to_string(),
-                    status: "approved".to_string(),
-                    reason: None,
-                    continuation_outcome: Some("execute".to_string()),
-                },
-            )
-            .unwrap();
-        store
-            .finish_agent_turn(&AgentTurnFinish {
-                turn_id: "turn_1".to_string(),
-                status: "completed".to_string(),
-                terminal_reason: None,
-                workspace_id_after: Some("ws_test".to_string()),
-                state_revision_after: Some(4),
-                project_revision_after: Some(1),
-                final_message: Some("已完成".to_string()),
-                error_message: None,
-            })
-            .unwrap();
-
-        let detail = store
-            .get_agent_turn_detail("D:\\Rho\\project\\", "turn_1")
-            .unwrap()
-            .unwrap();
-        assert_eq!(detail.turn.status, "completed");
-        assert_eq!(detail.events.len(), 1);
-        assert_eq!(detail.approvals.len(), 1);
-        assert_eq!(detail.approvals[0].status, "approved");
-        assert_eq!(
-            detail.approvals[0].continuation_outcome.as_deref(),
-            Some("execute")
-        );
-    }
-
-    #[test]
     fn returns_bounded_recent_agent_conversation_without_the_current_turn() {
         let directory = TempDir::new().unwrap();
         let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
@@ -3360,7 +3052,6 @@ mod tests {
                     &AgentTurnDraft {
                         turn_id: turn_id.to_string(),
                         project_root: "D:/Rho/project".to_string(),
-                        mode: "act".to_string(),
                         prompt: prompt.to_string(),
                         model: "test".to_string(),
                         workspace_id: "ws_test".to_string(),
@@ -3441,7 +3132,6 @@ mod tests {
                 &AgentTurnDraft {
                     turn_id: "turn_a1".to_string(),
                     project_root: "D:/Rho/project".to_string(),
-                    mode: "ask".to_string(),
                     prompt: "Explain project A".to_string(),
                     model: "test".to_string(),
                     workspace_id: "ws_test".to_string(),
@@ -3457,7 +3147,6 @@ mod tests {
                 &AgentTurnDraft {
                     turn_id: "turn_a_competing".to_string(),
                     project_root: "D:/Rho/project".to_string(),
-                    mode: "plan".to_string(),
                     prompt: "Compete with A".to_string(),
                     model: "test".to_string(),
                     workspace_id: "ws_test".to_string(),
@@ -3479,7 +3168,6 @@ mod tests {
                 &AgentTurnDraft {
                     turn_id: "turn_b1".to_string(),
                     project_root: "D:/Rho/project".to_string(),
-                    mode: "ask".to_string(),
                     prompt: "Explain project B".to_string(),
                     model: "test".to_string(),
                     workspace_id: "ws_test".to_string(),
@@ -3495,7 +3183,6 @@ mod tests {
                 &AgentTurnDraft {
                     turn_id: "turn_wrong_project".to_string(),
                     project_root: "D:/Rho/project".to_string(),
-                    mode: "ask".to_string(),
                     prompt: "Wrong project".to_string(),
                     model: "test".to_string(),
                     workspace_id: "ws_test".to_string(),
@@ -3571,7 +3258,6 @@ mod tests {
         let existing_turn = AgentTurnDraft {
             turn_id: "duplicate_turn".to_string(),
             project_root: "D:/Rho/project".to_string(),
-            mode: "ask".to_string(),
             prompt: "Existing turn".to_string(),
             model: "test".to_string(),
             workspace_id: "ws_test".to_string(),
@@ -3607,398 +3293,6 @@ mod tests {
                 .unwrap()
                 .len(),
             1
-        );
-    }
-
-    #[test]
-    fn deletes_only_a_terminal_agent_conversation_and_cascades_its_records() {
-        let directory = TempDir::new().unwrap();
-        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
-        for conversation_id in ["conversation_delete", "conversation_keep"] {
-            store
-                .create_agent_conversation(&AgentConversationDraft {
-                    conversation_id: conversation_id.to_string(),
-                    project_root: "D:/Rho/project".to_string(),
-                    title: "New conversation".to_string(),
-                    legacy_unthreaded: false,
-                })
-                .unwrap();
-        }
-        for (conversation_id, turn_id) in [
-            ("conversation_delete", "turn_delete"),
-            ("conversation_keep", "turn_keep"),
-        ] {
-            store
-                .create_agent_turn_in_conversation(
-                    conversation_id,
-                    None,
-                    &AgentTurnDraft {
-                        turn_id: turn_id.to_string(),
-                        project_root: "D:/Rho/project".to_string(),
-                        mode: "ask".to_string(),
-                        prompt: format!("Prompt for {turn_id}"),
-                        model: "test".to_string(),
-                        workspace_id: "ws_test".to_string(),
-                        state_revision_before: 1,
-                        project_revision_before: 0,
-                    },
-                )
-                .unwrap();
-        }
-        store
-            .append_agent_turn_event(&AgentTurnEventDraft {
-                turn_id: "turn_delete".to_string(),
-                event_type: "agent.user_prompt".to_string(),
-                title: "You".to_string(),
-                body: Some("Prompt for turn_delete".to_string()),
-                status: "completed".to_string(),
-                tool: None,
-                request_id: None,
-                code: None,
-                details_json: "{}".to_string(),
-            })
-            .unwrap();
-        store
-            .create_approval_request(&ApprovalRequestDraft {
-                request_id: "req_delete".to_string(),
-                turn_id: "turn_delete".to_string(),
-                project_root: "D:/Rho/project".to_string(),
-                tool: "run_r".to_string(),
-                policy: "required".to_string(),
-                arguments_json: "{\"code\":\"x <- 1\"}".to_string(),
-                code: Some("x <- 1".to_string()),
-                workspace_id: "ws_test".to_string(),
-                state_revision: 1,
-                project_revision: 0,
-            })
-            .unwrap();
-
-        let active_delete = store
-            .delete_agent_conversation("D:/Rho/project", "conversation_delete")
-            .unwrap_err();
-        assert!(matches!(
-            active_delete,
-            StoreError::Validation(message)
-                if message == "A running Agent Conversation cannot be deleted"
-        ));
-        for turn_id in ["turn_delete", "turn_keep"] {
-            store
-                .finish_agent_turn(&AgentTurnFinish {
-                    turn_id: turn_id.to_string(),
-                    status: "completed".to_string(),
-                    terminal_reason: None,
-                    workspace_id_after: Some("ws_test".to_string()),
-                    state_revision_after: Some(1),
-                    project_revision_after: Some(0),
-                    final_message: Some("done".to_string()),
-                    error_message: None,
-                })
-                .unwrap();
-        }
-
-        assert_eq!(
-            store
-                .delete_agent_conversation("D:/Rho/project", "conversation_delete")
-                .unwrap(),
-            1
-        );
-        assert!(
-            store
-                .get_agent_conversation("D:/Rho/project", "conversation_delete")
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            store
-                .get_agent_turn_detail("D:/Rho/project", "turn_delete")
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            store
-                .get_approval_request("D:/Rho/project", "req_delete")
-                .unwrap()
-                .is_none()
-        );
-        assert_eq!(
-            store
-                .list_agent_turns_for_conversation("D:/Rho/project", "conversation_keep", None,)
-                .unwrap()
-                .len(),
-            1
-        );
-    }
-
-    #[test]
-    fn recovers_incomplete_agent_turns() {
-        let directory = TempDir::new().unwrap();
-        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
-        store
-            .create_agent_turn(&AgentTurnDraft {
-                turn_id: "turn_1".to_string(),
-                project_root: "D:/Rho/project".to_string(),
-                mode: "act".to_string(),
-                prompt: "run something".to_string(),
-                model: "test".to_string(),
-                workspace_id: "ws_test".to_string(),
-                state_revision_before: 1,
-                project_revision_before: 0,
-            })
-            .unwrap();
-        store.update_agent_turn_status("turn_1", "waiting").unwrap();
-        store
-            .create_approval_request(&ApprovalRequestDraft {
-                request_id: "req_1".to_string(),
-                turn_id: "turn_1".to_string(),
-                project_root: "D:/Rho/project".to_string(),
-                tool: "run_r".to_string(),
-                policy: "required".to_string(),
-                arguments_json: "{\"code\":\"x <- 1\"}".to_string(),
-                code: Some("x <- 1".to_string()),
-                workspace_id: "ws_test".to_string(),
-                state_revision: 1,
-                project_revision: 0,
-            })
-            .unwrap();
-        assert_eq!(store.recover_incomplete_agent_turns().unwrap(), 1);
-        assert_eq!(store.recover_incomplete_approvals().unwrap(), 1);
-        let detail = store
-            .get_agent_turn_detail("D:/Rho/project", "turn_1")
-            .unwrap()
-            .unwrap();
-        assert_eq!(detail.turn.status, "interrupted");
-        assert!(detail.turn.error_message.is_some());
-        assert_eq!(detail.approvals[0].status, "interrupted");
-    }
-
-    #[test]
-    fn interrupts_waiting_approvals_for_a_cancelled_agent_turn() {
-        let directory = TempDir::new().unwrap();
-        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
-        store
-            .create_agent_turn(&AgentTurnDraft {
-                turn_id: "turn_cancel".to_string(),
-                project_root: "D:/Rho/project".to_string(),
-                mode: "act".to_string(),
-                prompt: "run something".to_string(),
-                model: "test".to_string(),
-                workspace_id: "ws_test".to_string(),
-                state_revision_before: 1,
-                project_revision_before: 0,
-            })
-            .unwrap();
-        store
-            .create_approval_request(&ApprovalRequestDraft {
-                request_id: "req_cancel".to_string(),
-                turn_id: "turn_cancel".to_string(),
-                project_root: "D:/Rho/project".to_string(),
-                tool: "run_r".to_string(),
-                policy: "required".to_string(),
-                arguments_json: "{\"code\":\"x <- 1\"}".to_string(),
-                code: Some("x <- 1".to_string()),
-                workspace_id: "ws_test".to_string(),
-                state_revision: 1,
-                project_revision: 0,
-            })
-            .unwrap();
-
-        assert_eq!(
-            store
-                .interrupt_agent_approvals("turn_cancel", "Cancelled by user")
-                .unwrap(),
-            1
-        );
-        let detail = store
-            .get_agent_turn_detail("D:/Rho/project", "turn_cancel")
-            .unwrap()
-            .unwrap();
-        assert_eq!(detail.approvals[0].status, "interrupted");
-        assert_eq!(detail.approvals[0].decision.as_deref(), Some("cancel"));
-        assert_eq!(
-            detail.approvals[0].reason.as_deref(),
-            Some("Cancelled by user")
-        );
-        assert_eq!(
-            detail.approvals[0].continuation_outcome.as_deref(),
-            Some("user_cancelled")
-        );
-    }
-
-    #[test]
-    fn isolates_project_owned_history_and_excludes_legacy_unscoped_records() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        let mut store = Store::open(&database).unwrap();
-        for (project_root, suffix) in [("D:/projects/A", "a"), ("D:/projects/B", "b")] {
-            store
-                .create_run(&RunDraft {
-                    run_id: format!("run_{suffix}"),
-                    parent_run_id: None,
-                    project_root: project_root.to_string(),
-                    origin: "user".to_string(),
-                    request_type: "workspace.execute".to_string(),
-                    operation_class: "state_capable".to_string(),
-                    code: "stop('same failure')".to_string(),
-                    arguments_json: "{\"source_path\":\"analysis.R\"}".to_string(),
-                    source_path: Some("analysis.R".to_string()),
-                    execution_mode: Some("file".to_string()),
-                    document_version: Some(1),
-                    workspace_id: format!("ws_{suffix}"),
-                    state_revision_before: 1,
-                    project_revision_before: 1,
-                    environment_snapshot_id: None,
-                })
-                .unwrap();
-            store
-                .finish_run(&RunFinish {
-                    run_id: format!("run_{suffix}"),
-                    status: "failed".to_string(),
-                    terminal_reason: Some("r_error".to_string()),
-                    workspace_id: Some(format!("ws_{suffix}")),
-                    state_revision_after: Some(2),
-                    project_revision_after: Some(1),
-                    stdout: None,
-                    value_text: None,
-                    messages: Vec::new(),
-                    warnings: Vec::new(),
-                    error_message: Some(format!("failure {suffix}")),
-                    error_call: None,
-                    traceback: Vec::new(),
-                    environment_snapshot_id_after: None,
-                })
-                .unwrap();
-            store
-                .create_agent_turn(&AgentTurnDraft {
-                    turn_id: format!("turn_{suffix}"),
-                    project_root: project_root.to_string(),
-                    mode: "act".to_string(),
-                    prompt: format!("project {suffix} prompt"),
-                    model: "test".to_string(),
-                    workspace_id: format!("ws_{suffix}"),
-                    state_revision_before: 2,
-                    project_revision_before: 1,
-                })
-                .unwrap();
-            store
-                .create_approval_request(&ApprovalRequestDraft {
-                    request_id: format!("req_{suffix}"),
-                    turn_id: format!("turn_{suffix}"),
-                    project_root: project_root.to_string(),
-                    tool: "run_r".to_string(),
-                    policy: "required".to_string(),
-                    arguments_json: "{\"code\":\"x <- 1\"}".to_string(),
-                    code: Some("x <- 1".to_string()),
-                    workspace_id: format!("ws_{suffix}"),
-                    state_revision: 2,
-                    project_revision: 1,
-                })
-                .unwrap();
-        }
-
-        store
-            .connection
-            .execute(
-                "INSERT INTO runs(run_id, project_root, status, started_at)
-                 VALUES('run_legacy', ?1, 'failed', ?2)",
-                params![LEGACY_UNSCOPED, Utc::now().to_rfc3339()],
-            )
-            .unwrap();
-        store
-            .connection
-            .execute(
-                "INSERT INTO agent_turns(
-                    turn_id, project_root, mode, prompt, prompt_preview, model, status, started_at
-                 ) VALUES('turn_legacy', ?1, 'ask', 'legacy prompt', 'legacy prompt', 'test', 'completed', ?2)",
-                params![LEGACY_UNSCOPED, Utc::now().to_rfc3339()],
-            )
-            .unwrap();
-        store
-            .connection
-            .execute(
-                "INSERT INTO approval_requests(
-                    request_id, turn_id, project_root, tool, policy, status, arguments_json, requested_at
-                 ) VALUES('req_legacy', 'turn_legacy', ?1, 'run_r', 'required', 'pending', '{}', ?2)",
-                params![LEGACY_UNSCOPED, Utc::now().to_rfc3339()],
-            )
-            .unwrap();
-
-        let runs_a = store.list_runs("D:/projects/A", None).unwrap();
-        assert_eq!(runs_a.len(), 1);
-        assert_eq!(runs_a[0].run_id, "run_a");
-        assert_eq!(store.list_problems("D:/projects/A", None).unwrap().len(), 1);
-        assert!(
-            store
-                .get_run_detail("D:/projects/A", "run_b")
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            store
-                .get_run_detail("D:/projects/A", "run_legacy")
-                .unwrap()
-                .is_none()
-        );
-        assert_eq!(store.latest_active_run_id("D:/projects/A").unwrap(), None);
-        assert!(!store.request_cancel("D:/projects/A", "run_b").unwrap());
-
-        let turns_a = store.list_agent_turns("D:/projects/A", None).unwrap();
-        assert_eq!(turns_a.len(), 1);
-        assert_eq!(turns_a[0].turn_id, "turn_a");
-        assert_eq!(
-            store
-                .recent_agent_conversation(
-                    "D:/projects/A",
-                    "conversation_turn_a",
-                    "turn_current",
-                    8,
-                )
-                .unwrap()
-                .iter()
-                .map(|turn| turn.turn_id.as_str())
-                .collect::<Vec<_>>(),
-            Vec::<&str>::new()
-        );
-        assert!(
-            store
-                .get_agent_turn_detail("D:/projects/A", "turn_b")
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            store
-                .get_agent_turn_detail("D:/projects/A", "turn_legacy")
-                .unwrap()
-                .is_none()
-        );
-        let approvals_a = store
-            .list_approval_requests("D:/projects/A", None, None)
-            .unwrap();
-        assert_eq!(approvals_a.len(), 1);
-        assert_eq!(approvals_a[0].request_id, "req_a");
-        assert!(
-            store
-                .get_approval_request("D:/projects/A", "req_b")
-                .unwrap()
-                .is_none()
-        );
-
-        assert_eq!(store.clear_agent_history("D:/projects/A").unwrap(), 1);
-        assert!(
-            store
-                .list_agent_turns("D:/projects/A", None)
-                .unwrap()
-                .is_empty()
-        );
-        assert_eq!(
-            store.list_agent_turns("D:/projects/B", None).unwrap().len(),
-            1
-        );
-        assert!(
-            store
-                .list_approval_requests("D:/projects/B", None, None)
-                .unwrap()
-                .iter()
-                .any(|approval| approval.request_id == "req_b")
         );
     }
 
@@ -4285,7 +3579,6 @@ mod tests {
                 &AgentTurnDraft {
                     turn_id: "turn_a".to_string(),
                     project_root: "D:/projects/A".to_string(),
-                    mode: "ask".to_string(),
                     prompt: "Project A prompt".to_string(),
                     model: "test".to_string(),
                     workspace_id: "ws_test".to_string(),

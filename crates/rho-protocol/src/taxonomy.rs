@@ -55,29 +55,8 @@ pub enum DestinationClass {
     RemoteExecutor,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum PermissionPosture {
-    AskBeforeChanges,
-    AutoWithinPolicy,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum DataEgressPosture {
-    Deny,
-    ConfiguredProviderOnly,
-    AllowlistedDestinations,
-    AskForUnrestrictedDestination,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum BrokerDecisionKind {
-    Allow,
-    Ask,
-    Deny,
-}
+// PermissionPosture removed: Agent (external ACP) handles all permission logic.
+// Rho's job is to expose state and execute requests, not to gate Agent decisions.
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -85,5 +64,5 @@ pub enum NetworkPolicy {
     Deny,
     ProviderOnly,
     AllowlistedDomains,
-    UnrestrictedWithApproval,
+    Unrestricted,
 }

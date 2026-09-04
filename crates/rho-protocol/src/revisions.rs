@@ -140,10 +140,10 @@ pub struct CheckpointDescriptor {
 pub fn terminal_execution_revision_transition(
     before: RevisionStamp,
     outcome: ExecutionTerminalOutcome,
-    arbitrary_evaluation_admitted: bool,
+    may_mutate_workspace: bool,
 ) -> Result<RevisionTransition, RevisionError> {
     let advance_state =
-        arbitrary_evaluation_admitted || matches!(outcome, ExecutionTerminalOutcome::Uncertain);
+        may_mutate_workspace || matches!(outcome, ExecutionTerminalOutcome::Uncertain);
     let after = RevisionStamp {
         workspace_id: before.workspace_id.clone(),
         kernel_instance_id: before.kernel_instance_id.clone(),

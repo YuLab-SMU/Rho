@@ -31,7 +31,7 @@ impl SemanticStore {
         execution_id: &ExecutionId,
         before: RevisionStamp,
         outcome: ExecutionTerminalOutcome,
-        arbitrary_evaluation_admitted: bool,
+        may_mutate_workspace: bool,
     ) -> Result<TerminalRevisionOutcome, StoreRevisionError> {
         let tx = self.conn.transaction()?;
         let existing: Option<i64> = tx
@@ -48,7 +48,7 @@ impl SemanticStore {
             });
         }
         let transition =
-            terminal_execution_revision_transition(before, outcome, arbitrary_evaluation_admitted)?;
+            terminal_execution_revision_transition(before, outcome, may_mutate_workspace)?;
         tx.execute(
             "INSERT INTO terminal_revision_dedupe(
                 terminal_event_id, execution_id, state_revision_after, project_revision_after

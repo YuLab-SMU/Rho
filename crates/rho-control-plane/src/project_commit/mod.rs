@@ -6,39 +6,43 @@ use std::{
 };
 
 use rho_protocol::{
-    ArtifactDigest, CanonicalProjectPatch, DestinationClass, PatchOperation, ProjectRevision,
-    RevisionStamp, RevisionTransition, SemanticEventPayload,
+    ArtifactDigest, CanonicalProjectPatch, PatchOperation, ProjectRevision, RevisionStamp,
+    RevisionTransition, SemanticEventPayload,
 };
-use rho_sandbox::staging::{SealedStagedBlob, StagingArea, StagingError};
+use rho_sandbox::{
+    snapshot::{ProjectSnapshotDelta, SnapshotFileChangeKind},
+    staging::{SealedStagedBlob, StagingArea, StagingError},
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(rename_all = "snake_case")]
-pub enum HighRiskPathClass {
-    GitHook,
-    StartupProfile,
-    TaskOrBuildConfig,
-    CredentialConfig,
-    PackageActivation,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PatchApprovalBinding {
-    pub approval_id: String,
-    pub patch_digest: ArtifactDigest,
-    pub base_project_revision: ProjectRevision,
-    pub destination: DestinationClass,
-    pub expires_at_ms: u64,
-    pub high_risk_acknowledgements: BTreeSet<HighRiskPathClass>,
-}
 
 #[derive(Debug)]
 pub struct PreparedProjectPatch<'a> {
     pub patch: &'a CanonicalProjectPatch,
     pub staging: &'a StagingArea,
     pub sealed: BTreeMap<String, &'a SealedStagedBlob>,
+}
+
+#[derive(Debug)]
+pub struct StagedProjectPatch {
+    pub patch: CanonicalProjectPatch,
+    pub staging: StagingArea,
+    pub sealed: BTreeMap<String, SealedStagedBlob>,
+}
+
+impl StagedProjectPatch {
+    pub fn prepared(&self) -> PreparedProjectPatch<'_> {
+        PreparedProjectPatch {
+            patch: &self.patch,
+            staging: &self.staging,
+            sealed: self
+                .sealed
+                .iter()
+                .map(|(path, sealed)| (path.clone(), sealed))
+                .collect(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -84,10 +88,6 @@ pub enum ProjectCommitError {
         expected: ProjectRevision,
         current: ProjectRevision,
     },
-    #[error("patch approval is missing, expired, reused, or does not match exact effect")]
-    InvalidApproval,
-    #[error("high-risk project path is denied without explicit acknowledgement: {0:?}")]
-    HighRiskDenied(HighRiskPathClass),
     #[error("project path is unsafe")]
     UnsafePath,
     #[error("project path state conflicts with patch base digest: {0}")]
@@ -112,13 +112,12 @@ pub struct ProjectCommitState {
     pub last_applied_patch_digest: Option<ArtifactDigest>,
 }
 
-pub struct BrokerProjectCommitter {
+pub struct ProjectCommitter {
     project_root: PathBuf,
     state: ProjectCommitState,
-    used_approvals: BTreeSet<String>,
 }
 
-impl BrokerProjectCommitter {
+impl ProjectCommitter {
     pub fn open(
         project_root: impl AsRef<Path>,
         revision: RevisionStamp,
@@ -130,7 +129,6 @@ impl BrokerProjectCommitter {
                 revision,
                 last_applied_patch_digest: None,
             },
-            used_approvals: BTreeSet::new(),
         })
     }
 
@@ -138,42 +136,29 @@ impl BrokerProjectCommitter {
         &self.state
     }
 
-    pub fn bind_approval(
-        &self,
-        patch: &CanonicalProjectPatch,
-        approval_id: impl Into<String>,
-        destination: DestinationClass,
-        expires_at_ms: u64,
-        high_risk_acknowledgements: BTreeSet<HighRiskPathClass>,
-    ) -> Result<PatchApprovalBinding, ProjectCommitError> {
-        Ok(PatchApprovalBinding {
-            approval_id: approval_id.into(),
-            patch_digest: patch_digest(patch)?,
-            base_project_revision: patch.base_project_revision,
-            destination,
-            expires_at_ms,
-            high_risk_acknowledgements,
-        })
-    }
-
+    /// Commit a well-formed requested patch. Rho validates execution identity
+    /// and integrity but does not make a permission decision.
     pub fn commit(
         &mut self,
         prepared: &PreparedProjectPatch<'_>,
-        approval: &PatchApprovalBinding,
-        destination: DestinationClass,
-        now_ms: u64,
     ) -> Result<ProjectCommitOutcome, ProjectCommitError> {
-        self.commit_with_fault(prepared, approval, destination, now_ms, None)
+        let digest = self.validated_patch_digest(prepared)?;
+        self.commit_validated(prepared, digest, None)
     }
 
     pub fn commit_with_fault(
         &mut self,
         prepared: &PreparedProjectPatch<'_>,
-        approval: &PatchApprovalBinding,
-        destination: DestinationClass,
-        now_ms: u64,
         fault: Option<ProjectCommitFault>,
     ) -> Result<ProjectCommitOutcome, ProjectCommitError> {
+        let digest = self.validated_patch_digest(prepared)?;
+        self.commit_validated(prepared, digest, fault)
+    }
+
+    fn validated_patch_digest(
+        &self,
+        prepared: &PreparedProjectPatch<'_>,
+    ) -> Result<ArtifactDigest, ProjectCommitError> {
         prepared
             .patch
             .validate()
@@ -184,30 +169,19 @@ impl BrokerProjectCommitter {
                 current: self.state.revision.project_revision,
             });
         }
-        let digest = patch_digest(prepared.patch)?;
-        if self.used_approvals.contains(&approval.approval_id)
-            || approval.patch_digest != digest
-            || approval.base_project_revision != prepared.patch.base_project_revision
-            || approval.destination != destination
-            || now_ms > approval.expires_at_ms
-        {
-            return Err(ProjectCommitError::InvalidApproval);
-        }
-        for operation in &prepared.patch.operations {
-            for path in operation_paths(operation) {
-                if let Some(class) = classify_high_risk_path(path)
-                    && !approval.high_risk_acknowledgements.contains(&class)
-                {
-                    return Err(ProjectCommitError::HighRiskDenied(class));
-                }
-            }
-        }
+        patch_digest(prepared.patch)
+    }
+
+    fn commit_validated(
+        &mut self,
+        prepared: &PreparedProjectPatch<'_>,
+        digest: ArtifactDigest,
+        fault: Option<ProjectCommitFault>,
+    ) -> Result<ProjectCommitOutcome, ProjectCommitError> {
         self.validate_bases(prepared.patch)?;
         if fault == Some(ProjectCommitFault::DiskFull) {
             return Err(ProjectCommitError::DiskFull);
         }
-        self.used_approvals.insert(approval.approval_id.clone());
-
         let journal_id = format!("journal_{}", prepared.patch.patch_id);
         let mut journal = CommitJournal {
             journal_id: journal_id.clone(),
@@ -559,40 +533,92 @@ fn reconcile_outcome(
     }
 }
 
+pub fn stage_snapshot_delta(
+    delta: &ProjectSnapshotDelta,
+    staging_root: impl AsRef<Path>,
+    patch_id: impl Into<String>,
+) -> Result<StagedProjectPatch, ProjectCommitError> {
+    if delta.changes.is_empty() {
+        return Err(ProjectCommitError::UnsafePath);
+    }
+    let mut staging = StagingArea::open(staging_root, rho_protocol::MAX_PATCH_FILE_BYTES)?;
+    let mut sealed = BTreeMap::new();
+    let mut operations = Vec::with_capacity(delta.changes.len());
+    for change in &delta.changes {
+        let operation = match change.kind {
+            SnapshotFileChangeKind::Create | SnapshotFileChangeKind::Replace => {
+                let bytes = change.bytes.as_deref().ok_or_else(|| {
+                    ProjectCommitError::MissingStagedBlob(change.relative_path.clone())
+                })?;
+                let staged = staging.write_and_seal(&change.relative_path, bytes)?;
+                if change.after_sha256.as_deref() != Some(staged.reference().digest.as_str()) {
+                    return Err(ProjectCommitError::MissingStagedBlob(
+                        change.relative_path.clone(),
+                    ));
+                }
+                let reference = staged.reference().clone();
+                sealed.insert(change.relative_path.clone(), staged);
+                let mode = change.mode.ok_or(ProjectCommitError::UnsafePath)?;
+                if change.kind == SnapshotFileChangeKind::Create {
+                    PatchOperation::Create {
+                        path: change.relative_path.clone(),
+                        staged: reference,
+                        mode,
+                        hunk_count: 1,
+                    }
+                } else {
+                    PatchOperation::Replace {
+                        path: change.relative_path.clone(),
+                        base_digest: ArtifactDigest::new(
+                            change
+                                .before_sha256
+                                .clone()
+                                .ok_or(ProjectCommitError::UnsafePath)?,
+                        )
+                        .map_err(|_| ProjectCommitError::UnsafePath)?,
+                        staged: reference,
+                        mode,
+                        hunk_count: 1,
+                    }
+                }
+            }
+            SnapshotFileChangeKind::Delete => PatchOperation::Delete {
+                path: change.relative_path.clone(),
+                base_digest: ArtifactDigest::new(
+                    change
+                        .before_sha256
+                        .clone()
+                        .ok_or(ProjectCommitError::UnsafePath)?,
+                )
+                .map_err(|_| ProjectCommitError::UnsafePath)?,
+            },
+        };
+        operations.push(operation);
+    }
+    let staging_root_digest = staging.staging_root_digest()?;
+    let patch = CanonicalProjectPatch::new(
+        patch_id,
+        delta.base_project_revision,
+        staging_root_digest,
+        if cfg!(windows) {
+            rho_protocol::PatchPathSemantics::CaseInsensitive
+        } else {
+            rho_protocol::PatchPathSemantics::CaseSensitive
+        },
+        operations,
+    )
+    .map_err(|_| ProjectCommitError::UnsafePath)?;
+    Ok(StagedProjectPatch {
+        patch,
+        staging,
+        sealed,
+    })
+}
+
 pub fn patch_digest(patch: &CanonicalProjectPatch) -> Result<ArtifactDigest, ProjectCommitError> {
     let bytes = serde_json::to_vec(patch)?;
     ArtifactDigest::new(format!("sha256:{:x}", Sha256::digest(bytes)))
         .map_err(|_| ProjectCommitError::UnsafePath)
-}
-
-pub fn classify_high_risk_path(path: &str) -> Option<HighRiskPathClass> {
-    let lower = path.to_ascii_lowercase();
-    if lower.starts_with(".git/hooks/") || lower.contains("/.git/hooks/") {
-        Some(HighRiskPathClass::GitHook)
-    } else if matches!(
-        lower.as_str(),
-        ".rprofile" | ".renviron" | "rprofile.site" | "renviron.site"
-    ) || lower.ends_with("/.rprofile")
-        || lower.ends_with("/.renviron")
-    {
-        Some(HighRiskPathClass::StartupProfile)
-    } else if lower.contains("credential")
-        || lower.contains("secrets")
-        || lower.ends_with(".pem")
-        || lower.ends_with(".key")
-    {
-        Some(HighRiskPathClass::CredentialConfig)
-    } else if lower == "renv/activate.r" || lower.ends_with("/renv/activate.r") {
-        Some(HighRiskPathClass::PackageActivation)
-    } else if lower.starts_with(".github/workflows/")
-        || lower == "makefile"
-        || lower == "taskfile.yml"
-        || lower.ends_with("/tasks.json")
-    {
-        Some(HighRiskPathClass::TaskOrBuildConfig)
-    } else {
-        None
-    }
 }
 
 fn operation_paths(operation: &PatchOperation) -> Vec<&str> {
@@ -659,8 +685,7 @@ pub fn project_commit_boundary() -> (&'static [&'static str], &'static [&'static
     (
         &[
             "revision_validation",
-            "exact_patch_approval",
-            "high_risk_policy",
+            "requested_project_commit",
             "journaled_commit",
             "project_revision_provenance",
         ],

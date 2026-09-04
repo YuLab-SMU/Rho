@@ -2,7 +2,6 @@
 //!
 //! These tests exercise the newly added methods on `ProjectQueryService`:
 //! - `compare_runs`
-//! - `list_approval_requests`
 //! - `list_agent_conversations`
 //! - `list_agent_turns`
 //! - `get_agent_turn_detail`
@@ -13,9 +12,7 @@
 //! Tauri/DOM state and that project isolation, normalization, and bounded
 //! results are correct.
 
-use rho_store::{
-    AgentTurnDraft, ApprovalRequestDraft, ProjectQueryService, RunDraft, RunFinish, Store,
-};
+use rho_store::{AgentTurnDraft, ProjectQueryService, RunDraft, RunFinish, Store};
 use tempfile::tempdir;
 
 // ── Test fixtures ────────────────────────────────────────────────────────
@@ -70,36 +67,6 @@ fn create_run(store: &mut Store, project_root: &str, run_id: &str, has_error: bo
         .unwrap();
 }
 
-fn create_approval_request(store: &mut Store, project_root: &str, request_id: &str, turn_id: &str) {
-    // First create the agent turn (required by FK constraint on approval_requests).
-    store
-        .create_agent_turn(&AgentTurnDraft {
-            turn_id: turn_id.into(),
-            project_root: project_root.into(),
-            mode: "chat".into(),
-            prompt: "test prompt".into(),
-            model: "gpt-4".into(),
-            workspace_id: "ws_01".into(),
-            state_revision_before: 1,
-            project_revision_before: 1,
-        })
-        .unwrap();
-    store
-        .create_approval_request(&ApprovalRequestDraft {
-            request_id: request_id.into(),
-            turn_id: turn_id.into(),
-            project_root: project_root.into(),
-            tool: "file_edit".into(),
-            policy: "auto_approve".into(),
-            arguments_json: "{}".into(),
-            code: None,
-            workspace_id: "ws_01".into(),
-            state_revision: 1,
-            project_revision: 1,
-        })
-        .unwrap();
-}
-
 // ── list_agent_conversations ──────────────────────────────────────────────
 
 #[test]
@@ -111,7 +78,6 @@ fn scenario_list_agent_conversations() {
         .create_agent_turn(&AgentTurnDraft {
             turn_id: "turn_001".into(),
             project_root: "/projects/alpha".into(),
-            mode: "chat".into(),
             prompt: "What is 1+1?".into(),
             model: "gpt-4".into(),
             workspace_id: "ws_01".into(),
@@ -123,7 +89,6 @@ fn scenario_list_agent_conversations() {
         .create_agent_turn(&AgentTurnDraft {
             turn_id: "turn_002".into(),
             project_root: "/projects/alpha".into(),
-            mode: "chat".into(),
             prompt: "What is 2+2?".into(),
             model: "gpt-4".into(),
             workspace_id: "ws_01".into(),
@@ -135,7 +100,6 @@ fn scenario_list_agent_conversations() {
         .create_agent_turn(&AgentTurnDraft {
             turn_id: "turn_003".into(),
             project_root: "/projects/beta".into(),
-            mode: "chat".into(),
             prompt: "Hello".into(),
             model: "gpt-4".into(),
             workspace_id: "ws_01".into(),
@@ -169,7 +133,6 @@ fn scenario_list_agent_conversations_normalizes_trailing_slash() {
         .create_agent_turn(&AgentTurnDraft {
             turn_id: "turn_001".into(),
             project_root: "/projects/alpha".into(),
-            mode: "chat".into(),
             prompt: "Hello".into(),
             model: "gpt-4".into(),
             workspace_id: "ws_01".into(),
@@ -183,49 +146,6 @@ fn scenario_list_agent_conversations_normalizes_trailing_slash() {
         .list_agent_conversations("/projects/alpha/", None)
         .unwrap();
     assert_eq!(convs.len(), 1);
-}
-
-// ── list_approval_requests ────────────────────────────────────────────────
-
-#[test]
-fn scenario_list_approval_requests() {
-    let (mut store, _dir) = setup_store();
-    create_approval_request(&mut store, "/projects/alpha", "appr_001", "turn_001");
-
-    let service = ProjectQueryService::new(&store);
-
-    let all = service
-        .list_approval_requests("/projects/alpha", None, None)
-        .unwrap();
-    assert_eq!(all.len(), 1);
-    assert_eq!(all[0].request_id, "appr_001");
-
-    let waiting = service
-        .list_approval_requests("/projects/alpha", None, Some("waiting"))
-        .unwrap();
-    assert_eq!(waiting.len(), 1);
-
-    let other = service
-        .list_approval_requests("/projects/alpha", None, Some("responded"))
-        .unwrap();
-    assert!(other.is_empty());
-
-    let foreign = service
-        .list_approval_requests("/projects/beta", None, None)
-        .unwrap();
-    assert!(foreign.is_empty());
-}
-
-#[test]
-fn scenario_list_approval_requests_normalizes_trailing_slash() {
-    let (mut store, _dir) = setup_store();
-    create_approval_request(&mut store, "/projects/alpha", "appr_001", "turn_001");
-
-    let service = ProjectQueryService::new(&store);
-    let requests = service
-        .list_approval_requests("/projects/alpha/", None, None)
-        .unwrap();
-    assert_eq!(requests.len(), 1);
 }
 
 // ── get_agent_turn_detail ─────────────────────────────────────────────────
@@ -247,7 +167,6 @@ fn scenario_get_agent_turn_detail_foreign_project() {
         .create_agent_turn(&AgentTurnDraft {
             turn_id: "turn_001".into(),
             project_root: "/projects/alpha".into(),
-            mode: "chat".into(),
             prompt: "Hello".into(),
             model: "gpt-4".into(),
             workspace_id: "ws_01".into(),
@@ -277,7 +196,6 @@ fn scenario_list_agent_turns_and_detail_are_conversation_and_project_scoped() {
             .create_agent_turn(&AgentTurnDraft {
                 turn_id: turn_id.into(),
                 project_root: project_root.into(),
-                mode: "chat".into(),
                 prompt: "Hello".into(),
                 model: "gpt-4".into(),
                 workspace_id: "ws_01".into(),

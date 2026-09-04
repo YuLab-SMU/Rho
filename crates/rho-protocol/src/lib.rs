@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 
-pub mod agent;
 pub mod artifacts;
 pub mod authority;
 pub mod capabilities;
@@ -11,7 +10,6 @@ pub mod execution;
 pub mod ids;
 pub mod operation;
 pub mod patches;
-pub mod policy;
 pub mod remote_cas;
 pub mod results;
 pub mod revisions;
@@ -20,7 +18,6 @@ pub mod taxonomy;
 pub mod versioning;
 pub mod workbench;
 
-pub use agent::*;
 pub use artifacts::*;
 pub use authority::*;
 pub use capabilities::*;
@@ -31,7 +28,6 @@ pub use execution::*;
 pub use ids::*;
 pub use operation::*;
 pub use patches::*;
-pub use policy::*;
 pub use remote_cas::*;
 pub use results::*;
 pub use revisions::*;

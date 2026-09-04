@@ -118,7 +118,7 @@ mod tests {
     fn boundary_does_not_expose_authority_or_execution() {
         let text = crate::boundary();
         assert!(text.contains("does_not_own"));
-        assert!(text.contains("approval"));
+        assert!(text.contains("permission decisions"));
         assert!(text.contains("execution"));
     }
 

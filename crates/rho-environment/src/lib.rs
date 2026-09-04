@@ -1,7 +1,7 @@
 //! Environment realization semantics and provider request boundaries.
 //!
 //! This crate normalizes observations and plans. It deliberately owns no
-//! approval, process spawning, secret materialization, Store connection,
+//! permission decisions, process spawning, secret materialization, Store connection,
 //! Workspace restart or remote transport.
 
 #![forbid(unsafe_code)]
@@ -43,5 +43,5 @@ pub use remote::{
 };
 
 pub fn boundary() -> &'static str {
-    "rho-environment owns semantics and provider requests; it does_not_own approval, execution, persistence, secrets, or Workspace mutation"
+    "rho-environment owns semantics and provider requests; it does_not_own permission decisions, execution, persistence, secrets, or Workspace mutation"
 }

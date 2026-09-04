@@ -5,9 +5,9 @@
 //! or internal transport fields are exposed.
 
 use rho_protocol::workbench::{
-    ApprovalSummary, EnvironmentReceipt, MAX_PAGE_SIZE, OutputSummary, ProblemSummary,
-    ProjectSummary, ProvenanceLink, RunDetail, RunSummary, WORKBENCH_PROTOCOL_VERSION,
-    WorkbenchCapabilities, WorkbenchPage, WorkbenchPageInfo, WorkspaceStatus,
+    EnvironmentReceipt, MAX_PAGE_SIZE, OutputSummary, ProblemSummary, ProjectSummary,
+    ProvenanceLink, RunDetail, RunSummary, WORKBENCH_PROTOCOL_VERSION, WorkbenchCapabilities,
+    WorkbenchPage, WorkbenchPageInfo, WorkspaceStatus,
 };
 use rusqlite::{OptionalExtension, params};
 
@@ -53,8 +53,6 @@ where
                 "output_get".into(),
                 "environment_receipt_list".into(),
                 "environment_receipt_get".into(),
-                "approval_list".into(),
-                "approval_get".into(),
                 "provenance_get".into(),
             ],
             entity_types: vec![
@@ -65,7 +63,6 @@ where
                 "ProblemSummary".into(),
                 "OutputSummary".into(),
                 "EnvironmentReceipt".into(),
-                "ApprovalSummary".into(),
                 "ProvenanceLink".into(),
             ],
             max_page_size: MAX_PAGE_SIZE,
@@ -734,137 +731,6 @@ where
         Ok(op)
     }
 
-    // ── Approvals ────────────────────────────────────────────────────────────
-
-    fn map_approval_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ApprovalSummary> {
-        Ok(ApprovalSummary {
-            request_id: row.get(0)?,
-            turn_id: row.get(1)?,
-            tool: row.get(2)?,
-            policy: row.get(3)?,
-            status: row.get(4)?,
-            decision: row.get(5)?,
-            reason: row.get(6)?,
-            requested_at: row.get(7)?,
-            responded_at: row.get(8)?,
-        })
-    }
-
-    /// Paginated list of approval requests (inspection only — no decide/continue/cancel).
-    pub fn workbench_approval_list(
-        &self,
-        project_root: &str,
-        after: Option<&str>,
-        page_size: usize,
-    ) -> Result<WorkbenchPage<ApprovalSummary>, StoreError> {
-        let page_size = clamp_page_size(page_size);
-
-        // Cursor: "requested_at|request_id" — compound cursor for deterministic pagination.
-        let (cursor_clause, cursor_params): (&str, Vec<String>) = match after {
-            Some(cursor) => {
-                let parts: Vec<&str> = cursor.splitn(2, '|').collect();
-                if parts.len() == 2 {
-                    (
-                        "AND (requested_at < ?3 OR (requested_at = ?3 AND request_id < ?4))",
-                        vec![parts[0].to_string(), parts[1].to_string()],
-                    )
-                } else {
-                    return Err(StoreError::Sqlite(rusqlite::Error::InvalidParameterName(
-                        "invalid cursor format".into(),
-                    )));
-                }
-            }
-            None => ("", vec![]),
-        };
-
-        let sql = format!(
-            "SELECT request_id, turn_id, tool, policy, status, decision,
-                    reason, requested_at, responded_at
-             FROM approval_requests
-             WHERE project_root = ?1 {}
-             ORDER BY requested_at DESC, request_id DESC
-             LIMIT ?2",
-            cursor_clause
-        );
-
-        let mut statement = self.connection.prepare(&sql)?;
-
-        let rows: Vec<ApprovalSummary> = if cursor_params.len() == 2 {
-            statement
-                .query_map(
-                    params![
-                        project_root,
-                        page_size as i64 + 1,
-                        &cursor_params[0],
-                        &cursor_params[1]
-                    ],
-                    |row| Self::map_approval_row(row),
-                )?
-                .collect::<Result<Vec<_>, _>>()?
-        } else {
-            statement
-                .query_map(params![project_root, page_size as i64 + 1], |row| {
-                    Self::map_approval_row(row)
-                })?
-                .collect::<Result<Vec<_>, _>>()?
-        };
-
-        let has_more = rows.len() > page_size;
-        let items: Vec<ApprovalSummary> = if has_more {
-            rows.into_iter().take(page_size).collect()
-        } else {
-            rows
-        };
-
-        let after_cursor = items
-            .last()
-            .map(|a| format!("{}|{}", a.requested_at, a.request_id));
-
-        Ok(WorkbenchPage {
-            items,
-            page: WorkbenchPageInfo {
-                after: after_cursor,
-                before: None,
-                has_more,
-                total_count: None,
-                page_size,
-            },
-        })
-    }
-
-    /// Get a single approval request.
-    pub fn workbench_approval_get(
-        &self,
-        project_root: &str,
-        request_id: &str,
-    ) -> Result<Option<ApprovalSummary>, StoreError> {
-        let record = self
-            .connection
-            .query_row(
-                "SELECT request_id, turn_id, tool, policy, status,
-                        decision, reason, requested_at, responded_at
-                 FROM approval_requests
-                 WHERE project_root = ?1 AND request_id = ?2",
-                params![project_root, request_id],
-                |row| {
-                    Ok(ApprovalSummary {
-                        request_id: row.get(0)?,
-                        turn_id: row.get(1)?,
-                        tool: row.get(2)?,
-                        policy: row.get(3)?,
-                        status: row.get(4)?,
-                        decision: row.get(5)?,
-                        reason: row.get(6)?,
-                        requested_at: row.get(7)?,
-                        responded_at: row.get(8)?,
-                    })
-                },
-            )
-            .optional()?;
-
-        Ok(record)
-    }
-
     // ── Provenance ───────────────────────────────────────────────────────────
 
     /// Get provenance link for a given resource.
@@ -1435,13 +1301,6 @@ mod tests {
         assert!(
             store
                 .workbench_output_list("/test/empty", None, 50)
-                .unwrap()
-                .items
-                .is_empty()
-        );
-        assert!(
-            store
-                .workbench_approval_list("/test/empty", None, 50)
                 .unwrap()
                 .items
                 .is_empty()

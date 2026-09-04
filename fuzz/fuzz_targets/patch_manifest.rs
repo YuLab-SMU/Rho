@@ -11,6 +11,6 @@ fuzz_target!(|data: &[u8]| {
         patch.validate().expect("successful parse remains valid");
         let summary = patch.exact_effect_summary();
         assert!(summary.paths.len() <= rho_protocol::MAX_PATCH_OPERATIONS * 2);
-        // Parsing never calls BrokerProjectCommitter or touches a filesystem.
+        // Parsing never calls ProjectCommitter or touches a filesystem.
     }
 });

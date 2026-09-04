@@ -1,6 +1,6 @@
 use rho_protocol::{
-    AUTHORITY_CONTRACT_VERSION, AgentTurnRefV1, ApprovalReceiptV1, ArtifactReceiptV1,
-    AuthorityDigest, AuthorityKindV1, AuthorityReceiptBatchV1, AuthorityReceiptV1, AuthorityRefV1,
+    AUTHORITY_CONTRACT_VERSION, AgentTurnRefV1, ArtifactReceiptV1, AuthorityDigest,
+    AuthorityKindV1, AuthorityReceiptBatchV1, AuthorityReceiptV1, AuthorityRefV1,
     AuthorityStatusV1, EnvironmentReceiptV1, MAX_RECEIPT_BATCH_ITEMS, ProjectId, ProjectRevision,
     RevisionRefV1, RunReceiptV1, StateRevision,
 };
@@ -121,7 +121,6 @@ impl<C: StoreConnection> Store<C> {
         match kind {
             "run" => self.run_receipt(project_root, project_id, authority_id),
             "artifact" => self.artifact_receipt(project_root, project_id, authority_id),
-            "approval" => self.approval_receipt(project_root, project_id, authority_id),
             "environment_snapshot" => {
                 self.environment_receipt(project_root, project_id, authority_id)
             }
@@ -205,33 +204,6 @@ impl<C: StoreConnection> Store<C> {
                 .transpose()?,
             revision,
             captured_at: artifact.created_at,
-        })))
-    }
-
-    fn approval_receipt(
-        &self,
-        project_root: &str,
-        project_id: &ProjectId,
-        request_id: &str,
-    ) -> Result<Option<AuthorityReceiptV1>, StoreError> {
-        let Some(approval) = self.get_approval_request(project_root, request_id)? else {
-            return Ok(None);
-        };
-        let effect_digest = AuthorityDigest::new(format!(
-            "sha256:{:x}",
-            Sha256::digest(approval.arguments_json.as_bytes())
-        ))
-        .map_err(|error| StoreError::Validation(error.to_string()))?;
-        Ok(Some(AuthorityReceiptV1::Approval(ApprovalReceiptV1 {
-            reference: authority_ref(project_id, AuthorityKindV1::Approval, &approval.request_id)?,
-            status: approval_status(&approval.status, approval.decision.as_deref()),
-            agent_turn_ref: Some(authority_ref(
-                project_id,
-                AuthorityKindV1::AgentTurn,
-                &approval.turn_id,
-            )?),
-            effect_digest,
-            captured_at: approval.responded_at.unwrap_or(approval.requested_at),
         })))
     }
 
@@ -335,18 +307,6 @@ fn run_status(status: &str) -> AuthorityStatusV1 {
         "failed" => AuthorityStatusV1::Failed,
         "cancelled" | "canceled" | "interrupted" => AuthorityStatusV1::Cancelled,
         _ => AuthorityStatusV1::Uncertain,
-    }
-}
-
-fn approval_status(status: &str, decision: Option<&str>) -> AuthorityStatusV1 {
-    match decision {
-        Some("approve" | "approved" | "allow") => AuthorityStatusV1::Approved,
-        Some("reject" | "rejected" | "deny") => AuthorityStatusV1::Rejected,
-        _ => match status {
-            "cancelled" | "canceled" | "interrupted" => AuthorityStatusV1::Cancelled,
-            "completed" | "committed" => AuthorityStatusV1::Committed,
-            _ => AuthorityStatusV1::Pending,
-        },
     }
 }
 

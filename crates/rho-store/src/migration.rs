@@ -103,7 +103,6 @@ pub(crate) fn current_schema_sql() -> &'static str {
     CREATE TABLE agent_turns (
         turn_id TEXT PRIMARY KEY,
         project_root TEXT NOT NULL CHECK (project_root <> ''),
-        mode TEXT NOT NULL,
         prompt TEXT NOT NULL,
         prompt_preview TEXT NOT NULL,
         model TEXT NOT NULL,
@@ -152,25 +151,6 @@ pub(crate) fn current_schema_sql() -> &'static str {
         request_id TEXT,
         code TEXT,
         details_json TEXT NOT NULL DEFAULT '{}',
-        FOREIGN KEY(turn_id) REFERENCES agent_turns(turn_id) ON DELETE CASCADE
-    );
-    CREATE TABLE approval_requests (
-        request_id TEXT PRIMARY KEY,
-        turn_id TEXT NOT NULL,
-        project_root TEXT NOT NULL CHECK (project_root <> ''),
-        tool TEXT NOT NULL,
-        policy TEXT NOT NULL,
-        status TEXT NOT NULL,
-        decision TEXT,
-        reason TEXT,
-        arguments_json TEXT NOT NULL,
-        code TEXT,
-        workspace_id TEXT,
-        state_revision INTEGER,
-        project_revision INTEGER,
-        requested_at TEXT NOT NULL,
-        responded_at TEXT,
-        continuation_outcome TEXT,
         FOREIGN KEY(turn_id) REFERENCES agent_turns(turn_id) ON DELETE CASCADE
     );
     CREATE TABLE plot_artifacts (
@@ -229,24 +209,13 @@ pub(crate) fn current_schema_sql() -> &'static str {
         canonical_digest TEXT NOT NULL,
         created_at TEXT NOT NULL
     );
-    CREATE TABLE environment_plan_reviews (
+    CREATE TABLE environment_plans (
         project_root TEXT NOT NULL CHECK (project_root <> ''),
         plan_id TEXT NOT NULL CHECK (plan_id <> ''),
         environment_id TEXT NOT NULL CHECK (environment_id <> ''),
         canonical_plan_json TEXT NOT NULL CHECK (json_valid(canonical_plan_json)),
-        status TEXT NOT NULL CHECK (
-            status IN ('materialized', 'approved', 'rejected', 'dispatched', 'expired', 'superseded')
-        ),
-        approval_lease_id TEXT,
-        operation_id TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY(project_root, plan_id),
-        CHECK (
-            (status = 'materialized' AND approval_lease_id IS NULL AND operation_id IS NULL) OR
-            (status IN ('approved', 'dispatched') AND approval_lease_id IS NOT NULL AND operation_id IS NOT NULL) OR
-            (status IN ('rejected', 'expired', 'superseded'))
-        )
+        recorded_at TEXT NOT NULL,
+        PRIMARY KEY(project_root, plan_id)
     );
     CREATE TABLE environment_operation_receipts (
         receipt_id TEXT PRIMARY KEY,
@@ -308,7 +277,7 @@ pub(crate) fn current_schema_sql() -> &'static str {
         seq INTEGER PRIMARY KEY AUTOINCREMENT,
         project_root TEXT NOT NULL CHECK (project_root <> ''),
         authority_kind TEXT NOT NULL CHECK (
-            authority_kind IN ('run', 'artifact', 'approval', 'environment_snapshot', 'agent_turn')
+            authority_kind IN ('run', 'artifact', 'environment_snapshot', 'agent_turn')
         ),
         authority_id TEXT NOT NULL CHECK (authority_id <> ''),
         changed_at TEXT NOT NULL
@@ -328,14 +297,6 @@ pub(crate) fn current_schema_sql() -> &'static str {
     CREATE TRIGGER authority_artifact_update AFTER UPDATE ON artifact_records BEGIN
         INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
         VALUES(NEW.project_root, 'artifact', NEW.artifact_id, NEW.created_at);
-    END;
-    CREATE TRIGGER authority_approval_insert AFTER INSERT ON approval_requests BEGIN
-        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
-        VALUES(NEW.project_root, 'approval', NEW.request_id, NEW.requested_at);
-    END;
-    CREATE TRIGGER authority_approval_update AFTER UPDATE ON approval_requests BEGIN
-        INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
-        VALUES(NEW.project_root, 'approval', NEW.request_id, COALESCE(NEW.responded_at, NEW.requested_at));
     END;
     CREATE TRIGGER authority_environment_insert AFTER INSERT ON environment_snapshots BEGIN
         INSERT INTO authority_receipt_log(project_root, authority_kind, authority_id, changed_at)
@@ -361,10 +322,6 @@ pub(crate) fn current_schema_sql() -> &'static str {
         ON agent_conversation_turns(conversation_id, turn_id);
     CREATE INDEX idx_agent_turn_events_turn_id
         ON agent_turn_events(turn_id, id);
-    CREATE INDEX idx_approval_requests_turn_id
-        ON approval_requests(turn_id, requested_at DESC);
-    CREATE INDEX idx_approval_requests_status
-        ON approval_requests(status, requested_at DESC);
     CREATE INDEX idx_plot_artifacts_created_at
         ON plot_artifacts(created_at DESC);
     CREATE INDEX idx_plot_artifacts_run_id
@@ -383,8 +340,8 @@ pub(crate) fn current_schema_sql() -> &'static str {
         ON environment_desired_revisions(project_root, created_at DESC);
     CREATE INDEX idx_environment_realization_project_created
         ON environment_realization_revisions(project_root, created_at DESC);
-    CREATE INDEX idx_environment_plan_reviews_project_status
-        ON environment_plan_reviews(project_root, status, updated_at DESC);
+    CREATE INDEX idx_environment_plans_project_recorded
+        ON environment_plans(project_root, recorded_at DESC);
     CREATE INDEX idx_environment_receipts_project_recorded
         ON environment_operation_receipts(project_root, recorded_at DESC);
     CREATE INDEX idx_environment_journal_project_updated
@@ -397,8 +354,6 @@ pub(crate) fn current_schema_sql() -> &'static str {
         ON runs(project_root, started_at DESC);
     CREATE INDEX idx_agent_turns_project_started
         ON agent_turns(project_root, started_at DESC);
-    CREATE INDEX idx_approval_requests_project_status
-        ON approval_requests(project_root, status, requested_at DESC);
     CREATE INDEX idx_authority_receipt_log_project_seq
         ON authority_receipt_log(project_root, seq);
     "
@@ -1455,49 +1410,6 @@ pub(crate) fn create_runtime_output_schema(connection: &Connection) -> Result<()
             )
         );
 
-        CREATE TABLE IF NOT EXISTS agent_turn_context_items (
-            context_item_id TEXT PRIMARY KEY CHECK (
-                length(context_item_id) BETWEEN 1 AND 128
-            ),
-            turn_id TEXT NOT NULL,
-            project_root TEXT NOT NULL CHECK (project_root <> ''),
-            ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-            source_kind TEXT NOT NULL CHECK (length(source_kind) BETWEEN 1 AND 64),
-            source_id TEXT CHECK (
-                source_id IS NULL OR length(CAST(source_id AS BLOB)) <= 512
-            ),
-            source_revision TEXT CHECK (
-                source_revision IS NULL OR
-                length(CAST(source_revision AS BLOB)) <= 512
-            ),
-            source_sha256 TEXT NOT NULL CHECK (
-                length(source_sha256) = 64 AND
-                source_sha256 = lower(source_sha256) AND
-                source_sha256 NOT GLOB '*[^0-9a-f]*'
-            ),
-            trust_class TEXT NOT NULL CHECK (length(trust_class) BETWEEN 1 AND 64),
-            capacity_source TEXT NOT NULL CHECK (
-                capacity_source IN ('catalog', 'user', 'conservative')
-            ),
-            original_bytes INTEGER NOT NULL CHECK (original_bytes >= 0),
-            included_bytes INTEGER NOT NULL CHECK (
-                included_bytes >= 0 AND included_bytes <= original_bytes
-            ),
-            estimated_tokens INTEGER NOT NULL CHECK (estimated_tokens >= 0),
-            disposition TEXT NOT NULL CHECK (
-                disposition IN (
-                    'complete', 'projected', 'truncated', 'omitted',
-                    'unavailable', 'rejected'
-                )
-            ),
-            reason_code TEXT CHECK (
-                reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 128
-            ),
-            UNIQUE(turn_id, ordinal),
-            FOREIGN KEY(turn_id, project_root)
-                REFERENCES agent_turns(turn_id, project_root) ON DELETE CASCADE
-        );
-
         CREATE TABLE IF NOT EXISTS project_runtime_output_policies (
             project_root TEXT NOT NULL PRIMARY KEY CHECK (project_root <> ''),
             revision INTEGER NOT NULL CHECK (revision >= 0),
@@ -1526,8 +1438,6 @@ pub(crate) fn create_runtime_output_schema(connection: &Connection) -> Result<()
             ON runtime_executions(project_root, workspace_id, started_at DESC);
         CREATE INDEX IF NOT EXISTS idx_runtime_output_project_execution_sequence
             ON runtime_output_chunks(project_root, execution_id, sequence);
-        CREATE INDEX IF NOT EXISTS idx_agent_turn_context_project_turn
-            ON agent_turn_context_items(project_root, turn_id, ordinal);
         ",
     )?;
     Ok(())
@@ -1537,7 +1447,6 @@ pub(crate) fn assert_runtime_output_schema(connection: &Connection) -> Result<()
     for table in [
         "runtime_executions",
         "runtime_output_chunks",
-        "agent_turn_context_items",
         "project_runtime_output_policies",
     ] {
         assert_table_exists(connection, table)?;
@@ -1550,7 +1459,6 @@ pub(crate) fn assert_runtime_output_schema(connection: &Connection) -> Result<()
         "idx_runtime_executions_console_started",
         "idx_runtime_executions_workspace_started",
         "idx_runtime_output_project_execution_sequence",
-        "idx_agent_turn_context_project_turn",
     ] {
         assert_index_exists(connection, index)?;
     }
@@ -1581,20 +1489,10 @@ pub(crate) fn assert_runtime_output_schema(connection: &Connection) -> Result<()
             "foreignkey(execution_id,project_root)referencesruntime_executions",
         ],
     )?;
-    assert_table_sql_contains(
-        connection,
-        "agent_turn_context_items",
-        &[
-            "included_bytes<=original_bytes",
-            "capacity_sourcein('catalog','user','conservative')",
-            "foreignkey(turn_id,project_root)referencesagent_turns(turn_id,project_root)",
-        ],
-    )?;
-
     let foreign_key_failures: i64 = connection.query_row(
         "SELECT COUNT(*) FROM pragma_foreign_key_check
          WHERE \"table\" IN (
-            'runtime_executions', 'runtime_output_chunks', 'agent_turn_context_items',
+            'runtime_executions', 'runtime_output_chunks',
             'project_runtime_output_policies'
          )",
         [],
@@ -1602,7 +1500,7 @@ pub(crate) fn assert_runtime_output_schema(connection: &Connection) -> Result<()
     )?;
     if foreign_key_failures != 0 {
         return Err(StoreError::MigrationRejected {
-            message: "Runtime output or Agent context foreign keys are inconsistent".to_string(),
+            message: "Runtime output foreign keys are inconsistent".to_string(),
             outcome: MigrationOutcome::rejected(
                 Some(SCHEMA_VERSION),
                 None,

@@ -7,8 +7,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-rho-control-plane = { path = "../rho-control-plane" }
-rho-execution = { path = "../rho-execution" }
 rho-protocol = { path = "../rho-protocol" }
 serde.workspace = true
 serde_json.workspace = true

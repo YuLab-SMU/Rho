@@ -15,7 +15,6 @@ const MAX_APPEND_CHUNKS: usize = 1024;
 const MAX_PAGE_CHUNKS: usize = 200;
 const MIN_PAGE_BYTES: usize = 64 * 1024;
 const MAX_PAGE_BYTES: usize = 1024 * 1024;
-const MAX_CONTEXT_ITEMS: usize = 512;
 const MAX_SUBMITTED_CODE_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -235,50 +234,6 @@ pub struct RuntimeExecutionDeleteResult {
     pub outcome: RuntimeExecutionMutationOutcome,
     #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub deleted_output_chunk_count: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-pub struct AgentTurnContextItemDraft {
-    pub context_item_id: String,
-    #[specta(type = crate::RuntimeOutputIpcNumber)]
-    pub ordinal: i64,
-    pub source_kind: String,
-    pub source_id: Option<String>,
-    pub source_revision: Option<String>,
-    pub source_sha256: String,
-    pub trust_class: String,
-    pub capacity_source: String,
-    #[specta(type = crate::RuntimeOutputIpcNumber)]
-    pub original_bytes: i64,
-    #[specta(type = crate::RuntimeOutputIpcNumber)]
-    pub included_bytes: i64,
-    #[specta(type = crate::RuntimeOutputIpcNumber)]
-    pub estimated_tokens: i64,
-    pub disposition: String,
-    pub reason_code: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-pub struct AgentTurnContextItem {
-    pub context_item_id: String,
-    pub turn_id: String,
-    pub project_root: String,
-    #[specta(type = crate::RuntimeOutputIpcNumber)]
-    pub ordinal: i64,
-    pub source_kind: String,
-    pub source_id: Option<String>,
-    pub source_revision: Option<String>,
-    pub source_sha256: String,
-    pub trust_class: String,
-    pub capacity_source: String,
-    #[specta(type = crate::RuntimeOutputIpcNumber)]
-    pub original_bytes: i64,
-    #[specta(type = crate::RuntimeOutputIpcNumber)]
-    pub included_bytes: i64,
-    #[specta(type = crate::RuntimeOutputIpcNumber)]
-    pub estimated_tokens: i64,
-    pub disposition: String,
-    pub reason_code: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1289,18 +1244,6 @@ where
                 deleted_output_chunk_count: 0,
             });
         }
-        let referenced: i64 = transaction.query_row(
-            "SELECT COUNT(*) FROM agent_turn_context_items
-             WHERE project_root = ?1 AND source_kind = 'runtime_output'
-               AND (source_id = ?2 OR substr(source_id, 1, length(?2) + 1) = ?2 || ':')",
-            params![project_root, execution_id],
-            |row| row.get(0),
-        )?;
-        if referenced > 0 {
-            return Err(StoreError::Validation(
-                "Runtime execution is retained by an Agent context receipt".to_string(),
-            ));
-        }
         let output_count: i64 = transaction.query_row(
             "SELECT COUNT(*) FROM runtime_output_chunks
              WHERE project_root = ?1 AND execution_id = ?2",
@@ -1316,92 +1259,6 @@ where
             outcome: RuntimeExecutionMutationOutcome::Applied,
             deleted_output_chunk_count: output_count,
         })
-    }
-
-    pub fn record_agent_turn_context_items(
-        &mut self,
-        project_root: &str,
-        turn_id: &str,
-        drafts: &[AgentTurnContextItemDraft],
-    ) -> Result<Vec<AgentTurnContextItem>, StoreError> {
-        validate_project_root(project_root)?;
-        validate_identifier(turn_id, "turn_id")?;
-        if drafts.len() > MAX_CONTEXT_ITEMS {
-            return Err(StoreError::Validation(
-                "Agent context receipt cannot exceed 512 items".to_string(),
-            ));
-        }
-        validate_context_items(drafts)?;
-        let transaction = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let turn_exists = transaction
-            .query_row(
-                "SELECT 1 FROM agent_turns WHERE project_root = ?1 AND turn_id = ?2",
-                params![project_root, turn_id],
-                |_row| Ok(()),
-            )
-            .optional()?
-            .is_some();
-        if !turn_exists {
-            return Err(StoreError::Validation(
-                "Agent Turn is unavailable in the active project".to_string(),
-            ));
-        }
-        let existing_count: i64 = transaction.query_row(
-            "SELECT COUNT(*) FROM agent_turn_context_items
-             WHERE project_root = ?1 AND turn_id = ?2",
-            params![project_root, turn_id],
-            |row| row.get(0),
-        )?;
-        if existing_count != 0 {
-            return Err(StoreError::Validation(
-                "Agent context receipt is immutable once recorded".to_string(),
-            ));
-        }
-        for draft in drafts {
-            transaction.execute(
-                "INSERT INTO agent_turn_context_items(
-                    context_item_id, turn_id, project_root, ordinal, source_kind,
-                    source_id, source_revision, source_sha256, trust_class,
-                    capacity_source, original_bytes, included_bytes,
-                    estimated_tokens, disposition, reason_code
-                 ) VALUES(
-                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                    ?13, ?14, ?15
-                 )",
-                params![
-                    draft.context_item_id,
-                    turn_id,
-                    project_root,
-                    draft.ordinal,
-                    draft.source_kind,
-                    draft.source_id,
-                    draft.source_revision,
-                    draft.source_sha256,
-                    draft.trust_class,
-                    draft.capacity_source,
-                    draft.original_bytes,
-                    draft.included_bytes,
-                    draft.estimated_tokens,
-                    draft.disposition,
-                    draft.reason_code,
-                ],
-            )?;
-        }
-        let items = load_context_items(&transaction, project_root, turn_id)?;
-        transaction.commit()?;
-        Ok(items)
-    }
-
-    pub fn list_agent_turn_context_items(
-        &self,
-        project_root: &str,
-        turn_id: &str,
-    ) -> Result<Vec<AgentTurnContextItem>, StoreError> {
-        validate_project_root(project_root)?;
-        validate_identifier(turn_id, "turn_id")?;
-        load_context_items(&self.connection, project_root, turn_id)
     }
 }
 
@@ -1916,94 +1773,6 @@ fn decode_chunk(row: &Row<'_>) -> rusqlite::Result<RuntimeOutputChunk> {
     })
 }
 
-fn load_context_items(
-    connection: &rusqlite::Connection,
-    project_root: &str,
-    turn_id: &str,
-) -> Result<Vec<AgentTurnContextItem>, StoreError> {
-    let mut statement = connection.prepare(
-        "SELECT context_item_id, turn_id, project_root, ordinal, source_kind,
-                source_id, source_revision, source_sha256, trust_class,
-                capacity_source, original_bytes, included_bytes,
-                estimated_tokens, disposition, reason_code
-         FROM agent_turn_context_items
-         WHERE project_root = ?1 AND turn_id = ?2
-         ORDER BY ordinal ASC",
-    )?;
-    let items = statement
-        .query_map(params![project_root, turn_id], decode_context_item)?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(items)
-}
-
-fn decode_context_item(row: &Row<'_>) -> rusqlite::Result<AgentTurnContextItem> {
-    Ok(AgentTurnContextItem {
-        context_item_id: row.get(0)?,
-        turn_id: row.get(1)?,
-        project_root: row.get(2)?,
-        ordinal: row.get(3)?,
-        source_kind: row.get(4)?,
-        source_id: row.get(5)?,
-        source_revision: row.get(6)?,
-        source_sha256: row.get(7)?,
-        trust_class: row.get(8)?,
-        capacity_source: row.get(9)?,
-        original_bytes: row.get(10)?,
-        included_bytes: row.get(11)?,
-        estimated_tokens: row.get(12)?,
-        disposition: row.get(13)?,
-        reason_code: row.get(14)?,
-    })
-}
-
-fn validate_context_items(drafts: &[AgentTurnContextItemDraft]) -> Result<(), StoreError> {
-    let mut ids = BTreeSet::new();
-    let mut ordinals = BTreeSet::new();
-    for draft in drafts {
-        validate_identifier(&draft.context_item_id, "context_item_id")?;
-        if draft.ordinal < 0
-            || !ids.insert(draft.context_item_id.as_str())
-            || !ordinals.insert(draft.ordinal)
-        {
-            return Err(StoreError::Validation(
-                "Agent context receipt contains invalid or duplicate identity".to_string(),
-            ));
-        }
-        validate_label(&draft.source_kind, "source_kind")?;
-        validate_optional_text(draft.source_id.as_deref(), 512, "source_id")?;
-        validate_optional_text(draft.source_revision.as_deref(), 512, "source_revision")?;
-        validate_sha256(&draft.source_sha256, "source_sha256")?;
-        validate_label(&draft.trust_class, "trust_class")?;
-        if !matches!(
-            draft.capacity_source.as_str(),
-            "catalog" | "user" | "conservative"
-        ) {
-            return Err(StoreError::Validation(
-                "Agent context capacity source is unsupported".to_string(),
-            ));
-        }
-        if draft.original_bytes < 0
-            || draft.included_bytes < 0
-            || draft.included_bytes > draft.original_bytes
-            || draft.estimated_tokens < 0
-        {
-            return Err(StoreError::Validation(
-                "Agent context receipt byte/token accounting is invalid".to_string(),
-            ));
-        }
-        if !matches!(
-            draft.disposition.as_str(),
-            "complete" | "projected" | "truncated" | "omitted" | "unavailable" | "rejected"
-        ) {
-            return Err(StoreError::Validation(
-                "Agent context disposition is unsupported".to_string(),
-            ));
-        }
-        validate_optional_text(draft.reason_code.as_deref(), 128, "reason_code")?;
-    }
-    Ok(())
-}
-
 fn validate_project_root(project_root: &str) -> Result<(), StoreError> {
     if project_root.is_empty() || normalize_project_root(project_root) != project_root {
         return Err(StoreError::Validation(
@@ -2097,7 +1866,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::{AgentTurnDraft, RunDraft};
+    use crate::RunDraft;
 
     fn execution(project_root: &str) -> RuntimeExecutionDraft {
         RuntimeExecutionDraft {
@@ -2438,7 +2207,7 @@ mod tests {
     }
 
     #[test]
-    fn manual_prune_keeps_ordered_tombstones_and_delete_respects_context_and_project_scope() {
+    fn manual_prune_keeps_ordered_tombstones_and_delete_is_project_scoped() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         let mut store = Store::open(&database).unwrap();
@@ -2506,46 +2275,10 @@ mod tests {
             "inline_text"
         );
 
-        store
-            .create_agent_turn(&AgentTurnDraft {
-                turn_id: "turn.prune".to_string(),
-                project_root: "D:/projects/A".to_string(),
-                mode: "ask".to_string(),
-                prompt: "review output".to_string(),
-                model: "fake".to_string(),
-                workspace_id: "workspace.a".to_string(),
-                state_revision_before: 1,
-                project_revision_before: 1,
-            })
+        let deleted_a = store
+            .delete_runtime_execution_record("D:/projects/A", "execution.shared")
             .unwrap();
-        store
-            .record_agent_turn_context_items(
-                "D:/projects/A",
-                "turn.prune",
-                &[AgentTurnContextItemDraft {
-                    context_item_id: "context.prune".to_string(),
-                    ordinal: 0,
-                    source_kind: "runtime_output".to_string(),
-                    source_id: Some("execution.shared:1-2".to_string()),
-                    source_revision: Some("2".to_string()),
-                    source_sha256: "a".repeat(64),
-                    trust_class: "explicit_project_data".to_string(),
-                    capacity_source: "catalog".to_string(),
-                    original_bytes: 10,
-                    included_bytes: 10,
-                    estimated_tokens: 3,
-                    disposition: "complete".to_string(),
-                    reason_code: None,
-                }],
-            )
-            .unwrap();
-        assert!(
-            store
-                .delete_runtime_execution_record("D:/projects/A", "execution.shared")
-                .unwrap_err()
-                .to_string()
-                .contains("Agent context receipt")
-        );
+        assert_eq!(deleted_a.outcome, RuntimeExecutionMutationOutcome::Applied);
         let deleted = store
             .delete_runtime_execution_record("D:/projects/B", "execution.shared")
             .unwrap();
@@ -2561,7 +2294,7 @@ mod tests {
             store
                 .get_runtime_execution("D:/projects/A", "execution.shared")
                 .unwrap()
-                .is_some()
+                .is_none()
         );
     }
 
@@ -2619,58 +2352,5 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(other.status, "admitted");
-    }
-
-    #[test]
-    fn context_receipts_are_immutable_and_project_scoped() {
-        let directory = TempDir::new().unwrap();
-        let database = directory.path().join("rho.sqlite");
-        let mut store = Store::open(&database).unwrap();
-        store
-            .create_agent_turn(&AgentTurnDraft {
-                turn_id: "turn.a".to_string(),
-                project_root: "D:/projects/A".to_string(),
-                mode: "ask".to_string(),
-                prompt: "inspect this output".to_string(),
-                model: "fake".to_string(),
-                workspace_id: "workspace.a".to_string(),
-                state_revision_before: 1,
-                project_revision_before: 1,
-            })
-            .unwrap();
-        let draft = AgentTurnContextItemDraft {
-            context_item_id: "context.a".to_string(),
-            ordinal: 0,
-            source_kind: "runtime_output".to_string(),
-            source_id: Some("execution.shared:1-2".to_string()),
-            source_revision: Some("2".to_string()),
-            source_sha256: "a".repeat(64),
-            trust_class: "explicit_project_data".to_string(),
-            capacity_source: "catalog".to_string(),
-            original_bytes: 100,
-            included_bytes: 80,
-            estimated_tokens: 20,
-            disposition: "projected".to_string(),
-            reason_code: None,
-        };
-        let items = store
-            .record_agent_turn_context_items(
-                "D:/projects/A",
-                "turn.a",
-                std::slice::from_ref(&draft),
-            )
-            .unwrap();
-        assert_eq!(items.len(), 1);
-        assert!(
-            store
-                .list_agent_turn_context_items("D:/projects/B", "turn.a")
-                .unwrap()
-                .is_empty()
-        );
-        assert!(
-            store
-                .record_agent_turn_context_items("D:/projects/A", "turn.a", &[draft])
-                .is_err()
-        );
     }
 }

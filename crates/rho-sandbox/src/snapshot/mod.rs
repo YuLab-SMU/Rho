@@ -75,6 +75,115 @@ impl ProjectSnapshot {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SnapshotFileChangeKind {
+    Create,
+    Replace,
+    Delete,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotFileChange {
+    pub kind: SnapshotFileChangeKind,
+    pub relative_path: String,
+    pub before_sha256: Option<String>,
+    pub after_sha256: Option<String>,
+    pub byte_size: u64,
+    pub mode: Option<u32>,
+    pub bytes: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectSnapshotDelta {
+    pub base_snapshot_id: String,
+    pub base_project_revision: ProjectRevision,
+    pub changes: Vec<SnapshotFileChange>,
+    pub total_staged_bytes: u64,
+}
+
+/// Compare a disposable working copy with the immutable snapshot from which it
+/// was created. The original ignore policy must remain unchanged so an Agent
+/// cannot hide edits by rewriting `.rhoignore` during the turn.
+pub fn diff_project_snapshot(
+    baseline: &ProjectSnapshot,
+    working_root: impl AsRef<Path>,
+    limits: SnapshotLimits,
+) -> Result<ProjectSnapshotDelta, SnapshotError> {
+    let current = build_project_snapshot(working_root, baseline.manifest.project_revision, limits)?;
+    if current.manifest.policy_digest != baseline.manifest.policy_digest {
+        return Err(SnapshotError::IgnorePolicyRace);
+    }
+
+    let before = baseline
+        .manifest
+        .files
+        .iter()
+        .map(|entry| (entry.relative_path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let after = current
+        .manifest
+        .files
+        .iter()
+        .map(|entry| (entry.relative_path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let paths = before
+        .keys()
+        .chain(after.keys())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut changes = Vec::new();
+    let mut total_staged_bytes = 0_u64;
+    for path in paths {
+        let previous = before.get(path).copied();
+        let next = after.get(path).copied();
+        let change = match (previous, next) {
+            (None, Some(next)) => Some(SnapshotFileChange {
+                kind: SnapshotFileChangeKind::Create,
+                relative_path: path.to_string(),
+                before_sha256: None,
+                after_sha256: Some(next.sha256.clone()),
+                byte_size: next.byte_size,
+                mode: Some(next.mode),
+                bytes: current.bytes.get(path).cloned(),
+            }),
+            (Some(previous), None) => Some(SnapshotFileChange {
+                kind: SnapshotFileChangeKind::Delete,
+                relative_path: path.to_string(),
+                before_sha256: Some(previous.sha256.clone()),
+                after_sha256: None,
+                byte_size: 0,
+                mode: None,
+                bytes: None,
+            }),
+            (Some(previous), Some(next))
+                if previous.sha256 != next.sha256 || previous.mode != next.mode =>
+            {
+                Some(SnapshotFileChange {
+                    kind: SnapshotFileChangeKind::Replace,
+                    relative_path: path.to_string(),
+                    before_sha256: Some(previous.sha256.clone()),
+                    after_sha256: Some(next.sha256.clone()),
+                    byte_size: next.byte_size,
+                    mode: Some(next.mode),
+                    bytes: current.bytes.get(path).cloned(),
+                })
+            }
+            _ => None,
+        };
+        if let Some(change) = change {
+            total_staged_bytes = total_staged_bytes.saturating_add(change.byte_size);
+            changes.push(change);
+        }
+    }
+    Ok(ProjectSnapshotDelta {
+        base_snapshot_id: baseline.manifest.snapshot_id.clone(),
+        base_project_revision: baseline.manifest.project_revision,
+        changes,
+        total_staged_bytes,
+    })
+}
+
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum SnapshotError {
     #[error("project snapshot root is unavailable")]

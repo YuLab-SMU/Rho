@@ -1,31 +1,13 @@
 #![forbid(unsafe_code)]
-//! Target owner for Broker admission, policy authority and service orchestration.
+//! Typed capability dispatch, journaled project commits and passive observation.
 
-pub mod agent_port;
-pub mod broker;
 pub mod capability_registry;
-pub mod composition;
-pub mod controlled_mutation;
-pub mod environment_operation;
-pub mod information_flow;
-pub mod policy;
-pub mod policy_engine;
+pub mod operation_monitor;
 pub mod project_commit;
-pub mod security;
 
-pub use agent_port::*;
-pub use broker::*;
 pub use capability_registry::*;
-pub use composition::*;
-pub use controlled_mutation::*;
-pub use environment_operation::*;
-pub use information_flow::*;
-pub use policy::*;
-pub use policy_engine::*;
+pub use operation_monitor::*;
 pub use project_commit::*;
-pub use security::*;
-
-use rho_protocol::{BrokerDecisionKind, PolicyDecision, PolicyInput};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ControlPlaneBoundary {
@@ -36,19 +18,15 @@ pub struct ControlPlaneBoundary {
 pub fn boundary() -> ControlPlaneBoundary {
     ControlPlaneBoundary {
         owns: &[
-            "broker_admission",
-            "policy_decision",
-            "capability_dispatch",
-            "service_orchestration",
+            "capability_contract_validation",
+            "journaled_project_commit",
+            "passive_operation_observation",
         ],
-        does_not_own: &["agent_strategy", "executor_mechanics", "ui_projection"],
+        does_not_own: &[
+            "agent_strategy",
+            "permission_decisions",
+            "executor_mechanics",
+            "ui_projection",
+        ],
     }
-}
-
-pub fn deny_policy(input: &PolicyInput, reason_code: impl Into<String>) -> PolicyDecision {
-    PolicyDecision::new(
-        input.operation.operation_id.clone(),
-        BrokerDecisionKind::Deny,
-        reason_code,
-    )
 }

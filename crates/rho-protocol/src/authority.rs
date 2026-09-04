@@ -21,7 +21,6 @@ pub enum AuthorityKindV1 {
     Run,
     Job,
     Artifact,
-    Approval,
     Patch,
     Revision,
     EnvironmentSnapshot,
@@ -41,8 +40,6 @@ pub enum AuthorityStatusV1 {
     Uncertain,
     Cancelled,
     Committed,
-    Approved,
-    Rejected,
     Missing,
     Stale,
 }
@@ -337,37 +334,6 @@ impl ArtifactReceiptV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ApprovalReceiptV1 {
-    pub reference: AuthorityRefV1,
-    pub status: AuthorityStatusV1,
-    pub agent_turn_ref: Option<AuthorityRefV1>,
-    pub effect_digest: AuthorityDigest,
-    pub captured_at: String,
-}
-
-impl ApprovalReceiptV1 {
-    pub fn validate(&self) -> Result<(), AuthorityContractError> {
-        self.reference.expect_kind(AuthorityKindV1::Approval)?;
-        validate_status(
-            AuthorityKindV1::Approval,
-            self.status,
-            &[
-                AuthorityStatusV1::Pending,
-                AuthorityStatusV1::Approved,
-                AuthorityStatusV1::Rejected,
-                AuthorityStatusV1::Cancelled,
-                AuthorityStatusV1::Committed,
-            ],
-        )?;
-        if let Some(reference) = &self.agent_turn_ref {
-            reference.expect_kind(AuthorityKindV1::AgentTurn)?;
-            ensure_same_project(&self.reference, reference)?;
-        }
-        validate_timestamp(&self.captured_at)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EnvironmentReceiptV1 {
     pub reference: AuthorityRefV1,
     pub digest: AuthorityDigest,
@@ -435,7 +401,6 @@ impl AgentTurnRefV1 {
 pub enum AuthorityReceiptV1 {
     Run(RunReceiptV1),
     Artifact(ArtifactReceiptV1),
-    Approval(ApprovalReceiptV1),
     Environment(EnvironmentReceiptV1),
     SourceAnchor(SourceAnchorV1),
     Finding(FindingReceiptV1),
@@ -447,7 +412,6 @@ impl AuthorityReceiptV1 {
         match self {
             Self::Run(value) => value.validate(),
             Self::Artifact(value) => value.validate(),
-            Self::Approval(value) => value.validate(),
             Self::Environment(value) => value.validate(),
             Self::SourceAnchor(value) => value.validate(),
             Self::Finding(value) => value.validate(),
@@ -459,7 +423,6 @@ impl AuthorityReceiptV1 {
         match self {
             Self::Run(value) => &value.reference,
             Self::Artifact(value) => &value.reference,
-            Self::Approval(value) => &value.reference,
             Self::Environment(value) => &value.reference,
             Self::SourceAnchor(value) => &value.reference,
             Self::Finding(value) => &value.reference,

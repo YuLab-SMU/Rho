@@ -4150,7 +4150,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.18",
  "tokio",
  "tokio-util",
 ]
@@ -4189,13 +4188,8 @@ dependencies = [
 name = "rho-control-plane"
 version = "0.4.1-dev.22"
 dependencies = [
- "rho-artifact-store",
- "rho-environment",
- "rho-execution",
  "rho-protocol",
  "rho-sandbox",
- "rho-secret-broker",
- "rho-store",
  "serde",
  "serde_json",
  "sha2",
@@ -4239,6 +4233,7 @@ dependencies = [
  "rho-evidence-graph",
  "rho-extension-runtime",
  "rho-kernel",
+ "rho-mcp",
  "rho-protocol",
  "rho-sandbox",
  "rho-server",
@@ -4274,16 +4269,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "rho-event-hub"
-version = "0.4.1-dev.22"
-dependencies = [
- "rho-protocol",
- "serde",
- "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -4357,7 +4342,6 @@ dependencies = [
  "anyhow",
  "clap",
  "rho-control-plane",
- "rho-protocol",
  "serde",
  "serde_json",
 ]
@@ -4394,8 +4378,6 @@ dependencies = [
 name = "rho-runner"
 version = "0.4.1-dev.22"
 dependencies = [
- "rho-artifact-store",
- "rho-execution",
  "rho-protocol",
  "serde",
  "serde_json",
@@ -4474,24 +4456,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-telemetry"
-version = "0.4.1-dev.22"
-dependencies = [
- "rho-protocol",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "rho-test-support"
-version = "0.4.1-dev.22"
-dependencies = [
- "rho-protocol",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "rho-ui-contract"
 version = "0.4.1-dev.22"
 dependencies = [
@@ -4517,8 +4481,6 @@ dependencies = [
 name = "rho-workspace"
 version = "0.4.1-dev.22"
 dependencies = [
- "rho-control-plane",
- "rho-execution",
  "rho-protocol",
  "serde",
  "serde_json",

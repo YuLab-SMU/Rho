@@ -38,7 +38,7 @@
   "provenance": {
     "requested_by": "user_main",
     "capability_id": "execution.run",
-    "policy_decision_id": "policy_decision_golden",
+    "request_id": "request_golden",
     "source_revision": "workspace_main/kernel_a/8/3"
   },
   "retry_class": "non_idempotent",

@@ -47,8 +47,6 @@ fn request(url: &str, mode: NetworkAccessMode) -> NetworkRequest {
         url: url.to_string(),
         data_class: DataClass::ProjectInternal,
         mode,
-        approval: None,
-        now_ms: 1000,
         response_byte_limit: 1024,
     }
 }
@@ -247,20 +245,12 @@ fn network_resolution_rejects_any_private_answer_before_packet() {
 }
 
 #[test]
-fn network_unrestricted_approval_binds_exact_turn_data_origin_expiry_and_single_use() {
-    let approval = UnrestrictedNetworkApproval {
-        approval_id: "approval_network".to_string(),
-        turn_id: TurnId::new("turn_network").unwrap(),
-        destination_origin: "https://target.example:443".to_string(),
-        data_class: DataClass::ProjectConfidential,
-        expires_at_ms: 2000,
-    };
+fn network_unrestricted_requires_no_rho_approval() {
     let mut exact = request(
         "https://target.example/data",
-        NetworkAccessMode::UnrestrictedWithApproval,
+        NetworkAccessMode::Unrestricted,
     );
     exact.data_class = DataClass::ProjectConfidential;
-    exact.approval = Some(approval.clone());
     let mut enforcer = NetworkEnforcer::new(true);
     let mut first_resolver = resolver("target.example");
     let mut connector = FakeConnector {
@@ -278,28 +268,6 @@ fn network_unrestricted_approval_binds_exact_turn_data_origin_expiry_and_single_
             .unwrap()
             .body,
         b"ok"
-    );
-    let mut second_resolver = resolver("target.example");
-    assert_eq!(
-        enforcer
-            .execute(&exact, &mut second_resolver, &mut connector)
-            .unwrap_err(),
-        NetworkEnforcementError::InvalidApproval
-    );
-
-    let mut wrong = exact;
-    wrong.turn_id = TurnId::new("turn_other").unwrap();
-    wrong.approval = Some(approval);
-    let mut fresh_enforcer = NetworkEnforcer::new(true);
-    assert_eq!(
-        fresh_enforcer
-            .execute(
-                &wrong,
-                &mut resolver("target.example"),
-                &mut FakeConnector::default()
-            )
-            .unwrap_err(),
-        NetworkEnforcementError::InvalidApproval
     );
 }
 

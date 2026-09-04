@@ -68,51 +68,6 @@ fn run_r_declares_workspace_mutation_and_non_idempotent_retry() {
 }
 
 #[test]
-fn policy_input_golden_json_round_trips_with_operation_context() {
-    let operation = OperationContext {
-        operation_id: id("operation_run_r_1"),
-        expected_revisions: expected_revisions(),
-        causality: causality(),
-    };
-    let input = PolicyInput::new(
-        Actor {
-            kind: ActorKind::AgentProvider,
-            id: "provider:aisdk".to_string(),
-        },
-        operation,
-        id(RUN_R_CAPABILITY),
-        json!({"code": "x <- 1"}),
-        id("workspace_main"),
-        ProviderCapabilitySnapshot {
-            provider_id: id("provider_aisdk"),
-            snapshot_digest:
-                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                    .to_string(),
-            capability_ids: vec![id(RUN_R_CAPABILITY)],
-        },
-    );
-
-    let value = serde_json::to_value(Versioned::new(input.clone())).unwrap();
-    assert_eq!(value["schema_version"], CANONICAL_SCHEMA_VERSION);
-    assert_eq!(value["body"]["schema_version"], CANONICAL_SCHEMA_VERSION);
-    assert_eq!(value["body"]["capability_id"], RUN_R_CAPABILITY);
-    assert_eq!(
-        value["body"]["operation"]["operation_id"],
-        "operation_run_r_1"
-    );
-    assert_eq!(
-        value["body"]["operation"]["causality"]["trace_id"],
-        "trace_full_1"
-    );
-    assert_eq!(value["body"]["permission_posture"], "ask_before_changes");
-    assert_eq!(value["body"]["data_class"], "project_confidential");
-    assert_eq!(value["body"]["destination"], "local_workspace");
-
-    let decoded: PolicyInput = decode_versioned_value(value).unwrap();
-    assert_eq!(decoded, input);
-}
-
-#[test]
 fn unknown_schema_version_is_rejected_before_body_deserialization() {
     let payload = json!({
         "schema_version": 99,
@@ -193,35 +148,6 @@ fn capability_request_carries_expected_revision_and_destination() {
         42
     );
     assert_eq!(value["destination"], "local_workspace");
-}
-
-#[test]
-fn agent_provider_prompt_request_is_revision_bound_and_provider_neutral() {
-    let provider_snapshot = AgentProviderSnapshot {
-        provider_id: id("provider_external"),
-        provider_version: "1.0.0".to_string(),
-        capability_ids: vec![id(RUN_R_CAPABILITY)],
-        supports_resume: true,
-        supports_cancel: true,
-        max_payload_bytes: 4096,
-    };
-    let turn = TurnRequest::new(
-        id("session_1"),
-        id("turn_1"),
-        "compare cluster 3 and cluster 7",
-        expected_revisions(),
-        provider_snapshot,
-    );
-    let request = AgentProviderRequest::Prompt { request: turn };
-
-    let value = serde_json::to_value(request).unwrap();
-    assert_eq!(value["type"], "prompt");
-    assert_eq!(
-        value["request"]["expected_revisions"]["workspace_id"],
-        "workspace_main"
-    );
-    assert!(value.get("acp_method").is_none());
-    assert!(value.get("provider_enum").is_none());
 }
 
 #[test]

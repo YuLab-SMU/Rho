@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use thiserror::Error;
 
 pub const SEMANTIC_SCHEMA_VERSION: i64 = 1;
-pub const SEMANTIC_SCHEMA_FINGERPRINT: &str = "rho.semantic.baseline.v1.p4-03.2026-08-30";
+pub const SEMANTIC_SCHEMA_FINGERPRINT: &str = "rho.semantic.baseline.v1.external-acp.2026-09-04";
 pub const MAX_SEMANTIC_PAYLOAD_BYTES: i64 = 512 * 1024;
 
 const BASELINE_SQL: &str = r#"
@@ -22,9 +22,8 @@ CREATE TABLE IF NOT EXISTS events (
   stream_seq INTEGER NOT NULL CHECK (stream_seq >= 0),
   schema_version INTEGER NOT NULL CHECK (schema_version = 1),
   event_type TEXT NOT NULL CHECK (event_type IN (
-    'message_completed', 'plan_replaced', 'plan_step_transition',
-    'capability_requested', 'session_changed', 'turn_completed', 'turn_failed',
-    'policy_decision_recorded', 'execution_state_changed', 'revision_advanced',
+    'message_completed', 'capability_requested', 'session_changed',
+    'turn_completed', 'turn_failed', 'execution_state_changed', 'revision_advanced',
     'artifact_committed', 'recovery_recorded', 'security_violation'
   )),
   priority TEXT NOT NULL CHECK (priority IN ('p0', 'p1', 'p2', 'p3')),
@@ -60,69 +59,6 @@ CREATE TABLE IF NOT EXISTS sessions (
   current_state TEXT NOT NULL,
   created_event_id TEXT NOT NULL REFERENCES events(event_id)
 );
-CREATE TABLE IF NOT EXISTS turns (
-  turn_id TEXT PRIMARY KEY NOT NULL,
-  session_id TEXT NOT NULL REFERENCES sessions(session_id),
-  state TEXT NOT NULL,
-  goal_digest TEXT NOT NULL,
-  opened_event_id TEXT NOT NULL REFERENCES events(event_id),
-  terminal_event_id TEXT REFERENCES events(event_id)
-);
-CREATE TABLE IF NOT EXISTS plans (
-  plan_id TEXT PRIMARY KEY NOT NULL,
-  turn_id TEXT NOT NULL REFERENCES turns(turn_id),
-  state TEXT NOT NULL,
-  replaced_by_plan_id TEXT REFERENCES plans(plan_id),
-  source_event_id TEXT NOT NULL REFERENCES events(event_id)
-);
-CREATE TABLE IF NOT EXISTS steps (
-  step_id TEXT PRIMARY KEY NOT NULL,
-  plan_id TEXT NOT NULL REFERENCES plans(plan_id),
-  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-  state TEXT NOT NULL,
-  label TEXT NOT NULL,
-  source_event_id TEXT NOT NULL REFERENCES events(event_id),
-  UNIQUE (plan_id, ordinal)
-);
-CREATE TABLE IF NOT EXISTS tool_calls (
-  tool_call_id TEXT PRIMARY KEY NOT NULL,
-  turn_id TEXT NOT NULL REFERENCES turns(turn_id),
-  capability_id TEXT NOT NULL,
-  operation_id TEXT NOT NULL,
-  state TEXT NOT NULL,
-  expected_state_revision INTEGER,
-  expected_project_revision INTEGER,
-  source_event_id TEXT NOT NULL REFERENCES events(event_id),
-  UNIQUE (operation_id)
-);
-CREATE TABLE IF NOT EXISTS approvals (
-  approval_id TEXT PRIMARY KEY NOT NULL,
-  operation_id TEXT NOT NULL,
-  capability_id TEXT NOT NULL,
-  effect_class TEXT NOT NULL,
-  destination_class TEXT NOT NULL,
-  state TEXT NOT NULL,
-  source_event_id TEXT NOT NULL REFERENCES events(event_id),
-  decision_event_id TEXT REFERENCES events(event_id),
-  UNIQUE (operation_id, capability_id)
-);
-CREATE TABLE IF NOT EXISTS executions (
-  execution_id TEXT PRIMARY KEY NOT NULL,
-  operation_id TEXT NOT NULL,
-  capability_id TEXT NOT NULL,
-  state TEXT NOT NULL,
-  source_event_id TEXT NOT NULL REFERENCES events(event_id),
-  terminal_event_id TEXT REFERENCES events(event_id),
-  UNIQUE (operation_id)
-);
-CREATE TABLE IF NOT EXISTS jobs (
-  job_id TEXT PRIMARY KEY NOT NULL,
-  execution_id TEXT NOT NULL REFERENCES executions(execution_id),
-  lane_id TEXT NOT NULL,
-  state TEXT NOT NULL,
-  source_event_id TEXT NOT NULL REFERENCES events(event_id),
-  terminal_event_id TEXT REFERENCES events(event_id)
-);
 CREATE TABLE IF NOT EXISTS revisions (
   workspace_id TEXT NOT NULL,
   kernel_instance_id TEXT NOT NULL,
@@ -136,7 +72,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
   digest TEXT NOT NULL CHECK (digest GLOB 'sha256:[0-9a-f]*' AND length(digest) = 71),
   byte_size INTEGER NOT NULL CHECK (byte_size >= 0),
   media_type TEXT NOT NULL,
-  producer_execution_id TEXT REFERENCES executions(execution_id),
+  producer_execution_id TEXT,
   revision_event_id TEXT NOT NULL REFERENCES events(event_id),
   source_event_id TEXT NOT NULL REFERENCES events(event_id),
   UNIQUE (digest)
@@ -158,24 +94,6 @@ CREATE TABLE IF NOT EXISTS checkpoints (
   code_ref TEXT NOT NULL,
   source_event_id TEXT NOT NULL REFERENCES events(event_id)
 );
-CREATE TABLE IF NOT EXISTS provider_sessions (
-  provider_session_id TEXT PRIMARY KEY NOT NULL,
-  logical_session_id TEXT NOT NULL,
-  provider_id TEXT NOT NULL,
-  protocol TEXT NOT NULL,
-  provider_version TEXT NOT NULL,
-  external_session_id TEXT NOT NULL,
-  capability_snapshot_digest TEXT NOT NULL,
-  supports_resume INTEGER NOT NULL CHECK (supports_resume IN (0, 1)),
-  lifecycle TEXT NOT NULL CHECK (lifecycle IN ('created', 'active', 'closed', 'lost')),
-  continuity_mode TEXT NOT NULL CHECK (continuity_mode IN ('exact_resume', 'new_provider_session_rehydrated', 'model_context_reset')),
-  process_incarnation INTEGER NOT NULL CHECK (process_incarnation >= 0),
-  source_event_id TEXT NOT NULL,
-  closed_event_id TEXT,
-  UNIQUE (logical_session_id, provider_id, external_session_id, process_incarnation)
-);
-CREATE INDEX IF NOT EXISTS idx_provider_sessions_logical
-  ON provider_sessions(logical_session_id, lifecycle);
 CREATE TABLE IF NOT EXISTS current_projection (
   key TEXT PRIMARY KEY NOT NULL,
   value_json TEXT NOT NULL CHECK (json_valid(value_json)),

@@ -41,6 +41,55 @@ fn snapshot_manifest_is_relative_immutable_revision_bound_and_digest_verified() 
 }
 
 #[test]
+fn snapshot_delta_captures_created_replaced_and_deleted_bytes_against_one_revision() {
+    let temp = project();
+    let baseline =
+        build_project_snapshot(temp.path(), ProjectRevision(7), SnapshotLimits::default()).unwrap();
+    fs::write(temp.path().join("analysis.R"), "x <- 2\n").unwrap();
+    fs::remove_file(temp.path().join("data/counts.csv")).unwrap();
+    fs::create_dir(temp.path().join("results")).unwrap();
+    fs::write(temp.path().join("results/summary.txt"), "complete\n").unwrap();
+
+    let delta = diff_project_snapshot(&baseline, temp.path(), SnapshotLimits::default()).unwrap();
+    assert_eq!(delta.base_project_revision, ProjectRevision(7));
+    assert_eq!(
+        delta
+            .changes
+            .iter()
+            .map(|change| (change.relative_path.as_str(), change.kind))
+            .collect::<Vec<_>>(),
+        vec![
+            ("analysis.R", SnapshotFileChangeKind::Replace),
+            ("data/counts.csv", SnapshotFileChangeKind::Delete),
+            ("results/summary.txt", SnapshotFileChangeKind::Create),
+        ]
+    );
+    assert_eq!(
+        delta.changes[0].bytes.as_deref(),
+        Some("x <- 2\n".as_bytes())
+    );
+    assert!(delta.changes[1].bytes.is_none());
+    assert_eq!(
+        delta.changes[2].bytes.as_deref(),
+        Some("complete\n".as_bytes())
+    );
+    assert_eq!(delta.total_staged_bytes, 16);
+}
+
+#[test]
+fn snapshot_delta_rejects_an_ignore_policy_rewrite() {
+    let temp = project();
+    fs::write(temp.path().join(IGNORE_POLICY_FILE), "*.secret\n").unwrap();
+    let baseline =
+        build_project_snapshot(temp.path(), ProjectRevision(4), SnapshotLimits::default()).unwrap();
+    fs::write(temp.path().join(IGNORE_POLICY_FILE), "*.txt\n").unwrap();
+    assert_eq!(
+        diff_project_snapshot(&baseline, temp.path(), SnapshotLimits::default()).unwrap_err(),
+        SnapshotError::IgnorePolicyRace
+    );
+}
+
+#[test]
 fn snapshot_rejects_symlink_loop_escape_and_toctou_swap() {
     let temp = project();
     symlink("../outside", temp.path().join("escape")).unwrap();

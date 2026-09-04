@@ -134,7 +134,6 @@ define_id!(ProjectId, "project", "project_");
 define_id!(WorkspaceId, "workspace", "workspace_");
 define_id!(KernelInstanceId, "kernel_instance", "kernel_");
 define_id!(SessionId, "logical_session", "session_");
-define_id!(ProviderSessionId, "provider_session", "provider_session_");
 define_id!(RunId, "run", "run_");
 define_id!(TurnId, "turn", "turn_");
 define_id!(ToolCallId, "tool_call", "tool_call_");

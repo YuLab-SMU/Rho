@@ -84,14 +84,14 @@ pub enum WorkspaceEnvironmentError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkspaceEnvironmentGate {
+pub struct WorkspaceEnvironmentState {
     phase: WorkspaceEnvironmentPhase,
     active_binding: Option<WorkspaceEnvironmentBindingV1>,
     pending_binding: Option<WorkspaceEnvironmentBindingV1>,
     incidents: Vec<EnvironmentIncidentV1>,
 }
 
-impl WorkspaceEnvironmentGate {
+impl WorkspaceEnvironmentState {
     pub fn new(active_binding: Option<WorkspaceEnvironmentBindingV1>) -> Self {
         Self {
             phase: if active_binding.is_some() {
@@ -152,7 +152,7 @@ impl WorkspaceEnvironmentGate {
         Ok(self.status())
     }
 
-    pub fn admit_execution(
+    pub fn validate_execution_binding(
         &self,
         expected: Option<&WorkspaceEnvironmentBindingV1>,
     ) -> Result<(), WorkspaceEnvironmentError> {

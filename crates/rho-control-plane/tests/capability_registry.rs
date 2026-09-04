@@ -118,37 +118,6 @@ fn capability_registry_run_r_and_other_classifications_are_not_caller_overridabl
 }
 
 #[test]
-fn capability_registry_provider_snapshot_filters_unsupported_targets_and_destinations() {
-    let registry = CapabilityRegistry::canonical().unwrap();
-    let support = CapabilitySupport {
-        targets: [TargetClass::Workspace].into_iter().collect(),
-        destinations: [DestinationClass::LocalWorkspace].into_iter().collect(),
-    };
-    let snapshot = registry.provider_snapshot(&support);
-    let ids = snapshot
-        .iter()
-        .map(|entry| entry.id.as_str())
-        .collect::<Vec<_>>();
-    assert!(ids.contains(&"workspace.inspect"));
-    assert!(ids.contains(&RUN_R_CAPABILITY));
-    assert!(!ids.contains(&"network.fetch"));
-    assert!(snapshot.iter().all(|entry| {
-        entry
-            .destinations
-            .iter()
-            .all(|destination| *destination == DestinationClass::LocalWorkspace)
-    }));
-}
-
-#[test]
-fn capability_registry_mcp_facade_and_first_party_adapter_share_fixture() {
-    assert_eq!(
-        mcp_facade_snapshot_fixture(),
-        first_party_adapter_snapshot_fixture()
-    );
-}
-
-#[test]
 fn capability_registry_api_does_not_expose_executor_handles_approval_store_or_secret_resolver() {
     let source = include_str!("../src/capability_registry.rs");
     for forbidden in [

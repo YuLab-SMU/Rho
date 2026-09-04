@@ -59,8 +59,6 @@ pub enum EventChannel {
 pub enum CanonicalEventType {
     MessageDelta,
     MessageCompleted,
-    PlanReplaced,
-    PlanStepTransition,
     CapabilityRequested,
     ProviderPermissionHint,
     UsageUpdated,
@@ -68,7 +66,6 @@ pub enum CanonicalEventType {
     TurnCompleted,
     TurnFailed,
     ProviderDiagnostic,
-    PolicyDecisionRecorded,
     ExecutionStateChanged,
     RevisionAdvanced,
     ArtifactCommitted,
@@ -76,11 +73,9 @@ pub enum CanonicalEventType {
     SecurityViolation,
 }
 
-pub const ALL_CANONICAL_EVENT_TYPES: [CanonicalEventType; 17] = [
+pub const ALL_CANONICAL_EVENT_TYPES: [CanonicalEventType; 14] = [
     CanonicalEventType::MessageDelta,
     CanonicalEventType::MessageCompleted,
-    CanonicalEventType::PlanReplaced,
-    CanonicalEventType::PlanStepTransition,
     CanonicalEventType::CapabilityRequested,
     CanonicalEventType::ProviderPermissionHint,
     CanonicalEventType::UsageUpdated,
@@ -88,7 +83,6 @@ pub const ALL_CANONICAL_EVENT_TYPES: [CanonicalEventType; 17] = [
     CanonicalEventType::TurnCompleted,
     CanonicalEventType::TurnFailed,
     CanonicalEventType::ProviderDiagnostic,
-    CanonicalEventType::PolicyDecisionRecorded,
     CanonicalEventType::ExecutionStateChanged,
     CanonicalEventType::RevisionAdvanced,
     CanonicalEventType::ArtifactCommitted,
@@ -108,18 +102,6 @@ impl CanonicalEventType {
             Self::MessageCompleted => EventRegistryEntry::semantic(
                 self,
                 EventPriority::P1,
-                DataClass::ProjectConfidential,
-                MAX_SEMANTIC_EVENT_PAYLOAD_BYTES,
-            ),
-            Self::PlanReplaced => EventRegistryEntry::semantic(
-                self,
-                EventPriority::P1,
-                DataClass::ProjectConfidential,
-                MAX_SEMANTIC_EVENT_PAYLOAD_BYTES,
-            ),
-            Self::PlanStepTransition => EventRegistryEntry::semantic(
-                self,
-                EventPriority::P2,
                 DataClass::ProjectConfidential,
                 MAX_SEMANTIC_EVENT_PAYLOAD_BYTES,
             ),
@@ -164,12 +146,6 @@ impl CanonicalEventType {
                 EventPriority::P3,
                 DataClass::ProjectInternal,
                 MAX_HOT_EVENT_PAYLOAD_BYTES,
-            ),
-            Self::PolicyDecisionRecorded => EventRegistryEntry::semantic(
-                self,
-                EventPriority::P0,
-                DataClass::ProjectConfidential,
-                MAX_SEMANTIC_EVENT_PAYLOAD_BYTES,
             ),
             Self::ExecutionStateChanged => EventRegistryEntry::semantic(
                 self,
@@ -485,15 +461,6 @@ pub enum SemanticEventPayload {
         turn_id: TurnId,
         visible_text_digest: String,
     },
-    PlanReplaced {
-        turn_id: TurnId,
-        plan_id: String,
-    },
-    PlanStepTransition {
-        plan_id: String,
-        step_id: String,
-        state: String,
-    },
     CapabilityRequested {
         capability_id: CapabilityId,
         operation_id: OperationId,
@@ -510,10 +477,6 @@ pub enum SemanticEventPayload {
     TurnFailed {
         turn_id: TurnId,
         reason_code: String,
-    },
-    PolicyDecisionRecorded {
-        decision_id: String,
-        decision: String,
     },
     ExecutionStateChanged {
         execution_id: ExecutionId,
@@ -541,13 +504,10 @@ impl SemanticEventPayload {
     pub fn event_type(&self) -> CanonicalEventType {
         match self {
             Self::MessageCompleted { .. } => CanonicalEventType::MessageCompleted,
-            Self::PlanReplaced { .. } => CanonicalEventType::PlanReplaced,
-            Self::PlanStepTransition { .. } => CanonicalEventType::PlanStepTransition,
             Self::CapabilityRequested { .. } => CanonicalEventType::CapabilityRequested,
             Self::SessionChanged { .. } => CanonicalEventType::SessionChanged,
             Self::TurnCompleted { .. } => CanonicalEventType::TurnCompleted,
             Self::TurnFailed { .. } => CanonicalEventType::TurnFailed,
-            Self::PolicyDecisionRecorded { .. } => CanonicalEventType::PolicyDecisionRecorded,
             Self::ExecutionStateChanged { .. } => CanonicalEventType::ExecutionStateChanged,
             Self::RevisionAdvanced { .. } => CanonicalEventType::RevisionAdvanced,
             Self::ArtifactCommitted { .. } => CanonicalEventType::ArtifactCommitted,
@@ -564,11 +524,8 @@ impl SemanticEventPayload {
             Self::SecurityViolation { .. }
             | Self::CapabilityRequested { .. }
             | Self::MessageCompleted { .. }
-            | Self::PlanReplaced { .. }
-            | Self::PlanStepTransition { .. }
             | Self::TurnCompleted { .. }
             | Self::TurnFailed { .. }
-            | Self::PolicyDecisionRecorded { .. }
             | Self::ExecutionStateChanged { .. }
             | Self::RevisionAdvanced { .. }
             | Self::ArtifactCommitted { .. } => DataClass::ProjectConfidential,

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use rho_protocol::{
     CapabilityDescriptor, CapabilityId, DataClass, DestinationClass,
@@ -39,22 +39,6 @@ pub struct RegisteredCapability {
     pub destinations: Vec<DestinationClass>,
     pub max_argument_bytes: usize,
     pub max_array_items: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ProviderCapabilityDescription {
-    pub id: CapabilityId,
-    pub display_name: String,
-    pub effect_class: EffectClass,
-    pub retry_class: RetryClass,
-    pub target_class: TargetClass,
-    pub destinations: Vec<DestinationClass>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CapabilitySupport {
-    pub targets: BTreeSet<TargetClass>,
-    pub destinations: BTreeSet<DestinationClass>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -147,45 +131,6 @@ impl CapabilityRegistry {
             validate_environment_plan_binding(id, arguments)?;
         }
         Ok(())
-    }
-
-    pub fn provider_snapshot(
-        &self,
-        support: &CapabilitySupport,
-    ) -> Vec<ProviderCapabilityDescription> {
-        self.entries
-            .values()
-            .filter(|entry| support.targets.contains(&entry.descriptor.target_class))
-            .filter(|entry| {
-                entry
-                    .destinations
-                    .iter()
-                    .any(|destination| support.destinations.contains(destination))
-            })
-            .map(|entry| ProviderCapabilityDescription {
-                id: entry.descriptor.id.clone(),
-                display_name: entry.descriptor.display_name.clone(),
-                effect_class: entry.descriptor.effect_class,
-                retry_class: entry.descriptor.retry_class,
-                target_class: entry.descriptor.target_class,
-                destinations: entry
-                    .destinations
-                    .iter()
-                    .copied()
-                    .filter(|destination| support.destinations.contains(destination))
-                    .collect(),
-            })
-            .collect()
-    }
-
-    pub fn read_only_observer_snapshot(
-        &self,
-        support: &CapabilitySupport,
-    ) -> Vec<ProviderCapabilityDescription> {
-        self.provider_snapshot(support)
-            .into_iter()
-            .filter(|description| description.effect_class == EffectClass::Read)
-            .collect()
     }
 
     pub fn validate_startup(&self) -> Result<(), CapabilityRegistryError> {
@@ -480,38 +425,6 @@ pub fn canonical_capabilities() -> Vec<RegisteredCapability> {
             vec![DestinationClass::LocalSandbox],
         ),
     ]
-}
-
-pub fn mcp_facade_snapshot_fixture() -> Vec<ProviderCapabilityDescription> {
-    CapabilityRegistry::canonical()
-        .unwrap()
-        .provider_snapshot(&first_party_support())
-}
-
-pub fn first_party_adapter_snapshot_fixture() -> Vec<ProviderCapabilityDescription> {
-    CapabilityRegistry::canonical()
-        .unwrap()
-        .provider_snapshot(&first_party_support())
-}
-
-pub fn first_party_support() -> CapabilitySupport {
-    CapabilitySupport {
-        targets: [
-            TargetClass::Workspace,
-            TargetClass::ProjectFiles,
-            TargetClass::LocalProcess,
-            TargetClass::ExternalService,
-        ]
-        .into_iter()
-        .collect(),
-        destinations: [
-            DestinationClass::LocalWorkspace,
-            DestinationClass::LocalSandbox,
-            DestinationClass::AllowlistedDomain,
-        ]
-        .into_iter()
-        .collect(),
-    }
 }
 
 fn with_schema(

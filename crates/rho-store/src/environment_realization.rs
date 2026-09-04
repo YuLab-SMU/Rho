@@ -61,32 +61,27 @@ pub struct EnvironmentOperationActivity {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct EnvironmentPlanReviewRecord {
+pub struct EnvironmentPlanRecord {
     pub project_root: String,
     pub plan: MaterializedPackagePlanV1,
-    pub status: String,
-    pub approval_lease_id: Option<String>,
-    pub operation_id: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
+    pub recorded_at: String,
 }
 
 impl<C: StoreConnection> Store<C> {
-    pub fn record_environment_plan_for_review(
+    pub fn record_environment_plan(
         &mut self,
         project_root: &str,
         plan: &MaterializedPackagePlanV1,
-    ) -> Result<EnvironmentPlanReviewRecord, StoreError> {
+    ) -> Result<EnvironmentPlanRecord, StoreError> {
         let project_root = required_root(project_root)?;
         plan.validate()
             .map_err(|error| StoreError::Validation(error.to_string()))?;
         let canonical_plan_json = serde_json::to_string(plan)?;
         let now = Utc::now().to_rfc3339();
         self.connection.execute(
-            "INSERT INTO environment_plan_reviews(
-                project_root, plan_id, environment_id, canonical_plan_json, status,
-                approval_lease_id, operation_id, created_at, updated_at
-             ) VALUES(?1, ?2, ?3, ?4, 'materialized', NULL, NULL, ?5, ?5)
+            "INSERT INTO environment_plans(
+                project_root, plan_id, environment_id, canonical_plan_json, recorded_at
+             ) VALUES(?1, ?2, ?3, ?4, ?5)
              ON CONFLICT(project_root, plan_id) DO NOTHING",
             params![
                 project_root,
@@ -97,7 +92,7 @@ impl<C: StoreConnection> Store<C> {
             ],
         )?;
         let record = self
-            .get_environment_plan_review(&project_root, plan.plan_id.as_str())?
+            .get_environment_plan(&project_root, plan.plan_id.as_str())?
             .ok_or_else(|| {
                 StoreError::Validation("Environment plan review insert disappeared".to_string())
             })?;
@@ -109,114 +104,41 @@ impl<C: StoreConnection> Store<C> {
         Ok(record)
     }
 
-    pub fn get_environment_plan_review(
+    pub fn get_environment_plan(
         &self,
         project_root: &str,
         plan_id: &str,
-    ) -> Result<Option<EnvironmentPlanReviewRecord>, StoreError> {
+    ) -> Result<Option<EnvironmentPlanRecord>, StoreError> {
         let project_root = required_root(project_root)?;
         self.connection
             .query_row(
-                "SELECT project_root, canonical_plan_json, status, approval_lease_id,
-                        operation_id, created_at, updated_at
-                 FROM environment_plan_reviews
+                "SELECT project_root, canonical_plan_json, recorded_at
+                 FROM environment_plans
                  WHERE project_root = ?1 AND plan_id = ?2",
                 params![project_root, plan_id],
-                decode_environment_plan_review,
+                decode_environment_plan,
             )
             .optional()
             .map_err(StoreError::from)
     }
 
-    pub fn latest_reviewable_environment_plan(
+    pub fn latest_environment_plan(
         &self,
         project_root: &str,
-    ) -> Result<Option<EnvironmentPlanReviewRecord>, StoreError> {
+    ) -> Result<Option<EnvironmentPlanRecord>, StoreError> {
         let project_root = required_root(project_root)?;
         self.connection
             .query_row(
-                "SELECT project_root, canonical_plan_json, status, approval_lease_id,
-                        operation_id, created_at, updated_at
-                 FROM environment_plan_reviews
-                 WHERE project_root = ?1 AND status IN ('materialized', 'approved')
-                 ORDER BY updated_at DESC, plan_id DESC
+                "SELECT project_root, canonical_plan_json, recorded_at
+                 FROM environment_plans
+                 WHERE project_root = ?1
+                 ORDER BY recorded_at DESC, plan_id DESC
                  LIMIT 1",
                 [project_root],
-                decode_environment_plan_review,
+                decode_environment_plan,
             )
             .optional()
             .map_err(StoreError::from)
-    }
-
-    pub fn approve_environment_plan(
-        &mut self,
-        project_root: &str,
-        plan_id: &str,
-        approval_lease_id: &str,
-        operation_id: &str,
-    ) -> Result<EnvironmentPlanReviewRecord, StoreError> {
-        let project_root = required_root(project_root)?;
-        for (label, value) in [
-            ("approval lease", approval_lease_id),
-            ("operation", operation_id),
-        ] {
-            if value.is_empty() || value.trim() != value || value.chars().any(char::is_control) {
-                return Err(StoreError::Validation(format!(
-                    "Environment plan {label} identity is invalid"
-                )));
-            }
-        }
-        let now = Utc::now().to_rfc3339();
-        let changed = self.connection.execute(
-            "UPDATE environment_plan_reviews
-             SET status = 'approved', approval_lease_id = ?3, operation_id = ?4, updated_at = ?5
-             WHERE project_root = ?1 AND plan_id = ?2 AND status = 'materialized'",
-            params![project_root, plan_id, approval_lease_id, operation_id, now],
-        )?;
-        let record = self
-            .get_environment_plan_review(&project_root, plan_id)?
-            .ok_or_else(|| StoreError::Validation("Environment plan is not materialized".into()))?;
-        if changed == 0
-            && (record.status != "approved"
-                || record.approval_lease_id.as_deref() != Some(approval_lease_id)
-                || record.operation_id.as_deref() != Some(operation_id))
-        {
-            return Err(StoreError::Validation(
-                "Environment plan cannot be approved from its current state".to_string(),
-            ));
-        }
-        Ok(record)
-    }
-
-    pub fn dispatch_approved_environment_plan(
-        &mut self,
-        project_root: &str,
-        plan_id: &str,
-        approval_lease_id: &str,
-        operation_id: &str,
-    ) -> Result<EnvironmentPlanReviewRecord, StoreError> {
-        let project_root = required_root(project_root)?;
-        let now = Utc::now().to_rfc3339();
-        let changed = self.connection.execute(
-            "UPDATE environment_plan_reviews
-             SET status = 'dispatched', updated_at = ?5
-             WHERE project_root = ?1 AND plan_id = ?2 AND status = 'approved'
-               AND approval_lease_id = ?3 AND operation_id = ?4",
-            params![project_root, plan_id, approval_lease_id, operation_id, now],
-        )?;
-        let record = self
-            .get_environment_plan_review(&project_root, plan_id)?
-            .ok_or_else(|| StoreError::Validation("Environment plan is not materialized".into()))?;
-        if changed == 0
-            && (record.status != "dispatched"
-                || record.approval_lease_id.as_deref() != Some(approval_lease_id)
-                || record.operation_id.as_deref() != Some(operation_id))
-        {
-            return Err(StoreError::Validation(
-                "Environment plan has no matching exact approval".to_string(),
-            ));
-        }
-        Ok(record)
     }
 
     pub fn active_environment_operation(
@@ -872,9 +794,7 @@ fn prepare_environment_commit(
     })
 }
 
-fn decode_environment_plan_review(
-    row: &rusqlite::Row<'_>,
-) -> rusqlite::Result<EnvironmentPlanReviewRecord> {
+fn decode_environment_plan(row: &rusqlite::Row<'_>) -> rusqlite::Result<EnvironmentPlanRecord> {
     let canonical_plan_json: String = row.get(1)?;
     let plan: MaterializedPackagePlanV1 =
         serde_json::from_str(&canonical_plan_json).map_err(|error| {
@@ -883,14 +803,10 @@ fn decode_environment_plan_review(
     plan.validate().map_err(|error| {
         rusqlite::Error::FromSqlConversionFailure(1, Type::Text, Box::new(error))
     })?;
-    Ok(EnvironmentPlanReviewRecord {
+    Ok(EnvironmentPlanRecord {
         project_root: row.get(0)?,
         plan,
-        status: row.get(2)?,
-        approval_lease_id: row.get(3)?,
-        operation_id: row.get(4)?,
-        created_at: row.get(5)?,
-        updated_at: row.get(6)?,
+        recorded_at: row.get(2)?,
     })
 }
 
@@ -1236,7 +1152,7 @@ mod tests {
             operation_id: OperationId::new("operation_environment_store").unwrap(),
             plan_id: EnvironmentPlanId::new("environment_plan_store").unwrap(),
             actor_id: "user".to_string(),
-            approval_effect_digest: digest('2'),
+            effect_digest: digest('2'),
             desired_before: EnvironmentDesiredRevisionId::new("env_desired_store_before").unwrap(),
             desired_after: Some(desired.revision_id.clone()),
             realization_before: EnvironmentRealizationRevisionId::new("env_realized_store_before")

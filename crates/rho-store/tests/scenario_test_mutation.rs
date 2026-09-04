@@ -179,7 +179,6 @@ fn scenario_clear_agent_history_success() {
         .create_agent_turn(&AgentTurnDraft {
             turn_id: "turn_001".into(),
             project_root: "/projects/alpha".into(),
-            mode: "chat".into(),
             prompt: "Hello".into(),
             model: "gpt-4".into(),
             workspace_id: "ws_01".into(),
@@ -212,7 +211,6 @@ fn scenario_clear_agent_history_preserves_foreign_project() {
             .create_agent_turn(&AgentTurnDraft {
                 turn_id: turn_id.into(),
                 project_root: project_root.into(),
-                mode: "chat".into(),
                 prompt: "Hello".into(),
                 model: "gpt-4".into(),
                 workspace_id: "ws_01".into(),
@@ -251,7 +249,6 @@ fn scenario_delete_agent_conversation_success() {
         .create_agent_turn(&AgentTurnDraft {
             turn_id: "turn_001".into(),
             project_root: "/projects/alpha".into(),
-            mode: "chat".into(),
             prompt: "Hello".into(),
             model: "gpt-4".into(),
             workspace_id: "ws_01".into(),
@@ -287,7 +284,6 @@ fn scenario_delete_agent_conversation_foreign_project() {
         .create_agent_turn(&AgentTurnDraft {
             turn_id: "turn_001".into(),
             project_root: "/projects/alpha".into(),
-            mode: "chat".into(),
             prompt: "Hello".into(),
             model: "gpt-4".into(),
             workspace_id: "ws_01".into(),

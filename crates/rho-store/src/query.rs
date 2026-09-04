@@ -10,7 +10,7 @@
 //! ## Design constraints
 //!
 //! * No `tauri` / TUI / DOM dependency — depends only on `rho-store` types.
-//! * No new SQLite, runtime, project, credential, or approval authority.
+//! * No new SQLite, runtime, project, credential, or permission authority.
 //! * No schema / persistence / public protocol change.
 //! * Bounded results via `limit` parameter (default 50, matching `Store`).
 //! * Stable error category via `StoreError`.
@@ -90,21 +90,6 @@ impl<'a> ProjectQueryService<'a> {
         let normalized = required_project_root(project_root)?;
         self.store
             .compare_runs(&normalized, left_run_id, right_run_id)
-    }
-
-    /// List approval requests for the given project.
-    ///
-    /// The project root is normalized via `normalize_project_root` before
-    /// querying. Optionally filter by status (e.g. `"waiting"`).
-    pub fn list_approval_requests(
-        &self,
-        project_root: &str,
-        limit: Option<usize>,
-        status: Option<&str>,
-    ) -> Result<Vec<crate::ApprovalRequestSummary>, StoreError> {
-        let normalized = required_project_root(project_root)?;
-        self.store
-            .list_approval_requests(&normalized, limit, status)
     }
 
     /// List agent conversations for the given project.

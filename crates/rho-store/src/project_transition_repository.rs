@@ -1,7 +1,7 @@
 //! Coherent durable project-transition projections and active-root writes.
 
 use crate::{
-    ApprovalRequestSummary, EnvironmentOperationActivity, Store, StoreExecutor, StoreExecutorError,
+    EnvironmentOperationActivity, Store, StoreExecutor, StoreExecutorError,
     query::required_project_root,
 };
 
@@ -9,7 +9,6 @@ use crate::{
 pub struct ProjectTransitionSnapshot {
     pub active_project_root: String,
     pub active_run_id: Option<String>,
-    pub waiting_approvals: Vec<ApprovalRequestSummary>,
     pub environment_operation: Option<EnvironmentOperationActivity>,
 }
 
@@ -39,17 +38,11 @@ impl ProjectTransitionRepository {
                     .active_project_root()?
                     .unwrap_or(fallback_project_root);
                 let active_run_id = store.latest_active_run_id(&active_project_root)?;
-                let waiting_approvals = store.list_approval_requests(
-                    &active_project_root,
-                    Some(10),
-                    Some("waiting"),
-                )?;
                 let environment_operation =
                     store.active_environment_operation(&active_project_root)?;
                 Ok(ProjectTransitionSnapshot {
                     active_project_root,
                     active_run_id,
-                    waiting_approvals,
                     environment_operation,
                 })
             })
@@ -82,7 +75,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::{AgentConversationDraft, AgentTurnDraft, ApprovalRequestDraft, RunDraft};
+    use crate::RunDraft;
 
     fn create_active_run(store: &mut Store, project_root: &str, run_id: &str) {
         store
@@ -106,45 +99,6 @@ mod tests {
             .unwrap();
     }
 
-    fn create_waiting_approval(store: &mut Store, project_root: &str, suffix: &str) {
-        let conversation_id = format!("conversation-{suffix}");
-        let turn_id = format!("turn-{suffix}");
-        store
-            .create_agent_turn_with_conversation(
-                &AgentConversationDraft {
-                    conversation_id,
-                    project_root: project_root.to_string(),
-                    title: format!("Conversation {suffix}"),
-                    legacy_unthreaded: false,
-                },
-                &AgentTurnDraft {
-                    turn_id: turn_id.clone(),
-                    project_root: project_root.to_string(),
-                    mode: "act".to_string(),
-                    prompt: "Run code".to_string(),
-                    model: "test".to_string(),
-                    workspace_id: format!("workspace.{suffix}"),
-                    state_revision_before: 1,
-                    project_revision_before: 1,
-                },
-            )
-            .unwrap();
-        store
-            .create_approval_request(&ApprovalRequestDraft {
-                request_id: format!("approval-{suffix}"),
-                turn_id,
-                project_root: project_root.to_string(),
-                tool: "run_r".to_string(),
-                policy: "required".to_string(),
-                arguments_json: "{}".to_string(),
-                code: None,
-                workspace_id: format!("workspace.{suffix}"),
-                state_revision: 1,
-                project_revision: 1,
-            })
-            .unwrap();
-    }
-
     #[tokio::test]
     async fn snapshot_and_active_root_writes_preserve_project_isolation_and_recovery() {
         let directory = tempdir().unwrap();
@@ -153,8 +107,6 @@ mod tests {
         store.set_project_root(Some("/projects/a")).unwrap();
         create_active_run(&mut store, "/projects/a", "run-a");
         create_active_run(&mut store, "/projects/b", "run-b");
-        create_waiting_approval(&mut store, "/projects/a", "a");
-        create_waiting_approval(&mut store, "/projects/b", "b");
         drop(store);
 
         let repository = StoreExecutor::open(&database)
@@ -168,8 +120,6 @@ mod tests {
             .unwrap();
         assert_eq!(project_a.active_project_root, "/projects/a");
         assert_eq!(project_a.active_run_id.as_deref(), Some("run-a"));
-        assert_eq!(project_a.waiting_approvals.len(), 1);
-        assert_eq!(project_a.waiting_approvals[0].request_id, "approval-a");
         assert!(project_a.environment_operation.is_none());
 
         repository
@@ -185,7 +135,6 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(project_b.active_run_id.as_deref(), Some("run-b"));
-        assert_eq!(project_b.waiting_approvals[0].request_id, "approval-b");
         assert!(project_b.environment_operation.is_none());
 
         repository.set_active_project_root(None).await.unwrap();
