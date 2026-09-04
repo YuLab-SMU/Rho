@@ -1,13 +1,9 @@
 use super::*;
 use crate::commands::agent_execution::{
-    AgentApprovalDeliveryResponse, AgentApprovalDeliveryStatus, AgentContextPlanPreviewView,
     AgentTurnCancelResponse, AgentTurnCancelStatus, AgentTurnDetailView, AgentTurnStartResponse,
-    AgentTurnStartStatus, ApprovalDecisionRequest,
+    AgentTurnStartStatus,
 };
-use rho_store::{
-    AgentConversationSummary, AgentTurnContextItem, AgentTurnContextItemDraft, AgentTurnEvent,
-    AgentTurnSummary, ApprovalRequestSummary,
-};
+use rho_store::{AgentConversationSummary, AgentTurnEvent, AgentTurnSummary};
 
 fn conversation() -> AgentConversationSummary {
     AgentConversationSummary {
@@ -21,10 +17,8 @@ fn conversation() -> AgentConversationSummary {
         turn_count: 2,
         status: "completed".to_string(),
         latest_turn_id: Some("agent-turn:2".to_string()),
-        latest_mode: Some("ask".to_string()),
         latest_prompt_preview: Some("Review the model".to_string()),
         terminal_reason: Some("completed".to_string()),
-        pending_request_id: None,
     }
 }
 
@@ -33,7 +27,6 @@ fn turn() -> AgentTurnSummary {
         turn_id: "agent-turn:2".to_string(),
         conversation_id: "agent-conversation:fixture".to_string(),
         project_root: "/tmp/Project A".to_string(),
-        mode: "ask".to_string(),
         status: "completed".to_string(),
         started_at: "2026-08-24T12:00:00Z".to_string(),
         finished_at: Some("2026-08-24T12:01:00Z".to_string()),
@@ -47,7 +40,6 @@ fn turn() -> AgentTurnSummary {
         project_revision_after: Some(7),
         final_message: Some("Looks sound.".to_string()),
         error_message: None,
-        pending_request_id: None,
         retry_of_turn_id: None,
         terminal_reason: Some("completed".to_string()),
     }
@@ -66,65 +58,6 @@ fn turn_event() -> AgentTurnEvent {
         request_id: Some("agent-request:fixture".to_string()),
         code: None,
         details_json: "{\"success\":true}".to_string(),
-    }
-}
-
-fn approval() -> ApprovalRequestSummary {
-    ApprovalRequestSummary {
-        request_id: "agent-request:fixture".to_string(),
-        turn_id: "agent-turn:2".to_string(),
-        project_root: "/tmp/Project A".to_string(),
-        tool: "inspect_model".to_string(),
-        policy: "ask".to_string(),
-        status: "approved".to_string(),
-        decision: Some("approve".to_string()),
-        reason: None,
-        arguments_json: "{\"path\":\"model.R\"}".to_string(),
-        code: None,
-        workspace_id: Some("workspace:a".to_string()),
-        state_revision: Some(5),
-        project_revision: Some(7),
-        requested_at: "2026-08-24T12:00:20Z".to_string(),
-        responded_at: Some("2026-08-24T12:00:25Z".to_string()),
-        continuation_outcome: Some("resumed".to_string()),
-    }
-}
-
-fn context_item() -> AgentTurnContextItem {
-    AgentTurnContextItem {
-        context_item_id: "agent-context:fixture".to_string(),
-        turn_id: "agent-turn:2".to_string(),
-        project_root: "/tmp/Project A".to_string(),
-        ordinal: 1,
-        source_kind: "runtime_output".to_string(),
-        source_id: Some("runtime-output:fixture".to_string()),
-        source_revision: Some("3".to_string()),
-        source_sha256: "fixture-sha256".to_string(),
-        trust_class: "project_owned".to_string(),
-        capacity_source: "catalog".to_string(),
-        original_bytes: 4_096,
-        included_bytes: 2_048,
-        estimated_tokens: 512,
-        disposition: "included".to_string(),
-        reason_code: None,
-    }
-}
-
-fn context_item_draft() -> AgentTurnContextItemDraft {
-    AgentTurnContextItemDraft {
-        context_item_id: "agent-context-draft:fixture".to_string(),
-        ordinal: 0,
-        source_kind: "current_request".to_string(),
-        source_id: None,
-        source_revision: Some("1".to_string()),
-        source_sha256: "draft-sha256".to_string(),
-        trust_class: "user_instruction".to_string(),
-        capacity_source: "catalog".to_string(),
-        original_bytes: 256,
-        included_bytes: 256,
-        estimated_tokens: 64,
-        disposition: "complete".to_string(),
-        reason_code: None,
     }
 }
 
@@ -191,7 +124,6 @@ fn agent_conversation_ipc_serialization_matches_generated_contract() {
 
     assert_eq!(conversations[0]["turn_count"], 2);
     assert!(conversations[0]["archived_at"].is_null());
-    assert_eq!(turns[0]["mode"], "ask");
     assert_eq!(turns[0]["state_revision_before"], 5);
     assert!(turns[0]["error_message"].is_null());
     assert_javascript_safe_numbers(&conversations);
@@ -203,57 +135,21 @@ fn agent_turn_detail_ipc_serialization_matches_generated_contract() {
     let detail = serde_json::to_value(AgentTurnDetailView {
         turn: turn(),
         events: vec![turn_event()],
-        approvals: vec![approval()],
-        context_items: vec![context_item()],
     })
     .unwrap();
 
-    assert_eq!(detail["turn"]["mode"], "ask");
     assert_eq!(detail["events"][0]["id"], 42);
     assert!(detail["events"][0]["code"].is_null());
-    assert_eq!(detail["approvals"][0]["state_revision"], 5);
-    assert!(detail["approvals"][0]["reason"].is_null());
-    assert_eq!(
-        detail["context_items"][0]["context_item_id"],
-        "agent-context:fixture"
-    );
-    assert_eq!(detail["context_items"][0]["included_bytes"], 2_048);
     assert_javascript_safe_numbers(&detail);
 }
 
 #[test]
 fn agent_execution_ipc_serialization_matches_generated_contract() {
-    let preview = serde_json::to_value(AgentContextPlanPreviewView {
-        plan_digest: "plan-digest:fixture".to_string(),
-        context_window_tokens: 128_000,
-        reserved_output_tokens: 8_192,
-        estimated_input_tokens: 1_024,
-        capacity_source: "catalog".to_string(),
-        items: vec![context_item_draft()],
-        model_profile_id: "model-profile:fixture".to_string(),
-        model_display_name: "Fixture model".to_string(),
-        settings_revision: 9,
-        conversation_id: None,
-        runtime_output_context: Some(runtime_registry::RuntimeOutputReference {
-            project_id: "project:fixture".to_string(),
-            execution_id: "runtime-execution:fixture".to_string(),
-            start_sequence: 1,
-            end_sequence: 3,
-            range_sha256: "range-sha256:fixture".to_string(),
-            payload_bytes: 2_048,
-            chunk_count: 3,
-            status: "completed".to_string(),
-            output_state: "complete".to_string(),
-        }),
-    })
-    .unwrap();
     let started = serde_json::to_value(AgentTurnStartResponse {
         status: AgentTurnStartStatus::Started,
         turn_id: "agent-turn:started".to_string(),
         conversation_id: "agent-conversation:fixture".to_string(),
         retry_of_turn_id: None,
-        auto_approve: false,
-        task_kind: "agent_turn".to_string(),
     })
     .unwrap();
     let cancelled = serde_json::to_value(AgentTurnCancelResponse {
@@ -261,33 +157,9 @@ fn agent_execution_ipc_serialization_matches_generated_contract() {
         turn_id: "agent-turn:cancelled".to_string(),
     })
     .unwrap();
-    let delivered = serde_json::to_value(AgentApprovalDeliveryResponse {
-        status: AgentApprovalDeliveryStatus::NotDelivered,
-        request_id: "agent-request:fixture".to_string(),
-        turn_id: "agent-turn:started".to_string(),
-    })
-    .unwrap();
-    let decision: ApprovalDecisionRequest = serde_json::from_value(serde_json::json!({
-        "request_id": "agent-request:fixture",
-        "decision": "reject",
-        "reason": null
-    }))
-    .unwrap();
-
-    assert_eq!(preview["context_window_tokens"], 128_000);
-    assert_eq!(
-        preview["items"][0]["context_item_id"],
-        "agent-context-draft:fixture"
-    );
-    assert!(preview["conversation_id"].is_null());
-    assert_eq!(preview["runtime_output_context"]["end_sequence"], 3);
     assert_eq!(started["status"], "started");
     assert!(started["retry_of_turn_id"].is_null());
     assert_eq!(cancelled["status"], "cancelled");
-    assert_eq!(delivered["status"], "not_delivered");
-    assert_eq!(decision.decision, "reject");
-    assert!(decision.reason.is_none());
-    assert_javascript_safe_numbers(&preview);
     assert_javascript_safe_numbers(&started);
 }
 
@@ -328,11 +200,9 @@ fn agent_execution_typescript_export() {
         .expect("RHO_AGENT_EXECUTION_BINDINGS_PATH must name the generated file");
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
-            crate::commands::agent_execution::agent_context_preview,
             crate::commands::agent_execution::run_agent,
             crate::commands::agent_execution::retry_agent_turn,
             crate::commands::agent_execution::cancel_agent_turn,
-            crate::commands::agent_execution::respond_approval,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)
@@ -352,10 +222,4 @@ fn agent_diagnostics_typescript_export() {
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)
         .expect("Agent runtime TypeScript export must succeed");
-}
-
-#[test]
-fn agent_file_contract_serializes_exact_wire_casing_placeholder() {
-    // Retained intentionally empty: the file-proposal protocol was retired with
-    // the in-process Agent host; external ACP agents emit standard patches.
 }

@@ -582,7 +582,9 @@ pub(crate) fn probe_agent_runtime(process_path: &std::ffi::OsStr) -> AgentRuntim
         active_agent_id: candidate.as_ref().map(|agent| agent.agent_id.clone()),
         active_agent_label: candidate.as_ref().map(|agent| agent.display_name.clone()),
         protocol: candidate.as_ref().and_then(|agent| agent.protocol.clone()),
-        executable: candidate.as_ref().and_then(|agent| agent.executable.clone()),
+        executable: candidate
+            .as_ref()
+            .and_then(|agent| agent.executable.clone()),
         candidates: candidate.into_iter().collect(),
         error: (!available).then(|| {
             "Install claude-code-acp, codex-acp, or an ACP-capable opencode executable.".to_string()

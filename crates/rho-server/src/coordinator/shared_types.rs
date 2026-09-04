@@ -15,14 +15,6 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct AgentRuntimeCapabilityRoute {
-    pub capability: String,
-    pub model: String,
-    pub model_type: String,
-    pub required_model_capabilities: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AgentPluginToolDefinition {
     pub name: String,
     pub contribution_id: String,
@@ -44,52 +36,6 @@ pub struct AgentPluginContextItem {
     pub content: Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct AgentRuntimeModelProfile {
-    pub settings_revision: u64,
-    pub route_capability: String,
-    pub profile_id: String,
-    pub provider_kind: String,
-    pub runtime_provider_id: String,
-    pub registered_provider_id: Option<String>,
-    pub model_id: String,
-    pub api_key_env: Option<String>,
-    pub api_key_required: bool,
-    pub base_url: Option<String>,
-    pub base_url_env: Option<String>,
-    pub wire_api: Option<String>,
-    pub disable_stream_options: bool,
-    pub tool_calling: String,
-    pub provider_display_name: String,
-    pub model_display_name: String,
-    pub context_window_tokens: u64,
-    pub reserved_output_tokens: u64,
-    pub context_capacity_source: String,
-    pub capability_routes: Vec<AgentRuntimeCapabilityRoute>,
-    #[serde(default)]
-    pub plugin_tools: Vec<AgentPluginToolDefinition>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct AgentExplicitContextItem {
-    pub source_kind: String,
-    pub source_id: String,
-    pub source_revision: String,
-    pub source_sha256: String,
-    pub trust_class: String,
-    pub original_bytes: i64,
-    pub content: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct AgentContextPlanPreview {
-    pub plan_digest: String,
-    pub context_window_tokens: u64,
-    pub reserved_output_tokens: u64,
-    pub estimated_input_tokens: u64,
-    pub capacity_source: String,
-    pub items: Vec<AgentTurnContextItemDraft>,
-}
 
 const MAX_CANONICAL_SNAPSHOT_BYTES: usize = 2 * 1024 * 1024;
 const PROJECT_SKILL_TRUST_STATUS: &str = "untrusted_project_content";
@@ -385,113 +331,5 @@ impl Drop for AgentWorkspaceExecutionGuard<'_> {
         {
             state.active = None;
         }
-    }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ApprovalResponseInput {
-    pub decision: String,
-    pub reason: Option<String>,
-}
-
-#[derive(Default)]
-pub struct PendingApprovalRegistry {
-    waiters: Mutex<std::collections::HashMap<String, PendingApprovalWaiter>>,
-}
-
-struct PendingApprovalWaiter {
-    turn_id: Option<String>,
-    sender: oneshot::Sender<ApprovalResponseInput>,
-}
-
-impl PendingApprovalRegistry {
-    pub async fn is_empty(&self) -> bool {
-        self.waiters.lock().await.is_empty()
-    }
-
-    pub async fn count(&self) -> usize {
-        self.waiters.lock().await.len()
-    }
-
-    pub async fn register(
-        &self,
-        request_id: String,
-        turn_id: Option<String>,
-    ) -> oneshot::Receiver<ApprovalResponseInput> {
-        let (sender, receiver) = oneshot::channel();
-        self.waiters
-            .lock()
-            .await
-            .insert(request_id, PendingApprovalWaiter { turn_id, sender });
-        receiver
-    }
-
-    pub async fn respond(&self, request_id: &str, decision: ApprovalResponseInput) -> bool {
-        let waiter = self.waiters.lock().await.remove(request_id);
-        waiter.is_some_and(|waiter| waiter.sender.send(decision).is_ok())
-    }
-
-    pub async fn respond_for_turn(
-        &self,
-        request_id: &str,
-        turn_id: Option<&str>,
-        decision: ApprovalResponseInput,
-    ) -> bool {
-        let waiter = {
-            let mut waiters = self.waiters.lock().await;
-            if waiters
-                .get(request_id)
-                .is_some_and(|waiter| waiter.turn_id.as_deref() == turn_id)
-            {
-                waiters.remove(request_id)
-            } else {
-                None
-            }
-        };
-        waiter.is_some_and(|waiter| waiter.sender.send(decision).is_ok())
-    }
-
-    pub async fn remove(&self, request_id: &str) {
-        self.waiters.lock().await.remove(request_id);
-    }
-
-    pub async fn cancel_all(&self, reason: impl Into<String>) -> usize {
-        let reason = reason.into();
-        let waiters = {
-            let mut waiters = self.waiters.lock().await;
-            std::mem::take(&mut *waiters)
-        };
-        let count = waiters.len();
-        for (_, waiter) in waiters {
-            let _ = waiter.sender.send(ApprovalResponseInput {
-                decision: "cancel".to_string(),
-                reason: Some(reason.clone()),
-            });
-        }
-        count
-    }
-
-    pub async fn cancel_turn(&self, turn_id: &str, reason: impl Into<String>) -> usize {
-        let reason = reason.into();
-        let cancelled = {
-            let mut waiters = self.waiters.lock().await;
-            let all = std::mem::take(&mut *waiters);
-            let (cancelled, retained): (
-                std::collections::HashMap<_, _>,
-                std::collections::HashMap<_, _>,
-            ) = all
-                .into_iter()
-                .partition(|(_, waiter)| waiter.turn_id.as_deref() == Some(turn_id));
-            *waiters = retained;
-            cancelled
-        };
-        let count = cancelled.len();
-        for (_, waiter) in cancelled {
-            let _ = waiter.sender.send(ApprovalResponseInput {
-                decision: "cancel".to_string(),
-                reason: Some(reason.clone()),
-            });
-        }
-        count
     }
 }

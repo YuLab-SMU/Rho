@@ -1,30 +1,32 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, ensure};
-use rho_server::coordinator::{
-    AgentContextPlanPreview, AgentExplicitContextItem, ApprovalResponseInput,
-    preview_external_acp_context_plan, run_external_acp_agent_turn,
-};
+use rho_control_plane::{ProjectCommitOutcome, ProjectCommitter, stage_snapshot_delta};
+use rho_protocol::{KernelInstanceId, ProjectRevision, RevisionStamp, StateRevision, WorkspaceId};
+use rho_sandbox::snapshot::ProjectSnapshotDelta;
+use rho_server::coordinator::run_external_acp_agent_turn;
 #[cfg(test)]
 use rho_store::Store;
 use rho_store::{
-    AgentConversationDraft, AgentConversationSummary, AgentTurnContextItem,
-    AgentTurnContextItemDraft, AgentTurnDetail, AgentTurnDraft, AgentTurnEvent,
-    AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
+    AgentConversationDraft, AgentConversationSummary, AgentRepository, AgentTurnDetail,
+    AgentTurnDraft, AgentTurnEvent, AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary,
     normalize_project_root,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
-use crate::application_state::{active_context, active_session, store_executor};
-use crate::project::durable_project_root;
+use crate::application_state::{
+    active_context, active_session, persist_workspace_identity, store_executor,
+};
+use crate::project::{PROJECT_FILES_CHANGED_EVENT, ProjectFileChangeEvent, durable_project_root};
 use crate::startup_runtime::runtime_config;
-use crate::{AppState, display_error, runtime_registry, workspace_plugins};
+use crate::{AppState, display_error, workspace_plugins};
 
 const MAX_CONCURRENT_AGENT_TURNS: usize = 2;
 
@@ -36,7 +38,6 @@ pub(crate) struct AgentTaskEntry {
 pub(crate) fn agent_turn_admission_error(
     tasks: &HashMap<String, AgentTaskEntry>,
     conversation_id: Option<&str>,
-    _mode: &str,
 ) -> Option<&'static str> {
     if conversation_id.is_some_and(|conversation_id| {
         tasks
@@ -53,73 +54,6 @@ pub(crate) fn agent_turn_admission_error(
     None
 }
 
-async fn resolve_agent_explicit_context(
-    state: &AppState,
-    reference: Option<&runtime_registry::RuntimeOutputReference>,
-) -> Result<Option<AgentExplicitContextItem>> {
-    let Some(reference) = reference else {
-        return Ok(None);
-    };
-    let resolved = runtime_registry::resolve_runtime_output_context(
-        state,
-        &runtime_registry::RuntimeOutputReferenceRequest {
-            execution_id: reference.execution_id.clone(),
-            start_sequence: Some(reference.start_sequence),
-            end_sequence: Some(reference.end_sequence),
-        },
-        Some(&reference.project_id),
-        Some(&reference.range_sha256),
-    )
-    .await?;
-    let authoritative = &resolved.reference;
-    Ok(Some(AgentExplicitContextItem {
-        source_kind: "runtime_output".to_string(),
-        source_id: format!(
-            "{}:{}-{}",
-            authoritative.execution_id, authoritative.start_sequence, authoritative.end_sequence
-        ),
-        source_revision: format!("sequence:{}", authoritative.end_sequence),
-        source_sha256: authoritative.range_sha256.clone(),
-        trust_class: "explicit_project_data".to_string(),
-        original_bytes: authoritative.payload_bytes,
-        content: resolved.content,
-    }))
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-#[serde(untagged)]
-pub(crate) enum AgentJsonValue {
-    Null(()),
-    Boolean(bool),
-    Number(f64),
-    String(String),
-    Array(Vec<AgentJsonValue>),
-    Object(BTreeMap<String, AgentJsonValue>),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-#[serde(transparent)]
-pub(crate) struct AgentEditorContext(#[specta(type = AgentJsonValue)] pub(crate) Value);
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-pub(crate) struct AgentContextPlanPreviewView {
-    pub(crate) plan_digest: String,
-    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
-    pub(crate) context_window_tokens: u64,
-    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
-    pub(crate) reserved_output_tokens: u64,
-    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
-    pub(crate) estimated_input_tokens: u64,
-    pub(crate) capacity_source: String,
-    pub(crate) items: Vec<AgentTurnContextItemDraft>,
-    pub(crate) model_profile_id: String,
-    pub(crate) model_display_name: String,
-    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
-    pub(crate) settings_revision: u64,
-    pub(crate) conversation_id: Option<String>,
-    pub(crate) runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
-}
-
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AgentTurnStartStatus {
@@ -132,148 +66,337 @@ pub(crate) struct AgentTurnStartResponse {
     pub(crate) turn_id: String,
     pub(crate) conversation_id: String,
     pub(crate) retry_of_turn_id: Option<String>,
-    pub(crate) auto_approve: bool,
-    pub(crate) task_kind: String,
 }
 
-#[allow(clippy::too_many_arguments)]
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-pub(crate) async fn agent_context_preview(
-    prompt: String,
-    mode: String,
-    task_kind: Option<String>,
-    model_id: Option<String>,
-    editor_context: Option<AgentEditorContext>,
-    conversation_id: Option<String>,
-    runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
-    state: State<'_, AppState>,
-) -> Result<AgentContextPlanPreviewView, String> {
-    if prompt.trim().is_empty() {
-        return Err("Agent prompt is empty".to_string());
-    }
-    if !matches!(mode.as_str(), "ask" | "plan" | "act") {
-        return Err(format!("unsupported Agent mode `{mode}`"));
-    }
-    let task_kind = task_kind.unwrap_or_else(|| "agent_turn".to_string());
-    if !matches!(task_kind.as_str(), "agent_turn" | "problem_repair") {
-        return Err(format!("unsupported Agent task kind `{task_kind}`"));
-    }
-    if task_kind == "problem_repair" && mode != "ask" {
-        return Err("Problem repair must use read-only Ask mode.".to_string());
-    }
-    let config = runtime_config(&state).map_err(display_error)?;
-    let _ = model_id;
-    let requested_conversation_id = conversation_id.map(|value| value.trim().to_string());
-    if requested_conversation_id.as_deref() == Some("") {
-        return Err("Agent Conversation identity cannot be empty".to_string());
-    }
-    let explicit_context = resolve_agent_explicit_context(&state, runtime_output_context.as_ref())
-        .await
-        .map_err(display_error)?;
-    let store_executor = store_executor(&state).await.map_err(display_error)?;
-    let agent_store = store_executor.agent_repository();
-    let _project_transition = state.project_transition_gate.lock().await;
-    let identity = active_context(&state)
-        .await
-        .map_err(display_error)?
-        .identity();
-    let plugin_snapshot = workspace_plugins::agent_plugin_projection_snapshot(
-        Arc::clone(&state.plugin_permissions),
-        store_executor,
-        config.data_dir.clone(),
-        identity,
-        "Cannot preview Agent context without an active project identity",
-    )
-    .await
-    .map_err(display_error)?;
-    let project_root = plugin_snapshot.project_root;
-    let plugin_projection = plugin_snapshot.projection;
-    let history = if let Some(conversation_id) = requested_conversation_id.as_deref() {
-        agent_store
-            .recent_conversation(
-                project_root.clone(),
-                conversation_id.to_string(),
-                "preview".to_string(),
-                100,
-            )
-            .await
-            .map_err(display_error)?
-    } else {
-        Vec::new()
-    };
-    let conversation_digest_id = requested_conversation_id
-        .as_deref()
-        .unwrap_or("new_conversation");
-    let preview: AgentContextPlanPreview = preview_external_acp_context_plan(
-        &prompt,
-        &history,
-        editor_context.as_ref().map(|context| &context.0),
-        Some(&project_root),
-        &plugin_projection.context,
-        explicit_context.as_ref(),
-        conversation_digest_id,
-    )
-    .map_err(display_error)?;
-    Ok(AgentContextPlanPreviewView {
-        plan_digest: preview.plan_digest,
-        context_window_tokens: preview.context_window_tokens,
-        reserved_output_tokens: preview.reserved_output_tokens,
-        estimated_input_tokens: preview.estimated_input_tokens,
-        capacity_source: preview.capacity_source,
-        items: preview.items,
-        model_profile_id: "external.acp".to_string(),
-        model_display_name: "External ACP Agent".to_string(),
-        settings_revision: 1,
-        conversation_id: requested_conversation_id,
-        runtime_output_context,
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn run_agent(
     prompt: String,
-    mode: String,
-    task_kind: Option<String>,
-    model_id: Option<String>,
-    auto_approve: Option<bool>,
-    editor_context: Option<AgentEditorContext>,
     conversation_id: Option<String>,
-    runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
-    context_plan_digest: Option<String>,
     app: AppHandle,
 ) -> Result<AgentTurnStartResponse, String> {
     let state = app.state::<AppState>();
-    start_agent_turn(
-        prompt,
-        mode,
-        task_kind,
-        model_id,
-        auto_approve,
-        editor_context.map(|context| context.0),
-        conversation_id,
-        runtime_output_context,
-        context_plan_digest,
+    start_agent_turn(prompt, conversation_id, None, app.clone(), &state).await
+}
+
+enum AgentWorkspaceApplyOutcome {
+    NoChanges,
+    Committed {
+        identity: rho_protocol::WorkspaceIdentity,
+        paths: Vec<String>,
+    },
+    ReconcileRequired {
+        journal_id: String,
+        reason_code: String,
+        applied_paths: Vec<String>,
+        pending_paths: Vec<String>,
+    },
+}
+
+fn revision_stamp(identity: &rho_protocol::WorkspaceIdentity) -> Result<RevisionStamp> {
+    Ok(RevisionStamp {
+        workspace_id: WorkspaceId::new(identity.workspace_id.clone())?,
+        kernel_instance_id: KernelInstanceId::new(identity.kernel_instance_id.clone())?,
+        state_revision: StateRevision(identity.state_revision),
+        project_revision: ProjectRevision(identity.project_revision),
+    })
+}
+
+async fn apply_agent_workspace_delta(
+    context: &rho_server::workspace_lane::WorkspaceBrokerLane,
+    agent_store: &AgentRepository,
+    project_root: &str,
+    turn_id: &str,
+    delta: ProjectSnapshotDelta,
+    staging_root: &Path,
+) -> Result<AgentWorkspaceApplyOutcome> {
+    if delta.changes.is_empty() {
+        return Ok(AgentWorkspaceApplyOutcome::NoChanges);
+    }
+    let staged = stage_snapshot_delta(
+        &delta,
+        staging_root,
+        format!("agent_patch_{}", Uuid::new_v4().simple()),
+    )?;
+    let prepared = staged.prepared();
+    let mut workspace = context.lock().await;
+    let before = workspace.broker.identity().clone();
+    ensure!(
+        before.project_revision == delta.base_project_revision.0,
+        "Agent Workspace changes are stale after another project mutation"
+    );
+    let mut committer = ProjectCommitter::open(project_root, revision_stamp(&before)?)?;
+    let outcome = committer.commit(&prepared)?;
+    match outcome {
+        ProjectCommitOutcome::Committed {
+            transition,
+            provenance,
+            ..
+        } => {
+            let paths = provenance.applied_paths;
+            workspace.broker.project_changed();
+            let identity = workspace.broker.identity().clone();
+            ensure!(
+                identity.project_revision == transition.after.project_revision.0,
+                "Agent project commit revision differs from Workspace authority"
+            );
+            persist_workspace_identity(&workspace.executor, identity.clone()).await?;
+            drop(workspace);
+            agent_store
+                .append_turn_event(AgentTurnEventDraft {
+                    turn_id: turn_id.to_string(),
+                    event_type: "agent.workspace_committed".to_string(),
+                    title: "Agent project changes committed".to_string(),
+                    body: Some(format!(
+                        "{} project path{} changed.",
+                        paths.len(),
+                        if paths.len() == 1 { "" } else { "s" }
+                    )),
+                    status: "completed".to_string(),
+                    tool: Some("project.apply_patch".to_string()),
+                    request_id: None,
+                    code: None,
+                    details_json: serde_json::to_string(&json!({
+                        "patch_digest": provenance.patch_digest,
+                        "base_project_revision": provenance.base_project_revision,
+                        "applied_project_revision": provenance.applied_project_revision,
+                        "paths": paths.clone(),
+                        "base_snapshot_id": delta.base_snapshot_id,
+                        "total_staged_bytes": delta.total_staged_bytes,
+                    }))?,
+                })
+                .await?;
+            Ok(AgentWorkspaceApplyOutcome::Committed { identity, paths })
+        }
+        ProjectCommitOutcome::ReconcileRequired {
+            applied_paths,
+            pending_paths,
+            journal_id,
+            reason_code,
+            patch_digest,
+        } => {
+            drop(workspace);
+            agent_store
+                .append_turn_event(AgentTurnEventDraft {
+                    turn_id: turn_id.to_string(),
+                    event_type: "agent.workspace_reconcile_required".to_string(),
+                    title: "Agent project changes require reconciliation".to_string(),
+                    body: Some(
+                        "Rho preserved the exact partial outcome and did not report success."
+                            .to_string(),
+                    ),
+                    status: "uncertain".to_string(),
+                    tool: Some("project.apply_patch".to_string()),
+                    request_id: None,
+                    code: None,
+                    details_json: serde_json::to_string(&json!({
+                        "patch_digest": patch_digest,
+                        "journal_id": journal_id.clone(),
+                        "reason_code": reason_code.clone(),
+                        "applied_paths": applied_paths.clone(),
+                        "pending_paths": pending_paths.clone(),
+                        "base_snapshot_id": delta.base_snapshot_id,
+                    }))?,
+                })
+                .await?;
+            Ok(AgentWorkspaceApplyOutcome::ReconcileRequired {
+                journal_id,
+                reason_code,
+                applied_paths,
+                pending_paths,
+            })
+        }
+    }
+}
+
+async fn update_agent_turn_after_workspace_effect(
+    agent_store: &AgentRepository,
+    project_root: &str,
+    turn_id: &str,
+    identity: &rho_protocol::WorkspaceIdentity,
+    status: &str,
+    terminal_reason: &str,
+    error_message: Option<String>,
+) -> Result<()> {
+    let detail = agent_store
+        .get_turn_detail(project_root.to_string(), turn_id.to_string())
+        .await?
+        .context("Agent turn disappeared before Workspace effect finalization")?;
+    let error_message = error_message.or(detail.turn.error_message);
+    agent_store
+        .finish_turn(AgentTurnFinish {
+            turn_id: turn_id.to_string(),
+            status: status.to_string(),
+            terminal_reason: Some(terminal_reason.to_string()),
+            workspace_id_after: Some(identity.workspace_id.clone()),
+            state_revision_after: Some(identity.state_revision as i64),
+            project_revision_after: Some(identity.project_revision as i64),
+            final_message: detail.turn.final_message,
+            error_message,
+        })
+        .await?;
+    Ok(())
+}
+
+async fn refresh_agent_turn_after_gateway(
+    agent_store: &AgentRepository,
+    project_root: &str,
+    turn_id: &str,
+    identity: &rho_protocol::WorkspaceIdentity,
+    execution_succeeded: bool,
+) -> Result<()> {
+    update_agent_turn_after_workspace_effect(
+        agent_store,
+        project_root,
+        turn_id,
+        identity,
+        if execution_succeeded {
+            "completed"
+        } else {
+            "failed"
+        },
+        if execution_succeeded {
+            "external_acp_completed"
+        } else {
+            "external_acp_failure"
+        },
         None,
-        app.clone(),
-        &state,
     )
     .await
 }
 
-#[allow(clippy::too_many_arguments)]
+async fn record_agent_workspace_uncertainty(
+    agent_store: &AgentRepository,
+    project_root: &str,
+    turn_id: &str,
+    identity: &rho_protocol::WorkspaceIdentity,
+    event_type: &str,
+    title: &str,
+    message: &str,
+    details: Value,
+) -> Result<()> {
+    agent_store
+        .append_turn_event(AgentTurnEventDraft {
+            turn_id: turn_id.to_string(),
+            event_type: event_type.to_string(),
+            title: title.to_string(),
+            body: Some(message.to_string()),
+            status: "uncertain".to_string(),
+            tool: Some("project.apply_patch".to_string()),
+            request_id: None,
+            code: None,
+            details_json: serde_json::to_string(&details)?,
+        })
+        .await?;
+    update_agent_turn_after_workspace_effect(
+        agent_store,
+        project_root,
+        turn_id,
+        identity,
+        "uncertain",
+        "agent_workspace_reconcile_required",
+        Some(message.to_string()),
+    )
+    .await
+}
+
+fn retained_agent_staging_id(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("retained-agent-turn")
+        .to_string()
+}
+
+async fn capture_agent_exposed_state(
+    state: &AppState,
+    executor: &rho_store::StoreExecutor,
+    project_root: &str,
+) -> Result<Value> {
+    const LIMIT: usize = 100;
+    let runs = executor
+        .run_repository()
+        .list_runs(project_root.to_string(), Some(LIMIT))
+        .await?;
+    let problems = executor
+        .run_repository()
+        .list_problems(project_root.to_string(), Some(LIMIT))
+        .await?;
+    let artifacts = executor
+        .artifact_repository()
+        .list_records(project_root.to_string(), None, false, Some(LIMIT))
+        .await?;
+    let plots = executor
+        .artifact_repository()
+        .list_plots(project_root.to_string(), None, false, Some(LIMIT))
+        .await?
+        .into_iter()
+        .map(|plot| {
+            json!({
+                "plot_id": plot.plot_id,
+                "run_id": plot.run_id,
+                "source_path": plot.source_path,
+                "execution_mode": plot.execution_mode,
+                "document_version": plot.document_version,
+                "workspace_id": plot.workspace_id,
+                "state_revision": plot.state_revision,
+                "project_revision": plot.project_revision,
+                "media_type": plot.media_type,
+                "provenance_complete": plot.provenance_complete,
+                "created_at": plot.created_at,
+            })
+        })
+        .collect::<Vec<_>>();
+    let runtime_executions = executor
+        .runtime_output_repository()
+        .list_executions(project_root.to_string(), Some(LIMIT), None)
+        .await?
+        .into_iter()
+        .map(|execution| {
+            json!({
+                "execution_id": execution.execution_id,
+                "run_id": execution.run_id,
+                "runtime_provider_id": execution.runtime_provider_id,
+                "runtime_instance_id": execution.runtime_instance_id,
+                "console_instance_id": execution.console_instance_id,
+                "workspace_id": execution.workspace_id,
+                "source_path": execution.source_path,
+                "execution_mode": execution.execution_mode,
+                "document_version": execution.document_version,
+                "status": execution.status,
+                "terminal_reason": execution.terminal_reason,
+                "output_state": execution.output_state,
+                "last_sequence": execution.last_sequence,
+                "output_bytes": execution.output_bytes,
+                "started_at": execution.started_at,
+                "finished_at": execution.finished_at,
+            })
+        })
+        .collect::<Vec<_>>();
+    let conversations = executor
+        .agent_repository()
+        .list_conversations(project_root.to_string(), Some(LIMIT))
+        .await?;
+    let environment = crate::commands::environment::environment_health_for_state(state)
+        .await
+        .map_err(anyhow::Error::msg)?;
+    let graph_context = crate::evidence_graph_runtime::active_graph_context(state).await?;
+    let evidence_graph = crate::evidence_graph_runtime::graph_health_view(&graph_context)?;
+    Ok(json!({
+        "runs": runs,
+        "problems": problems,
+        "artifacts": artifacts,
+        "plots": plots,
+        "runtime_executions": runtime_executions,
+        "agent_conversations": conversations,
+        "environment": environment,
+        "evidence_graph": evidence_graph,
+        "bounds": {"items_per_collection": LIMIT},
+    }))
+}
+
 async fn start_agent_turn(
     prompt: String,
-    mode: String,
-    task_kind: Option<String>,
-    model_id: Option<String>,
-    _auto_approve: Option<bool>,
-    editor_context: Option<Value>,
     conversation_id: Option<String>,
-    runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
-    context_plan_digest: Option<String>,
     retry_of_turn_id: Option<String>,
     app: AppHandle,
     state: &AppState,
@@ -282,18 +405,7 @@ async fn start_agent_turn(
     if prompt.trim().is_empty() {
         return Err("Agent prompt is empty".to_string());
     }
-    if !matches!(mode.as_str(), "ask" | "plan" | "act") {
-        return Err(format!("unsupported Agent mode `{mode}`"));
-    }
-    let task_kind = task_kind.unwrap_or_else(|| "agent_turn".to_string());
-    if !matches!(task_kind.as_str(), "agent_turn" | "problem_repair") {
-        return Err(format!("unsupported Agent task kind `{task_kind}`"));
-    }
-    if task_kind == "problem_repair" && mode != "ask" {
-        return Err("Problem repair must use read-only Ask mode.".to_string());
-    }
     let config = runtime_config(state).map_err(display_error)?;
-    let _ = model_id;
     let requested_conversation_id = conversation_id.map(|value| value.trim().to_string());
     if requested_conversation_id.as_deref() == Some("") {
         return Err("Agent Conversation identity cannot be empty".to_string());
@@ -302,19 +414,16 @@ async fn start_agent_turn(
         return Err("Agent Retry requires its original Conversation identity".to_string());
     }
     let project_transition = state.project_transition_gate.lock().await;
-    let mut tasks = state.agent_tasks.lock().await;
-    if let Some(error) =
-        agent_turn_admission_error(&tasks, requested_conversation_id.as_deref(), &mode)
     {
-        return Err(error.to_string());
+        let tasks = state.agent_tasks.lock().await;
+        if let Some(error) =
+            agent_turn_admission_error(&tasks, requested_conversation_id.as_deref())
+        {
+            return Err(error.to_string());
+        }
     }
     let context = active_context(state).await.map_err(display_error)?;
     let turn_id = format!("agent_turn_{}", Uuid::new_v4());
-    let auto_approve = false;
-    let _ = auto_approve;
-    let explicit_context = resolve_agent_explicit_context(state, runtime_output_context.as_ref())
-        .await
-        .map_err(display_error)?;
     let store_executor = store_executor(state).await.map_err(display_error)?;
     let agent_store = store_executor.agent_repository();
     let identity = context.identity();
@@ -329,63 +438,79 @@ async fn start_agent_turn(
     .map_err(display_error)?;
     let project_root = plugin_snapshot.project_root;
     let plugin_projection = plugin_snapshot.projection;
+    let plugin_tool_count = plugin_projection.tools.len();
+    let new_conversation = requested_conversation_id.is_none();
+    let conversation_id = requested_conversation_id
+        .clone()
+        .unwrap_or_else(|| format!("agent_conversation_{}", Uuid::new_v4()));
+    let prior_turns = if new_conversation {
+        Vec::new()
+    } else {
+        agent_store
+            .recent_conversation(
+                project_root.clone(),
+                conversation_id.clone(),
+                turn_id.clone(),
+                100,
+            )
+            .await
+            .map_err(display_error)?
+    };
+    let mut exposed_state = capture_agent_exposed_state(state, store_executor, &project_root)
+        .await
+        .map_err(display_error)?;
+    exposed_state["workspace_plugins"] = json!({
+        "tools": &plugin_projection.tools,
+        "context": &plugin_projection.context,
+    });
+    exposed_state["active_conversation"] = json!({
+        "conversation_id": conversation_id,
+        "prior_turns": prior_turns,
+    });
+    exposed_state["workbench"] = serde_json::to_value(
+        crate::workbench_projection::capture_for_state(state)
+            .await
+            .map_err(display_error)?,
+    )
+    .map_err(display_error)?;
+    exposed_state["live_capabilities"] = json!([
+        "workspace.inspect",
+        "workspace.inspect_object",
+        rho_protocol::RUN_R_CAPABILITY,
+        rho_protocol::ENVIRONMENT_INSPECT_CAPABILITY,
+        rho_protocol::ENVIRONMENT_EXPLAIN_INCIDENT_CAPABILITY,
+        rho_protocol::ENVIRONMENT_OPERATION_INSPECT_CAPABILITY,
+    ]);
+    let gateway = crate::agent_gateway::start_agent_gateway(
+        app.clone(),
+        active_session(state).await.map_err(display_error)?,
+        Arc::clone(&context),
+    )
+    .await
+    .map_err(display_error)?;
+    let mcp_environment = gateway.mcp_environment();
     let prepared_acp = crate::acp_runtime::prepare_acp_turn(
         &config.data_dir,
         &project_root,
-        identity.project_revision,
+        identity.as_ref(),
+        exposed_state,
+        mcp_environment,
         &config.process_path,
     )
     .map_err(display_error)?;
     let provider_label = prepared_acp.provider_label.clone();
 
-    if explicit_context.is_some() || context_plan_digest.is_some() {
-        let digest_conversation_id = requested_conversation_id
-            .as_deref()
-            .unwrap_or("new_conversation");
-        let history = if let Some(conversation_id) = requested_conversation_id.as_deref() {
-            agent_store
-                .recent_conversation(
-                    project_root.clone(),
-                    conversation_id.to_string(),
-                    "preview".to_string(),
-                    100,
-                )
-                .await
-                .map_err(display_error)?
-        } else {
-            Vec::new()
-        };
-        let current_plan = preview_external_acp_context_plan(
-            &prompt,
-            &history,
-            editor_context.as_ref(),
-            Some(&project_root),
-            &plugin_projection.context,
-            explicit_context.as_ref(),
-            digest_conversation_id,
-        )
-        .map_err(display_error)?;
-        let expected = context_plan_digest.as_deref().ok_or_else(|| {
-            "Explicit Agent context requires a reviewed context-plan digest".to_string()
-        })?;
-        if expected != current_plan.plan_digest {
-            return Err(
-                "Agent context changed after review. Review the current context plan and send again."
-                    .to_string(),
-            );
-        }
-    }
+    let mut tasks = state.agent_tasks.lock().await;
     let turn_draft = AgentTurnDraft {
         turn_id: turn_id.clone(),
         project_root: project_root.clone(),
-        mode: mode.clone(),
         prompt: prompt.clone(),
         model: provider_label.clone(),
         workspace_id: identity.workspace_id.clone(),
         state_revision_before: identity.state_revision as i64,
         project_revision_before: identity.project_revision as i64,
     };
-    let conversation_id = if let Some(conversation_id) = requested_conversation_id {
+    if !new_conversation {
         agent_store
             .create_turn_in_conversation(
                 conversation_id.clone(),
@@ -394,9 +519,7 @@ async fn start_agent_turn(
             )
             .await
             .map_err(display_error)?;
-        conversation_id
     } else {
-        let conversation_id = format!("agent_conversation_{}", Uuid::new_v4());
         agent_store
             .create_turn_with_conversation(
                 AgentConversationDraft {
@@ -409,8 +532,7 @@ async fn start_agent_turn(
             )
             .await
             .map_err(display_error)?;
-        conversation_id
-    };
+    }
     let event_result = agent_store
         .append_turn_event(AgentTurnEventDraft {
             turn_id: turn_id.clone(),
@@ -422,22 +544,10 @@ async fn start_agent_turn(
             request_id: None,
             code: None,
             details_json: serde_json::to_string(&json!({
-                "prompt": prompt,
-                "mode": mode,
-                "task_kind": task_kind,
                 "conversation_id": conversation_id,
                 "retry_of_turn_id": retry_of_turn_id,
-                "auto_approve": auto_approve,
-                "editor_context": editor_context.clone(),
-                "runtime_output_context": runtime_output_context,
-                "context_plan_digest": context_plan_digest.clone(),
-                "model_profile_id": "external.acp",
-                "model_display_name": "Agent selected",
                 "provider_display_name": provider_label,
-                "effective_model": "external-acp-session",
-                "model_settings_revision": 1,
-                "capability_route": "external.acp",
-                "plugin_tool_count": 0,
+                "plugin_tool_count": plugin_tool_count,
                 "plugin_context_count": plugin_projection.context.len()
             }))
             .map_err(display_error)?,
@@ -465,25 +575,152 @@ async fn start_agent_turn(
     let task_turn_id = turn_id.clone();
     let task_conversation_id = conversation_id.clone();
     let task_agent_tasks = state.agent_tasks.clone();
+    let task_agent_store = agent_store.clone();
+    let task_project_root = project_root.clone();
+    let task_context = Arc::clone(&context);
     let workspace_before = identity.as_ref().clone();
     let (registered_tx, registered_rx) = oneshot::channel();
     let task = tauri::async_runtime::spawn(async move {
         let _ = registered_rx.await;
-        let _prepared_acp = prepared_acp;
-        let _ = run_external_acp_agent_turn(
+        let mut prepared_acp = Some(prepared_acp);
+        let process = prepared_acp.as_ref().unwrap().process.clone();
+        let exposure = prepared_acp.as_ref().unwrap().exposure.clone();
+        let execution_result = run_external_acp_agent_turn(
             agent_store,
-            project_root,
-            _prepared_acp.process.clone(),
+            process,
+            exposure,
             prompt,
             task_turn_id.clone(),
             task_conversation_id,
             workspace_before,
-            editor_context,
-            explicit_context,
-            context_plan_digest,
-            plugin_projection.context,
         )
         .await;
+        gateway.shutdown().await;
+        let workspace_delta = prepared_acp.as_ref().unwrap().workspace_delta();
+        match workspace_delta {
+            Ok(delta) if delta.changes.is_empty() => {
+                let identity = task_context.identity();
+                let _ = refresh_agent_turn_after_gateway(
+                    &task_agent_store,
+                    &task_project_root,
+                    &task_turn_id,
+                    identity.as_ref(),
+                    execution_result.is_ok(),
+                )
+                .await;
+            }
+            Ok(delta) => {
+                let staging_root = prepared_acp.as_ref().unwrap().commit_staging_root();
+                match apply_agent_workspace_delta(
+                    task_context.as_ref(),
+                    &task_agent_store,
+                    &task_project_root,
+                    &task_turn_id,
+                    delta,
+                    &staging_root,
+                )
+                .await
+                {
+                    Ok(AgentWorkspaceApplyOutcome::NoChanges) => {
+                        let identity = task_context.identity();
+                        let _ = refresh_agent_turn_after_gateway(
+                            &task_agent_store,
+                            &task_project_root,
+                            &task_turn_id,
+                            identity.as_ref(),
+                            execution_result.is_ok(),
+                        )
+                        .await;
+                    }
+                    Ok(AgentWorkspaceApplyOutcome::Committed { identity, paths }) => {
+                        let _ = app.emit(
+                            PROJECT_FILES_CHANGED_EVENT,
+                            ProjectFileChangeEvent {
+                                root: task_project_root.clone(),
+                                changed_paths: paths,
+                            },
+                        );
+                        let (status, terminal_reason) = if execution_result.is_ok() {
+                            ("completed", "external_acp_completed_with_workspace_commit")
+                        } else {
+                            ("failed", "external_acp_failed_after_workspace_commit")
+                        };
+                        let _ = update_agent_turn_after_workspace_effect(
+                            &task_agent_store,
+                            &task_project_root,
+                            &task_turn_id,
+                            &identity,
+                            status,
+                            terminal_reason,
+                            None,
+                        )
+                        .await;
+                    }
+                    Ok(AgentWorkspaceApplyOutcome::ReconcileRequired {
+                        journal_id,
+                        reason_code,
+                        applied_paths,
+                        pending_paths,
+                    }) => {
+                        let retained = prepared_acp.take().unwrap().retain_for_reconciliation();
+                        let identity = task_context.identity();
+                        let _ = record_agent_workspace_uncertainty(
+                            &task_agent_store,
+                            &task_project_root,
+                            &task_turn_id,
+                            identity.as_ref(),
+                            "agent.workspace_staging_retained",
+                            "Agent project staging retained",
+                            "Agent project changes have a partial outcome and require reconciliation.",
+                            json!({
+                                "staging_id": retained_agent_staging_id(&retained),
+                                "journal_id": journal_id,
+                                "reason_code": reason_code,
+                                "applied_paths": applied_paths,
+                                "pending_paths": pending_paths,
+                            }),
+                        )
+                        .await;
+                    }
+                    Err(error) => {
+                        let retained = prepared_acp.take().unwrap().retain_for_reconciliation();
+                        let identity = task_context.identity();
+                        let _ = record_agent_workspace_uncertainty(
+                            &task_agent_store,
+                            &task_project_root,
+                            &task_turn_id,
+                            identity.as_ref(),
+                            "agent.workspace_commit_failed",
+                            "Agent project commit failed",
+                            "Agent project changes were retained for reconciliation and were not reported as committed.",
+                            json!({
+                                "staging_id": retained_agent_staging_id(&retained),
+                                "reason": error.to_string(),
+                            }),
+                        )
+                        .await;
+                    }
+                }
+            }
+            Err(error) => {
+                let retained = prepared_acp.take().unwrap().retain_for_reconciliation();
+                let identity = task_context.identity();
+                let _ = record_agent_workspace_uncertainty(
+                    &task_agent_store,
+                    &task_project_root,
+                    &task_turn_id,
+                    identity.as_ref(),
+                    "agent.workspace_capture_failed",
+                    "Agent project changes could not be captured",
+                    "The disposable Agent Workspace was retained for reconciliation.",
+                    json!({
+                        "staging_id": retained_agent_staging_id(&retained),
+                        "reason": error.to_string(),
+                    }),
+                )
+                .await;
+            }
+        }
         task_agent_tasks.lock().await.remove(&task_turn_id);
         let _ = app.emit(
             "rho://agent-turn-updated",
@@ -505,16 +742,11 @@ async fn start_agent_turn(
         turn_id,
         conversation_id,
         retry_of_turn_id,
-        auto_approve,
-        task_kind,
     })
 }
 
 pub(crate) struct AgentRetrySource {
     pub(crate) prompt: String,
-    pub(crate) mode: String,
-    pub(crate) task_kind: String,
-    pub(crate) editor_context: Option<Value>,
     pub(crate) conversation_id: String,
 }
 
@@ -555,18 +787,8 @@ fn project_agent_retry_source(
         .clone()
         .filter(|prompt| !prompt.trim().is_empty())
         .context("Agent Retry source prompt is empty")?;
-    let event_details: Value = serde_json::from_str(&user_event.details_json)
-        .context("Agent Retry source metadata is malformed")?;
-    let task_kind = event_details
-        .get("task_kind")
-        .and_then(Value::as_str)
-        .unwrap_or("agent_turn")
-        .to_string();
     Ok(AgentRetrySource {
         prompt,
-        mode: detail.turn.mode,
-        task_kind,
-        editor_context: event_details.get("editor_context").cloned(),
         conversation_id: detail.turn.conversation_id,
     })
 }
@@ -615,14 +837,7 @@ pub(crate) async fn retry_agent_turn(
 
     start_agent_turn(
         source.prompt,
-        source.mode,
-        Some(source.task_kind),
-        None,
-        Some(false),
-        source.editor_context,
         Some(source.conversation_id),
-        None,
-        None,
         Some(turn_id),
         app,
         &state,
@@ -630,50 +845,10 @@ pub(crate) async fn retry_agent_turn(
     .await
 }
 
-#[derive(Debug, Clone, Deserialize, specta::Type)]
-pub(crate) struct ApprovalDecisionRequest {
-    pub(crate) request_id: String,
-    pub(crate) decision: String,
-    pub(crate) reason: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum AgentApprovalDeliveryStatus {
-    Delivered,
-    NotDelivered,
-}
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-pub(crate) struct AgentApprovalDeliveryResponse {
-    pub(crate) status: AgentApprovalDeliveryStatus,
-    pub(crate) request_id: String,
-    pub(crate) turn_id: String,
-}
-
-#[tauri::command]
-pub(crate) async fn list_approval_requests(
-    limit: Option<usize>,
-    status: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<Vec<ApprovalRequestSummary>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = durable_project_root(&root);
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .agent_repository()
-        .list_approval_requests(project_root, limit, status)
-        .await
-        .map_err(display_error)
-}
-
 #[derive(Debug, Clone, Serialize, specta::Type)]
 pub(crate) struct AgentTurnDetailView {
     pub(crate) turn: AgentTurnSummary,
     pub(crate) events: Vec<AgentTurnEvent>,
-    pub(crate) approvals: Vec<ApprovalRequestSummary>,
-    pub(crate) context_items: Vec<AgentTurnContextItem>,
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -695,80 +870,10 @@ pub(crate) async fn get_agent_turn_detail(
     let Some(detail) = detail else {
         return Ok(None);
     };
-    let context_items = agent_store
-        .list_context_items(project_root, turn_id)
-        .await
-        .map_err(display_error)?;
     Ok(Some(AgentTurnDetailView {
         turn: detail.turn,
         events: detail.events,
-        approvals: detail.approvals,
-        context_items,
     }))
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-pub(crate) async fn respond_approval(
-    request: ApprovalDecisionRequest,
-    state: State<'_, AppState>,
-) -> Result<AgentApprovalDeliveryResponse, String> {
-    if !matches!(request.decision.as_str(), "approve" | "reject" | "cancel") {
-        return Err(format!(
-            "unsupported approval decision `{}`",
-            request.decision
-        ));
-    }
-    let root = state.project_root.read().await.clone();
-    let project_root = durable_project_root(&root);
-    let agent_store = store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .agent_repository();
-    let pending = agent_store
-        .get_approval_request(project_root, request.request_id.clone())
-        .await
-        .map_err(display_error)?
-        .filter(|item| item.status == "waiting")
-        .context(format!(
-            "Approval request not found or no longer waiting: {}",
-            request.request_id
-        ))
-        .map_err(display_error)?;
-    let delivered = state
-        .approvals
-        .respond_for_turn(
-            &request.request_id,
-            Some(&pending.turn_id),
-            ApprovalResponseInput {
-                decision: request.decision.clone(),
-                reason: request.reason.clone(),
-            },
-        )
-        .await;
-    if !delivered {
-        agent_store
-            .resolve_approval_request(
-                request.request_id.clone(),
-                rho_store::ApprovalDecisionRecord {
-                    decision: "cancel".to_string(),
-                    status: "interrupted".to_string(),
-                    reason: Some("Approval channel is no longer active.".to_string()),
-                    continuation_outcome: Some("agent_unavailable".to_string()),
-                },
-            )
-            .await
-            .map_err(display_error)?;
-    }
-    Ok(AgentApprovalDeliveryResponse {
-        status: if delivered {
-            AgentApprovalDeliveryStatus::Delivered
-        } else {
-            AgentApprovalDeliveryStatus::NotDelivered
-        },
-        request_id: request.request_id,
-        turn_id: pending.turn_id,
-    })
 }
 
 pub(crate) async fn interrupt_all_agent_tasks(
@@ -776,7 +881,6 @@ pub(crate) async fn interrupt_all_agent_tasks(
     terminal_reason: &str,
     message: &str,
 ) -> Result<usize> {
-    state.approvals.cancel_all(message).await;
     let tasks = {
         let mut tasks = state.agent_tasks.lock().await;
         tasks.drain().collect::<Vec<_>>()
@@ -808,13 +912,6 @@ pub(crate) async fn interrupt_all_agent_tasks(
             continue;
         }
         agent_store
-            .interrupt_approvals(
-                turn_id.clone(),
-                message.to_string(),
-                terminal_reason.to_string(),
-            )
-            .await?;
-        agent_store
             .append_turn_event(AgentTurnEventDraft {
                 turn_id: turn_id.clone(),
                 event_type: "agent.interrupted".to_string(),
@@ -843,26 +940,6 @@ pub(crate) async fn interrupt_all_agent_tasks(
             .await?;
     }
     Ok(count)
-}
-
-#[tauri::command]
-pub(crate) async fn clear_agent_history(state: State<'_, AppState>) -> Result<Value, String> {
-    let _project_transition = state.project_transition_gate.lock().await;
-    let tasks = state.agent_tasks.lock().await;
-    if !tasks.is_empty() {
-        return Err("Stop the active Agent turn before clearing its history.".to_string());
-    }
-    let root = state.project_root.read().await.clone();
-    let project_root = durable_project_root(&root);
-    let deleted = store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .agent_repository()
-        .clear_history(project_root)
-        .await
-        .map_err(display_error)?;
-    drop(tasks);
-    Ok(json!({"deleted": deleted}))
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -906,11 +983,6 @@ pub(crate) async fn cancel_agent_turn_state(
         .remove(&turn_id)
         .context(format!("Agent turn is not active: {turn_id}"))
         .map_err(display_error)?;
-    let cancelled_approvals = state
-        .approvals
-        .cancel_turn(&turn_id, "Agent turn cancelled by the user.")
-        .await;
-    let cancelled_file_mutations = 0usize;
     let active_workspace_run = state.agent_workspace_lane.cancel_turn(&turn_id);
     let mut joined_after_interrupt = false;
     if let Some(run_id) = active_workspace_run.as_deref() {
@@ -960,14 +1032,6 @@ pub(crate) async fn cancel_agent_turn_state(
         .is_some()
     {
         agent_store
-            .interrupt_approvals(
-                turn_id.clone(),
-                "Agent turn cancelled by the user.".to_string(),
-                "user_cancelled".to_string(),
-            )
-            .await
-            .map_err(display_error)?;
-        agent_store
             .append_turn_event(AgentTurnEventDraft {
                 turn_id: turn_id.clone(),
                 event_type: "agent.cancelled".to_string(),
@@ -978,8 +1042,6 @@ pub(crate) async fn cancel_agent_turn_state(
                 request_id: None,
                 code: None,
                 details_json: serde_json::to_string(&json!({
-                    "cancelled_approval_waiters": cancelled_approvals,
-                    "cancelled_file_mutations": cancelled_file_mutations,
                     "workspace_run_id": active_workspace_run
                 }))
                 .map_err(display_error)?,
@@ -1016,4 +1078,94 @@ pub(crate) async fn cancel_agent_turn(
     let response = cancel_agent_turn_state(turn_id.clone(), &state).await?;
     let _ = app.emit("rho://agent-turn-updated", json!({ "turn_id": turn_id }));
     Ok(response)
+}
+
+#[cfg(all(test, unix))]
+mod agent_workspace_tests {
+    use super::*;
+    use rho_core::BrokerState;
+    use rho_sandbox::snapshot::{SnapshotLimits, build_project_snapshot, diff_project_snapshot};
+    use rho_server::workspace_lane::WorkspaceBrokerLane;
+    use rho_store::{AgentConversationDraft, AgentTurnDraft, StoreExecutor};
+
+    #[tokio::test]
+    async fn agent_workspace_delta_commits_through_the_live_workspace_revision_lane() {
+        let directory = tempfile::tempdir().unwrap();
+        let project = directory.path().join("project");
+        let workspace = directory.path().join("workspace");
+        std::fs::create_dir(&project).unwrap();
+        std::fs::create_dir(&workspace).unwrap();
+        std::fs::write(project.join("analysis.R"), "x <- 1\n").unwrap();
+        std::fs::write(workspace.join("analysis.R"), "x <- 2\n").unwrap();
+        std::fs::write(workspace.join("result.txt"), "done\n").unwrap();
+        let baseline =
+            build_project_snapshot(&project, ProjectRevision(0), SnapshotLimits::default())
+                .unwrap();
+        let delta =
+            diff_project_snapshot(&baseline, &workspace, SnapshotLimits::default()).unwrap();
+
+        let executor = StoreExecutor::open(directory.path().join("rho.sqlite"))
+            .await
+            .unwrap();
+        let agent_store = executor.agent_repository();
+        let project_root = normalize_project_root(project.to_string_lossy().as_ref());
+        agent_store
+            .create_turn_with_conversation(
+                AgentConversationDraft {
+                    conversation_id: "conversation-agent-files".to_string(),
+                    project_root: project_root.clone(),
+                    title: "Agent files".to_string(),
+                    legacy_unthreaded: false,
+                },
+                AgentTurnDraft {
+                    turn_id: "turn-agent-files".to_string(),
+                    project_root: project_root.clone(),
+                    prompt: "Update the analysis".to_string(),
+                    model: "external-acp".to_string(),
+                    workspace_id: "workspace-agent-files".to_string(),
+                    state_revision_before: 0,
+                    project_revision_before: 0,
+                },
+            )
+            .await
+            .unwrap();
+        let context = WorkspaceBrokerLane::new(BrokerState::new("workspace-agent-files"), executor);
+        let staging = directory.path().join("staging");
+
+        let outcome = apply_agent_workspace_delta(
+            &context,
+            &agent_store,
+            &project_root,
+            "turn-agent-files",
+            delta,
+            &staging,
+        )
+        .await
+        .unwrap();
+        let AgentWorkspaceApplyOutcome::Committed { identity, paths } = outcome else {
+            panic!("Agent Workspace delta must commit");
+        };
+        assert_eq!(identity.project_revision, 1);
+        assert_eq!(context.identity().project_revision, 1);
+        assert_eq!(paths, vec!["analysis.R", "result.txt"]);
+        assert_eq!(
+            std::fs::read_to_string(project.join("analysis.R")).unwrap(),
+            "x <- 2\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(project.join("result.txt")).unwrap(),
+            "done\n"
+        );
+        let detail = agent_store
+            .get_turn_detail(project_root, "turn-agent-files".to_string())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            detail
+                .events
+                .iter()
+                .any(|event| event.event_type == "agent.workspace_committed")
+        );
+    }
 }

@@ -47,9 +47,6 @@ async fn recover_workspace_store(executor: &StoreExecutor, project_root: String)
             .recover_incomplete_agent_turns()
             .context("recovering incomplete agent turns after desktop restart")?;
         store
-            .recover_incomplete_approvals()
-            .context("recovering incomplete approvals after desktop restart")?;
-        store
             .recover_environment_operations_after_restart(&project_root)
             .context("marking incomplete Environment journals for reconciliation")?;
         store

@@ -1,62 +1,3 @@
-fn external_acp_context_profile() -> AgentRuntimeModelProfile {
-    AgentRuntimeModelProfile {
-        settings_revision: 1,
-        route_capability: "external.acp".to_string(),
-        profile_id: "external.acp".to_string(),
-        provider_kind: "external_acp".to_string(),
-        runtime_provider_id: "external.acp".to_string(),
-        registered_provider_id: None,
-        model_id: "agent_selected".to_string(),
-        api_key_env: None,
-        api_key_required: false,
-        base_url: None,
-        base_url_env: None,
-        wire_api: Some("acp/1".to_string()),
-        disable_stream_options: true,
-        tool_calling: "agent_owned".to_string(),
-        provider_display_name: "External ACP Agent".to_string(),
-        model_display_name: "Agent selected".to_string(),
-        context_window_tokens: 128 * 1024,
-        reserved_output_tokens: 16 * 1024,
-        context_capacity_source: "conservative_default".to_string(),
-        capability_routes: Vec::new(),
-        plugin_tools: Vec::new(),
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn preview_external_acp_context_plan(
-    prompt: &str,
-    history: &[AgentConversationTurn],
-    editor_context: Option<&Value>,
-    project_root: Option<&str>,
-    plugin_context: &[AgentPluginContextItem],
-    explicit_context: Option<&AgentExplicitContextItem>,
-    conversation_id: &str,
-) -> Result<AgentContextPlanPreview> {
-    let project_skills = project_root.map(discover_project_skills);
-    let profile = external_acp_context_profile();
-    let plan = plan_agent_context(
-        prompt,
-        history,
-        editor_context,
-        project_skills.as_ref(),
-        plugin_context,
-        explicit_context,
-        &profile,
-        "preview",
-        conversation_id,
-    )?;
-    Ok(AgentContextPlanPreview {
-        plan_digest: plan.digest,
-        context_window_tokens: profile.context_window_tokens,
-        reserved_output_tokens: profile.reserved_output_tokens,
-        estimated_input_tokens: u64::try_from(plan.model_prompt.len()).unwrap_or(u64::MAX),
-        capacity_source: profile.context_capacity_source,
-        items: plan.receipts,
-    })
-}
-
 fn acp_event_draft(turn_id: &str, event: &rho_acp_client::AcpClientEvent) -> AgentTurnEventDraft {
     let (event_type, title, body, status, tool) = match event {
         rho_acp_client::AcpClientEvent::MessageDelta { text } => (
@@ -128,55 +69,24 @@ fn acp_event_draft(turn_id: &str, event: &rho_acp_client::AcpClientEvent) -> Age
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn run_external_acp_agent_turn(
     agent_store: AgentRepository,
-    project_root: String,
     process_spec: rho_acp_client::AcpProcessSpec,
+    client_exposure: rho_acp_client::AcpClientExposure,
     prompt: String,
     turn_id: String,
     conversation_id: String,
     workspace_before: rho_protocol::WorkspaceIdentity,
-    editor_context: Option<Value>,
-    explicit_context: Option<AgentExplicitContextItem>,
-    expected_plan_digest: Option<String>,
-    plugin_context: Vec<AgentPluginContextItem>,
 ) -> Result<Value> {
     let result = async {
-        let history = agent_store
-            .recent_conversation(
-                project_root.clone(),
-                conversation_id.clone(),
-                turn_id.clone(),
-                100,
-            )
-            .await?;
-        let project_skills = Some(discover_project_skills(&project_root));
-        let profile = external_acp_context_profile();
-        let plan = plan_agent_context(
-            &prompt,
-            &history,
-            editor_context.as_ref(),
-            project_skills.as_ref(),
-            &plugin_context,
-            explicit_context.as_ref(),
-            &profile,
-            &turn_id,
-            &conversation_id,
-        )?;
-        if let Some(expected) = expected_plan_digest.as_deref() {
-            ensure!(
-                expected == plan.digest,
-                "Agent context changed after review. Review the current context plan and send again."
-            );
-        }
-        agent_store
-            .record_context_items(project_root.clone(), turn_id.clone(), plan.receipts)
-            .await?;
-
-        let completion = rho_acp_client::run_external_acp_turn(process_spec, plan.model_prompt)
-            .await
-            .context("external ACP Agent turn failed")?;
+        let completion = rho_acp_client::run_external_acp_turn_with_exposure(
+            process_spec,
+            prompt,
+            None,
+            client_exposure,
+        )
+        .await
+        .context("external ACP Agent turn failed")?;
         for event in &completion.events {
             agent_store
                 .append_turn_event(acp_event_draft(&turn_id, event))
@@ -197,6 +107,10 @@ pub async fn run_external_acp_agent_turn(
                         "session_id": completion.session_id,
                         "stop_reason": completion.stop_reason,
                         "permission_requests_denied": completion.permission_requests_denied,
+                        "permission_requests_selected": completion.permission_requests_selected,
+                        "workspace_file_reads": completion.workspace_file_reads,
+                        "workspace_file_writes": completion.workspace_file_writes,
+                        "terminal_commands_created": completion.terminal_commands_created,
                     }))?,
                 })
                 .await?;
@@ -220,6 +134,10 @@ pub async fn run_external_acp_agent_turn(
             "session_id": completion.session_id,
             "stop_reason": completion.stop_reason,
             "permission_requests_denied": completion.permission_requests_denied,
+            "permission_requests_selected": completion.permission_requests_selected,
+            "workspace_file_reads": completion.workspace_file_reads,
+            "workspace_file_writes": completion.workspace_file_writes,
+            "terminal_commands_created": completion.terminal_commands_created,
             "status": "completed"
         }))
     }

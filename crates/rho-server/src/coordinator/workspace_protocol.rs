@@ -978,13 +978,6 @@ fn redact_sensitive_text(input: &str) -> String {
     redact_after_marker(&output, "Bearer ", " \t\r\n\"'")
 }
 
-/// Applies the broker's credential redaction policy before externally sourced
-/// project data enters the Agent context planner. The planner deliberately
-/// applies the same policy again immediately before prompt assembly.
-pub fn redact_agent_context_text(input: &str) -> String {
-    redact_sensitive_text(input)
-}
-
 fn redact_after_marker(input: &str, marker: &str, terminators: &str) -> String {
     let mut output = String::with_capacity(input.len());
     let lower = input.to_ascii_lowercase();

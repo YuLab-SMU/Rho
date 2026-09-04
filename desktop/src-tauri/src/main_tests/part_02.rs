@@ -120,43 +120,6 @@
             assert_eq!(durable_after_retry, Some(next_identity));
         });
     }
-
-
-
-    fn create_waiting_approval(
-        store: &mut Store,
-        project_root: &str,
-        turn_id: &str,
-        request_id: &str,
-    ) {
-        store
-            .create_agent_turn(&AgentTurnDraft {
-                turn_id: turn_id.to_string(),
-                project_root: project_root.to_string(),
-                mode: "ask".to_string(),
-                prompt: "Need approval".to_string(),
-                model: "test-model".to_string(),
-                workspace_id: "ws-1".to_string(),
-                state_revision_before: 1,
-                project_revision_before: 1,
-            })
-            .unwrap();
-        store
-            .create_approval_request(&ApprovalRequestDraft {
-                request_id: request_id.to_string(),
-                turn_id: turn_id.to_string(),
-                project_root: project_root.to_string(),
-                tool: "write_file".to_string(),
-                policy: "ask".to_string(),
-                arguments_json: "{}".to_string(),
-                code: None,
-                workspace_id: "ws-1".to_string(),
-                state_revision: 1,
-                project_revision: 1,
-            })
-            .unwrap();
-    }
-
     fn assert_run_summaries_equal(
         actual: Vec<rho_store::RunSummary>,
         expected: &[rho_store::RunSummary],
@@ -257,7 +220,7 @@
     }
 
     #[test]
-    fn agent_admission_allows_two_read_only_conversations_and_rejects_a_third() {
+    fn agent_admission_allows_two_conversations_and_rejects_a_third() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
             let first = tauri::async_runtime::spawn(async { std::future::pending::<()>().await });
@@ -270,7 +233,7 @@
                 },
             )]);
             assert_eq!(
-                agent_turn_admission_error(&tasks, Some("conversation-b"), "plan"),
+                agent_turn_admission_error(&tasks, Some("conversation-b")),
                 None
             );
             tasks.insert(
@@ -281,7 +244,7 @@
                 },
             );
             assert_eq!(
-                agent_turn_admission_error(&tasks, Some("conversation-c"), "ask"),
+                agent_turn_admission_error(&tasks, Some("conversation-c")),
                 Some("AGENT_CONCURRENCY_LIMIT: At most two Agent turns can run at once.")
             );
             for (_, task) in tasks {
@@ -291,7 +254,7 @@
     }
 
     #[test]
-    fn agent_admission_rejects_same_conversation_but_allows_bounded_parallel_act() {
+    fn agent_admission_rejects_same_conversation_but_allows_bounded_parallel_turns() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
             let first = tauri::async_runtime::spawn(async { std::future::pending::<()>().await });
@@ -303,13 +266,13 @@
                 },
             )]);
             assert_eq!(
-                agent_turn_admission_error(&tasks, Some("conversation-a"), "plan"),
+                agent_turn_admission_error(&tasks, Some("conversation-a")),
                 Some(
                     "AGENT_CONVERSATION_BUSY: This Conversation already has an active Agent turn."
                 )
             );
             assert_eq!(
-                agent_turn_admission_error(&tasks, Some("conversation-b"), "act"),
+                agent_turn_admission_error(&tasks, Some("conversation-b")),
                 None
             );
             for (_, task) in tasks {
@@ -325,7 +288,7 @@
                 },
             )]);
             assert_eq!(
-                agent_turn_admission_error(&act_tasks, Some("conversation-b"), "ask"),
+                agent_turn_admission_error(&act_tasks, Some("conversation-b")),
                 None
             );
             for (_, task) in act_tasks {
@@ -333,8 +296,6 @@
             }
         });
     }
-
-
 
 
 

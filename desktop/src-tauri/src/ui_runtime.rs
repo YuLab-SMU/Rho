@@ -239,9 +239,7 @@ fn agent_dependency_detail(runtime: &AgentRuntimeStatus) -> Option<String> {
         .candidates
         .iter()
         .filter(|candidate| candidate.status != "ready")
-        .map(|candidate| {
-            format!("{}: {}.", candidate.display_name, candidate.status)
-        })
+        .map(|candidate| format!("{}: {}.", candidate.display_name, candidate.status))
         .collect::<Vec<_>>();
     if let Some(error) = &runtime.error {
         details.push(bounded_diagnostic(error));
@@ -267,9 +265,10 @@ fn agent_health(startup: &StartupView) -> UiHealthDetailV1 {
         return UiHealthDetailV1 {
             state: HealthStateV1::Ready,
             label: "External Agent ready".to_string(),
-            detail: runtime.active_agent_label.as_ref().map(|label| {
-                format!("{label} · {}", runtime.protocol.as_deref().unwrap_or("ACP"))
-            }),
+            detail: runtime
+                .active_agent_label
+                .as_ref()
+                .map(|label| format!("{label} · {}", runtime.protocol.as_deref().unwrap_or("ACP"))),
         };
     }
     if runtime.status == "checking" {
@@ -344,14 +343,6 @@ async fn active_operations(state: &AppState, project_root: &str) -> Vec<ActiveOp
                 state: ActiveOperationStateV1::Running,
             });
         }
-    }
-    let approval_count = state.approvals.count().await;
-    if approval_count > 0 {
-        operations.push(ActiveOperationV1 {
-            operation_id: OperationId::new("approval:agent").unwrap(),
-            label: format!("Agent approvals waiting ({approval_count})"),
-            state: ActiveOperationStateV1::Waiting,
-        });
     }
     operations.sort_by(|left, right| left.operation_id.cmp(&right.operation_id));
     operations.truncate(rho_ui_contract::MAX_ACTIVE_OPERATIONS);

@@ -511,7 +511,6 @@ pub(crate) async fn project_switch_blocker(
         let root = state.project_root.read().await.clone();
         normalize_project_root(root.to_string_lossy().as_ref())
     };
-    let approval_count = state.approvals.count().await;
     let durable = store_executor(state)
         .await?
         .project_transition_repository()
@@ -576,23 +575,6 @@ pub(crate) async fn project_switch_blocker(
         }));
     }
     drop(agent_tasks);
-
-    let waiting_approvals = &durable.waiting_approvals;
-    if approval_count > 0 || !waiting_approvals.is_empty() {
-        return Ok(Some(ProjectSwitchBlocker {
-            kind: ProjectSwitchBlockerKind::Approval,
-            message: "Resolve the waiting approval before switching projects.".to_string(),
-            pending_count: approval_count.max(waiting_approvals.len()),
-            run_id: None,
-            turn_id: waiting_approvals
-                .first()
-                .map(|approval| approval.turn_id.clone()),
-            request_id: waiting_approvals
-                .first()
-                .map(|approval| approval.request_id.clone()),
-            operation_status: Some("waiting".to_string()),
-        }));
-    }
 
     if let Some(blocker) = environment_operation_switch_blocker(&durable) {
         return Ok(Some(blocker));

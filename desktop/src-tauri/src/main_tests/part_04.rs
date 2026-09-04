@@ -92,7 +92,6 @@
                     "rho.runs",
                     "rho.jobs",
                     "rho.artifacts",
-                    "rho.approvals",
                     "rho.revisions",
                     "rho.problems",
                     "rho.plots",

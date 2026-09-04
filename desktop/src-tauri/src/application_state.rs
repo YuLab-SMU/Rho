@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock as SyncRwLock};
 use anyhow::{Context, Result, anyhow};
 use rho_extension_runtime::ExtensionHost;
 use rho_kernel::ArkSession;
-use rho_server::coordinator::{AgentWorkspaceLane, PendingApprovalRegistry};
+use rho_server::coordinator::AgentWorkspaceLane;
 use rho_server::workspace_lane::WorkspaceBrokerLane;
 use rho_store::{BorrowedStore, StoreExecutor, StoreExecutorOperationError};
 use tokio::sync::{Mutex, OnceCell, RwLock};
@@ -23,28 +23,28 @@ use crate::{
 
 pub(crate) struct WorkspaceEnvironmentRuntime {
     project_root: Option<String>,
-    gate: rho_workspace::WorkspaceEnvironmentGate,
+    binding_state: rho_workspace::WorkspaceEnvironmentState,
 }
 
 impl Default for WorkspaceEnvironmentRuntime {
     fn default() -> Self {
         Self {
             project_root: None,
-            gate: rho_workspace::WorkspaceEnvironmentGate::new(None),
+            binding_state: rho_workspace::WorkspaceEnvironmentState::new(None),
         }
     }
 }
 
 impl WorkspaceEnvironmentRuntime {
-    pub(crate) fn for_project(
+    pub(crate) fn state_for_project(
         &mut self,
         project_root: &str,
-    ) -> &mut rho_workspace::WorkspaceEnvironmentGate {
+    ) -> &mut rho_workspace::WorkspaceEnvironmentState {
         if self.project_root.as_deref() != Some(project_root) {
             self.project_root = Some(project_root.to_string());
-            self.gate = rho_workspace::WorkspaceEnvironmentGate::new(None);
+            self.binding_state = rho_workspace::WorkspaceEnvironmentState::new(None);
         }
-        &mut self.gate
+        &mut self.binding_state
     }
 }
 
@@ -61,7 +61,6 @@ pub(crate) struct AppState {
     pub(crate) context: Mutex<Option<Arc<WorkspaceBrokerLane>>>,
     pub(crate) store_executor: OnceCell<StoreExecutor>,
     pub(crate) evidence_graph: rho_evidence_graph::ProjectGraphManager,
-    pub(crate) approvals: Arc<PendingApprovalRegistry>,
     pub(crate) workspace_environment: Mutex<WorkspaceEnvironmentRuntime>,
     pub(crate) project_transition_gate: Arc<Mutex<()>>,
     pub(crate) extension_host: Arc<ExtensionHost>,

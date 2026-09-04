@@ -101,13 +101,6 @@ fn authority_receipt_summary(
             value.captured_at.clone(),
             value.producing_run_ref.iter().cloned().collect(),
         ),
-        AuthorityReceiptV1::Approval(value) => (
-            value.status,
-            value.reference.authority_id.clone(),
-            Some(value.effect_digest.to_string()),
-            value.captured_at.clone(),
-            value.agent_turn_ref.iter().cloned().collect(),
-        ),
         AuthorityReceiptV1::Environment(value) => (
             AuthorityStatusV1::Present,
             value.reference.authority_id.clone(),

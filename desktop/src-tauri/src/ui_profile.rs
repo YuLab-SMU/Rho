@@ -647,9 +647,7 @@ fn default_surface_specs(
             view_group_id: None,
             view_state: json!({
                 "conversation_id": null,
-                "mode": "ask",
-                "composer": "",
-                "auto_approve": false
+                "composer": ""
             }),
         });
     }

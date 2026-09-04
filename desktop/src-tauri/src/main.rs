@@ -2,6 +2,7 @@
 
 mod acceptance_bridge;
 mod acp_runtime;
+mod agent_gateway;
 mod application_lifecycle;
 mod application_state;
 mod check_runtime;
@@ -59,6 +60,7 @@ use commands::workspace::{
 };
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock as SyncRwLock};
 
@@ -69,8 +71,7 @@ use project::durable_project_root;
 use project::{MAX_VIEWER_FILE_BYTES, MAX_VIEWER_HTML_BYTES};
 use project::{ProjectSessionStore, default_project_root};
 use rho_server::coordinator::{
-    AgentWorkspaceLane, PendingApprovalRegistry, dispatch_workspace_request,
-    dispatch_workspace_request_with_execution_id,
+    AgentWorkspaceLane, dispatch_workspace_request, dispatch_workspace_request_with_execution_id,
 };
 use rho_store::normalize_project_root;
 use tauri::Manager;
@@ -85,6 +86,21 @@ mod agent_contract_tests;
 mod tests;
 
 fn main() {
+    let arguments = std::env::args().collect::<Vec<_>>();
+    if arguments
+        .iter()
+        .any(|argument| argument == "--rho-mcp-stdio")
+    {
+        let context_path = arguments
+            .windows(2)
+            .find(|pair| pair[0] == "--rho-mcp-context")
+            .map(|pair| PathBuf::from(&pair[1]));
+        if let Err(error) = rho_mcp::serve_stdio(context_path.as_deref()) {
+            eprintln!("Rho MCP server failed: {error:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
     // On Linux, WebKitGTK's DMABUF renderer fails to allocate GBM buffers on
     // NVIDIA proprietary graphics stacks, leaving the webview blank. Default
     // to the software renderer unless the environment already overrides it.
@@ -96,7 +112,6 @@ fn main() {
     std::panic::set_hook(Box::new(|information| {
         write_startup_log(&format!("Rho desktop panic: {information}"));
     }));
-    let arguments = std::env::args().collect::<Vec<_>>();
     let smoke_agent = arguments.iter().any(|argument| argument == "--smoke-agent");
     if smoke_agent || arguments.iter().any(|argument| argument == "--smoke-test") {
         let runtime = tokio::runtime::Runtime::new().expect("creating smoke-test runtime");
@@ -159,7 +174,6 @@ fn main() {
                 context: Mutex::new(None),
                 store_executor: tokio::sync::OnceCell::new(),
                 evidence_graph: rho_evidence_graph::ProjectGraphManager::default(),
-                approvals: Arc::new(PendingApprovalRegistry::default()),
                 workspace_environment: Mutex::new(
                     crate::application_state::WorkspaceEnvironmentRuntime::default(),
                 ),
@@ -351,16 +365,12 @@ fn main() {
             commands::editor::editor_discover_chunks,
             commands::runs::retry_run,
             commands::agent_execution::run_agent,
-            commands::agent_execution::agent_context_preview,
             commands::agent_conversation::list_agent_conversations,
             commands::agent_conversation::create_agent_conversation,
             commands::agent_conversation::list_agent_turns,
             commands::agent_execution::retry_agent_turn,
             commands::agent_conversation::delete_agent_conversation,
-            commands::agent_execution::clear_agent_history,
-            commands::agent_execution::list_approval_requests,
             commands::agent_execution::get_agent_turn_detail,
-            commands::agent_execution::respond_approval,
             commands::runtime_control::interrupt_r,
             commands::runtime_control::cancel_run,
             commands::agent_execution::cancel_agent_turn,

@@ -328,16 +328,6 @@ fn resolve_store_reference(
                 None => AuthorityStatusV1::Missing,
             }
         }
-        AuthorityKindV1::Approval => {
-            match store.get_approval_request(project_root, &reference.authority_id)? {
-                Some(approval) => {
-                    project_revision = nonnegative_revision(approval.project_revision);
-                    state_revision = nonnegative_state_revision(approval.state_revision);
-                    map_authority_status(&approval.status)
-                }
-                None => AuthorityStatusV1::Missing,
-            }
-        }
         AuthorityKindV1::EnvironmentSnapshot => {
             match store.get_environment_snapshot(&reference.authority_id)? {
                 Some(snapshot) if snapshot.project_root == project_root => {
@@ -497,8 +487,6 @@ fn map_authority_status(status: &str) -> AuthorityStatusV1 {
         "failed" | "error" => AuthorityStatusV1::Failed,
         "cancelled" | "canceled" | "interrupted" => AuthorityStatusV1::Cancelled,
         "committed" => AuthorityStatusV1::Committed,
-        "approved" | "allow" | "allowed" => AuthorityStatusV1::Approved,
-        "rejected" | "deny" | "denied" => AuthorityStatusV1::Rejected,
         _ => AuthorityStatusV1::Uncertain,
     }
 }

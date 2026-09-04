@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex as StdMutex, MutexGuard};
 
 use anyhow::{Context, Result, anyhow, ensure};
 use rho_kernel::{ArkLaunchConfig, ArkSession, CorrelatedKernelEvent, KernelEvent};
-use rho_server::coordinator::redact_agent_context_text;
 use rho_store::{
     RuntimeExecution, RuntimeExecutionDeleteResult, RuntimeExecutionDraft, RuntimeExecutionFinish,
     RuntimeExecutionMutationOutcome, RuntimeOutputChunk, RuntimeOutputDraft, RuntimeOutputPage,
@@ -180,12 +179,6 @@ pub(crate) struct RuntimeOutputReference {
     pub(crate) status: String,
     #[specta(type = rho_store::RuntimeOutputState)]
     pub(crate) output_state: String,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ResolvedRuntimeOutputContext {
-    pub(crate) reference: RuntimeOutputReference,
-    pub(crate) content: String,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -1247,58 +1240,11 @@ async fn reconcile_persisted_output_once(state: &AppState, project_root: &str) -
     result.map(|_| ())
 }
 
-fn append_utf8_prefix(target: &mut String, value: &str, limit: usize) {
-    if target.len() >= limit {
-        return;
-    }
-    let remaining = limit - target.len();
-    let mut end = remaining.min(value.len());
-    while end > 0 && !value.is_char_boundary(end) {
-        end -= 1;
-    }
-    target.push_str(&value[..end]);
-}
-
-fn keep_utf8_suffix(value: &mut String, limit: usize) {
-    if value.len() <= limit {
-        return;
-    }
-    let mut start = value.len() - limit;
-    while start < value.len() && !value.is_char_boundary(start) {
-        start += 1;
-    }
-    value.drain(..start);
-}
-
-fn context_chunk_text(chunk: &RuntimeOutputChunk) -> String {
-    match chunk.storage_kind.as_str() {
-        "inline_text" => chunk.text_payload.clone().unwrap_or_default(),
-        "inline_json" => chunk.json_payload.clone().unwrap_or_default(),
-        "record_ref" => format!(
-            "{} reference: {}",
-            chunk.reference_kind.as_deref().unwrap_or("output"),
-            chunk.reference_id.as_deref().unwrap_or("unavailable")
-        ),
-        "tombstone" => {
-            "[This output payload is unavailable or was omitted by retention policy.]".to_string()
-        }
-        _ => "[Unsupported output record.]".to_string(),
-    }
-}
-
-pub(crate) async fn resolve_runtime_output_context(
+pub(crate) async fn resolve_runtime_output_reference(
     state: &AppState,
     request: &RuntimeOutputReferenceRequest,
-    expected_project_id: Option<&str>,
-    expected_digest: Option<&str>,
-) -> Result<ResolvedRuntimeOutputContext> {
+) -> Result<RuntimeOutputReference> {
     let (project_root, project_id) = active_project_scope(state).await?;
-    if let Some(expected_project_id) = expected_project_id {
-        ensure!(
-            expected_project_id == project_id,
-            "Runtime output reference belongs to another project"
-        );
-    }
     reconcile_persisted_output_once(state, &project_root).await?;
     let repository = crate::application_state::store_executor(state)
         .await?
@@ -1309,7 +1255,7 @@ pub(crate) async fn resolve_runtime_output_context(
         .context("Runtime execution is unavailable in the active project")?;
     ensure!(
         execution.output_state != "pruned",
-        "The selected Runtime output was pruned and cannot be attached to Agent"
+        "The selected Runtime output was pruned and cannot be referenced"
     );
     let start_sequence = request.start_sequence.unwrap_or(1);
     let end_sequence = request.end_sequence.unwrap_or(execution.last_sequence);
@@ -1325,9 +1271,6 @@ pub(crate) async fn resolve_runtime_output_context(
     let mut cursor = start_sequence - 1;
     let mut expected_sequence = start_sequence;
     let mut hasher = Sha256::new();
-    let mut head = String::new();
-    let mut tail = String::new();
-    let mut important = String::new();
     let mut payload_bytes = 0i64;
     let mut chunk_count = 0i64;
     while cursor < end_sequence {
@@ -1366,18 +1309,6 @@ pub(crate) async fn resolve_runtime_output_context(
             ))?;
             hasher.update((canonical.len() as u64).to_be_bytes());
             hasher.update(canonical);
-            let rendered = format!(
-                "[{} · {}]\n{}\n",
-                chunk.sequence,
-                chunk.presentation_kind,
-                context_chunk_text(&chunk)
-            );
-            append_utf8_prefix(&mut head, &rendered, 24 * 1024);
-            tail.push_str(&rendered);
-            keep_utf8_suffix(&mut tail, 24 * 1024);
-            if matches!(chunk.presentation_kind.as_str(), "warning" | "error") {
-                append_utf8_prefix(&mut important, &rendered, 24 * 1024);
-            }
             payload_bytes = payload_bytes.saturating_add(chunk.payload_bytes);
             chunk_count += 1;
             cursor = chunk.sequence;
@@ -1388,34 +1319,16 @@ pub(crate) async fn resolve_runtime_output_context(
         cursor == end_sequence,
         "Runtime output reference range is incomplete"
     );
-    let range_sha256 = format!("{:x}", hasher.finalize());
-    if let Some(expected_digest) = expected_digest {
-        ensure!(
-            expected_digest == range_sha256,
-            "Runtime output changed after it was selected; review Agent context again"
-        );
-    }
-    let content = if payload_bytes <= 24 * 1024 {
-        head
-    } else {
-        format!(
-            "Head of selected output:\n{head}\nImportant warnings and errors:\n{important}\nTail of selected output:\n{tail}\n[Projected {chunk_count} chunks from sequences {start_sequence}-{end_sequence}; exact range digest {range_sha256}.]"
-        )
-    };
-    let content = redact_agent_context_text(&content);
-    Ok(ResolvedRuntimeOutputContext {
-        reference: RuntimeOutputReference {
-            project_id,
-            execution_id: request.execution_id.clone(),
-            start_sequence,
-            end_sequence,
-            range_sha256,
-            payload_bytes,
-            chunk_count,
-            status: execution.status,
-            output_state: execution.output_state,
-        },
-        content,
+    Ok(RuntimeOutputReference {
+        project_id,
+        execution_id: request.execution_id.clone(),
+        start_sequence,
+        end_sequence,
+        range_sha256: format!("{:x}", hasher.finalize()),
+        payload_bytes,
+        chunk_count,
+        status: execution.status,
+        output_state: execution.output_state,
     })
 }
 
@@ -2255,9 +2168,8 @@ pub(crate) async fn runtime_output_reference(
     request: RuntimeOutputReferenceRequest,
     state: State<'_, AppState>,
 ) -> Result<RuntimeOutputReference, String> {
-    resolve_runtime_output_context(&state, &request, None, None)
+    resolve_runtime_output_reference(&state, &request)
         .await
-        .map(|resolved| resolved.reference)
         .map_err(display_error)
 }
 

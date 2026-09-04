@@ -1,8 +1,4 @@
 use anyhow::Context;
-use rho_control_plane::{
-    BrokerLease, EnvironmentApplyRequest, EnvironmentCommitVerifier, EnvironmentExecutionPort,
-    EnvironmentOperationCoordinator,
-};
 use rho_core::ExecutionOrigin;
 use rho_environment::{ProjectEnvironmentMode, classify_project_environment};
 use rho_protocol::EnvironmentIncidentV1;
@@ -26,9 +22,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tauri::State;
 
-use crate::application_state::{
-    active_context, active_session, run_store_executor_service, store_executor,
-};
+use crate::application_state::{active_context, active_session, store_executor};
 use crate::startup_runtime::runtime_config;
 use crate::{AppState, display_error};
 
@@ -278,126 +272,24 @@ async fn workspace_identity(state: &AppState) -> (Option<String>, Option<String>
     })
 }
 
-async fn sync_workspace_environment_gate(
+async fn sync_workspace_environment_state(
     state: &AppState,
     project_root: &str,
     authority: Option<&EnvironmentStateProjection>,
 ) -> Result<rho_workspace::WorkspaceEnvironmentStatus, String> {
     let mut runtime = state.workspace_environment.lock().await;
-    let gate = runtime.for_project(project_root);
+    let binding_state = runtime.state_for_project(project_root);
     if let Some(authority) = authority {
-        let status = gate.status();
+        let status = binding_state.status();
         if status.active_binding.as_ref() != Some(&authority.binding)
             && status.pending_binding.as_ref() != Some(&authority.binding)
         {
-            gate.stage_verified_binding(authority.binding.clone(), &authority.receipt)
+            binding_state
+                .stage_verified_binding(authority.binding.clone(), &authority.receipt)
                 .map_err(display_error)?;
         }
     }
-    Ok(gate.status())
-}
-
-#[allow(dead_code)] // Called by typed Environment provider adapters, never by the read-only UI port.
-pub(crate) async fn stage_environment_plan_for_review(
-    state: &AppState,
-    plan: rho_protocol::MaterializedPackagePlanV1,
-) -> Result<EnvironmentHealthViewV1, String> {
-    plan.validate().map_err(display_error)?;
-    let root = state.project_root.read().await.clone();
-    let project_root = normalize_project_root(root.to_string_lossy().as_ref());
-    let workspace = active_context(state)
-        .await
-        .map_err(display_error)?
-        .identity();
-    if plan.body.expected_before.project_revision != Some(workspace.project_revision) {
-        return Err(
-            "Environment plan project revision differs from the active Workspace".to_string(),
-        );
-    }
-    let repository = store_executor(state)
-        .await
-        .map_err(display_error)?
-        .environment_repository();
-    if let Some(current) = repository
-        .current_state(project_root.clone())
-        .await
-        .map_err(display_error)?
-        && (current.environment.environment_id != plan.body.environment.environment_id
-            || current.desired.revision_id != plan.body.expected_before.desired_revision
-            || current.realization.revision_id != plan.body.expected_before.realization_revision)
-    {
-        return Err(
-            "Environment state changed before the materialized plan could be reviewed".to_string(),
-        );
-    }
-    repository
-        .record_plan_for_review(project_root, plan)
-        .await
-        .map_err(display_error)?;
-    environment_health_for_state(state).await
-}
-
-/// Production composition seam for an already materialized and exactly leased
-/// Environment effect. Provider adapters supply only Execution and
-/// Verification ports; this function owns the Desktop Store commit and stages
-/// the verified binding for restart/re-observation.
-#[allow(dead_code)] // Generic composition seam is instantiated by the selected provider adapter.
-pub(crate) async fn apply_environment_plan_with_ports<E, V>(
-    state: &AppState,
-    lease: BrokerLease,
-    request: EnvironmentApplyRequest,
-    mut execution: E,
-    mut verifier: V,
-) -> Result<EnvironmentHealthViewV1, String>
-where
-    E: EnvironmentExecutionPort + Send + 'static,
-    V: EnvironmentCommitVerifier + Send + 'static,
-{
-    let root = state.project_root.read().await.clone();
-    let project_root = normalize_project_root(root.to_string_lossy().as_ref());
-    if request.project_root != project_root {
-        return Err("Environment apply request is not bound to the active project".to_string());
-    }
-    let workspace = active_context(state)
-        .await
-        .map_err(display_error)?
-        .identity();
-    if request.expected_revisions.workspace_id.as_str() != workspace.workspace_id
-        || request.expected_revisions.kernel_instance_id.as_str() != workspace.kernel_instance_id
-        || request.expected_revisions.state_revision.0 != workspace.state_revision
-        || request.expected_revisions.project_revision.0 != workspace.project_revision
-    {
-        return Err(
-            "Environment approval revisions are stale for the active Workspace".to_string(),
-        );
-    }
-    let executor = store_executor(state).await.map_err(display_error)?;
-    let approval_lease_id = lease.opaque_id().to_string();
-    let operation_id = lease.operation_id().as_str().to_string();
-    let plan_id = request.plan.plan_id.as_str().to_string();
-    let reviewed_project_root = request.project_root.clone();
-    let outcome = run_store_executor_service(&executor, move |store| {
-        store.approve_environment_plan(
-            &reviewed_project_root,
-            &plan_id,
-            &approval_lease_id,
-            &operation_id,
-        )?;
-        EnvironmentOperationCoordinator::apply(
-            store,
-            &lease,
-            &request,
-            &mut execution,
-            &mut verifier,
-        )
-        .map_err(anyhow::Error::from)
-    })
-    .await
-    .map_err(display_error)?;
-    if let Some(projection) = outcome.projection.as_ref() {
-        sync_workspace_environment_gate(state, &project_root, Some(projection)).await?;
-    }
-    environment_health_for_state(state).await
+    Ok(binding_state.status())
 }
 
 pub(crate) async fn environment_health_for_state(
@@ -412,11 +304,12 @@ pub(crate) async fn environment_health_for_state(
     let (authority, latest_operation, pending_plan, incidents) = tokio::try_join!(
         repository.current_state(project_root.clone()),
         repository.latest_operation(project_root.clone()),
-        repository.latest_reviewable_plan(project_root.clone()),
+        repository.latest_plan(project_root.clone()),
         repository.list_incidents(project_root.clone(), false, 200),
     )
     .map_err(display_error)?;
-    let gate = sync_workspace_environment_gate(state, &project_root, authority.as_ref()).await?;
+    let binding_state =
+        sync_workspace_environment_state(state, &project_root, authority.as_ref()).await?;
     let (workspace_id, kernel_instance_id) = workspace_identity(state).await;
     let local_observation = runtime_config(state)
         .ok()
@@ -431,7 +324,7 @@ pub(crate) async fn environment_health_for_state(
             )
         })
         .transpose()?;
-    let status = match gate.phase {
+    let status = match binding_state.phase {
         rho_workspace::WorkspaceEnvironmentPhase::Unbound
             if workspace_id.is_some() && local_observation.is_some() =>
         {
@@ -476,19 +369,19 @@ pub(crate) async fn environment_health_for_state(
         binding: authority.as_ref().map(environment_binding_view),
         local_observation,
         workspace: EnvironmentWorkspaceViewV1 {
-            phase: enum_text(&gate.phase),
+            phase: enum_text(&binding_state.phase),
             workspace_id,
             kernel_instance_id,
-            active_receipt_digest: gate
+            active_receipt_digest: binding_state
                 .active_binding
                 .as_ref()
                 .map(|binding| binding.receipt_digest.as_str().to_string()),
-            pending_receipt_digest: gate
+            pending_receipt_digest: binding_state
                 .pending_binding
                 .as_ref()
                 .map(|binding| binding.receipt_digest.as_str().to_string()),
-            restart_required: gate.restart_required,
-            reobserve_required: gate.reobserve_required,
+            restart_required: binding_state.restart_required,
+            reobserve_required: binding_state.reobserve_required,
         },
         pending_plan: pending_plan
             .as_ref()
@@ -591,7 +484,7 @@ pub(crate) async fn record_environment_workspace_restart(
     let new_kernel = rho_protocol::KernelInstanceId::new(new_kernel).map_err(display_error)?;
     let mut runtime = state.workspace_environment.lock().await;
     runtime
-        .for_project(&project_root)
+        .state_for_project(&project_root)
         .record_restart(&old_kernel, &new_kernel)
         .map_err(display_error)?;
     Ok(true)
@@ -612,7 +505,7 @@ pub(crate) async fn reobserve_environment_for_state(
         .map_err(display_error)?
         .context("No verified Environment receipt is available to re-observe")
         .map_err(display_error)?;
-    sync_workspace_environment_gate(state, &project_root, Some(&authority)).await?;
+    sync_workspace_environment_state(state, &project_root, Some(&authority)).await?;
     let session = active_session(state).await.map_err(display_error)?;
     let context = active_context(state).await.map_err(display_error)?;
     let identity = context.identity();
@@ -693,14 +586,14 @@ pub(crate) async fn reobserve_environment_for_state(
     let observation_kernel = observation.kernel_instance_id.clone();
     let mut runtime = state.workspace_environment.lock().await;
     let prior_incident_ids = runtime
-        .for_project(&project_root)
+        .state_for_project(&project_root)
         .status()
         .incidents
         .into_iter()
         .map(|incident| incident.incident_id)
         .collect::<Vec<_>>();
     let reobservation = runtime
-        .for_project(&project_root)
+        .state_for_project(&project_root)
         .reobserve(&observation_kernel, observation)
         .map_err(display_error)?;
     drop(runtime);

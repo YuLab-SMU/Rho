@@ -10,14 +10,12 @@ use rho_core::{BrokerState, ExecutionOrigin, ExecutionRequest};
 use rho_kernel::{ArkSession, CorrelatedKernelEvent, KernelEvent};
 use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, OperationClass};
 use rho_store::{
-    AgentConversationTurn, AgentRepository, AgentTurnContextItemDraft, AgentTurnEventDraft,
-    AgentTurnFinish, ArtifactRecordDraft, BorrowedStore, EnvironmentSnapshotDraft,
-    PlotArtifactDraft, RunDraft, RunErrorRange, RunFinish, Store, StoreConnection, StoreExecutor,
-    StoreExecutorOperationError,
+    AgentRepository, AgentTurnEventDraft, AgentTurnFinish, ArtifactRecordDraft, BorrowedStore,
+    EnvironmentSnapshotDraft, PlotArtifactDraft, RunDraft, RunErrorRange, RunFinish, Store,
+    StoreConnection, StoreExecutor, StoreExecutorOperationError,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -26,7 +24,7 @@ use crate::workspace_lane::WorkspaceBrokerLane;
 include!("coordinator/shared_types.rs");
 include!("coordinator/startup.rs");
 include!("coordinator/workspace_dispatch.rs");
-include!("coordinator/agent_context.rs");
+include!("coordinator/project_skills.rs");
 include!("coordinator/acp_execution.rs");
 include!("coordinator/environment.rs");
 include!("coordinator/workspace_protocol.rs");

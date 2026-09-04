@@ -16,9 +16,7 @@ use rho_extension_runtime::{
     ExtensionHost, InternalExtensionRuntimeMode, LifecycleDeadlines,
 };
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
-use rho_server::coordinator::{
-    bootstrap_bridge, dispatch_workspace_request,
-};
+use rho_server::coordinator::{bootstrap_bridge, dispatch_workspace_request};
 use rho_server::workspace_lane::WorkspaceBrokerLane;
 use rho_store::{RunSummary, Store, StoreExecutor, normalize_project_root};
 use serde_json::{Value, json};
