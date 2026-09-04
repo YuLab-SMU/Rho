@@ -17,7 +17,6 @@
         "process group whole-tree control",
         "close-on-exec handle isolation"
       ],
-      "controlled_mutation": "profile_dependent",
       "oci": "rootless runtime evidence required"
     },
     "macos": {
@@ -54,7 +53,6 @@
         "process group",
         "close-on-exec handles"
       ],
-      "controlled_mutation": "disabled_fail_closed",
       "oci": "disabled_fail_closed"
     },
     "windows": {
@@ -65,7 +63,6 @@
       "mechanisms": [
         "Job Object process-tree control (capability remains disabled until native evidence)"
       ],
-      "controlled_mutation": "disabled_fail_closed",
       "oci": "disabled_fail_closed"
     }
   }

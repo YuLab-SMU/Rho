@@ -34,22 +34,6 @@ try {
   throw new Error(`performance probe JSON invalid: ${error.message}`);
 }
 const slo = JSON.parse(await readFile(path.join(root, "test/performance/slo.json"), "utf8"));
-const firstParty = JSON.parse(
-  await readFile(
-    path.join(root, "test/control-plane/scenarios/first-party-golden.json"),
-    "utf8",
-  ),
-);
-raw.metrics.model_first_token = {
-  samples: 1,
-  cold_ms: firstParty.ux_metrics_baseline.model_first_token_ms,
-  p50_ms: firstParty.ux_metrics_baseline.model_first_token_ms,
-  p95_ms: firstParty.ux_metrics_baseline.model_first_token_ms,
-  p99_ms: firstParty.ux_metrics_baseline.model_first_token_ms,
-  max_ms: firstParty.ux_metrics_baseline.model_first_token_ms,
-  source: "first-party deterministic golden transcript",
-};
-
 for (const [metric, threshold] of Object.entries(slo.thresholds)) {
   const measured = raw.metrics[metric];
   if (!measured) {
@@ -60,11 +44,6 @@ for (const [metric, threshold] of Object.entries(slo.thresholds)) {
     errors.push(`slo:${metric}:${measured.p95_ms.toFixed(3)}>${threshold.p95_ms}`);
   }
 }
-if (raw.soak.hot_total_bytes > slo.bounded_soak.max_hot_total_bytes) {
-  errors.push("hot_ring_unbounded");
-}
-if (raw.soak.sessions > 100) errors.push("session_cardinality_unbounded");
-
 const frontend = spawnSync(
   process.platform === "win32" ? "npm.cmd" : "npm",
   ["--prefix", "desktop", "run", "rsr:test"],
@@ -99,13 +78,13 @@ if (baseline) {
 }
 
 const sourceFiles = [
-  "crates/rho-control-plane/src/broker.rs",
+  "crates/rho-control-plane/src/capability_registry.rs",
   "crates/rho-store/src/transactions/mod.rs",
   "crates/rho-artifact-store/src/lib.rs",
 ];
 for (const file of sourceFiles) {
   const source = await readFile(path.join(root, file), "utf8");
-  for (const forbidden of ["performance_bypass", "skip_durable_for_speed", "disable_policy_for_benchmark"]) {
+  for (const forbidden of ["performance_bypass", "skip_durable_for_speed", "disable_validation_for_benchmark"]) {
     if (source.includes(forbidden)) errors.push(`security_bypass:${file}:${forbidden}`);
   }
 }
@@ -116,26 +95,19 @@ const report = {
   result: errors.length === 0 ? "pass" : "fail",
   hardware: raw.hardware,
   workloads: {
-    short_answer: "first_visible_activity",
-    long_stream: "event_storm_publish",
-    inspect: "policy_approval_decision",
-    approval: "policy_approval_decision",
+    capability_validation: "capability_argument_validation",
     workspace_run: "durable_append",
     artifact_commit: "cas_commit_4k",
     local_job: "local_process_startup",
     oci_job: "contract benchmark; live availability reported by local-job gate",
-    reconnect: "hot_reconnect_read",
     recovery: "projection_recovery",
     sandbox: "sandbox_snapshot_startup",
   },
   distributions: raw.metrics,
   decomposition: {
-    provider_first_token_ms: raw.metrics.model_first_token.p95_ms,
-    rho_first_activity_ms: raw.metrics.first_visible_activity.p95_ms,
     queue_runtime_ms: raw.metrics.local_process_startup.p95_ms,
     durable_store_ms: raw.metrics.durable_append.p95_ms,
   },
-  soak: raw.soak,
   thresholds: slo,
   frontend_tests_passed: frontend.status === 0,
   frontend_build_passed: build.status === 0,

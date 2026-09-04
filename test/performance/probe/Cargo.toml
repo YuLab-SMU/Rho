@@ -7,7 +7,6 @@ publish = false
 [dependencies]
 rho-artifact-store = { path = "../../../crates/rho-artifact-store" }
 rho-control-plane = { path = "../../../crates/rho-control-plane" }
-rho-event-hub = { path = "../../../crates/rho-event-hub" }
 rho-protocol = { path = "../../../crates/rho-protocol" }
 rho-sandbox = { path = "../../../crates/rho-sandbox" }
 rho-store = { path = "../../../crates/rho-store" }

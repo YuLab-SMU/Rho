@@ -452,16 +452,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-event-hub"
-version = "0.4.1-dev.22"
-dependencies = [
- "rho-protocol",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "rho-execution"
 version = "0.4.1-dev.22"
 dependencies = [
@@ -477,7 +467,6 @@ version = "0.0.0"
 dependencies = [
  "rho-artifact-store",
  "rho-control-plane",
- "rho-event-hub",
  "rho-protocol",
  "rho-sandbox",
  "rho-store",

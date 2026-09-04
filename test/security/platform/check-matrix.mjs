@@ -88,7 +88,6 @@ const matrix = {
         "process group whole-tree control",
         "close-on-exec handle isolation",
       ],
-      controlled_mutation: linuxEvidence.status === "verified_real_host" ? "profile_dependent" : "ci_evidence_required",
       oci: "rootless runtime evidence required",
     },
     macos: {
@@ -98,7 +97,6 @@ const matrix = {
         profile: process.platform === "darwin" ? localProfile : null,
       },
       mechanisms: ["Seatbelt when present", "process group", "close-on-exec handles"],
-      controlled_mutation: localProfile?.external_mutation_enabled === true ? "enabled" : "disabled_fail_closed",
       oci: localProfile?.oci_enabled === true ? "enabled" : "disabled_fail_closed",
     },
     windows: {
@@ -107,7 +105,6 @@ const matrix = {
         source: "windows-latest CI; no isolation guarantee claimed by current adapter",
       },
       mechanisms: ["Job Object process-tree control (capability remains disabled until native evidence)"],
-      controlled_mutation: "disabled_fail_closed",
       oci: "disabled_fail_closed",
     },
   },

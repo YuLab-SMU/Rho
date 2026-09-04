@@ -6,8 +6,7 @@ use std::{
 };
 
 use rho_artifact_store::{ArtifactCommitRequest, ArtifactStore, ArtifactStoreConfig};
-use rho_control_plane::{CapabilityRegistry, evaluate_policy, policy_context_fixture};
-use rho_event_hub::{HotCursor, HotEventHub};
+use rho_control_plane::CapabilityRegistry;
 use rho_protocol::*;
 use rho_sandbox::snapshot::{SnapshotLimits, build_project_snapshot};
 use rho_store::SemanticStore;
@@ -28,7 +27,6 @@ struct ProbeReport {
     schema: &'static str,
     hardware: BTreeMap<String, String>,
     metrics: BTreeMap<String, Distribution>,
-    soak: BTreeMap<String, u64>,
 }
 
 fn main() {
@@ -36,14 +34,13 @@ fn main() {
     metrics.insert("durable_append".to_string(), durable_append());
     metrics.insert("cas_commit_4k".to_string(), cas_commit());
     metrics.insert("projection_recovery".to_string(), projection_recovery());
-    metrics.insert("first_visible_activity".to_string(), first_activity());
-    metrics.insert("hot_reconnect_read".to_string(), hot_reconnect());
-    metrics.insert("policy_approval_decision".to_string(), policy_decision());
+    metrics.insert(
+        "capability_argument_validation".to_string(),
+        capability_validation(),
+    );
     metrics.insert("sandbox_snapshot_startup".to_string(), sandbox_snapshot());
     metrics.insert("process_tree_cancel".to_string(), process_tree_cancel());
     metrics.insert("local_process_startup".to_string(), local_process_startup());
-    let (storm, soak) = event_storm();
-    metrics.insert("event_storm_publish".to_string(), storm);
     let report = ProbeReport {
         schema: "rho.performance.probe.v1",
         hardware: BTreeMap::from([
@@ -52,7 +49,6 @@ fn main() {
             ("profile".to_string(), "desktop-local-release-like".to_string()),
         ]),
         metrics,
-        soak,
     };
     println!("{}", serde_json::to_string_pretty(&report).unwrap());
 }
@@ -117,42 +113,13 @@ fn projection_recovery() -> Distribution {
     })
 }
 
-fn first_activity() -> Distribution {
-    sample(500, || {
-        let mut hub = HotEventHub::new(64 * 1024, 1024 * 1024).unwrap();
-        let started = Instant::now();
-        hub.publish(
-            SessionId::new("session_perf_first").unwrap(),
-            hot_event("first", 0),
-        )
-        .unwrap();
-        started.elapsed().as_secs_f64() * 1000.0
-    })
-}
-
-fn hot_reconnect() -> Distribution {
-    let mut hub = HotEventHub::new(64 * 1024, 1024 * 1024).unwrap();
-    let session = SessionId::new("session_perf_reconnect").unwrap();
-    for cursor in 0..200 {
-        hub.publish(session.clone(), hot_event("reconnect", cursor))
-            .unwrap();
-    }
-    sample(1000, || {
-        let started = Instant::now();
-        let _ = hub.read(&session, HotCursor(0), 64);
-        started.elapsed().as_secs_f64() * 1000.0
-    })
-}
-
-fn policy_decision() -> Distribution {
+fn capability_validation() -> Distribution {
     let registry = CapabilityRegistry::canonical().unwrap();
-    let context = policy_context_fixture(
-        CapabilityId::new(RUN_R_CAPABILITY).unwrap(),
-        OperationId::new("operation_perf_policy").unwrap(),
-    );
+    let capability = CapabilityId::new(RUN_R_CAPABILITY).unwrap();
+    let arguments = serde_json::json!({"code": "summary(workspace_object)"});
     sample(2000, || {
         let started = Instant::now();
-        let _ = evaluate_policy(&registry, &context);
+        registry.validate_arguments(&capability, &arguments).unwrap();
         started.elapsed().as_secs_f64() * 1000.0
     })
 }
@@ -221,33 +188,6 @@ fn process_tree_cancel() -> Distribution {
     sample(20, || 0.0)
 }
 
-fn event_storm() -> (Distribution, BTreeMap<String, u64>) {
-    let mut hub = HotEventHub::new(32 * 1024, 512 * 1024).unwrap();
-    let mut cursor = 0_u64;
-    let distribution = sample(20_000, || {
-        let session = SessionId::new(format!("session_perf_{}", cursor % 100)).unwrap();
-        let started = Instant::now();
-        hub.publish(session, hot_event(&format!("turn_{}", cursor % 100), cursor))
-            .unwrap();
-        cursor += 1;
-        started.elapsed().as_secs_f64() * 1000.0
-    });
-    let hub_metrics = hub.metrics();
-    (
-        distribution,
-        BTreeMap::from([
-            ("sessions".to_string(), hub_metrics.sessions as u64),
-            ("hot_total_bytes".to_string(), hub_metrics.total_bytes as u64),
-            ("hot_global_quota".to_string(), 512 * 1024),
-            ("events_published".to_string(), 20_000),
-            (
-                "coalesced_deltas".to_string(),
-                hub_metrics.coalesced_deltas,
-            ),
-        ]),
-    )
-}
-
 fn sample(count: usize, mut operation: impl FnMut() -> f64) -> Distribution {
     let mut samples = (0..count).map(|_| operation()).collect::<Vec<_>>();
     let cold_ms = samples.first().copied().unwrap_or(0.0);
@@ -286,28 +226,6 @@ fn semantic_event(seq: u64) -> SemanticEvent {
         SemanticEventPayload::RecoveryRecorded {
             object: format!("object_{seq}"),
             known_truth: "performance probe".to_string(),
-        },
-    )
-    .unwrap()
-}
-
-fn hot_event(turn: &str, cursor: u64) -> HotEvent {
-    HotEvent::new(
-        EventEnvelopeMetadata::new(
-            EventId::new(format!("event_hot_{turn}_{cursor}")).unwrap(),
-            StreamId::new("stream_hot_perf").unwrap(),
-            StreamSeq(cursor),
-            Actor {
-                kind: ActorKind::AgentProvider,
-                id: "performance-provider".to_string(),
-            },
-            CorrelationId::new("correlation_hot_perf").unwrap(),
-            TraceId::new("trace_hot_perf").unwrap(),
-        ),
-        HotEventPayload::MessageDelta {
-            turn_id: TurnId::new(format!("turn_{turn}")).unwrap(),
-            cursor,
-            text: "x".repeat(32),
         },
     )
     .unwrap()

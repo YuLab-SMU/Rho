@@ -2,26 +2,17 @@
   "schema": "rho.performance.slo.v1",
   "profile": "desktop-beta",
   "thresholds": {
-    "first_visible_activity": { "p95_ms": 10, "regression_factor": 3 },
-    "model_first_token": { "p95_ms": 5000, "regression_factor": 2 },
-    "policy_approval_decision": { "p95_ms": 5, "regression_factor": 3 },
+    "capability_argument_validation": { "p95_ms": 5, "regression_factor": 3 },
     "durable_append": { "p95_ms": 25, "regression_factor": 3 },
     "cas_commit_4k": { "p95_ms": 75, "regression_factor": 3 },
     "projection_recovery": { "p95_ms": 1000, "regression_factor": 3 },
-    "hot_reconnect_read": { "p95_ms": 10, "regression_factor": 3 },
     "sandbox_snapshot_startup": { "p95_ms": 250, "regression_factor": 3 },
     "local_process_startup": { "p95_ms": 100, "regression_factor": 3 },
-    "process_tree_cancel": { "p95_ms": 250, "regression_factor": 3 },
-    "event_storm_publish": { "p95_ms": 5, "regression_factor": 5 }
-  },
-  "bounded_soak": {
-    "max_hot_total_bytes": 524288,
-    "max_timeline_activities": 120,
-    "max_provider_diagnostics": 256
+    "process_tree_cancel": { "p95_ms": 250, "regression_factor": 3 }
   },
   "security_invariants": [
     "no durable append bypass",
-    "no policy bypass",
+    "no capability validation bypass",
     "no artifact digest bypass",
     "no provenance bypass"
   ]
