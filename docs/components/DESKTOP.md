@@ -21,12 +21,11 @@ resolved through the independent Authority facet. The Agent frontend receives
 Authority-read, Graph-read and Draft-write ports only; promotion methods are
 absent from its capability object.
 
-`commands/environment.rs` owns the typed Environment Authority health,
-Workspace re-observation boundary, and the internal provider composition seam
-for reviewed-plan/exact-lease apply. The renderer read port sees verified
+`commands/environment.rs` owns typed Environment Authority health and the
+Workspace re-observation boundary. The renderer read port sees verified
 receipt, desired/realization revisions, a pre-execution pending plan,
 immutable checkpoint activity, live Workspace phase and incidents as separate
-fields; it receives no apply port. The retired Toolchain
+fields; the current command inventory contains no Environment apply port. The retired Toolchain
 Doctor, generic package/request rendering, resource taskbar and desktop-bundled
 remote helper commands are not registered. `rho.environment` has only
 `Health`, `Plans`, and `Activity` modes.
@@ -48,42 +47,32 @@ stable Authority, Graph, Agent and Results ports from the application transport.
 `SurfaceFrame` owns lifecycle/chrome, delegates Console rendering to
 `app/console/ConsoleSurface.tsx`, and `SurfaceRouter` receives only narrow ports:
 
-- `app/authority/`: independent Runs, Jobs, Artifacts, Approvals, Revisions and
+- `app/authority/`: independent Runs, Jobs, Artifacts, Revisions and
   Environment modules reading owner receipts/projections; Environment renders
   Authority facts and live Workspace activation without generic domain data;
 - `app/evidence/`: Claims, Evidence Graph, Evidence Gaps, exact Claim Trace;
-- `app/agent/`: separate Goal, Current Work, Activity, Approvals, cited
-  evidence, gaps and final-answer components.
+- `app/agent/`: one continuous stream of what the external Agent did, plus a
+  composer. Environment facts render on the Authority side, not inside the
+  Agent surface.
 
 Jobs are never inferred from Run request strings. If no Job owner projection is
 published, `rho.jobs` says so instead of fabricating a list. Artifact identity
 comes from receipts with canonical digests, not renderer interpretation of a
 generic provenance flag.
 
-The Agent workbench under `app/agent/` presents:
-
-- Goal and provider-owned Current Work;
-- bounded live Activity with cursor/gap recovery;
-- exact one-use Approval effects, destination, revision, and risk;
-- independent Job cards and controlled-patch reconciliation;
-- revision, artifact, recovery, and policy context;
-- Authority status separately from graph promotion/support status, including
-  explicit ingest lag and open gaps.
-- Environment Doctor context copied from Authority receipt/Workspace
-  observation. Agent may inspect, explain and propose a typed apply handoff,
-  but its provider capability set has no direct apply, install, shell, secret,
-  re-observation, or evidence-promotion authority.
+The Agent surface exposes and dispatches; it does not gate. The external Agent
+owns its permission model, and every operation it requests is recorded in the
+audit log for post-facto review and rollback.
 
 `app/jobs/` renders Rho-owned Local/OCI/SSH/Slurm truth: queue and process state,
 requested versus effective resources, bounded logs, cancellation request versus
 process-tree confirmation, scheduler reconciliation, and CAS artifact status.
 Agent Plans and Provider sessions cannot alter Job identity or timeline.
 
-Provider controls are generated from a neutral capability and option schema.
-Unsupported Plan, resume, model, reasoning, or config controls do not exist;
-there is no Provider-name branch in React. External observers display their
-read-only and continuity limitations. Permission posture and data-egress policy
-remain Rho settings across Provider switches.
+The desktop reports external ACP runtime availability without implementing
+Provider configuration or model-selection controls. Permission modes belong to
+the external Agent; Rho retains containment and resource bounds rather than a
+second intent gate.
 
 Rust facets in `rho-ui-contract`, generated TypeScript facets under
 `transport/generated/`, the Tauri command surface, and browser mock handlers

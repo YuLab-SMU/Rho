@@ -41,14 +41,13 @@ const scans = [
       "Ask about this project",
       "Shape a reviewable approach",
       "Work with project tools",
+      "rho-agent-approval",
+      "respondAgentApproval",
+      "rho-agent-context-preview",
       "private_thinking",
       "plaintext_secret",
       "acp_method",
     ],
-  ],
-  [
-    "desktop/ui/src/contracts/workbenchVNext.ts",
-    ["interface Acp", "provider_specific_enum", "raw_project_payload", "plaintext_secret"],
   ],
 ];
 const requiredScans = [
@@ -58,11 +57,11 @@ const requiredScans = [
   [
     "desktop/ui/src/app/agent/AgentSurface.tsx",
     [
-      "Autonomous goal loop",
-      "Goal-driven scientific work",
-      "Observe → plan → request effect → re-observe",
       "listAgentConversations",
       "subscribeAgentTurnEvents",
+      "runConversation",
+      "rho-agent-stream-item",
+      "Observe → plan → request effect → re-observe",
     ],
   ],
 ];
@@ -75,23 +74,12 @@ for (const [relative, required] of requiredScans) {
 for (const [relative, forbidden] of scans) {
   const text = await readFile(path.join(root, relative), "utf8");
   for (const token of forbidden) {
-    // Contract validators intentionally name forbidden canaries; only type/field
-    // declarations are considered leaks for those files.
-    if (
-      text.includes(token) &&
-      !(
-        relative.includes("contracts/workbenchVNext") &&
-        ["provider_specific_enum", "raw_project_payload", "plaintext_secret"].includes(token)
-      )
-    ) {
-      errors.push(`forbidden:${relative}:${token}`);
-    }
+    if (text.includes(token)) errors.push(`forbidden:${relative}:${token}`);
   }
 }
 
 const environmentCutSources = [
-  "crates/rho-server/src/coordinator/agent_authorization.rs",
-  "crates/rho-server/src/coordinator/agent_execution.rs",
+  "crates/rho-server/src/coordinator/acp_execution.rs",
   "crates/rho-server/src/coordinator/workspace_protocol.rs",
   "r/rho.bridge/R/workspace.R",
   "r/rho.bridge/NAMESPACE",
@@ -112,42 +100,37 @@ for (const [relative, text] of await Promise.all(environmentCutSources)) {
     if (text.includes(token)) errors.push(`legacy_environment_surface:${relative}:${token}`);
   }
 }
-const environmentStore = await readFile(
-  path.join(root, "crates/rho-store/src/environment_realization.rs"),
-  "utf8",
-);
-for (const token of [
-  "record_environment_plan_for_review",
-  "approve_environment_plan",
-  "dispatch_approved_environment_plan",
-  "recover_environment_operations_after_restart",
-]) {
-  if (!environmentStore.includes(token)) errors.push(`missing_environment_store_cut:${token}`);
-}
 const environmentDesktop = await readFile(
   path.join(root, "desktop/src-tauri/src/commands/environment.rs"),
   "utf8",
 );
-for (const token of [
-  "stage_environment_plan_for_review",
-  "apply_environment_plan_with_ports",
-  "EnvironmentOperationCoordinator::apply",
-  "target_library_path",
-]) {
+for (const token of ["environment_health_for_state", "reobserve_environment_for_state"]) {
   if (!environmentDesktop.includes(token)) errors.push(`missing_environment_desktop_cut:${token}`);
+}
+const agentGateway = await readFile(
+  path.join(root, "desktop/src-tauri/src/agent_gateway.rs"),
+  "utf8",
+);
+for (const token of [
+  "dispatch_workspace_request",
+  "ENVIRONMENT_INSPECT_CAPABILITY",
+  "OperationMonitor",
+]) {
+  if (!agentGateway.includes(token)) errors.push(`missing_agent_gateway:${token}`);
+}
+for (const token of ["evaluate_policy", "BrokerAdmissionOutcome", "PatchApprovalBinding"]) {
+  if (agentGateway.includes(token)) errors.push(`agent_gateway_gate:${token}`);
 }
 for (const relative of [
   "desktop/src-tauri/src/commands/agent/workbench_vnext.rs",
   "desktop/src-tauri/src/commands/jobs/mod.rs",
 ]) {
-  const production = (await readFile(path.join(root, relative), "utf8")).split("#[cfg(test)]")[0];
-  if (production.includes("#[tauri::command]")) {
-    errors.push(`fixture_command_registered:${relative}`);
-  }
+  if (existsSync(path.join(root, relative))) errors.push(`fixture_harness_remains:${relative}`);
 }
 
 const reports = {
   final_golden: "test/control-plane/artifacts/final-golden-report.json",
+  agent_workspace: "test/control-plane/artifacts/agent-workspace-report.json",
   chaos: "test/chaos/artifacts/full-chaos-report.json",
   security: "test/security/artifacts/security-corpus-report.json",
   fuzz: "test/control-plane/artifacts/fuzz-report.json",
@@ -188,7 +171,9 @@ const audit = {
     provider_private_secret_raw_project_ui_absent: true,
     authoritative_success_evidence: true,
     legacy_live_workspace_environment_mutation_absent: true,
-    reviewed_exact_environment_apply_path_present: true,
+    external_agent_state_and_capabilities_exposed: true,
+    rho_owned_approval_gate_absent: true,
+    journaled_agent_project_commit_present: true,
   },
   reports: reportResults,
   errors,
@@ -201,4 +186,4 @@ if (errors.length > 0) {
   console.error(`Final rebuild audit failed:\n- ${errors.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`Final rebuild audit passed: 35/35 packages and all retained local reports; ${path.relative(root, output)}`);
+console.log(`Final rebuild audit passed: ${packageRecords.length} packages and all retained local reports; ${path.relative(root, output)}`);

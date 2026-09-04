@@ -5,6 +5,79 @@ a compact map of the current implementation; Git is the history. Plans and
 status stay with the working issue or branch rather than becoming repository
 documents.
 
+## Architecture Philosophy
+
+**Rho is the operable scientific space. The Agent platform owns conversation
+and behavior. ACP is the thin boundary between them.**
+
+Most product code belongs to Rho's scientific space:
+
+- project files, editors, resources and user-visible scientific assets;
+- the live Workspace R session, Environment state and runtime lifecycle;
+- tools, executions, jobs, outputs, artifacts, evidence and revisions;
+- capability schemas, containment, audit facts and recovery/rollback;
+- truthful state snapshots, tool events and execution results.
+
+The external Agent platform (Claude Code ACP, Codex, etc.) owns the smaller
+agency layer:
+
+- Conversation and Agent-session lifecycle;
+- understanding intent, planning and choosing actions;
+- model/provider configuration and private reasoning;
+- permission modes, risk decisions and user prompting;
+- retry, continuation and behavioral policy.
+
+Rho's Agent integration should remain a small ACP adapter. For an Agent-facing
+operation, Rho receives the request, validates protocol shape and mechanical
+execution constraints, dispatches it to the scientific-space owner, and returns
+the real state, tool events and run result. Rho must not rewrite the goal,
+construct an internal plan, imitate an Agent loop, or introduce a second
+permission decision.
+
+Conversation content is not Rho authority. Persist only the minimal correlation
+identities or visible audit projection required by the product; do not build a
+parallel Conversation, planning or behavioral subsystem inside Rho.
+
+### Key Principles
+
+1. **Scientific space first** - Put capabilities in their real Rho owner, not
+   in an Agent subsystem.
+2. **Agent owns agency** - Conversation, planning, tool choice and behavioral
+   control remain in the external Agent platform.
+3. **Respond, don't orchestrate** - Rho reacts to requested operations and
+   reports facts; it does not run a competing Agent loop.
+4. **Expose the whole usable space** - Agents receive discoverable state and
+   executable capabilities for Workspace, Environment, files, assets, evidence
+   and runtimes.
+5. **Validate mechanics, not intent** - Validate identity, schema, containment,
+   quotas and revision integrity, not whether an action seems reasonable.
+6. **No double approval** - The Agent platform's permission flow is
+   authoritative. Rho does not create approval records or re-prompt the user.
+7. **Return owner truth** - State, tool events and results come from the
+   component that performed or observed the operation, never UI inference.
+8. **Recover truthfully** - Preserve rollback/reconciliation material and
+   report partial or uncertain outcomes instead of claiming success.
+
+### Control Plane Role
+
+`rho-control-plane` components:
+
+- **CapabilityRegistry**: Declares operations and validates their schemas and
+  argument bounds.
+- **ProjectCommitter**: Applies revision-bound project changes with a durable
+  journal and truthful reconciliation.
+- **OperationMonitor**: Passively records factual operation observations; it
+  does not score intent or decide admission.
+
+Live state and execution stay with their domain owners (`rho-workspace`,
+`rho-environment`, Store, runtimes, project resources, and so on). MCP and the
+Agent Gateway expose and dispatch those owners; they do not become new owners.
+
+**Removed concepts** (legacy from internal Agent era):
+- ~~PermissionPosture~~ - Agent has its own permission modes
+- ~~ApprovalBinding~~ - Agent's RequestPermission carries user approval
+- ~~BrokerAdmissionOutcome::Ask~~ - Rho never prompts users, only Agent does
+
 ## Working loop
 
 1. Inspect `git status` and the relevant source/tests.
@@ -17,23 +90,47 @@ documents.
    express clearly. Delete obsolete explanation instead of archiving it.
 
 Preserve unrelated working-tree changes. A mutation reports success only when
-its authoritative state agrees. Keep identity and permission checks at the
-admission boundary, contain project data and secrets, bound external data, and
-leave truthful recovery after failure. These are implementation properties,
-not paperwork gates.
+its authoritative state agrees. Keep identity, capability, schema, containment
+and revision checks at the execution boundary, contain project data and
+secrets, bound external data, and leave truthful recovery after failure. Agent
+permissions belong to the Agent platform; extension sandbox permissions remain
+a separate component concern. These are implementation properties, not
+paperwork gates.
 
 Documentation starts at `docs/README.md`. Its machine-readable page and source
 maps live in `governance/registry.json` and `governance/source-map.json`.
 
+## Verification
+
+- Cargo invocations share one `target/` directory. Never run two
+  `cargo test` or `cargo build` processes in parallel; the build lock
+  serializes them and both appear hung until they time out.
+- Iterate with the closest fast gate; run full suites once at the end.
+  - Binding or Tauri command change: regenerate with the matching
+    `scripts/generate-*-bindings.mjs`, then run the area's
+    `rsr:test:<area>-bindings`, `rsr:test:commands`, and `rsr:typecheck`.
+  - Rust change: filtered `cargo test -p <crate> <filter>`; reruns take
+    seconds once the test binary is built.
+- Do not poll background test runs with sleeps; wait for completion.
+- When tests fail, compare the failing set against a pre-change baseline
+  before attributing it to the current change.
+
 ## Repository details
 
-- Direct UI scientific-environment operations use their dedicated broker and
-  request surface; they do not reuse Agent approval records.
+- **Agent requests are trusted** - Rho validates mechanical constraints,
+  dispatches to the owning scientific component, and never re-prompts users.
+- New scientific capabilities belong in Workspace, Environment, project,
+  runtime, artifact, evidence or other domain owners. The ACP/MCP layer only
+  exposes and forwards them.
+- Direct UI and Agent-triggered operations must report the same owner truth;
+  neither path creates Rho-owned Agent approval records.
 - Pass the normalized broker/store project root to Workspace R environment
   helpers. Do not rely on the process working directory.
 - In R, test name membership before indexing a named atomic vector.
 - Keep Tauri commands, generated TypeScript facets, and browser mock handlers
-  aligned in the same change.
+  aligned in the same change. Adding or removing a command also changes the
+  pinned `EXPECTED_HANDLER_DIGEST` in
+  `scripts/test-tauri-command-inventory.mjs`.
 - Frontend visual values belong in the tokenized styles under
   `desktop/ui/src/styles/`; `foundation.css` only composes layers.
 - Project skill discovery validates the `.rho/skills` root itself, including

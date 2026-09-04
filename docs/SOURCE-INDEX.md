@@ -14,13 +14,10 @@ Sources:
 
 - `crates/rho-acp-client/**`
 - `crates/rho-control-plane/**`
-- `crates/rho-event-hub/**`
-- `crates/rho-telemetry/**`
-- `crates/rho-test-support/**`
 
 Checks:
 
-- `rust.agent`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust agent","--","cargo","test","-p","rho-acp-client","-p","rho-control-plane","-p","rho-event-hub","-p","rho-test-support","-p","rho-telemetry","--locked","--","--test-threads=1"]`
+- `rust.agent`: `["node","scripts/run-test-command.mjs","--timeout-seconds","180","--label","rust agent","--","cargo","test","-p","rho-acp-client","-p","rho-control-plane","--locked","--","--test-threads=1"]`
 
 ## `desktop`
 
@@ -139,7 +136,6 @@ Documentation:
 
 Sources:
 
-- `crates/rho-control-plane/src/environment_operation.rs`
 - `crates/rho-environment/**`
 - `crates/rho-execution/src/remote_reconcile/**`
 - `crates/rho-execution/src/slurm/**`

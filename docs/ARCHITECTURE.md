@@ -1,125 +1,71 @@
 # Architecture
 
-Rho is a local-first scientific workbench with one durable authority path and
-separate interactive, Agent, and background-job planes.
+Rho is a local-first scientific workbench and execution environment for external
+ACP Agents. Rho exposes state and capabilities, executes well-formed requests,
+records observable outcomes, and preserves recovery information. It does not
+implement an Agent model loop or a second permission system.
 
 ```text
-React Workbench (Goal / Activity / Approval / Jobs)
-  │ versioned provider-neutral contracts
+React Workbench
+  │ typed Tauri commands
   ▼
-Tauri admission commands ── rho-control-plane Broker
-  │                            ├─ deterministic policy / information flow
-  │                            ├─ exact one-use approval leases
-  │                            └─ capability registry
-  ├─ rho-acp-client ── client for external ACP Agents; no Agent implementation
-  ├─ rho-workspace ── authenticated serial Workspace R bridge
-  ├─ rho-environment ── Runtime / Library / Profile / immutable plan semantics
-  ├─ rho-execution ── Local / OCI / SSH runner / Slurm
-  ├─ rho-sandbox ── immutable snapshots / staging / network enforcement
-  ├─ rho-secret-broker ── SecretRef / scoped injection
-  ├─ rho-artifact-store ── immutable CAS / manifests / provenance
-  ├─ rho-store ── authority events / projections / receipt feed
-  └─ rho-evidence-graph ── project-local LadybugDB claim graph / gaps / traces
+Desktop composition root
+  ├─ external ACP process ── Rho MCP state/capability projection
+  │                         └─ authenticated turn-scoped Agent Gateway
+  ├─ rho-workspace ── live Workspace R binding and revisions
+  ├─ rho-environment ── Environment contracts, observation and realization state
+  ├─ rho-store ── durable runs, artifacts, conversations and receipts
+  ├─ rho-evidence-graph ── project-local claims, gaps and traces
+  └─ rho-sandbox ── disposable snapshots, staging and network containment
 
-remote: framed SSH → digest-pinned rho-runner → Slurm → remote CAS
+Agent Gateway
+  ├─ CapabilityRegistry: identity, schema and byte-bound validation
+  ├─ operation owners: execute the request
+  └─ OperationMonitor: passive factual observation
 ```
 
-## Truth and authority
+## Runtime rules
 
-- **Broker admission is the sole effect ingress.** Provider permission hints,
-  transport acknowledgements, UI state, and model claims are not authority.
-- **Workspace R** owns the single live scientific state. Every admitted
-  evaluation is serialized and returns a revision-aware terminal observation;
-  failed or uncertain arbitrary evaluation can advance the state revision.
-- **Semantic Store** owns durable events and projections. It has one fresh
-  schema fingerprint and no migration, compatibility read, or dual-write path.
-  Store contains no claim/support tables. Its trigger-backed receipt log exposes
-  bounded changes only after the corresponding authority mutation commits.
-- **Evidence Graph** owns recorded claims, links, promotion history, graph
-  snapshots, and deterministic gaps in `<project>/.rho/evidence.lbdb`. It can
-  cache bounded Authority observations internally for reconciliation, but its
-  renderer projection exposes only stable refs and graph-owned semantics.
-  Current Run, Artifact, Approval and Revision facts are independently resolved
-  from their owners. Sidecar failure does not change an authority result.
-- **Execution and schedulers** own process/job truth. Missing processes,
-  disconnected SSH, daemon loss, and delayed `sacct` remain uncertain until an
-  exact identity can be reconciled.
-- **Environment realization** separates desired state from observed
-  realization. Materialized immutable plans bind exact artifacts, Runtime,
-  ordered LibraryStack target, RepositoryProfile and ExecutionProfile
-  identities and are persisted for review before approval. Store accepts an
-  apply only with the matching Broker lease, commits a binding only with a
-  successful verification receipt, and keeps live Workspace execution blocked
-  through restart/re-observation or an open PackageIncident.
-- **Artifact CAS** owns output identity. Product success requiring output is
-  reported only after sealed staging bytes are SHA-256 verified and manifest
-  metadata is durably committed.
-- **Secret Broker** exposes references and purpose/audience/destination-bound
-  leases, never serializable plaintext material.
-- **React** owns presentation only. Workbench composition joins independent
-  Authority observations with graph refs. Authority modules never import the
-  graph; Evidence modules have no Authority mutation; Agent receives reads plus
-  draft-only graph writes. Committed states require authoritative event,
-  revision, scheduler, process-tree, or CAS evidence.
+- External ACP Agents receive the disposable project Workspace, native ACP
+  filesystem and terminal capabilities, an MCP state snapshot, and live Rho
+  capabilities.
+- Rho validates identity, shape, containment, quotas and revision integrity. It
+  does not judge intent or ask for a second approval.
+- Project changes are captured as a snapshot delta and committed through a
+  journal with base revision and per-file digest checks. Partial outcomes remain
+  explicit and retain reconciliation material.
+- Workspace R is the single live scientific state. Terminal execution advances
+  revisions when it may have mutated the Workspace or when the outcome is
+  uncertain.
+- Environment bindings activate only after a verified receipt and required
+  restart/re-observation. This is state consistency, not Agent permission.
+- Network modes are deny, provider-only, allowlisted, or unrestricted. Every
+  enabled mode still enforces HTTPS parsing, DNS pinning/rebinding checks,
+  forbidden-address checks, redirect bounds and byte quotas.
+- Store owns durable facts. Evidence Graph owns claims and links but resolves
+  current Authority facts from their owners.
 
-## Agent boundary
+## Component boundaries
 
-`rho-acp-client` speaks the standard Agent Client Protocol to external Agents
-such as Codex ACP or Claude Code ACP. Rho does not implement their model loop,
-tool harness, planning, or session runtime. Private reasoning and raw frames do
-not enter UI or Store. External Agents work only inside disposable project
-snapshots; a Provider permission response is never Rho authority. A Provider
-switch changes Agent context, not Conversation, Job, Revision, or Artifact
-identity.
-
-## Containment and controlled mutation
-
-Agents see an immutable project-revision snapshot mounted read-only. Scratch
-and staging are independent writable areas; authoritative project paths,
-Workspace sockets, Store SQLite, the LadybugDB sidecar, CAS internals, host
-terminals, and secret stores are not mounted. Canonical patches carry base
-revision and per-file digests. Broker
-approval binds the exact patch digest, destination, expiry, and high-risk path
-acknowledgements. Multi-file commits use a durable journal and report exact
-applied/pending sets rather than claiming cross-file atomicity.
-
-Network is denied unless both policy and platform enforcement admit a canonical
-scheme/host/port. DNS results are pinned and checked again at connect and every
-redirect. Provider-only traffic is not general sandbox network access.
-
-## Background and remote jobs
-
-A versioned `ExecutionSpec` provides typed IDs, argv, working-set/environment
-manifests, exact Environment receipt/Profile refs, resource requests, network
-posture, outputs, provenance, and retry semantics for Local, OCI, SSH, and
-Slurm adapters. Commands are never Agent shell strings. `rho-runner`
-authenticates bounded requests, verifies the same spec and staging-manifest
-digests plus every leased CAS byte, journals operation markers, and survives
-duplicate requests.
-Remote bytes move by leased digest manifests and resumable checked chunks, not
-mutable project synchronization. SSH is transport only; Slurm owns scheduler
-lifecycle.
-
-## Main code areas
-
-| Owner | Source |
+| Component | Current responsibility |
 | --- | --- |
-| Canonical contracts | `crates/rho-protocol` |
-| Semantic events and projections | `crates/rho-store` |
-| Claims, graph links, gaps, traces and snapshots | `crates/rho-evidence-graph` |
-| Capability, policy, Broker, commits | `crates/rho-control-plane` |
-| External ACP client boundary | `crates/rho-acp-client` |
-| Hot bounded stream | `crates/rho-event-hub` |
-| Workspace R revision bridge | `crates/rho-workspace`, `r/rho.bridge` |
-| Environment realization | `crates/rho-environment`, `r/rho.environment` |
-| Local/OCI/SSH/Slurm execution | `crates/rho-execution`, `crates/rho-runner` |
-| Snapshot, staging, process and network sandbox | `crates/rho-sandbox` |
-| Secrets | `crates/rho-secret-broker` |
-| Artifacts and transfer | `crates/rho-artifact-store` |
-| Desktop contracts and UI | `crates/rho-ui-contract`, `desktop/` |
-| Telemetry | `crates/rho-telemetry` |
-| Extension runtime and authoring | `crates/rho-extension-runtime`, `crates/rho-plugin-dev` |
-| Public observer tools | `crates/rho-cli`, `crates/rho-mcp` |
+| `rho-protocol` | Canonical IDs, requests, events, revisions and receipts |
+| `rho-control-plane` | Capability contract validation, journaled project commits and passive operation observation |
+| `rho-acp-client` | ACP transport and client capabilities for external Agents |
+| `rho-mcp` | Bounded state/capability projection and Gateway forwarding |
+| `rho-workspace` | Environment-binding state and Workspace revision tracking |
+| `rho-environment` | Environment discovery, planning and realization semantics |
+| `rho-store` | Durable operational projections and Authority feed |
+| `rho-evidence-graph` | Project-local evidence graph |
+| `rho-sandbox` | Snapshot, staging, process and network containment |
+| `rho-server` | Live Workspace protocol and ACP turn persistence |
+| `rho-core`, `rho-kernel` | Workspace broker state and Ark session |
+| `rho-ui-contract`, `desktop/` | Typed desktop composition and presentation |
+| `rho-extension-runtime`, `rho-plugin-dev` | Isolated extension runtime and authoring |
+| `rho-runner` | Standalone authenticated structured-spec runner |
 
-The generated [source index](SOURCE-INDEX.md) maps these paths to executable
-checks.
+`rho-execution`, `rho-artifact-store`, and `rho-secret-broker` remain
+standalone library components; the current desktop dependency graph does not
+claim that they are wired into its live path.
+
+The generated [source index](SOURCE-INDEX.md) maps files to executable checks.

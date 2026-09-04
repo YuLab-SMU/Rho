@@ -9,25 +9,25 @@ scientific outputs, and an AI collaborator in one application.
 - edits and runs R code against one persistent Ark-backed Workspace R session;
 - presents Console output, Environment objects, plots, problems, and durable
   run history with project provenance;
-- supports Ask, Plan, and reviewed Act workflows through a separate Agent R
-  process;
-- admits exact R/rig/renv/pak and Python/uv project toolchains from
-  `rho.toml`, with explicit effect journals and environment receipts;
-- manages model providers, capabilities, routes, and credentials;
-- previews Agent file proposals before applying them;
+- drives an external ACP Agent over one continuous stream of what it read and
+  changed;
+- observes R/rig/renv/pak project environments and records explicit plans,
+  operation journals and environment receipts;
+- launches configured external ACP Agents and exposes Rho capabilities;
 - hosts bounded project plugins and typed plugin surfaces;
-- exposes read-side workbench data through the local CLI and MCP server.
+- exposes bounded workbench state and executable capabilities through MCP.
 
-The Rust desktop broker owns process lifecycle, projects, revisions,
-permissions, persistence, and transport. Workspace R owns live R execution and
-scientific objects. React owns presentation, not authority.
+The Rust desktop layer owns process lifecycle, projects, revisions, persistence,
+and transport: it exposes complete state and executes Agent requests faithfully.
+The external Agent owns intent and its own permission model. Workspace R owns
+live R execution and scientific objects. React owns presentation, not authority.
 
 ## Requirements
 
 - Windows 10/11 with WebView2, Apple Silicon macOS 14+, or a supported Linux
   desktop environment;
 - R 4.4 or later;
-- `aisdk` and configured model credentials only for Agent features.
+- a configured ACP Agent executable for Agent features.
 
 ## Develop
 
