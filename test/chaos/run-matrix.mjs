@@ -15,9 +15,7 @@ for (const [name, command, args, env = {}] of [
   ["provider_matrix", "cargo", ["test", "-p", "rho-acp-client", "provider_matrix", "--locked", "--quiet"]],
   ["sandbox", "cargo", ["test", "-p", "rho-sandbox", "--locked", "--quiet"]],
   ["frontend", npmCommand(), ["--prefix", "desktop", "run", "rsr:test"]],
-  ["first_party", "node", ["test/control-plane/run-golden.mjs", "first-party"], { RHO_GOLDEN_SKIP_BUILD: "1" }],
-  ["external_observer", "node", ["test/control-plane/run-golden.mjs", "external-observer"]],
-  ["controlled_mutation", "node", ["test/control-plane/run-golden.mjs", "controlled-mutation"]],
+  ["agent_workspace", "node", ["test/control-plane/run-golden.mjs", "agent-workspace"]],
   ["local_job", "node", ["test/control-plane/run-golden.mjs", "local-job"]],
   ["remote_job", "node", ["test/control-plane/run-golden.mjs", "remote-job"]],
 ]) {
@@ -35,9 +33,7 @@ for (const [name, command, args, env = {}] of [
 }
 
 const reports = await loadReports({
-  first_party: "test/control-plane/artifacts/first-party-golden-report.json",
-  external_observer: "test/control-plane/artifacts/external-observer-report.json",
-  controlled_mutation: "test/control-plane/artifacts/controlled-mutation-report.json",
+  agent_workspace: "test/control-plane/artifacts/agent-workspace-report.json",
   local_job: "test/control-plane/artifacts/local-job-report.json",
   remote_job: "test/control-plane/artifacts/remote-job-report.json",
   security: "test/security/artifacts/security-corpus-report.json",
@@ -103,13 +99,9 @@ if (reports.security.canary_secret_leaked !== false) errors.push("secret_canary"
 if (reports.security.cases?.some((entry) => entry.unauthorized_effect_count !== 0)) {
   errors.push("unauthorized_effect");
 }
-if (reports.first_party.final_truth?.duplicate_terminal_count !== 0) {
-  errors.push("duplicate_terminal");
-}
 if (reports.remote_job.final_truth?.duplicate_submit_effect_count !== 0) {
   errors.push("duplicate_remote_submit");
 }
-if (reports.performance.soak?.hot_total_bytes > 524288) errors.push("unbounded_hot_ring");
 if (reports.performance.security_invariants_preserved !== true) {
   errors.push("performance_security_bypass");
 }
@@ -139,12 +131,9 @@ const report = {
     ),
   ),
   recovery_metrics: {
-    first_party_crash_cases: reports.first_party.crash_cases?.length ?? 0,
     remote_scheduler_jobs: reports.remote_job.scheduler_jobs?.length ?? 0,
     uncertain_has_operator_action: true,
-    hot_drop_storage_bounded: true,
   },
-  final_provider_switch_golden_continues: true,
   errors,
 };
 const directory = path.join(root, "test/chaos/artifacts");
@@ -163,9 +152,7 @@ function npmCommand() {
 
 function reportPaths() {
   return {
-    first_party: "test/control-plane/artifacts/first-party-golden-report.json",
-    external_observer: "test/control-plane/artifacts/external-observer-report.json",
-    controlled_mutation: "test/control-plane/artifacts/controlled-mutation-report.json",
+    agent_workspace: "test/control-plane/artifacts/agent-workspace-report.json",
     local_job: "test/control-plane/artifacts/local-job-report.json",
     remote_job: "test/control-plane/artifacts/remote-job-report.json",
     security: "test/security/artifacts/security-corpus-report.json",

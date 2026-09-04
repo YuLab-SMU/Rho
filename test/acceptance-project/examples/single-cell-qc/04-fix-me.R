@@ -1,4 +1,4 @@
-# Gate coverage: Problems, Agent Ask/Plan/Act, file proposal review, rerun
+# Coverage: Problems, external Agent execution, project change capture, rerun
 # This file contains one deliberate defect. Ask Rho to diagnose it and propose
 # the smallest reviewable edit, then explicitly accept or reject the proposal.
 
