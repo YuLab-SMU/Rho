@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-05
 >
-> 当前阶段：N7 MCP 入口与真实 R 调用已验证；下一步生成前端 contract 与极简客户端，远程实测和生产切换仍待完成
+> 当前阶段：N7 本机工作台、生成类型与共享 HTTP/MCP Host 已实现；接口/真实 R 已验证，浏览器交互与视觉、远程实测、生产切换仍待完成
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -36,7 +36,7 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 - Retired：旧入口和实现已经不可达并删除。
 
 禁止把 Target 写成当前能力，禁止用“应该可用”代替验证结果。
-第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1—N5、N6 的本机部分与 N7 的 MCP 部分已有验证记录；远程实测、极简客户端和生产切换仍未完成。确定性 fake runtime 只用于测试。
+第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1—N5、N6 的本机部分与 N7 的协议部分已有验证记录；远程实测、极简客户端的浏览器验收和生产切换仍未完成。确定性 fake runtime 只用于测试。
 
 ### 阅读导航
 
@@ -66,14 +66,14 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 项目 | 当前事实 |
 | --- | --- |
 | 总体状态 | 真实 Ark/R、Project/Git、环境计划/隔离安装/验证/新会话绑定及长期 CLI 已贯通；仍未替换旧生产入口 |
-| 当前里程碑 | N7 Building；MCP 已接入并通过真实 SDK/R 验收，极简客户端未完成；远程目标尚待指定 |
+| 当前里程碑 | N7 Building；本机 HTTP/MCP 共用 Host，真实 R 与生成类型已验证；浏览器交互/视觉尚未验收，远程目标尚待指定 |
 | 已完成生产切换的 capability | 0；独立 Next CLI 的可用能力不计为旧生产入口已切换 |
 | 已退役的旧 capability 实现 | 0 |
 | 旧系统策略 | 冻结为行为参考；不作为 Next 的代码依赖 |
-| 前端策略 | N7 接入极简统一客户端；完整桌面仍延后，当前尚无 Next 前端实现 |
+| 前端策略 | 已实现本机浏览器客户端；纯 TypeScript、嵌入式静态资产和五端口，完整桌面仍延后 |
 | 数据策略 | Next 使用独立 schema 和数据目录，切换前不双写 |
 
-已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议 `2f9ce6b`、材料回收 `e1820f1`，N7 MCP `f4f502c`。
+已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议 `2f9ce6b`、材料回收 `e1820f1`，N7 MCP `f4f502c`、本机工作台 `3e20d78`。
 这些引用对应下方历史验证记录，不代表当前工作树已重新通过全部测试。
 N6 的本地执行、取消、输出收集已在 Host/CLI 验证；Git 和 Environment 复用同一进程执行器。Environment 与普通本地命令分别通过真实 Host 强制退出验收；后者不需要 R，并覆盖脱离进程组的子进程。验证只覆盖本机可观察、保留标记的进程，不代表远程任务或任意逃逸方式也已覆盖。
 
@@ -671,7 +671,8 @@ next 是迁移期名称。旧系统全部退役后，应把它提升为正常仓
 | R ps | Environment 中跨进程组的子进程清理 | N6 已采用；本机 ps 1.9.3，复用原生 marker/find/kill/wait |
 | sysinfo | 无 R 依赖的本机进程观察与恢复 | N6 已采用 0.39.6；只启用 system，结果不包含进程环境 |
 | OpenSSH executable | 远程连接、认证与主机密钥核对 | N6 已接入；复用用户已有 alias/known_hosts，不自建 SSH 协议或凭证库 |
-| TypeScript generator | 极简前端 contract | Frontend 阶段选择 |
+| ts-rs | Rust 到 TypeScript 的唯一 contract 生成器 | N7 已采用 12.0.1；包含 optional 字段与 JSON number 的编译/漂移检查 |
+| Axum | 本机工作台 HTTP transport | N7 已采用 0.8.9；只绑定 loopback；复用 rmcp HTTP，不承接 Gateway 业务 |
 
 禁止因为“未来也许有用”提前引入 DBOS、Restate、OpenTelemetry、完整 workflow runtime 或通用 policy engine。
 讨论中的推荐清单不是安装清单，也不是可靠性背书。采用时只核对当前能力所需的接口、维护状态、许可、平台支持和最小验证；不预先创建这些工具的通用替代层。
@@ -752,7 +753,7 @@ Git 可恢复源码，不代表已经撤销包安装、R 内存修改或远程�
 | N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Next 实现 Verified；生产切换未完成 |
 | N5 | Environment | observe/plan/realize/verify 首条链路完成 | Next Verified（隔离本地 fixture、renv restore、新 Ark 绑定）；生产未切换 |
 | N6 | Execution | local process 后再扩展 SSH/Slurm | Building（本机已验证；SSH/Slurm 已实现并通过协议测试，未远程实测） |
-| N7 | Public edges | MCP 与极简前端使用统一 host ports | Building（MCP 与真实 R 已验证；前端未完成） |
+| N7 | Public edges | MCP 与极简前端使用统一 host ports | Building（HTTP/MCP/真实 R、生成类型已验证；浏览器交互与视觉未验收） |
 | N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Not started |
 
 N1 不创建真实 R、前端、MCP、Environment 或 Project 功能。它只证明操作骨架、幂等、提交纪律和查询能够工作。
@@ -775,7 +776,7 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | operation.invoke | Command port | Next 独立 CLI；旧生产入口未切换 | operation | Ready | N7 公共入口与旧消费者切换 |
 | operation.get | Query port | Next 独立 CLI；旧生产入口未切换 | operation/sqlite | Ready | N7 公共边缘接入 |
 | operation.request_cancellation | Command port | Legacy 生产入口；Next Host 已验证 | operation | Ready | N7 公开入口接入 |
-| operation.subscribe | Subscription | Legacy 生产；Next cursor page 已验证 | sqlite outbox/host | Building | N7 push/消费进度语义仍待接入 |
+| operation.subscribe | Subscription | Legacy 生产；Next cursor page/HTTP 已验证 | sqlite outbox/host | Ready（游标协议） | 前端消费已实现；浏览器验收与生产切换，不声称 live push |
 | workspace.run_r | Operation | rho-server coordinator | workspace | Ready | Next 真实 R 已验证；待统一入口切换 |
 | workspace.snapshot | Query | rho-server + r/rho.bridge | workspace | Ready | 已验证 bounded/busy/无 Operation；待切换入口 |
 | workspace.inspect_object | Query | rho-server + r/rho.bridge | workspace | Ready | 已验证不求值绑定与有限预览；待切换入口 |
@@ -796,8 +797,8 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | slurm.snapshot | Query | 旧执行路径；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 验证真实 squeue/sacct 状态与版本 |
 | slurm.reconcile | Operation | Next 独立入口 | execution / ssh adapter | Building（本地协议测试通过） | 真实丢回执/状态核对；不重提作业 |
 | slurm.request_cancel | Operation | 旧执行路径；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 真实取消请求与后续状态观察 |
-| MCP edge | Edge | 旧 rho-mcp/Agent Gateway；Next stdio 入口已接入 | host adapter | Ready（真实 SDK/本机 R） | 极简客户端与生产路由切换；无业务分叉 |
-| desktop-lite | Edge | desktop | unified client | Planned | N7 generated contract 与真实本机客户端验收 |
+| MCP edge | Edge | 旧 rho-mcp/Agent Gateway；Next stdio/本机 HTTP 已接入 | host adapter | Ready（真实 SDK/本机 R） | 浏览器验收与生产路由切换；HTTP 与 UI 共享同一 Host |
+| desktop-lite | Edge | desktop；Next 独立本机入口已实现 | workbench / unified client | Building（接口/R Verified） | 浏览器交互与视觉验收后再切换生产入口 |
 | evidence projection | Query projection | rho-evidence-graph | 未决定 | Deferred | 出现真实消费者 |
 | extensions | Capability source | extension runtime | 未决定 | Deferred | 核心稳定后评估 |
 
@@ -1039,6 +1040,18 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 证据：真实 MCP 握手、发现、文件修改、查询纯度、幂等、输入越界、取消与断开后提交通过；真实 R 返回 42、对象 Query 不产生日志，Agent 实现 Human 创建的包计划，Human 读取同一结果。
 - 边界：当前是本机 stdio binding，不是网络鉴权或全平台验收。事件工具是 cursor page，不是 live push；前端与旧生产入口切换仍未完成。
 
+### N-D024 — 本机薄客户端、生成契约与共享 Host
+
+- 日期：2026-09-05
+- 状态：Accepted；类型生成、本机 HTTP/MCP 与真实 R 已验证，浏览器交互/视觉尚未验收
+- 决定：使用 ts-rs 12.0.1 从 Rust 生成 TypeScript contract；plain TypeScript 客户端与静态资产嵌入 Axum 本机服务。没有第二个前端业务服务器、旧 Tauri 依赖或外部网站部署。
+- 类型纪律：沿用 JSON number，客户端拒绝不安全游标；显式映射省略的 optional 字段。生成内容和嵌入 JS 有漂移检查，只有 app.js 是实际脚本资源。
+- 所有权：HostProfile 统一 CLI/stdio MCP/工作台的启动装配。`/api/host` 转发原五端口，`/api/info` 与 `/api/project` 只处理原 Host 启动/项目选择，不新增科学业务路由。`/mcp` 使用官方 rmcp，与 UI 共用同一个 Arc<NextHost>。
+- 切换：活跃请求、未提交任务和 MCP 会话阻止切换项目；旧浏览器的 project root 不匹配时拒绝请求。切换结束旧 R session，并清除项目特定的库/remote binding；启动失败报告没有打开项目，不声称内存已回滚。
+- 边界：只监听 127.0.0.1，使用每次启动的 bearer、精确 Host/Origin、请求大小上限与同源静态资源。不创建账户、Agent approval 或权限审批数据库；native R/进程仍拥有当前用户的 OS 权限。
+- 客户端：事件仅驱动重新查询；结果来自持久化 Operation 与 owner observation。断线后的同 ID 重试需要显式触发；关闭等待提示不取消运行。MCP 与 UI 保留各自 actor，共享 principal 的事实。
+- 证据范围：测试已从 HTTP 执行真实 R 得到 42，再由 MCP 查询同一对象；跨入口取消、查询纯度、断开后提交和项目切换边界已验证。电脑交互连接启动失败且浏览器列表为空，未据此声称界面已通过视觉验收。
+
 ## 24. Open Decisions
 
 以下问题尚未决定，不能由实现者顺手固化：
@@ -1048,7 +1061,6 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 | N-O004 | 任意 R eval 的最低 containment 保证是什么？ | workspace.run_r 切换前 |
 | N-O006 | SHA-256 与 BLAKE3 分别用于哪些外部兼容和本地内容身份？ | 首个 artifact 前 |
 | N-O007 | macOS、Windows、Linux 的 containment capability matrix 是什么？ | 首个受限 process 前 |
-| N-O008 | Rust 到 TypeScript 使用哪个单一生成器？ | N7 前 |
 | N-O009 | 旧 SQLite 数据是否一次迁移、只读挂载或直接放弃？ | 首个用户数据切换前 |
 | N-O010 | 首次切换必须一起迁移哪些共享 R session、library 或工作树的能力和入口？单个 capability 路由唯一不足以证明共享状态不会有两个写入 owner | 首次生产切换前 |
 | N-O011 | SSH/Slurm 真实验收使用哪个已配置目标及临时目录？已向用户询问；未指定前不连接或提交远程作业 | N6 远程实测前 |
@@ -1201,6 +1213,17 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 验证：`node scripts/governance.mjs check` 通过（9 pages、13 areas、34 checks）；`node scripts/test-governance.mjs` 与 `git diff --check` 通过。没有改动运行代码，未重跑 Rust、R 或旧系统测试。
 - 下一步：N7 generated contract 与极简客户端；本次文档整理不改变其未完成状态。
 
+### 2026-09-05 — 本机工作台与共享 HTTP/MCP Host
+
+- Git：`3e20d78`；本机客户端实现与协议验证检查点，不是 N7 或整体替换的完成提交。
+- 实现：新增本机 workbench edge、生成 TypeScript contract 与极简客户端；抽出 Host 启动装配，CLI 不再自行组装 Ark/Environment config。所有科学能力仍来自 Registry 和 Host 五端口。
+- 验证：`cargo test --manifest-path next/Cargo.toml --workspace --locked --offline -- --test-threads=1`、Next 全目标 Clippy（`-D warnings`）、architecture check、`npm run check --prefix next/ui` 通过。工作台四项 Rust 测试覆盖本机边界、幂等、查询纯度和切换互斥。
+- 真实验收：`node next/scripts/test-workbench.mjs` 及 `--real-r` 通过，含真正的 HTTP/MCP 服务、Ark/R 共享对象、Environment 观察、跨入口取消、断开后提交和同 ID 重试；没有把浏览器点击或视觉检查算在内。
+- 回归：`test-real-r.mjs`、`test-environment.mjs`、`test-mcp.mjs`（含 `--real-r`）、`test-process-recovery.mjs`、`test-remote-protocol.mjs` 全部通过，脚本位于 `next/scripts/`。远程脚本仍明确是本地协议 fixture。文档检查（9 pages、13 areas、37 checks）与 `git diff --check` 通过，未运行旧系统全套测试。
+- 发现：Fetch 会规范化 Host 头，安全验收改用实际原始 HTTP 请求；SDK 的 DELETE 返回 202，不能把它写成另一个预设回执。类型生成补齐省略 optional 与 JSON number 映射。
+- 未完成：电脑交互连接启动失败、可用浏览器列表为空，直接创建内置浏览器也返回不可用，不能进行真实点击与视觉验收。临时本机服务已关闭、临时凭证已清理。远程实测和生产切换仍未完成；没有删除旧生产实现。
+- 下一步：浏览器条件恢复后完成客户端交互验收；当前继续核对共享状态的首次切换集合与旧数据处理，不以接口测试替代整个 N7。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。
@@ -1257,7 +1280,9 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 N7：让外部 Agent 与极简客户端使用同一套科学空间端口。
 
-MCP 已经从 Registry 暴露能力并通过真实 SDK/R 验收。当前可执行出口是生成前端 contract 与极简客户端：只用 Host 五端口呈现项目、Workspace、Environment、Operation 与恢复状态，不能推断业务成功或复制 Agent 会话。随后逐项切换并删除旧生产入口；真实远程目标未指定前仍不连接或提交作业。
+工作台与 MCP 已共用一个本机 Host；生成类型、HTTP 入口及真实 Ark/R 已验证。浏览器交互连接当前不可用，项目选择、R 执行、对象刷新、操作详情、取消/重连与桌面/窄屏布局的真实浏览器验收仍未完成。
+
+当前可执行出口：核对首次生产切换的共享状态范围（N-O010）和旧数据处理（N-O009），明确需要一起切换的最小能力集合、尚未迁移的真实消费者和对应的旧源码删除清单。核对阶段不删除用户数据，也不提前删除仍可达的旧实现。浏览器条件恢复后补 N7 交互验收，再按批次接管并退役旧入口；真实远程目标未指定前仍不连接或提交作业。
 
 必须只包含：
 
