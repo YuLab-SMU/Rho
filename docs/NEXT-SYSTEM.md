@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-05
 >
-> 当前阶段：N7 本机工作台、生成类型与共享 HTTP/MCP Host 已实现；接口/真实 R 已验证，浏览器交互与视觉、远程实测、生产切换仍待完成
+> 当前阶段：N8 默认构建/运行入口已切到 Next，旧 CLI/MCP 已删除；剩余旧源码退役、浏览器验收及远程实测未完成
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -36,7 +36,7 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 - Retired：旧入口和实现已经不可达并删除。
 
 禁止把 Target 写成当前能力，禁止用“应该可用”代替验证结果。
-第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1—N5、N6 的本机部分与 N7 的协议部分已有验证记录；远程实测、极简客户端的浏览器验收和生产切换仍未完成。确定性 fake runtime 只用于测试。
+第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。默认源代码入口已切到 Next；这不等于旧源码已全部删除、平台验收完成或二进制已经发布。确定性 fake runtime 只用于测试。
 
 ### 阅读导航
 
@@ -50,7 +50,7 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 
 新加入的开发者先读目标、宪章和当前摘要，再按任务阅读相关契约；不必每次重读历史。
 具体运行命令只维护在 [Next README](../next/README.md)，本页只引用阶段性验证命令。
-现有 [架构文档](ARCHITECTURE.md) 和 `programs/rho-rebuild/` 描述旧系统，不是 Next 的进度来源。
+[架构文档](ARCHITECTURE.md) 描述当前默认系统；`programs/rho-rebuild/` 是待退役的旧工程记录，不是本任务的进度来源。
 
 ### 接手一项工作的最短路径
 
@@ -65,15 +65,15 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 
 | 项目 | 当前事实 |
 | --- | --- |
-| 总体状态 | 真实 Ark/R、Project/Git、环境计划/隔离安装/验证/新会话绑定及长期 CLI 已贯通；仍未替换旧生产入口 |
-| 当前里程碑 | N7 Building；本机 HTTP/MCP 共用 Host，真实 R 与生成类型已验证；浏览器交互/视觉尚未验收，远程目标尚待指定 |
-| 已完成生产切换的 capability | 0；独立 Next CLI 的可用能力不计为旧生产入口已切换 |
-| 已退役的旧 capability 实现 | 0 |
-| 旧系统策略 | 冻结为行为参考；不作为 Next 的代码依赖 |
+| 总体状态 | 根 Cargo 工作区只构建 Next，默认程序为 rho；真实 Ark/R、Project、Environment 与本机执行经新 Host 运行 |
+| 当前里程碑 | N8 Building；默认入口已切换，剩余旧源码待删除；N7 浏览器交互/视觉与 N6 远程实测仍未完成 |
+| 已切换的默认入口 | rho CLI/session、stdio MCP、workbench HTTP/MCP；没有保留旧入口启动代理或旧数据库兼容层 |
+| 已退役的旧入口模块 | crates/rho-cli、crates/rho-mcp；旧桌面中的引用随其剩余源码待删除，不把整套旧系统记为 Retired |
+| 旧系统策略 | 从生产编译图排除；已替代部分删除，其余源码继续退役。旧数据全部放弃 |
 | 前端策略 | 已实现本机浏览器客户端；纯 TypeScript、嵌入式静态资产和五端口，完整桌面仍延后 |
 | 数据策略 | 无真实旧用户；放弃旧架构全部数据资产。Next 使用全新应用状态，不做迁移、导入、只读兼容或会话接力（N-D025） |
 
-已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议 `2f9ce6b`、材料回收 `e1820f1`，N7 MCP `f4f502c`、本机工作台 `3e20d78`。
+已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议 `2f9ce6b`、材料回收 `e1820f1`，N7 MCP `f4f502c`、本机工作台 `3e20d78`，项目级互斥 `3bef981`，N8 默认入口切换 `a93e855`。
 这些引用对应下方历史验证记录，不代表当前工作树已重新通过全部测试。
 N6 的本地执行、取消、输出收集已在 Host/CLI 验证；Git 和 Environment 复用同一进程执行器。Environment 与普通本地命令分别通过真实 Host 强制退出验收；后者不需要 R，并覆盖脱离进程组的子进程。验证只覆盖本机可观察、保留标记的进程，不代表远程任务或任意逃逸方式也已覆盖。
 
@@ -682,7 +682,7 @@ next 是迁移期名称。旧系统全部退役后，应把它提升为正常仓
 
 ### 19.1 隔离
 
-- Next 使用独立 Cargo workspace、binary 名称、data directory 和 schema。
+- N1—N7 使用独立工作区建立底座。N8 已将根 Cargo 工作区切到 Next，删除嵌套 manifest、收敛为一个 lockfile；默认程序为 rho，旧 crate 与旧桌面不再是生产依赖。
 - Next 从全新应用状态启动。旧数据库、历史、会话、草稿、缓存与派生资产全部放弃；不建立迁移、导入、旧数据浏览器或跨版本会话接力。这里的“迁移”只指能力和代码收敛，不指数据迁移。
 - 旧源码可以暂时并存作为行为参考，但不要求两个版本在线共存。切换采用关闭旧入口、启动全新 Next 状态的方式，不开发跨版本项目占用或热迁移协议。
 - Next 不通过 path dependency 调用旧 rho-* crate。
@@ -704,7 +704,7 @@ Host 维护唯一 routing table：
 
 building 只是开发进度，不是运行时 owner。禁止 shadow execution 和 dual-write。
 
-路由唯一还不够：如果多个 capability 共享同一个 R session、包库或 working tree，必须一起核对它们的写入入口。不能让 Next 接管 `workspace.run_r`，却让 Legacy 继续通过另一个入口修改同一会话。具体首批切换集合仍由 N-O010 跟踪，本文档不预先声称该边界已经解决。
+路由唯一还不够：如果多个 capability 共享同一个 R session、包库或 working tree，必须一起核对它们的写入入口。默认入口已按 N-D027 统一冷切换，旧目录不再参与生产构建；不为新旧版本建立会话交接协议。新系统内部的项目互斥见 N-D026，不能把它说成旧版本也遵循的锁。
 
 ### 19.3 单项迁移流程
 
@@ -751,13 +751,13 @@ Git 可恢复源码，不代表已经撤销包安装、R 内存修改或远程�
 | --- | --- | --- | --- |
 | N0 | 宪章与台账 | 本文档进入治理索引并通过文档检查 | Complete |
 | N1 | Walking skeleton | Invocation 经 Gateway、假/内存 Handler、SQLite atomic commit 后可由 CLI 查询 | Verified |
-| N2 | 真实 Workspace R | workspace.run_r 贯通真实 R，支持结果、条件、取消请求和 uncertain | Verified（本机 Ark/R；生产未切换） |
-| N3 | Workspace Query | querySnapshot 返回有来源、时间和 completeness 的 Workspace observation | Verified（含长期 CLI 会话；生产未切换） |
-| N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Next 实现 Verified；生产切换未完成 |
-| N5 | Environment | observe/plan/realize/verify 首条链路完成 | Next Verified（隔离本地 fixture、renv restore、新 Ark 绑定）；生产未切换 |
+| N2 | 真实 Workspace R | workspace.run_r 贯通真实 R，支持结果、条件、取消请求和 uncertain | Verified；默认入口已切 Next，本机验收范围不变 |
+| N3 | Workspace Query | querySnapshot 返回有来源、时间和 completeness 的 Workspace observation | Verified；默认入口已切 Next |
+| N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Verified；默认入口已切 Next，旧实现物理删除归 N8 |
+| N5 | Environment | observe/plan/realize/verify 首条链路完成 | Verified；默认入口已切 Next，仍只声明已验收的本机范围 |
 | N6 | Execution | local process 后再扩展 SSH/Slurm | Building（本机已验证；SSH/Slurm 已实现并通过协议测试，未远程实测） |
 | N7 | Public edges | MCP 与极简前端使用统一 host ports | Building（HTTP/MCP/真实 R、生成类型已验证；浏览器交互与视觉未验收） |
-| N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Not started |
+| N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Building；默认根工作区已切换，旧 CLI/MCP 和旧默认 CI/发布流程已删除，其他旧源码未删完 |
 
 N1 不创建真实 R、前端、MCP、Environment 或 Project 功能。它只证明操作骨架、幂等、提交纪律和查询能够工作。
 
@@ -768,7 +768,7 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 状态词：
 
 - Planned：仅有目标。
-- Building：Next 实现中，运行 owner 仍为 Legacy。
+- Building：实现或验证未完成；owner 单独记录，不能从开发进度推断运行所有权。
 - Ready：Next 已验证但尚未切换。
 - Next-owned：所有生产入口只进入 Next。
 - Retired：Legacy 实现已删除。
@@ -776,34 +776,35 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 
 | Capability / Port | 类型 | 当前 owner | Next owner | 进度 | 下一出口条件 |
 | --- | --- | --- | --- | --- | --- |
-| operation.invoke | Command port | Next 独立 CLI；旧生产入口未切换 | operation | Ready | N7 公共入口与旧消费者切换 |
-| operation.get | Query port | Next 独立 CLI；旧生产入口未切换 | operation/sqlite | Ready | N7 公共边缘接入 |
-| operation.request_cancellation | Command port | Legacy 生产入口；Next Host 已验证 | operation | Ready | N7 公开入口接入 |
-| operation.subscribe | Subscription | Legacy 生产；Next cursor page/HTTP 已验证 | sqlite outbox/host | Ready（游标协议） | 前端消费已实现；浏览器验收与生产切换，不声称 live push |
-| workspace.run_r | Operation | rho-server coordinator | workspace | Ready | Next 真实 R 已验证；待统一入口切换 |
-| workspace.snapshot | Query | rho-server + r/rho.bridge | workspace | Ready | 已验证 bounded/busy/无 Operation；待切换入口 |
-| workspace.inspect_object | Query | rho-server + r/rho.bridge | workspace | Ready | 已验证不求值绑定与有限预览；待切换入口 |
-| project.snapshot | Query | 旧生产文件入口；Next CLI 已验证 | project | Ready | Git/文件原生观察已验证；待迁移消费者 |
-| project.read_file | Query | 旧生产文件入口；Next CLI 已验证 | project | Ready | 分段精确字节读取已验证；待迁移消费者 |
-| project.apply_patch | Operation | desktop + control-plane | project | Ready | Next 已验证；待旧入口切换 |
-| environment.observe | Query | 旧生产入口；Next 已验证 | environment | Ready | 原生 R/library 观察及 active library 字段已实现 |
-| environment.plan | Operation | Next CLI/Host | environment | Ready | pak/renv 原生锁与来源摘要；待公共入口切换 |
-| environment.realize | Operation | Next CLI/Host | environment | Ready | 新隔离库安装与 namespace verification；现有会话不变 |
-| environment.verify | Operation | Next CLI/Host | environment | Ready | 校验包库内容及实际 namespace；新 Ark 绑定前重验 |
-| environment.reconcile | Operation | Next 独立 CLI/Host；生产未接入 | environment | Ready（本机 Host 崩溃验收） | 统一入口切换；仅清理本机已标记资源，不改写原结果 |
-| environment.retention / cleanup_status | Query | Next 独立 CLI/Host | environment | Ready（本机材料验收） | 公共入口接入；查询不改变材料或 Operation |
-| environment.cleanup / restore_cleanup / purge_cleanup | Operation | Next 独立 CLI/Host | environment | Ready（本机材料验收） | 公共入口接入；隔离、恢复与永久删除分别记录 |
-| process.run_local | Operation | 多条旧生产路径；Next Host/CLI 已接入 | execution | Ready（本机正常/崩溃路径） | 公共入口切换 |
-| process.reconcile | Operation | Next 独立 CLI/Host；生产未接入 | execution | Ready（本机无 R 验收） | 公共入口切换；仅针对当前可见的同用户标记进程 |
-| process.run_remote | Operation | 旧执行路径；Next Host/CLI 已注册 | execution / ssh adapter | Building（本地协议测试通过） | 指定目标后进行真实 SSH 验收 |
-| slurm.submit | Operation | 旧 execution/runner；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 验证真实集群提交与原生回执 |
-| slurm.snapshot | Query | 旧执行路径；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 验证真实 squeue/sacct 状态与版本 |
-| slurm.reconcile | Operation | Next 独立入口 | execution / ssh adapter | Building（本地协议测试通过） | 真实丢回执/状态核对；不重提作业 |
-| slurm.request_cancel | Operation | 旧执行路径；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 真实取消请求与后续状态观察 |
-| MCP edge | Edge | 旧 rho-mcp/Agent Gateway；Next stdio/本机 HTTP 已接入 | host adapter | Ready（真实 SDK/本机 R） | 浏览器验收与生产路由切换；HTTP 与 UI 共享同一 Host |
-| desktop-lite | Edge | desktop；Next 独立本机入口已实现 | workbench / unified client | Building（接口/R Verified） | 浏览器交互与视觉验收后再切换生产入口 |
-| evidence projection | Query projection | rho-evidence-graph | 未决定 | Deferred | 出现真实消费者 |
-| extensions | Capability source | extension runtime | 未决定 | Deferred | 核心稳定后评估 |
+| operation.invoke | Command port | 默认 rho Host | operation | Next-owned | 删除剩余旧执行路径源码 |
+| operation.get | Query port | 默认 rho Host | operation/sqlite | Next-owned | 维持只读与 principal 可见性 |
+| operation.request_cancellation | Command port | 默认 rho Host | operation | Next-owned | 维持请求与真实终态分离 |
+| operation.subscribe | Subscription | 默认 rho Host | sqlite outbox/host | Next-owned（游标协议） | 浏览器消费验收；不声称 live push |
+| workspace.run_r | Operation | 默认 rho Host | workspace | Next-owned | 旧 server/kernel/bridge 源码退役 |
+| workspace.snapshot | Query | 默认 rho Host | workspace | Next-owned | 维持 bounded/busy/无 Operation |
+| workspace.inspect_object | Query | 默认 rho Host | workspace | Next-owned | 维持不求值绑定与有限预览 |
+| project.snapshot | Query | 默认 rho Host | project | Next-owned | 旧文件路径源码退役 |
+| project.read_file | Query | 默认 rho Host | project | Next-owned | 维持分段精确字节读取 |
+| project.apply_patch | Operation | 默认 rho Host | project | Next-owned | 旧 desktop/control-plane 源码退役 |
+| environment.observe | Query | 默认 rho Host | environment | Next-owned | 维持原生 R/library 观察 |
+| environment.plan | Operation | 默认 rho Host | environment | Next-owned | 旧环境规划代码退役 |
+| environment.realize | Operation | 默认 rho Host | environment | Next-owned | 维持隔离安装与原生验证 |
+| environment.verify | Operation | 默认 rho Host | environment | Next-owned | 新 Ark 绑定前重验 |
+| environment.reconcile | Operation | 默认 rho Host | environment | Next-owned（本机验收） | 不扩张成本机全进程或远程隔离保证 |
+| environment.retention / cleanup_status | Query | 默认 rho Host | environment | Next-owned | 只读取新系统自身材料，不读取 Legacy 资产 |
+| environment.cleanup / restore_cleanup / purge_cleanup | Operation | 默认 rho Host | environment | Next-owned | 维持显式隔离/恢复/删除，不做旧数据迁移 |
+| process.run_local | Operation | 默认 rho Host | execution | Next-owned | 旧执行入口及重复进程机制退役 |
+| process.reconcile | Operation | 默认 rho Host | execution | Next-owned（本机无 R 验收） | 仅针对当前可见的同用户标记进程 |
+| process.run_remote | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 指定目标后进行真实 SSH 验收 |
+| slurm.submit | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 验证真实集群提交与原生回执 |
+| slurm.snapshot | Query | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 验证真实 squeue/sacct 状态与版本 |
+| slurm.reconcile | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 真实丢回执/状态核对；不重提作业 |
+| slurm.request_cancel | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 真实取消请求与后续状态观察 |
+| CLI entry | Edge | 默认 rho | cli | 旧独立 crate Retired | 不再提供旧 SemanticStore 数据观察器 |
+| MCP edge | Edge | 默认 rho stdio/HTTP | mcp / host | Next-owned；旧独立 crate Retired | 删除旧桌面残留引用，保持同 Host 语义 |
+| desktop-lite | Edge | 默认 rho workbench | workbench / unified client | Building（接口/R Verified） | 真实浏览器交互与视觉验收仍未完成 |
+| evidence projection | Query projection | 当前默认系统未启用 | 未决定 | Deferred | 旧代码不参与构建；出现真实消费者时再评估 |
+| extensions | Capability source | 当前默认系统未启用 | 未决定 | Deferred | 旧代码不参与构建；核心稳定后评估 |
 
 此表是 capability 所有权的唯一人工台账。运行时 routing table 才是实际 owner 真相；两者不一致时，以代码为准并立即修正文档。
 
@@ -1064,6 +1065,26 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 开发范围：继续收敛科学能力、切换调用入口、删除被替代的旧实现。新系统自身的事务、幂等、项目互斥和真实故障处理仍然需要，但不能借此重新引入旧数据迁移工程。
 - 边界：本决定不要求现在扫描或清理旧应用数据目录，也不改变对无关源码改动的保护。当前不执行额外的数据处理工作。
 
+### N-D026 — 新系统的项目级原生互斥
+
+- 日期：2026-09-05
+- 状态：Accepted；本机 Verified，检查点 `3bef981`
+- 发现：原先只锁数据库，同一项目换一个数据库路径就能启动第二个 Next Host；新增测试先复现失败。
+- 决定：在规范化项目目录的 `.rho/next-host.lock` 上持有 OS lock，在创建数据库、恢复或启动 R 之前取得所有权。锁文件保持为空且不随退出删除，文件存在不代表有活跃 owner。
+- 生命周期：已接受的操作/查询持有整个 Host runtime（Gateway、Query、adapter 与项目锁），外部等待者和 Host handle 被丢弃也不能提前释放。切换项目先预留目标项目锁；目标忙时不关闭原会话。
+- 证据：不同数据库和路径别名不能重复接管；真实 Host 被终止后可重新取得锁；原生进程执行到提交完成前一直持有锁；链接/已有非空文件被拒绝，Project patch 不能删除锁文件。旧数据不参与这些机制。
+- 边界：合作式的 Next Host 互斥，仅覆盖同一个规范化项目根，不等于 OS sandbox、任意重叠目录隔离或旧版本互斥。Host 崩溃释放锁也不证明其外部子进程已停止，恢复仍按原生观察处理。
+
+### N-D027 — 根工作区冷切换到新系统
+
+- 日期：2026-09-05
+- 状态：Accepted；默认源码入口已切换，本地验证见 Work Log
+- 决定：根 Cargo 工作区仅包含 Next 的 16 个 crate；默认成员是 CLI，产物名为 `rho`。删除嵌套 workspace manifest，Next lockfile 提升为唯一根 lockfile；不添加旧命令代理、双入口调度或数据兼容层。
+- 所有权：CLI/session、官方 stdio MCP 和本机 workbench/HTTP MCP 都进入新 Host。原 `crates/` 与旧 Tauri 应用不参与生产编译图。旧 CLI/MCP crate 已物理删除；其他旧源码仍需继续删除，不能仅凭排除构建就宣布全部 Retired。
+- 开发与交付：默认 CI 改为新系统的原生测试、类型生成与真实本机传输检查；旧 Tauri、旧 sandbox/fuzz、candidate/updater 发布流程退役。新的手动构建只产生二进制 artifact，不签名、安装或发布。未执行远程 CI，不声明其他平台通过。
+- 文档：当前架构、开发、交付说明和 source map 只引导新默认系统；旧组件说明删除，历史由 Git 保存。当前依旧不要求继承旧数据或旧 API。
+- 后续：删除剩余无生产消费者的旧实现、旧测试及旧脚本，再消除迁移期目录；浏览器交互/视觉与真实远程验收仍是未完成要求。
+
 ## 24. Open Decisions
 
 以下问题尚未决定，不能由实现者顺手固化：
@@ -1073,7 +1094,6 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 | N-O004 | 任意 R eval 的最低 containment 保证是什么？ | workspace.run_r 切换前 |
 | N-O006 | SHA-256 与 BLAKE3 分别用于哪些外部兼容和本地内容身份？ | 首个 artifact 前 |
 | N-O007 | macOS、Windows、Linux 的 containment capability matrix 是什么？ | 首个受限 process 前 |
-| N-O010 | 首批代码切换要关闭哪些旧调用入口、删除哪些旧实现？按全新 Next 状态冷启动，不设计数据或活跃会话交接 | 首次入口切换前 |
 | N-O011 | SSH/Slurm 真实验收使用哪个已配置目标及临时目录？已向用户询问；未指定前不连接或提交远程作业 | N6 远程实测前 |
 
 解决 Open Decision 时：
@@ -1241,6 +1261,18 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 变化：删除未提交的 `inspect-legacy-data.mjs`、`test-legacy-data.mjs`；移除旧数据待决项，更新根与 Next 开发指引。没有读取、导入或清理实际旧应用数据目录。
 - 后续：按全新状态切换入口、收敛能力并删除旧代码；保留正在实现的新系统自身项目互斥，它不是跨版本数据兼容机制。
 
+### 2026-09-05 — 根默认入口切换与首批旧源码退役
+
+- Git：`a93e855`；默认入口切换检查点，不是整个 N8 或完整目标的完成提交。
+- 实现：根 Cargo 工作区与单一 lockfile 已切到 Next；默认 `rho` 提供 session、MCP、workbench 和 Operation 端口。源码、CLI 验收与生成脚本已同步根 manifest 和新程序名。
+- 退役：删除旧 `rho-cli`、`rho-mcp` 的全部 crate 源码/manifest；删除 LBUG 构建环境强制项、旧默认 CI/发布 workflow 和旧组件说明。当前未删除其他旧 crate、旧桌面和旧 R 源码；它们已排除出生产图。
+- 验证：根 `cargo test --workspace --locked --offline -- --test-threads=1`、Clippy（`--workspace --all-targets --locked --offline -- -D warnings`）、`cargo fmt --all --check`、architecture check 和 `npm run check --prefix next/ui` 通过。`target/debug/rho --help` 确认新默认入口；`test-workbench.mjs --real-r` 在新入口完成真实 Ark/R、HTTP/MCP、取消和断开后提交验收。
+- 回归：根入口下的 `test-real-r.mjs`、`test-environment.mjs`、`test-process-recovery.mjs`、`test-remote-protocol.mjs`、`test-mcp.mjs`（含 `--real-r`）和 `test-workbench.mjs`（含 `--real-r`）通过；均位于 `next/scripts/`。远程协议测试仍只是本地 fixture，不计作远程验收。
+- 文档/CI：文档索引和治理工具检查通过；新 workflow YAML 解析通过，但未触发 GitHub CI、上传 artifact 或发布。其他平台和视觉验收没有被这些结果代替。
+- 发现与修正：第一次 Environment 脚本在 R 测试启动前被冷编译的 180 秒限时终止；确认没有剩余 Cargo/rustc 进程后，拆开较长的编译阶段与原有运行限时。随后真实 Environment、CLI 新会话绑定及崩溃恢复全部通过；没有通过放宽运行超时掩盖功能失败。
+- 数据：没有执行任何旧数据处理或迁移。代码删除可从 Git 历史恢复；不为此保存平行源码归档。
+- 下一步：继续删除已无生产消费者的旧源码与旧测试；完整目标仍未完成。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。
@@ -1299,7 +1331,7 @@ N7：让外部 Agent 与极简客户端使用同一套科学空间端口。
 
 工作台与 MCP 已共用一个本机 Host；生成类型、HTTP 入口及真实 Ark/R 已验证。浏览器交互连接当前不可用，项目选择、R 执行、对象刷新、操作详情、取消/重连与桌面/窄屏布局的真实浏览器验收仍未完成。
 
-当前可执行出口：完成新系统自身项目互斥的验证，随后直接推进首次代码入口切换（N-O010）和旧实现删除。Next 从全新应用状态启动，不再盘点或处理任何旧数据，也不建立新旧会话交接机制。浏览器条件恢复后补 N7 交互验收；真实远程目标未指定前仍不连接或提交作业。
+当前可执行出口：继续删除已不在生产图中的旧 `crates/`、`desktop/`、`r/` 及其专属脚本/测试，并将仍有必要的科学能力明确收敛到新 Host，不恢复旧数据或旧 API。根默认入口已经切换；仅排除编译还不是源码退役完成。浏览器条件恢复后补 N7 交互验收，真实远程目标未指定前仍不连接或提交作业。
 
 必须只包含：
 
