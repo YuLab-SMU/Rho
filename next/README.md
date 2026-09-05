@@ -5,6 +5,49 @@ Independent Rust workspace for the replacement described in
 The CLI exposes a project-only Host, a real Ark/R Host, or an explicitly selected
 deterministic demo. Production capability routing is still owned by the old app.
 
+Use the same startup flags with `mcp` instead of `session` to serve the official
+MCP protocol over stdio. The implementation uses rmcp; stdout contains only MCP
+frames. For example, an MCP client can launch `rho-next --database /path/state.sqlite
+--project /path/project mcp`, adding the existing Ark/Rscript/remote flags as needed.
+
+Capability tools are derived from the Host registry and named `rho.<capability>.v<version>`.
+Query tools accept their capability arguments directly. Command tools accept:
+
+```json
+{"client_request_id":"unique-action-id","arguments":{"code":"x <- 21; x * 2"},"preconditions":[]}
+```
+
+Generate a unique client_request_id for each intended action, and reuse it only
+when retrying that same action. Results are returned under `structuredContent.result`
+with a text fallback. Failed/uncertain Operations are tool errors but retain their
+real OperationId and outcome. `rho.operation.get`, `rho.operation.request_cancellation`
+and `rho.events.poll` reuse the other Host ports. Events are bounded cursor pages,
+not live push. Cancel is subject to the source capability's granted scopes.
+
+MCP records its actor as `agent/local-mcp`, with the native local-user principal
+bound by the stdio edge. Client initialization names and tool arguments cannot
+declare authority. The local CLI and MCP therefore see the same owner's facts,
+while the acting caller remains truthful. Records without an explicit principal
+keep their caller as principal; equivalent Human representations preserve existing
+idempotency digests. This local binding is not network authentication.
+
+MCP RPC cancellation/EOF does not claim a runtime stopped. Use the explicit
+cancellation tool and inspect the actual outcome. Host tracks and drains accepted
+work when the stdio service ends. Input frames are bounded, malformed/oversized
+frames close the bounded codec stream, and capability calls have an in-flight
+limit. No Agent conversation, sampling loop, elicitation or second approval system
+is created.
+
+```sh
+node next/scripts/test-mcp.mjs
+node next/scripts/test-mcp.mjs --real-r
+```
+
+The first test uses the actual MCP SDK and local files/processes; the second also
+executes real R and lets Agent/MCP realize a Human/CLI-created package plan. They
+verify discovery, generated schemas, query purity, shared principal visibility,
+idempotency, explicit cancellation, disconnect draining and the input frame bound.
+
 Build and check the foundation:
 
 ```sh

@@ -495,6 +495,10 @@ impl OperationGateway {
             &normalized_arguments,
             &invocation.preconditions,
             idempotency_scope.as_deref(),
+            context
+                .principal
+                .as_ref()
+                .filter(|principal| *principal != &context.caller),
         )?;
         let operation_id = self.id_generator.next_id()?;
         let accepted_at_ms = self.clock.now_ms()?;
@@ -506,6 +510,7 @@ impl OperationGateway {
             operation_id: operation_id.clone(),
             client_request_id: invocation.client_request_id,
             caller: context.caller.clone(),
+            principal: context.principal.clone(),
             capability: invocation.capability,
             domain: descriptor.domain.clone(),
             target,
@@ -585,7 +590,7 @@ impl OperationGateway {
             .journal
             .get(operation_id)
             .await?
-            .filter(|record| record.operation.caller == context.caller))
+            .filter(|record| record.operation.principal() == context.principal()))
     }
 
     pub async fn request_cancellation(
@@ -598,6 +603,18 @@ impl OperationGateway {
             .await?
             .ok_or_else(|| OperationError::NotFound(operation_id.as_str().to_string()))?;
         let handler = self.registry.handler(&operation.operation.capability)?;
+        let missing = handler
+            .descriptor()
+            .required_scopes
+            .difference(&context.scopes)
+            .cloned()
+            .collect::<Vec<_>>();
+        if !missing.is_empty() {
+            return Err(OperationError::AccessDenied {
+                capability: operation.operation.capability.display_key(),
+                missing,
+            });
+        }
         if handler.descriptor().cancellation == CancellationClass::Unsupported {
             return Err(OperationError::CancellationUnsupported(
                 operation.operation.capability.display_key(),
@@ -640,7 +657,7 @@ impl OperationGateway {
     ) -> Result<Vec<OutboxRecord>, OperationError> {
         context.validate()?;
         self.journal
-            .outbox(&context.caller, after_sequence, limit)
+            .outbox(context.principal(), after_sequence, limit)
             .await
     }
 
@@ -670,6 +687,7 @@ fn invocation_digest(
     normalized_arguments: &Value,
     preconditions: &[rho_next_contract::Precondition],
     scope: Option<&str>,
+    principal: Option<&rho_next_contract::CallerIdentity>,
 ) -> Result<String, OperationError> {
     let mut document = json!({
         "capability": capability,
@@ -678,6 +696,9 @@ fn invocation_digest(
     });
     if let Some(scope) = scope {
         document["scope"] = json!(scope);
+    }
+    if let Some(principal) = principal {
+        document["principal"] = json!(principal);
     }
     document.sort_all_objects();
     let bytes = serde_json::to_vec(&document)

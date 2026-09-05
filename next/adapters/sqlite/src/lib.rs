@@ -588,7 +588,9 @@ impl OperationJournal for SqliteOperationJournal {
                 "SELECT o.sequence, o.message_id, o.operation_id, o.topic,
                         o.payload_json, o.created_at_ms, o.delivered_at_ms
                  FROM outbox o JOIN operations op ON op.operation_id = o.operation_id
-                 WHERE o.sequence > ?1 AND op.caller_kind = ?2 AND op.caller_id = ?3
+                 WHERE o.sequence > ?1
+                   AND COALESCE(json_extract(op.operation_json, '$.principal.kind'), op.caller_kind) = ?2
+                   AND COALESCE(json_extract(op.operation_json, '$.principal.id'), op.caller_id) = ?3
                  ORDER BY o.sequence
                  LIMIT ?4",
             )
@@ -1081,6 +1083,7 @@ mod tests {
 
     fn operation(id: &str, request: &str, digest: &str) -> Operation {
         Operation {
+            principal: None,
             operation_id: OperationId::new(id).unwrap(),
             client_request_id: request.to_string(),
             caller: CallerIdentity {

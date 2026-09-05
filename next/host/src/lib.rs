@@ -118,6 +118,7 @@ pub struct NextHost {
     gateway: Arc<OperationGateway>,
     queries: Arc<QueryGateway>,
     recovered_on_open: Vec<OperationRecord>,
+    tasks: tokio_util::task::TaskTracker,
 }
 
 #[derive(Default)]
@@ -327,6 +328,7 @@ impl NextHost {
     /// Context for a local, OS-user-owned CLI. Callers cannot put identity in Invocation.
     pub fn local_context() -> CallContext {
         CallContext {
+            principal: None,
             caller: CallerIdentity {
                 kind: CallerKind::Human,
                 id: "local-user".into(),
@@ -361,6 +363,7 @@ impl NextHost {
             )),
             queries: Arc::new(QueryGateway::new(registry)),
             recovered_on_open: Vec::new(),
+            tasks: tokio_util::task::TaskTracker::new(),
         })
     }
     pub async fn open_demo(database: impl AsRef<Path>) -> Result<Self, OperationError> {
@@ -501,6 +504,7 @@ impl NextHost {
             gateway,
             queries: Arc::new(QueryGateway::new(registry)),
             recovered_on_open,
+            tasks: tokio_util::task::TaskTracker::new(),
         })
     }
 
@@ -521,7 +525,8 @@ impl NextHost {
         // the result commit or release the runtime lane while R is still working.
         let gateway = self.gateway.clone();
         let context = context.clone();
-        tokio::spawn(async move { gateway.invoke(&context, invocation).await })
+        self.tasks
+            .spawn(async move { gateway.invoke(&context, invocation).await })
             .await
             .map_err(|error| {
                 OperationError::Storage(format!("operation task ended without a result: {error}"))
@@ -536,7 +541,8 @@ impl NextHost {
         let queries = self.queries.clone();
         let context = context.clone();
         // Keep the Workspace lane until the read has finished, even if an edge disconnects.
-        tokio::spawn(async move { queries.query(&context, request).await })
+        self.tasks
+            .spawn(async move { queries.query(&context, request).await })
             .await
             .map_err(|error| OperationError::Storage(format!("query task failed: {error}")))?
     }
@@ -547,6 +553,11 @@ impl NextHost {
         operation_id: &OperationId,
     ) -> Result<Option<OperationRecord>, OperationError> {
         self.gateway.get_operation(context, operation_id).await
+    }
+    /// Hosting lifecycle only: keep accepted work alive after an edge disconnects.
+    pub async fn drain(&self) {
+        self.tasks.close();
+        self.tasks.wait().await;
     }
 
     pub async fn request_cancellation(

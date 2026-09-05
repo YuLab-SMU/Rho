@@ -90,7 +90,7 @@ impl EnvironmentOwner {
                 HandlerError::before_effect("material source Operation was not found")
             })?;
         if record.operation.idempotency_scope.as_deref() != Some(self.runtime.root())
-            || caller.is_some_and(|caller| caller != &record.operation.caller)
+            || caller.is_some_and(|caller| caller != record.operation.principal())
         {
             return Err(HandlerError::before_effect(
                 "material source is outside this project/caller scope",
@@ -124,7 +124,7 @@ impl EnvironmentOwner {
                 OperationStatus::Succeeded | OperationStatus::Uncertain
             )
             || record.operation.idempotency_scope.as_deref() != Some(self.runtime.root())
-            || caller.is_some_and(|caller| caller != &record.operation.caller)
+            || caller.is_some_and(|caller| caller != record.operation.principal())
         {
             return Err(HandlerError::before_effect(
                 "invalid cleanup reference or scope",
@@ -413,7 +413,7 @@ impl OperationHandler for RetentionHandler {
                         .map_err(before)?;
                 let (source, kind) = self
                     .owner
-                    .material_source(&args.operation_id, Some(&operation.caller))
+                    .material_source(&args.operation_id, Some(operation.principal()))
                     .await?;
                 (
                     source,
@@ -427,7 +427,7 @@ impl OperationHandler for RetentionHandler {
                         .map_err(before)?;
                 let (source, kind) = self
                     .owner
-                    .cleanup_source(&args.cleanup_operation_id, Some(&operation.caller))
+                    .cleanup_source(&args.cleanup_operation_id, Some(operation.principal()))
                     .await?;
                 (
                     source,

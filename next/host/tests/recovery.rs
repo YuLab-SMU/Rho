@@ -21,6 +21,7 @@ fn crash_worker() {
     let journal = SqliteOperationJournal::open(&path).unwrap();
     runtime.block_on(async {
         let operation = Operation {
+            principal: None,
             operation_id: OperationId::new("op_crashed").unwrap(),
             client_request_id: "interrupted".into(),
             caller: NextHost::local_context().caller,

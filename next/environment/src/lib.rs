@@ -216,7 +216,7 @@ impl EnvironmentOwner {
         if record.status != rho_next_contract::OperationStatus::Succeeded
             || record.operation.capability.id != capability
             || record.operation.idempotency_scope.as_deref() != Some(self.runtime.root())
-            || caller.is_some_and(|caller| &record.operation.caller != caller)
+            || caller.is_some_and(|caller| record.operation.principal() != caller)
         {
             return Err(HandlerError::before_effect(
                 "environment reference is not a successful operation in this project/caller scope",
@@ -239,7 +239,7 @@ impl EnvironmentOwner {
             .map_err(HandlerError::before_effect)?
             .ok_or_else(|| HandlerError::before_effect("environment operation was not found"))?;
         if !record.status.is_terminal()
-            || record.operation.caller != *caller
+            || record.operation.principal() != caller
             || record.operation.idempotency_scope.as_deref() != Some(self.runtime.root())
             || ![PLAN_CAPABILITY, REALIZE_CAPABILITY, VERIFY_CAPABILITY]
                 .contains(&record.operation.capability.id.as_str())
@@ -411,7 +411,7 @@ impl OperationHandler for EnvironmentHandler {
                         .output(
                             &args.plan_operation_id,
                             PLAN_CAPABILITY,
-                            Some(&operation.caller),
+                            Some(operation.principal()),
                         )
                         .await?,
                 )
@@ -439,7 +439,7 @@ impl OperationHandler for EnvironmentHandler {
                         .output(
                             &args.realization_operation_id,
                             REALIZE_CAPABILITY,
-                            Some(&operation.caller),
+                            Some(operation.principal()),
                         )
                         .await?,
                 )
@@ -457,7 +457,7 @@ impl OperationHandler for EnvironmentHandler {
                     serde_json::from_value(operation.normalized_arguments.clone())
                         .map_err(parse_error)?;
                 self.owner
-                    .recovery_source(&args.operation_id, &operation.caller)
+                    .recovery_source(&args.operation_id, operation.principal())
                     .await?;
                 let report = self.owner.runtime.reconcile(&args.operation_id).await?;
                 successful = report.cleanup_confirmed;

@@ -103,6 +103,8 @@ impl Cli {
 enum Command {
     /// Keep one Host/R session alive; read and write the typed session protocol over stdio.
     Session,
+    /// Serve MCP over stdio using the same Host and capability registry.
+    Mcp,
     Invoke {
         #[arg(long)]
         client_request_id: String,
@@ -146,6 +148,10 @@ async fn main() {
 async fn run() -> Result<(), String> {
     let cli = Cli::parse();
     let context = NextHost::local_context();
+    if matches!(cli.command, Command::Mcp) {
+        let host = Arc::new(cli.open_host().await?);
+        return rho_next_mcp::serve(host, tokio::io::stdin(), tokio::io::stdout()).await;
+    }
     if matches!(cli.command, Command::Session) {
         let host = Arc::new(cli.open_host().await?);
         return session::serve(host, tokio::io::stdin(), tokio::io::stdout()).await;
@@ -156,7 +162,7 @@ async fn run() -> Result<(), String> {
         None
     };
     match cli.command {
-        Command::Session => unreachable!(),
+        Command::Session | Command::Mcp => unreachable!(),
         Command::Invoke {
             client_request_id,
             code,

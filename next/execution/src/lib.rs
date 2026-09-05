@@ -169,7 +169,7 @@ impl OperationHandler for ReconcileProcessHandler {
             .map_err(HandlerError::before_effect)?
             .ok_or_else(|| HandlerError::before_effect("source Operation was not found"))?;
         if !source.status.is_terminal()
-            || source.operation.caller != operation.caller
+            || source.operation.principal() != operation.principal()
             || source.operation.idempotency_scope.as_deref() != Some(self.executor.root())
             || source.operation.capability != CapabilityRef::new("process.run_local", 1).unwrap()
         {

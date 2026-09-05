@@ -140,7 +140,7 @@ impl SlurmOwner {
             .ok_or_else(|| HandlerError::before_effect("Slurm submission was not found"))?;
         if source.operation.capability != CapabilityRef::new(SUBMIT_CAPABILITY, 1).unwrap()
             || source.operation.idempotency_scope.as_deref() != Some(self.runtime.scope())
-            || caller.is_some_and(|caller| caller != &source.operation.caller)
+            || caller.is_some_and(|caller| caller != source.operation.principal())
         {
             return Err(HandlerError::before_effect(
                 "Slurm source is outside this target/caller scope",
@@ -248,7 +248,7 @@ impl OperationHandler for SlurmHandler {
                 serde_json::from_value(operation.normalized_arguments.clone()).map_err(before)?;
             let source = self
                 .owner
-                .source(&args.submission_operation_id, Some(&operation.caller))
+                .source(&args.submission_operation_id, Some(operation.principal()))
                 .await?;
             if !source.status.is_terminal() {
                 return Err(HandlerError::before_effect(

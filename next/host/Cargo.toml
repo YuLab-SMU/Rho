@@ -22,6 +22,7 @@ rho-next-process = { path = "../adapters/process" }
 rho-next-ssh = { path = "../adapters/ssh" }
 serde_json.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 
 [dev-dependencies]
 rusqlite.workspace = true

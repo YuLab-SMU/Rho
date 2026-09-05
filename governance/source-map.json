@@ -19,6 +19,12 @@
     "next.remote-protocol": {
       "command": ["node", "next/scripts/test-remote-protocol.mjs"]
     },
+    "next.mcp": {
+      "command": ["node", "next/scripts/test-mcp.mjs"]
+    },
+    "next.mcp-real-r": {
+      "command": ["node", "next/scripts/test-mcp.mjs", "--real-r"]
+    },
     "docs.index": {
       "command": ["node", "scripts/governance.mjs", "check"]
     },
@@ -157,7 +163,9 @@
         "next.real-r",
         "next.environment",
         "next.process-recovery",
-        "next.remote-protocol"
+        "next.remote-protocol",
+        "next.mcp",
+        "next.mcp-real-r"
       ]
     },
     "desktop-ui": {

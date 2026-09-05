@@ -74,6 +74,61 @@ async fn invocation_retry_and_all_persisted_references_share_one_operation() {
 }
 
 #[tokio::test]
+async fn actors_share_owner_truth_without_crossing_principals_or_idempotency() {
+    use rho_next_contract::{CallerIdentity, CallerKind};
+    let runtime = Arc::new(DeterministicWorkspaceRuntime::default());
+    let host = host(runtime.clone()).await;
+    let human = NextHost::local_context();
+    let human_record = host.invoke(&human, invocation("human-once")).await.unwrap();
+    let mut explicit_human = human.clone();
+    explicit_human.principal = Some(human.caller.clone());
+    assert_eq!(
+        host.invoke(&explicit_human, invocation("human-once"))
+            .await
+            .unwrap(),
+        human_record
+    );
+    let mut agent = human.clone();
+    agent.principal = Some(human.caller.clone());
+    agent.caller = CallerIdentity {
+        kind: CallerKind::Agent,
+        id: "test-mcp".into(),
+    };
+    let record = host.invoke(&agent, invocation("agent-once")).await.unwrap();
+    assert_eq!(record.operation.caller, agent.caller);
+    assert_eq!(record.operation.principal(), human.principal());
+    let id = &record.operation.operation_id;
+    assert_eq!(
+        host.get_operation(&human, id).await.unwrap().unwrap(),
+        record
+    );
+    assert_eq!(
+        host.outbox(&human, 0, 100).await.unwrap(),
+        host.outbox(&agent, 0, 100).await.unwrap()
+    );
+    let mut read_only = human.clone();
+    read_only.scopes.clear();
+    assert!(matches!(
+        host.request_cancellation(&read_only, id).await,
+        Err(OperationError::AccessDenied { .. })
+    ));
+    let mut outsider = agent.clone();
+    outsider.principal = Some(CallerIdentity {
+        kind: CallerKind::Human,
+        id: "other-account".into(),
+    });
+    assert!(host.get_operation(&outsider, id).await.unwrap().is_none());
+    assert!(host.outbox(&outsider, 0, 100).await.unwrap().is_empty());
+    assert_eq!(
+        host.invoke(&outsider, invocation("agent-once"))
+            .await
+            .unwrap_err(),
+        OperationError::IdempotencyConflict
+    );
+    assert_eq!(runtime.execution_count(), 2);
+}
+
+#[tokio::test]
 async fn bad_input_scope_and_stale_session_do_not_execute() {
     let runtime = Arc::new(DeterministicWorkspaceRuntime::default());
     let host = host(runtime.clone()).await;

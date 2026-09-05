@@ -55,7 +55,9 @@ fn validate_token(value: &str, field: &'static str) -> Result<(), ContractError>
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(transparent)]
 pub struct OperationId(String);
 
@@ -71,7 +73,9 @@ impl OperationId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(deny_unknown_fields)]
 pub struct CapabilityRef {
     pub id: String,
@@ -101,7 +105,7 @@ impl CapabilityRef {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Precondition {
     pub kind: String,
@@ -116,7 +120,7 @@ impl Precondition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Invocation {
     pub client_request_id: String,
@@ -146,7 +150,9 @@ impl Invocation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum CallerKind {
     Human,
@@ -155,7 +161,7 @@ pub enum CallerKind {
     Plugin,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CallerIdentity {
     pub kind: CallerKind,
@@ -172,6 +178,9 @@ impl CallerIdentity {
 #[serde(deny_unknown_fields)]
 pub struct CallContext {
     pub caller: CallerIdentity,
+    /// Authenticated local account behind an actor. Only a trusted edge sets this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub principal: Option<CallerIdentity>,
     #[serde(default)]
     pub scopes: BTreeSet<String>,
     pub connection_id: String,
@@ -181,8 +190,14 @@ pub struct CallContext {
 }
 
 impl CallContext {
+    pub fn principal(&self) -> &CallerIdentity {
+        self.principal.as_ref().unwrap_or(&self.caller)
+    }
     pub fn validate(&self) -> Result<(), ContractError> {
         self.caller.validate()?;
+        if let Some(principal) = &self.principal {
+            principal.validate()?;
+        }
         validate_token(&self.connection_id, "connection_id")?;
         if self.scopes.len() > MAX_SCOPE_COUNT {
             return Err(ContractError::TooManyScopes);
@@ -217,7 +232,9 @@ impl TargetRef {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum EffectHint {
     NeedsNetwork,
@@ -289,12 +306,14 @@ impl CapabilityDescriptor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Operation {
     pub operation_id: OperationId,
     pub client_request_id: String,
     pub caller: CallerIdentity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub principal: Option<CallerIdentity>,
     pub capability: CapabilityRef,
     pub domain: String,
     pub target: TargetRef,
@@ -309,8 +328,13 @@ pub struct Operation {
     pub trace_parent: Option<String>,
     pub accepted_at_ms: i64,
 }
+impl Operation {
+    pub fn principal(&self) -> &CallerIdentity {
+        self.principal.as_ref().unwrap_or(&self.caller)
+    }
+}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum OperationStatus {
     Accepted,
@@ -379,7 +403,7 @@ pub struct EffectObservation {
     pub completeness: ObservationCompleteness,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct OperationRecord {
     pub operation: Operation,
@@ -403,7 +427,7 @@ pub struct OperationEventRecord {
     pub recorded_at_ms: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct OutboxRecord {
     pub sequence: u64,
