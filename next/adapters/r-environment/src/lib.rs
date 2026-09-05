@@ -2,12 +2,12 @@
 
 use async_trait::async_trait;
 use rho_next_environment::{
-    EnvironmentPlan, EnvironmentRealization, EnvironmentRuntime, NamespaceProbe, PackageVersion,
-    PlanArguments, SourceDigest, Verification,
+    EnvironmentPlan, EnvironmentRealization, EnvironmentReconciliation, EnvironmentRuntime,
+    NamespaceProbe, PackageVersion, PlanArguments, SourceDigest, Verification,
 };
 use rho_next_operation::HandlerError;
 use rho_next_process::{ProcessOptions, ProcessTermination, run_command};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -58,6 +58,20 @@ struct NativeVerification {
     r_version: String,
     platform: String,
     probes: Vec<NamespaceProbe>,
+}
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecoveryMarker {
+    schema_version: u16,
+    operation_id: String,
+    project_root: String,
+    marker: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeCleanup {
+    stopped_pids: Vec<u32>,
+    remaining_pids: Vec<u32>,
 }
 
 impl REnvironment {
@@ -117,20 +131,73 @@ impl REnvironment {
             .map_err(|e| format!("Environment staging is not new: {e}"))?;
         Ok(directory)
     }
+    fn recovery_path(&self, id: &str) -> Result<PathBuf, String> {
+        let directory = self.config.data_root.join("recovery");
+        std::fs::create_dir_all(&directory).map_err(display)?;
+        if directory.canonicalize().map_err(display)? != directory {
+            return Err("Environment recovery directory identity changed".into());
+        }
+        Ok(directory.join(format!("{:x}.json", Sha256::digest(id.as_bytes()))))
+    }
+    fn persist_marker(&self, file: NamedTempFile, id: &str, marker: &str) -> Result<(), String> {
+        let target = self.recovery_path(id)?;
+        let material = RecoveryMarker {
+            schema_version: 1,
+            operation_id: id.into(),
+            project_root: self.root.clone(),
+            marker: marker.into(),
+        };
+        std::fs::write(file.path(), serde_json::to_vec(&material).map_err(display)?)
+            .map_err(display)?;
+        file.as_file().sync_all().map_err(display)?;
+        // Replace only after the previous helper has completed confirmed cleanup.
+        // A crash sees either its old (already stopped) marker or the new marker.
+        file.persist(&target).map_err(display)?;
+        #[cfg(unix)]
+        std::fs::File::open(target.parent().unwrap())
+            .and_then(|dir| dir.sync_all())
+            .map_err(display)?;
+        Ok(())
+    }
+    fn read_marker(&self, id: &str) -> Result<Option<RecoveryMarker>, String> {
+        let path = self.recovery_path(id)?;
+        let metadata = match std::fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(display(error)),
+        };
+        if !metadata.is_file()
+            || metadata.len() > 4096
+            || path.canonicalize().map_err(display)? != path
+        {
+            return Err("invalid Environment recovery file".into());
+        }
+        let material: RecoveryMarker =
+            serde_json::from_slice(&read_bounded(&path)?).map_err(display)?;
+        if material.schema_version != 1
+            || material.operation_id != id
+            || material.project_root != self.root
+            || !valid_marker(&material.marker)
+        {
+            return Err("Environment recovery reference identity mismatch".into());
+        }
+        Ok(Some(material))
+    }
     async fn helper_call(
         &self,
-        id: &str,
+        id: Option<&str>,
         action: &str,
         payload: Value,
         cancellation: watch::Receiver<bool>,
     ) -> Result<Value, HandlerError> {
+        let request_id = id.unwrap_or("observe");
         let scratch = TempDir::new_in(&self.config.data_root).map_err(before)?;
         let input = scratch.path().join("request.json");
         let output = scratch.path().join("result.json");
         std::fs::write(
             &input,
             serde_json::to_vec(
-                &json!({"protocol_version":1,"request_id":id,"action":action,"payload":payload}),
+                &json!({"protocol_version":1,"request_id":request_id,"action":action,"payload":payload}),
             )
             .map_err(before)?,
         )
@@ -145,11 +212,11 @@ impl REnvironment {
             cancellation,
         )
         .await?;
-        response(&output, id).map_err(uncertain)
+        response(&output, request_id).map_err(uncertain)
     }
     async fn run(
         &self,
-        id: &str,
+        id: Option<&str>,
         script: &Path,
         args: &[String],
         cancellation: watch::Receiver<bool>,
@@ -157,29 +224,37 @@ impl REnvironment {
         // Let ps allocate its own native marker format; never invent a parallel
         // process registry. The marker is inherited across detached callr groups.
         let marker_file = NamedTempFile::new_in(&self.config.data_root).map_err(before)?;
-        self.tree_action("mark", &marker_file.path().to_string_lossy())
+        self.tree_action("mark", &marker_file.path().to_string_lossy(), None)
             .await
             .map_err(before)?;
         let marker = String::from_utf8(read_bounded(marker_file.path()).map_err(before)?)
             .map_err(before)?
             .trim()
             .to_string();
-        if marker.is_empty()
-            || marker.len() > 200
-            || !marker
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
+        if !valid_marker(&marker) {
             return Err(before("ps returned an invalid process-tree marker"));
         }
+        // Pure observe queries have no Operation identity; keep their marker
+        // ephemeral. Every effectful Environment call supplies its real ID.
+        let _ephemeral_marker = if let Some(id) = id {
+            self.persist_marker(marker_file, id, &marker)
+                .map_err(before)?;
+            None
+        } else {
+            Some(marker_file)
+        };
         let mut command = tokio::process::Command::new(&self.config.rscript);
         command
             .arg("--vanilla")
             .arg(script)
             .args(args)
             .current_dir(&self.config.project_root)
-            .env(&marker, "YES")
-            .env("RHO_OPERATION_ID", id);
+            .env(&marker, "YES");
+        if let Some(id) = id {
+            command.env("RHO_OPERATION_ID", id);
+        } else {
+            command.env_remove("RHO_OPERATION_ID");
+        }
         command
             .env("RENV_CONFIG_CACHE_ENABLED", "FALSE")
             .env("RENV_CONFIG_AUTO_SNAPSHOT", "FALSE")
@@ -208,7 +283,7 @@ impl REnvironment {
         .map_err(before)?;
         // This cleanup is deliberately not cancelled with the main action.
         // A stopped leader alone is insufficient proof for a package install.
-        let tree_cleanup = self.tree_action("cleanup", &marker).await;
+        let tree_cleanup = self.cleanup_tree(&marker, id.unwrap_or("")).await;
         if let Err(error) = &tree_cleanup {
             report.termination = ProcessTermination::Uncertain;
             report.cleanup_error = Some(error.clone());
@@ -237,13 +312,21 @@ impl REnvironment {
             HandlerError::after_possible_effect(message, recovery)
         })
     }
-    async fn tree_action(&self, action: &str, value: &str) -> Result<(), String> {
+    async fn tree_action(
+        &self,
+        action: &str,
+        value: &str,
+        owner_tag: Option<&str>,
+    ) -> Result<String, String> {
         let mut command = tokio::process::Command::new(&self.config.rscript);
         command
             .arg("--vanilla")
             .arg(self.process_tree.path())
             .args([action, value])
             .current_dir(&self.config.project_root);
+        if let Some(tag) = owner_tag {
+            command.arg(tag);
+        }
         let report = run_command(
             command,
             ProcessOptions {
@@ -262,7 +345,19 @@ impl REnvironment {
                 String::from_utf8_lossy(&report.stderr.bytes)
             ));
         }
-        Ok(())
+        if report.stdout.truncated || report.stderr.truncated {
+            return Err("ps process-tree report exceeded its byte bound".into());
+        }
+        String::from_utf8(report.stdout.bytes).map_err(display)
+    }
+    async fn cleanup_tree(&self, marker: &str, id: &str) -> Result<NativeCleanup, String> {
+        let report: NativeCleanup =
+            serde_json::from_str(&self.tree_action("cleanup", marker, Some(id)).await?)
+                .map_err(display)?;
+        if !report.remaining_pids.is_empty() {
+            return Err("marked descendants are still running".into());
+        }
+        Ok(report)
     }
     async fn probes(
         &self,
@@ -273,7 +368,7 @@ impl REnvironment {
     ) -> Result<NativeVerification, HandlerError> {
         let native = self
             .helper_call(
-                id,
+                Some(id),
                 "observe",
                 json!({"library":null,"limit":1}),
                 cancellation.clone(),
@@ -294,7 +389,7 @@ impl REnvironment {
             validate_package(package).map_err(before)?;
             args.push(format!("{}@{}", package.name, package.version));
         }
-        self.run(id, self.verifier.path(), &args, cancellation)
+        self.run(Some(id), self.verifier.path(), &args, cancellation)
             .await?;
         serde_json::from_value(response(&output, id).map_err(uncertain)?).map_err(uncertain)
     }
@@ -317,13 +412,57 @@ impl EnvironmentRuntime for REnvironment {
     fn root(&self) -> &str {
         &self.root
     }
+    async fn reconcile(
+        &self,
+        operation_id: &str,
+    ) -> Result<EnvironmentReconciliation, HandlerError> {
+        let material = self.read_marker(operation_id).map_err(before)?;
+        let mut retained_stage_paths = Vec::new();
+        for kind in ["plans", "realizations"] {
+            let path = self
+                .config
+                .data_root
+                .join(kind)
+                .join(format!("{:x}", Sha256::digest(operation_id.as_bytes())));
+            match std::fs::symlink_metadata(&path) {
+                Ok(metadata) => {
+                    if !metadata.is_dir() || path.canonicalize().map_err(before)? != path {
+                        return Err(before("Environment staging identity changed"));
+                    }
+                    retained_stage_paths.push(path.to_string_lossy().into_owned());
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(before(error)),
+            }
+        }
+        let mut report = EnvironmentReconciliation {
+            source_operation_id: operation_id.into(),
+            project_root: self.root.clone(),
+            native_marker: material.as_ref().map(|material| material.marker.clone()),
+            cleanup_confirmed: false,
+            stopped_pids: Vec::new(),
+            retained_stage_paths,
+            notices: Vec::new(),
+        };
+        if let Some(material) = material {
+            let cleanup = self.cleanup_tree(&material.marker, operation_id).await.map_err(|error| {
+                HandlerError::after_possible_effect(error, Some(json!({"source_operation_id":operation_id,"process_tree_marker":material.marker,"action":"reconcile_again_without_reexecuting_source"})))
+            })?;
+            report.stopped_pids = cleanup.stopped_pids;
+            report.cleanup_confirmed = true;
+            report.notices.push("Native marked children stopped; staged files were retained and no library was activated. This does not establish the original operation outcome.".into());
+        } else {
+            report.notices.push("No durable native process-tree reference exists; absence is not proof of completed cleanup.".into());
+        }
+        Ok(report)
+    }
     async fn observe(&self, library: Option<&str>, limit: usize) -> Result<Value, String> {
         if !(1..=500).contains(&limit) {
             return Err("Environment observation limit is invalid".into());
         }
         let library = library.map(|path| self.owned_path(path)).transpose()?;
         self.helper_call(
-            "observe",
+            None,
             "observe",
             json!({"library":library,"limit":limit}),
             watch::channel(false).1,
@@ -359,7 +498,7 @@ impl EnvironmentRuntime for REnvironment {
                 (
                     "pak",
                     self.helper_call(
-                        operation_id,
+                        Some(operation_id),
                         "plan_pak",
                         json!({"packages":normalized,"lockfile":lock_path,"library":library}),
                         cancellation.clone(),
@@ -397,7 +536,7 @@ impl EnvironmentRuntime for REnvironment {
                 (
                     "renv",
                     self.helper_call(
-                        operation_id,
+                        Some(operation_id),
                         "plan_renv",
                         json!({"lockfile":lock_path}),
                         cancellation,
@@ -457,7 +596,7 @@ impl EnvironmentRuntime for REnvironment {
             .map_err(before)?;
         let native = self
             .helper_call(
-                operation_id,
+                Some(operation_id),
                 "observe",
                 json!({"library":null,"limit":1}),
                 cancellation.clone(),
@@ -483,7 +622,7 @@ impl EnvironmentRuntime for REnvironment {
             _ => return Err(before("unknown environment manager")),
         };
         self.helper_call(
-            operation_id,
+            Some(operation_id),
             action,
             json!({"project":self.config.project_root,"library":library,"lockfile":lock}),
             cancellation.clone(),
@@ -513,7 +652,7 @@ impl EnvironmentRuntime for REnvironment {
         }
         let renv_lock = stage.join("renv.lock");
         self.helper_call(
-            operation_id,
+            Some(operation_id),
             "snapshot",
             json!({"project":stage,"library":library,"lockfile":renv_lock}),
             cancellation,
@@ -717,6 +856,87 @@ fn display(error: impl std::fmt::Display) -> String {
 fn before(error: impl std::fmt::Display) -> HandlerError {
     HandlerError::before_effect(error.to_string())
 }
+fn valid_marker(value: &str) -> bool {
+    let Some((random, time)) = value.split_once('_') else {
+        return false;
+    };
+    value.len() <= 200
+        && random.starts_with("PS")
+        && random.len() > 2
+        && random.chars().all(|c| c.is_ascii_alphanumeric())
+        && !time.is_empty()
+        && time.chars().all(|c| c.is_ascii_digit())
+}
+
 fn uncertain(error: impl std::fmt::Display) -> HandlerError {
     HandlerError::after_possible_effect(error.to_string(), None)
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+
+    fn environment() -> (TempDir, REnvironment) {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        // These tests exercise storage only; no R subprocess is started.
+        let runtime = REnvironment::open(REnvironmentConfig {
+            rscript: std::env::current_exe().unwrap(),
+            project_root: project,
+            data_root: dir.path().join("environment"),
+            timeout: Duration::from_secs(1),
+        })
+        .unwrap();
+        (dir, runtime)
+    }
+
+    #[test]
+    fn marker_is_persistent_and_bound_to_operation_and_project() {
+        let (_dir, runtime) = environment();
+        let temporary = NamedTempFile::new_in(&runtime.config.data_root).unwrap();
+        runtime
+            .persist_marker(temporary, "op_test", "PSexample_1700000000")
+            .unwrap();
+        let saved = runtime.read_marker("op_test").unwrap().unwrap();
+        assert_eq!(saved.marker, "PSexample_1700000000");
+        assert!(runtime.read_marker("op_other").unwrap().is_none());
+        let file = runtime.recovery_path("op_test").unwrap();
+        let mut contents: Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+        contents["operation_id"] = json!("op_other");
+        std::fs::write(&file, serde_json::to_vec(&contents).unwrap()).unwrap();
+        assert!(
+            runtime
+                .read_marker("op_test")
+                .unwrap_err()
+                .contains("identity mismatch")
+        );
+        contents["operation_id"] = json!("op_test");
+        contents["project_root"] = json!("another-project");
+        std::fs::write(&file, serde_json::to_vec(&contents).unwrap()).unwrap();
+        assert!(runtime.read_marker("op_test").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_directory_and_files_cannot_follow_symlinks() {
+        let (dir, runtime) = environment();
+        let outside = dir.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        let recovery = runtime.config.data_root.join("recovery");
+        std::os::unix::fs::symlink(&outside, &recovery).unwrap();
+        let temporary = NamedTempFile::new_in(&runtime.config.data_root).unwrap();
+        assert!(
+            runtime
+                .persist_marker(temporary, "op_test", "PSexample_1700000000")
+                .is_err()
+        );
+        assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 0);
+        std::fs::remove_file(&recovery).unwrap();
+        let file = runtime.recovery_path("op_test").unwrap();
+        let target = outside.join("marker");
+        std::fs::write(&target, b"{}").unwrap();
+        std::os::unix::fs::symlink(target, file).unwrap();
+        assert!(runtime.read_marker("op_test").is_err());
+    }
 }

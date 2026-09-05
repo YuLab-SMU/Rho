@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyEnvironmentRecovery } from "./verify-environment-recovery.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const ark=process.env.RHO_NEXT_ARK || path.resolve(root,"../target/debug",process.platform==="win32"?"ark.exe":"ark");
@@ -44,3 +45,6 @@ try{
   assert.equal(answer.operation.output.value,42);
   console.log("Verified CLI environment planning, realization and --environment activation in a new Ark session.");
 }finally{fs.rmSync(directory,{recursive:true,force:true});}
+await verifyEnvironmentRecovery(binary,
+  path.join(env.RHO_NEXT_R_HOME,"bin",process.platform==="win32"?"Rscript.exe":"Rscript"),
+  path.join(root,"host/tests/fixtures/rhonextfixture"));

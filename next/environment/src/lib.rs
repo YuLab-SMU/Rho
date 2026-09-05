@@ -21,6 +21,7 @@ pub const ENVIRONMENT_WRITE_SCOPE: &str = "environment.write";
 pub const PLAN_CAPABILITY: &str = "environment.plan";
 pub const REALIZE_CAPABILITY: &str = "environment.realize";
 pub const VERIFY_CAPABILITY: &str = "environment.verify";
+pub const RECONCILE_CAPABILITY: &str = "environment.reconcile";
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "manager", rename_all = "snake_case", deny_unknown_fields)]
@@ -37,6 +38,11 @@ pub struct RealizeArguments {
 #[serde(deny_unknown_fields)]
 pub struct VerifyArguments {
     pub realization_operation_id: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReconcileArguments {
+    pub operation_id: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -104,6 +110,17 @@ pub struct Verification {
     pub errors: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct EnvironmentReconciliation {
+    pub source_operation_id: String,
+    pub project_root: String,
+    pub native_marker: Option<String>,
+    pub cleanup_confirmed: bool,
+    pub stopped_pids: Vec<u32>,
+    pub retained_stage_paths: Vec<String>,
+    pub notices: Vec<String>,
+}
+
 #[async_trait]
 pub trait EnvironmentRuntime: Send + Sync {
     fn root(&self) -> &str;
@@ -127,6 +144,10 @@ pub trait EnvironmentRuntime: Send + Sync {
         realization: &EnvironmentRealization,
         cancellation: watch::Receiver<bool>,
     ) -> Result<Verification, HandlerError>;
+    async fn reconcile(
+        &self,
+        operation_id: &str,
+    ) -> Result<EnvironmentReconciliation, HandlerError>;
 }
 
 /// A read-only projection of existing Operation output, not another plan database.
@@ -189,6 +210,30 @@ impl EnvironmentOwner {
             .output
             .ok_or_else(|| HandlerError::before_effect("environment operation has no output"))
     }
+
+    async fn recovery_source(
+        &self,
+        id: &str,
+        caller: &CallerIdentity,
+    ) -> Result<OperationRecord, HandlerError> {
+        let record = self
+            .records
+            .get(id)
+            .await
+            .map_err(HandlerError::before_effect)?
+            .ok_or_else(|| HandlerError::before_effect("environment operation was not found"))?;
+        if !record.status.is_terminal()
+            || record.operation.caller != *caller
+            || record.operation.idempotency_scope.as_deref() != Some(self.runtime.root())
+            || ![PLAN_CAPABILITY, REALIZE_CAPABILITY, VERIFY_CAPABILITY]
+                .contains(&record.operation.capability.id.as_str())
+        {
+            return Err(HandlerError::before_effect(
+                "reconciliation requires a terminal Environment operation in this project/caller scope",
+            ));
+        }
+        Ok(record)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -196,6 +241,7 @@ pub enum EnvironmentAction {
     Plan,
     Realize,
     Verify,
+    Reconcile,
 }
 pub struct EnvironmentHandler {
     owner: Arc<EnvironmentOwner>,
@@ -220,6 +266,11 @@ impl EnvironmentHandler {
                 schema_for!(VerifyArguments).to_value(),
                 schema_for!(Verification).to_value(),
             ),
+            EnvironmentAction::Reconcile => (
+                RECONCILE_CAPABILITY,
+                schema_for!(ReconcileArguments).to_value(),
+                schema_for!(EnvironmentReconciliation).to_value(),
+            ),
         };
         Self {
             owner,
@@ -238,7 +289,11 @@ impl EnvironmentHandler {
                 ]),
                 idempotency: IdempotencyClass::CallerScoped,
                 retry: RetryClass::ReconcileFirst,
-                cancellation: CancellationClass::Cooperative,
+                cancellation: if matches!(action, EnvironmentAction::Reconcile) {
+                    CancellationClass::Unsupported
+                } else {
+                    CancellationClass::Cooperative
+                },
             },
         }
     }
@@ -286,6 +341,12 @@ impl OperationHandler for EnvironmentHandler {
                 serde_json::from_value::<VerifyArguments>(value.clone()).map_err(invalid)?,
             )
             .map_err(invalid),
+            EnvironmentAction::Reconcile => {
+                let args: ReconcileArguments =
+                    serde_json::from_value(value.clone()).map_err(invalid)?;
+                rho_next_contract::OperationId::new(&args.operation_id).map_err(invalid)?;
+                serde_json::to_value(args).map_err(invalid)
+            }
         }
     }
     fn resolve_target(&self, _: &Value) -> Result<TargetRef, OperationError> {
@@ -312,6 +373,7 @@ impl OperationHandler for EnvironmentHandler {
         }
         let parse_error = |error: serde_json::Error| HandlerError::before_effect(error.to_string());
         let mut successful = true;
+        let mut recovery = None;
         let output = match self.action {
             EnvironmentAction::Plan => {
                 let args = serde_json::from_value(operation.normalized_arguments.clone())
@@ -374,11 +436,38 @@ impl OperationHandler for EnvironmentHandler {
                 successful = report.verified;
                 serde_json::to_value(report).map_err(parse_error)?
             }
+            EnvironmentAction::Reconcile => {
+                let args: ReconcileArguments =
+                    serde_json::from_value(operation.normalized_arguments.clone())
+                        .map_err(parse_error)?;
+                self.owner
+                    .recovery_source(&args.operation_id, &operation.caller)
+                    .await?;
+                let report = self.owner.runtime.reconcile(&args.operation_id).await?;
+                successful = report.cleanup_confirmed;
+                if !successful {
+                    recovery = Some(json!({"source_operation_id":args.operation_id,
+                        "action":"inspect_owner_without_automatic_reexecution"}));
+                }
+                serde_json::to_value(report).map_err(parse_error)?
+            }
         };
         let mut plan = CommitPlan::succeeded(output);
         if !successful {
-            plan.outcome = OperationOutcome::Failed;
-            plan.error = Some("environment verification did not pass".into());
+            plan.outcome = if recovery.is_some() {
+                OperationOutcome::Uncertain
+            } else {
+                OperationOutcome::Failed
+            };
+            plan.error = Some(
+                if recovery.is_some() {
+                    "Environment cleanup cannot be confirmed without its native recovery reference"
+                } else {
+                    "environment verification did not pass"
+                }
+                .into(),
+            );
+            plan.recovery = recovery;
         }
         plan.facts.push(DomainFactMutation {domain:"environment".into(),schema:"rho.environment.operation.v1".into(),
             key:operation.operation_id.as_str().into(),value:json!({"operation_id":operation.operation_id,"project_root":self.owner.runtime.root(),"capability":operation.capability})});

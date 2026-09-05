@@ -147,8 +147,38 @@ cancellation is supported by plan/realize/verify. Confirmed cancellation retains
 the staged library and does not produce an activatable receipt. The adapter uses
 ps-native tree markers to find and stop callr/processx descendants that create
 separate sessions; cleanup failure is uncertain, not cancelled. Staged-library
-retention and host-crash descendant reconciliation are still pending. Keep the
-data directory outside any local source package to avoid self-containing builds.
+retention is still pending. Keep the data directory outside any local source
+package to avoid self-containing builds.
+
+Before an effectful Environment helper starts, its native ps marker is atomically
+saved under `environment/recovery/`, bound to the original Operation and project.
+The file is synchronized before execution (the directory is also synchronized on
+Unix). It is recovery material, not a second status/result database. Completed
+markers remain available for later observation; a later helper replaces a marker
+only after the earlier helper's cleanup was confirmed. Pure observe queries do
+not create durable Operation recovery records.
+
+After a Host crash, opening a writer marks incomplete operations uncertain; reading
+with `get-operation` does neither that transition nor process cleanup. Use a new,
+explicit Operation to reconcile resources belonging to a terminal plan/realize/verify:
+
+```json
+{"id":"reconcile","request":{"method":"invoke","params":{"client_request_id":"recover-1","capability":{"id":"environment.reconcile","version":1},"arguments":{"operation_id":"<original operation ID>"}}}}
+```
+
+Use the same project, database and Environment data directory. The handler checks
+caller/project scope, and native cleanup verifies the processes' Operation tag
+before sending signals. A missing reference is uncertain, not proof of cleanup.
+The result identifies stopped local processes and retained staging paths. It does
+not roll back package effects, activate a library, cancel remote jobs, or rewrite
+the original operation's outcome. Retrying the original invocation still returns
+its original uncertain record; it does not restart installation. Reconciliation
+itself is non-cancellable so its cleanup can finish after an edge disconnects.
+
+`test-environment.mjs` also kills a real CLI Host during installation and verifies
+the recovery path, wrong-project/marker rejection, immutable uncertainty and no
+re-execution. This has been validated on macOS, not all operating systems. Ordinary
+`process.run_local` crash recovery remains separate pending work.
 
 Local process execution is available in every project Host through the same
 session port, without starting an R session:

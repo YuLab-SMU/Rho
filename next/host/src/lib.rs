@@ -377,6 +377,7 @@ impl NextHost {
                 EnvironmentAction::Plan,
                 EnvironmentAction::Realize,
                 EnvironmentAction::Verify,
+                EnvironmentAction::Reconcile,
             ] {
                 registry.register(Arc::new(EnvironmentHandler::new(owner.clone(), action)))?;
             }
