@@ -12,6 +12,8 @@ rho-next-contract = { path = "../contract" }
 rho-next-operation = { path = "../operation" }
 rho-next-sqlite = { path = "../adapters/sqlite" }
 rho-next-r-runtime = { path = "../adapters/r-runtime" }
+rho-next-project = { path = "../project" }
+rho-next-git = { path = "../adapters/git" }
 rho-next-workspace = { path = "../workspace" }
 serde_json.workspace = true
 tokio.workspace = true

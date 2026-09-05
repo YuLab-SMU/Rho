@@ -126,6 +126,15 @@ async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
     .unwrap()
     .unwrap();
     assert_eq!(busy.status, QueryStatus::Busy);
+    let project_busy = host
+        .query_snapshot(&context, query("project.snapshot", json!({})))
+        .await
+        .unwrap();
+    assert_eq!(
+        project_busy.status,
+        QueryStatus::Busy,
+        "R and Project must share the same write lane"
+    );
     assert!(busy.data.is_none());
     assert_eq!(
         host.outbox(&context, 0, 1000).await.unwrap(),
@@ -151,6 +160,33 @@ async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
         .await
         .unwrap();
     assert_eq!(after.output.as_ref().unwrap()["value"], json!(100));
+    let write_file = host
+        .invoke(
+            &context,
+            request("file", "writeLines('before', 'analysis.R')"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(write_file.status, OperationStatus::Succeeded);
+    let project_patch = Invocation {
+        client_request_id: "project-patch".into(),
+        capability: CapabilityRef::new("project.apply_patch", 1).unwrap(),
+        arguments: json!({"patch":"diff --git a/analysis.R b/analysis.R\n--- a/analysis.R\n+++ b/analysis.R\n@@ -1 +1 @@\n-before\n+after\n"}),
+        preconditions: Vec::new(),
+    };
+    let patched = host.invoke(&context, project_patch).await.unwrap();
+    assert_eq!(patched.status, OperationStatus::Succeeded, "{patched:?}");
+    let read_from_r = host
+        .invoke(
+            &context,
+            request("r-sees-project-change", "readLines('analysis.R')"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        read_from_r.output.as_ref().unwrap()["value"],
+        json!("after")
+    );
     let dead = host
         .invoke(&context, request("quit", "quit(save = 'no')"))
         .await

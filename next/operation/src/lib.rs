@@ -182,6 +182,9 @@ pub struct CancellationRequestOutcome {
 #[async_trait]
 pub trait OperationHandler: Send + Sync {
     fn descriptor(&self) -> &CapabilityDescriptor;
+    fn idempotency_scope(&self) -> Option<String> {
+        None
+    }
 
     fn normalize_arguments(&self, arguments: &Value) -> Result<Value, OperationError>;
 
@@ -422,10 +425,12 @@ impl OperationGateway {
         .validate()?;
         let target = handler.resolve_target(&normalized_arguments)?;
         target.validate()?;
+        let idempotency_scope = handler.idempotency_scope();
         let invocation_digest = invocation_digest(
             &invocation.capability,
             &normalized_arguments,
             &invocation.preconditions,
+            idempotency_scope.as_deref(),
         )?;
         let operation_id = self.id_generator.next_id()?;
         let accepted_at_ms = self.clock.now_ms()?;
@@ -442,6 +447,7 @@ impl OperationGateway {
             target,
             normalized_arguments,
             invocation_digest,
+            idempotency_scope,
             preconditions: invocation.preconditions,
             potential_effects: descriptor.potential_effects.clone(),
             correlation_id,
@@ -599,12 +605,16 @@ fn invocation_digest(
     capability: &CapabilityRef,
     normalized_arguments: &Value,
     preconditions: &[rho_next_contract::Precondition],
+    scope: Option<&str>,
 ) -> Result<String, OperationError> {
     let mut document = json!({
         "capability": capability,
         "arguments": normalized_arguments,
         "preconditions": preconditions,
     });
+    if let Some(scope) = scope {
+        document["scope"] = json!(scope);
+    }
     document.sort_all_objects();
     let bytes = serde_json::to_vec(&document)
         .map_err(|error| OperationError::InvalidInput(error.to_string()))?;

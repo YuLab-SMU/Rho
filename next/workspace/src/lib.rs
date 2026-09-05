@@ -113,6 +113,9 @@ impl WorkspaceRuntimeError {
 #[async_trait]
 pub trait WorkspaceRuntime: Send + Sync {
     fn session_id(&self) -> &str;
+    fn project_root(&self) -> Option<&str> {
+        None
+    }
 
     async fn query(
         &self,
@@ -142,11 +145,18 @@ pub trait WorkspaceRuntime: Send + Sync {
 pub struct WorkspaceRunHandler {
     descriptor: CapabilityDescriptor,
     runtime: Arc<dyn WorkspaceRuntime>,
-    lane: tokio::sync::Mutex<()>,
+    lane: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl WorkspaceRunHandler {
     pub fn new(runtime: Arc<dyn WorkspaceRuntime>) -> Self {
+        Self::with_lane(runtime, Arc::new(tokio::sync::Mutex::new(())))
+    }
+
+    pub fn with_lane(
+        runtime: Arc<dyn WorkspaceRuntime>,
+        lane: Arc<tokio::sync::Mutex<()>>,
+    ) -> Self {
         let required_scopes = BTreeSet::from([RUN_R_SCOPE.to_string()]);
         let potential_effects = BTreeSet::from([
             EffectHint::NeedsNetwork,
@@ -171,7 +181,7 @@ impl WorkspaceRunHandler {
                 cancellation: CancellationClass::Cooperative,
             },
             runtime,
-            lane: tokio::sync::Mutex::new(()),
+            lane,
         }
     }
 
@@ -214,6 +224,9 @@ impl WorkspaceRunHandler {
 
 #[async_trait]
 impl OperationHandler for WorkspaceRunHandler {
+    fn idempotency_scope(&self) -> Option<String> {
+        self.runtime.project_root().map(str::to_string)
+    }
     fn descriptor(&self) -> &CapabilityDescriptor {
         &self.descriptor
     }
@@ -374,6 +387,7 @@ mod tests {
             },
             normalized_arguments: json!({"code": "1 + 1"}),
             invocation_digest: "sha256:test".to_string(),
+            idempotency_scope: None,
             preconditions,
             potential_effects: BTreeSet::new(),
             correlation_id: "op_test".to_string(),

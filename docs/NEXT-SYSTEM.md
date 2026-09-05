@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-04
 >
-> 当前阶段：N1—N3 已验证；下一步 N4 Project/Git
+> 当前阶段：N4 Project/Git 在 Next 已验证，生产切换仍待完成；下一步 N5 Environment
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -34,14 +34,14 @@
 - Retired：旧入口和实现已经不可达并删除。
 
 禁止把 Target 写成当前能力，禁止用“应该可用”代替验证结果。
-第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1—N3 已在本机验证；生产切换仍未完成。确定性 fake runtime 只用于测试。
+第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1—N4 的 Next 实现已在本机验证；生产切换仍未完成。确定性 fake runtime 只用于测试。
 
 ## 2. 当前摘要
 
 | 项目 | 当前事实 |
 | --- | --- |
-| 总体状态 | 真实 Ark/R、Operation、SQLite、Workspace Query 与长期 CLI 会话已贯通；N1—N3 本机验证通过 |
-| 当前里程碑 | N4 — Project/Git；之后继续 Environment、Execution 与入口切换 |
+| 总体状态 | 真实 Ark/R、Operation、SQLite、Workspace/Project Query、Git patch 与长期 CLI 已贯通；仍未替换旧生产入口 |
+| 当前里程碑 | N5 Environment；N4 的旧入口切换与后续公共入口迁移一并推进 |
 | Next 已拥有的 capability | 0 |
 | 已退役的旧 capability 实现 | 0 |
 | 旧系统策略 | 冻结为行为参考；不作为 Next 的代码依赖 |
@@ -516,7 +516,7 @@ Project operation 应记录：
 - 如果创建 commit，则记录 commit SHA；
 - 如果未创建 commit，则明确记录 dirty/untracked 结果。
 
-尚未决定所有 Project operation 是否自动创建 Git commit。该决策必须在 project.apply_patch 实现前完成，不能由底层工具函数偶然决定。
+默认 patch 只修改工作树，不自动提交或改变 index。需要创建 Git commit 时应成为独立、明确请求的能力。见 N-D015。
 
 ## 15. 安全边界
 
@@ -610,7 +610,7 @@ next 是迁移期名称。旧系统全部退役后，应把它提升为正常仓
 
 | 项目 | 可能职责 | 当前决定 |
 | --- | --- | --- |
-| Git executable | Project 历史、diff、内容身份 | 原则接受；Project 阶段验证 |
+| Git executable | Project 历史、diff、内容身份 | N4 已采用；本机 Git 2.52.0 实际仓库测试通过 |
 | SQLite + rusqlite | Operation journal、facts、outbox | N1 首选 |
 | Tokio | async host、process 与 shutdown | N1 首选 |
 | tracing | 结构化运行观察 | N1 首选 |
@@ -686,7 +686,7 @@ building 只是开发进度，不是运行时 owner。禁止 shadow execution �
 | N1 | Walking skeleton | Invocation 经 Gateway、假/内存 Handler、SQLite atomic commit 后可由 CLI 查询 | Verified |
 | N2 | 真实 Workspace R | workspace.run_r 贯通真实 R，支持结果、条件、取消请求和 uncertain | Verified（本机 Ark/R；生产未切换） |
 | N3 | Workspace Query | querySnapshot 返回有来源、时间和 completeness 的 Workspace observation | Verified（含长期 CLI 会话；生产未切换） |
-| N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Not started |
+| N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Next 实现 Verified；生产切换未完成 |
 | N5 | Environment | observe/plan/realize/verify 首条链路完成 | Not started |
 | N6 | Execution | local process 后再扩展 SSH/Slurm | Not started |
 | N7 | Public edges | MCP 与极简前端使用统一 host ports | Not started |
@@ -716,7 +716,9 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | workspace.run_r | Operation | rho-server coordinator | workspace | Ready | Next 真实 R 已验证；待统一入口切换 |
 | workspace.snapshot | Query | rho-server + r/rho.bridge | workspace | Ready | 已验证 bounded/busy/无 Operation；待切换入口 |
 | workspace.inspect_object | Query | rho-server + r/rho.bridge | workspace | Ready | 已验证不求值绑定与有限预览；待切换入口 |
-| project.apply_patch | Operation | desktop + control-plane | project | Deferred | N4 Git precondition |
+| project.snapshot | Query | 旧生产文件入口；Next CLI 已验证 | project | Ready | Git/文件原生观察已验证；待迁移消费者 |
+| project.read_file | Query | 旧生产文件入口；Next CLI 已验证 | project | Ready | 分段精确字节读取已验证；待迁移消费者 |
+| project.apply_patch | Operation | desktop + control-plane | project | Ready | Next 已验证；待旧入口切换 |
 | environment.observe | Query | desktop/server/workspace | environment | Deferred | N5 owner observation |
 | environment.realize | Operation | 未形成单一 live path | environment | Deferred | N5 verified receipt |
 | process.run_local | Operation | 多条旧路径 | execution | Deferred | N6 local supervisor |
@@ -868,6 +870,24 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 后果：新增 Query 通过注册 handler 扩展。session edge 只转发五个 typed Host port；stdin 分帧有字节和并发上限，关闭输入后等待已接受操作结束。
 - 限制：观察是 partial；复杂 classed/S4 对象仅暴露元数据；subscribe 当前只读 cursor page，不宣称已实现 live push。
 
+### N-D015 — Git 工作树修改与原生文件前置条件
+
+- 日期：2026-09-04
+- 状态：Accepted；Next 实现 Verified
+- 决定：Project 使用系统 Git；patch 只改 working tree，默认不 staging/commit。HEAD 和文件 SHA-256 是前置条件，文件 null digest 表示必须不存在。
+- 证据：真实仓库验证 dirty/staged/untracked 保留、index 字节不变、创建/删除/重命名、冲突 patch、子目录、无 Git 的目录、二进制分页、跨项目幂等冲突。
+- 发现与修复：git apply 的 numstat 对 rename 只报告目标；现在组合正向和反向 numstat，先校验两端再 apply，避免漏掉受保护的源路径。
+- 后果：Project 与 Workspace 共享 Host lane；外部编辑器不受锁保护，所有快照标为 partial。原生 Git 身份在执行中变化或出现未确认/部分效果时报告 uncertain。
+- 范围：只引入 project domain 和 Git adapter；无新 ProjectJournal、project revision 或 audit route。文件读取返回原始字节页；时间戳直接引用文件系统元数据。
+
+### N-D016 — 幂等范围绑定实际项目
+
+- 日期：2026-09-04
+- 状态：Accepted；Verified
+- 决定：handler 提供原生 idempotency_scope（项目根目录），加入 invocation digest 并保存。Foundation 不解释该范围的业务意义。
+- 理由：同一数据库切换项目时，不能把相同代码/patch 和 client_request_id 误认成另一个项目的重试；R session 重启不改变项目范围。
+- 后果：不同项目复用同一 caller/request-id 返回冲突。旧未绑定范围的记录仍可读取，但不承诺与新的范围绑定请求等价；不得通过静默重跑消除冲突。
+
 ## 24. Open Decisions
 
 以下问题尚未决定，不能由实现者顺手固化：
@@ -875,7 +895,6 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 | ID | 问题 | 最晚决定时间 |
 | --- | --- | --- |
 | N-O004 | 任意 R eval 的最低 containment 保证是什么？ | workspace.run_r 切换前 |
-| N-O005 | Project mutation 默认产生 Git commit，还是保留明确 dirty working tree？ | N4 前 |
 | N-O006 | SHA-256 与 BLAKE3 分别用于哪些外部兼容和本地内容身份？ | 首个 artifact 前 |
 | N-O007 | macOS、Windows、Linux 的 containment capability matrix 是什么？ | 首个受限 process 前 |
 | N-O008 | Rust 到 TypeScript 使用哪个单一生成器？ | N7 前 |
@@ -939,6 +958,14 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - Legacy 删除：无；生产消费者尚未迁移。
 - 下一步：N4 Project/Git 原生状态与 patch capability。
 
+### 2026-09-04 — N4 Project/Git 的 Next 实现
+
+- 实现：project.snapshot、project.read_file、project.apply_patch；Project-only Host 无需启动 R；CLI 支持 generic capability/arguments/preconditions。
+- 验证：Next workspace suite 通过；Project 实际 Git 用例覆盖 staged/dirty/untracked、原生前置条件、重命名、创建/删除、子目录与 symlink 边界。故障注入执行真实第一文件修改后丢失返回，验证持久化 uncertain 和无自动重试。
+- 真实 R：Project busy 与 Workspace 共用 lane；通过 Project patch 改文件后，现有 R session 直接读到新字节；原有 R/长期 CLI 验证通过。
+- 进度边界：这是 Next-ready，尚不满足 N4 的生产切换条件。旧生产文件命令仍存在，不能把它们标成 Retired。
+- 下一步：N5 Environment；之后完成公共入口切换与旧代码删除。
+
 ## 26. 每次工作结束时如何更新
 
 只有发生以下情况才更新本文档：
@@ -974,19 +1001,18 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 
 ## 27. 当前唯一下一步
 
-N4：以 Git 与当前文件字节作为 Project owner 的真实状态。
+N5：用现有 R 环境工具实现 observe / plan / realize / verify 的真实链路。
 
 必须只包含：
 
-- project.snapshot Query：Git HEAD、dirty/untracked 状态和请求文件的内容摘要；
-- project.apply_patch Operation：owner 校验原生 precondition，调用 Git，记录实际结果；
-- 保留用户已有 dirty/staged/untracked 内容，不能把 HEAD 当作工作树快照；
-- Git 退出/进程中断后分别观察是否有 partial effect；不创造另一套 project revision；
-- 先在临时 Git 仓库完成真实端到端验证，再切换旧文件入口。
+- 环境观察来自实际 R/runtime/library/lockfile，不复制一套 Rho environment revision；
+- 固定非交互 R helper，复用 renv/pak；禁止在 Environment helper 接收任意 shell/R code；
+- 先在隔离 library 中实现并验证可复现包安装/恢复；不要修改用户现有 library；
+- realization 结果与实际 verification 一致才报告成功；明确现有 R session 何时需要重启；
+- 通过统一 Operation/Query 路径，并保留 N4/旧入口迁移的未完成状态。
 
-N4 暂不包含：
+N5 暂不包含：
 
-- Environment；
 - MCP；
 - Desktop；
 - Artifact framework；

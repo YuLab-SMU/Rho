@@ -42,6 +42,7 @@ pub struct ArkConfig {
 pub struct ArkRuntime {
     client: Mutex<Option<Arc<Client>>>,
     session_id: String,
+    project_root: String,
     data_root: PathBuf,
     timeout: Duration,
 }
@@ -118,6 +119,7 @@ impl ArkRuntime {
         let runtime = Self {
             client: Mutex::new(Some(Arc::new(client))),
             session_id,
+            project_root: project.to_string_lossy().into_owned(),
             data_root,
             timeout: config.execution_timeout,
         };
@@ -290,6 +292,9 @@ struct BridgeRequest<'a> {
 
 #[async_trait]
 impl WorkspaceRuntime for ArkRuntime {
+    fn project_root(&self) -> Option<&str> {
+        Some(&self.project_root)
+    }
     fn session_id(&self) -> &str {
         &self.session_id
     }

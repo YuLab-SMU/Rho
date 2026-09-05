@@ -1041,6 +1041,7 @@ mod tests {
             },
             normalized_arguments: json!({"code": "1 + 1"}),
             invocation_digest: digest.to_string(),
+            idempotency_scope: None,
             preconditions: Vec::new(),
             potential_effects: BTreeSet::from([EffectHint::MayMutateRuntime]),
             correlation_id: id.to_string(),

@@ -4,7 +4,7 @@ mod session;
 
 use clap::{Parser, Subcommand};
 use rho_next_contract::{CapabilityRef, Invocation, OperationId, Precondition};
-use rho_next_host::{ArkConfig, NextHost, RUN_R_CAPABILITY_ID, RUN_R_CAPABILITY_VERSION};
+use rho_next_host::{ArkConfig, NextHost, RUN_R_CAPABILITY_ID};
 use serde_json::json;
 
 #[derive(Debug, Parser)]
@@ -29,7 +29,7 @@ impl Cli {
     async fn open_host(&self) -> Result<NextHost, String> {
         if self.demo {
             NextHost::open_demo(&self.database).await
-        } else {
+        } else if self.ark.is_some() {
             let config = ArkConfig {
                 executable: self
                     .ark
@@ -51,6 +51,12 @@ impl Cli {
                 execution_timeout: std::time::Duration::from_secs(600),
             };
             NextHost::open_ark(&self.database, config).await
+        } else {
+            NextHost::open_project(
+                &self.database,
+                self.project.as_ref().ok_or("--project is required")?,
+            )
+            .await
         }
         .map_err(|error| error.to_string())
     }
@@ -63,8 +69,20 @@ enum Command {
     Invoke {
         #[arg(long)]
         client_request_id: String,
-        #[arg(long)]
-        code: String,
+        #[arg(
+            long,
+            required_unless_present = "arguments",
+            conflicts_with = "arguments"
+        )]
+        code: Option<String>,
+        #[arg(long, conflicts_with = "code")]
+        arguments: Option<String>,
+        #[arg(long, default_value = RUN_R_CAPABILITY_ID)]
+        capability: String,
+        #[arg(long, default_value_t = 1)]
+        capability_version: u16,
+        #[arg(long, default_value = "[]")]
+        preconditions: String,
         #[arg(long)]
         expected_session: Option<String>,
     },
@@ -105,23 +123,32 @@ async fn run() -> Result<(), String> {
         Command::Invoke {
             client_request_id,
             code,
+            arguments,
+            capability,
+            capability_version,
+            preconditions,
             expected_session,
         } => {
             let host = active_host.expect("invoke opens one host");
-            let preconditions = expected_session
-                .map(|session| {
-                    vec![Precondition {
-                        kind: "workspace.session".to_string(),
-                        subject: "active".to_string(),
-                        expected: json!(session),
-                    }]
-                })
-                .unwrap_or_default();
+            let mut preconditions: Vec<Precondition> =
+                serde_json::from_str(&preconditions).map_err(|error| error.to_string())?;
+            if let Some(session) = expected_session {
+                preconditions.push(Precondition {
+                    kind: "workspace.session".to_string(),
+                    subject: "active".to_string(),
+                    expected: json!(session),
+                });
+            }
+            let arguments = if let Some(arguments) = arguments {
+                serde_json::from_str(&arguments).map_err(|error| error.to_string())?
+            } else {
+                json!({"code":code.ok_or("--code or --arguments is required")?})
+            };
             let invocation = Invocation {
                 client_request_id,
-                capability: CapabilityRef::new(RUN_R_CAPABILITY_ID, RUN_R_CAPABILITY_VERSION)
+                capability: CapabilityRef::new(capability, capability_version)
                     .map_err(|error| error.to_string())?,
-                arguments: json!({"code": code}),
+                arguments,
                 preconditions,
             };
             let record = host
@@ -130,7 +157,7 @@ async fn run() -> Result<(), String> {
                 .map_err(|error| error.to_string())?;
             print_json(&json!({
                 "ok": true,
-                "runtime": if cli.demo { "deterministic_fake" } else { "ark" },
+                "runtime": if cli.demo { "deterministic_fake" } else if cli.ark.is_some() { "ark" } else { "project" },
                 "operation": record,
             }))
         }

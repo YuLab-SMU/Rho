@@ -32,6 +32,7 @@ fn crash_worker() {
             },
             normalized_arguments: json!({"code": "external effect"}),
             invocation_digest: "sha256:test".into(),
+            idempotency_scope: None,
             preconditions: Vec::new(),
             potential_effects: Default::default(),
             correlation_id: "op_crashed".into(),

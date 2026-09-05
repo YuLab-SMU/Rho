@@ -2,7 +2,7 @@
 
 Independent Rust workspace for the replacement described in
 [the system charter and migration ledger](../docs/NEXT-SYSTEM.md).
-The current CLI can execute real R through Ark, or run an explicitly selected
+The CLI exposes a project-only Host, a real Ark/R Host, or an explicitly selected
 deterministic demo. Production capability routing is still owned by the old app.
 
 Build and check the foundation:
@@ -75,3 +75,34 @@ The Jupyter transport reuses the existing third-party
 
 For foundation-only demonstrations use `--demo`; output explicitly says
 `deterministic_fake`. The demo does not evaluate R.
+
+Project operations need Git but do not require an R installation. Start a project
+session with `--database /path/to/state/next.sqlite --project /path/to/project session`,
+omitting `--ark`. The same project capabilities are available in an Ark Host.
+
+```json
+{"id":"files","request":{"method":"query_snapshot","params":{"capability":{"id":"project.snapshot","version":1},"arguments":{"paths":["analysis.R"],"limit":100}}}}
+{"id":"read","request":{"method":"query_snapshot","params":{"capability":{"id":"project.read_file","version":1},"arguments":{"path":"analysis.R","offset":0,"limit_bytes":32768}}}}
+```
+
+Snapshot returns Git HEAD/status when present, discovered entries, and requested
+file hashes. A folder without Git reports `git: null`; it is not assigned a
+synthetic project revision. File reads return a byte array and a next-page flag,
+so binary data and UTF-8 split across pages remain exact. Reads are limited to
+64 KiB per page; hashed files to 64 MiB; snapshot paths to 64 and entries to 200.
+
+`project.apply_patch` accepts a unified `patch` string. Generic one-shot calls use
+`invoke --client-request-id ID --capability project.apply_patch --arguments JSON`.
+Use Invocation preconditions (or one-shot `--preconditions JSON`) for
+`{"kind":"git.head","subject":"project","expected":"<commit SHA>"}` and
+`{"kind":"file.sha256","subject":"analysis.R","expected":"sha256:<digest>"}`.
+A null file digest precondition means that the path must be absent.
+
+Patches modify the working tree only: Git index and HEAD stay unchanged.
+Existing staged/dirty/untracked files outside the patch are preserved. Native
+Git parses both forward and reverse patch paths, including both sides of
+renames. Host-owned data and paths traversing symbolic links are excluded.
+R execution and project mutation share one Host lane; external editors are not
+locked. A lost process outcome or observed partial change is recorded as
+`uncertain`, with a new snapshot as the recovery path. No automatic Git commit
+or retry is performed.

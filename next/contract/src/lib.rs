@@ -112,7 +112,7 @@ pub struct Precondition {
 impl Precondition {
     pub fn validate(&self) -> Result<(), ContractError> {
         validate_token(&self.kind, "precondition.kind")?;
-        validate_text(&self.subject, "precondition.subject", MAX_IDENTIFIER_BYTES)
+        validate_text(&self.subject, "precondition.subject", 4096)
     }
 }
 
@@ -300,6 +300,8 @@ pub struct Operation {
     pub target: TargetRef,
     pub normalized_arguments: Value,
     pub invocation_digest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_scope: Option<String>,
     pub preconditions: Vec<Precondition>,
     pub potential_effects: BTreeSet<EffectHint>,
     pub correlation_id: String,

@@ -10,10 +10,15 @@ use rho_next_contract::{
     ObservationCompleteness, Operation, OperationEventRecord, OperationId, OperationRecord,
     OutboxRecord, QueryRequest, QuerySnapshot,
 };
+use rho_next_git::GitProject;
 use rho_next_operation::{
     CancellationRequestOutcome, CapabilityRegistry, Clock, OperationError, OperationGateway,
     OperationIdGenerator, OperationJournal, QueryGateway, StoredDomainFact, SystemClock,
     UuidOperationIdGenerator,
+};
+use rho_next_project::{
+    PROJECT_READ_SCOPE, PROJECT_WRITE_SCOPE, ProjectOwner, ProjectPatchHandler, ProjectReadHandler,
+    ProjectRuntime, ProjectSnapshotHandler,
 };
 use rho_next_sqlite::SqliteOperationJournal;
 use rho_next_workspace::{
@@ -96,6 +101,25 @@ pub struct NextHost {
 }
 
 impl NextHost {
+    pub async fn open_project(
+        database: impl AsRef<Path>,
+        project_root: impl AsRef<Path>,
+    ) -> Result<Self, OperationError> {
+        let database = database.as_ref();
+        let journal = Arc::new(SqliteOperationJournal::open(database)?);
+        let project = Arc::new(
+            GitProject::open(project_root, protected_project_paths(database)?)
+                .map_err(OperationError::TargetResolution)?,
+        );
+        Self::compose(
+            journal,
+            None,
+            Some(project),
+            Arc::new(SystemClock),
+            Arc::new(UuidOperationIdGenerator),
+        )
+        .await
+    }
     pub async fn dispatch(
         &self,
         context: &CallContext,
@@ -127,15 +151,30 @@ impl NextHost {
         config: ArkConfig,
     ) -> Result<Self, OperationError> {
         // Acquire the journal's host lock before creating any external runtime.
+        let database = database.as_ref();
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
+        std::fs::create_dir_all(&config.data_root)
+            .map_err(|error| OperationError::Storage(error.to_string()))?;
+        let mut excluded = protected_project_paths(database)?;
+        excluded.push(
+            config
+                .data_root
+                .canonicalize()
+                .map_err(|error| OperationError::Storage(error.to_string()))?,
+        );
+        let project = Arc::new(
+            GitProject::open(&config.project_root, excluded)
+                .map_err(OperationError::TargetResolution)?,
+        );
         let runtime = Arc::new(
             ArkRuntime::launch(config)
                 .await
                 .map_err(OperationError::TargetResolution)?,
         );
-        Self::with_components(
+        Self::compose(
             journal,
-            runtime,
+            Some(runtime),
+            Some(project),
             Arc::new(SystemClock),
             Arc::new(UuidOperationIdGenerator),
         )
@@ -151,6 +190,8 @@ impl NextHost {
             scopes: std::collections::BTreeSet::from([
                 RUN_R_SCOPE.into(),
                 WORKSPACE_READ_SCOPE.into(),
+                PROJECT_READ_SCOPE.into(),
+                PROJECT_WRITE_SCOPE.into(),
             ]),
             connection_id: format!("cli:{}", std::process::id()),
             correlation_id: None,
@@ -189,17 +230,36 @@ impl NextHost {
         clock: Arc<dyn Clock>,
         id_generator: Arc<dyn OperationIdGenerator>,
     ) -> Result<Self, OperationError> {
+        Self::compose(journal, Some(runtime), None, clock, id_generator).await
+    }
+
+    async fn compose(
+        journal: Arc<dyn OperationJournal>,
+        runtime: Option<Arc<dyn WorkspaceRuntime>>,
+        project: Option<Arc<dyn ProjectRuntime>>,
+        clock: Arc<dyn Clock>,
+        id_generator: Arc<dyn OperationIdGenerator>,
+    ) -> Result<Self, OperationError> {
         let mut registry = CapabilityRegistry::new();
-        let workspace = Arc::new(WorkspaceRunHandler::new(runtime));
-        registry.register(workspace.clone())?;
-        registry.register_query(Arc::new(WorkspaceQueryHandler::new(
-            workspace.clone(),
-            WorkspaceQueryKind::Snapshot,
-        )))?;
-        registry.register_query(Arc::new(WorkspaceQueryHandler::new(
-            workspace,
-            WorkspaceQueryKind::InspectObject,
-        )))?;
+        let lane = Arc::new(tokio::sync::Mutex::new(()));
+        if let Some(runtime) = runtime {
+            let workspace = Arc::new(WorkspaceRunHandler::with_lane(runtime, lane.clone()));
+            registry.register(workspace.clone())?;
+            registry.register_query(Arc::new(WorkspaceQueryHandler::new(
+                workspace.clone(),
+                WorkspaceQueryKind::Snapshot,
+            )))?;
+            registry.register_query(Arc::new(WorkspaceQueryHandler::new(
+                workspace,
+                WorkspaceQueryKind::InspectObject,
+            )))?;
+        }
+        if let Some(project) = project {
+            let owner = Arc::new(ProjectOwner::new(project, lane));
+            registry.register(Arc::new(ProjectPatchHandler::new(owner.clone())))?;
+            registry.register_query(Arc::new(ProjectSnapshotHandler::new(owner.clone())))?;
+            registry.register_query(Arc::new(ProjectReadHandler::new(owner)))?;
+        }
         let registry = Arc::new(registry);
         let gateway = Arc::new(OperationGateway::new(
             registry.clone(),
@@ -296,4 +356,17 @@ impl NextHost {
             .facts_for_operation(context, operation_id)
             .await
     }
+}
+
+fn protected_project_paths(database: &Path) -> Result<Vec<std::path::PathBuf>, OperationError> {
+    let database = database
+        .canonicalize()
+        .map_err(|e| OperationError::Storage(e.to_string()))?;
+    let mut excluded = vec![database.clone()];
+    for suffix in [".host.lock", "-journal", "-wal", "-shm"] {
+        let mut path = database.as_os_str().to_os_string();
+        path.push(suffix);
+        excluded.push(path.into());
+    }
+    Ok(excluded)
 }
