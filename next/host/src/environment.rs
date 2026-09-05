@@ -1,20 +1,7 @@
-use async_trait::async_trait;
-use rho_next_contract::{OperationId, OperationRecord, OperationStatus};
-use rho_next_environment::{
-    EnvironmentRealization, EnvironmentRecords, EnvironmentRuntime, REALIZE_CAPABILITY,
-};
+use rho_next_contract::{OperationId, OperationStatus};
+use rho_next_environment::{EnvironmentRealization, EnvironmentRuntime, REALIZE_CAPABILITY};
 use rho_next_operation::{OperationError, OperationJournal};
 pub use rho_next_r_environment::REnvironmentConfig;
-use std::sync::Arc;
-
-pub(crate) struct EnvironmentJournal(pub Arc<dyn OperationJournal>);
-#[async_trait]
-impl EnvironmentRecords for EnvironmentJournal {
-    async fn get(&self, id: &str) -> Result<Option<OperationRecord>, String> {
-        let id = OperationId::new(id).map_err(|e| e.to_string())?;
-        self.0.get(&id).await.map_err(|e| e.to_string())
-    }
-}
 
 pub(crate) async fn selected_environment(
     journal: &dyn OperationJournal,

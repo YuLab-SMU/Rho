@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod recovery;
 use async_trait::async_trait;
 #[cfg(windows)]
 use process_wrap::tokio::JobObject;
@@ -7,7 +8,9 @@ use process_wrap::tokio::JobObject;
 use process_wrap::tokio::ProcessGroup;
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 use rho_next_contract::Operation;
-use rho_next_execution::{OutputCapture, ProcessExecutor, RunLocalArguments};
+use rho_next_execution::{
+    OutputCapture, ProcessExecutor, ProcessReconciliation, RunLocalArguments,
+};
 pub use rho_next_execution::{ProcessReport, ProcessTermination};
 use rho_next_operation::{HandlerError, wait_cancellation};
 use std::{
@@ -310,6 +313,21 @@ impl LocalProcessExecutor {
 impl ProcessExecutor for LocalProcessExecutor {
     fn root(&self) -> &str {
         &self.identity
+    }
+    async fn reconcile(&self, source: &Operation) -> Result<ProcessReconciliation, HandlerError> {
+        if self
+            .root
+            .canonicalize()
+            .map_err(|error| HandlerError::before_effect(error.to_string()))?
+            != self.root
+        {
+            return Err(HandlerError::before_effect("process project root changed"));
+        }
+        let operation_id = source.operation_id.as_str().to_owned();
+        let recovery_id = operation_id.clone();
+        tokio::task::spawn_blocking(move || recovery::reconcile_tagged(&operation_id)).await
+            .map_err(|error| HandlerError::after_possible_effect(error.to_string(), None))?
+            .map_err(|error| HandlerError::after_possible_effect(error, Some(serde_json::json!({"source_operation_id":recovery_id,"action":"inspect_tagged_processes_without_reexecution"}))))
     }
     async fn run(
         &self,

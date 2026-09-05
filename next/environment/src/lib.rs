@@ -8,7 +8,7 @@ use rho_next_contract::{
 };
 use rho_next_operation::{
     Clock, CommitPlan, DomainFactMutation, HandlerError, OperationError, OperationHandler,
-    PlannedEvent, QueryHandler, SystemClock, wait_cancellation,
+    OperationRecords, PlannedEvent, QueryHandler, SystemClock, wait_cancellation,
 };
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
@@ -150,15 +150,9 @@ pub trait EnvironmentRuntime: Send + Sync {
     ) -> Result<EnvironmentReconciliation, HandlerError>;
 }
 
-/// A read-only projection of existing Operation output, not another plan database.
-#[async_trait]
-pub trait EnvironmentRecords: Send + Sync {
-    async fn get(&self, operation_id: &str) -> Result<Option<OperationRecord>, String>;
-}
-
 pub struct EnvironmentOwner {
     pub runtime: Arc<dyn EnvironmentRuntime>,
-    records: Arc<dyn EnvironmentRecords>,
+    records: Arc<dyn OperationRecords>,
     lane: Arc<Mutex<()>>,
     active_library: Option<String>,
     has_workspace: bool,
@@ -166,7 +160,7 @@ pub struct EnvironmentOwner {
 impl EnvironmentOwner {
     pub fn new(
         runtime: Arc<dyn EnvironmentRuntime>,
-        records: Arc<dyn EnvironmentRecords>,
+        records: Arc<dyn OperationRecords>,
         lane: Arc<Mutex<()>>,
         active_library: Option<String>,
         has_workspace: bool,

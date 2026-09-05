@@ -13,6 +13,8 @@ rho-next-contract = { path = "../../contract" }
 rho-next-operation = { path = "../../operation" }
 rho-next-execution = { path = "../../execution" }
 tokio.workspace = true
+sysinfo.workspace = true
+serde_json.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", default-features = false }

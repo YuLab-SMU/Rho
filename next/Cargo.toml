@@ -37,3 +37,4 @@ tokio = { version = "1.0", features = ["macros", "rt", "sync", "time", "process"
 tracing = "0.1"
 uuid = { version = "1.18", features = ["v4"] }
 process-wrap = { version = "10.0", features = ["tokio1"] }
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }

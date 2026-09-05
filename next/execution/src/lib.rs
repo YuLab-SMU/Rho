@@ -3,12 +3,12 @@
 use async_trait::async_trait;
 use rho_next_contract::{
     CancellationClass, CapabilityDescriptor, CapabilityKind, CapabilityRef, EffectHint,
-    EffectObservation, IdempotencyClass, ObservationCompleteness, Operation, OperationOutcome,
-    RetryClass, TargetRef,
+    EffectObservation, IdempotencyClass, ObservationCompleteness, Operation, OperationId,
+    OperationOutcome, RetryClass, TargetRef,
 };
 use rho_next_operation::{
-    Clock, CommitPlan, HandlerError, OperationError, OperationHandler, PlannedEvent, SystemClock,
-    wait_cancellation,
+    Clock, CommitPlan, HandlerError, OperationError, OperationHandler, OperationRecords,
+    PlannedEvent, SystemClock, wait_cancellation,
 };
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
@@ -67,6 +67,27 @@ pub struct ProcessReport {
     pub cleanup_requested: bool,
     pub cleanup_error: Option<String>,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct NativeProcessIdentity {
+    pub pid: u32,
+    pub started_at_seconds: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ProcessReconciliation {
+    pub source_operation_id: String,
+    pub observed: Vec<NativeProcessIdentity>,
+    pub signalled: Vec<NativeProcessIdentity>,
+    pub remaining: Vec<NativeProcessIdentity>,
+    pub no_matching_processes_observed: bool,
+    pub completeness: ObservationCompleteness,
+    pub notices: Vec<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReconcileProcessArguments {
+    /// Original terminal process.run_local Operation, never a caller-supplied PID.
+    pub operation_id: String,
+}
 #[async_trait]
 pub trait ProcessExecutor: Send + Sync {
     fn root(&self) -> &str;
@@ -76,6 +97,119 @@ pub trait ProcessExecutor: Send + Sync {
         args: &RunLocalArguments,
         cancellation: watch::Receiver<bool>,
     ) -> Result<ProcessReport, HandlerError>;
+    async fn reconcile(&self, source: &Operation) -> Result<ProcessReconciliation, HandlerError>;
+}
+
+pub struct ReconcileProcessHandler {
+    executor: Arc<dyn ProcessExecutor>,
+    records: Arc<dyn OperationRecords>,
+    lane: Arc<Mutex<()>>,
+    descriptor: CapabilityDescriptor,
+}
+impl ReconcileProcessHandler {
+    pub fn new(
+        executor: Arc<dyn ProcessExecutor>,
+        records: Arc<dyn OperationRecords>,
+        lane: Arc<Mutex<()>>,
+    ) -> Self {
+        Self {
+            executor,
+            records,
+            lane,
+            descriptor: CapabilityDescriptor {
+                kind: CapabilityKind::Operation,
+                capability: CapabilityRef::new("process.reconcile", 1).unwrap(),
+                domain: "execution".into(),
+                input_schema: schema_for!(ReconcileProcessArguments).to_value(),
+                output_schema: schema_for!(ProcessReconciliation).to_value(),
+                required_scopes: BTreeSet::from([RUN_LOCAL_SCOPE.into()]),
+                potential_effects: BTreeSet::from([EffectHint::MaySpawnProcess]),
+                idempotency: IdempotencyClass::CallerScoped,
+                retry: RetryClass::ReconcileFirst,
+                cancellation: CancellationClass::Unsupported,
+            },
+        }
+    }
+}
+#[async_trait]
+impl OperationHandler for ReconcileProcessHandler {
+    fn descriptor(&self) -> &CapabilityDescriptor {
+        &self.descriptor
+    }
+    fn idempotency_scope(&self) -> Option<String> {
+        Some(self.executor.root().into())
+    }
+    fn normalize_arguments(&self, value: &Value) -> Result<Value, OperationError> {
+        let args: ReconcileProcessArguments =
+            serde_json::from_value(value.clone()).map_err(invalid)?;
+        OperationId::new(&args.operation_id).map_err(invalid)?;
+        serde_json::to_value(args).map_err(invalid)
+    }
+    fn resolve_target(&self, _: &Value) -> Result<TargetRef, OperationError> {
+        Ok(TargetRef {
+            kind: "local_process".into(),
+            identity: self.executor.root().into(),
+        })
+    }
+    async fn execute(&self, operation: &Operation) -> Result<CommitPlan, HandlerError> {
+        if !operation.preconditions.is_empty() {
+            return Err(HandlerError::before_effect(
+                "process reconciliation uses its source Operation, not arbitrary preconditions",
+            ));
+        }
+        let args: ReconcileProcessArguments =
+            serde_json::from_value(operation.normalized_arguments.clone())
+                .map_err(|error| HandlerError::before_effect(error.to_string()))?;
+        let source = self
+            .records
+            .get(&args.operation_id)
+            .await
+            .map_err(HandlerError::before_effect)?
+            .ok_or_else(|| HandlerError::before_effect("source Operation was not found"))?;
+        if !source.status.is_terminal()
+            || source.operation.caller != operation.caller
+            || source.operation.idempotency_scope.as_deref() != Some(self.executor.root())
+            || source.operation.capability != CapabilityRef::new("process.run_local", 1).unwrap()
+        {
+            return Err(HandlerError::before_effect(
+                "reconciliation requires a terminal process.run_local Operation in this project/caller scope",
+            ));
+        }
+        // Reject a live source immediately, before waiting behind its runtime
+        // lane. Terminal source records cannot become live again.
+        let _lane = self.lane.lock().await;
+        let report = self.executor.reconcile(&source.operation).await?;
+        if report.source_operation_id != source.operation.operation_id.as_str()
+            || report.no_matching_processes_observed != report.remaining.is_empty()
+        {
+            return Err(HandlerError::after_possible_effect(
+                "inconsistent native reconciliation report",
+                Some(json!({"source_operation_id":args.operation_id})),
+            ));
+        }
+        let mut plan = CommitPlan::succeeded(
+            serde_json::to_value(&report)
+                .map_err(|error| HandlerError::after_possible_effect(error.to_string(), None))?,
+        );
+        if !report.no_matching_processes_observed {
+            plan.outcome = OperationOutcome::Uncertain;
+            plan.error = Some("tagged processes remain after bounded reconciliation".into());
+            plan.recovery = Some(
+                json!({"source_operation_id":args.operation_id,"action":"reconcile_again_without_reexecuting_source"}),
+            );
+        }
+        plan.effect_observations.push(EffectObservation {
+            kind: "tagged_process_reconciliation".into(), source: "os/sysinfo".into(),
+            detail: json!({"source_operation_id":args.operation_id,"signalled":report.signalled,"remaining":report.remaining}),
+            observed_at_ms: SystemClock.now_ms().map_err(|error| HandlerError::after_possible_effect(error.to_string(), None))?,
+            completeness: report.completeness,
+        });
+        plan.events.push(PlannedEvent {
+            kind: "execution.processes_reconciled".into(),
+            payload: json!({"source_operation_id":args.operation_id}),
+        });
+        Ok(plan)
+    }
 }
 pub struct RunLocalHandler {
     executor: Arc<dyn ProcessExecutor>,

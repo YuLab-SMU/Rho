@@ -13,6 +13,9 @@
     "next.environment": {
       "command": ["node", "next/scripts/test-environment.mjs"]
     },
+    "next.process-recovery": {
+      "command": ["node", "next/scripts/test-process-recovery.mjs"]
+    },
     "docs.index": {
       "command": ["node", "scripts/governance.mjs", "check"]
     },
@@ -149,7 +152,8 @@
         "next.architecture",
         "next.rust",
         "next.real-r",
-        "next.environment"
+        "next.environment",
+        "next.process-recovery"
       ]
     },
     "desktop-ui": {

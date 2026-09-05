@@ -178,7 +178,7 @@ itself is non-cancellable so its cleanup can finish after an edge disconnects.
 `test-environment.mjs` also kills a real CLI Host during installation and verifies
 the recovery path, wrong-project/marker rejection, immutable uncertainty and no
 re-execution. This has been validated on macOS, not all operating systems. Ordinary
-`process.run_local` crash recovery remains separate pending work.
+`process.run_local` uses the R-free recovery path described below.
 
 Local process execution is available in every project Host through the same
 session port, without starting an R session:
@@ -202,3 +202,33 @@ timeouts are failures, not rollbacks. The supervisor cleans background group mem
 after the leader exits. It is not a filesystem/network sandbox and cannot contain
 deliberately escaped descendants. Unix behavior is tested on macOS; the Windows
 Job Object branch has not been validated on a Windows host.
+
+After a Host crash, use `process.reconcile` with the original terminal Operation:
+
+```json
+{"id":"recover-process","request":{"method":"invoke","params":{"client_request_id":"recover-process-1","capability":{"id":"process.reconcile","version":1},"arguments":{"operation_id":"<original process.run_local operation ID>"}}}}
+```
+
+This works in a Project-only Host without R. The persisted OperationId was already
+placed in the child environment before execution. The adapter uses sysinfo to find
+currently visible, same-user processes retaining that tag, including detached
+descendants. Before each signal it refreshes the tag, user and native start time;
+neither a caller-provided PID nor a PID in an old result authorizes termination.
+Observation rounds are bounded; the adapter does not use sysinfo's unbounded wait.
+
+The result reports observed/signalled/remaining identities and
+`no_matching_processes_observed`, explicitly with partial completeness. It is not
+a claim about unobservable processes, processes that discard their tag, remote
+jobs, or rollback. POSIX signal delivery and inspection are not an atomic ownership
+primitive, so this is cooperative lifecycle management, not adversarial containment.
+The original uncertain outcome is preserved and its invocation is never replayed.
+Live sources, other projects and other callers are rejected before cleanup.
+
+```sh
+node next/scripts/test-process-recovery.mjs
+```
+
+This acceptance kills a real CLI Host, observes parent and detached-child exit,
+checks that an unrelated process survives, and verifies idempotency and unchanged
+original uncertainty. Environment and Execution share a read-only OperationRecords
+port to the same journal; no recovery status database or persisted PID table was added.

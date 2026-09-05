@@ -75,6 +75,27 @@ async fn real_process_shares_project_lane_and_cancellation_commits_owner_outcome
         .await
         .unwrap();
     assert_eq!(snapshot.status, QueryStatus::Busy);
+    let cleanup = Invocation {
+        client_request_id: "cannot-reconcile-live".into(),
+        capability: CapabilityRef::new("process.reconcile", 1).unwrap(),
+        arguments: json!({"operation_id":id}),
+        preconditions: vec![],
+    };
+    let denied_cleanup =
+        tokio::time::timeout(Duration::from_secs(2), host.invoke(&context, cleanup))
+            .await
+            .expect("reconciliation waited behind a live source")
+            .unwrap();
+    assert_eq!(denied_cleanup.status, OperationStatus::Failed);
+    assert!(denied_cleanup.error.unwrap().contains("terminal"));
+    assert_eq!(
+        host.get_operation(&context, &id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        OperationStatus::Running
+    );
     assert!(
         host.request_cancellation(&context, &id)
             .await

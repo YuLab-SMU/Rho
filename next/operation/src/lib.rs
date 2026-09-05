@@ -286,6 +286,13 @@ pub trait OperationJournal: Send + Sync {
     ) -> Result<Vec<StoredDomainFact>, OperationError>;
 }
 
+/// Narrow read-only access to an existing Operation, used by domain references.
+/// Domains still enforce their own caller, target and outcome requirements.
+#[async_trait]
+pub trait OperationRecords: Send + Sync {
+    async fn get(&self, operation_id: &str) -> Result<Option<OperationRecord>, String>;
+}
+
 pub trait Clock: Send + Sync {
     fn now_ms(&self) -> Result<i64, OperationError>;
 }

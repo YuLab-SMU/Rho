@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 
 mod environment;
+mod records;
 pub use environment::REnvironmentConfig;
-use environment::{EnvironmentJournal, selected_environment};
+use environment::selected_environment;
+use records::JournalRecords;
 use rho_next_environment::{
     ENVIRONMENT_READ_SCOPE, ENVIRONMENT_WRITE_SCOPE, EnvironmentAction, EnvironmentHandler,
     EnvironmentObserveHandler, EnvironmentOwner, EnvironmentRuntime,
@@ -19,7 +21,7 @@ use rho_next_contract::{
     ObservationCompleteness, Operation, OperationEventRecord, OperationId, OperationRecord,
     OutboxRecord, QueryRequest, QuerySnapshot,
 };
-use rho_next_execution::{RUN_LOCAL_SCOPE, RunLocalHandler};
+use rho_next_execution::{RUN_LOCAL_SCOPE, ReconcileProcessHandler, RunLocalHandler};
 use rho_next_git::GitProject;
 use rho_next_operation::{
     CancellationRequestOutcome, CapabilityRegistry, Clock, OperationError, OperationGateway,
@@ -339,6 +341,7 @@ impl NextHost {
     ) -> Result<Self, OperationError> {
         let mut registry = CapabilityRegistry::new();
         let lane = Arc::new(tokio::sync::Mutex::new(()));
+        let records = Arc::new(JournalRecords(journal.clone()));
         let has_workspace = runtime.is_some();
         if let Some(runtime) = runtime {
             let workspace = Arc::new(WorkspaceRunHandler::with_lane(runtime, lane.clone()));
@@ -353,10 +356,17 @@ impl NextHost {
             )))?;
         }
         if let Some(project) = project {
-            let process = LocalProcessExecutor::new(project.root())
-                .map_err(|e| OperationError::TargetResolution(e.to_string()))?;
+            let process = Arc::new(
+                LocalProcessExecutor::new(project.root())
+                    .map_err(|e| OperationError::TargetResolution(e.to_string()))?,
+            );
             registry.register(Arc::new(RunLocalHandler::new(
-                Arc::new(process),
+                process.clone(),
+                lane.clone(),
+            )))?;
+            registry.register(Arc::new(ReconcileProcessHandler::new(
+                process,
+                records.clone(),
                 lane.clone(),
             )))?;
             let owner = Arc::new(ProjectOwner::new(project, lane.clone()));
@@ -365,7 +375,6 @@ impl NextHost {
             registry.register_query(Arc::new(ProjectReadHandler::new(owner)))?;
         }
         if let Some(environment) = environment {
-            let records = Arc::new(EnvironmentJournal(journal.clone()));
             let owner = Arc::new(EnvironmentOwner::new(
                 environment,
                 records,
