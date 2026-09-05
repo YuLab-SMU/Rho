@@ -1,59 +1,10 @@
 {
   "schema_version": 1,
   "pages": [
-    {
-      "id": "DOCS",
-      "title": "Documentation map",
-      "document": "docs/README.md",
-      "area": "documentation"
-    },
-    {
-      "id": "ARCHITECTURE",
-      "title": "Architecture",
-      "document": "docs/ARCHITECTURE.md",
-      "area": "persistence-and-interfaces"
-    },
-    {
-      "id": "DEVELOPMENT",
-      "title": "Development loop",
-      "document": "docs/DEVELOPMENT.md",
-      "area": "development"
-    },
-    {
-      "id": "NEXT-SYSTEM",
-      "title": "Rho Next system charter and replacement ledger",
-      "document": "docs/NEXT-SYSTEM.md",
-      "area": "next-system"
-    },
-    {
-      "id": "DESKTOP",
-      "title": "Desktop application",
-      "document": "docs/components/DESKTOP.md",
-      "area": "desktop"
-    },
-    {
-      "id": "R-RUNTIME",
-      "title": "R runtimes",
-      "document": "docs/components/R-RUNTIME.md",
-      "area": "r-runtime"
-    },
-    {
-      "id": "EXTENSIONS",
-      "title": "Extension and plugin runtime",
-      "document": "docs/components/EXTENSIONS.md",
-      "area": "extensions"
-    },
-    {
-      "id": "ENVIRONMENT",
-      "title": "Environment realization",
-      "document": "docs/components/ENVIRONMENT.md",
-      "area": "environment"
-    },
-    {
-      "id": "RELEASE",
-      "title": "Build and release operations",
-      "document": "docs/RELEASE.md",
-      "area": "release"
-    }
+    { "id": "DOCS", "title": "Documentation map", "document": "docs/README.md", "area": "documentation" },
+    { "id": "ARCHITECTURE", "title": "Architecture", "document": "docs/ARCHITECTURE.md", "area": "next-system" },
+    { "id": "DEVELOPMENT", "title": "Development loop", "document": "docs/DEVELOPMENT.md", "area": "next-system" },
+    { "id": "NEXT-SYSTEM", "title": "Rho system charter and replacement ledger", "document": "docs/NEXT-SYSTEM.md", "area": "next-system" },
+    { "id": "RELEASE", "title": "Build and release operations", "document": "docs/RELEASE.md", "area": "delivery" }
   ]
 }

@@ -4,38 +4,16 @@
 
 Generated from `governance/registry.json`. Edit the JSON source and regenerate.
 
-## `desktop`
+## `delivery`
 
-- [Desktop application](<components/DESKTOP.md>) — `DESKTOP`
-
-## `development`
-
-- [Development loop](<DEVELOPMENT.md>) — `DEVELOPMENT`
+- [Build and release operations](<RELEASE.md>) — `RELEASE`
 
 ## `documentation`
 
 - [Documentation map](<README.md>) — `DOCS`
 
-## `environment`
-
-- [Environment realization](<components/ENVIRONMENT.md>) — `ENVIRONMENT`
-
-## `extensions`
-
-- [Extension and plugin runtime](<components/EXTENSIONS.md>) — `EXTENSIONS`
-
 ## `next-system`
 
-- [Rho Next system charter and replacement ledger](<NEXT-SYSTEM.md>) — `NEXT-SYSTEM`
-
-## `persistence-and-interfaces`
-
 - [Architecture](<ARCHITECTURE.md>) — `ARCHITECTURE`
-
-## `r-runtime`
-
-- [R runtimes](<components/R-RUNTIME.md>) — `R-RUNTIME`
-
-## `release`
-
-- [Build and release operations](<RELEASE.md>) — `RELEASE`
+- [Development loop](<DEVELOPMENT.md>) — `DEVELOPMENT`
+- [Rho system charter and replacement ledger](<NEXT-SYSTEM.md>) — `NEXT-SYSTEM`

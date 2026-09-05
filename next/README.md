@@ -1,9 +1,10 @@
 # Rho Next
 
-Independent Rust workspace for the replacement described in
-[the system charter and migration ledger](../docs/NEXT-SYSTEM.md).
-The CLI exposes a project-only Host, a real Ark/R Host, or an explicitly selected
-deterministic demo. Production capability routing is still owned by the old app.
+Operator guide for the production Rust workspace at the repository root.
+The default `rho` binary exposes a project-only Host, a real Ark/R Host, or an
+explicit test-only demo. New code still lives under `next/` during source cleanup;
+the old app is excluded from the production graph. Progress and remaining
+retirement work are in [the system ledger](../docs/NEXT-SYSTEM.md).
 
 Legacy architecture data assets are abandoned; there are no real legacy users.
 Next starts with fresh application state. There is no migration, import, archive
@@ -16,8 +17,8 @@ The browser client is served by the native Rust Host; it is not an external webs
 or the old desktop. Build and launch it with the same runtime flags:
 
 ```sh
-cargo build --manifest-path next/Cargo.toml -p rho-next-cli --locked
-next/target/debug/rho-next --database /absolute/path/to/next-data/next.sqlite \
+cargo build --locked
+target/debug/rho --database /absolute/path/to/next-data/next.sqlite \
   --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
   workbench --url-file /absolute/path/to/private-launch-url
 ```
@@ -77,11 +78,20 @@ they do not substitute for browser interaction and visual acceptance. A working
 computer/browser connection is needed for that separate check. Ctrl-C stops the
 local server and drains accepted Host work; it does not report work as cancelled.
 
+Host startup acquires a native OS lease on the canonical project's
+`.rho/next-host.lock` before creating a journal or runtime. A second database is
+not a way to start a second Host for that project; connect through the existing
+Host instead. The file stays empty and is not deleted on release; its presence
+does not indicate a live process. Project metadata must be writable for startup.
+This cooperative Next lease is not a sandbox and does not constrain old binaries
+or arbitrary external editors/processes. Queries of an existing Operation can
+still use the read-only `get-operation` entry without acquiring a project lease.
+
 ## MCP stdio
 
 Use the same startup flags with `mcp` instead of `session` to serve the official
 MCP protocol over stdio. The implementation uses rmcp; stdout contains only MCP
-frames. For example, an MCP client can launch `rho-next --database /path/state.sqlite
+frames. For example, an MCP client can launch `rho --database /path/state.sqlite
 --project /path/project mcp`, adding the existing Ark/Rscript/remote flags as needed.
 
 Capability tools are derived from the Host registry and named `rho.<capability>.v<version>`.
@@ -125,7 +135,7 @@ idempotency, explicit cancellation, disconnect draining and the input frame boun
 Build and check the foundation:
 
 ```sh
-cargo test --manifest-path next/Cargo.toml --workspace --locked
+cargo test --workspace --locked
 node next/scripts/check-architecture.mjs
 ```
 
@@ -142,7 +152,7 @@ project. Ordinary Cargo tests explicitly skip this external-runtime acceptance.
 Run a real operation:
 
 ```sh
-cargo run --manifest-path next/Cargo.toml -p rho-next-cli --locked -- \
+cargo run --locked -- \
   --database /absolute/path/to/next-data/next.sqlite \
   --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
   --project /absolute/path/to/project \

@@ -1,71 +1,50 @@
 # Architecture
 
-Rho is a local-first scientific workbench and execution environment for external
-ACP Agents. Rho exposes state and capabilities, executes well-formed requests,
-records observable outcomes, and preserves recovery information. It does not
-implement an Agent model loop or a second permission system.
+The repository's root Cargo workspace is the production system. Its default
+member builds `rho`, using only the new components under `next/`. Old crates and
+the old Tauri application are not production dependencies.
 
 ```text
-React Workbench
-  │ typed Tauri commands
-  ▼
-Desktop composition root
-  ├─ external ACP process ── Rho MCP state/capability projection
-  │                         └─ authenticated turn-scoped Agent Gateway
-  ├─ rho-workspace ── live Workspace R binding and revisions
-  ├─ rho-environment ── Environment contracts, observation and realization state
-  ├─ rho-store ── durable runs, artifacts, conversations and receipts
-  ├─ rho-evidence-graph ── project-local claims, gaps and traces
-  └─ rho-sandbox ── disposable snapshots, staging and network containment
-
-Agent Gateway
-  ├─ CapabilityRegistry: identity, schema and byte-bound validation
-  ├─ operation owners: execute the request
-  └─ OperationMonitor: passive factual observation
+rho CLI / local browser / official MCP
+                 |
+              one Host
+          /                 \
+ Operation Gateway       Query Gateway
+ idempotency, bounds      bounded observation
+          |                 |
+       registered domain handlers
+ Workspace / Project / Environment / Execution
+          |
+       domain ports
+          |
+ Ark + R / Git / pak + renv / OS + OpenSSH + Slurm
+          |
+ owner report -> CommitPlan -> SQLite transaction
+                             operation + facts + events
 ```
 
-## Runtime rules
+Commands have one OperationId and one immutable terminal outcome. Queries do not
+create Operations or trigger startup/recovery merely to read a recorded result.
+Domain handlers interpret observations; the foundation enforces admission and
+atomic commit. Adapters do not own a second result store.
 
-- External ACP Agents receive the disposable project Workspace, native ACP
-  filesystem and terminal capabilities, an MCP state snapshot, and live Rho
-  capabilities.
-- Rho validates identity, shape, containment, quotas and revision integrity. It
-  does not judge intent or ask for a second approval.
-- Project changes are captured as a snapshot delta and committed through a
-  journal with base revision and per-file digest checks. Partial outcomes remain
-  explicit and retain reconciliation material.
-- Workspace R is the single live scientific state. Terminal execution advances
-  revisions when it may have mutated the Workspace or when the outcome is
-  uncertain.
-- Environment bindings activate only after a verified receipt and required
-  restart/re-observation. This is state consistency, not Agent permission.
-- Network modes are deny, provider-only, allowlisted, or unrestricted. Every
-  enabled mode still enforces HTTPS parsing, DNS pinning/rebinding checks,
-  forbidden-address checks, redirect bounds and byte quotas.
-- Store owns durable facts. Evidence Graph owns claims and links but resolves
-  current Authority facts from their owners.
+Git owns project history, R owns live objects, native lockfiles describe package
+environments, and Slurm owns scheduler state. Rho references those identities;
+there is no global Rho revision counter, Agent approval flow, conversation store
+or parallel audit/provenance system.
 
-## Component boundaries
+Host startup acquires an OS lease on `.rho/next-host.lock` in the canonical project
+before creating its journal or runtime. Accepted work retains the runtime and
+lease after the caller disconnects. This is cooperative Next ownership, not a
+sandbox or a lock respected by arbitrary external processes. Lock existence does
+not indicate liveness; the OS releases ownership when the holder exits.
 
-| Component | Current responsibility |
-| --- | --- |
-| `rho-protocol` | Canonical IDs, requests, events, revisions and receipts |
-| `rho-control-plane` | Capability contract validation, journaled project commits and passive operation observation |
-| `rho-acp-client` | ACP transport and client capabilities for external Agents |
-| `rho-mcp` | Bounded state/capability projection and Gateway forwarding |
-| `rho-workspace` | Environment-binding state and Workspace revision tracking |
-| `rho-environment` | Environment discovery, planning and realization semantics |
-| `rho-store` | Durable operational projections and Authority feed |
-| `rho-evidence-graph` | Project-local evidence graph |
-| `rho-sandbox` | Snapshot, staging, process and network containment |
-| `rho-server` | Live Workspace protocol and ACP turn persistence |
-| `rho-core`, `rho-kernel` | Workspace broker state and Ark session |
-| `rho-ui-contract`, `desktop/` | Typed desktop composition and presentation |
-| `rho-extension-runtime`, `rho-plugin-dev` | Isolated extension runtime and authoring |
-| `rho-runner` | Standalone authenticated structured-spec runner |
+The browser and HTTP MCP share one Host. MCP sessions pin their selected project;
+active work blocks a switch. A new project's ownership is reserved before the old
+session is ended. Core ports are `invoke`, `getOperation`, `requestCancellation`,
+`querySnapshot` and cursor-based `subscribe`. Types are generated from Rust.
 
-`rho-execution`, `rho-artifact-store`, and `rho-secret-broker` remain
-standalone library components; the current desktop dependency graph does not
-claim that they are wired into its live path.
-
-The generated [source index](SOURCE-INDEX.md) maps files to executable checks.
+Legacy data assets are abandoned. Source replacement uses fresh application
+state, not imports, archive readers, dual writes or cross-version session handoff.
+See [the charter and ledger](NEXT-SYSTEM.md) for decisions, remaining work and
+actual verification scope; [the operator guide](../next/README.md) contains commands.

@@ -12,7 +12,7 @@ fn project_only_cli_applies_and_reads_files_without_starting_r() {
     std::fs::write(root.join("analysis.R"), "a\n").unwrap();
     let db = dir.path().join("state/next.sqlite");
     let patch = "diff --git a/analysis.R b/analysis.R\n--- a/analysis.R\n+++ b/analysis.R\n@@ -1 +1 @@\n-a\n+b\n";
-    let output = Command::new(env!("CARGO_BIN_EXE_rho-next"))
+    let output = Command::new(env!("CARGO_BIN_EXE_rho"))
         .arg("--database")
         .arg(&db)
         .arg("--project")
@@ -40,7 +40,7 @@ fn project_only_cli_applies_and_reads_files_without_starting_r() {
         std::fs::read_to_string(root.join("analysis.R")).unwrap(),
         "b\n"
     );
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rho-next"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rho"))
         .arg("--database")
         .arg(&db)
         .arg("--project")

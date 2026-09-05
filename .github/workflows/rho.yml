@@ -1,0 +1,90 @@
+name: Rho
+
+on:
+  push:
+    branches: [main]
+    paths: ["next/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/governance.mjs", "scripts/test-governance.mjs", ".github/workflows/rho.yml"]
+  pull_request:
+    paths: ["next/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/governance.mjs", "scripts/test-governance.mjs", ".github/workflows/rho.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rho-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: Native Host / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            toolchain: 1.97.0-x86_64-unknown-linux-gnu
+          - os: macos-26
+            toolchain: 1.97.0-aarch64-apple-darwin
+          - os: windows-latest
+            toolchain: 1.97.0-x86_64-pc-windows-gnu
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
+      CARGO_INCREMENTAL: "0"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Windows GNU toolchain dependencies
+        if: runner.os == 'Windows'
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.6.1"
+          rtools-version: "45"
+      - name: Select Windows GNU linker
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $rtools = "C:\rtools45\x86_64-w64-mingw32.static.posix\bin"
+          if (-not (Test-Path (Join-Path $rtools "gcc.exe"))) { throw "Rtools45 GNU linker missing" }
+          $rtools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Install pinned Rust
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy --no-self-update
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/db/
+            target/
+          key: rho-next-${{ runner.os }}-${{ matrix.toolchain }}-${{ hashFiles('Cargo.lock') }}
+      - name: Fetch locked dependencies
+        run: cargo fetch --locked
+      - name: Install client build tool
+        run: npm ci --ignore-scripts --prefix next/ui
+      - name: Check production graph and source map
+        run: |
+          node next/scripts/check-architecture.mjs
+          node scripts/governance.mjs check
+          node scripts/test-governance.mjs
+      - name: Format and lint
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test native foundation
+        run: cargo test --workspace --locked -- --test-threads=1
+      - name: Verify generated client and embedded assets
+        run: node next/scripts/client.mjs check
+      - name: Verify actual local public transports
+        run: |
+          node next/scripts/test-mcp.mjs
+          node next/scripts/test-workbench.mjs
+      # Real Ark/R and remote-cluster acceptance have separate explicit prerequisites.
+      # Ignored Rust tests above are not evidence of those runtime checks passing.

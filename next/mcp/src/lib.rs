@@ -232,7 +232,7 @@ impl McpEdge {
 impl ServerHandler for McpEdge {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("rho-next", env!("CARGO_PKG_VERSION")))
+            .with_server_info(Implementation::new("rho", env!("CARGO_PKG_VERSION")))
             .with_instructions("Rho exposes a scientific space, not an Agent loop. Commands require caller-generated stable client_request_id values; query tools do not create Operations. Use rho.events.poll to discover accepted OperationIds and rho.operation.request_cancellation to request a real cancellation. RPC cancellation or disconnect only stops waiting; accepted Host work is drained. No second user approval is created by Rho.")
     }
     fn get_tool(&self, name: &str) -> Option<Tool> {

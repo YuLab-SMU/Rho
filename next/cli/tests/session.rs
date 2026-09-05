@@ -30,7 +30,7 @@ fn invocation(frame_id: &str) -> Value {
 fn one_session_handles_pipelined_frames_and_queries_with_one_runtime() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = ChildGuard(
-        Command::new(env!("CARGO_BIN_EXE_rho-next"))
+        Command::new(env!("CARGO_BIN_EXE_rho"))
             .arg("--demo")
             .arg("--database")
             .arg(dir.path().join("next.sqlite"))
@@ -98,7 +98,7 @@ fn one_session_handles_pipelined_frames_and_queries_with_one_runtime() {
 fn oversized_session_frame_is_rejected_without_an_operation() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = ChildGuard(
-        Command::new(env!("CARGO_BIN_EXE_rho-next"))
+        Command::new(env!("CARGO_BIN_EXE_rho"))
             .arg("--demo")
             .arg("--database")
             .arg(dir.path().join("next.sqlite"))

@@ -12,13 +12,13 @@ import { fileURLToPath } from "node:url";
 assert.notEqual(process.platform, "win32", "this POSIX transcript fixture is not Windows/remote acceptance");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { cwd: root, encoding: "utf8", timeout: 60_000, ...options });
+  const result = spawnSync(command, args, { cwd: root, encoding: "utf8", timeout: command === "cargo" ? 900_000 : 60_000, ...options });
   assert.equal(result.status, 0, result.error?.message || result.stderr || result.signal);
   return result.stdout;
 }
-run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-next-cli", "--locked", "--offline"]);
-const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--offline"]));
-const binary = path.join(metadata.target_directory, "debug/rho-next");
+run("cargo", ["build", "--manifest-path", "../Cargo.toml", "-p", "rho-next-cli", "--locked", "--offline"]);
+const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "../Cargo.toml", "--no-deps", "--format-version", "1", "--offline"]));
+const binary = path.join(metadata.target_directory, "debug/rho");
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "rho-next-remote-protocol-"));
 const project = path.join(directory, "local");
 const remote = path.join(directory, "remote ' space $(literal)");

@@ -6,7 +6,7 @@ fn independent_cli_processes_reuse_durable_operation_and_query_without_writes() 
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("next.sqlite");
     let invoke = |code: &str| {
-        Command::new(env!("CARGO_BIN_EXE_rho-next"))
+        Command::new(env!("CARGO_BIN_EXE_rho"))
             .arg("--demo")
             .arg("--database")
             .arg(&db)
@@ -29,7 +29,7 @@ fn independent_cli_processes_reuse_durable_operation_and_query_without_writes() 
     assert!(!invoke("x <- 2").status.success());
 
     let before = std::fs::read(&db).unwrap();
-    let query = Command::new(env!("CARGO_BIN_EXE_rho-next"))
+    let query = Command::new(env!("CARGO_BIN_EXE_rho"))
         .arg("--database")
         .arg(&db)
         .args([

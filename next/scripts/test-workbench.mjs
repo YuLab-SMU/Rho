@@ -14,7 +14,7 @@ function run(program, args) {
   const result = spawnSync(program, args, {
     cwd: root,
     encoding: "utf8",
-    timeout: 60_000,
+    timeout: program === "cargo" ? 900_000 : 60_000,
   });
   assert.equal(
     result.status,
@@ -26,7 +26,7 @@ function run(program, args) {
 run("cargo", [
   "build",
   "--manifest-path",
-  "Cargo.toml",
+  "../Cargo.toml",
   "-p",
   "rho-next-cli",
   "--locked",
@@ -36,7 +36,7 @@ const metadata = JSON.parse(
   run("cargo", [
     "metadata",
     "--manifest-path",
-    "Cargo.toml",
+    "../Cargo.toml",
     "--no-deps",
     "--format-version",
     "1",
@@ -46,7 +46,7 @@ const metadata = JSON.parse(
 const binary = path.join(
   metadata.target_directory,
   "debug",
-  process.platform === "win32" ? "rho-next.exe" : "rho-next",
+  process.platform === "win32" ? "rho.exe" : "rho",
 );
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rho-next-workbench-"));
 const project = path.join(dir, "project");
@@ -267,7 +267,7 @@ try {
     capabilities: {},
     clientInfo: { name: "workbench-fixture", version: "1" },
   });
-  assert.equal(hello.serverInfo.name, "rho-next");
+  assert.equal(hello.serverInfo.name, "rho");
   assert.ok(sessionId);
   await mcp("notifications/initialized", {}, true);
   assert.ok(

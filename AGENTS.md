@@ -14,6 +14,11 @@ do not build data migration, import, archive-reader or compatibility work. Next
 starts with fresh application state; focus on capabilities, entrypoints and
 removing replaced code, not preserving old runtime or application data.
 
+The root Cargo workspace now builds the new system only, with `rho` as its
+default binary. Source remains under `next/` during cleanup. Old `crates/`,
+`desktop/` and `r/` code is excluded and pending retirement; do not restore it as
+a production dependency or run retired desktop/release gates for new changes.
+
 ## Architecture Philosophy
 
 **Rho is the operable scientific space. The Agent platform owns conversation
@@ -67,20 +72,14 @@ parallel Conversation, planning or behavioral subsystem inside Rho.
 8. **Recover truthfully** - Preserve rollback/reconciliation material and
    report partial or uncertain outcomes instead of claiming success.
 
-### Control Plane Role
+### Operation and Host Role
 
-`rho-control-plane` components:
-
-- **CapabilityRegistry**: Declares operations and validates their schemas and
-  argument bounds.
-- **ProjectCommitter**: Applies revision-bound project changes with a durable
-  journal and truthful reconciliation.
-- **OperationMonitor**: Passively records factual operation observations; it
-  does not score intent or decide admission.
-
-Live state and execution stay with their domain owners (`rho-workspace`,
-`rho-environment`, Store, runtimes, project resources, and so on). MCP and the
-Agent Gateway expose and dispatch those owners; they do not become new owners.
+`rho-next-operation` registers capabilities and enforces schema, scope,
+idempotency and commit discipline. Domain handlers interpret native observations
+and return CommitPlan; they do not own independent result databases. Native
+identities and owner-specific preconditions replace global revision counters.
+`rho-next-host` is the composition root. CLI, browser and official MCP use its
+five shared ports; none contains a second scientific operation flow.
 
 **Removed concepts** (legacy from internal Agent era):
 - ~~PermissionPosture~~ - Agent has its own permission modes
@@ -115,9 +114,8 @@ maps live in `governance/registry.json` and `governance/source-map.json`.
   `cargo test` or `cargo build` processes in parallel; the build lock
   serializes them and both appear hung until they time out.
 - Iterate with the closest fast gate; run full suites once at the end.
-  - Binding or Tauri command change: regenerate with the matching
-    `scripts/generate-*-bindings.mjs`, then run the area's
-    `rsr:test:<area>-bindings`, `rsr:test:commands`, and `rsr:typecheck`.
+  - Contract or client change: `npm run generate --prefix next/ui`,
+    `npm run build --prefix next/ui`, then `npm run check --prefix next/ui`.
   - Rust change: filtered `cargo test -p <crate> <filter>`; reruns take
     seconds once the test binary is built.
 - Do not poll background test runs with sleeps; wait for completion.
@@ -136,12 +134,10 @@ maps live in `governance/registry.json` and `governance/source-map.json`.
 - Pass the normalized broker/store project root to Workspace R environment
   helpers. Do not rely on the process working directory.
 - In R, test name membership before indexing a named atomic vector.
-- Keep Tauri commands, generated TypeScript facets, and browser mock handlers
-  aligned in the same change. Adding or removing a command also changes the
-  pinned `EXPECTED_HANDLER_DIGEST` in
-  `scripts/test-tauri-command-inventory.mjs`.
-- Frontend visual values belong in the tokenized styles under
-  `desktop/ui/src/styles/`; `foundation.css` only composes layers.
+- Client types come from Rust contract through ts-rs. Keep generated types and
+  embedded app.js current; do not reintroduce per-capability Tauri commands.
+- The current client uses `next/workbench/assets/style.css` tokens and
+  `next/ui/src/app.ts`; do not extend the retired desktop UI.
 - Project skill discovery validates the `.rho/skills` root itself, including
   symlink containment.
 - Windows GNU Rust commands require the Rtools45 toolchain at the front of
@@ -157,20 +153,20 @@ node scripts/dev-lanes.mjs check --id example --changed-auto
 node scripts/dev-lanes.mjs finish --id example
 ```
 
-Keep real Tauri debug windows in the integration checkout. Before changing
+Keep real workbench runs in the integration checkout. Before changing
 tasks, preserve unfinished work in a clearly named WIP branch commit.
 
 ## Visual and installer operations
 
-For a real visual run, build the current frontend and desktop, then use:
+For a real visual run, build the embedded client and current binary, then open
+its private local workbench URL through an available browser connection:
 
 ```bash
-npm run rsr:build --prefix desktop
-cargo build -p rho-desktop
-npm run rsr:accept:visual --prefix desktop
+npm run build --prefix next/ui
+cargo build --locked
 ```
 
-When explicitly asked to package the Windows installer, verify/bootstrap Ark,
-run `scripts/build-windows-installer.ps1`, and report the executable and NSIS
-installer paths, sizes, and SHA-256 hashes. Do not install or publish the
-artifacts automatically. See `docs/RELEASE.md` for the operator map.
+The old installer/updater workflows are retired, not evidence of new packaging.
+When distribution is explicitly requested, use a verified new-system packaging
+path and report exact paths, sizes and hashes. Do not install or publish
+automatically. See `docs/RELEASE.md` for the current operator map.

@@ -11,13 +11,13 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const run = (program, args) => {
-  const result = spawnSync(program, args, { cwd: root, encoding: "utf8", timeout: 60_000 });
+  const result = spawnSync(program, args, { cwd: root, encoding: "utf8", timeout: program === "cargo" ? 900_000 : 60_000 });
   assert.equal(result.status, 0, result.error?.message || result.stderr || result.signal);
   return result.stdout;
 };
-run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-next-cli", "--locked", "--offline"]);
-const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--offline"]));
-const binary = path.join(metadata.target_directory, "debug", process.platform === "win32" ? "rho-next.exe" : "rho-next");
+run("cargo", ["build", "--manifest-path", "../Cargo.toml", "-p", "rho-next-cli", "--locked", "--offline"]);
+const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "../Cargo.toml", "--no-deps", "--format-version", "1", "--offline"]));
+const binary = path.join(metadata.target_directory, "debug", process.platform === "win32" ? "rho.exe" : "rho");
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rho-next-mcp-"));
 const project = path.join(dir, "project"); fs.mkdirSync(project);
 fs.writeFileSync(path.join(project, "analysis.R"), "x <- 1\n");
@@ -76,7 +76,7 @@ function client(args) {
 }
 async function initialize(peer) {
   const hello = await peer.request("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "not-an-authority", version: "1" } }).result;
-  assert.equal(hello.serverInfo.name, "rho-next");
+  assert.equal(hello.serverInfo.name, "rho");
   peer.notify("notifications/initialized", {});
 }
 const peer = client([...hosting, "mcp"]);

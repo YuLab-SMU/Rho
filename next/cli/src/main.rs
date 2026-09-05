@@ -8,7 +8,7 @@ use rho_next_host::{HostProfile, NextHost, RUN_R_CAPABILITY_ID, RuntimeConfigura
 use serde_json::json;
 
 #[derive(Debug, Parser)]
-#[command(name = "rho-next", about = "Rho Next scientific workspace")]
+#[command(name = "rho", about = "Rho scientific workspace")]
 struct Cli {
     #[arg(long)]
     database: PathBuf,

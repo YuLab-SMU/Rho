@@ -1,327 +1,36 @@
 {
   "schema_version": 1,
   "checks": {
-    "next.architecture": {
-      "command": ["node", "next/scripts/check-architecture.mjs"]
-    },
-    "next.rust": {
-      "command": ["cargo", "test", "--manifest-path", "next/Cargo.toml", "--workspace", "--locked", "--", "--test-threads=1"]
-    },
-    "next.real-r": {
-      "command": ["node", "next/scripts/test-real-r.mjs"]
-    },
-    "next.environment": {
-      "command": ["node", "next/scripts/test-environment.mjs"]
-    },
-    "next.process-recovery": {
-      "command": ["node", "next/scripts/test-process-recovery.mjs"]
-    },
-    "next.remote-protocol": {
-      "command": ["node", "next/scripts/test-remote-protocol.mjs"]
-    },
-    "next.mcp": {
-      "command": ["node", "next/scripts/test-mcp.mjs"]
-    },
-    "next.mcp-real-r": {
-      "command": ["node", "next/scripts/test-mcp.mjs", "--real-r"]
-    },
-    "next.client": {
-      "command": ["node", "next/scripts/client.mjs", "check"]
-    },
-    "next.workbench": {
-      "command": ["node", "next/scripts/test-workbench.mjs"]
-    },
-    "next.workbench-real-r": {
-      "command": ["node", "next/scripts/test-workbench.mjs", "--real-r"]
-    },
-    "docs.index": {
-      "command": ["node", "scripts/governance.mjs", "check"]
-    },
-    "docs.tool": {
-      "command": ["node", "scripts/test-governance.mjs"]
-    },
-    "development.checkpoint": {
-      "command": ["node", "scripts/test-dev-checkpoint.mjs"]
-    },
-    "development.lanes": {
-      "command": ["node", "scripts/test-dev-lanes.mjs"]
-    },
-    "development.test-runner": {
-      "command": ["node", "scripts/test-test-command-runner.mjs"]
-    },
-    "development.integration": {
-      "command": ["node", "scripts/test-worktree-integration.mjs"]
-    },
-    "development.rebuild-ledger": {
-      "command": ["node", "scripts/rebuild-ledger.mjs", "validate"]
-    },
-    "frontend": {
-      "command": ["npm", "--prefix", "desktop", "run", "rsr:check"]
-    },
-    "frontend.contracts": {
-      "command": ["npm", "--prefix", "desktop", "run", "rsr:check:contracts"]
-    },
-    "r.bridge": {
-      "command": ["Rscript", "-e", "testthat::test_local('r/rho.bridge')"]
-    },
-    "r.environment": {
-      "command": ["Rscript", "-e", "testthat::test_local('r/rho.environment')"]
-    },
-    "release.candidate": {
-      "command": ["node", "scripts/candidate-release.mjs", "--test", "true"]
-    },
-    "release.signing": {
-      "command": ["node", "scripts/test-signpath-candidate-workflow.mjs"]
-    },
-    "release.site": {
-      "command": ["node", "scripts/generate-update-site.mjs", "--test", "true"]
-    },
-    "release.updater": {
-      "command": ["node", "scripts/tauri-native-updater.mjs", "--test", "true"]
-    },
-    "rust.architecture": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "120", "--label", "rust architecture", "--", "cargo", "test", "-p", "rho-architecture-tests", "--locked"]
-    },
-    "rust.agent": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust agent", "--", "cargo", "test", "-p", "rho-acp-client", "-p", "rho-control-plane", "--locked", "--", "--test-threads=1"]
-    },
-    "rust.desktop": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "600", "--label", "rust desktop", "--", "cargo", "test", "-p", "rho-desktop", "-p", "rho-ui-contract", "--locked"]
-    },
-    "rust.execution": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust execution", "--", "cargo", "test", "-p", "rho-artifact-store", "-p", "rho-execution", "-p", "rho-runner", "-p", "rho-sandbox", "-p", "rho-secret-broker", "-p", "rho-workspace", "--locked", "--", "--test-threads=1"]
-    },
-    "rust.evidence-graph": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "300", "--label", "rust evidence graph", "--", "cargo", "test", "-p", "rho-evidence-graph", "--locked", "--", "--test-threads=1"]
-    },
-    "rust.environment": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust environment", "--", "cargo", "test", "-p", "rho-environment", "--locked"]
-    },
-    "rust.extensions": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "300", "--label", "rust extensions", "--", "cargo", "test", "-p", "rho-extension-runtime", "-p", "rho-plugin-dev", "--locked"]
-    },
-    "rust.kernel": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "180", "--label", "rust kernel", "--", "cargo", "test", "-p", "rho-kernel", "--locked"]
-    },
-    "rust.public": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "120", "--label", "rust public interfaces", "--", "cargo", "test", "-p", "rho-cli", "-p", "rho-mcp", "--locked"]
-    },
-    "rust.store": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "300", "--label", "rust store", "--", "cargo", "test", "-p", "rho-store", "--locked", "--", "--test-threads=1"]
-    },
-    "rust.workspace": {
-      "command": ["node", "scripts/run-test-command.mjs", "--timeout-seconds", "900", "--label", "rust workspace", "--", "cargo", "test", "--workspace", "--locked", "--", "--test-threads=1"]
-    }
+    "next.architecture": { "command": ["node", "next/scripts/check-architecture.mjs"] },
+    "next.rust": { "command": ["cargo", "test", "--workspace", "--locked", "--", "--test-threads=1"] },
+    "next.client": { "command": ["node", "next/scripts/client.mjs", "check"] },
+    "next.real-r": { "command": ["node", "next/scripts/test-real-r.mjs"] },
+    "next.environment": { "command": ["node", "next/scripts/test-environment.mjs"] },
+    "next.process-recovery": { "command": ["node", "next/scripts/test-process-recovery.mjs"] },
+    "next.remote-protocol": { "command": ["node", "next/scripts/test-remote-protocol.mjs"] },
+    "next.mcp": { "command": ["node", "next/scripts/test-mcp.mjs"] },
+    "next.mcp-real-r": { "command": ["node", "next/scripts/test-mcp.mjs", "--real-r"] },
+    "next.workbench": { "command": ["node", "next/scripts/test-workbench.mjs"] },
+    "next.workbench-real-r": { "command": ["node", "next/scripts/test-workbench.mjs", "--real-r"] },
+    "docs.index": { "command": ["node", "scripts/governance.mjs", "check"] },
+    "docs.tool": { "command": ["node", "scripts/test-governance.mjs"] }
   },
   "areas": {
     "documentation": {
-      "sources": [
-        "AGENTS.md",
-        "CONTRIBUTING.md",
-        "README.md",
-        "docs/**",
-        "governance/**",
-        "scripts/governance.mjs",
-        "scripts/test-governance.mjs",
-        "test/acceptance-project/*.md"
-      ],
+      "sources": ["AGENTS.md", "README.md", "CONTRIBUTING.md", "docs/**", "governance/**", "scripts/governance.mjs", "scripts/test-governance.mjs"],
       "checks": ["docs.index", "docs.tool"]
     },
-    "development": {
-      "sources": [
-        ".gitignore",
-        "crates/rho-architecture-tests/**",
-        "programs/rho-rebuild/**",
-        "scripts/check-clean-agent-cut.mjs",
-        "scripts/dev-checkpoint.mjs",
-        "scripts/dev-lanes.mjs",
-        "scripts/path-ownership.mjs",
-        "scripts/rebuild-ledger.mjs",
-        "scripts/run-fuzz-targets.mjs",
-        "scripts/run-test-command.mjs",
-        "scripts/test-dev-checkpoint.mjs",
-        "scripts/test-dev-lanes.mjs",
-        "scripts/test-test-command-runner.mjs",
-        "scripts/test-worktree-integration.mjs",
-        "fuzz/**",
-        "test/chaos/**",
-        "test/control-plane/**",
-        "test/performance/**",
-        "test/remote-cluster/**",
-        "test/security/**"
-      ],
-      "checks": [
-        "development.checkpoint",
-        "development.integration",
-        "development.lanes",
-        "development.rebuild-ledger",
-        "development.test-runner",
-        "rust.architecture"
-      ]
-    },
     "next-system": {
-      "sources": [
-        "docs/NEXT-SYSTEM.md",
-        "next/**"
-      ],
-      "checks": [
-        "docs.index",
-        "docs.tool",
-        "next.architecture",
-        "next.rust",
-        "next.real-r",
-        "next.environment",
-        "next.process-recovery",
-        "next.remote-protocol",
-        "next.mcp",
-        "next.mcp-real-r",
-        "next.client",
-        "next.workbench",
-        "next.workbench-real-r"
-      ]
+      "sources": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "next/**", "vendor/jet/**", "docs/NEXT-SYSTEM.md"],
+      "checks": ["docs.index", "docs.tool", "next.architecture", "next.rust", "next.client", "next.real-r", "next.environment", "next.process-recovery", "next.remote-protocol", "next.mcp", "next.mcp-real-r", "next.workbench", "next.workbench-real-r"]
     },
-    "desktop-ui": {
-      "sources": [
-        "desktop/package-lock.json",
-        "desktop/package.json",
-        "desktop/ui/**",
-        "scripts/accept-rsr-exact-app.mjs",
-        "scripts/rsr-*",
-        "scripts/run-rsr-debug.mjs",
-        "scripts/serve-desktop-preview.mjs",
-        "scripts/test-rsr-*.mjs",
-        "scripts/test-test-tiers.mjs",
-        "scripts/test-visual-acceptance.mjs",
-        "scripts/visual-acceptance.mjs",
-        "scripts/visual-acceptance/**",
-        "test/acceptance-project/**"
-      ],
-      "checks": ["frontend"]
+    "legacy-pending-retirement": {
+      "sources": ["crates/**", "desktop/**", "r/**", "programs/**", "test/**", "fuzz/**", "scripts/**"],
+      "checks": []
     },
-    "desktop": {
-      "sources": [
-        "desktop/src-tauri/**",
-        "crates/rho-ui-contract/**",
-        "scripts/generate-*-bindings.mjs",
-        "scripts/generate-rsr-contract-fixtures.mjs",
-        "scripts/test-*-bindings.mjs",
-        "scripts/test-*config*.mjs",
-        "scripts/test-generated-bindings.mjs",
-        "scripts/test-generated-transport-boundary.mjs",
-        "scripts/test-tauri-command-inventory.mjs"
-      ],
-      "checks": ["frontend.contracts", "rust.desktop"]
-    },
-    "agent-runtime": {
-      "sources": [
-        "crates/rho-acp-client/**",
-        "crates/rho-control-plane/**"
-      ],
-      "checks": ["rust.agent"]
-    },
-    "execution-runtime": {
-      "sources": [
-        "crates/rho-artifact-store/**",
-        "crates/rho-execution/**",
-        "crates/rho-runner/**",
-        "crates/rho-sandbox/**",
-        "crates/rho-secret-broker/**",
-        "crates/rho-workspace/**"
-      ],
-      "checks": ["rust.execution"]
-    },
-    "public-interfaces": {
-      "sources": [
-        "crates/rho-cli/**",
-        "crates/rho-mcp/**"
-      ],
-      "checks": ["rust.public"]
-    },
-    "persistence-and-interfaces": {
-      "sources": [
-        ".cargo/**",
-        "Cargo.lock",
-        "Cargo.toml",
-        "crates/rho-evidence-graph/**",
-        "crates/rho-protocol/**",
-        "crates/rho-server/**",
-        "crates/rho-store/**",
-        "rust-toolchain.toml"
-      ],
-      "checks": ["rust.evidence-graph", "rust.store", "rust.workspace"]
-    },
-    "r-runtime": {
-      "sources": [
-        "crates/rho-kernel/**",
-        "r/rho.bridge/**",
-        "test/environment-demo/**"
-      ],
-      "checks": ["r.bridge", "rust.kernel"]
-    },
-    "extensions": {
-      "sources": [
-        "crates/rho-extension-runtime/**",
-        "crates/rho-plugin-dev/**",
-        "examples/workspace-plugin-*/**",
-        "scripts/test-extension-*.mjs"
-      ],
-      "checks": ["rust.extensions"]
-    },
-    "environment": {
-      "sources": [
-        "crates/rho-protocol/src/environment.rs",
-        "crates/rho-protocol/src/execution.rs",
-        "crates/rho-environment/**",
-        "crates/rho-store/src/environment_realization.rs",
-        "crates/rho-execution/src/remote_reconcile/**",
-        "crates/rho-execution/src/slurm/**",
-        "crates/rho-runner/**",
-        "crates/rho-workspace/src/environment.rs",
-        "r/rho.environment/**",
-        "test/remote-cluster/**"
-      ],
-      "checks": ["r.environment", "rust.environment", "rust.execution"]
-    },
-    "release": {
-      "sources": [
-        ".cargo/**",
-        ".github/CODEOWNERS",
-        ".github/release-notes/**",
-        ".github/workflows/**",
-        "CODE_SIGNING_POLICY.md",
-        "LICENSE",
-        "LICENSES.md",
-        "PRIVACY.md",
-        "SECURITY.md",
-        "Cargo.lock",
-        "Cargo.toml",
-        "crates/rho-updater-verifier/**",
-        "desktop/package-lock.json",
-        "desktop/package.json",
-        "desktop/src-tauri/tauri.conf.json",
-        "runtime/**",
-        "scripts/audit-final-rebuild.mjs",
-        "scripts/verify-clean-source-snapshot.mjs",
-        "scripts/verify-production-workbench-integration.mjs",
-        "scripts/test-production-invariants.mjs",
-        "scripts/bootstrap-*",
-        "scripts/build-*.sh",
-        "scripts/build-*.ps1",
-        "scripts/prepare-runtime-resources.*",
-        "scripts/*apprun*",
-        "scripts/*bundle*.mjs",
-        "scripts/*entitlements*.mjs",
-        "scripts/*notary*.mjs",
-        "scripts/*release*.mjs",
-        "scripts/*signpath*.mjs",
-        "scripts/*updater*.mjs",
-        "scripts/generate-update-site.mjs",
-        "scripts/test-release-metadata.ps1",
-        "scripts/test-desktop-platform-config.mjs",
-        "scripts/test-license-contract.mjs",
-        "test/release/**"
-      ],
-      "checks": ["release.candidate", "release.signing", "release.site", "release.updater"]
+    "delivery": {
+      "sources": [".github/**", "runtime/**", "LICENSE", "LICENSES.md", "PRIVACY.md", "SECURITY.md", "CODE_SIGNING_POLICY.md", "scripts/bootstrap-ark-*.sh", "scripts/bootstrap-ark-*.ps1"],
+      "checks": ["docs.index", "next.architecture"]
     }
   }
 }

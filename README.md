@@ -1,78 +1,69 @@
 # Rho
 
-Rho — R-centered Human–AI Orchestration — is a local-first desktop workbench
-for R. It combines a persistent Workspace R session, project-aware editing,
-scientific outputs, and an AI collaborator in one application.
+Rho is a local scientific workspace: a persistent R session, project files,
+reproducible environments and native process/job execution, available to people
+and external Agents through the same Host. The Agent owns conversation and
+planning; Rho executes requested capabilities and reports what actually happened.
 
-## What it does
+The repository now builds the new system by default. Source currently lives in
+`next/`; the remaining old `crates/`, `desktop/` and `r/` implementations are
+excluded from the production workspace and are being retired. There are no real
+legacy users and no legacy-data migration or compatibility work.
 
-- edits and runs R code against one persistent Ark-backed Workspace R session;
-- presents Console output, Environment objects, plots, problems, and durable
-  run history with project provenance;
-- drives an external ACP Agent over one continuous stream of what it read and
-  changed;
-- observes R/rig/renv/pak project environments and records explicit plans,
-  operation journals and environment receipts;
-- launches configured external ACP Agents and exposes Rho capabilities;
-- hosts bounded project plugins and typed plugin surfaces;
-- exposes bounded workbench state and executable capabilities through MCP.
+## Run
 
-The Rust desktop layer owns process lifecycle, projects, revisions, persistence,
-and transport: it exposes complete state and executes Agent requests faithfully.
-The external Agent owns intent and its own permission model. Workspace R owns
-live R execution and scientific objects. React owns presentation, not authority.
+Build with the pinned Rust toolchain:
 
-## Requirements
+```sh
+cargo build --locked
+target/debug/rho --database /absolute/path/to/state.sqlite workbench
+```
 
-- Windows 10/11 with WebView2, Apple Silicon macOS 14+, or a supported Linux
-  desktop environment;
-- R 4.4 or later;
-- a configured ACP Agent executable for Agent features.
+Open the private local URL printed by the command, then select a project folder.
+Without an R configuration, Project and local-process capabilities are available.
+For a persistent real R session, use an installed Ark and R:
+
+```sh
+target/debug/rho --database /absolute/path/to/state.sqlite \
+  --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
+  workbench
+```
+
+The workbench is embedded in the binary and only listens on `127.0.0.1`; running
+it does not require Node. Its `/mcp` endpoint shares the same Host and live R
+session. `rho ... mcp` also supports standalone stdio MCP. See the
+[operator guide](next/README.md) for flags, capabilities, authentication and
+real-runtime verification.
 
 ## Develop
 
-```bash
-npm install --prefix desktop
-npm run rsr:dev --prefix desktop
+```sh
+cargo test --workspace --locked -- --test-threads=1
+node next/scripts/check-architecture.mjs
+npm ci --ignore-scripts --prefix next/ui
+npm run check --prefix next/ui
 ```
 
-Run the Rust desktop from a second terminal when needed:
+Start with [Architecture](docs/ARCHITECTURE.md), the
+[development loop](docs/DEVELOPMENT.md), and the
+[system charter and replacement ledger](docs/NEXT-SYSTEM.md).
+The ledger distinguishes implementation, verified behavior, entrypoint cutover
+and source retirement; a green unit test is not full product acceptance.
 
-```bash
-cargo run -p rho-desktop
-```
+## Boundaries and status
 
-The fast workflow and affected-check discovery are documented in
-[Development](docs/DEVELOPMENT.md). Start with the compact
-[documentation map](docs/README.md) or the current
-[architecture](docs/ARCHITECTURE.md).
+Native R and processes run with the local user's OS access. They are not an OS
+sandbox. Operations preserve partial/uncertain outcomes and support explicit
+reconciliation; a cancellation request is not proof that work stopped.
 
-## Build
-
-```bash
-npm run rsr:build --prefix desktop
-cargo build -p rho-desktop
-```
-
-Platform packaging, signing, and candidate operations are mapped in
-[Build and release](docs/RELEASE.md). Generated artifacts and command output are
-the evidence for a particular build.
-
-## Privacy and security
-
-Rho has no first-party background telemetry. Network-capable operations follow
-an explicit product action, such as using a model provider, resolving a DOI,
-managing an R environment, or running approved code. Read the
-[privacy policy](PRIVACY.md), report vulnerabilities through
-[SECURITY.md](SECURITY.md), and review [code signing](CODE_SIGNING_POLICY.md)
-before distributing a build.
-
-Uninstalling Rho does not automatically remove projects, local application
-data, logs, or stored provider credentials.
+Local Rust, HTTP/MCP and real Ark/R acceptance are available. Browser visual
+acceptance and real SSH/Slurm acceptance remain separate requirements. The old
+Tauri installer, updater and release workflows are retired; the current manual
+build workflow produces a CLI/workbench binary only. No automatic publishing or
+installation occurs. See [Build and release](docs/RELEASE.md).
 
 ## License
 
-Rho-original source, documentation, tests, and scripts are licensed under
-[AGPL-3.0-only](LICENSE). Bundled dependencies retain their own licenses; see
-[LICENSES.md](LICENSES.md). Read [CONTRIBUTING.md](CONTRIBUTING.md) before
-submitting changes.
+Rho-original code is licensed under [AGPL-3.0-only](LICENSE). Bundled upstream
+dependencies retain their licenses; see [LICENSES.md](LICENSES.md).
+Security reports belong through [SECURITY.md](SECURITY.md).

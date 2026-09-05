@@ -4,8 +4,9 @@ Read [the system charter and replacement ledger](../docs/NEXT-SYSTEM.md) before
 changing this workspace. It is the task-specific design and progress record;
 code and reproducible execution remain evidence of what exists.
 
-Next is an independent Cargo workspace. Keep old Rho crates out of its
-dependency graph. The R adapter may reuse the third-party Jet code already
+The repository root Cargo workspace is now the production system; source is
+still under next/ while the remaining legacy files are retired. Keep old Rho
+crates out of the dependency graph. The R adapter may reuse third-party Jet code
 under vendor/jet; it must not call the old rho-kernel or server coordinator.
 Edges call Host ports. Domains interpret observations; adapters interact with
 runtimes. All effectful requests share Operation identity, admission and
@@ -23,7 +24,7 @@ result database. Preserve uncertainty after unconfirmed external effects.
 Cancellation requests and confirmed cancellation are different facts.
 
 Use the closest Next tests while iterating. The workspace gate is
-`cargo test --manifest-path next/Cargo.toml --workspace --locked`; architecture
+`cargo test --workspace --locked`; architecture
 checks use `node next/scripts/check-architecture.mjs`. Real Ark/R acceptance
 uses `node next/scripts/test-real-r.mjs` and needs an installed Ark, R/jsonlite,
 and local loopback access. A skipped external-runtime test is not a pass.

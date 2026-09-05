@@ -1,43 +1,31 @@
 # Build and release
 
-Ordinary development produces commits, not release claims. A release starts
-from an exact clean commit and uses the repository scripts and workflows as its
-executable definition.
+The current production build is the new CLI/local-browser workbench:
 
-## Local builds
-
-```bash
-npm --prefix desktop run rsr:build
-cargo build -p rho-desktop
+```sh
+cargo build --release --locked
 ```
 
-Platform bootstraps and packaging live in `scripts/bootstrap-*` and
-`scripts/build-*`. On Windows, `scripts/build-windows-installer.ps1` selects
-the supported GNU/Rtools toolchain and builds the NSIS bundle. On macOS,
-notarization helpers live in `scripts/macos-notary.mjs`; Linux packaging uses
-the AppImage and bundle scripts beside it.
+The artifact is `target/release/rho` (`rho.exe` on Windows). It embeds the client
+HTML, CSS and JavaScript. Ark and R remain explicitly configured external
+runtimes; an embedded UI does not imply those runtimes are bundled.
 
-## Candidate operations
+`.github/workflows/rho.yml` runs the new native source/transport checks.
+`.github/workflows/build-rho.yml` is an explicit manual binary build. It uploads
+build artifacts only; it does not sign, install, create a Release, update a site
+or publish a package. A workflow definition is not evidence that remote CI passed.
 
-`scripts/candidate-release.mjs`, the candidate workflows under
-`.github/workflows/`, and update-site tooling own candidate construction and
-machine evidence. Generated evidence belongs under `target/` or on the release
-it describes. It is not copied into `docs/`.
+The old Tauri candidate, NSIS/AppImage, updater and publication workflows have
+been removed from the active pipeline. Remaining old packaging scripts are
+pending retirement and are not a supported way to build the new system. Installer
+or signing work needs an explicit task and real platform verification; do not
+reuse old package metadata or claim an old installer contains the new Host.
 
-Version metadata must agree for the artifact being built. Signing, notarizing,
-installing, publishing, and updating are separate observable operations; report
-their actual result and artifact hash. A green source test does not imply an
-installed or published release.
+When handing off an explicitly requested distribution, report the exact commit,
+artifact paths, sizes, hashes and checks that actually ran. Build, signing,
+installation and publication are separate outcomes. Do not install or publish
+automatically.
 
-Provider and runner installation is also explicit. Signed metadata binds
-package ID, semver, channel, source origin, size, SHA-256, protocol, capability
-tier, and acknowledged permissions. Bytes stage into a version directory and
-an atomic active pointer changes only after verification. Rollback, mirror,
-truncation, and partial activation fail closed; the prior active version remains
-bootable. A staged runner cannot activate while jobs are running or its protocol
-is incompatible. Runtime job protocols contain no self-update command.
-
-Current legal and trust information lives at the repository root:
-[license](../LICENSE), [third-party notices](../LICENSES.md),
-[privacy](../PRIVACY.md), [security](../SECURITY.md), and
-[code signing](../CODE_SIGNING_POLICY.md).
+Legal and trust information remains in [LICENSE](../LICENSE),
+[LICENSES.md](../LICENSES.md), [SECURITY.md](../SECURITY.md) and
+[CODE_SIGNING_POLICY.md](../CODE_SIGNING_POLICY.md).

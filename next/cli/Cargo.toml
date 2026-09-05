@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [[bin]]
-name = "rho-next"
+name = "rho"
 path = "src/main.rs"
 
 [dependencies]

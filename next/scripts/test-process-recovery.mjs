@@ -9,13 +9,13 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 function run(command, args, input) {
-  const result = spawnSync(command, args, { cwd: root, input, encoding: "utf8", timeout: 30_000 });
+  const result = spawnSync(command, args, { cwd: root, input, encoding: "utf8", timeout: command === "cargo" ? 900_000 : 30_000 });
   assert.equal(result.status, 0, result.error?.message || result.stderr || result.signal);
   return result.stdout;
 }
-run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-next-cli", "--locked", "--offline"]);
-const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--offline"]));
-const binary = path.join(metadata.target_directory, "debug", process.platform === "win32" ? "rho-next.exe" : "rho-next");
+run("cargo", ["build", "--manifest-path", "../Cargo.toml", "-p", "rho-next-cli", "--locked", "--offline"]);
+const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "../Cargo.toml", "--no-deps", "--format-version", "1", "--offline"]));
+const binary = path.join(metadata.target_directory, "debug", process.platform === "win32" ? "rho.exe" : "rho");
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "rho-next-process-recovery-"));
 const project = path.join(directory, "project");
 fs.mkdirSync(project);

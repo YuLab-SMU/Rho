@@ -10,18 +10,20 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extension = process.platform === "win32" ? ".exe" : "";
 const ark = process.env.RHO_NEXT_ARK || path.resolve(root, "../target/debug", `ark${extension}`);
 const run = (command, args, options = {}) => {
-  const result = spawnSync(command, args, { cwd: root, encoding: "utf8", timeout: 120_000, ...options });
+  const result = spawnSync(command, args, { cwd: root, encoding: "utf8", timeout: command === "cargo" ? 900_000 : 120_000, ...options });
   assert.equal(result.status, 0, `${command} failed: ${result.error?.message || result.stderr || result.signal}`);
   return result.stdout;
 };
 assert.ok(fs.existsSync(ark), "Set RHO_NEXT_ARK to an installed Ark executable.");
 const rHome = process.env.RHO_NEXT_R_HOME || run("Rscript", ["--vanilla", "-e", "cat(R.home())"]).trim();
 const env = { ...process.env, RHO_NEXT_ARK: ark, RHO_NEXT_R_HOME: rHome };
-run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-next-host", "--test", "real_r",
-  "--locked", "--", "--ignored", "--nocapture"], { env, stdio: "inherit" });
-run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-next-cli", "--locked"], { stdio: "inherit" });
-const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--locked"]));
-const binary = path.join(metadata.target_directory, "debug", `rho-next${extension}`);
+run("cargo", ["test", "--manifest-path", "../Cargo.toml", "-p", "rho-next-host", "--test", "real_r",
+  "--locked", "--no-run"], { env, stdio: "inherit" });
+run("cargo", ["test", "--manifest-path", "../Cargo.toml", "-p", "rho-next-host", "--test", "real_r",
+  "--locked", "--", "--ignored", "--nocapture"], { env, stdio: "inherit", timeout: 120_000 });
+run("cargo", ["build", "--manifest-path", "../Cargo.toml", "-p", "rho-next-cli", "--locked"], { stdio: "inherit" });
+const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "../Cargo.toml", "--no-deps", "--format-version", "1", "--locked"]));
+const binary = path.join(metadata.target_directory, "debug", `rho${extension}`);
 const project = fs.mkdtempSync(path.join(os.tmpdir(), "rho-next-real-cli-"));
 try {
   const database = path.join(project, "next.sqlite");

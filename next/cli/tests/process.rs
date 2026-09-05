@@ -25,7 +25,7 @@ fn local_process_flows_through_session_journal_and_idempotency() {
     let root = dir.path().join("project");
     std::fs::create_dir(&root).unwrap();
     let mut child = Guard(
-        Command::new(env!("CARGO_BIN_EXE_rho-next"))
+        Command::new(env!("CARGO_BIN_EXE_rho"))
             .arg("--project")
             .arg(&root)
             .arg("--database")

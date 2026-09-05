@@ -1,2 +1,0 @@
-[env]
-LBUG_VERSION = { value = "0.20.1", force = true }

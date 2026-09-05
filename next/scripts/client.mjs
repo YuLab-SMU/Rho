@@ -56,7 +56,7 @@ try {
       [
         "run",
         "--manifest-path",
-        path.join(root, "Cargo.toml"),
+        path.join(root, "..", "Cargo.toml"),
         "-p",
         "rho-next-contract",
         "--bin",
