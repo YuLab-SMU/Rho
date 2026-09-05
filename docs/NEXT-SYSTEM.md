@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-05
 >
-> 当前阶段：N6 SSH/Slurm 已接入 Host/CLI 并通过本地协议测试；远程实测、资源回收和生产切换仍待完成
+> 当前阶段：本机 Environment 材料回收已验证；下一步 N7 公共入口，远程实测与生产切换仍待完成
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -57,14 +57,14 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 项目 | 当前事实 |
 | --- | --- |
 | 总体状态 | 真实 Ark/R、Project/Git、环境计划/隔离安装/验证/新会话绑定及长期 CLI 已贯通；仍未替换旧生产入口 |
-| 当前里程碑 | N6 Execution（Building）；SSH/Slurm 客户端路径与本地协议测试已完成，真实远程目标尚待指定 |
+| 当前里程碑 | N6 本机恢复/材料回收已验证，SSH/Slurm 协议实现已验证；转入 N7 公共入口，真实远程目标尚待指定 |
 | 已完成生产切换的 capability | 0；独立 Next CLI 的可用能力不计为旧生产入口已切换 |
 | 已退役的旧 capability 实现 | 0 |
 | 旧系统策略 | 冻结为行为参考；不作为 Next 的代码依赖 |
 | 前端策略 | 延后；需要时仅建立极简统一客户端 |
 | 数据策略 | Next 使用独立 schema 和数据目录，切换前不双写 |
 
-已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议实现 `2f9ce6b`。
+已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议 `2f9ce6b`、材料回收 `e1820f1`。
 这些引用对应下方历史验证记录，不代表当前工作树已重新通过全部测试。
 N6 的本地执行、取消、输出收集已在 Host/CLI 验证；Git 和 Environment 复用同一进程执行器。Environment 与普通本地命令分别通过真实 Host 强制退出验收；后者不需要 R，并覆盖脱离进程组的子进程。验证只覆盖本机可观察、保留标记的进程，不代表远程任务或任意逃逸方式也已覆盖。
 
@@ -762,6 +762,8 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | environment.realize | Operation | Next CLI/Host | environment | Ready | 新隔离库安装与 namespace verification；现有会话不变 |
 | environment.verify | Operation | Next CLI/Host | environment | Ready | 校验包库内容及实际 namespace；新 Ark 绑定前重验 |
 | environment.reconcile | Operation | Next 独立 CLI/Host；生产未接入 | environment | Ready（本机 Host 崩溃验收） | 统一入口切换；仅清理本机已标记资源，不改写原结果 |
+| environment.retention / cleanup_status | Query | Next 独立 CLI/Host | environment | Ready（本机材料验收） | 公共入口接入；查询不改变材料或 Operation |
+| environment.cleanup / restore_cleanup / purge_cleanup | Operation | Next 独立 CLI/Host | environment | Ready（本机材料验收） | 公共入口接入；隔离、恢复与永久删除分别记录 |
 | process.run_local | Operation | 多条旧生产路径；Next Host/CLI 已接入 | execution | Ready（本机正常/崩溃路径） | 公共入口切换 |
 | process.reconcile | Operation | Next 独立 CLI/Host；生产未接入 | execution | Ready（本机无 R 验收） | 公共入口切换；仅针对当前可见的同用户标记进程 |
 | process.run_remote | Operation | 旧执行路径；Next Host/CLI 已注册 | execution / ssh adapter | Building（本地协议测试通过） | 指定目标后进行真实 SSH 验收 |
@@ -943,7 +945,7 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 实现：每个 realization 有新的 library；锁、来源和包库内容都有摘要。namespace probe 在单独的 R 进程中执行，禁用用户库 fallback，验证真实版本与路径。
 - 绑定：realize 返回 available_not_active；旧 R 会话保持原有库。新 Host 使用 --environment 引用成功 receipt，先复验再启动 Ark；JSON/检查支持 namespace 先载入，再切换科学库路径。
 - 证据：临时本地包计划/安装、renv 恢复、完整 helper/Host/CLI、源码/锁/包库变更拒绝、原用户库存不变、R 中真实调用 fixture_answer 返回 42。
-- 限制：包脚本仍是 native user process；N6 已补充正常取消与 Environment Host 崩溃后的显式恢复，staging 自动回收仍未完成。远程仓库与其他平台尚未实测，不由本地 fixture 替代其验收。
+- 限制：包脚本仍是 native user process；N6 已补充正常取消、显式恢复及 N-D022 的材料回收。成功产物与不确定恢复材料默认保留，没有全局自动清扫。远程仓库与其他平台尚未实测。
 
 ### N-D018 — 共享进程执行器，领域补充原生子进程清理
 
@@ -964,7 +966,7 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 恢复入口：environment.reconcile 只接受当前 caller/project 范围内已经终止的 plan/realize/verify。它走原 Gateway、共享 lane 和事务；原生清理在发信号前检查进程的 Operation tag。
 - 真相：新 Operation 返回停止的本机进程与保留的 staging。旧 Operation 的 uncertain、output 与时间记录不被改写，旧 Invocation 不重跑。清理不等于回滚、环境激活或取消远程作业。
 - 证据：真实 CLI 在安装子进程报告开始后被 SIGKILL；只读查询保持数据库不变。错项目与错 marker 拒绝清理，原生 ps 检查确认进程仍活着；正确请求使连接关闭。丢失引用仍为 uncertain，重复恢复可观察到空进程集合。
-- 限制：目前验证范围为 macOS、本机 R/ps 和临时 fixture。普通 process.run_local 恢复由 N-D020 单独验证；自动 staging 回收及其他平台仍未完成。
+- 限制：目前验证范围为 macOS、本机 R/ps 和临时 fixture。普通 process.run_local 恢复由 N-D020 单独验证，材料保留/回收见 N-D022；其他平台仍未完成。
 
 ### N-D020 — 从当前原生进程状态恢复，不信任历史 PID
 
@@ -988,6 +990,18 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 机械边界：显式 Bash body 与 typed 资源选项；脚本中的 SBATCH 指令和继承的 Slurm CLI 选项不能偷偷改变分配。连接使用严格主机密钥检查，关闭 agent forwarding 与共享控制连接。
 - 证据：本地假 SSH/调度器运行了真实 argv、stdin 和 POSIX 引用路径，验证成功/丢回执、查询纯度、歧义拒绝、取消回执不等于终态。没有连接服务器或提交真实作业。
 - 限制：版本 1 是单节点/单任务分配；真实目标、工具版本、远程权限及运行行为仍需验收。SSH 超时、本地取消或 255 状态只能留下远程结果不确定，不能宣称远端已停止。
+
+### N-D022 — 引用保护下的显式材料回收
+
+- 日期：2026-09-05
+- 状态：Accepted；本机真实 R/Environment Verified
+- 保留规则：成功产物、运行中和 uncertain 来源保留；只考虑 failed/cancelled 的 plan/realization 暂存。缺失原生标记、仍有进程、引用扫描不完整或当前 R 使用情况不可观察时，不回收。
+- 使用事实：成功环境输出通过原 Journal 的有界只读页检查；当前 R 返回实际 .libPaths 与已加载命名空间路径，不用启动配置推断实际使用。没有新增引用数据库或 Evidence 图。
+- 操作：retention/cleanup_status 是 Query；cleanup、restore_cleanup、purge_cleanup 是独立 Operation。先将单个受控目录移入隔离区；永久删除必须显式请求，不触碰 Project 文件、成功库、Workspace 报告/日志或未识别的孤立材料。
+- 前置条件：预览给出元数据 fingerprint；变更前重新核对引用、进程与 fingerprint。它不是科学内容版本或 Rho revision。目录枚举有数量上限，不跟随内部符号链接，特殊文件阻止回收。
+- 恢复：隔离路径由 cleanup OperationId 定位。真实重命名后事务失败，重启仍可 query/restore/purge 已隔离材料，不重放移动、不改写旧结果。原生恢复标记在永久删除暂存后仍保留。
+- 证据：真实取消安装后，手动加入 .libPaths 会阻止回收，移除后允许；过期预览拒绝；隔离/恢复/永久删除及提交故障恢复通过，外部 symlink 目标不变。
+- 边界：保护 Rho 声明的引用与可观察 R 使用情况，不声称追踪所有外部进程或分析任意代码里的未来文件引用。默认不自动删除科学产物。
 
 ## 24. Open Decisions
 
@@ -1125,6 +1139,15 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 回归：真实 R 与 Environment 验证仍通过。生产切换：无；Legacy 删除：无。
 - 下一步：等待目标信息期间完成本机 staging/恢复材料保留与回收；目标获指定后补真实 SSH/Slurm 验收，再继续公共入口和旧系统退役。
 
+### 2026-09-05 — Environment 材料保留与回收
+
+- Git：`e1820f1`；本机材料回收检查点，远程实测与整个替换仍未完成。
+- 实现：统一的预览、隔离、恢复和永久删除；成功输出引用页与实时 Workspace 库使用检查。所有变更仍由原 Operation 事务提交，未新增材料状态数据库。
+- 发现与修正：base 内建命名空间不能像普通包一样查询 path，最初误报使用情况不完整；明确处理后验证了真正的活跃库保护，而不是依靠查询错误阻止回收。
+- 验证：Next workspace tests、Clippy、architecture check 通过；真实 Environment 测试覆盖 stale preview、引用保护、隔离/恢复/永久删除、链接目标保留和重命名后提交失败恢复；真实 R 验收通过。
+- 范围：只对私有测试目录执行删除，未清理实际用户材料。恢复标记及原结果被保留；生产切换与 Legacy 删除均无。
+- 下一步：N7 统一 MCP 入口和极简客户端；真实 SSH/Slurm 目标仍待指定。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。
@@ -1179,9 +1202,9 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 ## 27. 当前唯一下一步
 
-N6：完成执行能力的真实验收与资源收敛。
+N7：让外部 Agent 与极简客户端使用同一套科学空间端口。
 
-本机恢复已验证，SSH/Slurm 已接入并通过本地协议测试。真实远程目标尚待用户指定；未指定前不连接或提交作业。当前可执行出口是 staging 与恢复材料的保留/回收：只处理已确认不再被使用的本机材料，保留 uncertain 的恢复依据，不删除活跃或已绑定环境。
+本机恢复与 Environment 材料回收已验证，SSH/Slurm 已实现并通过本地协议测试。当前可执行出口是 MCP：从现有 Capability Registry 暴露能力，所有请求仍进入 Host 五端口，不复制业务逻辑、Conversation 或 Agent 行为。随后接入生成式前端 contract 与极简客户端，并逐项切换、删除旧生产入口。
 
 必须只包含：
 
@@ -1189,12 +1212,12 @@ N6：完成执行能力的真实验收与资源收敛。
 - 保留两条已验证的本机显式恢复路径，不把 scoped observation 扩张成全系统隔离承诺；
 - SSH/Slurm adapter 使用原生 job/host identity，未知提交结果不得自动重提；
 - 未提供真实远程运行条件时明确区分协议测试与实际远程验收；
-- 并行保留 N7 公共入口、staging 回收和 N8 旧代码删除的未完成要求。
+- 保留明确的材料保留策略，不用全局清扫替代引用判断；
+- 并行保留远程实测、N7 公共入口与 N8 旧代码删除的未完成要求。
 
 此阶段不创建：
 
-- MCP；
-- Desktop；
+- 完整旧桌面体验；
 - Artifact framework；
 - Audit、Evidence、Policy 或 Revision subsystem。
 
