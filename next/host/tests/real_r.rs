@@ -1,4 +1,4 @@
-use rho_next_contract::{CapabilityRef, Invocation, OperationStatus};
+use rho_next_contract::{CapabilityRef, Invocation, OperationStatus, QueryRequest, QueryStatus};
 use rho_next_host::{ArkConfig, NextHost};
 use serde_json::json;
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -9,6 +9,13 @@ fn request(id: &str, code: &str) -> Invocation {
         capability: CapabilityRef::new("workspace.run_r", 1).unwrap(),
         arguments: json!({"code":code}),
         preconditions: Vec::new(),
+    }
+}
+
+fn query(id: &str, arguments: serde_json::Value) -> QueryRequest {
+    QueryRequest {
+        capability: CapabilityRef::new(id, 1).unwrap(),
+        arguments,
     }
 }
 
@@ -110,6 +117,20 @@ async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
         .await
         .unwrap();
     assert_eq!(live.status, OperationStatus::Running);
+    let events_before_busy = host.outbox(&context, 0, 1000).await.unwrap();
+    let busy = tokio::time::timeout(
+        Duration::from_millis(250),
+        host.query_snapshot(&context, query("workspace.snapshot", json!({}))),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(busy.status, QueryStatus::Busy);
+    assert!(busy.data.is_none());
+    assert_eq!(
+        host.outbox(&context, 0, 1000).await.unwrap(),
+        events_before_busy
+    );
     let cancellation = host
         .request_cancellation(&context, &live.operation.operation_id)
         .await
@@ -136,10 +157,167 @@ async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
         .unwrap();
     assert_eq!(dead.status, OperationStatus::Uncertain, "{dead:?}");
     assert!(dead.recovery.is_some());
+    let unavailable = host
+        .query_snapshot(&context, query("workspace.snapshot", json!({})))
+        .await
+        .unwrap();
+    assert_eq!(unavailable.status, QueryStatus::Unavailable);
     assert_eq!(
         host.invoke(&context, request("quit", "quit(save = 'no')"))
             .await
             .unwrap(),
         dead
     );
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R with rlang for non-forcing binding inspection"]
+async fn real_workspace_queries_are_bounded_and_do_not_force_bindings_or_record_operations() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = ArkConfig {
+        executable: PathBuf::from(std::env::var_os("RHO_NEXT_ARK").expect("RHO_NEXT_ARK required")),
+        r_home: PathBuf::from(
+            std::env::var_os("RHO_NEXT_R_HOME").expect("RHO_NEXT_R_HOME required"),
+        ),
+        project_root: directory.path().into(),
+        data_root: directory.path().join("runtime"),
+        execution_timeout: Duration::from_secs(30),
+    };
+    let host = NextHost::open_ark(directory.path().join("next.sqlite"), config)
+        .await
+        .unwrap();
+    let context = NextHost::local_context();
+    let created = host
+        .invoke(
+            &context,
+            request(
+                "bindings",
+                r#"
+        stopifnot(requireNamespace("rlang", quietly = TRUE))
+        hits <- 0L
+        delayedAssign("lazy_value", { hits <<- hits + 1L; 123 })
+        makeActiveBinding("active_value", function() { hits <<- hits + 1L; 456 }, .GlobalEnv)
+        length.trap <- function(x) { hits <<- hits + 1L; stop("length must not run") }
+        print.trap <- function(x) { hits <<- hits + 1L; stop("print must not run") }
+        object <- structure(list(x = 1), class = "trap")
+        numbers <- 1:100
+        table <- data.frame(a = 1:5, b = letters[1:5])
+        text_table <- data.frame(text = paste(rep("a", 600), collapse = ""))
+        invisible(NULL)
+    "#,
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(created.status, OperationStatus::Succeeded, "{created:?}");
+    let history = host.outbox(&context, 0, 1000).await.unwrap();
+    let snapshot = host
+        .query_snapshot(&context, query("workspace.snapshot", json!({"limit":200})))
+        .await
+        .unwrap();
+    assert_eq!(snapshot.status, QueryStatus::Ready, "{snapshot:?}");
+    assert_eq!(snapshot.target, created.operation.target);
+    assert_eq!(snapshot.source, "ark/rho.bridge");
+    assert!(snapshot.observed_at_ms > 0);
+    let objects = snapshot.data.as_ref().unwrap()["objects"]
+        .as_array()
+        .unwrap();
+    assert!(objects.iter().any(|object| object["name"] == "numbers"));
+    for (name, expected_kind) in [
+        ("lazy_value", "promise"),
+        ("active_value", "active_binding"),
+        ("absent", "missing"),
+    ] {
+        let result = host
+            .query_snapshot(
+                &context,
+                query("workspace.inspect_object", json!({"name":name})),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.status, QueryStatus::Ready, "{result:?}");
+        assert_eq!(result.data.as_ref().unwrap()["kind"], json!(expected_kind));
+        assert_eq!(result.data.as_ref().unwrap()["preview"], json!(null));
+    }
+    let object = host
+        .query_snapshot(
+            &context,
+            query("workspace.inspect_object", json!({"name":"object"})),
+        )
+        .await
+        .unwrap();
+    assert_eq!(object.data.as_ref().unwrap()["classes"], json!(["trap"]));
+    let numbers = host
+        .query_snapshot(
+            &context,
+            query(
+                "workspace.inspect_object",
+                json!({"name":"numbers","max_items":3}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(numbers.data.as_ref().unwrap()["preview"], json!([1, 2, 3]));
+    assert_eq!(numbers.data.as_ref().unwrap()["truncated"], json!(true));
+    let table = host
+        .query_snapshot(
+            &context,
+            query(
+                "workspace.inspect_object",
+                json!({"name":"table","max_items":2}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(table.data.as_ref().unwrap()["dimensions"], json!([5, 2]));
+    assert_eq!(
+        table.data.as_ref().unwrap()["preview"][0]["values"],
+        json!([1, 2])
+    );
+    let clipped = host
+        .query_snapshot(
+            &context,
+            query("workspace.inspect_object", json!({"name":"text_table"})),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        clipped.data.as_ref().unwrap()["preview"][0]["values"][0]
+            .as_str()
+            .unwrap()
+            .len(),
+        512
+    );
+    assert_eq!(clipped.data.as_ref().unwrap()["truncated"], json!(true));
+    let bounded = host
+        .query_snapshot(&context, query("workspace.snapshot", json!({"limit":2})))
+        .await
+        .unwrap();
+    assert_eq!(
+        bounded.data.as_ref().unwrap()["objects"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(bounded.data.as_ref().unwrap()["truncated"], json!(true));
+    assert!(
+        host.query_snapshot(&context, query("workspace.snapshot", json!({"limit":201})))
+            .await
+            .is_err()
+    );
+    assert!(
+        host.query_snapshot(
+            &context,
+            query("workspace.snapshot", json!({"expected_session":"stale"}))
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(host.outbox(&context, 0, 1000).await.unwrap(), history);
+    let proof = host
+        .invoke(&context, request("no-side-effects", "hits"))
+        .await
+        .unwrap();
+    assert_eq!(proof.output.as_ref().unwrap()["value"], json!(0));
 }

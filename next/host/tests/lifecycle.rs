@@ -100,6 +100,33 @@ async fn bad_input_scope_and_stale_session_do_not_execute() {
 }
 
 #[tokio::test]
+async fn query_scopes_and_input_validation_share_the_registry_without_operation_admission() {
+    use rho_next_contract::{QueryRequest, QueryStatus};
+    let host = host(Arc::new(DeterministicWorkspaceRuntime::default())).await;
+    let mut context = NextHost::local_context();
+    let query = QueryRequest {
+        capability: CapabilityRef::new("workspace.snapshot", 1).unwrap(),
+        arguments: json!({}),
+    };
+    context.scopes.remove("workspace.read");
+    assert!(matches!(
+        host.query_snapshot(&context, query.clone()).await,
+        Err(OperationError::AccessDenied { .. })
+    ));
+    context = NextHost::local_context();
+    let reply = host.query_snapshot(&context, query.clone()).await.unwrap();
+    assert_eq!(
+        reply.status,
+        QueryStatus::Unavailable,
+        "a fake runtime must not manufacture live R observations"
+    );
+    let mut invalid = query;
+    invalid.arguments = json!({"limit":0});
+    assert!(host.query_snapshot(&context, invalid).await.is_err());
+    assert!(host.outbox(&context, 0, 100).await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn read_paths_and_cancellation_cannot_cross_caller_identity() {
     let host = host(Arc::new(DeterministicWorkspaceRuntime::default())).await;
     let context = NextHost::local_context();

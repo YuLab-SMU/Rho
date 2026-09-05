@@ -1,9 +1,17 @@
 # Loaded into a private environment by the Ark adapter. No Operation or Store policy here.
 rho_dispatch <- function(request) {
   stopifnot(identical(request$protocol_version, 1L),
-            identical(request$action, "execute"),
-            is.character(request$request_id), length(request$request_id) == 1L,
-            is.character(request$payload$code), length(request$payload$code) == 1L)
+            request$action %in% c("execute", "snapshot", "inspect_object"),
+            is.character(request$request_id), length(request$request_id) == 1L)
+  if (!identical(request$action, "execute")) {
+    value <- switch(request$action,
+                    snapshot = rho_workspace_snapshot(request$payload$limit),
+                    inspect_object = rho_inspect_object(request$payload$name, request$payload$max_items))
+    return(list(protocol_version = 1L, request_id = request$request_id,
+                outcome = "succeeded", error = NULL, value = value,
+                conditions = list(), conditions_truncated = FALSE))
+  }
+  stopifnot(is.character(request$payload$code), length(request$payload$code) == 1L)
   conditions <- list()
   truncated <- FALSE
   add_condition <- function(kind, condition) {

@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-04
 >
-> 当前阶段：N1/N2 已验证；下一步 N3 Workspace Query
+> 当前阶段：N1—N3 已验证；下一步 N4 Project/Git
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -34,14 +34,14 @@
 - Retired：旧入口和实现已经不可达并删除。
 
 禁止把 Target 写成当前能力，禁止用“应该可用”代替验证结果。
-第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1/N2 已在本机验证；生产切换仍未完成。确定性 fake runtime 只用于测试。
+第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1—N3 已在本机验证；生产切换仍未完成。确定性 fake runtime 只用于测试。
 
 ## 2. 当前摘要
 
 | 项目 | 当前事实 |
 | --- | --- |
-| 总体状态 | 独立 Next workspace 已贯通真实 Ark/R、统一 Operation、SQLite 和 CLI；N1/N2 已验证 |
-| 当前里程碑 | N3 — 有限 Workspace Query；之后继续 Project、Environment、Execution 与入口切换 |
+| 总体状态 | 真实 Ark/R、Operation、SQLite、Workspace Query 与长期 CLI 会话已贯通；N1—N3 本机验证通过 |
+| 当前里程碑 | N4 — Project/Git；之后继续 Environment、Execution 与入口切换 |
 | Next 已拥有的 capability | 0 |
 | 已退役的旧 capability 实现 | 0 |
 | 旧系统策略 | 冻结为行为参考；不作为 Next 的代码依赖 |
@@ -618,6 +618,7 @@ next 是迁移期名称。旧系统全部退役后，应把它提升为正常仓
 | Schemars | 从 Rust contract 生成 JSON Schema | N1 评估 |
 | Tower | Gateway middleware composition | 第二个真实 middleware 出现后再决定 |
 | Ark / Jet | 权威交互式 R runtime | N2 已复用第三方 Jet transport；本机 Ark 0.1.252 + R 4.5.2 验证通过 |
+| rlang | 无求值检查 lazy binding | N3 使用；缺失时仅报告未检查绑定，不强制求值 |
 | renv + pak | R environment declaration/realization | Environment 阶段采用 |
 | Pixi | 外层科学环境 | Environment 阶段 PoC |
 | Slurm / slurmrestd | Remote job truth | Execution 阶段采用 |
@@ -684,7 +685,7 @@ building 只是开发进度，不是运行时 owner。禁止 shadow execution �
 | N0 | 宪章与台账 | 本文档进入治理索引并通过文档检查 | Complete |
 | N1 | Walking skeleton | Invocation 经 Gateway、假/内存 Handler、SQLite atomic commit 后可由 CLI 查询 | Verified |
 | N2 | 真实 Workspace R | workspace.run_r 贯通真实 R，支持结果、条件、取消请求和 uncertain | Verified（本机 Ark/R；生产未切换） |
-| N3 | Workspace Query | querySnapshot 返回有来源、时间和 completeness 的 Workspace observation | Not started |
+| N3 | Workspace Query | querySnapshot 返回有来源、时间和 completeness 的 Workspace observation | Verified（含长期 CLI 会话；生产未切换） |
 | N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Not started |
 | N5 | Environment | observe/plan/realize/verify 首条链路完成 | Not started |
 | N6 | Execution | local process 后再扩展 SSH/Slurm | Not started |
@@ -711,10 +712,10 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | operation.invoke | Command port | Next 独立 CLI；旧生产入口未切换 | operation | Ready | N2 真实 runtime |
 | operation.get | Query port | Next 独立 CLI；旧生产入口未切换 | operation/sqlite | Ready | N7 公共边缘接入 |
 | operation.request_cancellation | Command port | Legacy 生产入口；Next Host 已验证 | operation | Ready | N7 公开入口接入 |
-| operation.subscribe | Subscription | Legacy fragments | sqlite outbox/host | Planned | cursor 恢复验证 |
+| operation.subscribe | Subscription | Legacy 生产；Next cursor page 已验证 | sqlite outbox/host | Building | N7 push/消费进度语义仍待接入 |
 | workspace.run_r | Operation | rho-server coordinator | workspace | Ready | Next 真实 R 已验证；待统一入口切换 |
-| workspace.snapshot | Query | rho-server + r/rho.bridge | workspace | Planned | N3 bounded observation |
-| workspace.inspect_object | Query | rho-server + r/rho.bridge | workspace | Planned | N3 typed response |
+| workspace.snapshot | Query | rho-server + r/rho.bridge | workspace | Ready | 已验证 bounded/busy/无 Operation；待切换入口 |
+| workspace.inspect_object | Query | rho-server + r/rho.bridge | workspace | Ready | 已验证不求值绑定与有限预览；待切换入口 |
 | project.apply_patch | Operation | desktop + control-plane | project | Deferred | N4 Git precondition |
 | environment.observe | Query | desktop/server/workspace | environment | Deferred | N5 owner observation |
 | environment.realize | Operation | 未形成单一 live path | environment | Deferred | N5 verified receipt |
@@ -858,6 +859,15 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 后果：执行与取消信号分离。只收到中断请求不能报告 cancelled；未收到完整 execute_reply/idle/result 则保留 uncertain。Ark startup 使用规范化项目目录和显式 R_HOME。
 - 边界：当前是 native user process，不声称具备 OS sandbox；observations 标记 partial。严格 containment、输出 retention、长期 host/IPC 仍需完成。
 
+### N-D014 — Query 不持有 Journal，命令与查询共享 capability 注册和 Workspace lane
+
+- 日期：2026-09-04
+- 状态：Accepted；N3 Verified
+- 决定：QueryGateway 没有 journal 或 OperationId generator；与 OperationGateway 使用同一个 CapabilityRegistry。Workspace 查询只尝试获取同一个运行 lane，忙时返回 busy，不另起 R。
+- 证据：真实 R 查询前后 outbox 完全一致；lazy/active binding 和自定义 length/print 的副作用计数仍为 0；长期 CLI 在 R 阻塞时能查询 busy、读取 Operation 并取消。
+- 后果：新增 Query 通过注册 handler 扩展。session edge 只转发五个 typed Host port；stdin 分帧有字节和并发上限，关闭输入后等待已接受操作结束。
+- 限制：观察是 partial；复杂 classed/S4 对象仅暴露元数据；subscribe 当前只读 cursor page，不宣称已实现 live push。
+
 ## 24. Open Decisions
 
 以下问题尚未决定，不能由实现者顺手固化：
@@ -920,6 +930,15 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - Legacy 删除：无；Next-ready 与 production ownership 分别记录，尚未删除仍有调用者的旧实现。
 - 下一步：N3 Workspace snapshot/object Query，统一 busy/live observation；随后继续 N4—N8。
 
+### 2026-09-04 — N3 Workspace Query 与长期 CLI 会话
+
+- 实现：共享 CapabilityRegistry、独立无 Journal 的 QueryGateway、snapshot/inspect_object 两个 owner handler；typed stdio session 转发五个 Host port。
+- 真实验证：`node next/scripts/test-real-r.mjs` 通过，覆盖两个 R 集成场景及实际长期 CLI：对象状态共享、查询不产生日志、惰性/活动绑定不被求值、普通 data frame/向量有限预览、busy 查询、取消、EOF 退出。
+- 常规验证：Next workspace tests、session 分帧/超长帧/连续请求测试及 Clippy 通过；本次未运行旧系统全套测试。
+- 检查点：N1/N2 代码为 `d0ba58b`；N3 将作为同一 WIP 分支的后续提交。
+- Legacy 删除：无；生产消费者尚未迁移。
+- 下一步：N4 Project/Git 原生状态与 patch capability。
+
 ## 26. 每次工作结束时如何更新
 
 只有发生以下情况才更新本文档：
@@ -955,20 +974,18 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 
 ## 27. 当前唯一下一步
 
-N3：让 Workspace Query 返回真实、有限且可定位到 R session 的观察。
+N4：以 Git 与当前文件字节作为 Project owner 的真实状态。
 
 必须只包含：
 
-- querySnapshot 与 inspect_object，不生成无意义的 Operation/timeline；
-- 返回 session identity、source、observed_at、completeness 和条目/字节上限；
-- busy 会话查询返回明确 busy 或已标注的缓存，不越过 Workspace 执行 lane；
-- 对 active binding、promise 或无法无副作用读取的对象显式说明限制；
-- CLI 保持同一 Host 的会话入口，以实际验证多次执行与查询；
-- 真实 R acceptance 覆盖查询不改变 Operation 历史与并发读取。
+- project.snapshot Query：Git HEAD、dirty/untracked 状态和请求文件的内容摘要；
+- project.apply_patch Operation：owner 校验原生 precondition，调用 Git，记录实际结果；
+- 保留用户已有 dirty/staged/untracked 内容，不能把 HEAD 当作工作树快照；
+- Git 退出/进程中断后分别观察是否有 partial effect；不创造另一套 project revision；
+- 先在临时 Git 仓库完成真实端到端验证，再切换旧文件入口。
 
-N3 暂不包含：
+N4 暂不包含：
 
-- Git mutation；
 - Environment；
 - MCP；
 - Desktop；

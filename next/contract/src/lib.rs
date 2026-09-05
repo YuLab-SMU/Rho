@@ -1,7 +1,13 @@
 #![forbid(unsafe_code)]
 
+mod query;
+pub use query::*;
+mod host;
+pub use host::*;
+
 use std::collections::BTreeSet;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -197,7 +203,7 @@ impl CallContext {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TargetRef {
     pub kind: String,
@@ -248,6 +254,7 @@ pub enum CancellationClass {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CapabilityDescriptor {
+    pub kind: CapabilityKind,
     pub capability: CapabilityRef,
     pub domain: String,
     pub input_schema: Value,
@@ -259,6 +266,13 @@ pub struct CapabilityDescriptor {
     pub idempotency: IdempotencyClass,
     pub retry: RetryClass,
     pub cancellation: CancellationClass,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityKind {
+    Operation,
+    Query,
 }
 
 impl CapabilityDescriptor {
@@ -345,7 +359,7 @@ impl OperationOutcome {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ObservationCompleteness {
     Complete,

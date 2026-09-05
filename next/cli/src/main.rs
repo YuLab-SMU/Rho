@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+use std::sync::Arc;
+mod session;
 
 use clap::{Parser, Subcommand};
 use rho_next_contract::{CapabilityRef, Invocation, OperationId, Precondition};
@@ -23,8 +25,41 @@ struct Cli {
     command: Command,
 }
 
+impl Cli {
+    async fn open_host(&self) -> Result<NextHost, String> {
+        if self.demo {
+            NextHost::open_demo(&self.database).await
+        } else {
+            let config = ArkConfig {
+                executable: self
+                    .ark
+                    .clone()
+                    .ok_or("--ark is required for a real Workspace")?,
+                r_home: self
+                    .r_home
+                    .clone()
+                    .ok_or("--r-home is required for a real Workspace")?,
+                project_root: self
+                    .project
+                    .clone()
+                    .ok_or("--project is required for a real Workspace")?,
+                data_root: self
+                    .database
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .join("runtime"),
+                execution_timeout: std::time::Duration::from_secs(600),
+            };
+            NextHost::open_ark(&self.database, config).await
+        }
+        .map_err(|error| error.to_string())
+    }
+}
+
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Keep one Host/R session alive; read and write the typed session protocol over stdio.
+    Session,
     Invoke {
         #[arg(long)]
         client_request_id: String,
@@ -56,33 +91,23 @@ async fn main() {
 async fn run() -> Result<(), String> {
     let cli = Cli::parse();
     let context = NextHost::local_context();
+    if matches!(cli.command, Command::Session) {
+        let host = Arc::new(cli.open_host().await?);
+        return session::serve(host, tokio::io::stdin(), tokio::io::stdout()).await;
+    }
+    let active_host = if matches!(cli.command, Command::Invoke { .. }) {
+        Some(cli.open_host().await?)
+    } else {
+        None
+    };
     match cli.command {
+        Command::Session => unreachable!(),
         Command::Invoke {
             client_request_id,
             code,
             expected_session,
         } => {
-            let host = if cli.demo {
-                NextHost::open_demo(&cli.database).await
-            } else {
-                let config = ArkConfig {
-                    executable: cli.ark.ok_or("--ark is required for a real Workspace")?,
-                    r_home: cli
-                        .r_home
-                        .ok_or("--r-home is required for a real Workspace")?,
-                    project_root: cli
-                        .project
-                        .ok_or("--project is required for a real Workspace")?,
-                    data_root: cli
-                        .database
-                        .parent()
-                        .unwrap_or(std::path::Path::new("."))
-                        .join("runtime"),
-                    execution_timeout: std::time::Duration::from_secs(600),
-                };
-                NextHost::open_ark(&cli.database, config).await
-            }
-            .map_err(|error| error.to_string())?;
+            let host = active_host.expect("invoke opens one host");
             let preconditions = expected_session
                 .map(|session| {
                     vec![Precondition {

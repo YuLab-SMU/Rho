@@ -1,14 +1,17 @@
 #![forbid(unsafe_code)]
 
+mod query;
+pub use query::{QueryGateway, QueryHandler};
+
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use rho_next_contract::{
-    CallContext, CallerIdentity, CancellationClass, CapabilityDescriptor, CapabilityRef,
-    ContractError, EffectObservation, Invocation, Operation, OperationEventRecord, OperationId,
-    OperationOutcome, OperationRecord, OutboxRecord, TargetRef,
+    CallContext, CallerIdentity, CancellationClass, CapabilityDescriptor, CapabilityKind,
+    CapabilityRef, ContractError, EffectObservation, Invocation, Operation, OperationEventRecord,
+    OperationId, OperationOutcome, OperationRecord, OutboxRecord, TargetRef,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -274,25 +277,59 @@ impl OperationIdGenerator for UuidOperationIdGenerator {
 }
 
 #[derive(Default)]
-pub struct OperationRegistry {
+pub struct CapabilityRegistry {
     handlers: BTreeMap<CapabilityRef, Arc<dyn OperationHandler>>,
+    queries: BTreeMap<CapabilityRef, Arc<dyn QueryHandler>>,
 }
 
-impl OperationRegistry {
+impl CapabilityRegistry {
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn register(&mut self, handler: Arc<dyn OperationHandler>) -> Result<(), OperationError> {
         handler.descriptor().validate()?;
+        if handler.descriptor().kind != CapabilityKind::Operation {
+            return Err(OperationError::Contract(
+                "operation handler requires an Operation descriptor".into(),
+            ));
+        }
         let capability = handler.descriptor().capability.clone();
-        if self.handlers.contains_key(&capability) {
+        if self.handlers.contains_key(&capability) || self.queries.contains_key(&capability) {
             return Err(OperationError::DuplicateCapability(
                 capability.display_key(),
             ));
         }
         self.handlers.insert(capability, handler);
         Ok(())
+    }
+
+    pub fn register_query(&mut self, handler: Arc<dyn QueryHandler>) -> Result<(), OperationError> {
+        let descriptor = handler.descriptor();
+        descriptor.validate()?;
+        if descriptor.kind != CapabilityKind::Query || !descriptor.potential_effects.is_empty() {
+            return Err(OperationError::Contract(
+                "query descriptors must be reads without declared effects".into(),
+            ));
+        }
+        let capability = descriptor.capability.clone();
+        if self.handlers.contains_key(&capability) || self.queries.contains_key(&capability) {
+            return Err(OperationError::DuplicateCapability(
+                capability.display_key(),
+            ));
+        }
+        self.queries.insert(capability, handler);
+        Ok(())
+    }
+
+    pub fn query_handler(
+        &self,
+        capability: &CapabilityRef,
+    ) -> Result<Arc<dyn QueryHandler>, OperationError> {
+        self.queries
+            .get(capability)
+            .cloned()
+            .ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))
     }
 
     pub fn handler(
@@ -309,12 +346,17 @@ impl OperationRegistry {
         self.handlers
             .values()
             .map(|handler| handler.descriptor().clone())
+            .chain(
+                self.queries
+                    .values()
+                    .map(|handler| handler.descriptor().clone()),
+            )
             .collect()
     }
 }
 
 pub struct OperationGateway {
-    registry: Arc<OperationRegistry>,
+    registry: Arc<CapabilityRegistry>,
     journal: Arc<dyn OperationJournal>,
     clock: Arc<dyn Clock>,
     id_generator: Arc<dyn OperationIdGenerator>,
@@ -337,7 +379,7 @@ impl Drop for ActiveOperation {
 
 impl OperationGateway {
     pub fn new(
-        registry: Arc<OperationRegistry>,
+        registry: Arc<CapabilityRegistry>,
         journal: Arc<dyn OperationJournal>,
         clock: Arc<dyn Clock>,
         id_generator: Arc<dyn OperationIdGenerator>,
@@ -603,6 +645,7 @@ mod tests {
         }
 
         let descriptor = CapabilityDescriptor {
+            kind: CapabilityKind::Operation,
             capability: CapabilityRef::new("test.noop", 1).unwrap(),
             domain: "test".to_string(),
             input_schema: json!({}),
@@ -613,7 +656,7 @@ mod tests {
             retry: rho_next_contract::RetryClass::Never,
             cancellation: CancellationClass::Unsupported,
         };
-        let mut registry = OperationRegistry::new();
+        let mut registry = CapabilityRegistry::new();
         registry
             .register(Arc::new(Noop {
                 descriptor: descriptor.clone(),

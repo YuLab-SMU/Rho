@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifySession } from "./verify-session.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extension = process.platform === "win32" ? ".exe" : "";
@@ -35,6 +36,8 @@ try {
   const query = JSON.parse(run(binary, ["--database", database, "get-operation", id]));
   assert.deepEqual(query.operation, output.operation);
   assert.deepEqual(fs.readFileSync(database), before);
+  await verifySession(binary, ["--database", path.join(project, "session.sqlite"),
+    "--ark", ark, "--r-home", rHome, "--project", project]);
   console.log("Verified real Ark/R session state, R errors with partial effects, confirmed cancellation, kernel exit, CLI invoke and read-only result query.");
 } finally {
   fs.rmSync(project, { recursive: true, force: true });

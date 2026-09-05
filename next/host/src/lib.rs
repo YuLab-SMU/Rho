@@ -8,16 +8,17 @@ use async_trait::async_trait;
 use rho_next_contract::{
     CallContext, CallerIdentity, CallerKind, CapabilityDescriptor, EffectObservation, Invocation,
     ObservationCompleteness, Operation, OperationEventRecord, OperationId, OperationRecord,
-    OutboxRecord,
+    OutboxRecord, QueryRequest, QuerySnapshot,
 };
 use rho_next_operation::{
-    CancellationRequestOutcome, Clock, OperationError, OperationGateway, OperationIdGenerator,
-    OperationJournal, OperationRegistry, StoredDomainFact, SystemClock, UuidOperationIdGenerator,
+    CancellationRequestOutcome, CapabilityRegistry, Clock, OperationError, OperationGateway,
+    OperationIdGenerator, OperationJournal, QueryGateway, StoredDomainFact, SystemClock,
+    UuidOperationIdGenerator,
 };
 use rho_next_sqlite::SqliteOperationJournal;
 use rho_next_workspace::{
-    RunRArguments, WorkspaceRunHandler, WorkspaceRuntime, WorkspaceRuntimeError,
-    WorkspaceRuntimeReport,
+    RunRArguments, WORKSPACE_READ_SCOPE, WorkspaceQueryHandler, WorkspaceQueryKind,
+    WorkspaceRunHandler, WorkspaceRuntime, WorkspaceRuntimeError, WorkspaceRuntimeReport,
 };
 use serde_json::json;
 
@@ -90,10 +91,37 @@ impl WorkspaceRuntime for DeterministicWorkspaceRuntime {
 
 pub struct NextHost {
     gateway: Arc<OperationGateway>,
+    queries: Arc<QueryGateway>,
     recovered_on_open: Vec<OperationRecord>,
 }
 
 impl NextHost {
+    pub async fn dispatch(
+        &self,
+        context: &CallContext,
+        request: rho_next_contract::HostRequest,
+    ) -> Result<serde_json::Value, OperationError> {
+        use rho_next_contract::HostRequest;
+        let result = match request {
+            HostRequest::Invoke(invocation) => {
+                serde_json::to_value(self.invoke(context, invocation).await?)
+            }
+            HostRequest::GetOperation { operation_id } => {
+                serde_json::to_value(self.get_operation(context, &operation_id).await?)
+            }
+            HostRequest::RequestCancellation { operation_id } => {
+                serde_json::to_value(self.request_cancellation(context, &operation_id).await?)
+            }
+            HostRequest::QuerySnapshot(query) => {
+                serde_json::to_value(self.query_snapshot(context, query).await?)
+            }
+            HostRequest::Subscribe {
+                after_sequence,
+                limit,
+            } => serde_json::to_value(self.outbox(context, after_sequence, limit).await?),
+        };
+        result.map_err(|error| OperationError::Contract(error.to_string()))
+    }
     pub async fn open_ark(
         database: impl AsRef<Path>,
         config: ArkConfig,
@@ -120,7 +148,10 @@ impl NextHost {
                 kind: CallerKind::Human,
                 id: "local-user".into(),
             },
-            scopes: std::collections::BTreeSet::from([RUN_R_SCOPE.into()]),
+            scopes: std::collections::BTreeSet::from([
+                RUN_R_SCOPE.into(),
+                WORKSPACE_READ_SCOPE.into(),
+            ]),
             connection_id: format!("cli:{}", std::process::id()),
             correlation_id: None,
             causation_id: None,
@@ -129,13 +160,15 @@ impl NextHost {
     }
 
     pub fn open_read_only(database: impl AsRef<Path>) -> Result<Self, OperationError> {
+        let registry = Arc::new(CapabilityRegistry::new());
         Ok(Self {
             gateway: Arc::new(OperationGateway::new(
-                Arc::new(OperationRegistry::new()),
+                registry.clone(),
                 Arc::new(SqliteOperationJournal::open_read_only(database)?),
                 Arc::new(SystemClock),
                 Arc::new(UuidOperationIdGenerator),
             )),
+            queries: Arc::new(QueryGateway::new(registry)),
             recovered_on_open: Vec::new(),
         })
     }
@@ -156,10 +189,20 @@ impl NextHost {
         clock: Arc<dyn Clock>,
         id_generator: Arc<dyn OperationIdGenerator>,
     ) -> Result<Self, OperationError> {
-        let mut registry = OperationRegistry::new();
-        registry.register(Arc::new(WorkspaceRunHandler::new(runtime)))?;
+        let mut registry = CapabilityRegistry::new();
+        let workspace = Arc::new(WorkspaceRunHandler::new(runtime));
+        registry.register(workspace.clone())?;
+        registry.register_query(Arc::new(WorkspaceQueryHandler::new(
+            workspace.clone(),
+            WorkspaceQueryKind::Snapshot,
+        )))?;
+        registry.register_query(Arc::new(WorkspaceQueryHandler::new(
+            workspace,
+            WorkspaceQueryKind::InspectObject,
+        )))?;
+        let registry = Arc::new(registry);
         let gateway = Arc::new(OperationGateway::new(
-            Arc::new(registry),
+            registry.clone(),
             journal,
             clock,
             id_generator,
@@ -167,6 +210,7 @@ impl NextHost {
         let recovered_on_open = gateway.recover_incomplete().await?;
         Ok(Self {
             gateway,
+            queries: Arc::new(QueryGateway::new(registry)),
             recovered_on_open,
         })
     }
@@ -193,6 +237,19 @@ impl NextHost {
             .map_err(|error| {
                 OperationError::Storage(format!("operation task ended without a result: {error}"))
             })?
+    }
+
+    pub async fn query_snapshot(
+        &self,
+        context: &CallContext,
+        request: QueryRequest,
+    ) -> Result<QuerySnapshot, OperationError> {
+        let queries = self.queries.clone();
+        let context = context.clone();
+        // Keep the Workspace lane until the read has finished, even if an edge disconnects.
+        tokio::spawn(async move { queries.query(&context, request).await })
+            .await
+            .map_err(|error| OperationError::Storage(format!("query task failed: {error}")))?
     }
 
     pub async fn get_operation(

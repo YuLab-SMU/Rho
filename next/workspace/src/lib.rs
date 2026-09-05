@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 
+mod query;
+pub use query::*;
+
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -111,6 +114,15 @@ impl WorkspaceRuntimeError {
 pub trait WorkspaceRuntime: Send + Sync {
     fn session_id(&self) -> &str;
 
+    async fn query(
+        &self,
+        _query: &WorkspaceQuery,
+    ) -> Result<WorkspaceObservation, WorkspaceRuntimeError> {
+        Err(WorkspaceRuntimeError::before_effect(
+            "this runtime does not support Workspace inspection",
+        ))
+    }
+
     async fn execute(
         &self,
         operation: &Operation,
@@ -146,6 +158,7 @@ impl WorkspaceRunHandler {
         ]);
         Self {
             descriptor: CapabilityDescriptor {
+                kind: rho_next_contract::CapabilityKind::Operation,
                 capability: CapabilityRef::new(RUN_R_CAPABILITY_ID, RUN_R_CAPABILITY_VERSION)
                     .expect("static capability identity is valid"),
                 domain: "workspace".to_string(),

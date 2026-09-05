@@ -10,7 +10,9 @@ use jet_core::{
 };
 use rho_next_contract::{EffectObservation, ObservationCompleteness, Operation, OperationOutcome};
 use rho_next_workspace::{
-    RunRArguments, WorkspaceRuntime, WorkspaceRuntimeError, WorkspaceRuntimeReport,
+    BindingSummary, InspectArguments, RunRArguments, SnapshotArguments, WorkspaceObservation,
+    WorkspaceQuery, WorkspaceRuntime, WorkspaceRuntimeError, WorkspaceRuntimeReport,
+    WorkspaceSnapshotData,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -26,6 +28,7 @@ use tokio::{sync::watch, time::Instant};
 use uuid::Uuid;
 
 const BRIDGE: &str = include_str!("../../../r/bridge/dispatch.R");
+const QUERIES: &str = include_str!("../../../r/bridge/query.R");
 const OUTPUT_LIMIT: usize = 1024 * 1024;
 
 pub struct ArkConfig {
@@ -119,8 +122,8 @@ impl ArkRuntime {
             timeout: config.execution_timeout,
         };
         let bootstrap = format!(
-            "local({{ e <- new.env(parent = baseenv()); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); invisible(TRUE) }})",
-            quote(BRIDGE)?,
+            "local({{ e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); invisible(TRUE) }})",
+            quote(&format!("{BRIDGE}\n{QUERIES}"))?,
             quote(&project.to_string_lossy())?
         );
         let bootstrap_output = runtime
@@ -270,23 +273,58 @@ struct BridgeResponse {
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
-enum BridgeAction {
-    Execute,
+#[serde(tag = "action", content = "payload", rename_all = "snake_case")]
+enum BridgeAction<'a> {
+    Execute(&'a RunRArguments),
+    Snapshot(&'a SnapshotArguments),
+    InspectObject(&'a InspectArguments),
 }
 
 #[derive(Serialize)]
 struct BridgeRequest<'a> {
     protocol_version: u16,
     request_id: &'a str,
-    action: BridgeAction,
-    payload: &'a RunRArguments,
+    #[serde(flatten)]
+    action: BridgeAction<'a>,
 }
 
 #[async_trait]
 impl WorkspaceRuntime for ArkRuntime {
     fn session_id(&self) -> &str {
         &self.session_id
+    }
+
+    async fn query(
+        &self,
+        query: &WorkspaceQuery,
+    ) -> Result<WorkspaceObservation, WorkspaceRuntimeError> {
+        let id = format!("query_{}", Uuid::new_v4().simple());
+        let action = match query {
+            WorkspaceQuery::Snapshot(args) => BridgeAction::Snapshot(args),
+            WorkspaceQuery::InspectObject(args) => BridgeAction::InspectObject(args),
+        };
+        let (response, _, result_path) = self
+            .bridge_call(&id, action, watch::channel(false).1)
+            .await?;
+        // Query transport files are temporary; no Operation or retained query history.
+        let _ = std::fs::remove_file(result_path);
+        let data = match query {
+            WorkspaceQuery::Snapshot(_) => {
+                let data: WorkspaceSnapshotData =
+                    serde_json::from_value(response.value).map_err(before)?;
+                serde_json::to_value(data).map_err(before)?
+            }
+            WorkspaceQuery::InspectObject(_) => {
+                let data: BindingSummary =
+                    serde_json::from_value(response.value).map_err(before)?;
+                serde_json::to_value(data).map_err(before)?
+            }
+        };
+        Ok(WorkspaceObservation {
+            session_id: self.session_id.clone(), source: "ark/rho.bridge".into(),
+            observed_at_ms: now_ms(), data, completeness: ObservationCompleteness::Partial,
+            notices: vec!["Bounded live observation; lazy/active bindings and classed values are not evaluated.".into()],
+        })
     }
 
     async fn execute(
@@ -304,15 +342,50 @@ impl WorkspaceRuntime for ArkRuntime {
         request: &RunRArguments,
         cancellation: watch::Receiver<bool>,
     ) -> Result<WorkspaceRuntimeReport, WorkspaceRuntimeError> {
-        let id = operation.operation_id.as_str();
+        let (response, captured, result_path) = self
+            .bridge_call(
+                operation.operation_id.as_str(),
+                BridgeAction::Execute(request),
+                cancellation,
+            )
+            .await?;
+        let observed_at_ms = now_ms();
+        Ok(WorkspaceRuntimeReport {
+            session_id: self.session_id.clone(),
+            value: response.value,
+            stdout: captured.stdout,
+            stderr: captured.stderr,
+            conditions: response.conditions,
+            output_references: captured.displays,
+            effect_observations: vec![EffectObservation {
+                kind: "r_execution".into(),
+                source: "ark".into(),
+                detail: json!({"child_pid":self.child_pid(), "outcome":response.outcome,
+                    "output_truncated":captured.truncated || response.conditions_truncated,
+                    "containment":"native_user_process", "result_path":result_path}),
+                observed_at_ms,
+                completeness: ObservationCompleteness::Partial,
+            }],
+            outcome: response.outcome,
+            error: response.error,
+        })
+    }
+}
+
+impl ArkRuntime {
+    async fn bridge_call(
+        &self,
+        id: &str,
+        action: BridgeAction<'_>,
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<(BridgeResponse, CapturedOutput, PathBuf), WorkspaceRuntimeError> {
         let result_path = self
             .data_root
             .join(format!("{:x}.json", Sha256::digest(id.as_bytes())));
         let bridge_request = BridgeRequest {
             protocol_version: 1,
             request_id: id,
-            action: BridgeAction::Execute,
-            payload: request,
+            action,
         };
         let request_json = serde_json::to_string(&bridge_request).map_err(before)?;
         let code = format!(
@@ -349,34 +422,18 @@ impl WorkspaceRuntime for ArkRuntime {
         };
         let response = read_report().map_err(|error| WorkspaceRuntimeError::after_possible_effect(error,
             Some(json!({"session_id":self.session_id, "result_path":result_path, "kernel_error":captured.protocol_error}))))?;
-        let observed_at_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
-        Ok(WorkspaceRuntimeReport {
-            session_id: self.session_id.clone(),
-            value: response.value,
-            stdout: captured.stdout,
-            stderr: captured.stderr,
-            conditions: response.conditions,
-            output_references: captured.displays,
-            effect_observations: vec![EffectObservation {
-                kind: "r_execution".into(),
-                source: "ark".into(),
-                detail: json!({"child_pid":self.child_pid(), "outcome":response.outcome,
-                    "output_truncated":captured.truncated || response.conditions_truncated,
-                    "containment":"native_user_process", "result_path":result_path}),
-                observed_at_ms,
-                completeness: ObservationCompleteness::Partial,
-            }],
-            outcome: response.outcome,
-            error: response.error,
-        })
+        Ok((response, captured, result_path))
     }
 }
 
 fn quote(value: &str) -> Result<String, String> {
     serde_json::to_string(value).map_err(|e| e.to_string())
+}
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
 }
 fn before(error: impl std::fmt::Display) -> WorkspaceRuntimeError {
     WorkspaceRuntimeError::before_effect(error.to_string())
