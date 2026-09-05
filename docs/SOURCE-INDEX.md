@@ -189,6 +189,25 @@ Checks:
 
 - `rust.extensions`: `["node","scripts/run-test-command.mjs","--timeout-seconds","300","--label","rust extensions","--","cargo","test","-p","rho-extension-runtime","-p","rho-plugin-dev","--locked"]`
 
+## `next-system`
+
+Documentation:
+
+- [Rho Next system charter and replacement ledger](<NEXT-SYSTEM.md>) — `NEXT-SYSTEM`
+
+Sources:
+
+- `docs/NEXT-SYSTEM.md`
+- `next/**`
+
+Checks:
+
+- `docs.index`: `["node","scripts/governance.mjs","check"]`
+- `docs.tool`: `["node","scripts/test-governance.mjs"]`
+- `next.architecture`: `["node","next/scripts/check-architecture.mjs"]`
+- `next.real-r`: `["node","next/scripts/test-real-r.mjs"]`
+- `next.rust`: `["cargo","test","--manifest-path","next/Cargo.toml","--workspace","--locked","--","--test-threads=1"]`
+
 ## `persistence-and-interfaces`
 
 Documentation:

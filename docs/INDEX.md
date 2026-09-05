@@ -24,6 +24,10 @@ Generated from `governance/registry.json`. Edit the JSON source and regenerate.
 
 - [Extension and plugin runtime](<components/EXTENSIONS.md>) — `EXTENSIONS`
 
+## `next-system`
+
+- [Rho Next system charter and replacement ledger](<NEXT-SYSTEM.md>) — `NEXT-SYSTEM`
+
 ## `persistence-and-interfaces`
 
 - [Architecture](<ARCHITECTURE.md>) — `ARCHITECTURE`

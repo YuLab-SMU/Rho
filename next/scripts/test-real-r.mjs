@@ -1,0 +1,41 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const extension = process.platform === "win32" ? ".exe" : "";
+const ark = process.env.RHO_NEXT_ARK || path.resolve(root, "../target/debug", `ark${extension}`);
+const run = (command, args, options = {}) => {
+  const result = spawnSync(command, args, { cwd: root, encoding: "utf8", timeout: 120_000, ...options });
+  assert.equal(result.status, 0, `${command} failed: ${result.error?.message || result.stderr || result.signal}`);
+  return result.stdout;
+};
+assert.ok(fs.existsSync(ark), "Set RHO_NEXT_ARK to an installed Ark executable.");
+const rHome = process.env.RHO_NEXT_R_HOME || run("Rscript", ["--vanilla", "-e", "cat(R.home())"]).trim();
+const env = { ...process.env, RHO_NEXT_ARK: ark, RHO_NEXT_R_HOME: rHome };
+run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-next-host", "--test", "real_r",
+  "--locked", "--", "--ignored", "--nocapture"], { env, stdio: "inherit" });
+run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-next-cli", "--locked"], { stdio: "inherit" });
+const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--locked"]));
+const binary = path.join(metadata.target_directory, "debug", `rho-next${extension}`);
+const project = fs.mkdtempSync(path.join(os.tmpdir(), "rho-next-real-cli-"));
+try {
+  const database = path.join(project, "next.sqlite");
+  const output = JSON.parse(run(binary, ["--database", database, "--ark", ark, "--r-home", rHome,
+    "--project", project, "invoke", "--client-request-id", "real-cli-once",
+    "--code", "x <- 21; cat('native R ready\\n'); x * 2"]));
+  assert.equal(output.runtime, "ark");
+  assert.equal(output.operation.status, "succeeded");
+  assert.equal(output.operation.output.value, 42);
+  const id = output.operation.operation.operation_id;
+  const before = fs.readFileSync(database);
+  const query = JSON.parse(run(binary, ["--database", database, "get-operation", id]));
+  assert.deepEqual(query.operation, output.operation);
+  assert.deepEqual(fs.readFileSync(database), before);
+  console.log("Verified real Ark/R session state, R errors with partial effects, confirmed cancellation, kernel exit, CLI invoke and read-only result query.");
+} finally {
+  fs.rmSync(project, { recursive: true, force: true });
+}

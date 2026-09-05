@@ -1,6 +1,15 @@
 {
   "schema_version": 1,
   "checks": {
+    "next.architecture": {
+      "command": ["node", "next/scripts/check-architecture.mjs"]
+    },
+    "next.rust": {
+      "command": ["cargo", "test", "--manifest-path", "next/Cargo.toml", "--workspace", "--locked", "--", "--test-threads=1"]
+    },
+    "next.real-r": {
+      "command": ["node", "next/scripts/test-real-r.mjs"]
+    },
     "docs.index": {
       "command": ["node", "scripts/governance.mjs", "check"]
     },
@@ -124,6 +133,19 @@
         "development.rebuild-ledger",
         "development.test-runner",
         "rust.architecture"
+      ]
+    },
+    "next-system": {
+      "sources": [
+        "docs/NEXT-SYSTEM.md",
+        "next/**"
+      ],
+      "checks": [
+        "docs.index",
+        "docs.tool",
+        "next.architecture",
+        "next.rust",
+        "next.real-r"
       ]
     },
     "desktop-ui": {

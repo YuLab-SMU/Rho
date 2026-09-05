@@ -20,6 +20,12 @@
       "area": "development"
     },
     {
+      "id": "NEXT-SYSTEM",
+      "title": "Rho Next system charter and replacement ledger",
+      "document": "docs/NEXT-SYSTEM.md",
+      "area": "next-system"
+    },
+    {
       "id": "DESKTOP",
       "title": "Desktop application",
       "document": "docs/components/DESKTOP.md",

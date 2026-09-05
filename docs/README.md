@@ -9,6 +9,9 @@ source or a reproducible run is wrong and should be corrected or deleted.
 - [Architecture](ARCHITECTURE.md) — the shortest map of processes, authority,
   persistence, and interfaces.
 - [Development](DEVELOPMENT.md) — the fast edit–run–inspect–commit loop.
+- [Rho Next system charter and replacement ledger](NEXT-SYSTEM.md) — the
+  normative design, capability ownership, decisions, progress, and verified
+  work log for the greenfield replacement.
 - [Desktop](components/DESKTOP.md), [R runtimes](components/R-RUNTIME.md),
   [Environment realization](components/ENVIRONMENT.md), and [extensions](components/EXTENSIONS.md)
   — deeper implementation maps.
@@ -25,8 +28,11 @@ The documentation tree has only three useful shapes:
 - a component page explains behavior that source layout cannot make obvious;
 - an operator page gives reproducible commands.
 
-Plans and status live with the working issue or branch. Command output and
-artifacts live with the run that produced them. Git retains the evolution.
+Plans and status normally live with the working issue or branch. The explicitly
+authorized exception is `NEXT-SYSTEM.md`, the single living charter and
+replacement ledger for Rho Next. It must distinguish target, implemented, and
+verified claims. Command output and artifacts live with the run that produced
+them. Git retains the evolution.
 
 ## Updating the map
 
