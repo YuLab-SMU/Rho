@@ -36,7 +36,7 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 - Retired：旧入口和实现已经不可达并删除。
 
 禁止把 Target 写成当前能力，禁止用“应该可用”代替验证结果。
-第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1—N5 的 Next 实现已在本机验证；生产切换仍未完成。确定性 fake runtime 只用于测试。
+第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1—N5、N6 的本机部分与 N7 的 MCP 部分已有验证记录；远程实测、极简客户端和生产切换仍未完成。确定性 fake runtime 只用于测试。
 
 ### 阅读导航
 
@@ -52,6 +52,15 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 具体运行命令只维护在 [Next README](../next/README.md)，本页只引用阶段性验证命令。
 现有 [架构文档](ARCHITECTURE.md) 和 `programs/rho-rebuild/` 描述旧系统，不是 Next 的进度来源。
 
+### 接手一项工作的最短路径
+
+1. 查看 Git 状态、[当前摘要](#2-当前摘要)与[当前下一步](#27-当前唯一下一步)，保留未完成的用户改动。
+2. 在 [Capability Ledger](#21-capability-ledger) 找到本次范围，核对实际入口、共享资源和 owner；不从目录名称推断所有权。
+3. 阅读相关源码、最近的验证证据和对应 N-D/N-O。每次只推进一个可运行的能力闭环；尚未决定的范围不能由实现者顺手扩大。
+4. 用最接近改动的检查验证，按[最小记录模板](#最小记录模板)更新有实质变化的字段；未运行的测试和未切换的旧入口保持未完成。
+
+本文档回答“为什么、到哪里、还缺什么”；代码回答“怎么做”，运行证据回答“是否有效”，Git 回答“具体改过什么”。不另设周报、审批表或平行进度数据库。
+
 ## 2. 当前摘要
 
 | 项目 | 当前事实 |
@@ -61,7 +70,7 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 已完成生产切换的 capability | 0；独立 Next CLI 的可用能力不计为旧生产入口已切换 |
 | 已退役的旧 capability 实现 | 0 |
 | 旧系统策略 | 冻结为行为参考；不作为 Next 的代码依赖 |
-| 前端策略 | 延后；需要时仅建立极简统一客户端 |
+| 前端策略 | N7 接入极简统一客户端；完整桌面仍延后，当前尚无 Next 前端实现 |
 | 数据策略 | Next 使用独立 schema 和数据目录，切换前不双写 |
 
 已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议 `2f9ce6b`、材料回收 `e1820f1`，N7 MCP `f4f502c`。
@@ -691,15 +700,29 @@ Host 维护唯一 routing table：
 
 building 只是开发进度，不是运行时 owner。禁止 shadow execution 和 dual-write。
 
+路由唯一还不够：如果多个 capability 共享同一个 R session、包库或 working tree，必须一起核对它们的写入入口。不能让 Next 接管 `workspace.run_r`，却让 Legacy 继续通过另一个入口修改同一会话。具体首批切换集合仍由 N-O010 跟踪，本文档不预先声称该边界已经解决。
+
 ### 19.3 单项迁移流程
 
-1. 列出 capability 的外部可观察行为和真实 owner。
+1. 列出 capability 的外部可观察行为、真实 owner 和共享资源；据此确定需要一起切换的最小能力集合。
 2. 在 Next 中完成一条端到端实现。
 3. 通过该 capability 的不变量与真实 acceptance。
 4. 原子切换 routing ownership 到 next。
 5. 确认所有 edge 不再能到达旧入口。
 6. 删除旧实现、旧 schema、旧测试和临时兼容层。
 7. 更新 Capability Ledger 和 Work Log。
+
+切换批次只在对应 Work Log 记录以下信息，不另建计划文件：
+
+| 字段 | 必须能回答的问题 |
+| --- | --- |
+| 范围 | 本批哪些 capability 和调用入口一起切换？哪些明确不动？ |
+| 共享资源 | 哪个 R session、工作树、包库或数据库在切换后只有一个写入 owner？ |
+| 数据处理 | 复用原生文件、一次迁移或只读保留什么？不得默认删除用户数据或持续双写 |
+| 切换依据 | 哪条真实验收、路由变更和旧调用者检查证明可以接管？ |
+| 退役与恢复 | 哪些旧源码/测试可以删除？若切换失败，如何先停止新写入再恢复入口，并核对已发生的外部效果？ |
+
+Git 可恢复源码，不代表已经撤销包安装、R 内存修改或远程作业；回退代码不能被记录为运行状态已回滚。
 
 ### 19.4 Capability 完成定义
 
@@ -774,7 +797,7 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | slurm.reconcile | Operation | Next 独立入口 | execution / ssh adapter | Building（本地协议测试通过） | 真实丢回执/状态核对；不重提作业 |
 | slurm.request_cancel | Operation | 旧执行路径；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 真实取消请求与后续状态观察 |
 | MCP edge | Edge | 旧 rho-mcp/Agent Gateway；Next stdio 入口已接入 | host adapter | Ready（真实 SDK/本机 R） | 极简客户端与生产路由切换；无业务分叉 |
-| desktop-lite | Edge | desktop | unified client | Deferred | N7 generated contract |
+| desktop-lite | Edge | desktop | unified client | Planned | N7 generated contract 与真实本机客户端验收 |
 | evidence projection | Query projection | rho-evidence-graph | 未决定 | Deferred | 出现真实消费者 |
 | extensions | Capability source | extension runtime | 未决定 | Deferred | 核心稳定后评估 |
 
@@ -1169,6 +1192,14 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 身份验证：保留 Agent actor，跨入口按同一 principal 看事实；隔离其他账户。缺少能力 scope 的 caller 不能借助取消端口获得写能力。
 - 进度：N7 的 MCP 部分已验证，前端未完成；生产切换与 Legacy 删除均无。远程 SSH/Slurm 未进行实际连接或提交。
 - 下一步：从 Rust contract 生成唯一客户端类型，接入极简前端，然后完成能力路由切换与旧实现删除。
+
+### 2026-09-05 — 统一文档入口与切换记录
+
+- 结果：沿用本页，不新增平行文档；根 AGENTS.md 明确此任务台账的例外与入口，补齐接手路径及切换批次字段。
+- 范围：仅文档和开发指引。核对现有源码、manifest 与 Git 检查点；没有将历史测试记录当作本次重新验证。
+- 所有权：未切换；Legacy 删除：无。共享状态的具体首批切换集合仍为 N-O010，尚未决定。
+- 验证：`node scripts/governance.mjs check` 通过（9 pages、13 areas、34 checks）；`node scripts/test-governance.mjs` 与 `git diff --check` 通过。没有改动运行代码，未重跑 Rust、R 或旧系统测试。
+- 下一步：N7 generated contract 与极简客户端；本次文档整理不改变其未完成状态。
 
 ## 26. 每次工作结束时如何更新
 

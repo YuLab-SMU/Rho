@@ -5,6 +5,11 @@ a compact map of the current implementation; Git is the history. Plans and
 status stay with the working issue or branch rather than becoming repository
 documents.
 
+The user-authorized exception is `docs/NEXT-SYSTEM.md`: the single living
+design, replacement ledger and milestone record for Rho Next. Read it before
+Next work; keep target, implemented, verified, production cutover and legacy
+retirement distinct. Do not create a parallel plan or status document.
+
 ## Architecture Philosophy
 
 **Rho is the operable scientific space. The Agent platform owns conversation
