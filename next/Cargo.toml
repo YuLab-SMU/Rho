@@ -5,6 +5,8 @@ members = [
   "operation",
   "workspace",
   "project",
+  "environment",
+  "adapters/r-environment",
   "adapters/git",
   "adapters/sqlite",
   "adapters/r-runtime",

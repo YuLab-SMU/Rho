@@ -1,5 +1,14 @@
 #![forbid(unsafe_code)]
 
+mod environment;
+pub use environment::REnvironmentConfig;
+use environment::{EnvironmentJournal, selected_environment};
+use rho_next_environment::{
+    ENVIRONMENT_READ_SCOPE, ENVIRONMENT_WRITE_SCOPE, EnvironmentAction, EnvironmentHandler,
+    EnvironmentObserveHandler, EnvironmentOwner, EnvironmentRuntime,
+};
+use rho_next_r_environment::REnvironment;
+
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -115,6 +124,8 @@ impl NextHost {
             journal,
             None,
             Some(project),
+            None,
+            None,
             Arc::new(SystemClock),
             Arc::new(UuidOperationIdGenerator),
         )
@@ -150,6 +161,43 @@ impl NextHost {
         database: impl AsRef<Path>,
         config: ArkConfig,
     ) -> Result<Self, OperationError> {
+        Self::open_ark_with_environment(database, config, None).await
+    }
+
+    pub async fn open_environment(
+        database: impl AsRef<Path>,
+        config: REnvironmentConfig,
+    ) -> Result<Self, OperationError> {
+        let database = database.as_ref();
+        let journal = Arc::new(SqliteOperationJournal::open(database)?);
+        let root = config.project_root.clone();
+        let data = config.data_root.clone();
+        let environment =
+            Arc::new(REnvironment::open(config).map_err(OperationError::TargetResolution)?);
+        let mut excluded = protected_project_paths(database)?;
+        excluded.push(
+            data.canonicalize()
+                .map_err(|e| OperationError::Storage(e.to_string()))?,
+        );
+        let project =
+            Arc::new(GitProject::open(root, excluded).map_err(OperationError::TargetResolution)?);
+        Self::compose(
+            journal,
+            None,
+            Some(project),
+            Some(environment),
+            None,
+            Arc::new(SystemClock),
+            Arc::new(UuidOperationIdGenerator),
+        )
+        .await
+    }
+
+    pub async fn open_ark_with_environment(
+        database: impl AsRef<Path>,
+        mut config: ArkConfig,
+        realization_id: Option<&str>,
+    ) -> Result<Self, OperationError> {
         // Acquire the journal's host lock before creating any external runtime.
         let database = database.as_ref();
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
@@ -162,6 +210,37 @@ impl NextHost {
                 .canonicalize()
                 .map_err(|error| OperationError::Storage(error.to_string()))?,
         );
+        let environment_root = database
+            .parent()
+            .unwrap_or(Path::new("."))
+            .join("environment");
+        let executable = if cfg!(windows) {
+            "Rscript.exe"
+        } else {
+            "Rscript"
+        };
+        let environment = Arc::new(
+            REnvironment::open(REnvironmentConfig {
+                rscript: config.r_home.join("bin").join(executable),
+                project_root: config.project_root.clone(),
+                data_root: environment_root.clone(),
+                timeout: std::time::Duration::from_secs(300),
+            })
+            .map_err(OperationError::TargetResolution)?,
+        );
+        excluded.push(
+            environment_root
+                .canonicalize()
+                .map_err(|e| OperationError::Storage(e.to_string()))?,
+        );
+        if let Some(id) = realization_id {
+            let receipt = selected_environment(journal.as_ref(), environment.as_ref(), id).await?;
+            config.library_path = Some(receipt.library_path.into());
+        }
+        let active_library = config
+            .library_path
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned());
         let project = Arc::new(
             GitProject::open(&config.project_root, excluded)
                 .map_err(OperationError::TargetResolution)?,
@@ -175,6 +254,8 @@ impl NextHost {
             journal,
             Some(runtime),
             Some(project),
+            Some(environment),
+            active_library,
             Arc::new(SystemClock),
             Arc::new(UuidOperationIdGenerator),
         )
@@ -192,6 +273,8 @@ impl NextHost {
                 WORKSPACE_READ_SCOPE.into(),
                 PROJECT_READ_SCOPE.into(),
                 PROJECT_WRITE_SCOPE.into(),
+                ENVIRONMENT_READ_SCOPE.into(),
+                ENVIRONMENT_WRITE_SCOPE.into(),
             ]),
             connection_id: format!("cli:{}", std::process::id()),
             correlation_id: None,
@@ -230,18 +313,30 @@ impl NextHost {
         clock: Arc<dyn Clock>,
         id_generator: Arc<dyn OperationIdGenerator>,
     ) -> Result<Self, OperationError> {
-        Self::compose(journal, Some(runtime), None, clock, id_generator).await
+        Self::compose(
+            journal,
+            Some(runtime),
+            None,
+            None,
+            None,
+            clock,
+            id_generator,
+        )
+        .await
     }
 
     async fn compose(
         journal: Arc<dyn OperationJournal>,
         runtime: Option<Arc<dyn WorkspaceRuntime>>,
         project: Option<Arc<dyn ProjectRuntime>>,
+        environment: Option<Arc<dyn EnvironmentRuntime>>,
+        active_library: Option<String>,
         clock: Arc<dyn Clock>,
         id_generator: Arc<dyn OperationIdGenerator>,
     ) -> Result<Self, OperationError> {
         let mut registry = CapabilityRegistry::new();
         let lane = Arc::new(tokio::sync::Mutex::new(()));
+        let has_workspace = runtime.is_some();
         if let Some(runtime) = runtime {
             let workspace = Arc::new(WorkspaceRunHandler::with_lane(runtime, lane.clone()));
             registry.register(workspace.clone())?;
@@ -255,10 +350,28 @@ impl NextHost {
             )))?;
         }
         if let Some(project) = project {
-            let owner = Arc::new(ProjectOwner::new(project, lane));
+            let owner = Arc::new(ProjectOwner::new(project, lane.clone()));
             registry.register(Arc::new(ProjectPatchHandler::new(owner.clone())))?;
             registry.register_query(Arc::new(ProjectSnapshotHandler::new(owner.clone())))?;
             registry.register_query(Arc::new(ProjectReadHandler::new(owner)))?;
+        }
+        if let Some(environment) = environment {
+            let records = Arc::new(EnvironmentJournal(journal.clone()));
+            let owner = Arc::new(EnvironmentOwner::new(
+                environment,
+                records,
+                lane,
+                active_library,
+                has_workspace,
+            ));
+            for action in [
+                EnvironmentAction::Plan,
+                EnvironmentAction::Realize,
+                EnvironmentAction::Verify,
+            ] {
+                registry.register(Arc::new(EnvironmentHandler::new(owner.clone(), action)))?;
+            }
+            registry.register_query(Arc::new(EnvironmentObserveHandler::new(owner)))?;
         }
         let registry = Arc::new(registry);
         let gateway = Arc::new(OperationGateway::new(

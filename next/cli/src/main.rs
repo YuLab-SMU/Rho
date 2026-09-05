@@ -4,7 +4,7 @@ mod session;
 
 use clap::{Parser, Subcommand};
 use rho_next_contract::{CapabilityRef, Invocation, OperationId, Precondition};
-use rho_next_host::{ArkConfig, NextHost, RUN_R_CAPABILITY_ID};
+use rho_next_host::{ArkConfig, NextHost, REnvironmentConfig, RUN_R_CAPABILITY_ID};
 use serde_json::json;
 
 #[derive(Debug, Parser)]
@@ -19,6 +19,11 @@ struct Cli {
     ark: Option<PathBuf>,
     #[arg(long)]
     r_home: Option<PathBuf>,
+    #[arg(long)]
+    rscript: Option<PathBuf>,
+    /// Bind a verified Environment realization when starting a new Ark session.
+    #[arg(long, requires = "ark")]
+    environment: Option<String>,
     #[arg(long)]
     project: Option<PathBuf>,
     #[command(subcommand)]
@@ -49,8 +54,22 @@ impl Cli {
                     .unwrap_or(std::path::Path::new("."))
                     .join("runtime"),
                 execution_timeout: std::time::Duration::from_secs(600),
+                library_path: None,
             };
-            NextHost::open_ark(&self.database, config).await
+            NextHost::open_ark_with_environment(&self.database, config, self.environment.as_deref())
+                .await
+        } else if let Some(rscript) = &self.rscript {
+            let config = REnvironmentConfig {
+                rscript: rscript.clone(),
+                project_root: self.project.clone().ok_or("--project is required")?,
+                data_root: self
+                    .database
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .join("environment"),
+                timeout: std::time::Duration::from_secs(300),
+            };
+            NextHost::open_environment(&self.database, config).await
         } else {
             NextHost::open_project(
                 &self.database,
@@ -157,7 +176,7 @@ async fn run() -> Result<(), String> {
                 .map_err(|error| error.to_string())?;
             print_json(&json!({
                 "ok": true,
-                "runtime": if cli.demo { "deterministic_fake" } else if cli.ark.is_some() { "ark" } else { "project" },
+                "runtime": if cli.demo { "deterministic_fake" } else if cli.ark.is_some() { "ark" } else if cli.rscript.is_some() { "environment" } else { "project" },
                 "operation": record,
             }))
         }

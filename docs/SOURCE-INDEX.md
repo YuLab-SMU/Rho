@@ -205,6 +205,7 @@ Checks:
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
 - `next.architecture`: `["node","next/scripts/check-architecture.mjs"]`
+- `next.environment`: `["node","next/scripts/test-environment.mjs"]`
 - `next.real-r`: `["node","next/scripts/test-real-r.mjs"]`
 - `next.rust`: `["cargo","test","--manifest-path","next/Cargo.toml","--workspace","--locked","--","--test-threads=1"]`
 

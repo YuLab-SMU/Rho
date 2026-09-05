@@ -106,3 +106,41 @@ R execution and project mutation share one Host lane; external editors are not
 locked. A lost process outcome or observed partial change is recorded as
 `uncertain`, with a new snapshot as the recovery path. No automatic Git commit
 or retry is performed.
+
+Environment support uses an explicit Rscript installation (`--rscript /path/to/Rscript`)
+or the R installation selected by `--ark ... --r-home ...`. It registers
+`environment.observe` (Query), `environment.plan`, `environment.realize`, and
+`environment.verify` (Operations). Example session requests:
+
+```json
+{"id":"env","request":{"method":"query_snapshot","params":{"capability":{"id":"environment.observe","version":1},"arguments":{}}}}
+{"id":"plan","request":{"method":"invoke","params":{"client_request_id":"env-plan-1","capability":{"id":"environment.plan","version":1},"arguments":{"manager":"pak","packages":["local::pkg"]}}}}
+```
+
+Plans also accept `{"manager":"renv","lockfile":"renv.lock"}`. Realize with
+`{"plan_operation_id":"<successful plan operation ID>"}`; verify with
+`{"realization_operation_id":"<successful realization operation ID>"}`.
+References are checked against the project and caller; native lockfile and local
+source digests are checked before installation. New libraries live in the
+selected data directory, never in the user's existing library.
+
+Verification loads every planned namespace in a separate R process using only
+the new library and R's base library. The receipt records actual versions/paths,
+a library content digest and a candidate renv.lock. It reports
+`available_not_active`; an existing R session is unchanged. Start a new Ark
+session with `--environment <realization operation ID>` to use it. Startup
+re-verifies the library before selecting it. JSON/inspection support namespaces
+load before the scientific library path is switched; other user libraries are
+not used as dependency fallbacks.
+
+```sh
+node next/scripts/test-environment.mjs
+```
+
+This acceptance installs the small local fixture into temporary libraries,
+restores its generated renv.lock, checks source/lock/library tampering, and
+exercises real CLI selection. It requires renv, pak, jsonlite, R and Ark.
+Remote repository behavior follows pak/renv and is not covered by this local
+fixture. Native package scripts run with the user's OS permissions. Environment
+cancellation and staged-library retention are still pending. Keep the data
+directory outside any local source package to avoid self-containing builds.

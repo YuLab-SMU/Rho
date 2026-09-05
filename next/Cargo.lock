@@ -1093,6 +1093,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-next-environment"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "rho-next-contract",
+ "rho-next-operation",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "rho-next-git"
 version = "0.1.0"
 dependencies = [
@@ -1109,9 +1122,11 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "rho-next-contract",
+ "rho-next-environment",
  "rho-next-git",
  "rho-next-operation",
  "rho-next-project",
+ "rho-next-r-environment",
  "rho-next-r-runtime",
  "rho-next-sqlite",
  "rho-next-workspace",
@@ -1146,6 +1161,20 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "rho-next-r-environment"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "rho-next-environment",
+ "rho-next-operation",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
  "tokio",
 ]
 

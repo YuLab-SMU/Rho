@@ -1,0 +1,258 @@
+use rho_next_contract::{CapabilityRef, Invocation, OperationStatus, QueryRequest, QueryStatus};
+use rho_next_host::{ArkConfig, NextHost, REnvironmentConfig};
+use serde_json::{Value, json};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
+
+fn invocation(id: &str, capability: &str, args: Value) -> Invocation {
+    Invocation {
+        client_request_id: id.into(),
+        capability: CapabilityRef::new(capability, 1).unwrap(),
+        arguments: args,
+        preconditions: Vec::new(),
+    }
+}
+async fn invoke(
+    host: &NextHost,
+    id: &str,
+    capability: &str,
+    args: Value,
+) -> rho_next_contract::OperationRecord {
+    host.invoke(&NextHost::local_context(), invocation(id, capability, args))
+        .await
+        .unwrap()
+}
+async fn observe(host: &NextHost, args: Value) -> Value {
+    let reply = host
+        .query_snapshot(
+            &NextHost::local_context(),
+            QueryRequest {
+                capability: CapabilityRef::new("environment.observe", 1).unwrap(),
+                arguments: args,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(reply.status, QueryStatus::Ready, "{reply:?}");
+    reply.data.unwrap()
+}
+fn copy_fixture(project: &Path) {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rhonextfixture");
+    std::fs::create_dir_all(project.join("pkg/R")).unwrap();
+    for file in ["DESCRIPTION", "NAMESPACE", "R/answer.R"] {
+        std::fs::copy(source.join(file), project.join("pkg").join(file)).unwrap();
+    }
+}
+fn ark_config(project: &Path, data: &Path, r_home: &Path) -> ArkConfig {
+    ArkConfig {
+        executable: PathBuf::from(std::env::var_os("RHO_NEXT_ARK").expect("RHO_NEXT_ARK required")),
+        r_home: r_home.into(),
+        project_root: project.into(),
+        data_root: data.join("runtime"),
+        execution_timeout: Duration::from_secs(30),
+        library_path: None,
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires real R, pak, renv, jsonlite and Ark; installs only into temporary libraries"]
+async fn real_environment_plan_realize_verify_restore_and_restart_binding() {
+    let directory = tempfile::tempdir().unwrap();
+    let project = directory.path().join("project");
+    copy_fixture(&project);
+    let data = directory.path().join("state");
+    let database = data.join("next.sqlite");
+    let r_home =
+        PathBuf::from(std::env::var_os("RHO_NEXT_R_HOME").expect("RHO_NEXT_R_HOME required"));
+    let rscript = r_home.join("bin").join(if cfg!(windows) {
+        "Rscript.exe"
+    } else {
+        "Rscript"
+    });
+    let host = NextHost::open_environment(
+        &database,
+        REnvironmentConfig {
+            rscript,
+            project_root: project.clone(),
+            data_root: data.join("environment"),
+            timeout: Duration::from_secs(90),
+        },
+    )
+    .await
+    .unwrap();
+    let native_before = observe(&host, json!({"limit":500})).await;
+    let plan = invoke(
+        &host,
+        "plan",
+        "environment.plan",
+        json!({"manager":"pak","packages":["local::pkg"]}),
+    )
+    .await;
+    assert_eq!(plan.status, OperationStatus::Succeeded, "{plan:?}");
+    assert_eq!(
+        plan.output.as_ref().unwrap()["packages"][0]["name"],
+        "rhonextfixture"
+    );
+    let plan_id = plan.operation.operation_id.as_str();
+    let request = json!({"plan_operation_id":plan_id});
+    let realized = invoke(&host, "realize", "environment.realize", request.clone()).await;
+    assert_eq!(realized.status, OperationStatus::Succeeded, "{realized:?}");
+    let receipt = realized.output.as_ref().unwrap();
+    assert_eq!(receipt["verified"], true);
+    assert_eq!(receipt["restart_required"], false);
+    assert_eq!(receipt["activation"], "available_not_active");
+    let realization_id = realized.operation.operation_id.as_str().to_string();
+    let library = PathBuf::from(receipt["library_path"].as_str().unwrap());
+    assert!(library.starts_with(data.join("environment").canonicalize().unwrap()));
+    assert_eq!(
+        invoke(&host, "realize", "environment.realize", request).await,
+        realized
+    );
+    let verification = invoke(
+        &host,
+        "verify",
+        "environment.verify",
+        json!({"realization_operation_id":realization_id}),
+    )
+    .await;
+    assert_eq!(
+        verification.status,
+        OperationStatus::Succeeded,
+        "{verification:?}"
+    );
+    let observed = observe(&host, json!({"realization_operation_id":realization_id})).await;
+    assert_eq!(observed["packages"][0]["name"], "rhonextfixture");
+    let native_after = observe(&host, json!({"limit":500})).await;
+    assert_eq!(
+        native_before["packages"], native_after["packages"],
+        "user library inventory changed"
+    );
+    assert_eq!(
+        native_before["library_paths"],
+        native_after["library_paths"]
+    );
+
+    let lockfile = PathBuf::from(receipt["renv_lockfile"].as_str().unwrap());
+    std::fs::copy(lockfile, project.join("renv.lock")).unwrap();
+    let original_lock = std::fs::read(project.join("renv.lock")).unwrap();
+    let renv_plan = invoke(
+        &host,
+        "renv-plan",
+        "environment.plan",
+        json!({"manager":"renv","lockfile":"renv.lock"}),
+    )
+    .await;
+    assert_eq!(
+        renv_plan.status,
+        OperationStatus::Succeeded,
+        "{renv_plan:?}"
+    );
+    let restored = invoke(
+        &host,
+        "renv-realize",
+        "environment.realize",
+        json!({"plan_operation_id":renv_plan.operation.operation_id}),
+    )
+    .await;
+    assert_eq!(restored.status, OperationStatus::Succeeded, "{restored:?}");
+    assert_eq!(
+        std::fs::read(project.join("renv.lock")).unwrap(),
+        original_lock,
+        "restore changed authoritative lockfile"
+    );
+
+    std::fs::write(
+        project.join("pkg/R/answer.R"),
+        "fixture_answer <- function() 43L\n",
+    )
+    .unwrap();
+    let stale = invoke(
+        &host,
+        "changed-source",
+        "environment.realize",
+        json!({"plan_operation_id":plan_id}),
+    )
+    .await;
+    assert_eq!(stale.status, OperationStatus::Failed, "{stale:?}");
+    assert!(stale.error.unwrap().contains("source changed"));
+    std::fs::write(
+        project.join("pkg/R/answer.R"),
+        "fixture_answer <- function() 42L\n",
+    )
+    .unwrap();
+    let owned_lock = PathBuf::from(plan.output.as_ref().unwrap()["lock_path"].as_str().unwrap());
+    std::fs::write(&owned_lock, b"{}").unwrap();
+    let changed_lock = invoke(
+        &host,
+        "changed-lock",
+        "environment.realize",
+        json!({"plan_operation_id":plan_id}),
+    )
+    .await;
+    assert_eq!(changed_lock.status, OperationStatus::Failed);
+    assert!(changed_lock.error.unwrap().contains("lockfile changed"));
+    drop(host);
+
+    let bound = NextHost::open_ark_with_environment(
+        &database,
+        ark_config(&project, &data, &r_home),
+        Some(&realization_id),
+    )
+    .await
+    .unwrap();
+    let answer = invoke(
+        &bound,
+        "use-environment",
+        "workspace.run_r",
+        json!({"code":"rhonextfixture::fixture_answer()"}),
+    )
+    .await;
+    assert_eq!(answer.status, OperationStatus::Succeeded, "{answer:?}");
+    assert_eq!(answer.output.as_ref().unwrap()["value"], 42);
+    let active = observe(&bound, json!({})).await;
+    assert_eq!(active["active_workspace_library"], receipt["library_path"]);
+    let another = invoke(
+        &bound,
+        "while-bound",
+        "environment.realize",
+        json!({"plan_operation_id":renv_plan.operation.operation_id}),
+    )
+    .await;
+    assert_eq!(another.status, OperationStatus::Succeeded, "{another:?}");
+    assert_eq!(another.output.as_ref().unwrap()["restart_required"], true);
+    assert_eq!(
+        observe(&bound, json!({})).await["active_workspace_library"],
+        receipt["library_path"]
+    );
+    let description = library.join("rhonextfixture/DESCRIPTION");
+    let original = std::fs::read_to_string(&description).unwrap();
+    std::fs::write(
+        &description,
+        original.replace("Version: 0.1.0", "Version: 9.9.9"),
+    )
+    .unwrap();
+    let tampered = invoke(
+        &bound,
+        "verify-tampered",
+        "environment.verify",
+        json!({"realization_operation_id":realization_id}),
+    )
+    .await;
+    assert_eq!(tampered.status, OperationStatus::Failed);
+    assert_eq!(
+        tampered.output.as_ref().unwrap()["library_digest_matches"],
+        false
+    );
+    drop(bound);
+    assert!(
+        NextHost::open_ark_with_environment(
+            &database,
+            ark_config(&project, &data, &r_home),
+            Some(&realization_id)
+        )
+        .await
+        .is_err()
+    );
+}

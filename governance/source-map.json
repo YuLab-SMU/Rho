@@ -10,6 +10,9 @@
     "next.real-r": {
       "command": ["node", "next/scripts/test-real-r.mjs"]
     },
+    "next.environment": {
+      "command": ["node", "next/scripts/test-environment.mjs"]
+    },
     "docs.index": {
       "command": ["node", "scripts/governance.mjs", "check"]
     },
@@ -145,7 +148,8 @@
         "docs.tool",
         "next.architecture",
         "next.rust",
-        "next.real-r"
+        "next.real-r",
+        "next.environment"
       ]
     },
     "desktop-ui": {

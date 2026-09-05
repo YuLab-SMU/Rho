@@ -31,6 +31,7 @@ async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
         project_root: directory.path().to_path_buf(),
         data_root: directory.path().join("runtime"),
         execution_timeout: Duration::from_secs(30),
+        library_path: None,
     };
     let host = Arc::new(
         NextHost::open_ark(directory.path().join("next.sqlite"), config)
@@ -218,6 +219,7 @@ async fn real_workspace_queries_are_bounded_and_do_not_force_bindings_or_record_
         project_root: directory.path().into(),
         data_root: directory.path().join("runtime"),
         execution_timeout: Duration::from_secs(30),
+        library_path: None,
     };
     let host = NextHost::open_ark(directory.path().join("next.sqlite"), config)
         .await

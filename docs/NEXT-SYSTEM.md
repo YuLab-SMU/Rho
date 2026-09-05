@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-04
 >
-> 当前阶段：N4 Project/Git 在 Next 已验证，生产切换仍待完成；下一步 N5 Environment
+> 当前阶段：N5 Environment 的 Next 链路已验证；下一步 N6 Execution，生产切换仍待完成
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -34,19 +34,23 @@
 - Retired：旧入口和实现已经不可达并删除。
 
 禁止把 Target 写成当前能力，禁止用“应该可用”代替验证结果。
-第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1—N4 的 Next 实现已在本机验证；生产切换仍未完成。确定性 fake runtime 只用于测试。
+第 3—19 节描述目标边界；实际实现与验证范围以第 20—27 节为准。N1—N5 的 Next 实现已在本机验证；生产切换仍未完成。确定性 fake runtime 只用于测试。
 
 ## 2. 当前摘要
 
 | 项目 | 当前事实 |
 | --- | --- |
-| 总体状态 | 真实 Ark/R、Operation、SQLite、Workspace/Project Query、Git patch 与长期 CLI 已贯通；仍未替换旧生产入口 |
-| 当前里程碑 | N5 Environment；N4 的旧入口切换与后续公共入口迁移一并推进 |
+| 总体状态 | 真实 Ark/R、Project/Git、环境计划/隔离安装/验证/新会话绑定及长期 CLI 已贯通；仍未替换旧生产入口 |
+| 当前里程碑 | N6 Execution；旧入口切换、staging 回收、公共入口与退役工作仍待完成 |
 | Next 已拥有的 capability | 0 |
 | 已退役的旧 capability 实现 | 0 |
 | 旧系统策略 | 冻结为行为参考；不作为 Next 的代码依赖 |
 | 前端策略 | 延后；需要时仅建立极简统一客户端 |
 | 数据策略 | Next 使用独立 schema 和数据目录，切换前不双写 |
+
+Environment 实际验证入口：`node next/scripts/test-environment.mjs`。
+当前已验证本机 R 4.5.2、pak 0.11.1、renv 1.1.8 与隔离本地 fixture；
+没有据此声称远程仓库、全部包或所有平台都已验证。
 
 已存在的操作说明见 [Next README](../next/README.md)，真实运行验证入口是
 `node next/scripts/test-real-r.mjs`。普通 Cargo 测试明确跳过需要外部 R 安装的验证；
@@ -619,7 +623,7 @@ next 是迁移期名称。旧系统全部退役后，应把它提升为正常仓
 | Tower | Gateway middleware composition | 第二个真实 middleware 出现后再决定 |
 | Ark / Jet | 权威交互式 R runtime | N2 已复用第三方 Jet transport；本机 Ark 0.1.252 + R 4.5.2 验证通过 |
 | rlang | 无求值检查 lazy binding | N3 使用；缺失时仅报告未检查绑定，不强制求值 |
-| renv + pak | R environment declaration/realization | Environment 阶段采用 |
+| renv + pak | R environment declaration/realization | N5 使用 pak 原生 lockfile_create/install 和 renv lockfile_read/restore/snapshot；本机真实验证通过 |
 | Pixi | 外层科学环境 | Environment 阶段 PoC |
 | Slurm / slurmrestd | Remote job truth | Execution 阶段采用 |
 | OS containment | 真实隔离 | 按平台、按威胁模型引入 |
@@ -687,7 +691,7 @@ building 只是开发进度，不是运行时 owner。禁止 shadow execution �
 | N2 | 真实 Workspace R | workspace.run_r 贯通真实 R，支持结果、条件、取消请求和 uncertain | Verified（本机 Ark/R；生产未切换） |
 | N3 | Workspace Query | querySnapshot 返回有来源、时间和 completeness 的 Workspace observation | Verified（含长期 CLI 会话；生产未切换） |
 | N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Next 实现 Verified；生产切换未完成 |
-| N5 | Environment | observe/plan/realize/verify 首条链路完成 | Not started |
+| N5 | Environment | observe/plan/realize/verify 首条链路完成 | Next Verified（隔离本地 fixture、renv restore、新 Ark 绑定）；生产未切换 |
 | N6 | Execution | local process 后再扩展 SSH/Slurm | Not started |
 | N7 | Public edges | MCP 与极简前端使用统一 host ports | Not started |
 | N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Not started |
@@ -719,8 +723,10 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | project.snapshot | Query | 旧生产文件入口；Next CLI 已验证 | project | Ready | Git/文件原生观察已验证；待迁移消费者 |
 | project.read_file | Query | 旧生产文件入口；Next CLI 已验证 | project | Ready | 分段精确字节读取已验证；待迁移消费者 |
 | project.apply_patch | Operation | desktop + control-plane | project | Ready | Next 已验证；待旧入口切换 |
-| environment.observe | Query | desktop/server/workspace | environment | Deferred | N5 owner observation |
-| environment.realize | Operation | 未形成单一 live path | environment | Deferred | N5 verified receipt |
+| environment.observe | Query | 旧生产入口；Next 已验证 | environment | Ready | 原生 R/library 观察及 active library 字段已实现 |
+| environment.plan | Operation | Next CLI/Host | environment | Ready | pak/renv 原生锁与来源摘要；待公共入口切换 |
+| environment.realize | Operation | Next CLI/Host | environment | Ready | 新隔离库安装与 namespace verification；现有会话不变 |
+| environment.verify | Operation | Next CLI/Host | environment | Ready | 校验包库内容及实际 namespace；新 Ark 绑定前重验 |
 | process.run_local | Operation | 多条旧路径 | execution | Deferred | N6 local supervisor |
 | slurm.submit/query/cancel | Operation + Query | execution/runner | execution | Deferred | N6 scheduler truth |
 | MCP edge | Edge | rho-mcp + Agent Gateway | host adapter | Deferred | N7 no business routing |
@@ -888,6 +894,17 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 理由：同一数据库切换项目时，不能把相同代码/patch 和 client_request_id 误认成另一个项目的重试；R session 重启不改变项目范围。
 - 后果：不同项目复用同一 caller/request-id 返回冲突。旧未绑定范围的记录仍可读取，但不承诺与新的范围绑定请求等价；不得通过静默重跑消除冲突。
 
+### N-D017 — 原生环境锁、隔离 realization 与显式新会话绑定
+
+- 日期：2026-09-04
+- 状态：Accepted；Next 本机链路 Verified
+- 决定：pak 使用公开 lockfile_create/lockfile_install；renv 使用 lockfile_read/restore/snapshot。计划以 Operation output 保存元数据并引用原生 lockfile，没有独立 plan 数据库或 environment revision。
+- 实际发现：本机 renv 1.1.8 没有 renv::plan。仅设置 snapshot library/type 仍可能使用不适合的发现范围；当前显式传入安装包集合，候选 lockfile 写在 staging。pak 的 local 元数据通过 renv 原生 Path 字段保留可恢复来源。
+- 实现：每个 realization 有新的 library；锁、来源和包库内容都有摘要。namespace probe 在单独的 R 进程中执行，禁用用户库 fallback，验证真实版本与路径。
+- 绑定：realize 返回 available_not_active；旧 R 会话保持原有库。新 Host 使用 --environment 引用成功 receipt，先复验再启动 Ark；JSON/检查支持 namespace 先载入，再切换科学库路径。
+- 证据：临时本地包计划/安装、renv 恢复、完整 helper/Host/CLI、源码/锁/包库变更拒绝、原用户库存不变、R 中真实调用 fixture_answer 返回 42。
+- 限制：包脚本仍是 native user process；取消和 staging 回收待 N6/收敛阶段处理。远程仓库与其他平台尚未实测，不由本地 fixture 替代其验收。
+
 ## 24. Open Decisions
 
 以下问题尚未决定，不能由实现者顺手固化：
@@ -966,6 +983,13 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 进度边界：这是 Next-ready，尚不满足 N4 的生产切换条件。旧生产文件命令仍存在，不能把它们标成 Retired。
 - 下一步：N5 Environment；之后完成公共入口切换与旧代码删除。
 
+### 2026-09-04 — N5 原生环境链路
+
+- 新增 Environment domain 与固定 Rscript adapter，注册 observe/plan/realize/verify，复用共享 Host lane 和既有 Operation journal。
+- 验证：`node next/scripts/test-environment.mjs` 通过，覆盖 pak/renv 实际包流程、独立 namespace 检查、摘要变化、原用户库存、新 Ark 绑定，以及真实 CLI 的 --rscript/--environment。
+- Next 常规测试通过；外部运行时测试单独执行，未把 ignored 计为 passed。新系统仍未完成旧入口替换。
+- 后续：N6 的进程与远程执行；补齐取消/回收、公共入口及旧代码退役，不能仅以 N5 链路成功宣布整体完成。
+
 ## 26. 每次工作结束时如何更新
 
 只有发生以下情况才更新本文档：
@@ -1001,17 +1025,17 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 
 ## 27. 当前唯一下一步
 
-N5：用现有 R 环境工具实现 observe / plan / realize / verify 的真实链路。
+N6：把本地进程与后续 SSH/Slurm 执行放进统一操作和观察路径。
 
 必须只包含：
 
-- 环境观察来自实际 R/runtime/library/lockfile，不复制一套 Rho environment revision；
-- 固定非交互 R helper，复用 renv/pak；禁止在 Environment helper 接收任意 shell/R code；
-- 先在隔离 library 中实现并验证可复现包安装/恢复；不要修改用户现有 library；
-- realization 结果与实际 verification 一致才报告成功；明确现有 R session 何时需要重启；
-- 通过统一 Operation/Query 路径，并保留 N4/旧入口迁移的未完成状态。
+- 本地进程的真实 stdout/stderr、退出码、取消与退出后收集；不复制一套 scheduler；
+- 基于相同进程机制处理 Environment helper 的取消、超时和子进程清理；
+- SSH/Slurm adapter 使用原生 job/host identity，未知提交结果不得自动重提；
+- 未提供真实远程运行条件时明确区分协议测试与实际远程验收；
+- 并行保留 N7 公共入口、staging 回收和 N8 旧代码删除的未完成要求。
 
-N5 暂不包含：
+此阶段不创建：
 
 - MCP；
 - Desktop；

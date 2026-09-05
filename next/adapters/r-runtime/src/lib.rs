@@ -37,12 +37,14 @@ pub struct ArkConfig {
     pub project_root: PathBuf,
     pub data_root: PathBuf,
     pub execution_timeout: Duration,
+    pub library_path: Option<PathBuf>,
 }
 
 pub struct ArkRuntime {
     client: Mutex<Option<Arc<Client>>>,
     session_id: String,
     project_root: String,
+    library_path: Option<String>,
     data_root: PathBuf,
     timeout: Duration,
 }
@@ -120,11 +122,22 @@ impl ArkRuntime {
             client: Mutex::new(Some(Arc::new(client))),
             session_id,
             project_root: project.to_string_lossy().into_owned(),
+            library_path: config
+                .library_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned()),
             data_root,
             timeout: config.execution_timeout,
         };
+        let library_setup = match &config.library_path {
+            Some(library) => format!(
+                ".libPaths(c({}, .Library), include.site = FALSE);",
+                quote(&library.to_string_lossy())?
+            ),
+            None => String::new(),
+        };
         let bootstrap = format!(
-            "local({{ e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); invisible(TRUE) }})",
+            "local({{ requireNamespace('jsonlite'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); {library_setup} invisible(TRUE) }})",
             quote(&format!("{BRIDGE}\n{QUERIES}"))?,
             quote(&project.to_string_lossy())?
         );
@@ -366,6 +379,7 @@ impl WorkspaceRuntime for ArkRuntime {
                 kind: "r_execution".into(),
                 source: "ark".into(),
                 detail: json!({"child_pid":self.child_pid(), "outcome":response.outcome,
+                    "environment_library":self.library_path,
                     "output_truncated":captured.truncated || response.conditions_truncated,
                     "containment":"native_user_process", "result_path":result_path}),
                 observed_at_ms,
