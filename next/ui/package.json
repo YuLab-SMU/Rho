@@ -1,0 +1,12 @@
+{
+  "name": "rho-next-client",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../scripts/client.mjs build",
+    "generate": "node ../scripts/client.mjs generate",
+    "check": "node ../scripts/client.mjs check",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": { "typescript": "6.0.3" }
+}

@@ -205,6 +205,7 @@ Checks:
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
 - `next.architecture`: `["node","next/scripts/check-architecture.mjs"]`
+- `next.client`: `["node","next/scripts/client.mjs","check"]`
 - `next.environment`: `["node","next/scripts/test-environment.mjs"]`
 - `next.mcp`: `["node","next/scripts/test-mcp.mjs"]`
 - `next.mcp-real-r`: `["node","next/scripts/test-mcp.mjs","--real-r"]`
@@ -212,6 +213,8 @@ Checks:
 - `next.real-r`: `["node","next/scripts/test-real-r.mjs"]`
 - `next.remote-protocol`: `["node","next/scripts/test-remote-protocol.mjs"]`
 - `next.rust`: `["cargo","test","--manifest-path","next/Cargo.toml","--workspace","--locked","--","--test-threads=1"]`
+- `next.workbench`: `["node","next/scripts/test-workbench.mjs"]`
+- `next.workbench-real-r`: `["node","next/scripts/test-workbench.mjs","--real-r"]`
 
 ## `persistence-and-interfaces`
 

@@ -4,6 +4,8 @@ mod query;
 pub use query::*;
 mod host;
 pub use host::*;
+mod workbench;
+pub use workbench::*;
 
 use std::collections::BTreeSet;
 
@@ -59,6 +61,7 @@ fn validate_token(value: &str, field: &'static str) -> Result<(), ContractError>
     Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(transparent)]
+#[derive(ts_rs::TS)]
 pub struct OperationId(String);
 
 impl OperationId {
@@ -77,6 +80,7 @@ impl OperationId {
     Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct CapabilityRef {
     pub id: String,
     pub version: u16,
@@ -107,6 +111,7 @@ impl CapabilityRef {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct Precondition {
     pub kind: String,
     pub subject: String,
@@ -122,6 +127,7 @@ impl Precondition {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct Invocation {
     pub client_request_id: String,
     pub capability: CapabilityRef,
@@ -154,6 +160,7 @@ impl Invocation {
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 pub enum CallerKind {
     Human,
     Agent,
@@ -163,6 +170,7 @@ pub enum CallerKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct CallerIdentity {
     pub kind: CallerKind,
     pub id: String,
@@ -220,6 +228,7 @@ impl CallContext {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct TargetRef {
     pub kind: String,
     pub identity: String,
@@ -236,6 +245,7 @@ impl TargetRef {
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 pub enum EffectHint {
     NeedsNetwork,
     MayWriteProject,
@@ -247,6 +257,7 @@ pub enum EffectHint {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 pub enum IdempotencyClass {
     Pure,
     CallerScoped,
@@ -254,6 +265,7 @@ pub enum IdempotencyClass {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 pub enum RetryClass {
     Safe,
     Never,
@@ -262,6 +274,7 @@ pub enum RetryClass {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 pub enum CancellationClass {
     Unsupported,
     Cooperative,
@@ -270,6 +283,7 @@ pub enum CancellationClass {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct CapabilityDescriptor {
     pub kind: CapabilityKind,
     pub capability: CapabilityRef,
@@ -287,6 +301,7 @@ pub struct CapabilityDescriptor {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 pub enum CapabilityKind {
     Operation,
     Query,
@@ -308,11 +323,13 @@ impl CapabilityDescriptor {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct Operation {
     pub operation_id: OperationId,
     pub client_request_id: String,
     pub caller: CallerIdentity,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub principal: Option<CallerIdentity>,
     pub capability: CapabilityRef,
     pub domain: String,
@@ -320,6 +337,7 @@ pub struct Operation {
     pub normalized_arguments: Value,
     pub invocation_digest: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub idempotency_scope: Option<String>,
     pub preconditions: Vec<Precondition>,
     pub potential_effects: BTreeSet<EffectHint>,
@@ -336,6 +354,7 @@ impl Operation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 pub enum OperationStatus {
     Accepted,
     Running,
@@ -357,6 +376,7 @@ impl OperationStatus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 pub enum OperationOutcome {
     Succeeded,
     Failed,
@@ -387,6 +407,7 @@ impl OperationOutcome {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 pub enum ObservationCompleteness {
     Complete,
     Partial,
@@ -405,6 +426,7 @@ pub struct EffectObservation {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct OperationRecord {
     pub operation: Operation,
     pub status: OperationStatus,
@@ -429,6 +451,7 @@ pub struct OperationEventRecord {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct OutboxRecord {
     pub sequence: u64,
     pub message_id: String,

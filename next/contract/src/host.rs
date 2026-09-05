@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
     rename_all = "snake_case",
     deny_unknown_fields
 )]
+#[derive(ts_rs::TS)]
 pub enum HostRequest {
     Invoke(Invocation),
     GetOperation { operation_id: OperationId },
@@ -19,17 +20,20 @@ pub enum HostRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct SessionFrame {
     pub id: String,
     pub request: HostRequest,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 pub struct SessionReply {
     pub id: Option<String>,
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub result: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub error: Option<String>,
 }

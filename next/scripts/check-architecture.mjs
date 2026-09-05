@@ -23,7 +23,8 @@ const allowed = {
   "rho-next-r-runtime": ["rho-next-contract", "rho-next-workspace"],
   "rho-next-host": ["rho-next-contract", "rho-next-operation", "rho-next-sqlite", "rho-next-workspace", "rho-next-r-runtime", "rho-next-project", "rho-next-git", "rho-next-environment", "rho-next-r-environment", "rho-next-execution", "rho-next-process", "rho-next-ssh"],
   "rho-next-mcp": ["rho-next-contract", "rho-next-host"],
-  "rho-next-cli": ["rho-next-contract", "rho-next-host", "rho-next-mcp"],
+  "rho-next-workbench": ["rho-next-contract", "rho-next-host", "rho-next-mcp"],
+  "rho-next-cli": ["rho-next-contract", "rho-next-host", "rho-next-mcp", "rho-next-workbench"],
 };
 for (const pkg of metadata.packages) {
   assert.ok(Object.hasOwn(allowed, pkg.name), `Unclassified production owner: ${pkg.name}`);

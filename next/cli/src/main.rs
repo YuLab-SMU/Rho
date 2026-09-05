@@ -4,7 +4,7 @@ mod session;
 
 use clap::{Parser, Subcommand};
 use rho_next_contract::{CapabilityRef, Invocation, OperationId, Precondition};
-use rho_next_host::{ArkConfig, NextHost, REnvironmentConfig, RUN_R_CAPABILITY_ID, SshConfig};
+use rho_next_host::{HostProfile, NextHost, RUN_R_CAPABILITY_ID, RuntimeConfiguration, SshConfig};
 use serde_json::json;
 
 #[derive(Debug, Parser)]
@@ -38,64 +38,44 @@ struct Cli {
 }
 
 impl Cli {
-    async fn open_host(&self) -> Result<NextHost, String> {
+    fn profile(&self) -> Result<HostProfile, String> {
         let remote = self.remote_host.as_ref().map(|host| SshConfig {
             host_alias: host.clone(),
             project_root: self.remote_root.clone().unwrap_or_default(),
             slurm_cluster: self.slurm_cluster.clone(),
         });
-        if self.demo {
-            NextHost::open_demo(&self.database).await
-        } else if self.ark.is_some() {
-            let config = ArkConfig {
-                executable: self
-                    .ark
-                    .clone()
-                    .ok_or("--ark is required for a real Workspace")?,
+        let runtime = if let Some(executable) = &self.ark {
+            RuntimeConfiguration::Ark {
+                executable: executable.clone(),
                 r_home: self
                     .r_home
                     .clone()
-                    .ok_or("--r-home is required for a real Workspace")?,
-                project_root: self
-                    .project
-                    .clone()
-                    .ok_or("--project is required for a real Workspace")?,
-                data_root: self
-                    .database
-                    .parent()
-                    .unwrap_or(std::path::Path::new("."))
-                    .join("runtime"),
-                execution_timeout: std::time::Duration::from_secs(600),
-                library_path: None,
-            };
-            NextHost::open_ark_with_remote(
-                &self.database,
-                config,
-                self.environment.as_deref(),
-                remote,
-            )
-            .await
+                    .ok_or("--r-home is required with --ark")?,
+                environment: self.environment.clone(),
+            }
         } else if let Some(rscript) = &self.rscript {
-            let config = REnvironmentConfig {
+            RuntimeConfiguration::Environment {
                 rscript: rscript.clone(),
-                project_root: self.project.clone().ok_or("--project is required")?,
-                data_root: self
-                    .database
-                    .parent()
-                    .unwrap_or(std::path::Path::new("."))
-                    .join("environment"),
-                timeout: std::time::Duration::from_secs(300),
-            };
-            NextHost::open_environment_with_remote(&self.database, config, remote).await
+            }
         } else {
-            NextHost::open_project_with_remote(
-                &self.database,
-                self.project.as_ref().ok_or("--project is required")?,
-                remote,
-            )
-            .await
+            RuntimeConfiguration::Project
+        };
+        Ok(HostProfile {
+            database: self.database.clone(),
+            runtime,
+            remote,
+        })
+    }
+
+    async fn open_host(&self) -> Result<NextHost, String> {
+        if self.demo {
+            return NextHost::open_demo(&self.database)
+                .await
+                .map_err(|error| error.to_string());
         }
-        .map_err(|error| error.to_string())
+        self.profile()?
+            .open(self.project.as_deref().ok_or("--project is required")?)
+            .await
     }
 }
 
@@ -105,6 +85,14 @@ enum Command {
     Session,
     /// Serve MCP over stdio using the same Host and capability registry.
     Mcp,
+    /// Serve the local browser workbench and MCP using one Host. No external hosting.
+    Workbench {
+        #[arg(long, default_value_t = 0)]
+        port: u16,
+        /// Write the private launch URL to a new file instead of stdout.
+        #[arg(long)]
+        url_file: Option<PathBuf>,
+    },
     Invoke {
         #[arg(long)]
         client_request_id: String,
@@ -148,6 +136,23 @@ async fn main() {
 async fn run() -> Result<(), String> {
     let cli = Cli::parse();
     let context = NextHost::local_context();
+    if let Command::Workbench { port, url_file } = &cli.command {
+        if cli.demo {
+            return Err("workbench requires a real project/runtime; --demo is test-only".into());
+        }
+        if cli.project.is_none() && (cli.environment.is_some() || cli.remote_host.is_some()) {
+            return Err(
+                "--project is required for an initial environment or remote binding".into(),
+            );
+        }
+        return rho_next_workbench::serve(
+            cli.profile()?,
+            cli.project.as_deref(),
+            *port,
+            url_file.as_deref(),
+        )
+        .await;
+    }
     if matches!(cli.command, Command::Mcp) {
         let host = Arc::new(cli.open_host().await?);
         return rho_next_mcp::serve(host, tokio::io::stdin(), tokio::io::stdout()).await;
@@ -162,7 +167,7 @@ async fn run() -> Result<(), String> {
         None
     };
     match cli.command {
-        Command::Session | Command::Mcp => unreachable!(),
+        Command::Session | Command::Mcp | Command::Workbench { .. } => unreachable!(),
         Command::Invoke {
             client_request_id,
             code,

@@ -5,6 +5,7 @@ use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct QueryRequest {
     pub capability: CapabilityRef,
     #[serde(default = "empty_arguments")]
@@ -26,6 +27,7 @@ impl QueryRequest {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[derive(ts_rs::TS)]
 pub enum QueryStatus {
     Ready,
     Busy,
@@ -34,6 +36,7 @@ pub enum QueryStatus {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
 pub struct QuerySnapshot {
     pub target: TargetRef,
     pub source: String,

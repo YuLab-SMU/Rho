@@ -16,6 +16,7 @@ members = [
   "host",
   "cli",
   "mcp",
+  "workbench",
 ]
 
 [workspace.package]
@@ -43,3 +44,5 @@ sysinfo = { version = "0.39.6", default-features = false, features = ["system"] 
 tokio-util = { version = "0.7", features = ["rt", "codec"] }
 rmcp = { version = "1.8", default-features = false, features = ["server", "transport-async-rw"] }
 futures = "0.3"
+ts-rs = { version = "=12.0.1", features = ["serde-json-impl", "no-serde-warnings"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }

@@ -5,6 +5,75 @@ Independent Rust workspace for the replacement described in
 The CLI exposes a project-only Host, a real Ark/R Host, or an explicitly selected
 deterministic demo. Production capability routing is still owned by the old app.
 
+## Local workbench
+
+The browser client is served by the native Rust Host; it is not an external website
+or the old desktop. Build and launch it with the same runtime flags:
+
+```sh
+cargo build --manifest-path next/Cargo.toml -p rho-next-cli --locked
+next/target/debug/rho-next --database /absolute/path/to/next-data/next.sqlite \
+  --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
+  workbench --url-file /absolute/path/to/private-launch-url
+```
+
+The URL file must not already exist. Open its full URL in a browser, then select an
+absolute project directory. `--project` can preselect a directory. Omit Ark/R flags
+for Project/Process-only hosting, or use `--rscript` for Environment without a live R
+session. The `--demo` test runtime is not accepted by this workbench.
+
+The server binds only `127.0.0.1` on an ephemeral port (`--port` overrides it). The
+launch fragment contains a per-run bearer token: keep the URL private. With no
+`--url-file`, the URL is printed to stdout. Unix URL files are created with mode
+0600; other platforms inherit directory access controls and are not yet verified.
+The static shell contains no token or project data. Host/Origin checks, bounded
+request bodies and same-origin resources protect the local entry; R and native
+commands still run with the user's OS permissions, not in a sandbox.
+
+UI scientific requests forward the five Host ports at `/api/host`. `/api/info` and
+`/api/project` manage hosting selection only, not scientific capabilities. An old
+browser project's requests are rejected after a switch. A switch ends the old R
+session (in-memory objects are not restored), clears project-specific environment
+and remote bindings, and is refused while work or an MCP session is active. If new
+startup fails, the UI reports no open project; it does not claim an old session was
+rolled back. Files and recorded Operations remain.
+
+The same Host exposes official Streamable HTTP MCP at `/mcp`. Configure the MCP
+client's URL and `Authorization: Bearer <launch-token>` header; the token is the
+`token` value in the private launch fragment, not the entire URL. Use this endpoint
+to share live R state with the workbench. Starting a second stdio Host against the
+same database is intentionally rejected by the existing writer lock. MCP sessions
+pin their project until the client closes them with the protocol's DELETE request.
+No conversation, Agent plan or user-approval database is created.
+
+Closing a page only stops waiting. A pending command is retained in that tab's
+session storage for explicit same-ID retry; no automatic command retry occurs.
+The UI reads durable event pages and fetches actual Operation results, displays at
+most 200 loaded Operations, and re-queries owner observations after new terminal
+results. It does not infer success from notifications or cancellation receipt.
+Cursor paging is not a live push or exactly-once delivery promise.
+
+Client types come from ts-rs 12.0.1 over Rust contracts. JSON integers remain
+numbers; unsafe event cursors are rejected by the client. Static HTML/CSS and the
+compiled app.js are embedded, so running the binary does not require Node. To edit
+the plain TypeScript client (no frontend framework or separate business server):
+
+```sh
+npm ci --ignore-scripts --prefix next/ui
+npm run generate --prefix next/ui
+npm run build --prefix next/ui
+npm run check --prefix next/ui
+node next/scripts/test-workbench.mjs
+node next/scripts/test-workbench.mjs --real-r
+```
+
+The checks cover generated type drift and actual HTTP/MCP/native-runtime behavior;
+they do not substitute for browser interaction and visual acceptance. A working
+computer/browser connection is needed for that separate check. Ctrl-C stops the
+local server and drains accepted Host work; it does not report work as cancelled.
+
+## MCP stdio
+
 Use the same startup flags with `mcp` instead of `session` to serve the official
 MCP protocol over stdio. The implementation uses rmcp; stdout contains only MCP
 frames. For example, an MCP client can launch `rho-next --database /path/state.sqlite

@@ -1,0 +1,89 @@
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use crate::{ArkConfig, NextHost, REnvironmentConfig, SshConfig};
+
+/// Native runtime selection shared by all edges. This is hosting, not a domain.
+#[derive(Debug, Clone)]
+pub enum RuntimeConfiguration {
+    Project,
+    Environment {
+        rscript: PathBuf,
+    },
+    Ark {
+        executable: PathBuf,
+        r_home: PathBuf,
+        environment: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct HostProfile {
+    pub database: PathBuf,
+    pub runtime: RuntimeConfiguration,
+    pub remote: Option<SshConfig>,
+}
+
+impl HostProfile {
+    pub fn runtime_name(&self) -> &'static str {
+        match self.runtime {
+            RuntimeConfiguration::Project => "project",
+            RuntimeConfiguration::Environment { .. } => "environment",
+            RuntimeConfiguration::Ark { .. } => "ark",
+        }
+    }
+
+    /// Bindings to a receipt or remote directory must not follow a project switch.
+    pub fn for_new_project(&self) -> Self {
+        let mut profile = self.clone();
+        profile.remote = None;
+        if let RuntimeConfiguration::Ark { environment, .. } = &mut profile.runtime {
+            *environment = None;
+        }
+        profile
+    }
+
+    pub async fn open(&self, project: &Path) -> Result<NextHost, String> {
+        let data = self.database.parent().unwrap_or(Path::new("."));
+        match &self.runtime {
+            RuntimeConfiguration::Project => {
+                NextHost::open_project_with_remote(&self.database, project, self.remote.clone())
+                    .await
+            }
+            RuntimeConfiguration::Environment { rscript } => {
+                NextHost::open_environment_with_remote(
+                    &self.database,
+                    REnvironmentConfig {
+                        rscript: rscript.clone(),
+                        project_root: project.to_owned(),
+                        data_root: data.join("environment"),
+                        timeout: Duration::from_secs(300),
+                    },
+                    self.remote.clone(),
+                )
+                .await
+            }
+            RuntimeConfiguration::Ark {
+                executable,
+                r_home,
+                environment,
+            } => {
+                NextHost::open_ark_with_remote(
+                    &self.database,
+                    ArkConfig {
+                        executable: executable.clone(),
+                        r_home: r_home.clone(),
+                        project_root: project.to_owned(),
+                        data_root: data.join("runtime"),
+                        execution_timeout: Duration::from_secs(600),
+                        library_path: None,
+                    },
+                    environment.as_deref(),
+                    self.remote.clone(),
+                )
+                .await
+            }
+        }
+        .map_err(|error| error.to_string())
+    }
+}

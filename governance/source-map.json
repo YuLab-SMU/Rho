@@ -25,6 +25,15 @@
     "next.mcp-real-r": {
       "command": ["node", "next/scripts/test-mcp.mjs", "--real-r"]
     },
+    "next.client": {
+      "command": ["node", "next/scripts/client.mjs", "check"]
+    },
+    "next.workbench": {
+      "command": ["node", "next/scripts/test-workbench.mjs"]
+    },
+    "next.workbench-real-r": {
+      "command": ["node", "next/scripts/test-workbench.mjs", "--real-r"]
+    },
     "docs.index": {
       "command": ["node", "scripts/governance.mjs", "check"]
     },
@@ -165,7 +174,10 @@
         "next.process-recovery",
         "next.remote-protocol",
         "next.mcp",
-        "next.mcp-real-r"
+        "next.mcp-real-r",
+        "next.client",
+        "next.workbench",
+        "next.workbench-real-r"
       ]
     },
     "desktop-ui": {

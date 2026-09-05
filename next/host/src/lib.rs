@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
+mod config;
 mod environment;
+pub use config::{HostProfile, RuntimeConfiguration};
 mod records;
 mod usage;
 pub use environment::REnvironmentConfig;
@@ -555,6 +557,11 @@ impl NextHost {
         self.gateway.get_operation(context, operation_id).await
     }
     /// Hosting lifecycle only: keep accepted work alive after an edge disconnects.
+    pub fn is_idle(&self) -> bool {
+        self.tasks.is_empty()
+    }
+
+    /// The caller must first stop accepting new work through every edge.
     pub async fn drain(&self) {
         self.tasks.close();
         self.tasks.wait().await;

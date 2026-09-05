@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Rho · Scientific workspace</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="wordmark" href="/">ρ <span>Rho</span><small>NEXT</small></a
+      ><span>Scientific workspace</span
+      ><span id="connection" role="status">正在连接</span>
+    </header>
+    <main>
+      <section class="project-bar" aria-label="项目">
+        <div>
+          <p class="eyebrow">LOCAL WORKSPACE</p>
+          <h1 id="project-title">打开一个科学项目</h1>
+          <p id="project-path">选择本机目录，连接真实运行环境。</p>
+        </div>
+        <button id="choose-project" class="secondary">选择项目</button>
+      </section>
+      <div id="notice" role="status" aria-live="polite" hidden></div>
+      <div id="pending-request" class="panel" hidden>
+        <p id="pending-label"></p>
+        <button id="retry-request" class="secondary">重发同一请求</button>
+        <button id="dismiss-request" class="quiet">
+          仅关闭重试提示，不取消执行
+        </button>
+      </div>
+      <div class="workbench-grid">
+        <section class="panel console">
+          <div class="section-heading">
+            <h2>R Console</h2>
+            <span id="runtime-status" class="badge">未连接</span>
+          </div>
+          <p class="hint">
+            代码在本机真实 R 中执行，以当前用户权限运行；这里不是隔离沙箱。
+          </p>
+          <label class="sr-only" for="code">R 代码</label
+          ><textarea
+            id="code"
+            spellcheck="false"
+            placeholder="输入 R 代码…"
+            rows="7"
+          ></textarea>
+          <div class="console-actions">
+            <span class="hint">⌘ / Ctrl + Enter 执行</span
+            ><button id="run-code" disabled>运行代码</button>
+          </div>
+          <div class="result-heading">
+            <h3>运行结果</h3>
+            <span id="console-state">等待执行</span>
+          </div>
+          <pre id="console-output" class="console-output" tabindex="0">
+执行后显示真实输出、条件与结果。关闭页面不会取消已接受的操作。</pre
+          >
+        </section>
+        <section class="panel workspace">
+          <div class="section-heading">
+            <h2>Workspace</h2>
+            <button id="refresh-workspace" class="quiet">刷新</button>
+          </div>
+          <p id="workspace-meta" class="hint">尚无运行时观察</p>
+          <div id="objects" class="object-list"></div>
+          <details>
+            <summary>对象详情 / 原始观察</summary>
+            <pre id="object-detail" tabindex="0">
+选择对象以读取有界预览，不会调用用户定义的打印方法。</pre
+            >
+          </details>
+        </section>
+        <section class="panel environment">
+          <div class="section-heading">
+            <h2>Environment</h2>
+            <button id="refresh-environment" class="quiet">刷新</button>
+          </div>
+          <p id="environment-meta" class="hint">尚无环境观察</p>
+          <div id="environment-summary"></div>
+          <details>
+            <summary>原始环境状态</summary>
+            <pre id="environment-detail" tabindex="0"></pre>
+          </details>
+        </section>
+        <section class="panel operations">
+          <div class="section-heading">
+            <h2>Operations</h2>
+            <button id="load-events" class="quiet">读取事件</button>
+          </div>
+          <p id="events-meta" class="hint">
+            从持久化事件恢复；不是另一份结果库。
+          </p>
+          <div id="operation-list"></div>
+          <details id="operation-detail-panel">
+            <summary>操作详情与恢复材料</summary>
+            <div id="operation-actions"></div>
+            <pre id="operation-detail" tabindex="0">选择一条操作。</pre>
+          </details>
+        </section>
+      </div>
+      <section class="panel capabilities">
+        <details id="capability-panel">
+          <summary>
+            能力目录 <span class="hint">所有操作与查询均来自同一 Registry</span>
+          </summary>
+          <div class="capability-form">
+            <label>能力<select id="capability"></select></label
+            ><label
+              >参数 JSON<textarea id="arguments" spellcheck="false" rows="6">
+{}</textarea
+              ></label
+            ><label
+              >前置条件 JSON<textarea
+                id="preconditions"
+                spellcheck="false"
+                rows="2"
+              >
+[]</textarea
+              >
+            </label>
+          </div>
+          <div class="console-actions">
+            <p id="capability-kind" class="hint"></p>
+            <button id="invoke-capability" disabled>提交</button>
+          </div>
+          <details>
+            <summary>输入 Schema</summary>
+            <pre id="capability-schema" tabindex="0"></pre>
+          </details>
+          <pre id="capability-result" tabindex="0"></pre>
+        </details>
+      </section>
+      <footer>
+        <span>本机 Host · 原生事实 · 统一操作</span
+        ><span id="mcp-address"></span>
+      </footer>
+    </main>
+    <dialog id="project-dialog">
+      <form id="project-form">
+        <h2>选择项目</h2>
+        <label for="project-input">本机目录的绝对路径</label
+        ><input
+          id="project-input"
+          autocomplete="off"
+          placeholder="/path/to/project"
+          required
+        />
+        <p class="hint">
+          切换会结束当前 R
+          会话，不保留内存对象。已保存的文件与操作记录保留。运行中或仍有 MCP
+          会话连接时不会切换。
+        </p>
+        <div class="console-actions">
+          <button type="button" id="close-project-dialog" class="secondary">
+            返回</button
+          ><button type="submit" id="open-project">打开项目</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
