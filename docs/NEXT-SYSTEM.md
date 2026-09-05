@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-05
 >
-> 当前阶段：N6 本机进程与 Environment 崩溃恢复已验证；下一步 SSH/Slurm，生产切换仍待完成
+> 当前阶段：N6 SSH/Slurm 已接入 Host/CLI 并通过本地协议测试；远程实测、资源回收和生产切换仍待完成
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -57,14 +57,14 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 项目 | 当前事实 |
 | --- | --- |
 | 总体状态 | 真实 Ark/R、Project/Git、环境计划/隔离安装/验证/新会话绑定及长期 CLI 已贯通；仍未替换旧生产入口 |
-| 当前里程碑 | N6 Execution（Building）；本机执行与两条显式恢复路径已验证；远程执行和生产切换未完成 |
+| 当前里程碑 | N6 Execution（Building）；SSH/Slurm 客户端路径与本地协议测试已完成，真实远程目标尚待指定 |
 | 已完成生产切换的 capability | 0；独立 Next CLI 的可用能力不计为旧生产入口已切换 |
 | 已退役的旧 capability 实现 | 0 |
 | 旧系统策略 | 冻结为行为参考；不作为 Next 的代码依赖 |
 | 前端策略 | 延后；需要时仅建立极简统一客户端 |
 | 数据策略 | Next 使用独立 schema 和数据目录，切换前不双写 |
 
-已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`。
+已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议实现 `2f9ce6b`。
 这些引用对应下方历史验证记录，不代表当前工作树已重新通过全部测试。
 N6 的本地执行、取消、输出收集已在 Host/CLI 验证；Git 和 Environment 复用同一进程执行器。Environment 与普通本地命令分别通过真实 Host 强制退出验收；后者不需要 R，并覆盖脱离进程组的子进程。验证只覆盖本机可观察、保留标记的进程，不代表远程任务或任意逃逸方式也已覆盖。
 
@@ -654,11 +654,12 @@ next 是迁移期名称。旧系统全部退役后，应把它提升为正常仓
 | rlang | 无求值检查 lazy binding | N3 使用；缺失时仅报告未检查绑定，不强制求值 |
 | renv + pak | R environment declaration/realization | N5 使用 pak 原生 lockfile_create/install 和 renv lockfile_read/restore/snapshot；本机真实验证通过 |
 | Pixi | 外层科学环境 | Environment 阶段 PoC |
-| Slurm / slurmrestd | Remote job truth | Execution 阶段采用 |
+| Slurm CLI / 可选 slurmrestd | Remote job truth | 已实现 OpenSSH 上的原生 CLI；尚未远程实测，未引入 REST 服务依赖 |
 | OS containment | 真实隔离 | 按平台、按威胁模型引入 |
 | process-wrap | 本地进程生命周期封装 | N6 已采用 10.0.0；Unix 进程组在本机验证，Windows Job Object 分支未实测 |
 | R ps | Environment 中跨进程组的子进程清理 | N6 已采用；本机 ps 1.9.3，复用原生 marker/find/kill/wait |
 | sysinfo | 无 R 依赖的本机进程观察与恢复 | N6 已采用 0.39.6；只启用 system，结果不包含进程环境 |
+| OpenSSH executable | 远程连接、认证与主机密钥核对 | N6 已接入；复用用户已有 alias/known_hosts，不自建 SSH 协议或凭证库 |
 | TypeScript generator | 极简前端 contract | Frontend 阶段选择 |
 
 禁止因为“未来也许有用”提前引入 DBOS、Restate、OpenTelemetry、完整 workflow runtime 或通用 policy engine。
@@ -725,7 +726,7 @@ building 只是开发进度，不是运行时 owner。禁止 shadow execution �
 | N3 | Workspace Query | querySnapshot 返回有来源、时间和 completeness 的 Workspace observation | Verified（含长期 CLI 会话；生产未切换） |
 | N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Next 实现 Verified；生产切换未完成 |
 | N5 | Environment | observe/plan/realize/verify 首条链路完成 | Next Verified（隔离本地 fixture、renv restore、新 Ark 绑定）；生产未切换 |
-| N6 | Execution | local process 后再扩展 SSH/Slurm | Building（本机执行、安装取消及两条崩溃恢复链已验证；远程部分未完成） |
+| N6 | Execution | local process 后再扩展 SSH/Slurm | Building（本机已验证；SSH/Slurm 已实现并通过协议测试，未远程实测） |
 | N7 | Public edges | MCP 与极简前端使用统一 host ports | Not started |
 | N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Not started |
 
@@ -763,7 +764,11 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | environment.reconcile | Operation | Next 独立 CLI/Host；生产未接入 | environment | Ready（本机 Host 崩溃验收） | 统一入口切换；仅清理本机已标记资源，不改写原结果 |
 | process.run_local | Operation | 多条旧生产路径；Next Host/CLI 已接入 | execution | Ready（本机正常/崩溃路径） | 公共入口切换 |
 | process.reconcile | Operation | Next 独立 CLI/Host；生产未接入 | execution | Ready（本机无 R 验收） | 公共入口切换；仅针对当前可见的同用户标记进程 |
-| slurm.submit/query/cancel | Operation + Query | execution/runner | execution | Deferred | N6 scheduler truth |
+| process.run_remote | Operation | 旧执行路径；Next Host/CLI 已注册 | execution / ssh adapter | Building（本地协议测试通过） | 指定目标后进行真实 SSH 验收 |
+| slurm.submit | Operation | 旧 execution/runner；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 验证真实集群提交与原生回执 |
+| slurm.snapshot | Query | 旧执行路径；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 验证真实 squeue/sacct 状态与版本 |
+| slurm.reconcile | Operation | Next 独立入口 | execution / ssh adapter | Building（本地协议测试通过） | 真实丢回执/状态核对；不重提作业 |
+| slurm.request_cancel | Operation | 旧执行路径；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 真实取消请求与后续状态观察 |
 | MCP edge | Edge | rho-mcp + Agent Gateway | host adapter | Deferred | N7 no business routing |
 | desktop-lite | Edge | desktop | unified client | Deferred | N7 generated contract |
 | evidence projection | Query projection | rho-evidence-graph | 未决定 | Deferred | 出现真实消费者 |
@@ -972,6 +977,18 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 收敛：Environment 与 Execution 现在共用 OperationRecords 只读接口；移除原先仅属于 Environment 的同形接口，依然读取同一个 Journal。
 - 证据：真实 CLI 被强制终止后，父进程及独立进程组中的子进程被清理，无关标记的进程仍活着；只读查询不恢复数据库，旧结果保持 uncertain，副作用文件只写一次。
 
+### N-D021 — OpenSSH 与 Slurm 原生操作，不复制调度器
+
+- 日期：2026-09-05
+- 状态：Accepted；代码已接入，本地协议 Verified，真实远程未验证
+- 决定：OpenSSH 管连接、认证及 known_hosts；Next 只构造有边界的命令与数据流。Host 可同时装配 Workspace、Environment 和远程能力，启动不会连接 SSH。
+- 原生身份：sbatch --parsable 返回 cluster/JobID；Operation 派生作业名是恢复标记，comment 只是附加关联，因为会计注释保存取决于集群配置。
+- 操作约束：提交一次，不自动重试或 requeue；丢回执后原结果保持 uncertain。reconcile 查询唯一匹配作业，缺失或歧义不构成重新提交的依据。
+- 查询与取消：squeue 读取当前状态，必要时查 30 天内 sacct；缺失记录不证明作业不存在。request_cancel 使用当前用户/作业名过滤，取消回执与后续调度器状态分开返回。
+- 机械边界：显式 Bash body 与 typed 资源选项；脚本中的 SBATCH 指令和继承的 Slurm CLI 选项不能偷偷改变分配。连接使用严格主机密钥检查，关闭 agent forwarding 与共享控制连接。
+- 证据：本地假 SSH/调度器运行了真实 argv、stdin 和 POSIX 引用路径，验证成功/丢回执、查询纯度、歧义拒绝、取消回执不等于终态。没有连接服务器或提交真实作业。
+- 限制：版本 1 是单节点/单任务分配；真实目标、工具版本、远程权限及运行行为仍需验收。SSH 超时、本地取消或 255 状态只能留下远程结果不确定，不能宣称远端已停止。
+
 ## 24. Open Decisions
 
 以下问题尚未决定，不能由实现者顺手固化：
@@ -1099,6 +1116,15 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 生产切换：无；Legacy 删除：无。移除了重复的领域专用读取接口，Git 保留改动历史。
 - 下一步：SSH/Slurm 原生执行适配；真实目标尚待用户指定，先继续本地及协议实现。
 
+### 2026-09-05 — SSH/Slurm 客户端路径与本地协议验收
+
+- Git：`2f9ce6b`；这是协议实现检查点，不是远程验收或整体完成。
+- 实现：新增 ssh adapter，以及 process.run_remote、slurm.submit/snapshot/reconcile/request_cancel；通过既有 Host 五端口暴露。Host 用明确的领域装配结构组合能力，不扩张一串位置参数或在 Edge 编写业务路由。
+- 验证：Next workspace tests、Clippy、architecture check 通过；`node next/scripts/test-remote-protocol.mjs` 本地协议测试通过。测试明确替换了 SSH/Slurm executable，没有网络连接或真实调度器作业。
+- 发现：初始 sed 模式在测试平台不兼容，已修正；查询纯度现在在同一已启动 Host 内比较，避免将 Host 初始化的数据库头变化误算成 Query 写入。
+- 回归：真实 R 与 Environment 验证仍通过。生产切换：无；Legacy 删除：无。
+- 下一步：等待目标信息期间完成本机 staging/恢复材料保留与回收；目标获指定后补真实 SSH/Slurm 验收，再继续公共入口和旧系统退役。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。
@@ -1153,9 +1179,9 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 ## 27. 当前唯一下一步
 
-N6：把本地进程与后续 SSH/Slurm 执行放进统一操作和观察路径。
+N6：完成执行能力的真实验收与资源收敛。
 
-本机进程与 Environment 的真实 Host 崩溃恢复已分别验证。最近的可执行出口是 SSH/Slurm：建立真实协议和原生 job/host 引用，将 submit/query/cancel 接入既有 Host ports；未知提交结果不得自动重提。未指定远程验收目标前，不连接服务器或提交作业，也不把本地/协议测试写成远程实测。
+本机恢复已验证，SSH/Slurm 已接入并通过本地协议测试。真实远程目标尚待用户指定；未指定前不连接或提交作业。当前可执行出口是 staging 与恢复材料的保留/回收：只处理已确认不再被使用的本机材料，保留 uncertain 的恢复依据，不删除活跃或已绑定环境。
 
 必须只包含：
 
