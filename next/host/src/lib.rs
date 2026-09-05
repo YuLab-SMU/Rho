@@ -21,6 +21,10 @@ use rho_next_contract::{
     ObservationCompleteness, Operation, OperationEventRecord, OperationId, OperationRecord,
     OutboxRecord, QueryRequest, QuerySnapshot,
 };
+use rho_next_execution::remote::{REMOTE_EXECUTE_SCOPE, RemoteRunHandler};
+use rho_next_execution::slurm::{
+    SLURM_READ_SCOPE, SLURM_WRITE_SCOPE, SlurmAction, SlurmHandler, SlurmOwner, SlurmQueryHandler,
+};
 use rho_next_execution::{RUN_LOCAL_SCOPE, ReconcileProcessHandler, RunLocalHandler};
 use rho_next_git::GitProject;
 use rho_next_operation::{
@@ -34,6 +38,8 @@ use rho_next_project::{
     ProjectRuntime, ProjectSnapshotHandler,
 };
 use rho_next_sqlite::SqliteOperationJournal;
+pub use rho_next_ssh::SshConfig;
+use rho_next_ssh::SshRemote;
 use rho_next_workspace::{
     RunRArguments, WORKSPACE_READ_SCOPE, WorkspaceQueryHandler, WorkspaceQueryKind,
     WorkspaceRunHandler, WorkspaceRuntime, WorkspaceRuntimeError, WorkspaceRuntimeReport,
@@ -113,10 +119,38 @@ pub struct NextHost {
     recovered_on_open: Vec<OperationRecord>,
 }
 
+#[derive(Default)]
+struct HostDomains {
+    workspace: Option<Arc<dyn WorkspaceRuntime>>,
+    project: Option<Arc<dyn ProjectRuntime>>,
+    environment: Option<Arc<dyn EnvironmentRuntime>>,
+    active_library: Option<String>,
+    remote: Option<Arc<SshRemote>>,
+}
+fn remote_components(
+    root: &Path,
+    config: Option<SshConfig>,
+) -> Result<Option<Arc<SshRemote>>, OperationError> {
+    config
+        .map(|config| {
+            SshRemote::new(root, config)
+                .map(Arc::new)
+                .map_err(OperationError::TargetResolution)
+        })
+        .transpose()
+}
+
 impl NextHost {
     pub async fn open_project(
         database: impl AsRef<Path>,
         project_root: impl AsRef<Path>,
+    ) -> Result<Self, OperationError> {
+        Self::open_project_with_remote(database, project_root, None).await
+    }
+    pub async fn open_project_with_remote(
+        database: impl AsRef<Path>,
+        project_root: impl AsRef<Path>,
+        remote: Option<SshConfig>,
     ) -> Result<Self, OperationError> {
         let database = database.as_ref();
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
@@ -124,12 +158,14 @@ impl NextHost {
             GitProject::open(project_root, protected_project_paths(database)?)
                 .map_err(OperationError::TargetResolution)?,
         );
+        let remote = remote_components(Path::new(project.root()), remote)?;
         Self::compose(
             journal,
-            None,
-            Some(project),
-            None,
-            None,
+            HostDomains {
+                project: Some(project),
+                remote,
+                ..HostDomains::default()
+            },
             Arc::new(SystemClock),
             Arc::new(UuidOperationIdGenerator),
         )
@@ -172,9 +208,17 @@ impl NextHost {
         database: impl AsRef<Path>,
         config: REnvironmentConfig,
     ) -> Result<Self, OperationError> {
+        Self::open_environment_with_remote(database, config, None).await
+    }
+    pub async fn open_environment_with_remote(
+        database: impl AsRef<Path>,
+        config: REnvironmentConfig,
+        remote: Option<SshConfig>,
+    ) -> Result<Self, OperationError> {
         let database = database.as_ref();
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
         let root = config.project_root.clone();
+        let remote = remote_components(&root, remote)?;
         let data = config.data_root.clone();
         let environment =
             Arc::new(REnvironment::open(config).map_err(OperationError::TargetResolution)?);
@@ -187,10 +231,12 @@ impl NextHost {
             Arc::new(GitProject::open(root, excluded).map_err(OperationError::TargetResolution)?);
         Self::compose(
             journal,
-            None,
-            Some(project),
-            Some(environment),
-            None,
+            HostDomains {
+                project: Some(project),
+                environment: Some(environment),
+                remote,
+                ..HostDomains::default()
+            },
             Arc::new(SystemClock),
             Arc::new(UuidOperationIdGenerator),
         )
@@ -199,12 +245,21 @@ impl NextHost {
 
     pub async fn open_ark_with_environment(
         database: impl AsRef<Path>,
+        config: ArkConfig,
+        realization_id: Option<&str>,
+    ) -> Result<Self, OperationError> {
+        Self::open_ark_with_remote(database, config, realization_id, None).await
+    }
+    pub async fn open_ark_with_remote(
+        database: impl AsRef<Path>,
         mut config: ArkConfig,
         realization_id: Option<&str>,
+        remote: Option<SshConfig>,
     ) -> Result<Self, OperationError> {
         // Acquire the journal's host lock before creating any external runtime.
         let database = database.as_ref();
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
+        let remote = remote_components(&config.project_root, remote)?;
         std::fs::create_dir_all(&config.data_root)
             .map_err(|error| OperationError::Storage(error.to_string()))?;
         let mut excluded = protected_project_paths(database)?;
@@ -256,10 +311,13 @@ impl NextHost {
         );
         Self::compose(
             journal,
-            Some(runtime),
-            Some(project),
-            Some(environment),
-            active_library,
+            HostDomains {
+                workspace: Some(runtime),
+                project: Some(project),
+                environment: Some(environment),
+                active_library,
+                remote,
+            },
             Arc::new(SystemClock),
             Arc::new(UuidOperationIdGenerator),
         )
@@ -280,6 +338,9 @@ impl NextHost {
                 ENVIRONMENT_READ_SCOPE.into(),
                 ENVIRONMENT_WRITE_SCOPE.into(),
                 RUN_LOCAL_SCOPE.into(),
+                REMOTE_EXECUTE_SCOPE.into(),
+                SLURM_READ_SCOPE.into(),
+                SLURM_WRITE_SCOPE.into(),
             ]),
             connection_id: format!("cli:{}", std::process::id()),
             correlation_id: None,
@@ -320,10 +381,10 @@ impl NextHost {
     ) -> Result<Self, OperationError> {
         Self::compose(
             journal,
-            Some(runtime),
-            None,
-            None,
-            None,
+            HostDomains {
+                workspace: Some(runtime),
+                ..HostDomains::default()
+            },
             clock,
             id_generator,
         )
@@ -332,16 +393,34 @@ impl NextHost {
 
     async fn compose(
         journal: Arc<dyn OperationJournal>,
-        runtime: Option<Arc<dyn WorkspaceRuntime>>,
-        project: Option<Arc<dyn ProjectRuntime>>,
-        environment: Option<Arc<dyn EnvironmentRuntime>>,
-        active_library: Option<String>,
+        domains: HostDomains,
         clock: Arc<dyn Clock>,
         id_generator: Arc<dyn OperationIdGenerator>,
     ) -> Result<Self, OperationError> {
+        let HostDomains {
+            workspace: runtime,
+            project,
+            environment,
+            active_library,
+            remote,
+        } = domains;
         let mut registry = CapabilityRegistry::new();
         let lane = Arc::new(tokio::sync::Mutex::new(()));
         let records = Arc::new(JournalRecords(journal.clone()));
+        if let Some(remote) = remote {
+            registry.register(Arc::new(RemoteRunHandler::new(remote.clone())))?;
+            if remote.has_slurm() {
+                let owner = Arc::new(SlurmOwner::new(remote, records.clone()));
+                for action in [
+                    SlurmAction::Submit,
+                    SlurmAction::Reconcile,
+                    SlurmAction::RequestCancel,
+                ] {
+                    registry.register(Arc::new(SlurmHandler::new(owner.clone(), action)))?;
+                }
+                registry.register_query(Arc::new(SlurmQueryHandler::new(owner)))?;
+            }
+        }
         let has_workspace = runtime.is_some();
         if let Some(runtime) = runtime {
             let workspace = Arc::new(WorkspaceRunHandler::with_lane(runtime, lane.clone()));

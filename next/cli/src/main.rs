@@ -4,7 +4,7 @@ mod session;
 
 use clap::{Parser, Subcommand};
 use rho_next_contract::{CapabilityRef, Invocation, OperationId, Precondition};
-use rho_next_host::{ArkConfig, NextHost, REnvironmentConfig, RUN_R_CAPABILITY_ID};
+use rho_next_host::{ArkConfig, NextHost, REnvironmentConfig, RUN_R_CAPABILITY_ID, SshConfig};
 use serde_json::json;
 
 #[derive(Debug, Parser)]
@@ -26,12 +26,24 @@ struct Cli {
     environment: Option<String>,
     #[arg(long)]
     project: Option<PathBuf>,
+    /// An existing OpenSSH host alias. No connection is made while opening Host.
+    #[arg(long, requires = "remote_root", conflicts_with = "demo")]
+    remote_host: Option<String>,
+    #[arg(long, requires = "remote_host")]
+    remote_root: Option<String>,
+    #[arg(long, requires = "remote_host")]
+    slurm_cluster: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
 
 impl Cli {
     async fn open_host(&self) -> Result<NextHost, String> {
+        let remote = self.remote_host.as_ref().map(|host| SshConfig {
+            host_alias: host.clone(),
+            project_root: self.remote_root.clone().unwrap_or_default(),
+            slurm_cluster: self.slurm_cluster.clone(),
+        });
         if self.demo {
             NextHost::open_demo(&self.database).await
         } else if self.ark.is_some() {
@@ -56,8 +68,13 @@ impl Cli {
                 execution_timeout: std::time::Duration::from_secs(600),
                 library_path: None,
             };
-            NextHost::open_ark_with_environment(&self.database, config, self.environment.as_deref())
-                .await
+            NextHost::open_ark_with_remote(
+                &self.database,
+                config,
+                self.environment.as_deref(),
+                remote,
+            )
+            .await
         } else if let Some(rscript) = &self.rscript {
             let config = REnvironmentConfig {
                 rscript: rscript.clone(),
@@ -69,11 +86,12 @@ impl Cli {
                     .join("environment"),
                 timeout: std::time::Duration::from_secs(300),
             };
-            NextHost::open_environment(&self.database, config).await
+            NextHost::open_environment_with_remote(&self.database, config, remote).await
         } else {
-            NextHost::open_project(
+            NextHost::open_project_with_remote(
                 &self.database,
                 self.project.as_ref().ok_or("--project is required")?,
+                remote,
             )
             .await
         }

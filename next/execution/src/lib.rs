@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+pub mod remote;
+pub mod slurm;
 use async_trait::async_trait;
 use rho_next_contract::{
     CancellationClass, CapabilityDescriptor, CapabilityKind, CapabilityRef, EffectHint,
@@ -251,24 +253,7 @@ impl OperationHandler for RunLocalHandler {
         Some(self.executor.root().into())
     }
     fn normalize_arguments(&self, value: &Value) -> Result<Value, OperationError> {
-        let args: RunLocalArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
-        if args.program.is_empty()
-            || args.program.len() > 4096
-            || args.program.contains('\0')
-            || args.args.len() > 256
-            || args.args.iter().any(|arg| arg.contains('\0'))
-            || args
-                .stdin
-                .as_ref()
-                .is_some_and(|input| input.len() > 128 * 1024)
-            || !(1..=3_600_000).contains(&args.timeout_ms)
-            || !(1..=131072).contains(&args.output_limit_bytes)
-        {
-            return Err(invalid(
-                "local process arguments exceed their declared bounds",
-            ));
-        }
-        serde_json::to_value(args).map_err(invalid)
+        normalize_run_arguments(value)
     }
     fn resolve_target(&self, _: &Value) -> Result<TargetRef, OperationError> {
         Ok(TargetRef {
@@ -346,4 +331,23 @@ impl OperationHandler for RunLocalHandler {
 }
 fn invalid(error: impl std::fmt::Display) -> OperationError {
     OperationError::InvalidInput(error.to_string())
+}
+
+pub fn normalize_run_arguments(value: &Value) -> Result<Value, OperationError> {
+    let args: RunLocalArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
+    if args.program.is_empty()
+        || args.program.len() > 4096
+        || args.program.contains('\0')
+        || args.args.len() > 256
+        || args.args.iter().any(|arg| arg.contains('\0'))
+        || args
+            .stdin
+            .as_ref()
+            .is_some_and(|input| input.len() > 128 * 1024)
+        || !(1..=3_600_000).contains(&args.timeout_ms)
+        || !(1..=131072).contains(&args.output_limit_bytes)
+    {
+        return Err(invalid("process arguments exceed their declared bounds"));
+    }
+    serde_json::to_value(args).map_err(invalid)
 }

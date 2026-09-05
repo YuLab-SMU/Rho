@@ -208,6 +208,7 @@ Checks:
 - `next.environment`: `["node","next/scripts/test-environment.mjs"]`
 - `next.process-recovery`: `["node","next/scripts/test-process-recovery.mjs"]`
 - `next.real-r`: `["node","next/scripts/test-real-r.mjs"]`
+- `next.remote-protocol`: `["node","next/scripts/test-remote-protocol.mjs"]`
 - `next.rust`: `["cargo","test","--manifest-path","next/Cargo.toml","--workspace","--locked","--","--test-threads=1"]`
 
 ## `persistence-and-interfaces`

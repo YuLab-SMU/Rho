@@ -16,11 +16,12 @@ const allowed = {
   "rho-next-environment": ["rho-next-contract", "rho-next-operation"],
   "rho-next-execution": ["rho-next-contract", "rho-next-operation"],
   "rho-next-process": ["rho-next-contract", "rho-next-operation", "rho-next-execution"],
+  "rho-next-ssh": ["rho-next-contract", "rho-next-operation", "rho-next-execution", "rho-next-process"],
   "rho-next-r-environment": ["rho-next-environment", "rho-next-operation", "rho-next-process"],
   "rho-next-git": ["rho-next-project", "rho-next-process"],
   "rho-next-sqlite": ["rho-next-contract", "rho-next-operation"],
   "rho-next-r-runtime": ["rho-next-contract", "rho-next-workspace"],
-  "rho-next-host": ["rho-next-contract", "rho-next-operation", "rho-next-sqlite", "rho-next-workspace", "rho-next-r-runtime", "rho-next-project", "rho-next-git", "rho-next-environment", "rho-next-r-environment", "rho-next-execution", "rho-next-process"],
+  "rho-next-host": ["rho-next-contract", "rho-next-operation", "rho-next-sqlite", "rho-next-workspace", "rho-next-r-runtime", "rho-next-project", "rho-next-git", "rho-next-environment", "rho-next-r-environment", "rho-next-execution", "rho-next-process", "rho-next-ssh"],
   "rho-next-cli": ["rho-next-contract", "rho-next-host"],
 };
 for (const pkg of metadata.packages) {

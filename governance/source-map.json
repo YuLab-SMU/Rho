@@ -16,6 +16,9 @@
     "next.process-recovery": {
       "command": ["node", "next/scripts/test-process-recovery.mjs"]
     },
+    "next.remote-protocol": {
+      "command": ["node", "next/scripts/test-remote-protocol.mjs"]
+    },
     "docs.index": {
       "command": ["node", "scripts/governance.mjs", "check"]
     },
@@ -153,7 +156,8 @@
         "next.rust",
         "next.real-r",
         "next.environment",
-        "next.process-recovery"
+        "next.process-recovery",
+        "next.remote-protocol"
       ]
     },
     "desktop-ui": {

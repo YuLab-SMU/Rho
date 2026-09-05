@@ -232,3 +232,47 @@ This acceptance kills a real CLI Host, observes parent and detached-child exit,
 checks that an unrelated process survives, and verifies idempotency and unchanged
 original uncertainty. Environment and Execution share a read-only OperationRecords
 port to the same journal; no recovery status database or persisted PID table was added.
+
+SSH and Slurm adapters are now wired into Host, but **only local protocol fixtures
+have been verified**, not a real remote target. Configure an existing OpenSSH alias
+and a canonical absolute POSIX project directory with `--remote-host ALIAS
+--remote-root /absolute/project`; add `--slurm-cluster NAME` to expose Slurm.
+These flags work with Project-only, Rscript and Ark Hosts. Opening Host does not
+connect to SSH. Authentication and known hosts remain with OpenSSH; unknown or
+changed host keys are not automatically accepted and there is no password prompt.
+
+The same five session ports expose these capabilities:
+
+| Capability | Input / result |
+| --- | --- |
+| process.run_remote | Same program/args/stdin bounds as local execution; SSH loss or local cancellation yields uncertain, not proof of remote termination |
+| slurm.submit | Bash `body`, optional cpus/memory_mb/time_minutes/gpus/partition/account; returns native cluster + JobID + log paths, not job completion |
+| slurm.snapshot | Query by `submission_operation_id`; reads scheduler queue or bounded accounting history |
+| slurm.reconcile | New Operation observing a unique native job after a lost submission receipt; never resubmits or rewrites the source outcome |
+| slurm.request_cancel | Requests cancellation of the matching job; separately returns any subsequent scheduler observation |
+
+For example, in a configured session:
+
+```json
+{"id":"submit","request":{"method":"invoke","params":{"client_request_id":"batch-1","capability":{"id":"slurm.submit","version":1},"arguments":{"body":"Rscript analysis.R","cpus":2,"memory_mb":4096,"time_minutes":10}}}}
+```
+
+Version 1 submits one node/task allocation. Resource settings are explicit flags;
+the supplied body is not a file of `#SBATCH` directives. Inherited Slurm CLI option
+environment variables are cleared. An Operation-derived job name is the recovery
+marker, because [accounting comments are configuration-dependent](https://slurm.schedmd.com/sacct.html).
+Query results preserve native state strings and source (`squeue`/`sacct`), with partial
+completeness. Accounting lookup is limited to 30 days; missing/ambiguous results are
+not proof that no job exists. No background scheduler polling or automatic requeue
+is introduced. [Cancellation](https://slurm.schedmd.com/scancel.html) uses the native
+name/current-user filter and does not turn its acknowledgement into `CANCELLED`.
+
+```sh
+node next/scripts/test-remote-protocol.mjs
+```
+
+This POSIX-only test replaces SSH/Slurm executables inside a private temporary PATH.
+It verifies real argument/stream handling, quote preservation, no startup connection,
+lost receipts without replay, query purity and cancel-request semantics. It is not
+remote acceptance. Real cluster availability, installed command versions and remote
+runtime behavior must still be verified on the user-selected target.
