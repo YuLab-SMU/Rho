@@ -16,7 +16,7 @@ const result=spawnSync("cargo",["test","--manifest-path","Cargo.toml","-p","rho-
   cwd:root,env,stdio:"inherit",timeout:180_000,
 });
 assert.equal(result.status,0,result.error?.message || result.signal || "Environment integration failed.");
-console.log("Verified pak plan/install, confirmed installer cancellation, renv restore, namespace probes, source/library tampering, restart binding and unchanged user library.");
+console.log("Verified pak/renv, installer cancellation, live-library retention, quarantine/restore/purge, lost-commit recovery, namespace probes, restart binding and unchanged user library.");
 const run=(command,args,options={})=>{
   const output=spawnSync(command,args,{cwd:root,encoding:"utf8",timeout:120_000,...options});
   assert.equal(output.status,0,output.error?.message || output.stderr || output.signal);

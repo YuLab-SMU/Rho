@@ -147,8 +147,8 @@ cancellation is supported by plan/realize/verify. Confirmed cancellation retains
 the staged library and does not produce an activatable receipt. The adapter uses
 ps-native tree markers to find and stop callr/processx descendants that create
 separate sessions; cleanup failure is uncertain, not cancelled. Staged-library
-retention is still pending. Keep the data directory outside any local source
-package to avoid self-containing builds.
+retention uses explicit preview/quarantine/restore/purge operations. Keep the data
+directory outside any local source package to avoid self-containing builds.
 
 Before an effectful Environment helper starts, its native ps marker is atomically
 saved under `environment/recovery/`, bound to the original Operation and project.
@@ -276,3 +276,43 @@ It verifies real argument/stream handling, quote preservation, no startup connec
 lost receipts without replay, query purity and cancel-request semantics. It is not
 remote acceptance. Real cluster availability, installed command versions and remote
 runtime behavior must still be verified on the user-selected target.
+
+Environment material retention is explicit, not an age-based background sweep:
+
+| Port / capability | Purpose |
+| --- | --- |
+| environment.retention (Query) | Preview a source plan/realization by `operation_id` |
+| environment.cleanup | Move eligible staging into quarantine; requires the preview's `expected_fingerprint` |
+| environment.cleanup_status (Query) | Observe both locations by `cleanup_operation_id`, including after a lost commit |
+| environment.restore_cleanup | Restore quarantined staging if its original path is vacant; requires the current trash fingerprint |
+| environment.purge_cleanup | Permanently delete only that quarantined directory; requires the current trash fingerprint |
+
+Only failed or confirmed-cancelled attempts are candidates. Successful reusable
+outputs, uncertain source operations, live native processes and unavailable
+recovery references are retained. Bounded successful-output pages identify plan
+source/library references. The existing R session supplies its actual library
+paths and loaded-namespace paths, so changing `.libPaths()` cannot bypass protection.
+If those observations are unavailable or incomplete, collection is refused.
+
+```json
+{"id":"preview","request":{"method":"query_snapshot","params":{"capability":{"id":"environment.retention","version":1},"arguments":{"operation_id":"<failed or cancelled attempt>"}}}}
+{"id":"collect","request":{"method":"invoke","params":{"client_request_id":"collect-1","capability":{"id":"environment.cleanup","version":1},"arguments":{"operation_id":"<same attempt>","expected_fingerprint":"<material.stage.fingerprint from preview>"}}}}
+```
+
+Restore/purge arguments contain `cleanup_operation_id` and `expected_fingerprint`
+from `material.trash` in cleanup_status. The token describes current filesystem
+metadata, not a new scientific revision. Inventory is limited to 50,000 entries;
+symbolic links are not followed and special files prevent collection. Operations
+recheck source scope, references, native processes and the preview token before
+changing anything. Quarantine paths derive from the cleanup OperationId, so a
+rename followed by a failed database commit can be inspected without replay.
+
+Purge is irreversible; quarantine/restore preserve bytes. Native recovery markers
+and original Operation records are kept, even after purge. Project files,
+successful environment libraries, Workspace result/log files and unidentified
+orphan material are not part of this sweep. External processes outside Rho's
+observable ownership are not a claimed containment boundary.
+
+The real Environment acceptance covers live-library protection, stale previews,
+quarantine/restore/purge, external symlink-target preservation and lost-commit
+recovery. It only removes private test material, never the user's environments.

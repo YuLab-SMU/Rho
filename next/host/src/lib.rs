@@ -2,6 +2,7 @@
 
 mod environment;
 mod records;
+mod usage;
 pub use environment::REnvironmentConfig;
 use environment::selected_environment;
 use records::JournalRecords;
@@ -422,6 +423,10 @@ impl NextHost {
             }
         }
         let has_workspace = runtime.is_some();
+        let usage = runtime.as_ref().map(|runtime| {
+            Arc::new(usage::WorkspaceUsage(runtime.clone()))
+                as Arc<dyn rho_next_environment::EnvironmentUsage>
+        });
         if let Some(runtime) = runtime {
             let workspace = Arc::new(WorkspaceRunHandler::with_lane(runtime, lane.clone()));
             registry.register(workspace.clone())?;
@@ -454,13 +459,10 @@ impl NextHost {
             registry.register_query(Arc::new(ProjectReadHandler::new(owner)))?;
         }
         if let Some(environment) = environment {
-            let owner = Arc::new(EnvironmentOwner::new(
-                environment,
-                records,
-                lane,
-                active_library,
-                has_workspace,
-            ));
+            let owner = Arc::new(
+                EnvironmentOwner::new(environment, records, lane, active_library, has_workspace)
+                    .with_usage(usage),
+            );
             for action in [
                 EnvironmentAction::Plan,
                 EnvironmentAction::Realize,
@@ -469,7 +471,23 @@ impl NextHost {
             ] {
                 registry.register(Arc::new(EnvironmentHandler::new(owner.clone(), action)))?;
             }
-            registry.register_query(Arc::new(EnvironmentObserveHandler::new(owner)))?;
+            registry.register_query(Arc::new(EnvironmentObserveHandler::new(owner.clone())))?;
+            for action in [
+                rho_next_environment::MaterialAction::Quarantine,
+                rho_next_environment::MaterialAction::Restore,
+                rho_next_environment::MaterialAction::Purge,
+            ] {
+                registry.register(Arc::new(rho_next_environment::RetentionHandler::new(
+                    owner.clone(),
+                    action,
+                )))?;
+            }
+            for trash in [false, true] {
+                registry.register_query(Arc::new(rho_next_environment::RetentionQuery::new(
+                    owner.clone(),
+                    trash,
+                )))?;
+            }
         }
         let registry = Arc::new(registry);
         let gateway = Arc::new(OperationGateway::new(

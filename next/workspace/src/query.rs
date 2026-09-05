@@ -80,6 +80,9 @@ pub struct WorkspaceSnapshotData {
     pub truncated: bool,
     pub working_directory: String,
     pub r_version: String,
+    pub library_paths: Vec<String>,
+    pub namespace_paths: Vec<String>,
+    pub library_usage_complete: bool,
 }
 
 pub struct WorkspaceObservation {

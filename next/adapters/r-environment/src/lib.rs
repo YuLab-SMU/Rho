@@ -1,9 +1,11 @@
 #![forbid(unsafe_code)]
 
+mod retention;
 use async_trait::async_trait;
 use rho_next_environment::{
     EnvironmentPlan, EnvironmentRealization, EnvironmentReconciliation, EnvironmentRuntime,
-    NamespaceProbe, PackageVersion, PlanArguments, SourceDigest, Verification,
+    MaterialAction, MaterialChange, MaterialKind, MaterialState, NamespaceProbe, PackageVersion,
+    PlanArguments, SourceDigest, Verification,
 };
 use rho_next_operation::HandlerError;
 use rho_next_process::{ProcessOptions, ProcessTermination, run_command};
@@ -133,13 +135,16 @@ impl REnvironment {
     }
     fn recovery_path(&self, id: &str) -> Result<PathBuf, String> {
         let directory = self.config.data_root.join("recovery");
-        std::fs::create_dir_all(&directory).map_err(display)?;
-        if directory.canonicalize().map_err(display)? != directory {
+        if directory.exists() && directory.canonicalize().map_err(display)? != directory {
             return Err("Environment recovery directory identity changed".into());
         }
         Ok(directory.join(format!("{:x}.json", Sha256::digest(id.as_bytes()))))
     }
     fn persist_marker(&self, file: NamedTempFile, id: &str, marker: &str) -> Result<(), String> {
+        if self.config.data_root.canonicalize().map_err(display)? != self.config.data_root {
+            return Err("Environment data root identity changed".into());
+        }
+        std::fs::create_dir_all(self.config.data_root.join("recovery")).map_err(display)?;
         let target = self.recovery_path(id)?;
         let material = RecoveryMarker {
             schema_version: 1,
@@ -411,6 +416,25 @@ impl REnvironment {
 impl EnvironmentRuntime for REnvironment {
     fn root(&self) -> &str {
         &self.root
+    }
+    async fn material_state(
+        &self,
+        source_id: &str,
+        kind: MaterialKind,
+        cleanup_id: Option<&str>,
+    ) -> Result<MaterialState, String> {
+        self.inspect_material(source_id, kind, cleanup_id).await
+    }
+    async fn change_material(
+        &self,
+        source_id: &str,
+        kind: MaterialKind,
+        cleanup_id: &str,
+        action: MaterialAction,
+        expected_fingerprint: &str,
+    ) -> Result<MaterialChange, HandlerError> {
+        self.apply_material_change(source_id, kind, cleanup_id, action, expected_fingerprint)
+            .await
     }
     async fn reconcile(
         &self,
@@ -933,6 +957,7 @@ mod recovery_tests {
         );
         assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 0);
         std::fs::remove_file(&recovery).unwrap();
+        std::fs::create_dir(&recovery).unwrap();
         let file = runtime.recovery_path("op_test").unwrap();
         let target = outside.join("marker");
         std::fs::write(&target, b"{}").unwrap();

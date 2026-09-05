@@ -11,7 +11,7 @@ use rho_next_contract::{
 };
 use rho_next_operation::{
     Admission, CancellationRequestOutcome, CommitPlan, OperationError, OperationJournal,
-    StoredDomainFact,
+    OperationOutputPage, StoredDomainFact,
 };
 use rusqlite::{
     Connection, OpenFlags, OptionalExtension, Row, Transaction, TransactionBehavior, params,
@@ -634,6 +634,60 @@ impl OperationJournal for SqliteOperationJournal {
             .map_err(storage)?;
         rows.into_iter().map(decode_fact).collect()
     }
+    async fn successful_outputs(
+        &self,
+        scope: &str,
+        capability: &rho_next_contract::CapabilityRef,
+        after_id: Option<&str>,
+        limit: usize,
+    ) -> Result<OperationOutputPage, OperationError> {
+        if !(1..=32).contains(&limit) {
+            return Err(OperationError::InvalidInput(
+                "output page limit must be 1..=32".into(),
+            ));
+        }
+        capability.validate()?;
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT operation_id, COALESCE(output_json, 'null') FROM operations
+            WHERE status = 'succeeded' AND capability_id = ?1 AND capability_version = ?2
+            AND json_extract(operation_json, '$.idempotency_scope') = ?3 AND operation_id > ?4
+            ORDER BY operation_id LIMIT ?5",
+            )
+            .map_err(storage)?;
+        let mut rows = statement
+            .query(params![
+                capability.id,
+                capability.version,
+                scope,
+                after_id.unwrap_or(""),
+                (limit + 1) as i64
+            ])
+            .map_err(storage)?;
+        let mut selected = Vec::new();
+        let mut bytes = 0;
+        while let Some(row) = rows.next().map_err(storage)? {
+            let id: String = row.get(0).map_err(storage)?;
+            let output: String = row.get(1).map_err(storage)?;
+            bytes += output.len();
+            if bytes > MAX_PLAN_BYTES {
+                return Err(OperationError::Storage(
+                    "output reference page exceeds 4 MiB".into(),
+                ));
+            }
+            selected.push((id, serde_json::from_str(&output).map_err(storage)?));
+        }
+        let next_id = (selected.len() > limit).then(|| selected[limit - 1].0.clone());
+        Ok(OperationOutputPage {
+            outputs: selected
+                .into_iter()
+                .take(limit)
+                .map(|(_, output)| output)
+                .collect(),
+            next_id,
+        })
+    }
 }
 
 fn validate_plan(plan: &CommitPlan) -> Result<(), OperationError> {
@@ -1049,6 +1103,51 @@ mod tests {
             trace_parent: None,
             accepted_at_ms: 1,
         }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn successful_output_pages_preserve_scope_and_cursor_without_writes() {
+        let journal = SqliteOperationJournal::open_in_memory().unwrap();
+        let cap = CapabilityRef::new("environment.plan", 1).unwrap();
+        for (id, scope, success) in [
+            ("op_1", "/project", true),
+            ("op_2", "/project", true),
+            ("op_3", "/other", true),
+            ("op_4", "/project", false),
+        ] {
+            let mut op = operation(id, id, id);
+            op.capability = cap.clone();
+            op.domain = "environment".into();
+            op.idempotency_scope = Some(scope.into());
+            journal.admit(&op).await.unwrap();
+            journal.mark_running(&op.operation_id, 2).await.unwrap();
+            let mut plan = CommitPlan::succeeded(json!({"source":id}));
+            if !success {
+                plan.outcome = OperationOutcome::Failed;
+            }
+            journal.commit(&op.operation_id, &plan, 3).await.unwrap();
+        }
+        let caller = operation("unused", "unused", "unused").caller;
+        let history = journal.outbox(&caller, 0, 100).await.unwrap();
+        let first = journal
+            .successful_outputs("/project", &cap, None, 1)
+            .await
+            .unwrap();
+        assert_eq!(first.outputs, vec![json!({"source":"op_1"})]);
+        assert_eq!(first.next_id.as_deref(), Some("op_1"));
+        let second = journal
+            .successful_outputs("/project", &cap, first.next_id.as_deref(), 1)
+            .await
+            .unwrap();
+        assert_eq!(second.outputs, vec![json!({"source":"op_2"})]);
+        assert!(second.next_id.is_none());
+        assert!(
+            journal
+                .successful_outputs("/project", &cap, None, 33)
+                .await
+                .is_err()
+        );
+        assert_eq!(journal.outbox(&caller, 0, 100).await.unwrap(), history);
     }
 
     #[tokio::test(flavor = "current_thread")]

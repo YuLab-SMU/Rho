@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
+mod retention;
 use async_trait::async_trait;
+pub use retention::*;
 use rho_next_contract::{
     CallerIdentity, CancellationClass, CapabilityDescriptor, CapabilityKind, CapabilityRef,
     EffectHint, IdempotencyClass, ObservationCompleteness, Operation, OperationOutcome,
@@ -148,6 +150,20 @@ pub trait EnvironmentRuntime: Send + Sync {
         &self,
         operation_id: &str,
     ) -> Result<EnvironmentReconciliation, HandlerError>;
+    async fn material_state(
+        &self,
+        source_id: &str,
+        kind: MaterialKind,
+        cleanup_id: Option<&str>,
+    ) -> Result<MaterialState, String>;
+    async fn change_material(
+        &self,
+        source_id: &str,
+        kind: MaterialKind,
+        cleanup_id: &str,
+        action: MaterialAction,
+        expected_fingerprint: &str,
+    ) -> Result<MaterialChange, HandlerError>;
 }
 
 pub struct EnvironmentOwner {
@@ -156,6 +172,7 @@ pub struct EnvironmentOwner {
     lane: Arc<Mutex<()>>,
     active_library: Option<String>,
     has_workspace: bool,
+    usage: Option<Arc<dyn EnvironmentUsage>>,
 }
 impl EnvironmentOwner {
     pub fn new(
@@ -171,7 +188,12 @@ impl EnvironmentOwner {
             lane,
             active_library,
             has_workspace,
+            usage: None,
         }
+    }
+    pub fn with_usage(mut self, usage: Option<Arc<dyn EnvironmentUsage>>) -> Self {
+        self.usage = usage;
+        self
     }
     fn target(&self) -> TargetRef {
         TargetRef {

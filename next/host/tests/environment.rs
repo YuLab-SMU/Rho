@@ -38,6 +38,20 @@ async fn observe(host: &NextHost, args: Value) -> Value {
     assert_eq!(reply.status, QueryStatus::Ready, "{reply:?}");
     reply.data.unwrap()
 }
+async fn material_view(host: &NextHost, capability: &str, args: Value) -> Value {
+    let result = host
+        .query_snapshot(
+            &NextHost::local_context(),
+            QueryRequest {
+                capability: CapabilityRef::new(capability, 1).unwrap(),
+                arguments: args,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.status, QueryStatus::Ready, "{result:?}");
+    result.data.unwrap()
+}
 fn copy_fixture(project: &Path) {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rhonextfixture");
     std::fs::create_dir_all(project.join("pkg/R")).unwrap();
@@ -57,7 +71,7 @@ fn ark_config(project: &Path, data: &Path, r_home: &Path) -> ArkConfig {
 }
 
 #[tokio::test]
-#[ignore = "requires real R, pak, renv, ps and jsonlite; cancels an actual package installation"]
+#[ignore = "requires real R, pak, renv, ps, jsonlite and Ark; cancels an actual package installation"]
 async fn real_environment_cancellation_stops_installer_and_retains_staging() {
     use std::sync::Arc;
     use tokio::{
@@ -97,7 +111,7 @@ async fn real_environment_cancellation_stops_installer_and_retains_staging() {
                 } else {
                     "Rscript"
                 }),
-                project_root: project,
+                project_root: project.clone(),
                 data_root: directory.path().join("state/environment"),
                 timeout: Duration::from_secs(90),
             },
@@ -157,6 +171,171 @@ async fn real_environment_cancellation_stops_installer_and_retains_staging() {
         .expect("installer child survived cancellation")
         .unwrap();
     assert!(rest.is_empty());
+    let data = directory.path().join("state");
+    let database = data.join("next.sqlite");
+    let stage = PathBuf::from(recovery["stage"].as_str().unwrap());
+    let library = stage.join("library");
+    drop(host);
+    let host = NextHost::open_ark(&database, ark_config(&project, &data, &r_home))
+        .await
+        .unwrap();
+    let library_text = serde_json::to_string(&library.to_string_lossy()).unwrap();
+    let selected = invoke(
+        &host,
+        "use-partial-library",
+        "workspace.run_r",
+        json!({"code":format!(".libPaths(c({library_text}, .libPaths())); TRUE")}),
+    )
+    .await;
+    assert_eq!(selected.status, OperationStatus::Succeeded);
+    let protected = material_view(&host, "environment.retention", json!({"operation_id":id})).await;
+    assert_eq!(
+        protected["can_quarantine"], false,
+        "live library was not protected: {protected}"
+    );
+    assert!(
+        protected["retained_reasons"]
+            .to_string()
+            .contains("references"),
+        "{protected}"
+    );
+    let reset = invoke(
+        &host,
+        "reset-library",
+        "workspace.run_r",
+        json!({"code":format!(".libPaths(setdiff(.libPaths(), {library_text})); TRUE")}),
+    )
+    .await;
+    assert_eq!(reset.status, OperationStatus::Succeeded);
+    let history = host
+        .outbox(&NextHost::local_context(), 0, 1000)
+        .await
+        .unwrap();
+    let preview = material_view(&host, "environment.retention", json!({"operation_id":id})).await;
+    assert_eq!(preview["can_quarantine"], true, "{preview}");
+    assert_eq!(
+        host.outbox(&NextHost::local_context(), 0, 1000)
+            .await
+            .unwrap(),
+        history
+    );
+    let stale_fingerprint = preview["material"]["stage"]["fingerprint"].clone();
+    std::fs::write(
+        stage.join("changed-after-preview"),
+        b"retained until explicit cleanup",
+    )
+    .unwrap();
+    let stale = invoke(
+        &host,
+        "stale-cleanup",
+        "environment.cleanup",
+        json!({"operation_id":id,"expected_fingerprint":stale_fingerprint}),
+    )
+    .await;
+    assert_eq!(stale.status, OperationStatus::Failed);
+    assert!(stage.exists());
+    let outside = directory.path().join("outside.txt");
+    std::fs::write(&outside, b"must survive collection").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&outside, stage.join("outside-link")).unwrap();
+    let preview = material_view(&host, "environment.retention", json!({"operation_id":id})).await;
+    let cleaned = invoke(&host, "quarantine", "environment.cleanup", json!({"operation_id":id,"expected_fingerprint":preview["material"]["stage"]["fingerprint"]})).await;
+    assert_eq!(cleaned.status, OperationStatus::Succeeded, "{cleaned:?}");
+    assert!(!stage.exists());
+    let cleanup_id = cleaned.operation.operation_id;
+    let trashed = material_view(
+        &host,
+        "environment.cleanup_status",
+        json!({"cleanup_operation_id":cleanup_id}),
+    )
+    .await;
+    assert_eq!(trashed["can_restore"], true, "{trashed}");
+    let restored = invoke(&host, "restore", "environment.restore_cleanup", json!({"cleanup_operation_id":cleanup_id,"expected_fingerprint":trashed["material"]["trash"]["fingerprint"]})).await;
+    assert_eq!(restored.status, OperationStatus::Succeeded, "{restored:?}");
+    assert!(stage.exists());
+    let preview = material_view(&host, "environment.retention", json!({"operation_id":id})).await;
+    // Lose the commit after a real directory rename; recovery must use the
+    // existing Operation identity and filesystem, not replay the mutation.
+    let fault = rusqlite::Connection::open(&database).unwrap();
+    fault
+        .execute_batch(
+            "CREATE TRIGGER fail_material_commit BEFORE UPDATE ON operations
+        WHEN NEW.capability_id = 'environment.cleanup' AND NEW.status = 'succeeded'
+        BEGIN SELECT RAISE(ABORT, 'injected material commit failure'); END;",
+        )
+        .unwrap();
+    let failed = host.invoke(&NextHost::local_context(), invocation("lost-cleanup-commit", "environment.cleanup",
+        json!({"operation_id":id,"expected_fingerprint":preview["material"]["stage"]["fingerprint"]}))).await.unwrap_err();
+    let lost_id = match failed {
+        rho_next_operation::OperationError::CommitPending { operation_id, .. } => operation_id,
+        other => panic!("{other:?}"),
+    };
+    assert!(!stage.exists());
+    fault
+        .execute_batch("DROP TRIGGER fail_material_commit;")
+        .unwrap();
+    drop(fault);
+    drop(host);
+    let host = NextHost::open_environment(
+        &database,
+        REnvironmentConfig {
+            rscript: r_home.join("bin").join(if cfg!(windows) {
+                "Rscript.exe"
+            } else {
+                "Rscript"
+            }),
+            project_root: project,
+            data_root: data.join("environment"),
+            timeout: Duration::from_secs(90),
+        },
+    )
+    .await
+    .unwrap();
+    let uncertain_cleanup = host
+        .get_operation(&NextHost::local_context(), &lost_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(uncertain_cleanup.status, OperationStatus::Uncertain);
+    let state = material_view(
+        &host,
+        "environment.cleanup_status",
+        json!({"cleanup_operation_id":lost_id}),
+    )
+    .await;
+    assert_eq!(state["can_purge"], true, "{state}");
+    let request = json!({"cleanup_operation_id":lost_id,"expected_fingerprint":state["material"]["trash"]["fingerprint"]});
+    let purged = invoke(&host, "purge", "environment.purge_cleanup", request.clone()).await;
+    assert_eq!(purged.status, OperationStatus::Succeeded, "{purged:?}");
+    assert_eq!(purged.output.as_ref().unwrap()["recoverable"], false);
+    assert_eq!(
+        invoke(&host, "purge", "environment.purge_cleanup", request).await,
+        purged
+    );
+    assert_eq!(std::fs::read(&outside).unwrap(), b"must survive collection");
+    assert_eq!(
+        host.get_operation(&NextHost::local_context(), &lost_id)
+            .await
+            .unwrap()
+            .unwrap(),
+        uncertain_cleanup
+    );
+    assert_eq!(
+        host.get_operation(&NextHost::local_context(), &id)
+            .await
+            .unwrap()
+            .unwrap(),
+        result
+    );
+    assert_eq!(
+        material_view(
+            &host,
+            "environment.cleanup_status",
+            json!({"cleanup_operation_id":lost_id})
+        )
+        .await["material"]["native_marker_present"],
+        true
+    );
 }
 
 #[tokio::test]
@@ -203,6 +382,13 @@ async fn real_environment_plan_realize_verify_restore_and_restart_binding() {
     let realized = invoke(&host, "realize", "environment.realize", request.clone()).await;
     assert_eq!(realized.status, OperationStatus::Succeeded, "{realized:?}");
     let receipt = realized.output.as_ref().unwrap();
+    let keep_success = material_view(
+        &host,
+        "environment.retention",
+        json!({"operation_id":realized.operation.operation_id}),
+    )
+    .await;
+    assert_eq!(keep_success["can_quarantine"], false);
     assert_eq!(receipt["verified"], true);
     assert_eq!(receipt["restart_required"], false);
     assert_eq!(receipt["activation"], "available_not_active");

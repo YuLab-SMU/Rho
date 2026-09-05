@@ -284,6 +284,19 @@ pub trait OperationJournal: Send + Sync {
         &self,
         operation_id: &OperationId,
     ) -> Result<Vec<StoredDomainFact>, OperationError>;
+    async fn successful_outputs(
+        &self,
+        scope: &str,
+        capability: &rho_next_contract::CapabilityRef,
+        after_id: Option<&str>,
+        limit: usize,
+    ) -> Result<OperationOutputPage, OperationError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct OperationOutputPage {
+    pub outputs: Vec<Value>,
+    pub next_id: Option<String>,
 }
 
 /// Narrow read-only access to an existing Operation, used by domain references.
@@ -291,6 +304,13 @@ pub trait OperationJournal: Send + Sync {
 #[async_trait]
 pub trait OperationRecords: Send + Sync {
     async fn get(&self, operation_id: &str) -> Result<Option<OperationRecord>, String>;
+    async fn successful_outputs(
+        &self,
+        scope: &str,
+        capability: &rho_next_contract::CapabilityRef,
+        after_id: Option<&str>,
+        limit: usize,
+    ) -> Result<OperationOutputPage, String>;
 }
 
 pub trait Clock: Send + Sync {

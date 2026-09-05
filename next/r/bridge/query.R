@@ -78,10 +78,24 @@ rho_workspace_snapshot <- function(limit) {
   names <- ls(envir = .GlobalEnv, all.names = TRUE)
   bounded <- names[nchar(names, type = "bytes") <= 4096L & nchar(names, type = "chars") <= 1024L]
   selected <- head(bounded, as.integer(limit))
+  namespaces <- loadedNamespaces()
+  namespace_paths <- unlist(lapply(head(namespaces, 512L), function(name) {
+    # The built-in base namespace has no queryable package path; it is covered
+    # by R's own library paths, not an incomplete user-library observation.
+    if (identical(name, "base")) return(character())
+    tryCatch({
+      path <- getNamespaceInfo(name, "path")
+      if (is.null(path)) character() else as.character(path)
+    }, error = function(error) NA_character_)
+  }), use.names = FALSE)
+  libraries <- .libPaths()
   list(objects = unname(lapply(selected, rho_binding_summary)),
        total_bindings = length(names), truncated = length(selected) < length(names),
        working_directory = getwd(),
-       r_version = paste(R.version$major, R.version$minor, sep = "."))
+       r_version = paste(R.version$major, R.version$minor, sep = "."),
+       library_paths = unname(as.list(head(libraries, 128L))),
+       namespace_paths = unname(as.list(namespace_paths[!is.na(namespace_paths)])),
+       library_usage_complete = length(namespaces) <= 512L && length(libraries) <= 128L && !anyNA(namespace_paths))
 }
 
 rho_inspect_object <- function(name, max_items) {

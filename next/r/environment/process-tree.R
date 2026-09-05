@@ -4,7 +4,7 @@ args <- commandArgs(trailingOnly = TRUE)
 stopifnot(length(args) %in% c(2L, 3L), requireNamespace("ps", quietly = TRUE))
 if (identical(args[[1L]], "mark")) {
   writeLines(ps::ps_mark_tree(), args[[2L]])
-} else if (identical(args[[1L]], "cleanup")) {
+} else if (args[[1L]] %in% c("cleanup", "inspect")) {
   stopifnot(length(args) == 3L)
   marker <- args[[2L]]
   live <- function(handle) {
@@ -29,11 +29,14 @@ if (identical(args[[1L]], "mark")) {
       }
     }
   }
-  killed <- ps::ps_kill_tree(marker)
-  if (length(handles)) ps::ps_wait(handles, timeout = 3000L)
+  killed <- integer()
+  if (identical(args[[1L]], "cleanup")) {
+    killed <- ps::ps_kill_tree(marker)
+    if (length(handles)) ps::ps_wait(handles, timeout = 3000L)
+  }
   remaining <- Filter(live, ps::ps_find_tree(marker))
-  if (length(remaining)) stop("marked descendants are still running")
-  cat(jsonlite::toJSON(list(stopped_pids = unname(as.list(killed)), remaining_pids = list()), auto_unbox = TRUE))
+  if (identical(args[[1L]], "cleanup") && length(remaining)) stop("marked descendants are still running")
+  cat(jsonlite::toJSON(list(stopped_pids = unname(as.list(killed)), remaining_pids = unname(lapply(remaining, ps::ps_pid))), auto_unbox = TRUE))
 } else {
   stop("unsupported process-tree action")
 }
