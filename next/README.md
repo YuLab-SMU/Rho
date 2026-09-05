@@ -5,6 +5,11 @@ Independent Rust workspace for the replacement described in
 The CLI exposes a project-only Host, a real Ark/R Host, or an explicitly selected
 deterministic demo. Production capability routing is still owned by the old app.
 
+Legacy architecture data assets are abandoned; there are no real legacy users.
+Next starts with fresh application state. There is no migration, import, archive
+reader or old-session handoff work. Replacing capabilities and deleting old code
+must not be delayed by legacy data compatibility.
+
 ## Local workbench
 
 The browser client is served by the native Rust Host; it is not an external website

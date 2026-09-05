@@ -12,6 +12,11 @@ runtimes. All effectful requests share Operation identity, admission and
 commit discipline. Queries must not start a runtime or trigger recovery merely
 to read a recorded result.
 
+Legacy data assets are abandoned because there are no real users. Do not spend
+work on old-data inventory, migration, import, read-only archive access or
+cross-version session handoff. Start with fresh Next application state. The
+replacement task concerns capabilities and code, not legacy data continuity.
+
 Keep native identities and owner-specific preconditions. Do not add a global
 Rho revision counter, Agent approval, separate audit pipeline or duplicate
 result database. Preserve uncertainty after unconfirmed external effects.
