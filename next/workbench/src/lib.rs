@@ -149,12 +149,26 @@ async fn select_project(
             );
         }
     }
+    let profile = if hosting.selected.is_some() {
+        hosting.profile.for_new_project()
+    } else {
+        hosting.profile.clone()
+    };
+    let reserved = match profile.reserve(&root) {
+        Ok(reserved) => reserved,
+        Err(error) => {
+            return failure(
+                StatusCode::CONFLICT,
+                format!("Project was not changed: {error}"),
+            );
+        }
+    };
     if let Some(old) = hosting.selected.take() {
         old.host.drain().await;
         drop(old);
-        hosting.profile = hosting.profile.for_new_project();
     }
-    match hosting.profile.open(&root).await {
+    hosting.profile = profile;
+    match reserved.open().await {
         Ok(host) => {
             hosting.selected = Some(SelectedHost {
                 host: Arc::new(host),
@@ -550,5 +564,28 @@ mod tests {
             json_body(changed).await["project_root"],
             json!(other.canonicalize().unwrap())
         );
+    }
+
+    #[tokio::test]
+    async fn occupied_target_does_not_close_the_current_host() {
+        let (temp, state, app) = fixture().await;
+        let other = temp.path().join("other");
+        std::fs::create_dir(&other).unwrap();
+        let other_host = NextHost::open_project(temp.path().join("other.sqlite"), &other)
+            .await
+            .unwrap();
+        let current = {
+            let hosting = state.hosting.read().await;
+            Arc::downgrade(&hosting.selected.as_ref().unwrap().host)
+        };
+        let before = state.hosting.read().await.info().project_root;
+        let rejected = request(&app, "/api/project", Some(json!({"project_root":other}))).await;
+        assert_eq!(rejected.status(), StatusCode::CONFLICT);
+        assert!(
+            current.upgrade().is_some(),
+            "target ownership refusal dropped the original runtime"
+        );
+        assert_eq!(state.hosting.read().await.info().project_root, before);
+        other_host.drain().await;
     }
 }

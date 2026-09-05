@@ -56,6 +56,10 @@ pub enum OperationError {
     CancellationUnsupported(String),
     #[error("another Rho Next host already owns this database")]
     HostBusy,
+    #[error(
+        "another Rho Next host already owns project {0}; connect to that Host instead of starting another database/runtime"
+    )]
+    ProjectBusy(String),
 }
 
 impl From<ContractError> for OperationError {

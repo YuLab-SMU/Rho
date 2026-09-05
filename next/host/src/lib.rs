@@ -2,7 +2,9 @@
 
 mod config;
 mod environment;
-pub use config::{HostProfile, RuntimeConfiguration};
+mod ownership;
+pub use config::{HostProfile, ReservedHost, RuntimeConfiguration};
+use ownership::ProjectLease;
 mod records;
 mod usage;
 pub use environment::REnvironmentConfig;
@@ -117,10 +119,17 @@ impl WorkspaceRuntime for DeterministicWorkspaceRuntime {
 }
 
 pub struct NextHost {
-    gateway: Arc<OperationGateway>,
-    queries: Arc<QueryGateway>,
+    runtime: Arc<HostRuntime>,
     recovered_on_open: Vec<OperationRecord>,
     tasks: tokio_util::task::TaskTracker,
+}
+
+// Accepted tasks retain this entire lifetime, not just a gateway or query
+// handle. Drop adapters/journal before releasing the project's OS lease.
+struct HostRuntime {
+    gateway: Arc<OperationGateway>,
+    queries: Arc<QueryGateway>,
+    _project_lease: Option<ProjectLease>,
 }
 
 #[derive(Default)]
@@ -130,6 +139,7 @@ struct HostDomains {
     environment: Option<Arc<dyn EnvironmentRuntime>>,
     active_library: Option<String>,
     remote: Option<Arc<SshRemote>>,
+    project_lease: Option<ProjectLease>,
 }
 fn remote_components(
     root: &Path,
@@ -156,11 +166,20 @@ impl NextHost {
         project_root: impl AsRef<Path>,
         remote: Option<SshConfig>,
     ) -> Result<Self, OperationError> {
-        let database = database.as_ref();
+        let lease = ProjectLease::acquire(project_root.as_ref())?;
+        Self::open_project_reserved(database.as_ref(), lease, remote).await
+    }
+
+    async fn open_project_reserved(
+        database: &Path,
+        lease: ProjectLease,
+        remote: Option<SshConfig>,
+    ) -> Result<Self, OperationError> {
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
+        let mut excluded = protected_project_paths(database)?;
+        excluded.push(lease.path().to_owned());
         let project = Arc::new(
-            GitProject::open(project_root, protected_project_paths(database)?)
-                .map_err(OperationError::TargetResolution)?,
+            GitProject::open(lease.root(), excluded).map_err(OperationError::TargetResolution)?,
         );
         let remote = remote_components(Path::new(project.root()), remote)?;
         Self::compose(
@@ -168,6 +187,7 @@ impl NextHost {
             HostDomains {
                 project: Some(project),
                 remote,
+                project_lease: Some(lease),
                 ..HostDomains::default()
             },
             Arc::new(SystemClock),
@@ -219,7 +239,17 @@ impl NextHost {
         config: REnvironmentConfig,
         remote: Option<SshConfig>,
     ) -> Result<Self, OperationError> {
-        let database = database.as_ref();
+        let lease = ProjectLease::acquire(&config.project_root)?;
+        Self::open_environment_reserved(database.as_ref(), config, remote, lease).await
+    }
+
+    async fn open_environment_reserved(
+        database: &Path,
+        mut config: REnvironmentConfig,
+        remote: Option<SshConfig>,
+        lease: ProjectLease,
+    ) -> Result<Self, OperationError> {
+        config.project_root = lease.root().to_owned();
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
         let root = config.project_root.clone();
         let remote = remote_components(&root, remote)?;
@@ -227,6 +257,7 @@ impl NextHost {
         let environment =
             Arc::new(REnvironment::open(config).map_err(OperationError::TargetResolution)?);
         let mut excluded = protected_project_paths(database)?;
+        excluded.push(lease.path().to_owned());
         excluded.push(
             data.canonicalize()
                 .map_err(|e| OperationError::Storage(e.to_string()))?,
@@ -239,6 +270,7 @@ impl NextHost {
                 project: Some(project),
                 environment: Some(environment),
                 remote,
+                project_lease: Some(lease),
                 ..HostDomains::default()
             },
             Arc::new(SystemClock),
@@ -256,17 +288,29 @@ impl NextHost {
     }
     pub async fn open_ark_with_remote(
         database: impl AsRef<Path>,
-        mut config: ArkConfig,
+        config: ArkConfig,
         realization_id: Option<&str>,
         remote: Option<SshConfig>,
     ) -> Result<Self, OperationError> {
-        // Acquire the journal's host lock before creating any external runtime.
-        let database = database.as_ref();
+        // Acquire project ownership before journal creation, recovery or R launch.
+        let lease = ProjectLease::acquire(&config.project_root)?;
+        Self::open_ark_reserved(database.as_ref(), config, realization_id, remote, lease).await
+    }
+
+    async fn open_ark_reserved(
+        database: &Path,
+        mut config: ArkConfig,
+        realization_id: Option<&str>,
+        remote: Option<SshConfig>,
+        lease: ProjectLease,
+    ) -> Result<Self, OperationError> {
+        config.project_root = lease.root().to_owned();
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
         let remote = remote_components(&config.project_root, remote)?;
         std::fs::create_dir_all(&config.data_root)
             .map_err(|error| OperationError::Storage(error.to_string()))?;
         let mut excluded = protected_project_paths(database)?;
+        excluded.push(lease.path().to_owned());
         excluded.push(
             config
                 .data_root
@@ -321,6 +365,7 @@ impl NextHost {
                 environment: Some(environment),
                 active_library,
                 remote,
+                project_lease: Some(lease),
             },
             Arc::new(SystemClock),
             Arc::new(UuidOperationIdGenerator),
@@ -357,13 +402,16 @@ impl NextHost {
     pub fn open_read_only(database: impl AsRef<Path>) -> Result<Self, OperationError> {
         let registry = Arc::new(CapabilityRegistry::new());
         Ok(Self {
-            gateway: Arc::new(OperationGateway::new(
-                registry.clone(),
-                Arc::new(SqliteOperationJournal::open_read_only(database)?),
-                Arc::new(SystemClock),
-                Arc::new(UuidOperationIdGenerator),
-            )),
-            queries: Arc::new(QueryGateway::new(registry)),
+            runtime: Arc::new(HostRuntime {
+                gateway: Arc::new(OperationGateway::new(
+                    registry.clone(),
+                    Arc::new(SqliteOperationJournal::open_read_only(database)?),
+                    Arc::new(SystemClock),
+                    Arc::new(UuidOperationIdGenerator),
+                )),
+                queries: Arc::new(QueryGateway::new(registry)),
+                _project_lease: None,
+            }),
             recovered_on_open: Vec::new(),
             tasks: tokio_util::task::TaskTracker::new(),
         })
@@ -409,6 +457,7 @@ impl NextHost {
             environment,
             active_library,
             remote,
+            project_lease,
         } = domains;
         let mut registry = CapabilityRegistry::new();
         let lane = Arc::new(tokio::sync::Mutex::new(()));
@@ -503,15 +552,18 @@ impl NextHost {
         ));
         let recovered_on_open = gateway.recover_incomplete().await?;
         Ok(Self {
-            gateway,
-            queries: Arc::new(QueryGateway::new(registry)),
+            runtime: Arc::new(HostRuntime {
+                gateway,
+                queries: Arc::new(QueryGateway::new(registry)),
+                _project_lease: project_lease,
+            }),
             recovered_on_open,
             tasks: tokio_util::task::TaskTracker::new(),
         })
     }
 
     pub fn capabilities(&self) -> Vec<CapabilityDescriptor> {
-        self.gateway.registry_descriptors()
+        self.runtime.gateway.registry_descriptors()
     }
 
     pub fn recovered_on_open(&self) -> &[OperationRecord] {
@@ -525,10 +577,10 @@ impl NextHost {
     ) -> Result<OperationRecord, OperationError> {
         // The host owns execution. Dropping an edge's response future must not abandon
         // the result commit or release the runtime lane while R is still working.
-        let gateway = self.gateway.clone();
+        let runtime = self.runtime.clone();
         let context = context.clone();
         self.tasks
-            .spawn(async move { gateway.invoke(&context, invocation).await })
+            .spawn(async move { runtime.gateway.invoke(&context, invocation).await })
             .await
             .map_err(|error| {
                 OperationError::Storage(format!("operation task ended without a result: {error}"))
@@ -540,11 +592,11 @@ impl NextHost {
         context: &CallContext,
         request: QueryRequest,
     ) -> Result<QuerySnapshot, OperationError> {
-        let queries = self.queries.clone();
+        let runtime = self.runtime.clone();
         let context = context.clone();
         // Keep the Workspace lane until the read has finished, even if an edge disconnects.
         self.tasks
-            .spawn(async move { queries.query(&context, request).await })
+            .spawn(async move { runtime.queries.query(&context, request).await })
             .await
             .map_err(|error| OperationError::Storage(format!("query task failed: {error}")))?
     }
@@ -554,7 +606,10 @@ impl NextHost {
         context: &CallContext,
         operation_id: &OperationId,
     ) -> Result<Option<OperationRecord>, OperationError> {
-        self.gateway.get_operation(context, operation_id).await
+        self.runtime
+            .gateway
+            .get_operation(context, operation_id)
+            .await
     }
     /// Hosting lifecycle only: keep accepted work alive after an edge disconnects.
     pub fn is_idle(&self) -> bool {
@@ -572,7 +627,8 @@ impl NextHost {
         context: &CallContext,
         operation_id: &OperationId,
     ) -> Result<CancellationRequestOutcome, OperationError> {
-        self.gateway
+        self.runtime
+            .gateway
             .request_cancellation(context, operation_id)
             .await
     }
@@ -582,7 +638,7 @@ impl NextHost {
         context: &CallContext,
         operation_id: &OperationId,
     ) -> Result<Vec<OperationEventRecord>, OperationError> {
-        self.gateway.events(context, operation_id).await
+        self.runtime.gateway.events(context, operation_id).await
     }
 
     pub async fn outbox(
@@ -591,7 +647,10 @@ impl NextHost {
         after_sequence: u64,
         limit: usize,
     ) -> Result<Vec<OutboxRecord>, OperationError> {
-        self.gateway.outbox(context, after_sequence, limit).await
+        self.runtime
+            .gateway
+            .outbox(context, after_sequence, limit)
+            .await
     }
 
     pub async fn facts_for_operation(
@@ -599,7 +658,8 @@ impl NextHost {
         context: &CallContext,
         operation_id: &OperationId,
     ) -> Result<Vec<StoredDomainFact>, OperationError> {
-        self.gateway
+        self.runtime
+            .gateway
             .facts_for_operation(context, operation_id)
             .await
     }

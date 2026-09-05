@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use crate::ownership::ProjectLease;
 use crate::{ArkConfig, NextHost, REnvironmentConfig, SshConfig};
 
 /// Native runtime selection shared by all edges. This is hosting, not a domain.
@@ -24,6 +25,13 @@ pub struct HostProfile {
     pub remote: Option<SshConfig>,
 }
 
+/// A native project lease, reserved before ending the old Host. No database
+/// recovery or runtime is started until open() consumes the reservation.
+pub struct ReservedHost {
+    profile: HostProfile,
+    lease: ProjectLease,
+}
+
 impl HostProfile {
     pub fn runtime_name(&self) -> &'static str {
         match self.runtime {
@@ -44,22 +52,38 @@ impl HostProfile {
     }
 
     pub async fn open(&self, project: &Path) -> Result<NextHost, String> {
-        let data = self.database.parent().unwrap_or(Path::new("."));
-        match &self.runtime {
+        self.reserve(project)?.open().await
+    }
+
+    pub fn reserve(&self, project: &Path) -> Result<ReservedHost, String> {
+        Ok(ReservedHost {
+            profile: self.clone(),
+            lease: ProjectLease::acquire(project).map_err(|error| error.to_string())?,
+        })
+    }
+}
+
+impl ReservedHost {
+    pub async fn open(self) -> Result<NextHost, String> {
+        let Self { profile, lease } = self;
+        let project = lease.root().to_owned();
+        let data = profile.database.parent().unwrap_or(Path::new("."));
+        match &profile.runtime {
             RuntimeConfiguration::Project => {
-                NextHost::open_project_with_remote(&self.database, project, self.remote.clone())
+                NextHost::open_project_reserved(&profile.database, lease, profile.remote.clone())
                     .await
             }
             RuntimeConfiguration::Environment { rscript } => {
-                NextHost::open_environment_with_remote(
-                    &self.database,
+                NextHost::open_environment_reserved(
+                    &profile.database,
                     REnvironmentConfig {
                         rscript: rscript.clone(),
                         project_root: project.to_owned(),
                         data_root: data.join("environment"),
                         timeout: Duration::from_secs(300),
                     },
-                    self.remote.clone(),
+                    profile.remote.clone(),
+                    lease,
                 )
                 .await
             }
@@ -68,8 +92,8 @@ impl HostProfile {
                 r_home,
                 environment,
             } => {
-                NextHost::open_ark_with_remote(
-                    &self.database,
+                NextHost::open_ark_reserved(
+                    &profile.database,
                     ArkConfig {
                         executable: executable.clone(),
                         r_home: r_home.clone(),
@@ -79,7 +103,8 @@ impl HostProfile {
                         library_path: None,
                     },
                     environment.as_deref(),
-                    self.remote.clone(),
+                    profile.remote.clone(),
+                    lease,
                 )
                 .await
             }
