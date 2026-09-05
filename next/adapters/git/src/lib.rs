@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use async_trait::async_trait;
+use rho_next_process::{ProcessOptions, ProcessTermination, run_command};
 use rho_next_project::{
     FileObservation, FilePage, GitApplyReport, GitObservation, GitStatusEntry, MAX_PROJECT_PATHS,
     ProjectRuntime, ProjectSnapshot, ReadFileArguments, validate_path,
@@ -9,10 +10,9 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
-    process::Stdio,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 const MAX_OUTPUT_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
@@ -378,11 +378,7 @@ async fn git(root: &Path, args: &[&str], input: Option<&[u8]>) -> Result<GitOutp
         .arg("--no-pager")
         .args(["-c", "core.fsmonitor=false", "-c", "core.quotePath=false"])
         .args(args)
-        .current_dir(root)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
+        .current_dir(root);
     for (name, _) in std::env::vars_os() {
         if name.to_string_lossy().starts_with("GIT_") {
             command.env_remove(name);
@@ -392,56 +388,36 @@ async fn git(root: &Path, args: &[&str], input: Option<&[u8]>) -> Result<GitOutp
         .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("LC_ALL", "C");
-    let mut child = command.spawn().map_err(display)?;
-    let mut stdin = child.stdin.take().ok_or("Git stdin is unavailable")?;
-    let stdout = child.stdout.take().ok_or("Git stdout is unavailable")?;
-    let stderr = child.stderr.take().ok_or("Git stderr is unavailable")?;
-    let result = tokio::time::timeout(Duration::from_secs(15), async {
-        let (written, stdout, stderr, status) = tokio::join!(
-            async {
-                if let Some(bytes) = input {
-                    stdin.write_all(bytes).await?;
-                }
-                drop(stdin);
-                Ok::<_, std::io::Error>(())
-            },
-            bounded(stdout),
-            bounded(stderr),
-            child.wait(),
-        );
-        let status = status.map_err(display)?;
-        let stdout = stdout?;
-        let stderr = stderr?;
-        if status.success() {
-            written.map_err(display)?;
-        }
-        Ok::<_, String>(GitOutput {
-            code: status.code(),
-            stdout,
-            stderr,
-        })
-    })
-    .await;
-    match result {
-        Ok(result) => result,
-        Err(_) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            Err("Git process timed out; inspect current project state before retrying".into())
-        }
+    let report = run_command(
+        command,
+        ProcessOptions {
+            timeout: Duration::from_secs(15),
+            output_limit_bytes: MAX_OUTPUT_BYTES as usize,
+            stdin: input.map(<[u8]>::to_vec),
+        },
+        tokio::sync::watch::channel(false).1,
+    )
+    .await
+    .map_err(display)?;
+    if report.termination != ProcessTermination::Exited {
+        return Err(format!(
+            "Git process {:?}; inspect current project state before retrying: {:?}",
+            report.termination, report.cleanup_error
+        ));
     }
-}
-async fn bounded(reader: impl AsyncRead + Unpin) -> Result<Vec<u8>, String> {
-    let mut bytes = Vec::new();
-    reader
-        .take(MAX_OUTPUT_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .await
-        .map_err(display)?;
-    if bytes.len() as u64 > MAX_OUTPUT_BYTES {
+    if report.stdout.truncated || report.stderr.truncated {
         return Err("Git output exceeded the 4 MiB bound".into());
     }
-    Ok(bytes)
+    if report.exit_code == Some(0)
+        && let Some(error) = report.stdin_error
+    {
+        return Err(error);
+    }
+    Ok(GitOutput {
+        code: report.exit_code,
+        stdout: report.stdout.bytes,
+        stderr: report.stderr.bytes,
+    })
 }
 impl GitProject {
     async fn read_page(&self, args: &ReadFileArguments) -> Result<FilePage, String> {

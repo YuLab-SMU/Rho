@@ -139,8 +139,36 @@ node next/scripts/test-environment.mjs
 
 This acceptance installs the small local fixture into temporary libraries,
 restores its generated renv.lock, checks source/lock/library tampering, and
-exercises real CLI selection. It requires renv, pak, jsonlite, R and Ark.
+exercises real CLI selection and cancellation of an actual installation child.
+It requires renv, pak, ps, jsonlite, R and Ark.
 Remote repository behavior follows pak/renv and is not covered by this local
 fixture. Native package scripts run with the user's OS permissions. Environment
-cancellation and staged-library retention are still pending. Keep the data
-directory outside any local source package to avoid self-containing builds.
+cancellation is supported by plan/realize/verify. Confirmed cancellation retains
+the staged library and does not produce an activatable receipt. The adapter uses
+ps-native tree markers to find and stop callr/processx descendants that create
+separate sessions; cleanup failure is uncertain, not cancelled. Staged-library
+retention and host-crash descendant reconciliation are still pending. Keep the
+data directory outside any local source package to avoid self-containing builds.
+
+Local process execution is available in every project Host through the same
+session port, without starting an R session:
+
+```json
+{"id":"process","request":{"method":"invoke","params":{"client_request_id":"process-1","capability":{"id":"process.run_local","version":1},"arguments":{"program":"git","args":["status","--short"],"timeout_ms":60000,"output_limit_bytes":65536}}}}
+```
+
+The program and argument vector are passed directly to the OS (no implicit shell),
+with the normalized project root as working directory. Optional `stdin` is UTF-8
+text, limited to 128 KiB. Output is exact byte arrays with total byte counts,
+truncation and EOF flags; each stream retains 64 KiB by default (maximum 128 KiB)
+while continuing to drain. Timeout defaults to 60 seconds, capped at one hour.
+The child receives `RHO_OPERATION_ID` for correlation. The shared Project/Workspace
+lane prevents overlapping Host-managed mutations; external editors are not locked.
+
+Results contain the native PID, exit code/signal, termination reason and supervision
+mechanism. Cancellation requests stop the process group/job and collect the result;
+an unconfirmed stop or incomplete stream closure is uncertain. Nonzero exits and
+timeouts are failures, not rollbacks. The supervisor cleans background group members
+after the leader exits. It is not a filesystem/network sandbox and cannot contain
+deliberately escaped descendants. Unix behavior is tested on macOS; the Windows
+Job Object branch has not been validated on a Windows host.

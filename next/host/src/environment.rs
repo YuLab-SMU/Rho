@@ -40,9 +40,9 @@ pub(crate) async fn selected_environment(
     )
     .map_err(|e| OperationError::InvalidInput(e.to_string()))?;
     let verification = runtime
-        .verify(&receipt)
+        .verify(id, &receipt, tokio::sync::watch::channel(false).1)
         .await
-        .map_err(OperationError::TargetResolution)?;
+        .map_err(|e| OperationError::TargetResolution(e.message))?;
     if !receipt.verified || !verification.verified {
         return Err(OperationError::TargetResolution(format!(
             "selected environment no longer verifies: {:?}",

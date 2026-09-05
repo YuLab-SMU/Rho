@@ -19,12 +19,14 @@ use rho_next_contract::{
     ObservationCompleteness, Operation, OperationEventRecord, OperationId, OperationRecord,
     OutboxRecord, QueryRequest, QuerySnapshot,
 };
+use rho_next_execution::{RUN_LOCAL_SCOPE, RunLocalHandler};
 use rho_next_git::GitProject;
 use rho_next_operation::{
     CancellationRequestOutcome, CapabilityRegistry, Clock, OperationError, OperationGateway,
     OperationIdGenerator, OperationJournal, QueryGateway, StoredDomainFact, SystemClock,
     UuidOperationIdGenerator,
 };
+use rho_next_process::LocalProcessExecutor;
 use rho_next_project::{
     PROJECT_READ_SCOPE, PROJECT_WRITE_SCOPE, ProjectOwner, ProjectPatchHandler, ProjectReadHandler,
     ProjectRuntime, ProjectSnapshotHandler,
@@ -275,6 +277,7 @@ impl NextHost {
                 PROJECT_WRITE_SCOPE.into(),
                 ENVIRONMENT_READ_SCOPE.into(),
                 ENVIRONMENT_WRITE_SCOPE.into(),
+                RUN_LOCAL_SCOPE.into(),
             ]),
             connection_id: format!("cli:{}", std::process::id()),
             correlation_id: None,
@@ -350,6 +353,12 @@ impl NextHost {
             )))?;
         }
         if let Some(project) = project {
+            let process = LocalProcessExecutor::new(project.root())
+                .map_err(|e| OperationError::TargetResolution(e.to_string()))?;
+            registry.register(Arc::new(RunLocalHandler::new(
+                Arc::new(process),
+                lane.clone(),
+            )))?;
             let owner = Arc::new(ProjectOwner::new(project, lane.clone()));
             registry.register(Arc::new(ProjectPatchHandler::new(owner.clone())))?;
             registry.register_query(Arc::new(ProjectSnapshotHandler::new(owner.clone())))?;

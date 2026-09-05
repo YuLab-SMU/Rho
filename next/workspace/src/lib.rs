@@ -276,6 +276,7 @@ impl OperationHandler for WorkspaceRunHandler {
                     EffectBoundary::NotStarted
                 },
                 recovery: error.recovery,
+                cancellation_confirmed: false,
             })?;
 
         if report.session_id != operation.target.identity {

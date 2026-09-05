@@ -8,13 +8,13 @@ use rho_next_contract::{
 };
 use rho_next_operation::{
     Clock, CommitPlan, DomainFactMutation, HandlerError, OperationError, OperationHandler,
-    PlannedEvent, QueryHandler, SystemClock,
+    PlannedEvent, QueryHandler, SystemClock, wait_cancellation,
 };
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, sync::Arc};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, watch};
 
 pub const ENVIRONMENT_READ_SCOPE: &str = "environment.read";
 pub const ENVIRONMENT_WRITE_SCOPE: &str = "environment.write";
@@ -112,14 +112,21 @@ pub trait EnvironmentRuntime: Send + Sync {
         &self,
         operation_id: &str,
         args: &PlanArguments,
-    ) -> Result<EnvironmentPlan, String>;
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<EnvironmentPlan, HandlerError>;
     async fn realize(
         &self,
         operation_id: &str,
         plan_id: &str,
         plan: &EnvironmentPlan,
+        cancellation: watch::Receiver<bool>,
     ) -> Result<EnvironmentRealization, HandlerError>;
-    async fn verify(&self, realization: &EnvironmentRealization) -> Result<Verification, String>;
+    async fn verify(
+        &self,
+        operation_id: &str,
+        realization: &EnvironmentRealization,
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<Verification, HandlerError>;
 }
 
 /// A read-only projection of existing Operation output, not another plan database.
@@ -231,7 +238,7 @@ impl EnvironmentHandler {
                 ]),
                 idempotency: IdempotencyClass::CallerScoped,
                 retry: RetryClass::ReconcileFirst,
-                cancellation: CancellationClass::Unsupported,
+                cancellation: CancellationClass::Cooperative,
             },
         }
     }
@@ -285,7 +292,19 @@ impl OperationHandler for EnvironmentHandler {
         Ok(self.owner.target())
     }
     async fn execute(&self, operation: &Operation) -> Result<CommitPlan, HandlerError> {
-        let _lane = self.owner.lane.lock().await;
+        self.execute_controlled(operation, watch::channel(false).1)
+            .await
+    }
+    async fn execute_controlled(
+        &self,
+        operation: &Operation,
+        mut cancellation: watch::Receiver<bool>,
+    ) -> Result<CommitPlan, HandlerError> {
+        let _lane = tokio::select! {
+            biased;
+            _ = wait_cancellation(&mut cancellation) => return Ok(CommitPlan::cancelled_before_start()),
+            lane = self.owner.lane.lock() => lane,
+        };
         if !operation.preconditions.is_empty() {
             return Err(HandlerError::before_effect(
                 "Environment operations bind their immutable plan/receipt rather than arbitrary preconditions",
@@ -300,9 +319,8 @@ impl OperationHandler for EnvironmentHandler {
                 serde_json::to_value(
                     self.owner
                         .runtime
-                        .plan(operation.operation_id.as_str(), &args)
-                        .await
-                        .map_err(HandlerError::before_effect)?,
+                        .plan(operation.operation_id.as_str(), &args, cancellation)
+                        .await?,
                 )
                 .map_err(parse_error)?
             }
@@ -327,6 +345,7 @@ impl OperationHandler for EnvironmentHandler {
                         operation.operation_id.as_str(),
                         &args.plan_operation_id,
                         &plan,
+                        cancellation,
                     )
                     .await?;
                 receipt.restart_required = self.owner.has_workspace;
@@ -350,9 +369,8 @@ impl OperationHandler for EnvironmentHandler {
                 let report = self
                     .owner
                     .runtime
-                    .verify(&receipt)
-                    .await
-                    .map_err(HandlerError::before_effect)?;
+                    .verify(operation.operation_id.as_str(), &receipt, cancellation)
+                    .await?;
                 successful = report.verified;
                 serde_json::to_value(report).map_err(parse_error)?
             }

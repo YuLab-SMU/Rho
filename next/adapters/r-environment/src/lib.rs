@@ -6,6 +6,7 @@ use rho_next_environment::{
     PlanArguments, SourceDigest, Verification,
 };
 use rho_next_operation::HandlerError;
+use rho_next_process::{ProcessOptions, ProcessTermination, run_command};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -13,14 +14,14 @@ use std::{
     collections::BTreeSet,
     io::Read,
     path::{Path, PathBuf},
-    process::Stdio,
     time::Duration,
 };
 use tempfile::{NamedTempFile, TempDir};
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::sync::watch;
 
 const HELPER: &str = include_str!("../../../r/environment/helper.R");
 const VERIFY: &str = include_str!("../../../r/environment/verify.R");
+const PROCESS_TREE: &str = include_str!("../../../r/environment/process-tree.R");
 const MAX_RESULT: u64 = 4 * 1024 * 1024;
 const MAX_TREE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
@@ -35,6 +36,7 @@ pub struct REnvironment {
     root: String,
     helper: NamedTempFile,
     verifier: NamedTempFile,
+    process_tree: NamedTempFile,
 }
 #[derive(Deserialize)]
 struct Response {
@@ -69,13 +71,16 @@ impl REnvironment {
         config.data_root = config.data_root.canonicalize().map_err(display)?;
         let helper = NamedTempFile::new_in(&config.data_root).map_err(display)?;
         let verifier = NamedTempFile::new_in(&config.data_root).map_err(display)?;
+        let process_tree = NamedTempFile::new_in(&config.data_root).map_err(display)?;
         std::fs::write(helper.path(), HELPER).map_err(display)?;
         std::fs::write(verifier.path(), VERIFY).map_err(display)?;
+        std::fs::write(process_tree.path(), PROCESS_TREE).map_err(display)?;
         Ok(Self {
             root: config.project_root.to_string_lossy().into_owned(),
             config,
             helper,
             verifier,
+            process_tree,
         })
     }
     fn source_path(&self, value: &str) -> Result<PathBuf, String> {
@@ -112,8 +117,14 @@ impl REnvironment {
             .map_err(|e| format!("Environment staging is not new: {e}"))?;
         Ok(directory)
     }
-    async fn helper_call(&self, id: &str, action: &str, payload: Value) -> Result<Value, String> {
-        let scratch = TempDir::new_in(&self.config.data_root).map_err(display)?;
+    async fn helper_call(
+        &self,
+        id: &str,
+        action: &str,
+        payload: Value,
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<Value, HandlerError> {
+        let scratch = TempDir::new_in(&self.config.data_root).map_err(before)?;
         let input = scratch.path().join("request.json");
         let output = scratch.path().join("result.json");
         std::fs::write(
@@ -121,30 +132,54 @@ impl REnvironment {
             serde_json::to_vec(
                 &json!({"protocol_version":1,"request_id":id,"action":action,"payload":payload}),
             )
-            .map_err(display)?,
+            .map_err(before)?,
         )
-        .map_err(display)?;
+        .map_err(before)?;
         self.run(
+            id,
             self.helper.path(),
             &[
                 input.to_string_lossy().into_owned(),
                 output.to_string_lossy().into_owned(),
             ],
+            cancellation,
         )
         .await?;
-        response(&output, id)
+        response(&output, id).map_err(uncertain)
     }
-    async fn run(&self, script: &Path, args: &[String]) -> Result<(), String> {
+    async fn run(
+        &self,
+        id: &str,
+        script: &Path,
+        args: &[String],
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<(), HandlerError> {
+        // Let ps allocate its own native marker format; never invent a parallel
+        // process registry. The marker is inherited across detached callr groups.
+        let marker_file = NamedTempFile::new_in(&self.config.data_root).map_err(before)?;
+        self.tree_action("mark", &marker_file.path().to_string_lossy())
+            .await
+            .map_err(before)?;
+        let marker = String::from_utf8(read_bounded(marker_file.path()).map_err(before)?)
+            .map_err(before)?
+            .trim()
+            .to_string();
+        if marker.is_empty()
+            || marker.len() > 200
+            || !marker
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err(before("ps returned an invalid process-tree marker"));
+        }
         let mut command = tokio::process::Command::new(&self.config.rscript);
         command
             .arg("--vanilla")
             .arg(script)
             .args(args)
             .current_dir(&self.config.project_root)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
+            .env(&marker, "YES")
+            .env("RHO_OPERATION_ID", id);
         command
             .env("RENV_CONFIG_CACHE_ENABLED", "FALSE")
             .env("RENV_CONFIG_AUTO_SNAPSHOT", "FALSE")
@@ -160,53 +195,94 @@ impl REnvironment {
                 command.env_remove(name);
             }
         }
-        let mut child = command.spawn().map_err(display)?;
-        let stdout = child.stdout.take().ok_or("R helper stdout unavailable")?;
-        let stderr = child.stderr.take().ok_or("R helper stderr unavailable")?;
-        let result = tokio::time::timeout(self.config.timeout, async {
-            let (status, out, err) = tokio::join!(child.wait(), bounded(stdout), bounded(stderr));
-            let status = status.map_err(display)?;
-            let out = out?;
-            let err = err?;
-            if !status.success() {
-                return Err(format!(
-                    "R helper exited {:?}: {} {}",
-                    status.code(),
-                    String::from_utf8_lossy(&out)
-                        .chars()
-                        .take(4000)
-                        .collect::<String>(),
-                    String::from_utf8_lossy(&err)
-                        .chars()
-                        .take(4000)
-                        .collect::<String>()
-                ));
-            }
-            Ok(())
-        })
-        .await;
-        match result {
-            Ok(result) => result,
-            Err(_) => {
-                let _ = child.kill().await;
-                let _ = child.wait().await;
-                Err("R helper timed out; staged effects may exist".into())
-            }
+        let mut report = run_command(
+            command,
+            ProcessOptions {
+                timeout: self.config.timeout,
+                output_limit_bytes: MAX_RESULT as usize,
+                stdin: None,
+            },
+            cancellation,
+        )
+        .await
+        .map_err(before)?;
+        // This cleanup is deliberately not cancelled with the main action.
+        // A stopped leader alone is insufficient proof for a package install.
+        let tree_cleanup = self.tree_action("cleanup", &marker).await;
+        if let Err(error) = &tree_cleanup {
+            report.termination = ProcessTermination::Uncertain;
+            report.cleanup_error = Some(error.clone());
         }
+        if report.termination == ProcessTermination::Exited && report.exit_code == Some(0) {
+            return Ok(());
+        }
+        // Error recovery retains bounded diagnostics, never a multi-MiB copy of
+        // package-manager chatter inside the Operation record.
+        for capture in [&mut report.stdout, &mut report.stderr] {
+            capture.truncated |= capture.bytes.len() > 4000;
+            capture.bytes.truncate(4000);
+        }
+        let message = format!(
+            "R helper {:?}, exit {:?}: {} {}",
+            report.termination,
+            report.exit_code,
+            String::from_utf8_lossy(&report.stdout.bytes),
+            String::from_utf8_lossy(&report.stderr.bytes)
+        );
+        let recovery = Some(json!({"process":report,"process_tree_marker":marker,
+            "tree_cleanup_confirmed":tree_cleanup.is_ok(),"action":"inspect_staged_effects_before_retry"}));
+        Err(if report.termination == ProcessTermination::Cancelled {
+            HandlerError::cancelled(message, recovery)
+        } else {
+            HandlerError::after_possible_effect(message, recovery)
+        })
+    }
+    async fn tree_action(&self, action: &str, value: &str) -> Result<(), String> {
+        let mut command = tokio::process::Command::new(&self.config.rscript);
+        command
+            .arg("--vanilla")
+            .arg(self.process_tree.path())
+            .args([action, value])
+            .current_dir(&self.config.project_root);
+        let report = run_command(
+            command,
+            ProcessOptions {
+                timeout: Duration::from_secs(10),
+                output_limit_bytes: 4000,
+                stdin: None,
+            },
+            watch::channel(false).1,
+        )
+        .await
+        .map_err(display)?;
+        if report.termination != ProcessTermination::Exited || report.exit_code != Some(0) {
+            return Err(format!(
+                "ps process-tree {action} failed ({:?}): {}",
+                report.termination,
+                String::from_utf8_lossy(&report.stderr.bytes)
+            ));
+        }
+        Ok(())
     }
     async fn probes(
         &self,
         id: &str,
         library: &str,
         packages: &[PackageVersion],
-    ) -> Result<NativeVerification, String> {
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<NativeVerification, HandlerError> {
         let native = self
-            .helper_call("support", "observe", json!({"library":null,"limit":1}))
+            .helper_call(
+                id,
+                "observe",
+                json!({"library":null,"limit":1}),
+                cancellation.clone(),
+            )
             .await?;
         let support = native["jsonlite_library"]
             .as_str()
-            .ok_or("jsonlite support library unavailable")?;
-        let scratch = TempDir::new_in(&self.config.data_root).map_err(display)?;
+            .ok_or_else(|| before("jsonlite support library unavailable"))?;
+        let scratch = TempDir::new_in(&self.config.data_root).map_err(before)?;
         let output = scratch.path().join("verify.json");
         let mut args = vec![
             library.into(),
@@ -215,11 +291,12 @@ impl REnvironment {
             id.into(),
         ];
         for package in packages {
-            validate_package(package)?;
+            validate_package(package).map_err(before)?;
             args.push(format!("{}@{}", package.name, package.version));
         }
-        self.run(self.verifier.path(), &args).await?;
-        serde_json::from_value(response(&output, id)?).map_err(display)
+        self.run(id, self.verifier.path(), &args, cancellation)
+            .await?;
+        serde_json::from_value(response(&output, id).map_err(uncertain)?).map_err(uncertain)
     }
     async fn check_sources(&self, sources: &[SourceDigest]) -> Result<(), String> {
         for source in sources {
@@ -249,18 +326,21 @@ impl EnvironmentRuntime for REnvironment {
             "observe",
             "observe",
             json!({"library":library,"limit":limit}),
+            watch::channel(false).1,
         )
         .await
+        .map_err(|e| e.message)
     }
     async fn plan(
         &self,
         operation_id: &str,
         args: &PlanArguments,
-    ) -> Result<EnvironmentPlan, String> {
-        let stage = self.stage("plans", operation_id)?;
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<EnvironmentPlan, HandlerError> {
+        let stage = self.stage("plans", operation_id).map_err(before)?;
         let lock_path = stage.join("source.lock");
         let library = stage.join("empty-library");
-        std::fs::create_dir(&library).map_err(display)?;
+        std::fs::create_dir(&library).map_err(before)?;
         let mut inputs = BTreeSet::new();
         let (manager, native) = match args {
             PlanArguments::Pak { packages } => {
@@ -269,7 +349,7 @@ impl EnvironmentRuntime for REnvironment {
                     let mut reference = package.clone();
                     for prefix in ["local::", "deps::"] {
                         if let Some(path) = package.strip_prefix(prefix) {
-                            let path = self.source_path(path)?;
+                            let path = self.source_path(path).map_err(before)?;
                             inputs.insert(path.clone());
                             reference = format!("{prefix}{}", path.to_string_lossy());
                         }
@@ -282,14 +362,15 @@ impl EnvironmentRuntime for REnvironment {
                         operation_id,
                         "plan_pak",
                         json!({"packages":normalized,"lockfile":lock_path,"library":library}),
+                        cancellation.clone(),
                     )
                     .await?,
                 )
             }
             PlanArguments::Renv { lockfile } => {
-                let source = self.source_path(lockfile)?;
-                let bytes = read_bounded(&source)?;
-                let mut lock: Value = serde_json::from_slice(&bytes).map_err(display)?;
+                let source = self.source_path(lockfile).map_err(before)?;
+                let bytes = read_bounded(&source).map_err(before)?;
+                let mut lock: Value = serde_json::from_slice(&bytes).map_err(before)?;
                 if let Some(packages) = lock.get_mut("Packages").and_then(Value::as_object_mut) {
                     for record in packages.values_mut() {
                         let path = record
@@ -304,47 +385,52 @@ impl EnvironmentRuntime for REnvironment {
                                     .map(str::to_string)
                             });
                         if let Some(path) = path {
-                            record["Path"] = json!(self.source_path(&path)?);
+                            record["Path"] = json!(self.source_path(&path).map_err(before)?);
                         }
                     }
                 }
                 std::fs::write(
                     &lock_path,
-                    serde_json::to_vec_pretty(&lock).map_err(display)?,
+                    serde_json::to_vec_pretty(&lock).map_err(before)?,
                 )
-                .map_err(display)?;
+                .map_err(before)?;
                 (
                     "renv",
-                    self.helper_call(operation_id, "plan_renv", json!({"lockfile":lock_path}))
-                        .await?,
+                    self.helper_call(
+                        operation_id,
+                        "plan_renv",
+                        json!({"lockfile":lock_path}),
+                        cancellation,
+                    )
+                    .await?,
                 )
             }
         };
-        let native: NativePlan = serde_json::from_value(native).map_err(display)?;
+        let native: NativePlan = serde_json::from_value(native).map_err(uncertain)?;
         if native.packages.len() > 512 {
-            return Err("Environment plan exceeds 512 packages".into());
+            return Err(before("Environment plan exceeds 512 packages"));
         }
         let mut names = BTreeSet::new();
         for package in &native.packages {
-            validate_package(package)?;
+            validate_package(package).map_err(before)?;
             if !names.insert(&package.name) {
-                return Err("duplicate package in native lockfile".into());
+                return Err(before("duplicate package in native lockfile"));
             }
         }
         for path in &native.local_sources {
-            inputs.insert(self.source_path(path)?);
+            inputs.insert(self.source_path(path).map_err(before)?);
         }
         let mut local_sources = Vec::new();
         for path in inputs {
             local_sources.push(SourceDigest {
-                sha256: digest(&path).await?,
+                sha256: digest(&path).await.map_err(before)?,
                 path: path.to_string_lossy().into_owned(),
             });
         }
         Ok(EnvironmentPlan {
             project_root: self.root.clone(),
             manager: manager.into(),
-            lock_digest: hash(&read_bounded(&lock_path)?),
+            lock_digest: hash(&read_bounded(&lock_path).map_err(before)?),
             lock_path: lock_path.to_string_lossy().into_owned(),
             r_version: native.r_version,
             platform: native.platform,
@@ -357,6 +443,7 @@ impl EnvironmentRuntime for REnvironment {
         operation_id: &str,
         plan_id: &str,
         plan: &EnvironmentPlan,
+        cancellation: watch::Receiver<bool>,
     ) -> Result<EnvironmentRealization, HandlerError> {
         if plan.project_root != self.root {
             return Err(before("plan belongs to another project"));
@@ -368,7 +455,14 @@ impl EnvironmentRuntime for REnvironment {
         self.check_sources(&plan.local_sources)
             .await
             .map_err(before)?;
-        let native = self.observe(None, 1).await.map_err(before)?;
+        let native = self
+            .helper_call(
+                operation_id,
+                "observe",
+                json!({"library":null,"limit":1}),
+                cancellation.clone(),
+            )
+            .await?;
         if native["r_version"] != plan.r_version || native["platform"] != plan.platform {
             return Err(before("selected R runtime differs from the plan"));
         }
@@ -378,6 +472,11 @@ impl EnvironmentRuntime for REnvironment {
         let recovery = json!({"stage":stage,"plan_operation_id":plan_id,"action":"inspect_staged_library_before_retry"});
         let after =
             |error: String| HandlerError::after_possible_effect(error, Some(recovery.clone()));
+        let with_stage = |mut error: HandlerError| {
+            error.recovery = Some(json!({"stage":stage,"plan_operation_id":plan_id,
+                "runtime":error.recovery,"action":"inspect_staged_library_before_retry"}));
+            error
+        };
         let action = match plan.manager.as_str() {
             "pak" => "install_pak",
             "renv" => "install_renv",
@@ -387,17 +486,23 @@ impl EnvironmentRuntime for REnvironment {
             operation_id,
             action,
             json!({"project":self.config.project_root,"library":library,"lockfile":lock}),
+            cancellation.clone(),
         )
         .await
-        .map_err(after)?;
+        .map_err(with_stage)?;
         self.check_sources(&plan.local_sources)
             .await
             .map_err(after)?;
         let library_path = library.to_string_lossy().into_owned();
         let observed = self
-            .probes(operation_id, &library_path, &plan.packages)
+            .probes(
+                operation_id,
+                &library_path,
+                &plan.packages,
+                cancellation.clone(),
+            )
             .await
-            .map_err(after)?;
+            .map_err(with_stage)?;
         if observed.probes.len() != plan.packages.len()
             || observed.probes.iter().any(|probe| !probe.loadable)
         {
@@ -411,9 +516,10 @@ impl EnvironmentRuntime for REnvironment {
             operation_id,
             "snapshot",
             json!({"project":stage,"library":library,"lockfile":renv_lock}),
+            cancellation,
         )
         .await
-        .map_err(after)?;
+        .map_err(with_stage)?;
         let library_digest = digest(&library).await.map_err(after)?;
         Ok(EnvironmentRealization {
             project_root: self.root.clone(),
@@ -432,12 +538,17 @@ impl EnvironmentRuntime for REnvironment {
             activation: "available_not_active".into(),
         })
     }
-    async fn verify(&self, receipt: &EnvironmentRealization) -> Result<Verification, String> {
+    async fn verify(
+        &self,
+        operation_id: &str,
+        receipt: &EnvironmentRealization,
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<Verification, HandlerError> {
         if receipt.project_root != self.root {
-            return Err("realization belongs to another project".into());
+            return Err(before("realization belongs to another project"));
         }
-        let library = self.owned_path(&receipt.library_path)?;
-        let digest_matches = digest(&library).await? == receipt.library_digest;
+        let library = self.owned_path(&receipt.library_path).map_err(before)?;
+        let digest_matches = digest(&library).await.map_err(before)? == receipt.library_digest;
         if !digest_matches {
             return Ok(Verification {
                 verified: false,
@@ -447,7 +558,12 @@ impl EnvironmentRuntime for REnvironment {
             });
         }
         let observed = self
-            .probes("verify", &receipt.library_path, &receipt.packages)
+            .probes(
+                operation_id,
+                &receipt.library_path,
+                &receipt.packages,
+                cancellation,
+            )
             .await?;
         let mut errors = Vec::new();
         if observed.r_version != receipt.r_version || observed.platform != receipt.platform {
@@ -458,7 +574,7 @@ impl EnvironmentRuntime for REnvironment {
         {
             errors.push("namespace verification failed".into());
         }
-        if digest(&library).await? != receipt.library_digest {
+        if digest(&library).await.map_err(uncertain)? != receipt.library_digest {
             errors.push("managed library changed during namespace verification".into());
         }
         Ok(Verification {
@@ -511,18 +627,6 @@ fn read_bounded(path: &Path) -> Result<Vec<u8>, String> {
         .map_err(display)?;
     if bytes.len() as u64 > MAX_RESULT {
         return Err("Environment document exceeds 4 MiB".into());
-    }
-    Ok(bytes)
-}
-async fn bounded(input: impl AsyncRead + Unpin) -> Result<Vec<u8>, String> {
-    let mut bytes = Vec::new();
-    input
-        .take(MAX_RESULT + 1)
-        .read_to_end(&mut bytes)
-        .await
-        .map_err(display)?;
-    if bytes.len() as u64 > MAX_RESULT {
-        return Err("R helper output exceeds 4 MiB".into());
     }
     Ok(bytes)
 }
@@ -610,6 +714,9 @@ fn hash(bytes: &[u8]) -> String {
 fn display(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
-fn before(error: impl Into<String>) -> HandlerError {
-    HandlerError::before_effect(error)
+fn before(error: impl std::fmt::Display) -> HandlerError {
+    HandlerError::before_effect(error.to_string())
+}
+fn uncertain(error: impl std::fmt::Display) -> HandlerError {
+    HandlerError::after_possible_effect(error.to_string(), None)
 }

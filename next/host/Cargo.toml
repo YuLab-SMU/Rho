@@ -17,9 +17,12 @@ rho-next-git = { path = "../adapters/git" }
 rho-next-environment = { path = "../environment" }
 rho-next-r-environment = { path = "../adapters/r-environment" }
 rho-next-workspace = { path = "../workspace" }
+rho-next-execution = { path = "../execution" }
+rho-next-process = { path = "../adapters/process" }
 serde_json.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
 rusqlite.workspace = true
 tempfile.workspace = true
+tokio = { workspace = true, features = ["net"] }

@@ -57,7 +57,110 @@ fn ark_config(project: &Path, data: &Path, r_home: &Path) -> ArkConfig {
 }
 
 #[tokio::test]
-#[ignore = "requires real R, pak, renv, jsonlite and Ark; installs only into temporary libraries"]
+#[ignore = "requires real R, pak, renv, ps and jsonlite; cancels an actual package installation"]
+async fn real_environment_cancellation_stops_installer_and_retains_staging() {
+    use std::sync::Arc;
+    use tokio::{
+        io::{AsyncBufReadExt, AsyncReadExt, BufReader},
+        net::TcpListener,
+    };
+    let directory = tempfile::tempdir().unwrap();
+    let project = directory.path().join("project");
+    copy_fixture(&project);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    // R CMD INSTALL tests loading this namespace in a descendant R process.
+    // Signal readiness from that actual child, then block until it is killed.
+    std::fs::write(
+        project.join("pkg/R/load.R"),
+        format!(
+            r#"
+.onLoad <- function(libname, pkgname) {{
+  con <- socketConnection(host = "127.0.0.1", port = {}, open = "w", blocking = TRUE)
+  writeLines(Sys.getenv("RHO_OPERATION_ID"), con)
+  flush(con)
+  Sys.sleep(60)
+  close(con)
+}}
+"#,
+            listener.local_addr().unwrap().port()
+        ),
+    )
+    .unwrap();
+    let r_home =
+        PathBuf::from(std::env::var_os("RHO_NEXT_R_HOME").expect("RHO_NEXT_R_HOME required"));
+    let host = Arc::new(
+        NextHost::open_environment(
+            directory.path().join("state/next.sqlite"),
+            REnvironmentConfig {
+                rscript: r_home.join("bin").join(if cfg!(windows) {
+                    "Rscript.exe"
+                } else {
+                    "Rscript"
+                }),
+                project_root: project,
+                data_root: directory.path().join("state/environment"),
+                timeout: Duration::from_secs(90),
+            },
+        )
+        .await
+        .unwrap(),
+    );
+    let plan = invoke(
+        &host,
+        "plan",
+        "environment.plan",
+        json!({"manager":"pak","packages":["local::pkg"]}),
+    )
+    .await;
+    assert_eq!(plan.status, OperationStatus::Succeeded, "{plan:?}");
+    let args = json!({"plan_operation_id":plan.operation.operation_id});
+    let owner = host.clone();
+    let input = args.clone();
+    let task = tokio::spawn(async move {
+        invoke(&owner, "cancel-install", "environment.realize", input).await
+    });
+    let (socket, _) = tokio::time::timeout(Duration::from_secs(45), listener.accept())
+        .await
+        .expect("installer did not signal readiness")
+        .unwrap();
+    let mut socket = BufReader::new(socket);
+    let mut id = String::new();
+    tokio::time::timeout(Duration::from_secs(5), socket.read_line(&mut id))
+        .await
+        .unwrap()
+        .unwrap();
+    let id = rho_next_contract::OperationId::new(id.trim()).unwrap();
+    let requested = host
+        .request_cancellation(&NextHost::local_context(), &id)
+        .await
+        .unwrap();
+    assert!(requested.accepted);
+    let result = tokio::time::timeout(Duration::from_secs(15), task)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.status, OperationStatus::Cancelled, "{result:?}");
+    assert!(
+        result.output.is_none(),
+        "a cancelled install cannot be activated"
+    );
+    let recovery = result.recovery.as_ref().unwrap();
+    assert!(Path::new(recovery["stage"].as_str().unwrap()).is_dir());
+    assert_eq!(recovery["runtime"]["process"]["termination"], "cancelled");
+    assert_eq!(
+        invoke(&host, "cancel-install", "environment.realize", args).await,
+        result
+    );
+    let mut rest = Vec::new();
+    tokio::time::timeout(Duration::from_secs(3), socket.read_to_end(&mut rest))
+        .await
+        .expect("installer child survived cancellation")
+        .unwrap();
+    assert!(rest.is_empty());
+}
+
+#[tokio::test]
+#[ignore = "requires real R, pak, renv, ps, jsonlite and Ark; installs only into temporary libraries"]
 async fn real_environment_plan_realize_verify_restore_and_restart_binding() {
     let directory = tempfile::tempdir().unwrap();
     let project = directory.path().join("project");

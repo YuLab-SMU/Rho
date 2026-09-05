@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 rho-next-project = { path = "../../project" }
+rho-next-process = { path = "../process" }
 sha2.workspace = true
 tokio.workspace = true
 

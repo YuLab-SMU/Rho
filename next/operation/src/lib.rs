@@ -75,6 +75,9 @@ pub struct HandlerError {
     pub message: String,
     pub effect_boundary: EffectBoundary,
     pub recovery: Option<Value>,
+    /// Owner confirmation: no execution started, or the runtime actually stopped.
+    /// A cancellation request alone must never set this field.
+    pub cancellation_confirmed: bool,
 }
 
 impl HandlerError {
@@ -83,6 +86,7 @@ impl HandlerError {
             message: message.into(),
             effect_boundary: EffectBoundary::NotStarted,
             recovery: None,
+            cancellation_confirmed: false,
         }
     }
 
@@ -91,6 +95,16 @@ impl HandlerError {
             message: message.into(),
             effect_boundary: EffectBoundary::MayHaveOccurred,
             recovery,
+            cancellation_confirmed: false,
+        }
+    }
+
+    pub fn cancelled(message: impl Into<String>, recovery: Option<Value>) -> Self {
+        Self {
+            message: message.into(),
+            effect_boundary: EffectBoundary::MayHaveOccurred,
+            recovery,
+            cancellation_confirmed: true,
         }
     }
 }
@@ -115,6 +129,13 @@ pub struct CommitPlan {
 }
 
 impl CommitPlan {
+    pub fn cancelled_before_start() -> Self {
+        let mut plan = Self::succeeded(Value::Null);
+        plan.outcome = OperationOutcome::Cancelled;
+        plan.output = None;
+        plan
+    }
+
     pub fn succeeded(output: Value) -> Self {
         Self {
             outcome: OperationOutcome::Succeeded,
@@ -128,9 +149,13 @@ impl CommitPlan {
     }
 
     pub fn from_handler_error(error: HandlerError) -> Self {
-        let outcome = match error.effect_boundary {
-            EffectBoundary::NotStarted => OperationOutcome::Failed,
-            EffectBoundary::MayHaveOccurred => OperationOutcome::Uncertain,
+        let outcome = if error.cancellation_confirmed {
+            OperationOutcome::Cancelled
+        } else {
+            match error.effect_boundary {
+                EffectBoundary::NotStarted => OperationOutcome::Failed,
+                EffectBoundary::MayHaveOccurred => OperationOutcome::Uncertain,
+            }
         };
         Self {
             outcome,
@@ -177,6 +202,18 @@ pub enum Admission {
 pub struct CancellationRequestOutcome {
     pub accepted: bool,
     pub operation: OperationRecord,
+}
+
+/// A closed request channel is not a cancellation request.
+pub async fn wait_cancellation(receiver: &mut tokio::sync::watch::Receiver<bool>) {
+    loop {
+        if *receiver.borrow() {
+            return;
+        }
+        if receiver.changed().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    }
 }
 
 #[async_trait]

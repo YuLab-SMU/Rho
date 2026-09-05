@@ -11,11 +11,11 @@ assert.ok(fs.existsSync(ark),"Set RHO_NEXT_ARK to an installed Ark executable.")
 const rProbe=spawnSync("Rscript",["--vanilla","-e","cat(R.home())"],{encoding:"utf8"});
 assert.equal(rProbe.status,0,rProbe.stderr);
 const env={...process.env,RHO_NEXT_ARK:ark,RHO_NEXT_R_HOME:process.env.RHO_NEXT_R_HOME || rProbe.stdout.trim()};
-const result=spawnSync("cargo",["test","--manifest-path","Cargo.toml","-p","rho-next-host","--test","environment","--locked","--","--ignored","--nocapture"],{
+const result=spawnSync("cargo",["test","--manifest-path","Cargo.toml","-p","rho-next-host","--test","environment","--locked","--","--ignored","--nocapture","--test-threads=1"],{
   cwd:root,env,stdio:"inherit",timeout:180_000,
 });
 assert.equal(result.status,0,result.error?.message || result.signal || "Environment integration failed.");
-console.log("Verified pak plan/install, renv restore, namespace probes, source/library tampering, restart binding and unchanged user library.");
+console.log("Verified pak plan/install, confirmed installer cancellation, renv restore, namespace probes, source/library tampering, restart binding and unchanged user library.");
 const run=(command,args,options={})=>{
   const output=spawnSync(command,args,{cwd:root,encoding:"utf8",timeout:120_000,...options});
   assert.equal(output.status,0,output.error?.message || output.stderr || output.signal);
