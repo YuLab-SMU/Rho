@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-05
 >
-> 当前阶段：N6 Environment 的 Host 崩溃恢复已在本机验证；普通本地命令恢复、SSH/Slurm 和生产切换仍待完成
+> 当前阶段：N6 本机进程与 Environment 崩溃恢复已验证；下一步 SSH/Slurm，生产切换仍待完成
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -57,16 +57,16 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 项目 | 当前事实 |
 | --- | --- |
 | 总体状态 | 真实 Ark/R、Project/Git、环境计划/隔离安装/验证/新会话绑定及长期 CLI 已贯通；仍未替换旧生产入口 |
-| 当前里程碑 | N6 Execution（Building）；本地执行及 Environment 崩溃恢复已验证；普通进程恢复、远程执行和生产切换未完成 |
+| 当前里程碑 | N6 Execution（Building）；本机执行与两条显式恢复路径已验证；远程执行和生产切换未完成 |
 | 已完成生产切换的 capability | 0；独立 Next CLI 的可用能力不计为旧生产入口已切换 |
 | 已退役的旧 capability 实现 | 0 |
 | 旧系统策略 | 冻结为行为参考；不作为 Next 的代码依赖 |
 | 前端策略 | 延后；需要时仅建立极简统一客户端 |
 | 数据策略 | Next 使用独立 schema 和数据目录，切换前不双写 |
 
-已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 崩溃恢复 `9ec0837`。
+已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`。
 这些引用对应下方历史验证记录，不代表当前工作树已重新通过全部测试。
-N6 的本地执行、取消、输出收集已在 Host/CLI 验证；Git 和 Environment 复用同一进程执行器。Environment 已另行通过真实 Host 强制退出与显式恢复验收；不能由此推断普通本地命令或远程任务也已具备同样恢复能力。
+N6 的本地执行、取消、输出收集已在 Host/CLI 验证；Git 和 Environment 复用同一进程执行器。Environment 与普通本地命令分别通过真实 Host 强制退出验收；后者不需要 R，并覆盖脱离进程组的子进程。验证只覆盖本机可观察、保留标记的进程，不代表远程任务或任意逃逸方式也已覆盖。
 
 Environment 实际验证入口：`node next/scripts/test-environment.mjs`。
 当前已验证本机 R 4.5.2、pak 0.11.1、renv 1.1.8 与隔离本地 fixture；
@@ -658,6 +658,7 @@ next 是迁移期名称。旧系统全部退役后，应把它提升为正常仓
 | OS containment | 真实隔离 | 按平台、按威胁模型引入 |
 | process-wrap | 本地进程生命周期封装 | N6 已采用 10.0.0；Unix 进程组在本机验证，Windows Job Object 分支未实测 |
 | R ps | Environment 中跨进程组的子进程清理 | N6 已采用；本机 ps 1.9.3，复用原生 marker/find/kill/wait |
+| sysinfo | 无 R 依赖的本机进程观察与恢复 | N6 已采用 0.39.6；只启用 system，结果不包含进程环境 |
 | TypeScript generator | 极简前端 contract | Frontend 阶段选择 |
 
 禁止因为“未来也许有用”提前引入 DBOS、Restate、OpenTelemetry、完整 workflow runtime 或通用 policy engine。
@@ -724,7 +725,7 @@ building 只是开发进度，不是运行时 owner。禁止 shadow execution �
 | N3 | Workspace Query | querySnapshot 返回有来源、时间和 completeness 的 Workspace observation | Verified（含长期 CLI 会话；生产未切换） |
 | N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Next 实现 Verified；生产切换未完成 |
 | N5 | Environment | observe/plan/realize/verify 首条链路完成 | Next Verified（隔离本地 fixture、renv restore、新 Ark 绑定）；生产未切换 |
-| N6 | Execution | local process 后再扩展 SSH/Slurm | Building（本地执行、安装取消、Environment 崩溃恢复已验证；普通进程恢复和远程部分未完成） |
+| N6 | Execution | local process 后再扩展 SSH/Slurm | Building（本机执行、安装取消及两条崩溃恢复链已验证；远程部分未完成） |
 | N7 | Public edges | MCP 与极简前端使用统一 host ports | Not started |
 | N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Not started |
 
@@ -760,7 +761,8 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | environment.realize | Operation | Next CLI/Host | environment | Ready | 新隔离库安装与 namespace verification；现有会话不变 |
 | environment.verify | Operation | Next CLI/Host | environment | Ready | 校验包库内容及实际 namespace；新 Ark 绑定前重验 |
 | environment.reconcile | Operation | Next 独立 CLI/Host；生产未接入 | environment | Ready（本机 Host 崩溃验收） | 统一入口切换；仅清理本机已标记资源，不改写原结果 |
-| process.run_local | Operation | 多条旧生产路径；Next Host/CLI 已接入 | execution | Building（本机常规链已验证） | Host 强制退出后的清理/恢复；随后公共入口切换 |
+| process.run_local | Operation | 多条旧生产路径；Next Host/CLI 已接入 | execution | Ready（本机正常/崩溃路径） | 公共入口切换 |
+| process.reconcile | Operation | Next 独立 CLI/Host；生产未接入 | execution | Ready（本机无 R 验收） | 公共入口切换；仅针对当前可见的同用户标记进程 |
 | slurm.submit/query/cancel | Operation + Query | execution/runner | execution | Deferred | N6 scheduler truth |
 | MCP edge | Edge | rho-mcp + Agent Gateway | host adapter | Deferred | N7 no business routing |
 | desktop-lite | Edge | desktop | unified client | Deferred | N7 generated contract |
@@ -946,7 +948,7 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 发现：真实 pak 安装测试证明 processx/callr 会创建独立会话；主 R helper 退出和原进程组清理成功，不能证明安装子进程已停止。
 - 修正：Environment 复用 ps 的原生进程树 marker、find、kill、wait。取消后完成独立清理；清理失败必须是 uncertain。恢复材料保留 marker、实际进程报告和 stage；取消的安装不能产生可激活 receipt。
 - 证据：临时包在真实安装子进程中通过 TCP 报告 OperationId；取消后连接关闭，原请求重试仍返回同一 cancelled 结果。未用 fake RuntimeReport 或固定睡眠推断退出。
-- 边界：进程组和环境 marker 不是防恶意逃逸的 OS sandbox。强制杀死 Host 时清理代码不能运行；Environment 用 N-D019 补充重启后的恢复，普通进程路径仍未完成。不能据此宣称 Linux/Windows 或任意包行为已验证。
+- 边界：进程组和环境 marker 不是防恶意逃逸的 OS sandbox。强制杀死 Host 时清理代码不能运行；Environment 和普通进程分别通过 N-D019、N-D020 补充恢复。不能据此宣称 Linux/Windows 或任意包行为已验证。
 
 ### N-D019 — 持久化原生恢复引用，通过新 Operation 核对与清理
 
@@ -957,7 +959,18 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 恢复入口：environment.reconcile 只接受当前 caller/project 范围内已经终止的 plan/realize/verify。它走原 Gateway、共享 lane 和事务；原生清理在发信号前检查进程的 Operation tag。
 - 真相：新 Operation 返回停止的本机进程与保留的 staging。旧 Operation 的 uncertain、output 与时间记录不被改写，旧 Invocation 不重跑。清理不等于回滚、环境激活或取消远程作业。
 - 证据：真实 CLI 在安装子进程报告开始后被 SIGKILL；只读查询保持数据库不变。错项目与错 marker 拒绝清理，原生 ps 检查确认进程仍活着；正确请求使连接关闭。丢失引用仍为 uncertain，重复恢复可观察到空进程集合。
-- 限制：目前验证范围为 macOS、本机 R/ps 和临时 fixture。普通 process.run_local 的崩溃恢复、自动 staging 回收及其他平台仍是未完成工作。
+- 限制：目前验证范围为 macOS、本机 R/ps 和临时 fixture。普通 process.run_local 恢复由 N-D020 单独验证；自动 staging 回收及其他平台仍未完成。
+
+### N-D020 — 从当前原生进程状态恢复，不信任历史 PID
+
+- 日期：2026-09-05
+- 状态：Accepted；本机无 R 的 CLI 崩溃验收 Verified
+- 决定：复用执行前已持久化并注入环境的 OperationId；process.reconcile 通过同一 Gateway 查询源操作，不创建 PID 表或新状态库。
+- 机制：sysinfo 只检查当前同用户进程的 Operation 标记，发信号前再次刷新标记、用户与启动时间；不使用旧结果中的 PID，也不调用可能无限等待的 Process::wait。观察轮次受时间与数量限制。
+- 范围：结果是 observed/signalled/remaining 和 no_matching_processes_observed，completeness 明确为 partial；它不证明不可观察、清除标记或远程进程已经停止。原生查询与 POSIX 信号也不是原子隔离机制。
+- 约束：仅可恢复当前 caller/project 下已经终止的 process.run_local。运行中源操作在等待 lane 前就被拒绝；源结果不被覆盖，旧 Invocation 不重新执行。
+- 收敛：Environment 与 Execution 现在共用 OperationRecords 只读接口；移除原先仅属于 Environment 的同形接口，依然读取同一个 Journal。
+- 证据：真实 CLI 被强制终止后，父进程及独立进程组中的子进程被清理，无关标记的进程仍活着；只读查询不恢复数据库，旧结果保持 uncertain，副作用文件只写一次。
 
 ## 24. Open Decisions
 
@@ -971,6 +984,7 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 | N-O008 | Rust 到 TypeScript 使用哪个单一生成器？ | N7 前 |
 | N-O009 | 旧 SQLite 数据是否一次迁移、只读挂载或直接放弃？ | 首个用户数据切换前 |
 | N-O010 | 首次切换必须一起迁移哪些共享 R session、library 或工作树的能力和入口？单个 capability 路由唯一不足以证明共享状态不会有两个写入 owner | 首次生产切换前 |
+| N-O011 | SSH/Slurm 真实验收使用哪个已配置目标及临时目录？已向用户询问；未指定前不连接或提交远程作业 | N6 远程实测前 |
 
 解决 Open Decision 时：
 
@@ -1076,6 +1090,15 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 生产切换：无；Legacy 删除：无。普通本地命令恢复、SSH/Slurm、公共入口、staging 回收和旧系统退役继续保留在完整目标内。
 - 下一步：完成普通本地命令的 Host 崩溃收敛，再扩展远程执行。
 
+### 2026-09-05 — 普通本机命令的崩溃恢复
+
+- Git：`9b0131f`；本机恢复检查点，不代表整个 N6 或 Next 已完成。
+- 实现：新增 process.reconcile；复用原 OperationId 与 sysinfo 原生观察，Project-only Host 不需要 R。两类恢复 handler 共享只读 OperationRecords，不新增数据库表。
+- 验证：Next workspace tests、Clippy、architecture check 通过；`node next/scripts/test-process-recovery.mjs` 通过，覆盖真正的 CLI Host 强制退出、父/脱离进程组子进程、无关进程保留、源结果不可变与不重放。新验收已加入 governance 映射。
+- 回归：`node next/scripts/test-environment.mjs` 和 `node next/scripts/test-real-r.mjs` 通过，原有包安装、取消、绑定、崩溃恢复与 Workspace 查询仍工作。其他平台和远程执行没有被据此记为通过。
+- 生产切换：无；Legacy 删除：无。移除了重复的领域专用读取接口，Git 保留改动历史。
+- 下一步：SSH/Slurm 原生执行适配；真实目标尚待用户指定，先继续本地及协议实现。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。
@@ -1132,12 +1155,12 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 N6：把本地进程与后续 SSH/Slurm 执行放进统一操作和观察路径。
 
-本地 `process.run_local` 已贯通 CLI → Gateway → Handler → OS → Journal；Environment 的真实 Host 崩溃恢复已验证。最近的可执行出口是普通本地命令的 Host 崩溃收敛：不能要求 Project-only Host 安装 R，也不能凭陈旧 PID 终止无关进程；继续使用真实运行时身份，保留 uncertain，不盲目重跑命令。
+本机进程与 Environment 的真实 Host 崩溃恢复已分别验证。最近的可执行出口是 SSH/Slurm：建立真实协议和原生 job/host 引用，将 submit/query/cancel 接入既有 Host ports；未知提交结果不得自动重提。未指定远程验收目标前，不连接服务器或提交作业，也不把本地/协议测试写成远程实测。
 
 必须只包含：
 
 - 保留已验证的本地进程 stdout/stderr、退出码、取消与退出后收集；不复制一套 scheduler；
-- 保留已验证的 Environment 显式恢复，补齐普通进程的 Host 崩溃收敛；正常取消不能替代这一验证；
+- 保留两条已验证的本机显式恢复路径，不把 scoped observation 扩张成全系统隔离承诺；
 - SSH/Slurm adapter 使用原生 job/host identity，未知提交结果不得自动重提；
 - 未提供真实远程运行条件时明确区分协议测试与实际远程验收；
 - 并行保留 N7 公共入口、staging 回收和 N8 旧代码删除的未完成要求。
