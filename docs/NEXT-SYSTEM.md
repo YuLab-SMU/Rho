@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-05
 >
-> 当前阶段：本机 Environment 材料回收已验证；下一步 N7 公共入口，远程实测与生产切换仍待完成
+> 当前阶段：N7 MCP 入口与真实 R 调用已验证；下一步生成前端 contract 与极简客户端，远程实测和生产切换仍待完成
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -57,14 +57,14 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 项目 | 当前事实 |
 | --- | --- |
 | 总体状态 | 真实 Ark/R、Project/Git、环境计划/隔离安装/验证/新会话绑定及长期 CLI 已贯通；仍未替换旧生产入口 |
-| 当前里程碑 | N6 本机恢复/材料回收已验证，SSH/Slurm 协议实现已验证；转入 N7 公共入口，真实远程目标尚待指定 |
+| 当前里程碑 | N7 Building；MCP 已接入并通过真实 SDK/R 验收，极简客户端未完成；远程目标尚待指定 |
 | 已完成生产切换的 capability | 0；独立 Next CLI 的可用能力不计为旧生产入口已切换 |
 | 已退役的旧 capability 实现 | 0 |
 | 旧系统策略 | 冻结为行为参考；不作为 Next 的代码依赖 |
 | 前端策略 | 延后；需要时仅建立极简统一客户端 |
 | 数据策略 | Next 使用独立 schema 和数据目录，切换前不双写 |
 
-已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议 `2f9ce6b`、材料回收 `e1820f1`。
+已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议 `2f9ce6b`、材料回收 `e1820f1`，N7 MCP `f4f502c`。
 这些引用对应下方历史验证记录，不代表当前工作树已重新通过全部测试。
 N6 的本地执行、取消、输出收集已在 Host/CLI 验证；Git 和 Environment 复用同一进程执行器。Environment 与普通本地命令分别通过真实 Host 强制退出验收；后者不需要 R，并覆盖脱离进程组的子进程。验证只覆盖本机可观察、保留标记的进程，不代表远程任务或任意逃逸方式也已覆盖。
 
@@ -289,12 +289,14 @@ CallContext 由 transport edge 创建：
 
     CallContext
     - caller identity
+    - optional authenticated principal (defaults to caller)
     - granted scopes
     - connection/session identity
     - optional correlation and causation
     - optional standard trace context
 
 Gateway 可以机械地拒绝 caller 没有资格调用的 capability，但不得发起第二次用户审批。
+Caller 记录实际执行者，principal 表示连接背后的账户；同一账户的 CLI/Agent 共享结果可见性，但不抹去 actor。principal 只能由可信 Edge 绑定，不能来自 Invocation 参数。见 N-D023。
 
 ### 8.3 CapabilityDescriptor
 
@@ -727,7 +729,7 @@ building 只是开发进度，不是运行时 owner。禁止 shadow execution �
 | N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Next 实现 Verified；生产切换未完成 |
 | N5 | Environment | observe/plan/realize/verify 首条链路完成 | Next Verified（隔离本地 fixture、renv restore、新 Ark 绑定）；生产未切换 |
 | N6 | Execution | local process 后再扩展 SSH/Slurm | Building（本机已验证；SSH/Slurm 已实现并通过协议测试，未远程实测） |
-| N7 | Public edges | MCP 与极简前端使用统一 host ports | Not started |
+| N7 | Public edges | MCP 与极简前端使用统一 host ports | Building（MCP 与真实 R 已验证；前端未完成） |
 | N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Not started |
 
 N1 不创建真实 R、前端、MCP、Environment 或 Project 功能。它只证明操作骨架、幂等、提交纪律和查询能够工作。
@@ -771,7 +773,7 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | slurm.snapshot | Query | 旧执行路径；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 验证真实 squeue/sacct 状态与版本 |
 | slurm.reconcile | Operation | Next 独立入口 | execution / ssh adapter | Building（本地协议测试通过） | 真实丢回执/状态核对；不重提作业 |
 | slurm.request_cancel | Operation | 旧执行路径；Next 已接入 | execution / ssh adapter | Building（本地协议测试通过） | 真实取消请求与后续状态观察 |
-| MCP edge | Edge | rho-mcp + Agent Gateway | host adapter | Deferred | N7 no business routing |
+| MCP edge | Edge | 旧 rho-mcp/Agent Gateway；Next stdio 入口已接入 | host adapter | Ready（真实 SDK/本机 R） | 极简客户端与生产路由切换；无业务分叉 |
 | desktop-lite | Edge | desktop | unified client | Deferred | N7 generated contract |
 | evidence projection | Query projection | rho-evidence-graph | 未决定 | Deferred | 出现真实消费者 |
 | extensions | Capability source | extension runtime | 未决定 | Deferred | 核心稳定后评估 |
@@ -1003,6 +1005,17 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 证据：真实取消安装后，手动加入 .libPaths 会阻止回收，移除后允许；过期预览拒绝；隔离/恢复/永久删除及提交故障恢复通过，外部 symlink 目标不变。
 - 边界：保护 Rho 声明的引用与可观察 R 使用情况，不声称追踪所有外部进程或分析任意代码里的未来文件引用。默认不自动删除科学产物。
 
+### N-D023 — 官方 MCP SDK、共享 principal 与 Host 持有执行
+
+- 日期：2026-09-05
+- 状态：Accepted；真实 rmcp stdio 与本机 Ark/R Verified
+- 决定：复用 rmcp 1.8；Capability Registry 派生 MCP 工具及 schema，所有调用进入 Host 五端口。没有自建 MCP 协议、Agent Conversation、sampling/规划循环或二次审批。
+- 身份：MCP actor 是 agent/local-mcp，本机账户 principal 由 stdio Edge 绑定；CLI/Human 和 Agent 可以读取并引用同一账户的科学结果。其他 principal 不可见，clientInfo 与工具参数不能声明账户权限。
+- 兼容事实：旧记录没有 principal 时沿用 caller。principal 与 caller 等价时不改变已有幂等 digest；不同 principal 复用同 actor/request key 会冲突，不能返回另一个账户的结果。
+- 生命周期：SDK 的有界 codec 限制输入；能力调用有并发上限。RPC cancellation/EOF 不伪造 runtime cancellation，显式取消工具仍验证源能力 scopes。Host 使用 TaskTracker 等待已接受工作提交。
+- 证据：真实 MCP 握手、发现、文件修改、查询纯度、幂等、输入越界、取消与断开后提交通过；真实 R 返回 42、对象 Query 不产生日志，Agent 实现 Human 创建的包计划，Human 读取同一结果。
+- 边界：当前是本机 stdio binding，不是网络鉴权或全平台验收。事件工具是 cursor page，不是 live push；前端与旧生产入口切换仍未完成。
+
 ## 24. Open Decisions
 
 以下问题尚未决定，不能由实现者顺手固化：
@@ -1148,6 +1161,15 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 范围：只对私有测试目录执行删除，未清理实际用户材料。恢复标记及原结果被保留；生产切换与 Legacy 删除均无。
 - 下一步：N7 统一 MCP 入口和极简客户端；真实 SSH/Slurm 目标仍待指定。
 
+### 2026-09-05 — MCP 入口与共享账户视图
+
+- Git：`f4f502c`；MCP 入口检查点，不代表前端或整体替换完成。
+- 实现：`rho-next ... mcp` 复用同一个 Host 启动配置；动态工具由 registry 生成，查询与 command 分路，控制工具只转发 get/cancel/events。
+- 验证：`node next/scripts/test-mcp.mjs` 与 `--real-r` 通过，包含真正的 rmcp 服务、真实本机进程/R 与包安装。Next workspace tests、Clippy、architecture 和文档检查通过；原 Environment 验收通过。
+- 身份验证：保留 Agent actor，跨入口按同一 principal 看事实；隔离其他账户。缺少能力 scope 的 caller 不能借助取消端口获得写能力。
+- 进度：N7 的 MCP 部分已验证，前端未完成；生产切换与 Legacy 删除均无。远程 SSH/Slurm 未进行实际连接或提交。
+- 下一步：从 Rust contract 生成唯一客户端类型，接入极简前端，然后完成能力路由切换与旧实现删除。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。
@@ -1204,7 +1226,7 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 N7：让外部 Agent 与极简客户端使用同一套科学空间端口。
 
-本机恢复与 Environment 材料回收已验证，SSH/Slurm 已实现并通过本地协议测试。当前可执行出口是 MCP：从现有 Capability Registry 暴露能力，所有请求仍进入 Host 五端口，不复制业务逻辑、Conversation 或 Agent 行为。随后接入生成式前端 contract 与极简客户端，并逐项切换、删除旧生产入口。
+MCP 已经从 Registry 暴露能力并通过真实 SDK/R 验收。当前可执行出口是生成前端 contract 与极简客户端：只用 Host 五端口呈现项目、Workspace、Environment、Operation 与恢复状态，不能推断业务成功或复制 Agent 会话。随后逐项切换并删除旧生产入口；真实远程目标未指定前仍不连接或提交作业。
 
 必须只包含：
 
