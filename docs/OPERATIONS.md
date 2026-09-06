@@ -413,8 +413,10 @@ checks that an unrelated process survives, and verifies idempotency and unchange
 original uncertainty. Environment and Execution share a read-only OperationRecords
 port to the same journal; no recovery status database or persisted PID table was added.
 
-SSH and Slurm adapters are now wired into Host, but **only local protocol fixtures
-have been verified**, not a real remote target. Configure an existing OpenSSH alias
+SSH and Slurm adapters are wired into Host. Local protocol fixtures and real CPU
+jobs on the user-selected YuLabServer / Slurm 19.05.2 have been verified, including
+lost-receipt recovery and confirmed cancellation. This is not a claim about every
+cluster, connection implementation, GPU allocation or Slurm version. Configure an existing OpenSSH alias
 and a canonical absolute POSIX project directory with `--remote-host ALIAS
 --remote-root /absolute/project`; add `--slurm-cluster NAME` to expose Slurm.
 These flags work with Project-only, Rscript and Ark Hosts. Opening Host does not
@@ -454,8 +456,26 @@ node scripts/test-remote-protocol.mjs
 This POSIX-only test replaces SSH/Slurm executables inside a private temporary PATH.
 It verifies real argument/stream handling, quote preservation, no startup connection,
 lost receipts without replay, query purity and cancel-request semantics. It is not
-remote acceptance. Real cluster availability, installed command versions and remote
-runtime behavior must still be verified on the user-selected target.
+remote acceptance.
+
+Opt-in real acceptance uses an installed Server Manager and an explicitly supplied,
+empty, writable shared scratch directory on the chosen host:
+
+```sh
+node scripts/test-remote-live.mjs HOST_ALIAS /absolute/empty/shared/scratch CLUSTER CPU_PARTITION
+```
+
+The script submits two real jobs (1 CPU, 64 MiB each; 1- and 2-minute run limits),
+then cancels only its own lost-receipt test job. A temporary connection relay keeps
+authentication in the existing manager; it is test tooling, not a new Rho provider
+or plugin API. Remote commands and Slurm results are real. Receipt loss is deliberate
+fault injection after successful submission; reconciliation must discover that job
+without receiving its numeric ID. Waiting happens inside one bounded remote command.
+
+The Journal, evidence.json and remote output files are retained for inspection.
+On failure, use those original Operations and native references; do not rerun the
+script or resubmit blindly. This test is intentionally excluded from default CI.
+Actual validation scope and native job IDs are recorded in the system ledger.
 
 Environment material retention is explicit, not an age-based background sweep:
 

@@ -1,10 +1,10 @@
 # Rho Next 系统宪章与替换台账
 
-> 状态：Active
+> 状态：Complete（本轮约定范围）
 >
 > 最后更新：2026-09-06
 >
-> 当前阶段：N7 本机浏览器验收与 N8 源码收敛已完成，首版执行边界已确认；当前暂停实施，整理独立的场景插件研究。真实远程验收尚未完成。
+> 当前阶段：N0—N8 已按约定完成，最终回归通过；旧源码已退役，旧数据不迁移。场景插件研究、完整桌面与分发不在本轮实施范围内。
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -66,7 +66,7 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 项目 | 当前事实 |
 | --- | --- |
 | 总体状态 | 根 Cargo 工作区只构建 Next，默认程序为 rho；真实 Ark/R、Project、Environment 与本机执行经新 Host 运行 |
-| 当前里程碑 | N7 已经本机 Chrome 交互及 390 × 844 模拟窄屏验证，N8 Retired；N6 真实远程验收仍未完成 |
+| 当前里程碑 | N0—N8 完成；本机回归、浏览器验收与 YuLabServer / Slurm 19.05.2 CPU 作业验收通过 |
 | 已切换的默认入口 | rho CLI/session、stdio MCP、workbench HTTP/MCP；没有保留旧入口启动代理或旧数据库兼容层 |
 | 已退役的旧源码 | 全部旧 crates/、desktop/、r/，旧 test/、fuzz/、programs/ 与旧插件示例；专属脚本已删除，必要 Ark 获取与治理工具保留 |
 | 旧系统策略 | 不再保存平行源码树；Git 保留代码历史，旧数据全部放弃，不做迁移 |
@@ -75,6 +75,23 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 最终核对补项 | workspace.help/lint/format 已进入统一 Operation 主线，本机 Ark/R 与 MCP 验证通过；见 N-D030 |
 | 首版执行边界 | 用户接受原生用户权限、无文件/网络沙箱；原有机械校验与真实结果语义保留，见 N-D031 |
 | 新研究范围 | [复杂场景插件](SCENARIO-PLUGINS.md) 仅记录设计理念和候选形态；实施不属于本轮目标，不为 Next 增加完成条件，见 N-D032 |
+
+### 完成核对
+
+| 要求 | 当前依据 |
+| --- | --- |
+| 单一入口、单向依赖、无旧 owner | 根 Cargo metadata 与 architecture check；CLI/MCP/workbench 依赖 Host，领域不依赖具体 adapter |
+| 幂等、原子提交、不可改写终态、诚实恢复 | 全工作区测试，含 SQLite outbox 故障回滚、同 ID 重试、Host 强退和外部效果后恢复 |
+| 真实 Workspace 与无求值 Query | `test-real-r.mjs`：真实 Ark/R、条件、取消、kernel exit、help/lint/format、对象读取和 CLI session |
+| Git/filesystem 与 Environment | Project Rust/CLI 测试；`test-environment.mjs` 的 pak/renv、安装取消、绑定、回收与恢复 |
+| 本机与远程执行 | `test-process-recovery.mjs`；`test-remote-protocol.mjs`；`4228e59` 的真实远程验收与作业 28676/28677 |
+| 统一公共入口与极简界面 | MCP/workbench 测试含真实 R；`8259a5a` 的本机浏览器验收，之后 UI 源码和嵌入资产未改变 |
+| 旧源码退役、全新应用状态 | Git 路径核对无旧 crates/rho-*、r/rho.*、desktop/、next/；无旧数据迁移或兼容实现 |
+| 文档、生成契约与代码质量 | governance/tool、客户端类型与资产检查、全工作区 Clippy（-D warnings）、格式检查通过 |
+
+验证覆盖本机 macOS、真实 Ark/R 及指定 YuLab 的 Slurm 19.05.2 CPU 场景。
+没有触发 GitHub CI、发布二进制或验证所有平台、所有集群及 GPU/多节点组合；不据此作相应承诺。
+原始运行材料和每项边界见 Work Log。后续候选依赖及研究问题不转成当前目标的隐含实施项。
 
 已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议 `2f9ce6b`、材料回收 `e1820f1`，N7 MCP `f4f502c`、本机工作台 `3e20d78`，项目级互斥 `3bef981`，N8 默认入口切换 `a93e855`。
 这些引用对应下方历史验证记录，不代表当前工作树已重新通过全部测试。
@@ -664,7 +681,7 @@ Artifact、Audit、Policy、Evidence 或 extension 框架。未跟踪的构建�
 | R help / lintr / styler | 原生帮助、诊断与格式化 | 已接入；本机 R 4.5.2、lintr 3.2.0、styler 1.11.0 与真实 Ark/Host 验证通过，见 N-D030 |
 | renv + pak | R environment declaration/realization | N5 使用 pak 原生 lockfile_create/install 和 renv lockfile_read/restore/snapshot；本机真实验证通过 |
 | Pixi | 外层科学环境 | Environment 阶段 PoC |
-| Slurm CLI / 可选 slurmrestd | Remote job truth | 已实现 OpenSSH 上的原生 CLI；尚未远程实测，未引入 REST 服务依赖 |
+| Slurm CLI / 可选 slurmrestd | Remote job truth | 原生 CLI 已在 Slurm 19.05.2 完成真实提交、观察、回执丢失恢复与取消；未引入 REST 服务依赖 |
 | OS containment | 真实隔离 | 按平台、按威胁模型引入 |
 | process-wrap | 本地进程生命周期封装 | N6 已采用 10.0.0；Unix 进程组在本机验证，Windows Job Object 分支未实测 |
 | R ps | Environment 中跨进程组的子进程清理 | N6 已采用；本机 ps 1.9.3，复用原生 marker/find/kill/wait |
@@ -753,9 +770,9 @@ Git 可恢复源码，不代表已经撤销包安装、R 内存修改或远程�
 | N3 | Workspace Query | querySnapshot 返回有来源、时间和 completeness 的 Workspace observation | Verified；默认入口已切 Next |
 | N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Verified；默认入口已切 Next，旧实现物理删除归 N8 |
 | N5 | Environment | observe/plan/realize/verify 首条链路完成 | Verified；默认入口已切 Next，仍只声明已验收的本机范围 |
-| N6 | Execution | local process 后再扩展 SSH/Slurm | Building（本机已验证；SSH/Slurm 已实现并通过协议测试，未远程实测） |
+| N6 | Execution | local process 后再扩展 SSH/Slurm | Verified（本机执行/恢复与 YuLabServer 的 Slurm 19.05.2 CPU 作业；不扩张为所有集群或 GPU 验证） |
 | N7 | Public edges | MCP 与极简前端使用统一 host ports | Verified（本机 Chrome、桌面与 390 × 844 模拟窄屏；HTTP/MCP/真实 R 回归通过） |
-| N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Retired；旧源码删除及最终目录整理已完成，整体目标仍待 N6 真实远程验收 |
+| N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Retired；旧源码删除、最终目录整理与回归已完成 |
 
 N1 不创建真实 R、前端、MCP、Environment 或 Project 功能。它只证明操作骨架、幂等、提交纪律和查询能够工作。
 
@@ -794,11 +811,11 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | environment.cleanup / restore_cleanup / purge_cleanup | Operation | 默认 rho Host | environment | Next-owned | 维持显式隔离/恢复/删除，不做旧数据迁移 |
 | process.run_local | Operation | 默认 rho Host | execution | Next-owned；Legacy Retired | 保持单一进程机制与恢复语义 |
 | process.reconcile | Operation | 默认 rho Host | execution | Next-owned（本机无 R 验收） | 仅针对当前可见的同用户标记进程 |
-| process.run_remote | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 指定目标后进行真实 SSH 验收 |
-| slurm.submit | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 验证真实集群提交与原生回执 |
-| slurm.snapshot | Query | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 验证真实 squeue/sacct 状态与版本 |
-| slurm.reconcile | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 真实丢回执/状态核对；不重提作业 |
-| slurm.request_cancel | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 真实取消请求与后续状态观察 |
+| process.run_remote | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Next-owned（真实主机 Verified） | 保持 stdout/stderr/stdin、原生退出与幂等语义 |
+| slurm.submit | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Next-owned（真实 CPU 作业 Verified） | 保持原生回执、资源边界与未知结果不重提 |
+| slurm.snapshot | Query | 默认 rho Host（显式配置） | execution / ssh adapter | Next-owned（真实 squeue/sacct Verified） | 保持只读 Journal、原生状态与范围核对 |
+| slurm.reconcile | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Next-owned（真实作业丢回执 Verified） | 找回唯一作业，不改写源 uncertain，不重提 |
+| slurm.request_cancel | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Next-owned（真实取消 Verified） | 请求回执与后续 CANCELLED 观察分离 |
 | CLI entry | Edge | 默认 rho | cli | 旧独立 crate Retired | 不再提供旧 SemanticStore 数据观察器 |
 | MCP edge | Edge | 默认 rho stdio/HTTP | mcp / host | Next-owned；Legacy Retired | 保持同 Host 语义，旧桌面引用已删除 |
 | desktop-lite | Edge | 默认 rho workbench | workbench / unified client | Next-owned（本机浏览器 Verified） | 保持轮询控件稳定、面板状态独立与项目结果分离；不扩张为全平台声明 |
@@ -1130,7 +1147,7 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 
 ## 24. Open Decisions
 
-以下问题尚未决定，不能由实现者顺手固化：
+以下问题保留给后续独立能力或受限运行时需求，不属于本轮未完成项，也不能由实现者顺手固化：
 
 | ID | 问题 | 最晚决定时间 |
 | --- | --- | --- |
@@ -1361,6 +1378,27 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 文档验证：`node scripts/governance.mjs check`、`node scripts/test-governance.mjs` 和 `git diff --check` 通过；未运行 Rust、R 或远程测试，不将 WIP 记为已验证。
 - 下一步：研究内容留待另行立项；原 Next 目标保留 N6 真实远程验收，待用户恢复实施时继续。
 
+### 2026-09-06 — N6 真实主机与 Slurm 作业验收
+
+- Git：`4228e59`；真实验收工具与范围记录的检查点。
+- 范围：恢复原 Next 目标的剩余验收，没有实施场景插件研究、增加 provider 枚举或修改连接配置。测试目录中的转接脚本通过已有 Server Manager 认证；生产执行代码保持原接口，原生远程命令和调度器没有被替换为 fixture。
+- 真实结果：作业 28676 使用 1 CPU、64 MiB、1 分钟上限，完成并产出 `result=42` 和原 OperationId；作业 28677 使用同样的小型 CPU 分配、2 分钟上限，提交成功后故意丢弃回执。原 Operation 保持 uncertain；同 ID 重试未重提，reconcile 找回唯一的 28677，随后显式取消并观察到 `CANCELLED by 1256`。
+- 验证：`node scripts/test-remote-live.mjs YuLabServer /biostack/home/yonghe/rho-next-acceptance.BStcC4 cluster cpu_batch` 通过。包含远程 stdout/stderr、UTF-8 stdin、退出码、文件写入幂等、真实 JobID、输出、回执丢失、恢复、取消、终态不变及 Query 不写 Journal。等待在一个有界远端命令内进行，没有 Agent 侧 sleep/squeue 循环。
+- 兼容性：`042a8d8` 中移除 scancel --ctld 的 WIP 已经本地协议和实际 Slurm 19.05.2 取消验证。未安装软件、申请 GPU、取消其他任务或处理旧数据。
+- 证据：本机原始 Journal/结果留在 `/var/folders/pb/t9j6hdrn0m3g8r50g03107dr0000gn/T/rho-remote-live-uCA5hh/`；远程测试输出保留在上述独立目录。两个测试作业均已终态。回执丢失是明确的故障注入，不伪称自然发生的网络故障。
+- 限制：真实验收使用测试用连接转接；OpenSSH 参数构造另由本地协议测试覆盖，不据此声明任意连接实现、所有 Slurm 版本或 GPU/多节点任务都已验证。脚本需要明确目标参数，不进入默认 CI，以免自动提交真实作业。
+- 后续：完成核对结果见下条记录；研究文档中的插件、通道和工作组合开发继续排除。
+
+### 2026-09-06 — 最终完成核对与回归
+
+- 结果：逐项核对 N0—N8、能力台账与永久不变量，本轮约定的替换目标完成。源码收敛、原生事实引用、单一 Operation 主线、查询边界、公共入口与真实运行都有对应证据；未把新研究范围加入完成门槛。
+- 已运行：`cargo test --workspace --locked --offline -- --test-threads=1`、`cargo clippy --workspace --all-targets --locked --offline -- -D warnings`、`cargo fmt --all --check`、`npm run check --prefix ui` 通过。
+- 外部运行时：`node scripts/test-real-r.mjs`、`node scripts/test-environment.mjs`、`node scripts/test-process-recovery.mjs`、`node scripts/test-mcp.mjs`（普通与 `--real-r`）、`node scripts/test-workbench.mjs`（普通与 `--real-r`）均通过。普通 Cargo 中 ignored 的 R 测试已通过独立入口实际执行，不计作自动跳过的成功。
+- 远程：本轮真实验收见上条；另外核对了作业 28676 的 stderr 文件，内容为预期的 native-job-stderr。两个测试作业均已终态，没有额外提交或改动其他作业。
+- 结构与文档：architecture、governance/tool、diff 检查通过；Git 路径检查确认旧源码不在版本控制中。`git diff 8259a5a -- ui crates/workbench/assets` 为空，之前的桌面/模拟窄屏人工验收仍对应当前界面。
+- 保留工具：`bash scripts/test-bootstrap-ark-macos.sh`、`node scripts/test-dev-lanes.mjs` 通过；`target/debug/rho --help` 确认默认 CLI、MCP、workbench 和 Operation 入口。Ark 获取测试使用本机 fixture，不冒充其他平台或实际下载验收。
+- 交付边界：没有旧数据迁移、安装器发布、全平台认证或新插件系统实施。测试用临时连接转接不进入生产 provider 列表；配置与凭据仍由原有工具管理。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。
@@ -1415,8 +1453,6 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 ## 27. 当前唯一下一步
 
-当前按用户要求暂停实施，交付[复杂场景插件研究](SCENARIO-PLUGINS.md)。插件、通道和工作组合机制的开发不在本轮范围内，也不新增为 Next 的完成门槛。
+本轮目标已完成，无继续自动实施的事项。后续工作需要新的具体请求，不再用重复验收维持进行中状态。
 
-原目标仍保留 N6 的真实 SSH/Slurm 验收，具体要求见[里程碑](#20-里程碑)与[能力台账](#21-capability-ledger)。YuLabServer 已由用户提供作为参考，首版执行边界已经确认；恢复实施时核对实际目录、资源和交互能力，不重复询问已回答的选择。
-
-N7 本机浏览器验收、R 代码工具及 N8 旧源码退役均已记录完成。协议 fixture、只读连通性检查和文档交付不能替代尚未执行的真实作业验收。旧数据继续全部放弃，不因本研究恢复迁移或兼容工作。
+[复杂场景插件研究](SCENARIO-PLUGINS.md)仍只是一份研究文档。插件、通道和工作组合机制的开发不在本轮范围内，也不新增为 Next 的完成门槛。旧数据继续全部放弃，不恢复迁移或兼容工作。
