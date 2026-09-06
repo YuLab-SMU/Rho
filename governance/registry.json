@@ -6,6 +6,7 @@
     { "id": "DEVELOPMENT", "title": "Development loop", "document": "docs/DEVELOPMENT.md", "area": "system" },
     { "id": "OPERATIONS", "title": "Runtime operator guide", "document": "docs/OPERATIONS.md", "area": "system" },
     { "id": "NEXT-SYSTEM", "title": "Rho system charter and replacement ledger", "document": "docs/NEXT-SYSTEM.md", "area": "system" },
+    { "id": "SCENARIO-PLUGINS", "title": "Scenario plugin design research (no implementation scope)", "document": "docs/SCENARIO-PLUGINS.md", "area": "documentation" },
     { "id": "RELEASE", "title": "Build and release operations", "document": "docs/RELEASE.md", "area": "delivery" }
   ]
 }

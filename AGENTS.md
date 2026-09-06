@@ -9,6 +9,11 @@ The user-authorized exception is `docs/NEXT-SYSTEM.md`: the single living
 design, replacement ledger and milestone record for Rho Next. Read it before
 Next work; keep target, implemented, verified, production cutover and legacy
 retirement distinct. Do not create a parallel plan or status document.
+The user also authorized `docs/SCENARIO-PLUGINS.md` as a separate design-research
+note. Its possible plugin, channel and work-composition designs are not current
+capabilities, an implementation plan, or completion requirements for Rho Next.
+Do not implement that research without a new request. Progress remains only in
+`docs/NEXT-SYSTEM.md`.
 There are no real legacy users. Legacy architecture data assets are abandoned:
 do not build data migration, import, archive-reader or compatibility work. Next
 starts with fresh application state; focus on capabilities, entrypoints and

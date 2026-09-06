@@ -19,6 +19,13 @@ source or a reproducible run is wrong and should be corrected or deleted.
   domain.
 - [Build and release](RELEASE.md) — operator commands, loaded only when needed.
 
+## Design research
+
+- [Scenario plugins, runtime context and work bindings](SCENARIO-PLUGINS.md) —
+  a user-authorized research note. It separates user choices, Agent assistance
+  and deterministic execution, and explores possible plugin forms. Implementation
+  is outside the current Rho Next goal; this page is not a second progress ledger.
+
 ## Page shapes
 
 The documentation tree has only three useful shapes:
@@ -32,6 +39,9 @@ authorized exception is `NEXT-SYSTEM.md`, the single living charter and
 replacement ledger for Rho Next. It must distinguish target, implemented, and
 verified claims. Command output and artifacts live with the run that produced
 them. Git retains the evolution.
+
+`SCENARIO-PLUGINS.md` is the separately authorized research exception: candidate
+interfaces and concepts must remain explicitly distinct from implemented code.
 
 ## Updating the map
 

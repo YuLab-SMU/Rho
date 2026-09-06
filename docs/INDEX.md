@@ -11,6 +11,7 @@ Generated from `governance/registry.json`. Edit the JSON source and regenerate.
 ## `documentation`
 
 - [Documentation map](<README.md>) — `DOCS`
+- [Scenario plugin design research (no implementation scope)](<SCENARIO-PLUGINS.md>) — `SCENARIO-PLUGINS`
 
 ## `system`
 
