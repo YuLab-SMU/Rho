@@ -31,7 +31,9 @@ function pretty(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 function display(id: string, value: unknown): void {
-  el(id).textContent = text(value);
+  const element = el(id);
+  const content = text(value);
+  if (element.textContent !== content) element.textContent = content;
 }
 function notice(value: unknown): void {
   el("notice").hidden = !value;
@@ -59,6 +61,7 @@ let cursor = 0;
 let polling = false;
 let selectedOperation: string | null = null;
 let consoleOperation: string | null = null;
+let renderedOperations = "";
 const records = new Map<string, OperationRecord>();
 let pending: { project: string; invocation: Invocation } | null = null;
 try {
@@ -161,6 +164,9 @@ function setPending(value: typeof pending): void {
 
 async function refreshInfo(): Promise<void> {
   const next = await http<WorkbenchInfo>("/api/info");
+  // A poll is not a UI change. Preserve open selectors and accessibility focus
+  // when the Host's project/runtime/registry description has not changed.
+  if (JSON.stringify(next) === JSON.stringify(info)) return;
   if (next.project_root !== info.project_root) {
     epoch += 1;
     session = null;
@@ -172,6 +178,7 @@ async function refreshInfo(): Promise<void> {
     display("console-state", "等待执行");
     display("object-detail", "选择一个对象以读取有界预览。");
     display("operation-detail", "选择一条操作。");
+    display("capability-result", "");
     el("operation-actions").replaceChildren();
     el("objects").replaceChildren();
     display("workspace-meta", "尚无当前项目的运行时观察");
@@ -309,10 +316,21 @@ async function refreshEnvironment(): Promise<void> {
 
 function renderOperations(): void {
   const list = el("operation-list");
-  list.replaceChildren();
   const visible = [...records.values()]
     .sort((a, b) => b.operation.accepted_at_ms - a.operation.accepted_at_ms)
     .slice(0, 200);
+  // Results are immutable after their terminal outcome. These native record
+  // fields identify changes to the rendered list/detail without copying output
+  // payloads or replacing focused controls on every empty event page.
+  const signature = JSON.stringify(visible.map((record) => [
+    record.operation.operation_id,
+    record.updated_at_ms,
+    record.status,
+    record.cancellation_requested,
+  ]));
+  if (signature === renderedOperations) return;
+  renderedOperations = signature;
+  list.replaceChildren();
   if (!visible.length) {
     const empty = document.createElement("p");
     empty.className = "hint";
@@ -356,12 +374,12 @@ function showOperation(id: string, open = true): void {
       : "请求取消";
     cancel.addEventListener("click", () =>
       handle(async () => {
-        const acknowledgement = await rpc({
+        await rpc({
           method: "request_cancellation",
           params: { operation_id: id },
         });
         notice(
-          `取消请求回执：${pretty(acknowledgement)}。以操作后续终态为准。`,
+          `已收到取消请求回执 · ${id}。请以操作后续终态为准。`,
         );
         await loadOperation(id);
         renderOperations();
@@ -482,7 +500,12 @@ async function executePending(): Promise<void> {
   const current = epoch;
   const submitted = pending;
   el<HTMLButtonElement>("retry-request").disabled = true;
-  display("console-state", "等待 Host 回执 · 不推断执行结果");
+  display(
+    submitted.invocation.capability.id === "workspace.run_r"
+      ? "console-state"
+      : "capability-result",
+    "等待 Host 回执 · 不推断执行结果",
+  );
   try {
     const record = await rpc<OperationRecord>({
       method: "invoke",

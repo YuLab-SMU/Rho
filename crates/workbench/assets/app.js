@@ -20,7 +20,10 @@ function pretty(value) {
     return JSON.stringify(value, null, 2);
 }
 function display(id, value) {
-    el(id).textContent = text(value);
+    const element = el(id);
+    const content = text(value);
+    if (element.textContent !== content)
+        element.textContent = content;
 }
 function notice(value) {
     el("notice").hidden = !value;
@@ -48,6 +51,7 @@ let cursor = 0;
 let polling = false;
 let selectedOperation = null;
 let consoleOperation = null;
+let renderedOperations = "";
 const records = new Map();
 let pending = null;
 try {
@@ -141,6 +145,10 @@ function setPending(value) {
 }
 async function refreshInfo() {
     const next = await http("/api/info");
+    // A poll is not a UI change. Preserve open selectors and accessibility focus
+    // when the Host's project/runtime/registry description has not changed.
+    if (JSON.stringify(next) === JSON.stringify(info))
+        return;
     if (next.project_root !== info.project_root) {
         epoch += 1;
         session = null;
@@ -152,6 +160,7 @@ async function refreshInfo() {
         display("console-state", "等待执行");
         display("object-detail", "选择一个对象以读取有界预览。");
         display("operation-detail", "选择一条操作。");
+        display("capability-result", "");
         el("operation-actions").replaceChildren();
         el("objects").replaceChildren();
         display("workspace-meta", "尚无当前项目的运行时观察");
@@ -261,10 +270,22 @@ async function refreshEnvironment() {
 }
 function renderOperations() {
     const list = el("operation-list");
-    list.replaceChildren();
     const visible = [...records.values()]
         .sort((a, b) => b.operation.accepted_at_ms - a.operation.accepted_at_ms)
         .slice(0, 200);
+    // Results are immutable after their terminal outcome. These native record
+    // fields identify changes to the rendered list/detail without copying output
+    // payloads or replacing focused controls on every empty event page.
+    const signature = JSON.stringify(visible.map((record) => [
+        record.operation.operation_id,
+        record.updated_at_ms,
+        record.status,
+        record.cancellation_requested,
+    ]));
+    if (signature === renderedOperations)
+        return;
+    renderedOperations = signature;
+    list.replaceChildren();
     if (!visible.length) {
         const empty = document.createElement("p");
         empty.className = "hint";
@@ -306,11 +327,11 @@ function showOperation(id, open = true) {
             ? "已请求取消 · 再次查询"
             : "请求取消";
         cancel.addEventListener("click", () => handle(async () => {
-            const acknowledgement = await rpc({
+            await rpc({
                 method: "request_cancellation",
                 params: { operation_id: id },
             });
-            notice(`取消请求回执：${pretty(acknowledgement)}。以操作后续终态为准。`);
+            notice(`已收到取消请求回执 · ${id}。请以操作后续终态为准。`);
             await loadOperation(id);
             renderOperations();
         }));
@@ -410,7 +431,9 @@ async function executePending() {
     const current = epoch;
     const submitted = pending;
     el("retry-request").disabled = true;
-    display("console-state", "等待 Host 回执 · 不推断执行结果");
+    display(submitted.invocation.capability.id === "workspace.run_r"
+        ? "console-state"
+        : "capability-result", "等待 Host 回执 · 不推断执行结果");
     try {
         const record = await rpc({
             method: "invoke",
