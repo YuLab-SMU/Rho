@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-06
 >
-> 当前阶段：N8 旧源码退役与最终目录整理已完成；本地运行回归通过，浏览器与真实远程验收仍未完成
+> 当前阶段：N8 旧源码与最终目录已收敛；R 代码工具补齐并经真实 Ark/MCP 验证，浏览器与真实远程验收仍未完成
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -72,6 +72,7 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 旧系统策略 | 不再保存平行源码树；Git 保留代码历史，旧数据全部放弃，不做迁移 |
 | 前端策略 | 已实现本机浏览器客户端；纯 TypeScript、嵌入式静态资产和五端口，完整桌面仍延后 |
 | 数据策略 | 无真实旧用户；放弃旧架构全部数据资产。Next 使用全新应用状态，不做迁移、导入、只读兼容或会话接力（N-D025） |
+| 最终核对补项 | workspace.help/lint/format 已进入统一 Operation 主线，本机 Ark/R 与 MCP 验证通过；见 N-D030 |
 
 已提交检查点：N1/N2 `d0ba58b`，N3 `0abf441`，N4 `0f4c951`，N5 `e23bd05`，N6 本地执行 `56beff1`、Environment 恢复 `9ec0837`、无 R 的进程恢复 `9b0131f`、SSH/Slurm 协议 `2f9ce6b`、材料回收 `e1820f1`，N7 MCP `f4f502c`、本机工作台 `3e20d78`，项目级互斥 `3bef981`，N8 默认入口切换 `a93e855`。
 这些引用对应下方历史验证记录，不代表当前工作树已重新通过全部测试。
@@ -658,6 +659,7 @@ Artifact、Audit、Policy、Evidence 或 extension 框架。未跟踪的构建�
 | Tower | Gateway middleware composition | 第二个真实 middleware 出现后再决定 |
 | Ark / Jet | 权威交互式 R runtime | N2 已复用第三方 Jet transport；本机 Ark 0.1.252 + R 4.5.2 验证通过 |
 | rlang | 无求值检查 lazy binding | N3 使用；缺失时仅报告未检查绑定，不强制求值 |
+| R help / lintr / styler | 原生帮助、诊断与格式化 | 已接入；本机 R 4.5.2、lintr 3.2.0、styler 1.11.0 与真实 Ark/Host 验证通过，见 N-D030 |
 | renv + pak | R environment declaration/realization | N5 使用 pak 原生 lockfile_create/install 和 renv lockfile_read/restore/snapshot；本机真实验证通过 |
 | Pixi | 外层科学环境 | Environment 阶段 PoC |
 | Slurm CLI / 可选 slurmrestd | Remote job truth | 已实现 OpenSSH 上的原生 CLI；尚未远程实测，未引入 REST 服务依赖 |
@@ -775,6 +777,7 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | operation.request_cancellation | Command port | 默认 rho Host | operation | Next-owned | 维持请求与真实终态分离 |
 | operation.subscribe | Subscription | 默认 rho Host | sqlite outbox/host | Next-owned（游标协议） | 浏览器消费验收；不声称 live push |
 | workspace.run_r | Operation | 默认 rho Host | workspace | Next-owned；Legacy Retired | 保持真实 R 验收范围 |
+| workspace.help / lint / format | Operation | 默认 rho Host | workspace | Next-owned（本机 Ark/R Verified） | 保持显式调用、输入/输出上限与缺包失败语义 |
 | workspace.snapshot | Query | 默认 rho Host | workspace | Next-owned | 维持 bounded/busy/无 Operation |
 | workspace.inspect_object | Query | 默认 rho Host | workspace | Next-owned | 维持不求值绑定与有限预览 |
 | project.snapshot | Query | 默认 rho Host | project | Next-owned；Legacy Retired | 保持原生 Git/filesystem 观察 |
@@ -1098,13 +1101,22 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 路径：更新 R include_str、Rust path dependency、前端嵌入/类型生成、fixture、CI 和 source map；运行指南归入 docs/OPERATIONS.md。版本控制中没有 next/ 文件，忽略的构建缓存未被移动或删除。
 - 后续：以最终路径运行真实验收，不用目录重命名替代行为证明。浏览器和实际远程条件未提供时，仍不能声称整体完成。
 
+### N-D030 — 代码工具复用原生 R 能力和 Operation 主线
+
+- 日期：2026-09-06
+- 状态：Accepted；本机 Ark/R 与 MCP Verified
+- 发现：第 13 节要求的 help/lint/format 没有进入已实现能力台账；最终核对将其补齐，不删除目标来宣布完成。
+- 决定：R help、lintr 和 styler 经同一个 typed rho_dispatch 调用；只返回有界文本/诊断，不执行传入程序、不写回项目、不自动安装工具包。没有新 crate、数据库或手写 R 分析器。
+- 操作分类：加载工具可能改变 R namespace/options，也需要有界执行和取消，因此使用显式 Operation，共享 Workspace scope、lane、session precondition、幂等和提交纪律；纯对象读取仍为 Query。
+- 边界：不读取/求值项目 `.lintr`；只用固定原生 linters。关闭本次 styler cache 并恢复选项；帮助渲染不执行动态 Rd 表达式。无工具依赖或语法错误返回真实失败，不给出伪造结果。
+
 ## 24. Open Decisions
 
 以下问题尚未决定，不能由实现者顺手固化：
 
 | ID | 问题 | 最晚决定时间 |
 | --- | --- | --- |
-| N-O004 | 任意 R eval 的最低 containment 保证是什么？ | workspace.run_r 切换前 |
+| N-O004 | 首版是否接受当前原生用户权限、无文件/网络沙箱的执行边界，还是需要受限运行时？源码已切换，但文档不把已有进程管理说成隔离保证 | 整体验收前确认 |
 | N-O006 | SHA-256 与 BLAKE3 分别用于哪些外部兼容和本地内容身份？ | 首个 artifact 前 |
 | N-O007 | macOS、Windows、Linux 的 containment capability matrix 是什么？ | 首个受限 process 前 |
 | N-O011 | SSH/Slurm 真实验收使用哪个已配置目标及临时目录？已向用户询问；未指定前不连接或提交远程作业 | N6 远程实测前 |
@@ -1304,6 +1316,15 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 验证边界：电脑交互连接复查仍返回 native pipe startup failed，视觉验收尚未完成。没有连接真实远程主机、触发 CI 或发布；这些结果不能证明未执行的验收。
 - 下一步：完成最终路径的运行回归与剩余验收，完整目标继续进行。
 
+### 2026-09-06 — 补齐 R 帮助、诊断与格式化
+
+- 实现：workspace.help/lint/format 使用同一 Workspace owner、R bridge 和 Operation 事务；提取共享报告提交代码，不复制执行器或结果库。MCP/UI 从 registry 发现能力，没有新增业务端口。
+- 验证：`cargo test -p rho-workspace -p rho-host --locked --offline -- --test-threads=1` 通过；外部 R 测试仍明确 ignored，随后由 `node scripts/test-real-r.mjs` 实际执行，3 项真实 Ark/R 测试及 CLI session 验收全部通过。原生工具测试同时验证 `.lintr` 不执行、传入代码不执行、无项目文件写入、styler 选项恢复、有界结果和缺包失败路径；缺包路径使用确定性替身，不卸载实际依赖。
+- 入口回归：`node scripts/test-mcp.mjs --real-r` 通过，发现三个工具并经 MCP 调用同一个 R session 的 help；原有 Agent/Human Environment 共享结果仍通过。全工作区全目标 Clippy（`-D warnings`）、architecture、governance/tool 和 diff 检查通过。没有重跑独立 Environment、SSH 协议、进程恢复或完整浏览器 suite，不能把历史结果算成本次重验。
+- 数据与退役：没有操作旧数据，没有新增迁移/兼容路径；本阶段无额外旧源码删除。
+- 剩余：电脑连接复查仍为 native pipe startup failed，真实浏览器验收不能执行；真实 SSH/Slurm 目标仍未指定，未连接或提交作业。最低 containment 选择 N-O004 仍需确认；不将源码切换视作该选择已获批准。
+- 下一步：取得剩余验收条件并确认首版执行边界；没有这些条件时不重复扩张实现或用本机回归冒充整体完成。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。
@@ -1362,7 +1383,9 @@ N7：让外部 Agent 与极简客户端使用同一套科学空间端口。
 
 工作台与 MCP 已共用一个本机 Host；生成类型、HTTP 入口及真实 Ark/R 已验证。浏览器交互连接当前不可用，项目选择、R 执行、对象刷新、操作详情、取消/重连与桌面/窄屏布局的真实浏览器验收仍未完成。
 
-当前可执行出口：完成最终目录下的真实运行回归与剩余验收，保持一个 Cargo 工作区和同一套 Host 端口。版本控制中的 next/ 已移除，旧源码及专属测试已退役；不恢复旧源码或数据兼容。浏览器条件恢复后补 N7 交互验收，真实远程目标未指定前仍不连接或提交作业。
+当前下一步需要外部条件：恢复可用浏览器连接，指定真实 SSH/Slurm 验收目标（已有主机别名、允许的临时目录与分区/账户），并确认 N-O004 的首版执行边界。R help/lint/format 补项已通过真实 Ark/Host/MCP 验证，不再把它列作未完成。
+
+版本控制中的 next/ 已移除，旧源码及专属测试已退役；不恢复旧源码或数据兼容。条件具备后执行相应真实验收；此前不连接未指定远端，不把协议 fixture 或重复本机回归视作目标完成。
 
 必须只包含：
 

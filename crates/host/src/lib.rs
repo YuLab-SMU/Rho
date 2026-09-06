@@ -48,6 +48,7 @@ use rho_ssh::SshRemote;
 use rho_workspace::{
     RunRArguments, WORKSPACE_READ_SCOPE, WorkspaceQueryHandler, WorkspaceQueryKind,
     WorkspaceRunHandler, WorkspaceRuntime, WorkspaceRuntimeError, WorkspaceRuntimeReport,
+    WorkspaceToolHandler, WorkspaceToolKind,
 };
 use serde_json::json;
 
@@ -484,6 +485,13 @@ impl NextHost {
         if let Some(runtime) = runtime {
             let workspace = Arc::new(WorkspaceRunHandler::with_lane(runtime, lane.clone()));
             registry.register(workspace.clone())?;
+            for kind in [
+                WorkspaceToolKind::Help,
+                WorkspaceToolKind::Lint,
+                WorkspaceToolKind::Format,
+            ] {
+                registry.register(Arc::new(WorkspaceToolHandler::new(workspace.clone(), kind)))?;
+            }
             registry.register_query(Arc::new(WorkspaceQueryHandler::new(
                 workspace.clone(),
                 WorkspaceQueryKind::Snapshot,

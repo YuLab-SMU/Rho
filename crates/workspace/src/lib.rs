@@ -2,6 +2,8 @@
 
 mod query;
 pub use query::*;
+mod tools;
+pub use tools::*;
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -140,6 +142,17 @@ pub trait WorkspaceRuntime: Send + Sync {
     ) -> Result<WorkspaceRuntimeReport, WorkspaceRuntimeError> {
         self.execute(operation, request).await
     }
+
+    async fn execute_tool_controlled(
+        &self,
+        _operation: &Operation,
+        _request: &WorkspaceToolRequest,
+        _cancellation: tokio::sync::watch::Receiver<bool>,
+    ) -> Result<WorkspaceRuntimeReport, WorkspaceRuntimeError> {
+        Err(WorkspaceRuntimeError::before_effect(
+            "this runtime does not support R code tools",
+        ))
+    }
 }
 
 pub struct WorkspaceRunHandler {
@@ -220,6 +233,66 @@ impl WorkspaceRunHandler {
         }
         Ok(())
     }
+
+    fn finish_report(
+        &self,
+        operation: &Operation,
+        report: WorkspaceRuntimeReport,
+        fact_schema: &str,
+        fact: Value,
+        event_kind: &str,
+        event_payload: Value,
+    ) -> Result<CommitPlan, HandlerError> {
+        if report.session_id != operation.target.identity {
+            return Err(HandlerError::after_possible_effect(
+                "Workspace runtime session changed while executing",
+                Some(json!({"expected_session_id": operation.target.identity,
+                    "observed_session_id": report.session_id})),
+            ));
+        }
+        let output = serde_json::to_value(RunROutput {
+            session_id: report.session_id,
+            value: report.value,
+            stdout: report.stdout,
+            stderr: report.stderr,
+            conditions: report.conditions,
+            output_references: report.output_references,
+        })
+        .map_err(|error| HandlerError::after_possible_effect(error.to_string(), None))?;
+        let mut plan = CommitPlan::succeeded(output);
+        plan.outcome = report.outcome;
+        plan.error = report.error;
+        if plan.outcome == OperationOutcome::Uncertain {
+            plan.recovery = Some(
+                json!({"action":"observe_workspace_before_retry", "session_id":operation.target.identity}),
+            );
+        }
+        plan.facts.push(DomainFactMutation {
+            domain: "workspace".into(),
+            schema: fact_schema.into(),
+            key: operation.operation_id.as_str().into(),
+            value: fact,
+        });
+        plan.effect_observations = report.effect_observations;
+        plan.events.push(PlannedEvent {
+            kind: event_kind.into(),
+            payload: event_payload,
+        });
+        Ok(plan)
+    }
+}
+
+fn runtime_error(error: WorkspaceRuntimeError) -> HandlerError {
+    HandlerError {
+        message: error.message,
+        effect_boundary: if error.effect_may_have_occurred {
+            EffectBoundary::MayHaveOccurred
+        } else {
+            EffectBoundary::NotStarted
+        },
+        recovery: error.recovery,
+        cancellation_confirmed: false,
+    }
 }
 
 #[async_trait]
@@ -268,69 +341,30 @@ impl OperationHandler for WorkspaceRunHandler {
             .runtime
             .execute_controlled(operation, &request, cancellation)
             .await
-            .map_err(|error| HandlerError {
-                message: error.message,
-                effect_boundary: if error.effect_may_have_occurred {
-                    EffectBoundary::MayHaveOccurred
-                } else {
-                    EffectBoundary::NotStarted
-                },
-                recovery: error.recovery,
-                cancellation_confirmed: false,
-            })?;
-
-        if report.session_id != operation.target.identity {
-            return Err(HandlerError::after_possible_effect(
-                "Workspace runtime session changed while executing",
-                Some(json!({
-                    "expected_session_id": operation.target.identity,
-                    "observed_session_id": report.session_id,
-                })),
-            ));
-        }
+            .map_err(runtime_error)?;
 
         let code_digest = format!("sha256:{:x}", Sha256::digest(request.code.as_bytes()));
         let encode_error =
             |error: serde_json::Error| HandlerError::after_possible_effect(error.to_string(), None);
-        let output = serde_json::to_value(RunROutput {
-            session_id: report.session_id,
-            value: report.value,
-            stdout: report.stdout,
-            stderr: report.stderr,
-            conditions: report.conditions,
-            output_references: report.output_references,
-        })
-        .map_err(encode_error)?;
         let fact = serde_json::to_value(WorkspaceExecutionFact {
             operation_id: &operation.operation_id,
             session_id: &operation.target.identity,
             code_digest: &code_digest,
         })
         .map_err(encode_error)?;
-        let mut plan = CommitPlan::succeeded(output);
-        plan.outcome = report.outcome;
-        plan.error = report.error;
-        if plan.outcome == OperationOutcome::Uncertain {
-            plan.recovery = Some(
-                json!({"action":"observe_workspace_before_retry", "session_id":operation.target.identity}),
-            );
-        }
-        plan.facts.push(DomainFactMutation {
-            domain: "workspace".to_string(),
-            schema: "rho.workspace.execution.v1".to_string(),
-            key: operation.operation_id.as_str().to_string(),
-            value: fact,
+        let event = json!({
+            "session_id": operation.target.identity,
+            "code_digest": code_digest,
+            "effect_observation_count": report.effect_observations.len(),
         });
-        plan.effect_observations = report.effect_observations;
-        plan.events.push(PlannedEvent {
-            kind: "workspace.execution_observed".to_string(),
-            payload: json!({
-                "session_id": operation.target.identity,
-                "code_digest": code_digest,
-                "effect_observation_count": plan.effect_observations.len(),
-            }),
-        });
-        Ok(plan)
+        self.finish_report(
+            operation,
+            report,
+            "rho.workspace.execution.v1",
+            fact,
+            "workspace.execution_observed",
+            event,
+        )
     }
 }
 
@@ -369,6 +403,21 @@ mod tests {
                 outcome: OperationOutcome::Succeeded,
                 error: None,
             })
+        }
+
+        async fn execute_tool_controlled(
+            &self,
+            operation: &Operation,
+            request: &WorkspaceToolRequest,
+            _cancellation: tokio::sync::watch::Receiver<bool>,
+        ) -> Result<WorkspaceRuntimeReport, WorkspaceRuntimeError> {
+            self.execute(
+                operation,
+                &RunRArguments {
+                    code: request.action().into(),
+                },
+            )
+            .await
         }
     }
 
@@ -415,5 +464,88 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.effect_boundary, EffectBoundary::NotStarted);
         assert_eq!(runtime.calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn tools_share_scope_preconditions_cancellation_and_commit_discipline() {
+        let runtime = Arc::new(CountingRuntime {
+            calls: AtomicUsize::new(0),
+        });
+        let owner = Arc::new(WorkspaceRunHandler::new(runtime.clone()));
+        for kind in [
+            WorkspaceToolKind::Help,
+            WorkspaceToolKind::Lint,
+            WorkspaceToolKind::Format,
+        ] {
+            let handler = WorkspaceToolHandler::new(owner.clone(), kind);
+            assert_eq!(
+                handler.descriptor().required_scopes,
+                owner.descriptor().required_scopes
+            );
+            let mut op = operation(Vec::new());
+            op.capability = handler.descriptor().capability.clone();
+            op.normalized_arguments = handler
+                .normalize_arguments(&match kind {
+                    WorkspaceToolKind::Help => json!({"topic":"mean"}),
+                    _ => json!({"code":"x=1"}),
+                })
+                .unwrap();
+            let plan = handler.execute(&op).await.unwrap();
+            assert_eq!(plan.outcome, OperationOutcome::Succeeded);
+            assert_eq!(plan.facts[0].value["operation_id"], json!(op.operation_id));
+            assert_eq!(plan.facts[0].schema, "rho.workspace.tool.v1");
+            assert_eq!(plan.events[0].kind, "workspace.tool_observed");
+            let before = runtime.calls.load(Ordering::SeqCst);
+            let cancelled = handler
+                .execute_controlled(&op, tokio::sync::watch::channel(true).1)
+                .await
+                .unwrap();
+            assert_eq!(cancelled.outcome, OperationOutcome::Cancelled);
+            op.preconditions.push(Precondition {
+                kind: "workspace.session".into(),
+                subject: "active".into(),
+                expected: json!("stale"),
+            });
+            assert_eq!(
+                handler.execute(&op).await.unwrap_err().effect_boundary,
+                EffectBoundary::NotStarted
+            );
+            assert_eq!(runtime.calls.load(Ordering::SeqCst), before);
+        }
+    }
+
+    #[test]
+    fn tools_normalize_defaults_and_reject_unbounded_or_executable_configuration() {
+        let owner = Arc::new(WorkspaceRunHandler::new(Arc::new(CountingRuntime {
+            calls: AtomicUsize::new(0),
+        })));
+        let help = WorkspaceToolHandler::new(owner.clone(), WorkspaceToolKind::Help);
+        assert_eq!(
+            help.normalize_arguments(&json!({"topic":"mean"})).unwrap(),
+            json!({"topic":"mean","package":"base","max_chars":16384})
+        );
+        for args in [
+            json!({"topic":""}),
+            json!({"topic":"mean","package":"../base"}),
+            json!({"topic":"mean","max_chars":32769}),
+        ] {
+            assert!(help.normalize_arguments(&args).is_err());
+        }
+        for kind in [WorkspaceToolKind::Lint, WorkspaceToolKind::Format] {
+            let handler = WorkspaceToolHandler::new(owner.clone(), kind);
+            for args in [
+                json!({"code":"x=1","config":"source('evil.R')"}),
+                json!({"code":"a".repeat(65537)}),
+                json!({"code":"\u{0}"}),
+            ] {
+                assert!(handler.normalize_arguments(&args).is_err());
+            }
+            assert!(handler.normalize_arguments(&json!({"code":""})).is_ok());
+        }
+        let lint = WorkspaceToolHandler::new(owner, WorkspaceToolKind::Lint);
+        assert!(
+            lint.normalize_arguments(&json!({"code":"x=1","limit":201}))
+                .is_err()
+        );
     }
 }

@@ -114,6 +114,13 @@ try {
     const executed = (await peer.call("rho.workspace.run_r.v1", { client_request_id: "mcp-real-r", arguments: { code: "x <- 21; x * 2" } }).result).structuredContent.result;
     assert.equal(executed.status, "succeeded", JSON.stringify(executed));
     assert.equal(executed.output.value, 42);
+    for (const capability of ["help", "lint", "format"]) {
+      assert.ok(tools.some((tool) => tool.name === `rho.workspace.${capability}.v1`));
+    }
+    const help = (await peer.call("rho.workspace.help.v1", { client_request_id: "mcp-help", arguments: { topic: "mean" } }).result).structuredContent.result;
+    assert.equal(help.status, "succeeded", JSON.stringify(help));
+    assert.equal(help.output.value.found, true);
+    assert.equal(help.operation.target.identity, executed.operation.target.identity);
     const history = (await peer.call("rho.events.poll", { limit: 1000 }).result).structuredContent.result;
     const inspected = (await peer.call("rho.workspace.inspect_object.v1", { name: "x", max_items: 3 }).result).structuredContent.result;
     assert.deepEqual(inspected.data.preview, [21]);

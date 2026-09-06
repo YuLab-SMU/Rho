@@ -85,6 +85,7 @@ Sources:
 - `rust-toolchain.toml`
 - `scripts/check-architecture.mjs`
 - `scripts/client.mjs`
+- `scripts/test-*.R`
 - `scripts/test-*.mjs`
 - `scripts/verify-*.mjs`
 - `ui/**`

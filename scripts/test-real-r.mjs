@@ -17,6 +17,7 @@ const run = (command, args, options = {}) => {
 assert.ok(fs.existsSync(ark), "Set RHO_ARK to an installed Ark executable.");
 const rHome = process.env.RHO_R_HOME || run("Rscript", ["--vanilla", "-e", "cat(R.home())"]).trim();
 const env = { ...process.env, RHO_ARK: ark, RHO_R_HOME: rHome };
+run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-r-tools.R"], { env, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
   "--locked", "--no-run"], { env, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",

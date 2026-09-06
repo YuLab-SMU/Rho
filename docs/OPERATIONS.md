@@ -139,7 +139,7 @@ cargo test --workspace --locked
 node scripts/check-architecture.mjs
 ```
 
-Verify real R (requires Ark, R with jsonlite/rlang, and local loopback access):
+Verify real R (requires Ark, R with jsonlite/rlang/lintr/styler, and local loopback access):
 
 Optional pinned Ark acquisition uses `scripts/bootstrap-ark-macos.sh`,
 `scripts/bootstrap-ark-linux.sh` or `scripts/bootstrap-ark-windows.ps1`. The scripts
@@ -198,6 +198,30 @@ previews to 100 items; plain data frames to 10 columns and 20 rows. Lazy and
 active bindings are not forced; other classed objects expose metadata only.
 rlang enables non-forcing binding inspection. Without it, bindings remain
 uninspected rather than being forced to produce a preview.
+
+R code tools are explicit Operations in the same session, not background Queries:
+
+| Capability | Arguments and result |
+| --- | --- |
+| workspace.help | `topic`, optional `package` (base), `max_chars` (16384, max 32768); bounded native R help text with found/truncated flags |
+| workspace.lint | `code` (max 64 KiB), optional `limit` (100, max 200); lintr diagnostics and truncation flag |
+| workspace.format | `code` (max 64 KiB); styler-formatted text and changed flag, never a file edit |
+
+Invoke them through the existing session/MCP ports, or use one-shot
+`invoke --client-request-id help-1 --capability workspace.help --arguments '{"topic":"mean"}'`
+with the same Ark startup flags. Tools share the Workspace write lane, run scope,
+session preconditions, idempotency, cancellation and durable result path.
+Loading installed tooling can change runtime namespaces; it is not a pure read.
+Missing lintr/styler returns a failed Operation, never automatic installation.
+
+The lint preset uses built-in assignment, comma, infix-spacing and 120-column
+linters, plus native parse diagnostics. It does not evaluate project `.lintr`
+configuration. Format disables the styler cache for the call, restores its options,
+and does not format roxygen examples. Neither tool evaluates the supplied program
+or writes project files. Help renders native Rd without evaluating dynamic render
+expressions. Format output over 128 KiB is an error, not a silently truncated edit.
+The native library checks are `Rscript --vanilla scripts/test-r-tools.R`; the real
+Host acceptance is included in `scripts/test-real-r.mjs`.
 
 Native R runs with the user's OS access; it is not a filesystem/network sandbox.
 Effect observations are partial. R errors and cancellation do not roll back

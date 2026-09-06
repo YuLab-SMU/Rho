@@ -21,7 +21,7 @@
       "checks": ["docs.index", "docs.tool"]
     },
     "system": {
-      "sources": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "r/**", "ui/**", "scripts/check-architecture.mjs", "scripts/client.mjs", "scripts/test-*.mjs", "scripts/verify-*.mjs", "vendor/jet/**", "docs/NEXT-SYSTEM.md"],
+      "sources": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "r/**", "ui/**", "scripts/check-architecture.mjs", "scripts/client.mjs", "scripts/test-*.mjs", "scripts/test-*.R", "scripts/verify-*.mjs", "vendor/jet/**", "docs/NEXT-SYSTEM.md"],
       "checks": ["docs.index", "docs.tool", "system.architecture", "system.rust", "system.client", "system.real-r", "system.environment", "system.process-recovery", "system.remote-protocol", "system.mcp", "system.mcp-real-r", "system.workbench", "system.workbench-real-r"]
     },
     "development-tools": {

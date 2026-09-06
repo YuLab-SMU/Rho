@@ -10,9 +10,9 @@ use jet_core::{
 };
 use rho_contract::{EffectObservation, ObservationCompleteness, Operation, OperationOutcome};
 use rho_workspace::{
-    BindingSummary, InspectArguments, RunRArguments, SnapshotArguments, WorkspaceObservation,
-    WorkspaceQuery, WorkspaceRuntime, WorkspaceRuntimeError, WorkspaceRuntimeReport,
-    WorkspaceSnapshotData,
+    BindingSummary, FormatArguments, HelpArguments, InspectArguments, LintArguments, RunRArguments,
+    SnapshotArguments, WorkspaceObservation, WorkspaceQuery, WorkspaceRuntime,
+    WorkspaceRuntimeError, WorkspaceRuntimeReport, WorkspaceSnapshotData, WorkspaceToolRequest,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -29,6 +29,7 @@ use uuid::Uuid;
 
 const BRIDGE: &str = include_str!("../../../../r/bridge/dispatch.R");
 const QUERIES: &str = include_str!("../../../../r/bridge/query.R");
+const TOOLS: &str = include_str!("../../../../r/bridge/tools.R");
 const OUTPUT_LIMIT: usize = 1024 * 1024;
 
 pub struct ArkConfig {
@@ -138,7 +139,7 @@ impl ArkRuntime {
         };
         let bootstrap = format!(
             "local({{ requireNamespace('jsonlite'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); {library_setup} invisible(TRUE) }})",
-            quote(&format!("{BRIDGE}\n{QUERIES}"))?,
+            quote(&format!("{BRIDGE}\n{QUERIES}\n{TOOLS}"))?,
             quote(&project.to_string_lossy())?
         );
         let bootstrap_output = runtime
@@ -293,6 +294,9 @@ enum BridgeAction<'a> {
     Execute(&'a RunRArguments),
     Snapshot(&'a SnapshotArguments),
     InspectObject(&'a InspectArguments),
+    Help(&'a HelpArguments),
+    Lint(&'a LintArguments),
+    Format(&'a FormatArguments),
 }
 
 #[derive(Serialize)]
@@ -360,12 +364,41 @@ impl WorkspaceRuntime for ArkRuntime {
         request: &RunRArguments,
         cancellation: watch::Receiver<bool>,
     ) -> Result<WorkspaceRuntimeReport, WorkspaceRuntimeError> {
+        self.execute_action(
+            operation,
+            BridgeAction::Execute(request),
+            "execute",
+            cancellation,
+        )
+        .await
+    }
+
+    async fn execute_tool_controlled(
+        &self,
+        operation: &Operation,
+        request: &WorkspaceToolRequest,
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<WorkspaceRuntimeReport, WorkspaceRuntimeError> {
+        let action = match request {
+            WorkspaceToolRequest::Help(args) => BridgeAction::Help(args),
+            WorkspaceToolRequest::Lint(args) => BridgeAction::Lint(args),
+            WorkspaceToolRequest::Format(args) => BridgeAction::Format(args),
+        };
+        self.execute_action(operation, action, request.action(), cancellation)
+            .await
+    }
+}
+
+impl ArkRuntime {
+    async fn execute_action(
+        &self,
+        operation: &Operation,
+        action: BridgeAction<'_>,
+        action_name: &str,
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<WorkspaceRuntimeReport, WorkspaceRuntimeError> {
         let (response, captured, result_path) = self
-            .bridge_call(
-                operation.operation_id.as_str(),
-                BridgeAction::Execute(request),
-                cancellation,
-            )
+            .bridge_call(operation.operation_id.as_str(), action, cancellation)
             .await?;
         let observed_at_ms = now_ms();
         Ok(WorkspaceRuntimeReport {
@@ -379,7 +412,7 @@ impl WorkspaceRuntime for ArkRuntime {
                 kind: "r_execution".into(),
                 source: "ark".into(),
                 detail: json!({"child_pid":self.child_pid(), "outcome":response.outcome,
-                    "environment_library":self.library_path,
+                    "environment_library":self.library_path, "action":action_name,
                     "output_truncated":captured.truncated || response.conditions_truncated,
                     "containment":"native_user_process", "result_path":result_path}),
                 observed_at_ms,

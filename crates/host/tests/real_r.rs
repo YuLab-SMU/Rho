@@ -20,6 +20,134 @@ fn query(id: &str, arguments: serde_json::Value) -> QueryRequest {
 }
 
 #[tokio::test]
+#[ignore = "requires real Ark/R with lintr and styler; run scripts/test-real-r.mjs"]
+async fn real_r_tools_use_native_libraries_and_the_shared_operation_path() {
+    let directory = tempfile::tempdir().unwrap();
+    let host = NextHost::open_ark(
+        directory.path().join("tools.sqlite"),
+        ArkConfig {
+            executable: PathBuf::from(std::env::var_os("RHO_ARK").expect("RHO_ARK required")),
+            r_home: PathBuf::from(std::env::var_os("RHO_R_HOME").expect("RHO_R_HOME required")),
+            project_root: directory.path().into(),
+            data_root: directory.path().join("runtime"),
+            execution_timeout: Duration::from_secs(30),
+            library_path: None,
+        },
+    )
+    .await
+    .unwrap();
+    let context = NextHost::local_context();
+    let tool = |id: &str, capability: &str, arguments| Invocation {
+        client_request_id: id.into(),
+        capability: CapabilityRef::new(capability, 1).unwrap(),
+        arguments,
+        preconditions: Vec::new(),
+    };
+    let help_request = tool("help", "workspace.help", json!({"topic":"mean"}));
+    let mut denied = context.clone();
+    denied.scopes.clear();
+    assert!(host.invoke(&denied, help_request.clone()).await.is_err());
+    let help = host.invoke(&context, help_request.clone()).await.unwrap();
+    assert_eq!(help.status, OperationStatus::Succeeded, "{help:?}");
+    assert_eq!(help.output.as_ref().unwrap()["value"]["found"], true);
+    assert!(
+        help.output.as_ref().unwrap()["value"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("Arithmetic Mean")
+    );
+    assert_eq!(host.invoke(&context, help_request).await.unwrap(), help);
+    assert_eq!(
+        host.get_operation(&context, &help.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap(),
+        help
+    );
+    let lint = host
+        .invoke(
+            &context,
+            tool(
+                "lint",
+                "workspace.lint",
+                json!({"code":"tool_value=1", "limit":1}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(lint.status, OperationStatus::Succeeded, "{lint:?}");
+    assert_eq!(
+        lint.output.as_ref().unwrap()["value"]["diagnostics"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(lint.output.as_ref().unwrap()["value"]["truncated"], true);
+    let formatted = host
+        .invoke(
+            &context,
+            tool("format", "workspace.format", json!({"code":"tool_value=1"})),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        formatted.status,
+        OperationStatus::Succeeded,
+        "{formatted:?}"
+    );
+    assert_eq!(
+        formatted.output.as_ref().unwrap()["value"]["code"],
+        "tool_value <- 1"
+    );
+    assert_eq!(formatted.operation.target, help.operation.target);
+    let absent = host
+        .query_snapshot(
+            &context,
+            query("workspace.inspect_object", json!({"name":"tool_value"})),
+        )
+        .await
+        .unwrap();
+    assert_eq!(absent.data.as_ref().unwrap()["kind"], "missing");
+    let broken = host
+        .invoke(
+            &context,
+            tool("syntax", "workspace.format", json!({"code":"x <- ("})),
+        )
+        .await
+        .unwrap();
+    assert_eq!(broken.status, OperationStatus::Failed, "{broken:?}");
+    assert!(broken.error.is_some());
+    assert!(
+        host.invoke(
+            &context,
+            tool(
+                "config",
+                "workspace.lint",
+                json!({"code":"1", "config":"evil.R"})
+            )
+        )
+        .await
+        .is_err()
+    );
+    let mut stale = tool("stale-tool", "workspace.help", json!({"topic":"mean"}));
+    stale.preconditions.push(rho_contract::Precondition {
+        kind: "workspace.session".into(),
+        subject: "active".into(),
+        expected: json!("stale-session"),
+    });
+    let refused = host.invoke(&context, stale).await.unwrap();
+    assert_eq!(refused.status, OperationStatus::Failed);
+    assert!(
+        refused
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("precondition failed")
+    );
+}
+
+#[tokio::test]
 #[ignore = "requires RHO_ARK and RHO_R_HOME pointing to a real local R installation"]
 async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
     let directory = tempfile::tempdir().unwrap();
