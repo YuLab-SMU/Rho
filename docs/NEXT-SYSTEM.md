@@ -1318,6 +1318,7 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 
 ### 2026-09-06 — 补齐 R 帮助、诊断与格式化
 
+- Git：`e30af1e`；本机代码工具检查点，不是整体目标完成。
 - 实现：workspace.help/lint/format 使用同一 Workspace owner、R bridge 和 Operation 事务；提取共享报告提交代码，不复制执行器或结果库。MCP/UI 从 registry 发现能力，没有新增业务端口。
 - 验证：`cargo test -p rho-workspace -p rho-host --locked --offline -- --test-threads=1` 通过；外部 R 测试仍明确 ignored，随后由 `node scripts/test-real-r.mjs` 实际执行，3 项真实 Ark/R 测试及 CLI session 验收全部通过。原生工具测试同时验证 `.lintr` 不执行、传入代码不执行、无项目文件写入、styler 选项恢复、有界结果和缺包失败路径；缺包路径使用确定性替身，不卸载实际依赖。
 - 入口回归：`node scripts/test-mcp.mjs --real-r` 通过，发现三个工具并经 MCP 调用同一个 R session 的 help；原有 Agent/Human Environment 共享结果仍通过。全工作区全目标 Clippy（`-D warnings`）、architecture、governance/tool 和 diff 检查通过。没有重跑独立 Environment、SSH 协议、进程恢复或完整浏览器 suite，不能把历史结果算成本次重验。
