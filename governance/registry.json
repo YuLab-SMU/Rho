@@ -2,9 +2,10 @@
   "schema_version": 1,
   "pages": [
     { "id": "DOCS", "title": "Documentation map", "document": "docs/README.md", "area": "documentation" },
-    { "id": "ARCHITECTURE", "title": "Architecture", "document": "docs/ARCHITECTURE.md", "area": "next-system" },
-    { "id": "DEVELOPMENT", "title": "Development loop", "document": "docs/DEVELOPMENT.md", "area": "next-system" },
-    { "id": "NEXT-SYSTEM", "title": "Rho system charter and replacement ledger", "document": "docs/NEXT-SYSTEM.md", "area": "next-system" },
+    { "id": "ARCHITECTURE", "title": "Architecture", "document": "docs/ARCHITECTURE.md", "area": "system" },
+    { "id": "DEVELOPMENT", "title": "Development loop", "document": "docs/DEVELOPMENT.md", "area": "system" },
+    { "id": "OPERATIONS", "title": "Runtime operator guide", "document": "docs/OPERATIONS.md", "area": "system" },
+    { "id": "NEXT-SYSTEM", "title": "Rho system charter and replacement ledger", "document": "docs/NEXT-SYSTEM.md", "area": "system" },
     { "id": "RELEASE", "title": "Build and release operations", "document": "docs/RELEASE.md", "area": "delivery" }
   ]
 }

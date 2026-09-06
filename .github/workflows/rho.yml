@@ -3,9 +3,9 @@ name: Rho
 on:
   push:
     branches: [main]
-    paths: ["next/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/**", "runtime/ark.json", ".github/workflows/rho.yml"]
+    paths: ["crates/**", "r/**", "ui/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/**", "runtime/ark.json", ".github/workflows/rho.yml"]
   pull_request:
-    paths: ["next/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/**", "runtime/ark.json", ".github/workflows/rho.yml"]
+    paths: ["crates/**", "r/**", "ui/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/**", "runtime/ark.json", ".github/workflows/rho.yml"]
   workflow_dispatch:
 
 permissions:
@@ -64,14 +64,14 @@ jobs:
             ~/.cargo/registry/
             ~/.cargo/git/db/
             target/
-          key: rho-next-${{ runner.os }}-${{ matrix.toolchain }}-${{ hashFiles('Cargo.lock') }}
+          key: rho-${{ runner.os }}-${{ matrix.toolchain }}-${{ hashFiles('Cargo.lock') }}
       - name: Fetch locked dependencies
         run: cargo fetch --locked
       - name: Install client build tool
-        run: npm ci --ignore-scripts --prefix next/ui
+        run: npm ci --ignore-scripts --prefix ui
       - name: Check production graph and source map
         run: |
-          node next/scripts/check-architecture.mjs
+          node scripts/check-architecture.mjs
           node scripts/governance.mjs check
           node scripts/test-governance.mjs
       - name: Format and lint
@@ -81,11 +81,11 @@ jobs:
       - name: Test native foundation
         run: cargo test --workspace --locked -- --test-threads=1
       - name: Verify generated client and embedded assets
-        run: node next/scripts/client.mjs check
+        run: node scripts/client.mjs check
       - name: Verify actual local public transports
         run: |
-          node next/scripts/test-mcp.mjs
-          node next/scripts/test-workbench.mjs
+          node scripts/test-mcp.mjs
+          node scripts/test-workbench.mjs
       - name: Verify standalone Ark acquisition fixtures (macOS)
         if: runner.os == 'macOS'
         run: bash scripts/test-bootstrap-ark-macos.sh

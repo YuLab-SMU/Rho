@@ -65,7 +65,7 @@ try {
   assert.equal(started.base_commit, base);
   assert.equal(started.lane, "feature");
   assert.ok(started.shared_write_paths.includes("Cargo.lock"), "shared authority defaults recorded");
-  assert.ok(started.shared_write_paths.includes("next/host/src/lib.rs"));
+  assert.ok(started.shared_write_paths.includes("crates/host/src/lib.rs"));
   assert.ok(!started.shared_write_paths.some((entry) => entry.startsWith("desktop/")));
   assert.ok(fs.existsSync(path.join(leasesDir, "runtime-x.json")), "lease lives in the git common dir");
 

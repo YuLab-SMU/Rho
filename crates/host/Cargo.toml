@@ -1,0 +1,30 @@
+[package]
+name = "rho-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+rho-contract = { path = "../contract" }
+rho-operation = { path = "../operation" }
+rho-sqlite = { path = "../adapters/sqlite" }
+rho-r-runtime = { path = "../adapters/r-runtime" }
+rho-project = { path = "../project" }
+rho-git = { path = "../adapters/git" }
+rho-environment = { path = "../environment" }
+rho-r-environment = { path = "../adapters/r-environment" }
+rho-workspace = { path = "../workspace" }
+rho-execution = { path = "../execution" }
+rho-process = { path = "../adapters/process" }
+rho-ssh = { path = "../adapters/ssh" }
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["net"] }

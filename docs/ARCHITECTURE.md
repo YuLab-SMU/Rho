@@ -1,7 +1,8 @@
 # Architecture
 
 The repository's root Cargo workspace is the production system. Its default
-member builds `rho`, using only the new components under `next/`. Old crates,
+member builds `rho`, using the components under `crates/`, helpers under `r/`
+and client under `ui/`. Old crates,
 the old Tauri application and their dedicated source/tests have been removed.
 
 ```text
@@ -47,4 +48,4 @@ session is ended. Core ports are `invoke`, `getOperation`, `requestCancellation`
 Legacy data assets are abandoned. Source replacement uses fresh application
 state, not imports, archive readers, dual writes or cross-version session handoff.
 See [the charter and ledger](NEXT-SYSTEM.md) for decisions, remaining work and
-actual verification scope; [the operator guide](../next/README.md) contains commands.
+actual verification scope; [the operator guide](OPERATIONS.md) contains commands.

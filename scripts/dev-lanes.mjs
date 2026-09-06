@@ -23,9 +23,9 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/u;
 const SHARED_AUTHORITY_PATHS = [
   "Cargo.toml",
   "Cargo.lock",
-  "next/ui/package-lock.json",
-  "next/host/src/lib.rs",
-  "next/contract/src/lib.rs",
+  "ui/package-lock.json",
+  "crates/host/src/lib.rs",
+  "crates/contract/src/lib.rs",
 ];
 
 class LaneError extends Error {}

@@ -1327,21 +1327,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
-name = "rho-next-cli"
+name = "rho-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
- "rho-next-contract",
- "rho-next-host",
- "rho-next-mcp",
- "rho-next-workbench",
+ "rho-contract",
+ "rho-host",
+ "rho-mcp",
+ "rho-workbench",
  "serde_json",
  "tempfile",
  "tokio",
 ]
 
 [[package]]
-name = "rho-next-contract"
+name = "rho-contract"
 version = "0.1.0"
 dependencies = [
  "schemars",
@@ -1352,12 +1352,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-environment"
+name = "rho-environment"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "rho-next-contract",
- "rho-next-operation",
+ "rho-contract",
+ "rho-operation",
  "schemars",
  "serde",
  "serde_json",
@@ -1365,12 +1365,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-execution"
+name = "rho-execution"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "rho-next-contract",
- "rho-next-operation",
+ "rho-contract",
+ "rho-operation",
  "schemars",
  "serde",
  "serde_json",
@@ -1378,34 +1378,34 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-git"
+name = "rho-git"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "rho-next-process",
- "rho-next-project",
+ "rho-process",
+ "rho-project",
  "sha2",
  "tempfile",
  "tokio",
 ]
 
 [[package]]
-name = "rho-next-host"
+name = "rho-host"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "rho-next-contract",
- "rho-next-environment",
- "rho-next-execution",
- "rho-next-git",
- "rho-next-operation",
- "rho-next-process",
- "rho-next-project",
- "rho-next-r-environment",
- "rho-next-r-runtime",
- "rho-next-sqlite",
- "rho-next-ssh",
- "rho-next-workspace",
+ "rho-contract",
+ "rho-environment",
+ "rho-execution",
+ "rho-git",
+ "rho-operation",
+ "rho-process",
+ "rho-project",
+ "rho-r-environment",
+ "rho-r-runtime",
+ "rho-sqlite",
+ "rho-ssh",
+ "rho-workspace",
  "rusqlite",
  "serde_json",
  "tempfile",
@@ -1414,12 +1414,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-mcp"
+name = "rho-mcp"
 version = "0.1.0"
 dependencies = [
  "futures",
- "rho-next-contract",
- "rho-next-host",
+ "rho-contract",
+ "rho-host",
  "rmcp",
  "schemars",
  "serde",
@@ -1430,11 +1430,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-operation"
+name = "rho-operation"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "rho-next-contract",
+ "rho-contract",
  "serde",
  "serde_json",
  "sha2",
@@ -1445,15 +1445,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-process"
+name = "rho-process"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "nix",
  "process-wrap",
- "rho-next-contract",
- "rho-next-execution",
- "rho-next-operation",
+ "rho-contract",
+ "rho-execution",
+ "rho-operation",
  "serde_json",
  "sysinfo",
  "tempfile",
@@ -1461,12 +1461,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-project"
+name = "rho-project"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "rho-next-contract",
- "rho-next-operation",
+ "rho-contract",
+ "rho-operation",
  "schemars",
  "serde",
  "serde_json",
@@ -1474,13 +1474,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-r-environment"
+name = "rho-r-environment"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "rho-next-environment",
- "rho-next-operation",
- "rho-next-process",
+ "rho-environment",
+ "rho-operation",
+ "rho-process",
  "serde",
  "serde_json",
  "sha2",
@@ -1489,13 +1489,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-r-runtime"
+name = "rho-r-runtime"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "jet_core",
- "rho-next-contract",
- "rho-next-workspace",
+ "rho-contract",
+ "rho-workspace",
  "serde",
  "serde_json",
  "sha2",
@@ -1505,12 +1505,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-sqlite"
+name = "rho-sqlite"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "rho-next-contract",
- "rho-next-operation",
+ "rho-contract",
+ "rho-operation",
  "rusqlite",
  "serde",
  "serde_json",
@@ -1518,14 +1518,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-ssh"
+name = "rho-ssh"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "rho-next-contract",
- "rho-next-execution",
- "rho-next-operation",
- "rho-next-process",
+ "rho-contract",
+ "rho-execution",
+ "rho-operation",
+ "rho-process",
  "serde_json",
  "sha2",
  "tempfile",
@@ -1533,13 +1533,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-workbench"
+name = "rho-workbench"
 version = "0.1.0"
 dependencies = [
  "axum",
- "rho-next-contract",
- "rho-next-host",
- "rho-next-mcp",
+ "rho-contract",
+ "rho-host",
+ "rho-mcp",
  "rmcp",
  "serde_json",
  "tempfile",
@@ -1551,12 +1551,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-next-workspace"
+name = "rho-workspace"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "rho-next-contract",
- "rho-next-operation",
+ "rho-contract",
+ "rho-operation",
  "schemars",
  "serde",
  "serde_json",

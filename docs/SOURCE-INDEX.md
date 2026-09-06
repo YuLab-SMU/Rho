@@ -26,7 +26,7 @@ Sources:
 Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
-- `next.architecture`: `["node","next/scripts/check-architecture.mjs"]`
+- `system.architecture`: `["node","scripts/check-architecture.mjs"]`
 
 ## `development-tools`
 
@@ -66,35 +66,42 @@ Checks:
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
 
-## `next-system`
+## `system`
 
 Documentation:
 
 - [Architecture](<ARCHITECTURE.md>) — `ARCHITECTURE`
 - [Development loop](<DEVELOPMENT.md>) — `DEVELOPMENT`
 - [Rho system charter and replacement ledger](<NEXT-SYSTEM.md>) — `NEXT-SYSTEM`
+- [Runtime operator guide](<OPERATIONS.md>) — `OPERATIONS`
 
 Sources:
 
 - `Cargo.lock`
 - `Cargo.toml`
+- `crates/**`
 - `docs/NEXT-SYSTEM.md`
-- `next/**`
+- `r/**`
 - `rust-toolchain.toml`
+- `scripts/check-architecture.mjs`
+- `scripts/client.mjs`
+- `scripts/test-*.mjs`
+- `scripts/verify-*.mjs`
+- `ui/**`
 - `vendor/jet/**`
 
 Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
-- `next.architecture`: `["node","next/scripts/check-architecture.mjs"]`
-- `next.client`: `["node","next/scripts/client.mjs","check"]`
-- `next.environment`: `["node","next/scripts/test-environment.mjs"]`
-- `next.mcp`: `["node","next/scripts/test-mcp.mjs"]`
-- `next.mcp-real-r`: `["node","next/scripts/test-mcp.mjs","--real-r"]`
-- `next.process-recovery`: `["node","next/scripts/test-process-recovery.mjs"]`
-- `next.real-r`: `["node","next/scripts/test-real-r.mjs"]`
-- `next.remote-protocol`: `["node","next/scripts/test-remote-protocol.mjs"]`
-- `next.rust`: `["cargo","test","--workspace","--locked","--","--test-threads=1"]`
-- `next.workbench`: `["node","next/scripts/test-workbench.mjs"]`
-- `next.workbench-real-r`: `["node","next/scripts/test-workbench.mjs","--real-r"]`
+- `system.architecture`: `["node","scripts/check-architecture.mjs"]`
+- `system.client`: `["node","scripts/client.mjs","check"]`
+- `system.environment`: `["node","scripts/test-environment.mjs"]`
+- `system.mcp`: `["node","scripts/test-mcp.mjs"]`
+- `system.mcp-real-r`: `["node","scripts/test-mcp.mjs","--real-r"]`
+- `system.process-recovery`: `["node","scripts/test-process-recovery.mjs"]`
+- `system.real-r`: `["node","scripts/test-real-r.mjs"]`
+- `system.remote-protocol`: `["node","scripts/test-remote-protocol.mjs"]`
+- `system.rust`: `["cargo","test","--workspace","--locked","--","--test-threads=1"]`
+- `system.workbench`: `["node","scripts/test-workbench.mjs"]`
+- `system.workbench-real-r`: `["node","scripts/test-workbench.mjs","--real-r"]`

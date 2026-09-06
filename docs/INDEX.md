@@ -12,8 +12,9 @@ Generated from `governance/registry.json`. Edit the JSON source and regenerate.
 
 - [Documentation map](<README.md>) — `DOCS`
 
-## `next-system`
+## `system`
 
 - [Architecture](<ARCHITECTURE.md>) — `ARCHITECTURE`
 - [Development loop](<DEVELOPMENT.md>) — `DEVELOPMENT`
 - [Rho system charter and replacement ledger](<NEXT-SYSTEM.md>) — `NEXT-SYSTEM`
+- [Runtime operator guide](<OPERATIONS.md>) — `OPERATIONS`

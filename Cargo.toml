@@ -1,24 +1,24 @@
 [workspace]
 resolver = "3"
 members = [
-  "next/contract",
-  "next/operation",
-  "next/workspace",
-  "next/project",
-  "next/environment",
-  "next/execution",
-  "next/adapters/process",
-  "next/adapters/ssh",
-  "next/adapters/r-environment",
-  "next/adapters/git",
-  "next/adapters/sqlite",
-  "next/adapters/r-runtime",
-  "next/host",
-  "next/cli",
-  "next/mcp",
-  "next/workbench",
+  "crates/contract",
+  "crates/operation",
+  "crates/workspace",
+  "crates/project",
+  "crates/environment",
+  "crates/execution",
+  "crates/adapters/process",
+  "crates/adapters/ssh",
+  "crates/adapters/r-environment",
+  "crates/adapters/git",
+  "crates/adapters/sqlite",
+  "crates/adapters/r-runtime",
+  "crates/host",
+  "crates/cli",
+  "crates/mcp",
+  "crates/workbench",
 ]
-default-members = ["next/cli"]
+default-members = ["crates/cli"]
 exclude = ["vendor/jet"]
 
 [workspace.package]

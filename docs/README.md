@@ -12,7 +12,7 @@ source or a reproducible run is wrong and should be corrected or deleted.
 - [Rho Next system charter and replacement ledger](NEXT-SYSTEM.md) — the
   normative design, capability ownership, decisions, progress, and verified
   work log for the greenfield replacement.
-- [Operator guide](../next/README.md) — running the default `rho` binary,
+- [Operator guide](OPERATIONS.md) — running the default `rho` binary,
   local workbench/MCP, R runtimes, Environment and native acceptance.
 - [Documentation index](INDEX.md) — generated list of current pages.
 - [Source index](SOURCE-INDEX.md) — generated paths and checks by

@@ -5,9 +5,10 @@ reproducible environments and native process/job execution, available to people
 and external Agents through the same Host. The Agent owns conversation and
 planning; Rho executes requested capabilities and reports what actually happened.
 
-The repository now builds the new system by default. Source currently lives in
-`next/`; the old `crates/`, `desktop/` and `r/` implementations and their dedicated
-tests have been removed from version-controlled source. There are no real
+The repository builds one system: Rust components under `crates/`, R helpers
+under `r/`, the plain TypeScript client under `ui/`, and shared tools under
+`scripts/`. The old implementations and their dedicated tests have been removed
+from version-controlled source. There are no real
 legacy users and no legacy-data migration or compatibility work.
 
 ## Run
@@ -32,16 +33,16 @@ target/debug/rho --database /absolute/path/to/state.sqlite \
 The workbench is embedded in the binary and only listens on `127.0.0.1`; running
 it does not require Node. Its `/mcp` endpoint shares the same Host and live R
 session. `rho ... mcp` also supports standalone stdio MCP. See the
-[operator guide](next/README.md) for flags, capabilities, authentication and
+[operator guide](docs/OPERATIONS.md) for flags, capabilities, authentication and
 real-runtime verification.
 
 ## Develop
 
 ```sh
 cargo test --workspace --locked -- --test-threads=1
-node next/scripts/check-architecture.mjs
-npm ci --ignore-scripts --prefix next/ui
-npm run check --prefix next/ui
+node scripts/check-architecture.mjs
+npm ci --ignore-scripts --prefix ui
+npm run check --prefix ui
 ```
 
 Start with [Architecture](docs/ARCHITECTURE.md), the

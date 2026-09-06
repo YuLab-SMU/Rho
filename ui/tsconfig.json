@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "rootDir": "src",
+    "outDir": "../crates/workbench/assets",
+    "skipLibCheck": false
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -15,8 +15,8 @@ starts with fresh application state; focus on capabilities, entrypoints and
 removing replaced code, not preserving old runtime or application data.
 
 The root Cargo workspace now builds the new system only, with `rho` as its
-default binary. Source remains under `next/` during directory cleanup. Old
-`crates/`, `desktop/` and `r/` code has been removed; do not restore it as
+default binary. Current source is under `crates/`, `r/`, `ui/` and `scripts/`;
+the temporary next/ source tree and old implementations are gone. Do not restore old code as
 a production dependency or run retired desktop/release gates for new changes.
 
 ## Architecture Philosophy
@@ -74,11 +74,11 @@ parallel Conversation, planning or behavioral subsystem inside Rho.
 
 ### Operation and Host Role
 
-`rho-next-operation` registers capabilities and enforces schema, scope,
+`rho-operation` registers capabilities and enforces schema, scope,
 idempotency and commit discipline. Domain handlers interpret native observations
 and return CommitPlan; they do not own independent result databases. Native
 identities and owner-specific preconditions replace global revision counters.
-`rho-next-host` is the composition root. CLI, browser and official MCP use its
+`rho-host` is the composition root. CLI, browser and official MCP use its
 five shared ports; none contains a second scientific operation flow.
 
 **Removed concepts** (legacy from internal Agent era):
@@ -114,8 +114,8 @@ maps live in `governance/registry.json` and `governance/source-map.json`.
   `cargo test` or `cargo build` processes in parallel; the build lock
   serializes them and both appear hung until they time out.
 - Iterate with the closest fast gate; run full suites once at the end.
-  - Contract or client change: `npm run generate --prefix next/ui`,
-    `npm run build --prefix next/ui`, then `npm run check --prefix next/ui`.
+  - Contract or client change: `npm run generate --prefix ui`,
+    `npm run build --prefix ui`, then `npm run check --prefix ui`.
   - Rust change: filtered `cargo test -p <crate> <filter>`; reruns take
     seconds once the test binary is built.
 - Do not poll background test runs with sleeps; wait for completion.
@@ -136,8 +136,8 @@ maps live in `governance/registry.json` and `governance/source-map.json`.
 - In R, test name membership before indexing a named atomic vector.
 - Client types come from Rust contract through ts-rs. Keep generated types and
   embedded app.js current; do not reintroduce per-capability Tauri commands.
-- The current client uses `next/workbench/assets/style.css` tokens and
-  `next/ui/src/app.ts`; do not extend the retired desktop UI.
+- The current client uses `crates/workbench/assets/style.css` tokens and
+  `ui/src/app.ts`; do not extend the retired desktop UI.
 - Project skill discovery validates the `.rho/skills` root itself, including
   symlink containment.
 - Windows GNU Rust commands require the Rtools45 toolchain at the front of
@@ -162,7 +162,7 @@ For a real visual run, build the embedded client and current binary, then open
 its private local workbench URL through an available browser connection:
 
 ```bash
-npm run build --prefix next/ui
+npm run build --prefix ui
 cargo build --locked
 ```
 

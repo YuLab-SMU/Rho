@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
   "checks": {
-    "next.architecture": { "command": ["node", "next/scripts/check-architecture.mjs"] },
-    "next.rust": { "command": ["cargo", "test", "--workspace", "--locked", "--", "--test-threads=1"] },
-    "next.client": { "command": ["node", "next/scripts/client.mjs", "check"] },
-    "next.real-r": { "command": ["node", "next/scripts/test-real-r.mjs"] },
-    "next.environment": { "command": ["node", "next/scripts/test-environment.mjs"] },
-    "next.process-recovery": { "command": ["node", "next/scripts/test-process-recovery.mjs"] },
-    "next.remote-protocol": { "command": ["node", "next/scripts/test-remote-protocol.mjs"] },
-    "next.mcp": { "command": ["node", "next/scripts/test-mcp.mjs"] },
-    "next.mcp-real-r": { "command": ["node", "next/scripts/test-mcp.mjs", "--real-r"] },
-    "next.workbench": { "command": ["node", "next/scripts/test-workbench.mjs"] },
-    "next.workbench-real-r": { "command": ["node", "next/scripts/test-workbench.mjs", "--real-r"] },
+    "system.architecture": { "command": ["node", "scripts/check-architecture.mjs"] },
+    "system.rust": { "command": ["cargo", "test", "--workspace", "--locked", "--", "--test-threads=1"] },
+    "system.client": { "command": ["node", "scripts/client.mjs", "check"] },
+    "system.real-r": { "command": ["node", "scripts/test-real-r.mjs"] },
+    "system.environment": { "command": ["node", "scripts/test-environment.mjs"] },
+    "system.process-recovery": { "command": ["node", "scripts/test-process-recovery.mjs"] },
+    "system.remote-protocol": { "command": ["node", "scripts/test-remote-protocol.mjs"] },
+    "system.mcp": { "command": ["node", "scripts/test-mcp.mjs"] },
+    "system.mcp-real-r": { "command": ["node", "scripts/test-mcp.mjs", "--real-r"] },
+    "system.workbench": { "command": ["node", "scripts/test-workbench.mjs"] },
+    "system.workbench-real-r": { "command": ["node", "scripts/test-workbench.mjs", "--real-r"] },
     "docs.index": { "command": ["node", "scripts/governance.mjs", "check"] },
     "docs.tool": { "command": ["node", "scripts/test-governance.mjs"] }
   },
@@ -20,9 +20,9 @@
       "sources": ["AGENTS.md", "README.md", "CONTRIBUTING.md", "docs/**", "governance/**", "scripts/governance.mjs", "scripts/test-governance.mjs"],
       "checks": ["docs.index", "docs.tool"]
     },
-    "next-system": {
-      "sources": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "next/**", "vendor/jet/**", "docs/NEXT-SYSTEM.md"],
-      "checks": ["docs.index", "docs.tool", "next.architecture", "next.rust", "next.client", "next.real-r", "next.environment", "next.process-recovery", "next.remote-protocol", "next.mcp", "next.mcp-real-r", "next.workbench", "next.workbench-real-r"]
+    "system": {
+      "sources": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "r/**", "ui/**", "scripts/check-architecture.mjs", "scripts/client.mjs", "scripts/test-*.mjs", "scripts/verify-*.mjs", "vendor/jet/**", "docs/NEXT-SYSTEM.md"],
+      "checks": ["docs.index", "docs.tool", "system.architecture", "system.rust", "system.client", "system.real-r", "system.environment", "system.process-recovery", "system.remote-protocol", "system.mcp", "system.mcp-real-r", "system.workbench", "system.workbench-real-r"]
     },
     "development-tools": {
       "sources": ["scripts/dev-lanes.mjs", "scripts/test-dev-lanes.mjs", "scripts/path-ownership.mjs"],
@@ -30,7 +30,7 @@
     },
     "delivery": {
       "sources": [".github/**", "runtime/**", "LICENSE", "LICENSES.md", "PRIVACY.md", "SECURITY.md", "CODE_SIGNING_POLICY.md", "scripts/bootstrap-ark-*.sh", "scripts/bootstrap-ark-*.ps1", "scripts/test-bootstrap-ark-*.sh"],
-      "checks": ["docs.index", "next.architecture"]
+      "checks": ["docs.index", "system.architecture"]
     }
   }
 }

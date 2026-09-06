@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-06
 >
-> 当前阶段：N8 旧架构源码和专属测试/脚本已删除；迁移期目录整理、浏览器验收及远程实测仍未完成
+> 当前阶段：N8 旧源码退役与最终目录整理已完成；本地运行回归通过，浏览器与真实远程验收仍未完成
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -49,7 +49,7 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 如何接手工作，结束后记什么？ | [工作记录](#25-work-log)、[更新规则](#26-每次工作结束时如何更新)、[当前下一步](#27-当前唯一下一步) |
 
 新加入的开发者先读目标、宪章和当前摘要，再按任务阅读相关契约；不必每次重读历史。
-具体运行命令只维护在 [Next README](../next/README.md)，本页只引用阶段性验证命令。
+具体运行命令只维护在 [运行指南](OPERATIONS.md)，本页只引用阶段性验证命令。历史 Work Log 的旧路径属于对应 Git 检查点，不能当作当前命令。
 [架构文档](ARCHITECTURE.md) 描述当前默认系统；旧 `programs/rho-rebuild/` 已删除，历史由 Git 保存。
 
 ### 接手一项工作的最短路径
@@ -66,7 +66,7 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 项目 | 当前事实 |
 | --- | --- |
 | 总体状态 | 根 Cargo 工作区只构建 Next，默认程序为 rho；真实 Ark/R、Project、Environment 与本机执行经新 Host 运行 |
-| 当前里程碑 | N8 Building；旧源码已删除，源码仍在 next/ 等待最后目录整理；N7 浏览器交互/视觉与 N6 远程实测仍未完成 |
+| 当前里程碑 | N8 Retired；最终目录本地回归通过。N7 浏览器交互/视觉与 N6 远程实测仍未完成 |
 | 已切换的默认入口 | rho CLI/session、stdio MCP、workbench HTTP/MCP；没有保留旧入口启动代理或旧数据库兼容层 |
 | 已退役的旧源码 | 全部旧 crates/、desktop/、r/，旧 test/、fuzz/、programs/ 与旧插件示例；专属脚本已删除，必要 Ark 获取与治理工具保留 |
 | 旧系统策略 | 不再保存平行源码树；Git 保留代码历史，旧数据全部放弃，不做迁移 |
@@ -77,12 +77,12 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 这些引用对应下方历史验证记录，不代表当前工作树已重新通过全部测试。
 N6 的本地执行、取消、输出收集已在 Host/CLI 验证；Git 和 Environment 复用同一进程执行器。Environment 与普通本地命令分别通过真实 Host 强制退出验收；后者不需要 R，并覆盖脱离进程组的子进程。验证只覆盖本机可观察、保留标记的进程，不代表远程任务或任意逃逸方式也已覆盖。
 
-Environment 实际验证入口：`node next/scripts/test-environment.mjs`。
+Environment 实际验证入口：`node scripts/test-environment.mjs`。
 当前已验证本机 R 4.5.2、pak 0.11.1、renv 1.1.8 与隔离本地 fixture；
 没有据此声称远程仓库、全部包或所有平台都已验证。
 
-已存在的操作说明见 [Next README](../next/README.md)，真实运行验证入口是
-`node next/scripts/test-real-r.mjs`。普通 Cargo 测试明确跳过需要外部 R 安装的验证；
+已存在的操作说明见 [运行指南](OPERATIONS.md)，真实运行验证入口是
+`node scripts/test-real-r.mjs`。普通 Cargo 测试明确跳过需要外部 R 安装的验证；
 该验证必须单独运行，不能把 skipped 算作 passed。
 
 ## 3. 任务目标与非目标
@@ -618,36 +618,30 @@ CLI、MCP、Agent Gateway 和未来前端都调用这些端口。
 - requestCancellation 返回“请求已接收”，不能显示为“任务已停止”；
 - 完整桌面体验在核心后端稳定后再恢复。
 
-## 17. 初始目录
+## 17. 当前源码目录
 
-只创建第一条真实垂直链所需模块：
+版本控制中的源码不再保留 old/next 双树：
 
-    next/
-    ├── contract/
-    │   ├── invocation
-    │   ├── operation
-    │   ├── capability
-    │   ├── identity
-    │   └── observation
-    ├── operation/
-    │   ├── gateway
-    │   ├── registry
-    │   └── journal
-    ├── workspace/
-    │   ├── model
-    │   ├── handler
-    │   └── ports
+    Cargo.toml / Cargo.lock       # 唯一工作区与依赖锁
+    crates/
+    ├── contract/                # ID、Invocation、Observation、Event
+    ├── operation/               # Registry、Gateway、提交纪律
+    ├── workspace/ project/ environment/ execution/
     ├── adapters/
-    │   ├── r-runtime/
-    │   └── sqlite/
-    ├── host/
-    ├── cli/
-    └── r/
-        └── bridge/
+    │   ├── r-runtime/ r-environment/
+    │   └── git/ process/ ssh/ sqlite/
+    └── host/ cli/ mcp/ workbench/
+    r/
+    ├── bridge/
+    └── environment/
+    ui/                          # TypeScript 与生成 contract
+    scripts/                     # 开发、生成与真实验收工具
+    docs/                        # 当前说明与本台账
+    vendor/jet/                  # 保留上游边界与许可
 
-暂时不创建 project、environment、execution、artifact、secret、sandbox、MCP、desktop 或 extension 模块。出现第一条真实能力时再创建。
-
-next 是迁移期名称。旧系统全部退役后，应把它提升为正常仓库结构，不能永久保留 old/next 二元世界。
+Rust 包统一为 rho-*，默认程序为 rho。只保留已有真实消费者的模块，不预建
+Artifact、Audit、Policy、Evidence 或 extension 框架。未跟踪的构建缓存不属于源码树，
+本轮没有为目录整理扫描或清理旧数据资产。
 
 ## 18. 外部依赖原则
 
@@ -757,7 +751,7 @@ Git 可恢复源码，不代表已经撤销包安装、R 内存修改或远程�
 | N5 | Environment | observe/plan/realize/verify 首条链路完成 | Verified；默认入口已切 Next，仍只声明已验收的本机范围 |
 | N6 | Execution | local process 后再扩展 SSH/Slurm | Building（本机已验证；SSH/Slurm 已实现并通过协议测试，未远程实测） |
 | N7 | Public edges | MCP 与极简前端使用统一 host ports | Building（HTTP/MCP/真实 R、生成类型已验证；浏览器交互与视觉未验收） |
-| N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | 旧源码删除已实现；最后目录整理与验收收尾中，整体目标未完成 |
+| N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Retired；旧源码删除及最终目录整理已完成，整体目标仍待 N6/N7 验收 |
 
 N1 不创建真实 R、前端、MCP、Environment 或 Project 功能。它只证明操作骨架、幂等、提交纪律和查询能够工作。
 
@@ -1095,6 +1089,15 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 - 边界：旧 Evidence/extension 的代码已删除，其功能仍为 Deferred，不假称已接入新实现。没有开展旧数据库、历史或草稿的数据迁移。
 - 后续：消除 next/ 迁移期目录，再完成剩余浏览器及真实远程验收；源码删除不等于整体目标已经完成。
 
+### N-D029 — 结束迁移期源码目录
+
+- 日期：2026-09-06
+- 状态：Accepted；最终目录与本地运行回归 Verified
+- 决定：Rust 组件统一位于 crates/，R helper 位于 r/，客户端位于 ui/，构建/验收脚本位于 scripts/。根 Cargo 仍是唯一工作区，默认二进制仍为 rho。
+- 名称：crate 使用 rho-*，源码引用使用 rho_*；真实验收使用 RHO_ARK、RHO_R_HOME。没有保留旧包名别名或第二个 workspace。仅为历史保留的台账仍以 Rho Next 为任务名。
+- 路径：更新 R include_str、Rust path dependency、前端嵌入/类型生成、fixture、CI 和 source map；运行指南归入 docs/OPERATIONS.md。版本控制中没有 next/ 文件，忽略的构建缓存未被移动或删除。
+- 后续：以最终路径运行真实验收，不用目录重命名替代行为证明。浏览器和实际远程条件未提供时，仍不能声称整体完成。
+
 ## 24. Open Decisions
 
 以下问题尚未决定，不能由实现者顺手固化：
@@ -1293,6 +1296,14 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 数据：没有处理实际旧应用数据或用户项目，没有读取/导入/转换旧数据。删除代码由 Git 历史保留。
 - 下一步：整理新系统最终目录并补齐未完成的浏览器/远程验收，整体目标保持进行中。
 
+### 2026-09-06 — 最终源码布局与统一包名
+
+- 变化：将 26 个已验证、无目标冲突的源码路径移到最终位置，统一 rho-* 包名、R 嵌入路径、生成客户端路径、脚本入口与 CI。未跟踪缓存没有清理，未处理旧数据。
+- 已核对：Cargo metadata 仅有 16 个新系统包、默认 rho；architecture、前端构建、governance/tool、开发 lane 与 workflow YAML 解析通过；版本控制中的 next/ 为空。
+- 验证：最终目录下的 `cargo test --workspace --locked --offline -- --test-threads=1`、Clippy（`--workspace --all-targets --locked --offline -- -D warnings`）、格式检查和 `npm run check --prefix ui` 通过。`scripts/test-workbench.mjs --real-r`、`test-real-r.mjs`、`test-environment.mjs`、`test-mcp.mjs --real-r`、`test-process-recovery.mjs` 与 `test-remote-protocol.mjs` 通过；远程脚本仍是本地 fixture。
+- 验证边界：电脑交互连接复查仍返回 native pipe startup failed，视觉验收尚未完成。没有连接真实远程主机、触发 CI 或发布；这些结果不能证明未执行的验收。
+- 下一步：完成最终路径的运行回归与剩余验收，完整目标继续进行。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。
@@ -1351,7 +1362,7 @@ N7：让外部 Agent 与极简客户端使用同一套科学空间端口。
 
 工作台与 MCP 已共用一个本机 Host；生成类型、HTTP 入口及真实 Ark/R 已验证。浏览器交互连接当前不可用，项目选择、R 执行、对象刷新、操作详情、取消/重连与桌面/窄屏布局的真实浏览器验收仍未完成。
 
-当前可执行出口：将新系统从 next/ 迁移期目录提升为最终正常源码结构，保持一个 Cargo 工作区和同一套 Host 端口；不恢复旧源码或旧数据兼容。旧源码及专属测试已删除，剩余未跟踪文件不属于本轮删除范围。浏览器条件恢复后补 N7 交互验收，真实远程目标未指定前仍不连接或提交作业。
+当前可执行出口：完成最终目录下的真实运行回归与剩余验收，保持一个 Cargo 工作区和同一套 Host 端口。版本控制中的 next/ 已移除，旧源码及专属测试已退役；不恢复旧源码或数据兼容。浏览器条件恢复后补 N7 交互验收，真实远程目标未指定前仍不连接或提交作业。
 
 必须只包含：
 
