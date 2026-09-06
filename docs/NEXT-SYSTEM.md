@@ -4,7 +4,7 @@
 >
 > 最后更新：2026-09-06
 >
-> 当前阶段：N8 旧源码与最终目录已收敛；R 代码工具补齐并经真实 Ark/MCP 验证，浏览器与真实远程验收仍未完成
+> 当前阶段：N7 本机浏览器验收与 N8 源码收敛已完成；仍待真实远程验收及首版执行边界确认
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -66,11 +66,11 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 项目 | 当前事实 |
 | --- | --- |
 | 总体状态 | 根 Cargo 工作区只构建 Next，默认程序为 rho；真实 Ark/R、Project、Environment 与本机执行经新 Host 运行 |
-| 当前里程碑 | N8 Retired；最终目录本地回归通过。N7 浏览器交互/视觉与 N6 远程实测仍未完成 |
+| 当前里程碑 | N7 已经本机 Chrome 交互及 390 × 844 模拟窄屏验证，N8 Retired；N6 真实远程验收仍未完成 |
 | 已切换的默认入口 | rho CLI/session、stdio MCP、workbench HTTP/MCP；没有保留旧入口启动代理或旧数据库兼容层 |
 | 已退役的旧源码 | 全部旧 crates/、desktop/、r/，旧 test/、fuzz/、programs/ 与旧插件示例；专属脚本已删除，必要 Ark 获取与治理工具保留 |
 | 旧系统策略 | 不再保存平行源码树；Git 保留代码历史，旧数据全部放弃，不做迁移 |
-| 前端策略 | 已实现本机浏览器客户端；纯 TypeScript、嵌入式静态资产和五端口，完整桌面仍延后 |
+| 前端策略 | 本机浏览器客户端已验证；纯 TypeScript、嵌入式静态资产和五端口。完整桌面仍延后，模拟窄屏不等于真实移动设备验收 |
 | 数据策略 | 无真实旧用户；放弃旧架构全部数据资产。Next 使用全新应用状态，不做迁移、导入、只读兼容或会话接力（N-D025） |
 | 最终核对补项 | workspace.help/lint/format 已进入统一 Operation 主线，本机 Ark/R 与 MCP 验证通过；见 N-D030 |
 
@@ -752,8 +752,8 @@ Git 可恢复源码，不代表已经撤销包安装、R 内存修改或远程�
 | N4 | Project truth | Git/filesystem preconditions 与 project.apply_patch 完成切换 | Verified；默认入口已切 Next，旧实现物理删除归 N8 |
 | N5 | Environment | observe/plan/realize/verify 首条链路完成 | Verified；默认入口已切 Next，仍只声明已验收的本机范围 |
 | N6 | Execution | local process 后再扩展 SSH/Slurm | Building（本机已验证；SSH/Slurm 已实现并通过协议测试，未远程实测） |
-| N7 | Public edges | MCP 与极简前端使用统一 host ports | Building（HTTP/MCP/真实 R、生成类型已验证；浏览器交互与视觉未验收） |
-| N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Retired；旧源码删除及最终目录整理已完成，整体目标仍待 N6/N7 验收 |
+| N7 | Public edges | MCP 与极简前端使用统一 host ports | Verified（本机 Chrome、桌面与 390 × 844 模拟窄屏；HTTP/MCP/真实 R 回归通过） |
+| N8 | Legacy removal | 旧运行主线、旧 schema 与旧 crate 全部退役 | Retired；旧源码删除及最终目录整理已完成，整体目标仍待 N6 远程验收与 N-O004 确认 |
 
 N1 不创建真实 R、前端、MCP、Environment 或 Project 功能。它只证明操作骨架、幂等、提交纪律和查询能够工作。
 
@@ -775,7 +775,7 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | operation.invoke | Command port | 默认 rho Host | operation | Next-owned；Legacy Retired | 保持单一执行路径 |
 | operation.get | Query port | 默认 rho Host | operation/sqlite | Next-owned | 维持只读与 principal 可见性 |
 | operation.request_cancellation | Command port | 默认 rho Host | operation | Next-owned | 维持请求与真实终态分离 |
-| operation.subscribe | Subscription | 默认 rho Host | sqlite outbox/host | Next-owned（游标协议） | 浏览器消费验收；不声称 live push |
+| operation.subscribe | Subscription | 默认 rho Host | sqlite outbox/host | Next-owned（浏览器游标消费 Verified） | 保持同 ID 重试和断线后的真实状态，不声称 live push |
 | workspace.run_r | Operation | 默认 rho Host | workspace | Next-owned；Legacy Retired | 保持真实 R 验收范围 |
 | workspace.help / lint / format | Operation | 默认 rho Host | workspace | Next-owned（本机 Ark/R Verified） | 保持显式调用、输入/输出上限与缺包失败语义 |
 | workspace.snapshot | Query | 默认 rho Host | workspace | Next-owned | 维持 bounded/busy/无 Operation |
@@ -799,7 +799,7 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | slurm.request_cancel | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Building（协议已验证） | 真实取消请求与后续状态观察 |
 | CLI entry | Edge | 默认 rho | cli | 旧独立 crate Retired | 不再提供旧 SemanticStore 数据观察器 |
 | MCP edge | Edge | 默认 rho stdio/HTTP | mcp / host | Next-owned；Legacy Retired | 保持同 Host 语义，旧桌面引用已删除 |
-| desktop-lite | Edge | 默认 rho workbench | workbench / unified client | Building（接口/R Verified） | 真实浏览器交互与视觉验收仍未完成 |
+| desktop-lite | Edge | 默认 rho workbench | workbench / unified client | Next-owned（本机浏览器 Verified） | 保持轮询控件稳定、面板状态独立与项目结果分离；不扩张为全平台声明 |
 | evidence projection | Query projection | 当前默认系统未启用 | 未决定 | Deferred；旧实现已删除 | 出现真实消费者时再评估，不复制旧事实系统 |
 | extensions | Capability source | 当前默认系统未启用 | 未决定 | Deferred；旧实现已删除 | 核心稳定后按新 capability 契约评估 |
 
@@ -1044,14 +1044,14 @@ Decision 记录长期约束，不记录普通代码选择。每条决定必须�
 ### N-D024 — 本机薄客户端、生成契约与共享 Host
 
 - 日期：2026-09-05
-- 状态：Accepted；类型生成、本机 HTTP/MCP 与真实 R 已验证，浏览器交互/视觉尚未验收
+- 状态：Accepted；类型生成、本机 HTTP/MCP、真实 R 与本机浏览器交互/视觉已验证
 - 决定：使用 ts-rs 12.0.1 从 Rust 生成 TypeScript contract；plain TypeScript 客户端与静态资产嵌入 Axum 本机服务。没有第二个前端业务服务器、旧 Tauri 依赖或外部网站部署。
 - 类型纪律：沿用 JSON number，客户端拒绝不安全游标；显式映射省略的 optional 字段。生成内容和嵌入 JS 有漂移检查，只有 app.js 是实际脚本资源。
 - 所有权：HostProfile 统一 CLI/stdio MCP/工作台的启动装配。`/api/host` 转发原五端口，`/api/info` 与 `/api/project` 只处理原 Host 启动/项目选择，不新增科学业务路由。`/mcp` 使用官方 rmcp，与 UI 共用同一个 Arc<NextHost>。
 - 切换：活跃请求、未提交任务和 MCP 会话阻止切换项目；旧浏览器的 project root 不匹配时拒绝请求。切换结束旧 R session，并清除项目特定的库/remote binding；启动失败报告没有打开项目，不声称内存已回滚。
 - 边界：只监听 127.0.0.1，使用每次启动的 bearer、精确 Host/Origin、请求大小上限与同源静态资源。不创建账户、Agent approval 或权限审批数据库；native R/进程仍拥有当前用户的 OS 权限。
 - 客户端：事件仅驱动重新查询；结果来自持久化 Operation 与 owner observation。断线后的同 ID 重试需要显式触发；关闭等待提示不取消运行。MCP 与 UI 保留各自 actor，共享 principal 的事实。
-- 证据范围：测试已从 HTTP 执行真实 R 得到 42，再由 MCP 查询同一对象；跨入口取消、查询纯度、断开后提交和项目切换边界已验证。电脑交互连接启动失败且浏览器列表为空，未据此声称界面已通过视觉验收。
+- 证据范围：HTTP 执行真实 R 得到 42，再由 MCP 查询同一对象；跨入口取消、查询纯度、断开后提交和项目切换边界已验证。2026-09-06 电脑连接恢复后，通过原生 Chrome 完成界面交互及桌面/390 × 844 模拟窄屏检查；不是全浏览器或真实手机验收。
 
 ### N-D025 — 放弃旧数据，专注代码替换
 
@@ -1326,6 +1326,16 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 剩余：电脑连接复查仍为 native pipe startup failed，真实浏览器验收不能执行；真实 SSH/Slurm 目标仍未指定，未连接或提交作业。最低 containment 选择 N-O004 仍需确认；不将源码切换视作该选择已获批准。
 - 下一步：取得剩余验收条件并确认首版执行边界；没有这些条件时不重复扩张实现或用本机回归冒充整体完成。
 
+### 2026-09-06 — N7 真实浏览器验收与状态显示修复
+
+- Git：`8259a5a`；N7 本机验收与显示修复检查点，不是整体目标完成。
+- 证据：在本机 Chrome 中操作全新 alpha/beta 临时项目。Console 返回真实 `42`、stdout 与 warning；对象预览返回 `[1, 2, 3]`，操作详情引用相同 ID。桌面布局与 DevTools 的 390 × 844 视口已实际查看，窄屏可滚动访问各面板和取消入口；未把模拟视口说成真实 iPhone 测试。
+- 恢复与取消：页面刷新时 `op_89a8efc6cb9149ba8972d23745f32511` 仍运行，重发同一请求后 ID 不变、计数结果为 1。最终构建中的 `op_542b3ff52682486e868b3adda7d86960` 经界面请求取消后由 R 返回 cancelled；回执不再复制整条记录到提示栏。
+- 发现与修复：空轮询曾反复重建列表和下拉框；普通能力调用曾误改 Console 等待状态；切换项目曾残留上一项目的能力结果。现在仅对变化重绘，等待状态进入对应面板，并在项目变更时清除能力结果。最终构建中 help 成功时 Console 保持原 cancelled 终态；切换 beta 后对象/操作列表为空，旧 help 结果不可见。
+- 已运行：`npm run generate --prefix ui`、`npm run build --prefix ui`、`npm run check --prefix ui`、`cargo build --locked --offline`、`node scripts/test-workbench.mjs --real-r` 和 architecture check 通过。工作台回归包含真正的 HTTP/MCP、Ark/R、Environment 观察、取消、断开后提交及项目切换约束；governance/tool 和 diff 检查也通过，未重跑无关 Rust/远程/Environment 全套测试。
+- 范围：仅客户端显示逻辑、生成资产和当前文档；没有新增 crate、协议端口、数据表或旧数据处理。临时工作台与测试标签页已关闭，浏览器设备工具恢复为关闭状态。
+- 下一步：N6 真实 SSH/Slurm 目标与 N-O004 的首版执行边界仍需用户指定；整体目标未完成。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。
@@ -1380,11 +1390,11 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 ## 27. 当前唯一下一步
 
-N7：让外部 Agent 与极简客户端使用同一套科学空间端口。
+N6：完成用户指定目标上的真实 SSH/Slurm 验收。
 
-工作台与 MCP 已共用一个本机 Host；生成类型、HTTP 入口及真实 Ark/R 已验证。浏览器交互连接当前不可用，项目选择、R 执行、对象刷新、操作详情、取消/重连与桌面/窄屏布局的真实浏览器验收仍未完成。
+N7 的本机 Chrome 交互、桌面/模拟窄屏布局，以及修复后的 HTTP/MCP/Ark/R 回归已经通过；不再把浏览器连接列为阻塞。
 
-当前下一步需要外部条件：恢复可用浏览器连接，指定真实 SSH/Slurm 验收目标（已有主机别名、允许的临时目录与分区/账户），并确认 N-O004 的首版执行边界。R help/lint/format 补项已通过真实 Ark/Host/MCP 验证，不再把它列作未完成。
+当前下一步需要指定真实远程验收目标（已有主机别名、允许的临时目录与分区/账户），并确认 N-O004：首版接受当前原生用户权限、无文件/网络沙箱的执行边界，还是要求受限运行时。R help/lint/format 与源码退役均不再列为未完成。
 
 版本控制中的 next/ 已移除，旧源码及专属测试已退役；不恢复旧源码或数据兼容。条件具备后执行相应真实验收；此前不连接未指定远端，不把协议 fixture 或重复本机回归视作目标完成。
 
@@ -1395,7 +1405,7 @@ N7：让外部 Agent 与极简客户端使用同一套科学空间端口。
 - SSH/Slurm adapter 使用原生 job/host identity，未知提交结果不得自动重提；
 - 未提供真实远程运行条件时明确区分协议测试与实际远程验收；
 - 保留明确的材料保留策略，不用全局清扫替代引用判断；
-- 并行保留远程实测、N7 公共入口与 N8 旧代码删除的未完成要求。
+- 保留远程实测与首版执行边界的未完成要求；不将已验证的 N7 或已退役的 N8 重复列为工作。
 
 此阶段不创建：
 
@@ -1403,4 +1413,4 @@ N7：让外部 Agent 与极简客户端使用同一套科学空间端口。
 - Artifact framework；
 - Audit、Evidence、Policy 或 Revision subsystem。
 
-后续里程碑和旧系统删除仍属于完整目标；N1/N2 的局部验证不代表整体替换已完成。
+完整目标仍需真实远程验收与首版执行边界确认；N7 的本机验证不能替代它们。

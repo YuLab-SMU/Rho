@@ -78,6 +78,27 @@ they do not substitute for browser interaction and visual acceptance. A working
 computer/browser connection is needed for that separate check. Ctrl-C stops the
 local server and drains accepted Host work; it does not report work as cancelled.
 
+Manual browser acceptance uses disposable projects and fresh application data:
+
+1. Select a project, run R that returns 42 with stdout/warnings, inspect its objects,
+   and open the corresponding Operation. Empty event polling must preserve controls.
+2. Run a counter increment followed by a short sleep, reload the page while it is
+   running, then retry the same pending request. The OperationId must stay the same
+   and the counter must remain 1. A closed page must not imply cancellation.
+3. Cancel a long R operation through its detail panel and observe the real terminal
+   result. The brief receipt is not proof that execution has stopped.
+4. Invoke workspace.help from the capability form. Its waiting/result display must
+   not replace the Console's previous operation status.
+5. Switch to a second project. Runtime objects and result views must belong to that
+   project; a previous capability result must not remain under the new heading.
+6. Check desktop and narrow layouts, including scrolling and cancellation controls.
+   The verified 390 × 844 Chrome device viewport is emulation, not a real phone test.
+
+These interactions were completed on local Chrome on 2026-09-06; see the ledger
+for findings and validation scope. No whole-browser/platform compatibility claim
+is made. On restart with a new launch token at the same origin, reload after opening
+the new private fragment URL so the startup credential is read again.
+
 Host startup acquires a native OS lease on the canonical project's
 `.rho/next-host.lock` before creating a journal or runtime. A second database is
 not a way to start a second Host for that project; connect through the existing
