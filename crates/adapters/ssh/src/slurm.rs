@@ -217,20 +217,16 @@ impl SlurmRuntime for SshRemote {
                 "Slurm cancellation marker mismatch",
             ));
         }
-        // Filter in the controller by stable name/current user, not a stale PID
-        // or numeric JobID alone. No signals or requeue policy are invented here.
-        self.scheduler(
-            "scancel",
-            &["--ctld".into(), format!("--name={expected}")],
-            None,
-        )
-        .await
-        .map_err(|error| {
-            HandlerError::after_possible_effect(
-                error,
-                Some(json!({"source_operation_id":source.operation_id,"job":before.job})),
-            )
-        })?;
+        // Use native stable-name/current-user filters, not a stale PID or JobID
+        // alone. --ctld is unavailable on supported Slurm 19.05 installations.
+        self.scheduler("scancel", &[format!("--name={expected}")], None)
+            .await
+            .map_err(|error| {
+                HandlerError::after_possible_effect(
+                    error,
+                    Some(json!({"source_operation_id":source.operation_id,"job":before.job})),
+                )
+            })?;
         let (after, notice) = match self.find(source).await {
             Ok(found) if found.jobs.len() == 1 => (
                 Some(found.jobs[0].clone()),

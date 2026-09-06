@@ -71,7 +71,7 @@ if (tool === "scontrol") {
     if (tool === "sacct" && job.state !== "RUNNING") console.log([job.id, job.state, "0:15", job.marker, job.root].join("|"));
   }
 } else if (tool === "scancel") {
-  assert.ok(args.includes("--ctld"));
+  assert.ok(!args.includes("--ctld"), "Slurm 19.05 does not support --ctld");
   assert.ok(flag("--user"));
   assert.ok(!Object.keys(process.env).some((name) => name.startsWith("SCANCEL_")));
   const jobs = state.jobs.filter((job) => job.marker === flag("--name"));
