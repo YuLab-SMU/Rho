@@ -1285,6 +1285,7 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 
 ### 2026-09-06 — 旧架构源码与专属工具退役
 
+- Git：`f02d2f6`；旧源码删除检查点，不代表最终目录整理或整体验收完成。
 - 变化：按已验证生产依赖图删除 877 个旧架构文件；新系统没有运行时代码引用旧目录。更新治理源图、许可边界、CI 和当前入口说明。
 - 上游工具：Ark 获取保留固定 archive hash 和 notices，输出独立 executable；删除旧桌面 staging 与重复 kernelspec/R 探测。
 - 发现：macOS 系统 true 二进制是 arm64e，不适合作为要求 arm64 的正面 fixture，改为编译明确的 arm64 小程序；随后发现 TMPDIR 的双斜线导致路径字符串断言不一致，规范化后通过。该 fixture 验证获取/staging，不冒充真实 Ark 执行。
