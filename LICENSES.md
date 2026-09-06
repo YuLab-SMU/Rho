@@ -24,19 +24,17 @@ license, and notice files remain controlling.
 | Component | Repository or bundle boundary | License evidence |
 | --- | --- | --- |
 | Jet | `vendor/jet/` | MIT; [`vendor/jet/LICENSE`](vendor/jet/LICENSE) |
-| Monaco Editor | Vite dependency bundled into the generated Rho Surface Runtime | MIT; reviewed source notice at `desktop/legal/licenses/monaco/LICENSE`, emitted at `desktop/dist/licenses/monaco/LICENSE` |
-| DOMPurify | Vite dependency bundled into the generated Rho Surface Runtime | Apache-2.0 option from its upstream dual license; reviewed source notice at `desktop/legal/licenses/dompurify/LICENSE` |
-| Marked | Vite dependency bundled into the generated Rho Surface Runtime | MIT; reviewed source notice at `desktop/legal/licenses/marked/LICENSE` |
-| Papa Parse | Vite dependency bundled into the generated Rho Surface Runtime | MIT; reviewed source notice at `desktop/legal/licenses/papaparse/LICENSE` |
-| KaTeX | Vite dependency bundled into the generated Rho Surface Runtime | MIT; reviewed source notice at `desktop/legal/licenses/katex/LICENSE` |
-| Ark runtime | pinned by `runtime/ark.json` and staged as a Tauri sidecar | MIT plus upstream notices; the bootstrap process copies the archive's `LICENSE` and `NOTICE` into `desktop/resources/runtime/` for bundling |
-| Wasmtime / Cranelift | `wasmtime 38.0.4` Cargo dependency for the no-WASI Phase 2 Wasm host | Apache-2.0 WITH LLVM-exception; exact version/features are pinned in `Cargo.toml` and `Cargo.lock` |
-| sysinfo | `sysinfo 0.39.6` Cargo dependency for cross-platform CPU, memory, and project-filesystem telemetry | MIT; exact version/features are pinned in `Cargo.toml` and `Cargo.lock` |
-| LadybugDB | `lbug 0.20.1` Cargo dependency and its statically linked embedded graph engine for the project Evidence Graph sidecar | MIT; crate and engine version are pinned by `Cargo.toml`, `Cargo.lock`, and `.cargo/config.toml` |
-| WAT parser | test-only `wat 1.257.1` Cargo dependency for deterministic Wasm fixtures | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT; excluded from production dependencies |
+| Ark runtime | external executable, pinned for optional acquisition by `runtime/ark.json` | MIT plus upstream notices; acquisition retains the archive's `LICENSE` and `NOTICE` with the executable |
+| sysinfo | native process observation in the new execution adapter | MIT; exact version/features are pinned in `Cargo.toml` and `Cargo.lock` |
+
+The former Tauri/Vite frontend, Wasm extension host and embedded graph engine
+are no longer part of the production build. Their old copied notice files are
+not distribution inputs for the new binary. Upstream Jet's source and license
+remain in the repository; Ark notices remain with any acquired runtime.
 
 Rust, Node, and R dependency manifests identify additional source/runtime
 dependencies. Those dependencies remain under the licenses published by their
 authors; inclusion in an AGPL project does not change those terms. Before each
-signed public candidate, the exact distributable payload and its notices must
-be audited again under the release contract.
+public distribution, check the exact payload and include the notices required
+by the dependencies actually distributed. This inventory does not claim that
+an external Ark/R installation is bundled with the current Rho binary.

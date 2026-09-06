@@ -5,7 +5,7 @@ changing this workspace. It is the task-specific design and progress record;
 code and reproducible execution remain evidence of what exists.
 
 The repository root Cargo workspace is now the production system; source is
-still under next/ while the remaining legacy files are retired. Keep old Rho
+still under next/ pending final directory cleanup. Legacy source is retired. Keep old Rho
 crates out of the dependency graph. The R adapter may reuse third-party Jet code
 under vendor/jet; it must not call the old rho-kernel or server coordinator.
 Edges call Host ports. Domains interpret observations; adapters interact with

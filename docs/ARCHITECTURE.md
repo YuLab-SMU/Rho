@@ -1,8 +1,8 @@
 # Architecture
 
 The repository's root Cargo workspace is the production system. Its default
-member builds `rho`, using only the new components under `next/`. Old crates and
-the old Tauri application are not production dependencies.
+member builds `rho`, using only the new components under `next/`. Old crates,
+the old Tauri application and their dedicated source/tests have been removed.
 
 ```text
 rho CLI / local browser / official MCP

@@ -3,8 +3,8 @@
 Operator guide for the production Rust workspace at the repository root.
 The default `rho` binary exposes a project-only Host, a real Ark/R Host, or an
 explicit test-only demo. New code still lives under `next/` during source cleanup;
-the old app is excluded from the production graph. Progress and remaining
-retirement work are in [the system ledger](../docs/NEXT-SYSTEM.md).
+the old app's version-controlled source has been removed. Progress and remaining
+work are in [the system ledger](../docs/NEXT-SYSTEM.md).
 
 Legacy architecture data assets are abandoned; there are no real legacy users.
 Next starts with fresh application state. There is no migration, import, archive
@@ -140,6 +140,14 @@ node next/scripts/check-architecture.mjs
 ```
 
 Verify real R (requires Ark, R with jsonlite/rlang, and local loopback access):
+
+Optional pinned Ark acquisition uses `scripts/bootstrap-ark-macos.sh`,
+`scripts/bootstrap-ark-linux.sh` or `scripts/bootstrap-ark-windows.ps1`. The scripts
+return a standalone executable under `target/runtime/` and retain upstream
+notices; pass the returned path as `--ark` or `RHO_NEXT_ARK`. They do not install R,
+create a kernelspec, or recreate old desktop directories. Linux/Windows execution
+still requires verification on those platforms; macOS fixtures are not a claim
+that every downloaded runtime or platform has been tested.
 
 ```sh
 RHO_NEXT_ARK=/absolute/path/to/ark node next/scripts/test-real-r.mjs

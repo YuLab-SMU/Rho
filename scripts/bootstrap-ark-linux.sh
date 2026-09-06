@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# LIN1: download, verify, and stage the pinned Ark Linux sidecar for the
+# Download, verify, and stage the pinned standalone Ark executable for the
 # current architecture (linux-x64 or linux-arm64).
 #
 # Authority: runtime/ark.json (linux-x64, linux-arm64), the same manifest
@@ -10,13 +10,8 @@ set -euo pipefail
 #     RHO_ARK_ARCHIVE when provided);
 #   - rejects non-matching ELF binaries (x86-64 / aarch64), missing
 #     LICENSE/NOTICE, checksum mismatch, and alternate versions;
-#   - stages the sidecar as desktop/src-tauri/binaries/ark-x86_64-unknown-linux-gnu
-#     or ark-aarch64-unknown-linux-gnu (Tauri externalBin naming); LICENSE/NOTICE
-#     stay in the runtime root and are copied into the Tauri resource tree by
-#     prepare-runtime-resources.sh before a build;
-#   - writes a Linux kernelspec with the resolved R home/bin/libraries and a
-#     controlled PATH (no user/site/project startup files), matching the
-#     Windows/Mac controlled-startup policy.
+#   - stages a standalone binary under target/runtime/bin and retains notices;
+#   - does not probe R or create a second kernelspec. The Host owns startup.
 #
 # The generated sidecar and runtime files remain ignored by git; the manifest,
 # this script, and its fixture tests are tracked.
@@ -33,13 +28,11 @@ RHO_UNAME_M="${RHO_UNAME_M:-$(uname -m 2>/dev/null || echo unknown)}"
 case "$RHO_UNAME_M" in
   x86_64)
     RHO_ARK_MANIFEST_KEY="linux-x64"
-    RHO_ARK_SIDECAR_NAME="ark-x86_64-unknown-linux-gnu"
     RHO_ARK_ELF_PATTERN='ELF 64-bit LSB (executable|pie executable|shared object), x86-64'
     RHO_ARCH_DISPLAY="an x86-64"
     ;;
   aarch64|arm64)
     RHO_ARK_MANIFEST_KEY="linux-arm64"
-    RHO_ARK_SIDECAR_NAME="ark-aarch64-unknown-linux-gnu"
     RHO_ARK_ELF_PATTERN='ELF 64-bit LSB (executable|pie executable|shared object), ARM aarch64'
     RHO_ARCH_DISPLAY="a aarch64"
     ;;
@@ -52,8 +45,9 @@ esac
 RHO_SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RHO_REPOSITORY_ROOT="$(cd "$RHO_SCRIPT_ROOT/.." && pwd)"
 RHO_MANIFEST="$RHO_REPOSITORY_ROOT/runtime/ark.json"
-RHO_RUNTIME_ROOT="${RHO_ARK_RUNTIME_ROOT:-$RHO_REPOSITORY_ROOT/.rho/runtime}"
-RHO_SIDECAR="${RHO_ARK_SIDECAR:-$RHO_REPOSITORY_ROOT/desktop/src-tauri/binaries/$RHO_ARK_SIDECAR_NAME}"
+RHO_RUNTIME_ROOT="${RHO_ARK_RUNTIME_ROOT:-$RHO_REPOSITORY_ROOT/target/runtime}"
+RHO_SIDECAR="${RHO_ARK_SIDECAR:-$RHO_RUNTIME_ROOT/bin/ark}"
+RHO_LICENSE_ROOT="${RHO_ARK_LICENSE_ROOT:-$RHO_RUNTIME_ROOT/notices/ark}"
 
 read_manifest() {
   node -e '
@@ -72,11 +66,7 @@ RHO_INSTALL_ROOT="$RHO_RUNTIME_ROOT/ark-$RHO_ARK_VERSION-$RHO_ARK_MANIFEST_KEY"
 RHO_ARCHIVE_DEFAULT="$RHO_RUNTIME_ROOT/ark-$RHO_ARK_VERSION-$RHO_ARK_MANIFEST_KEY.zip"
 RHO_ARCHIVE="${RHO_ARK_ARCHIVE:-$RHO_ARCHIVE_DEFAULT}"
 RHO_ARK_BINARY="$RHO_INSTALL_ROOT/ark"
-RHO_KERNEL_SPEC="$RHO_INSTALL_ROOT/kernel.json"
-RHO_EMPTY_RENVIRON="$RHO_INSTALL_ROOT/empty.Renviron"
-RHO_ARK_LOG="$RHO_INSTALL_ROOT/ark.log"
-
-mkdir -p "$RHO_RUNTIME_ROOT" "$(dirname "$RHO_SIDECAR")"
+mkdir -p "$RHO_RUNTIME_ROOT" "$(dirname "$RHO_SIDECAR")" "$RHO_LICENSE_ROOT"
 
 if [[ -z "${RHO_ARK_ARCHIVE:-}" && ! -f "$RHO_ARCHIVE" ]]; then
   RHO_DOWNLOAD_PART="$RHO_ARCHIVE.partial"
@@ -118,56 +108,10 @@ cp "$RHO_ARK_BINARY" "$RHO_SIDECAR.partial"
 chmod 755 "$RHO_SIDECAR.partial"
 mv "$RHO_SIDECAR.partial" "$RHO_SIDECAR"
 
-# Kernelspec with controlled startup: resolve R home/bin/libraries through the
-# requested Rscript and bind an empty user .Renviron so no user/site/project
-# startup file can change the session, matching the Windows/Mac policy.
-RHO_RSCRIPT_COMMAND="${RHO_RSCRIPT:-Rscript}"
-if ! command -v "$RHO_RSCRIPT_COMMAND" >/dev/null 2>&1; then
-  echo "Rscript was not found. Set RHO_RSCRIPT or install R, then retry." >&2
-  exit 1
-fi
-RHO_R_HOME="$("$RHO_RSCRIPT_COMMAND" -e 'cat(normalizePath(R.home(), winslash = "/", mustWork = TRUE))')"
-RHO_R_BIN="$("$RHO_RSCRIPT_COMMAND" -e 'cat(normalizePath(R.home("bin"), winslash = "/", mustWork = TRUE))')"
-RHO_R_LIBS="$("$RHO_RSCRIPT_COMMAND" -e 'cat(paste(normalizePath(.libPaths(), winslash = "/", mustWork = TRUE), collapse = .Platform$path.sep))')"
-if [[ -z "$RHO_R_HOME" || -z "$RHO_R_BIN" || -z "$RHO_R_LIBS" ]]; then
-  echo "Unable to resolve R_HOME, the R bin directory and R libraries through $RHO_RSCRIPT_COMMAND" >&2
-  exit 1
-fi
-
-: > "$RHO_EMPTY_RENVIRON.partial"
-mv "$RHO_EMPTY_RENVIRON.partial" "$RHO_EMPTY_RENVIRON"
-node -e '
-  const fs = require("node:fs");
-  const [kernelSpecPath, ark, log, emptyRenviron, version, rHome, rBin, rLibs, pathValue] = process.argv.slice(1);
-  const spec = {
-    argv: [
-      ark,
-      "--connection_file",
-      "{connection_file}",
-      "--session-mode",
-      "console",
-      "--log",
-      log,
-      "--",
-      "--interactive",
-      "--no-environ",
-      "--no-init-file",
-      "--no-site-file"
-    ],
-    display_name: `Ark R ${version} (Rho)`,
-    language: "R",
-    interrupt_mode: "message",
-    kernel_protocol_version: "5.4",
-    env: {
-      R_HOME: rHome,
-      R_LIBS: rLibs,
-      R_ENVIRON_USER: emptyRenviron,
-      PATH: `${rBin}:${pathValue}`
-    }
-  };
-  fs.writeFileSync(kernelSpecPath, JSON.stringify(spec, null, 2) + "\n");
-' "$RHO_KERNEL_SPEC" "$RHO_SIDECAR" "$RHO_ARK_LOG" "$RHO_EMPTY_RENVIRON" \
-  "$RHO_ARK_VERSION" "$RHO_R_HOME" "$RHO_R_BIN" "$RHO_R_LIBS" "$PATH"
+for RHO_NOTICE_FILE in LICENSE NOTICE; do
+  cp "$RHO_INSTALL_ROOT/$RHO_NOTICE_FILE" "$RHO_LICENSE_ROOT/$RHO_NOTICE_FILE.partial"
+  mv "$RHO_LICENSE_ROOT/$RHO_NOTICE_FILE.partial" "$RHO_LICENSE_ROOT/$RHO_NOTICE_FILE"
+done
 
 "$RHO_SIDECAR" --version >/dev/null
 printf '%s\n' "$RHO_SIDECAR"

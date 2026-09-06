@@ -21,11 +21,29 @@ Sources:
 - `runtime/**`
 - `scripts/bootstrap-ark-*.ps1`
 - `scripts/bootstrap-ark-*.sh`
+- `scripts/test-bootstrap-ark-*.sh`
 
 Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `next.architecture`: `["node","next/scripts/check-architecture.mjs"]`
+
+## `development-tools`
+
+Documentation:
+
+- None.
+
+Sources:
+
+- `scripts/dev-lanes.mjs`
+- `scripts/path-ownership.mjs`
+- `scripts/test-dev-lanes.mjs`
+
+Checks:
+
+- `docs.index`: `["node","scripts/governance.mjs","check"]`
+- `docs.tool`: `["node","scripts/test-governance.mjs"]`
 
 ## `documentation`
 
@@ -47,26 +65,6 @@ Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
-
-## `legacy-pending-retirement`
-
-Documentation:
-
-- None.
-
-Sources:
-
-- `crates/**`
-- `desktop/**`
-- `fuzz/**`
-- `programs/**`
-- `r/**`
-- `scripts/**`
-- `test/**`
-
-Checks:
-
-- None.
 
 ## `next-system`
 

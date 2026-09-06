@@ -24,12 +24,12 @@
       "sources": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "next/**", "vendor/jet/**", "docs/NEXT-SYSTEM.md"],
       "checks": ["docs.index", "docs.tool", "next.architecture", "next.rust", "next.client", "next.real-r", "next.environment", "next.process-recovery", "next.remote-protocol", "next.mcp", "next.mcp-real-r", "next.workbench", "next.workbench-real-r"]
     },
-    "legacy-pending-retirement": {
-      "sources": ["crates/**", "desktop/**", "r/**", "programs/**", "test/**", "fuzz/**", "scripts/**"],
-      "checks": []
+    "development-tools": {
+      "sources": ["scripts/dev-lanes.mjs", "scripts/test-dev-lanes.mjs", "scripts/path-ownership.mjs"],
+      "checks": ["docs.index", "docs.tool"]
     },
     "delivery": {
-      "sources": [".github/**", "runtime/**", "LICENSE", "LICENSES.md", "PRIVACY.md", "SECURITY.md", "CODE_SIGNING_POLICY.md", "scripts/bootstrap-ark-*.sh", "scripts/bootstrap-ark-*.ps1"],
+      "sources": [".github/**", "runtime/**", "LICENSE", "LICENSES.md", "PRIVACY.md", "SECURITY.md", "CODE_SIGNING_POLICY.md", "scripts/bootstrap-ark-*.sh", "scripts/bootstrap-ark-*.ps1", "scripts/test-bootstrap-ark-*.sh"],
       "checks": ["docs.index", "next.architecture"]
     }
   }

@@ -3,9 +3,9 @@ name: Rho
 on:
   push:
     branches: [main]
-    paths: ["next/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/governance.mjs", "scripts/test-governance.mjs", ".github/workflows/rho.yml"]
+    paths: ["next/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/**", "runtime/ark.json", ".github/workflows/rho.yml"]
   pull_request:
-    paths: ["next/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/governance.mjs", "scripts/test-governance.mjs", ".github/workflows/rho.yml"]
+    paths: ["next/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/**", "runtime/ark.json", ".github/workflows/rho.yml"]
   workflow_dispatch:
 
 permissions:
@@ -86,5 +86,11 @@ jobs:
         run: |
           node next/scripts/test-mcp.mjs
           node next/scripts/test-workbench.mjs
+      - name: Verify standalone Ark acquisition fixtures (macOS)
+        if: runner.os == 'macOS'
+        run: bash scripts/test-bootstrap-ark-macos.sh
+      - name: Verify standalone Ark acquisition fixtures (Linux)
+        if: runner.os == 'Linux'
+        run: bash scripts/test-bootstrap-ark-linux.sh
       # Real Ark/R and remote-cluster acceptance have separate explicit prerequisites.
       # Ignored Rust tests above are not evidence of those runtime checks passing.

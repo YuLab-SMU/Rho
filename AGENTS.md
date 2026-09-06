@@ -15,8 +15,8 @@ starts with fresh application state; focus on capabilities, entrypoints and
 removing replaced code, not preserving old runtime or application data.
 
 The root Cargo workspace now builds the new system only, with `rho` as its
-default binary. Source remains under `next/` during cleanup. Old `crates/`,
-`desktop/` and `r/` code is excluded and pending retirement; do not restore it as
+default binary. Source remains under `next/` during directory cleanup. Old
+`crates/`, `desktop/` and `r/` code has been removed; do not restore it as
 a production dependency or run retired desktop/release gates for new changes.
 
 ## Architecture Philosophy

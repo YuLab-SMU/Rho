@@ -21,11 +21,11 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/u;
 // lane that explicitly --owns one of these paths is exempt, and the overlap
 // check then prevents any second lane from owning it.
 const SHARED_AUTHORITY_PATHS = [
+  "Cargo.toml",
   "Cargo.lock",
-  "desktop/package-lock.json",
-  "desktop/src-tauri/tauri.conf.json",
-  "desktop/src-tauri/src/main.rs",
-  "desktop/ui/src/app/App.tsx",
+  "next/ui/package-lock.json",
+  "next/host/src/lib.rs",
+  "next/contract/src/lib.rs",
 ];
 
 class LaneError extends Error {}

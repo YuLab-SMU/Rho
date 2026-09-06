@@ -19,8 +19,7 @@ members = [
   "next/workbench",
 ]
 default-members = ["next/cli"]
-# Legacy sources are pending retirement, never part of the production graph.
-exclude = ["vendor/jet", "crates/*", "desktop/src-tauri"]
+exclude = ["vendor/jet"]
 
 [workspace.package]
 version = "0.1.0"

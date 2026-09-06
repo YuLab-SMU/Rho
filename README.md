@@ -6,8 +6,8 @@ and external Agents through the same Host. The Agent owns conversation and
 planning; Rho executes requested capabilities and reports what actually happened.
 
 The repository now builds the new system by default. Source currently lives in
-`next/`; the remaining old `crates/`, `desktop/` and `r/` implementations are
-excluded from the production workspace and are being retired. There are no real
+`next/`; the old `crates/`, `desktop/` and `r/` implementations and their dedicated
+tests have been removed from version-controlled source. There are no real
 legacy users and no legacy-data migration or compatibility work.
 
 ## Run

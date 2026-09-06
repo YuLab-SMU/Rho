@@ -16,8 +16,7 @@ build artifacts only; it does not sign, install, create a Release, update a site
 or publish a package. A workflow definition is not evidence that remote CI passed.
 
 The old Tauri candidate, NSIS/AppImage, updater and publication workflows have
-been removed from the active pipeline. Remaining old packaging scripts are
-pending retirement and are not a supported way to build the new system. Installer
+been removed, along with their old packaging scripts. Installer
 or signing work needs an explicit task and real platform verification; do not
 reuse old package metadata or claim an old installer contains the new Host.
 
