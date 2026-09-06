@@ -57,8 +57,9 @@ Native R and processes run with the local user's OS access. They are not an OS
 sandbox. Operations preserve partial/uncertain outcomes and support explicit
 reconciliation; a cancellation request is not proof that work stopped.
 
-Local Rust, HTTP/MCP and real Ark/R acceptance are available. Browser visual
-acceptance and real SSH/Slurm acceptance remain separate requirements. The old
+Local Rust, HTTP/MCP, real Ark/R, browser interaction and the selected YuLab
+CPU/Slurm scenario have been verified; the ledger records the exact scope.
+This is not an all-platform or all-cluster certification. The old
 Tauri installer, updater and release workflows are retired; the current manual
 build workflow produces a CLI/workbench binary only. No automatic publishing or
 installation occurs. See [Build and release](docs/RELEASE.md).

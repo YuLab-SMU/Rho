@@ -1399,6 +1399,15 @@ Work Log 记录里程碑和切换，不复制每个 commit。每条记录引用 
 - 保留工具：`bash scripts/test-bootstrap-ark-macos.sh`、`node scripts/test-dev-lanes.mjs` 通过；`target/debug/rho --help` 确认默认 CLI、MCP、workbench 和 Operation 入口。Ark 获取测试使用本机 fixture，不冒充其他平台或实际下载验收。
 - 交付边界：没有旧数据迁移、安装器发布、全平台认证或新插件系统实施。测试用临时连接转接不进入生产 provider 列表；配置与凭据仍由原有工具管理。
 
+### 2026-09-06 — 仓库历史运行资产清理
+
+- 用户要求清理仓库历史资产，并明确停止相关旧进程。按启动路径和参数确认后，停止两组旧 Vite 服务及其 npm 父进程、29 个旧应用/旧验收 Ark 孤儿实例，共 33 个进程；未关闭独立 worktree。
+- 移出：旧 next/、desktop/、test/、旧 crate/R 包空目录、旧构建与发布目录，以及按已退役 crate 名识别的编译缓存。共整理 504,603 个条目，约 238.8 GiB，合并移至废纸篓中的 rho-history-cleanup.2qgowQ，可手动恢复原相对目录结构；这不是旧数据迁移到新系统。
+- 保留：当前源码、研究文档、Git 历史、Rho-kernel-v2 worktree、现用 rho/ark 可执行文件、Ark notices、ui/node_modules 和当前/共享编译缓存。target/ 由约 270 GiB 降到约 48 GiB；废纸篓未清空，不能把仓库体积下降说成同等磁盘空间已释放。
+- 仓库说明：删除仅指向旧 desktop 产物的 .gitattributes，清理旧忽略规则，改正隐私和签名说明中关于旧模型设置、审批存储及自动更新的失效描述。许可证文本不变。
+- Git 元数据：仅清除了指向不存在目录的 rho-stable-head worktree 记录，没有改写提交历史或删除分支。旧进程的内存状态无法通过恢复文件恢复；仓库外的全局应用数据、R 库和 SSH 配置未清理。
+- 验证：上述 33 个 PID 均已退出；旧根目录不存在，现用二进制、Ark notices 与客户端依赖仍在。architecture、governance/tool、UI typecheck、rho --help、ark --version 和 diff 检查通过；没有重跑会生成大量缓存的完整构建。
+
 ## 26. 每次工作结束时如何更新
 
 本文档是协作入口，不是新的审批流程。不要求日更、打分或逐次填写表单；普通实现过程保留在 Git，只有下面的实质变化进入台账。

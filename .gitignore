@@ -1,9 +1,6 @@
 target/
 /work/
-/node_modules/
-/desktop/node_modules/
-/desktop/ui/node_modules/
-/desktop/dist/
+node_modules/
 /.rho/
 /.Rproj.user/
 .Rhistory
@@ -11,13 +8,5 @@ target/
 .DS_Store
 *.log
 *.tsbuildinfo
-/desktop/resources/runtime/ark.exe
-/desktop/resources/runtime/ark
-/desktop/resources/runtime/LICENSE
-/desktop/resources/runtime/NOTICE
-/desktop/src-tauri/gen/
-/desktop/src-tauri/binaries/ark-*
 .worktrees/
-/test/generated-manual-fixtures/
-test/environment-demo/renv
 .reasonix

@@ -54,6 +54,7 @@ Documentation:
 
 Sources:
 
+- `.git*`
 - `AGENTS.md`
 - `CONTRIBUTING.md`
 - `README.md`

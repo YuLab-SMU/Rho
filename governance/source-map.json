@@ -17,7 +17,7 @@
   },
   "areas": {
     "documentation": {
-      "sources": ["AGENTS.md", "README.md", "CONTRIBUTING.md", "docs/**", "governance/**", "scripts/governance.mjs", "scripts/test-governance.mjs"],
+      "sources": [".git*", "AGENTS.md", "README.md", "CONTRIBUTING.md", "docs/**", "governance/**", "scripts/governance.mjs", "scripts/test-governance.mjs"],
       "checks": ["docs.index", "docs.tool"]
     },
     "system": {
