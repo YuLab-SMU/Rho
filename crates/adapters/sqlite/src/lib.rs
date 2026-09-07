@@ -192,6 +192,63 @@ impl SqliteOperationJournal {
 
 #[async_trait]
 impl OperationJournal for SqliteOperationJournal {
+    async fn list_recent(
+        &self,
+        scope: &str,
+        caller: &CallerIdentity,
+        args: &rho_contract::RecentOperationsArguments,
+    ) -> Result<rho_contract::RecentOperations, OperationError> {
+        if !(1..=100).contains(&args.limit)
+            || args.before_cursor.is_some_and(|c| c > i64::MAX as u64)
+        {
+            return Err(OperationError::InvalidInput(
+                "invalid operation page bounds".into(),
+            ));
+        }
+        let connection = self.connection()?;
+        let mut statement=connection.prepare("SELECT rowid,operation_id,client_request_id,capability_id,capability_version,status,
+            json_extract(operation_json,'$.accepted_at_ms'),updated_at_ms,substr(error,1,2048)
+            FROM operations WHERE json_extract(operation_json,'$.idempotency_scope')=?1
+            AND COALESCE(json_extract(operation_json,'$.principal.kind'),caller_kind)=?2
+            AND COALESCE(json_extract(operation_json,'$.principal.id'),caller_id)=?3
+            AND rowid < ?4 AND (?5 IS NULL OR client_request_id=?5) ORDER BY rowid DESC LIMIT ?6").map_err(storage)?;
+        let mut rows = statement
+            .query(params![
+                scope,
+                caller_kind(caller.kind),
+                caller.id,
+                args.before_cursor.unwrap_or(i64::MAX as u64) as i64,
+                args.client_request_id,
+                args.limit + 1
+            ])
+            .map_err(storage)?;
+        let mut operations = Vec::new();
+        while let Some(row) = rows.next().map_err(storage)? {
+            let status: String = row.get(5).map_err(storage)?;
+            let id: String = row.get(1).map_err(storage)?;
+            operations.push(rho_contract::OperationSummary {
+                cursor: row.get(0).map_err(storage)?,
+                operation_id: OperationId::new(id)?,
+                client_request_id: row.get(2).map_err(storage)?,
+                capability: rho_contract::CapabilityRef::new(
+                    row.get::<_, String>(3).map_err(storage)?,
+                    row.get(4).map_err(storage)?,
+                )?,
+                status: serde_json::from_value(json!(status)).map_err(storage)?,
+                accepted_at_ms: row.get(6).map_err(storage)?,
+                updated_at_ms: row.get(7).map_err(storage)?,
+                error: row.get(8).map_err(storage)?,
+            });
+        }
+        let next_cursor = (operations.len() > args.limit as usize)
+            .then(|| operations[args.limit as usize - 1].cursor);
+        operations.truncate(args.limit as usize);
+        Ok(rho_contract::RecentOperations {
+            operations,
+            next_cursor,
+        })
+    }
+
     async fn admit(&self, operation: &Operation) -> Result<Admission, OperationError> {
         let mut connection = self.connection()?;
         let transaction =

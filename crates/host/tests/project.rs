@@ -519,3 +519,83 @@ async fn partial_file_effect_with_lost_ack_is_persisted_as_uncertain() {
         record
     );
 }
+
+#[tokio::test]
+async fn recent_summaries_are_project_and_principal_scoped_and_paginated() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("project");
+    repository(&root);
+    let db = directory.path().join("state/next.sqlite");
+    let host = NextHost::open_project(&db, &root).await.unwrap();
+    let context = NextHost::local_context();
+    for index in 0..3 {
+        host.invoke(
+            &context,
+            invoke(
+                &format!("summary-{index}"),
+                patch("analysis.R", "x <- 1", "x <- 2"),
+                vec![],
+            ),
+        )
+        .await
+        .unwrap();
+    }
+    let query = |args| QueryRequest {
+        capability: CapabilityRef::new("operation.list_recent", 1).unwrap(),
+        arguments: args,
+    };
+    let first = host
+        .query_snapshot(&context, query(json!({"limit":2})))
+        .await
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(first["operations"].as_array().unwrap().len(), 2);
+    assert!(first["operations"][0].get("output").is_none());
+    assert!(first["operations"][0].get("normalized_arguments").is_none());
+    let second = host
+        .query_snapshot(
+            &context,
+            query(json!({"limit":2,"before_cursor":first["next_cursor"]})),
+        )
+        .await
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(second["operations"].as_array().unwrap().len(), 1);
+    let mut stranger = context.clone();
+    stranger.caller.id = "another-user".into();
+    assert_eq!(
+        host.query_snapshot(&stranger, query(json!({})))
+            .await
+            .unwrap()
+            .data
+            .unwrap()["operations"],
+        json!([])
+    );
+    let found = host
+        .query_snapshot(&context, query(json!({"client_request_id":"summary-1"})))
+        .await
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(found["operations"].as_array().unwrap().len(), 1);
+    assert!(
+        host.query_snapshot(&context, query(json!({"limit":101})))
+            .await
+            .is_err()
+    );
+    host.drain().await;
+    drop(host);
+    let other = directory.path().join("other");
+    std::fs::create_dir(&other).unwrap();
+    let host = NextHost::open_project(&db, other).await.unwrap();
+    assert_eq!(
+        host.query_snapshot(&context, query(json!({})))
+            .await
+            .unwrap()
+            .data
+            .unwrap()["operations"],
+        json!([])
+    );
+}

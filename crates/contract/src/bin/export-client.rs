@@ -21,5 +21,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     WriteApplicationState::export_all(&config)?;
     RConfiguration::export_all(&config)?;
     ApplyRConfiguration::export_all(&config)?;
+    RunROutput::export_all(&config)?;
+    BindingSummary::export_all(&config)?;
+    WorkspaceSnapshotData::export_all(&config)?;
+    FilePage::export_all(&config)?;
+    ProjectPatchResult::export_all(&config)?;
+    RecentOperations::export_all(&config)?;
+    RecentOperationsArguments::export_all(&config)?;
+    OutputEvents::export_all(&config)?;
+    OutputEventsArguments::export_all(&config)?;
+    ReadOutputArguments::export_all(&config)?;
+    OutputPage::export_all(&config)?;
+    RuntimeStatus::export_all(&config)?;
     Ok(())
 }

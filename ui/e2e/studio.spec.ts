@@ -30,11 +30,36 @@ test('real R Console, settings and docking shell',async({page})=>{
   await page.getByRole('textbox',{name:'R Console 输入'}).fill('cat("Studio R ready\\n")');
   await page.getByRole('button',{name:'执行',exact:true}).click();
   await expect(page.getByText('Studio R ready',{exact:true})).toBeVisible();
-  await expect(page.getByText('succeeded',{exact:true})).toBeVisible();
+  await expect(page.locator('.run[data-status=succeeded]')).toBeVisible();
   await page.getByRole('button',{name:'设置',exact:true}).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByText('jsonlite 可用 · rlang 可用 · Ark 可用')).toBeVisible();
   await page.getByRole('button',{name:'关闭',exact:true}).click();
   await page.screenshot({path:'../target/studio-browser/m1-shell.png'});
+  expect(errors).toEqual([]);
+});
+
+
+test('incremental output precedes completion and plots keep their identity',async({page})=>{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(url);
+  const input=page.getByRole('textbox',{name:'R Console 输入'});
+  await input.fill('cat("first-live\\n"); Sys.sleep(3); cat("second-live\\n"); plot(1:4)');
+  await page.getByRole('button',{name:'执行',exact:true}).click();
+  await expect(page.locator('.stream-output').getByText('first-live',{exact:true})).toBeVisible({timeout:2500});
+  await expect(page.locator('.run[data-status=running]')).toBeVisible();
+  await expect(page.locator('.stream-output').getByText('second-live',{exact:true})).toBeVisible();
+  await expect(page.locator('.media-card img').last()).toBeVisible();
+  await page.locator('.media-card').last().click();
+  await expect(page.locator('.plot-image img')).toBeVisible();
+  const original=await page.locator('.plot-image img').getAttribute('src');
+  await input.fill('plot(4:1); cat("before failure\\n"); stop("expected studio failure")');
+  await page.getByRole('button',{name:'执行',exact:true}).click();
+  await expect(page.locator('.run[data-status=failed]')).toBeVisible();
+  await expect(page.locator('.stream-output').getByText('before failure',{exact:true})).toBeVisible();
+  await expect(page.locator('.media-card')).toHaveCount(2);
+  await expect(page.locator('.plot-image img')).toHaveAttribute('src',original!);
+  await page.getByRole('button',{name:'下一张图'}).click();
+  await expect(page.locator('.plot-image img')).not.toHaveAttribute('src',original!);
   expect(errors).toEqual([]);
 });

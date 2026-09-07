@@ -4,6 +4,12 @@ import type { RConfiguration } from './generated/RConfiguration';
 import type { ApplicationState } from './generated/ApplicationState';
 import type { OperationRecord } from './generated/OperationRecord';
 import type { Invocation } from './generated/Invocation';
+import type { RuntimeStatus } from './generated/RuntimeStatus';
+import type { RecentOperations } from './generated/RecentOperations';
+import type { OutputEvent } from './generated/OutputEvent';
+import type { OutputEvents } from './generated/OutputEvents';
+import type { MediaReference } from './generated/MediaReference';
+import type { OutputPage } from './generated/OutputPage';
 import type { Precondition } from './generated/Precondition';
 
 export interface PendingRequest { invocation: Invocation; operationId?: string; error?: string }
@@ -19,6 +25,19 @@ export class Studio {
   records = new Map<string, OperationRecord>();
   pending: PendingRequest[] = [];
   recent: string[] = [];
+  runtime: RuntimeStatus | null = null;
+  outputEvents = new Map<string,OutputEvent[]>();
+  outputNotices = new Map<string,string>();
+  outputCursors = new Map<string,number>();
+  private outputDone = new Set<string>();
+  mediaUrls = new Map<string,string>();
+  mediaErrors = new Map<string,string>();
+  private mediaLoads = new Map<string,Promise<void>>();
+  selectedPlot: string | null = null;
+  plotZoom: number | null = null;
+  recentCursor: number | null = null;
+  showPanel?: (component:string,id?:string,name?:string,config?:unknown)=>void;
+  private observedAt = 0;
   layout: unknown = null;
   state: ApplicationState = {key:'studio',version:null,value:null};
   syncError = '';
@@ -37,13 +56,14 @@ export class Studio {
   emit() { this.revision++; for (const listener of this.listeners) listener(); }
   get project() { return this.info?.project_root ?? null; }
   get busy() { return this.pending.some(p=>!p.error) || [...this.records.values()].some(r=>!terminal(r.status)); }
-  get canRun() { return !!this.project && this.connected && !this.busy && !!this.info?.capabilities.some(c=>c.capability.id==='workspace.run_r'); }
+  get canRun() { return !!this.project && this.connected && !this.busy && !this.pending.length && this.runtime?.state === 'idle' && !!this.info?.capabilities.some(c=>c.capability.id==='workspace.run_r'); }
   async start() {
     try {
       [this.info, this.r] = await Promise.all([this.client.info(),this.client.rConfiguration()]);
       const recent = await this.client.readState(null,'recent');
       if (Array.isArray(recent.value)) this.recent = recent.value.filter((v): v is string=>typeof v === 'string');
       await this.restore();
+      await this.observe();
       this.connected = true;
     } catch(error) { this.error = message(error); }
     this.emit();
@@ -54,8 +74,9 @@ export class Studio {
     await this.flush();
     if (this.unsynced) throw new Error(this.syncError || '草稿尚未同步，项目未切换');
     this.info = await this.client.selectProject(path);
-    this.generation++; this.cursor=0; this.records.clear(); this.pending=[]; this.layout=null;
+    this.generation++; this.cursor=0; this.records.clear(); this.pending=[]; this.layout=null; this.clearOutputs(); this.observedAt=0;
     await this.restore();
+    await this.observe();
     const recent = await this.client.readState(null,'recent');
     this.recent = [this.project!, ...(Array.isArray(recent.value) ? recent.value.filter((v): v is string=>typeof v==='string' && v!==this.project):[])].slice(0,12);
     await this.client.writeState(null,{...recent,value:this.recent});
@@ -65,17 +86,20 @@ export class Studio {
   async restore() {
     if (!this.project) return;
     this.state = await this.client.readState(this.project,'studio');
-    const data = this.state.value as {layout?:unknown;pending?:PendingRequest[];consoleInput?:string} | null;
+    const data = this.state.value as {layout?:unknown;pending?:PendingRequest[];consoleInput?:string;selectedPlot?:string;cursor?:number} | null;
     this.layout = data?.layout ?? null;
     this.pending = Array.isArray(data?.pending) ? data.pending : [];
     this.consoleInput = typeof data?.consoleInput === 'string' ? data.consoleInput : '';
+    this.selectedPlot=typeof data?.selectedPlot==='string'?data.selectedPlot:null;
+    this.cursor=Number.isSafeInteger(data?.cursor) ? data!.cursor! : 0;
+    for(const pending of this.pending) pending.error='请求尚未确认；刷新不会重新执行。';
     this.unsynced=false; this.syncError='';
   }
   persist() {
     this.unsynced=true; clearTimeout(this.saveTimer);
     this.saveTimer=setTimeout(()=>{void this.flush();},400);
   }
-  serialize(): unknown { return {layout:this.layout,pending:this.pending,consoleInput:this.consoleInput}; }
+  serialize(): unknown { return {layout:this.layout,pending:this.pending,consoleInput:this.consoleInput,selectedPlot:this.selectedPlot,cursor:this.cursor}; }
   async flush(): Promise<void> {
     clearTimeout(this.saveTimer);
     if (this.saving) { await this.saving; if(this.unsynced && !this.syncError) await this.flush(); return; }
@@ -115,27 +139,104 @@ export class Studio {
     if(!this.project) return;
     for(const record of this.records.values()) if(!terminal(record.status)) await this.client.cancel(this.project,record.operation.operation_id);
   }
+  clearOutputs() {
+    for(const url of this.mediaUrls.values()) URL.revokeObjectURL(url);
+    this.outputEvents.clear();this.outputNotices.clear();this.outputCursors.clear();this.outputDone.clear();this.mediaUrls.clear();this.mediaErrors.clear();this.mediaLoads.clear();this.runtime=null;
+  }
+  mediaKey(reference:MediaReference) {return `${reference.operation_id}:${reference.sequence}:${reference.sha256}`;}
+  get media():MediaReference[] {return [...this.outputEvents.values()].flatMap(events=>events.flatMap(e=>e.media?[e.media]:[]));}
+  selectPlot(reference:MediaReference) {this.selectedPlot=this.mediaKey(reference);this.plotZoom=null;this.persist();this.emit();}
+  locatePlot(reference:MediaReference) {this.selectPlot(reference);this.showPanel?.('plots');}
+  async loadMedia(reference:MediaReference):Promise<void> {
+    const key=this.mediaKey(reference), project=this.project;
+    if(!project || this.mediaUrls.has(key) || this.mediaErrors.has(key))return;
+    if(this.mediaLoads.has(key))return this.mediaLoads.get(key)!;
+    const promise=(async()=>{
+      try {
+        if(!['image/png','image/jpeg','image/svg+xml'].includes(reference.mime_type) || reference.byte_size>16*1024*1024)throw new Error('不支持或过大的媒体输出');
+        const bytes=new Uint8Array(reference.byte_size);let offset=0;
+        do {
+          const snapshot=await this.client.query(project,'workspace.read_output',{reference,offset,limit_bytes:65536});
+          if(snapshot.status!=='ready')throw new Error(snapshot.notices.join('\n'));
+          const page=snapshot.data as OutputPage;
+          if(page.offset!==offset || JSON.stringify(page.reference)!==JSON.stringify(reference) || page.bytes.length>65536 || offset+page.bytes.length>bytes.length || (!page.bytes.length && page.has_more))throw new Error('媒体分段响应不一致');
+          bytes.set(page.bytes,offset);offset+=page.bytes.length;
+          if(!page.has_more)break;
+        } while(offset<bytes.length);
+        const digest='sha256:'+Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(b=>b.toString(16).padStart(2,'0')).join('');
+        if(offset!==bytes.length || digest!==reference.sha256)throw new Error('原始输出摘要不匹配');
+        if(this.project===project)this.mediaUrls.set(key,URL.createObjectURL(new Blob([bytes],{type:reference.mime_type})));
+      }catch(error){if(this.project===project)this.mediaErrors.set(key,message(error));}
+      finally{this.mediaLoads.delete(key);this.emit();}
+    })();
+    this.mediaLoads.set(key,promise);return promise;
+  }
+  async loadRecent(older=false) {
+    const project=this.project;if(!project)return;
+    const page=await this.client.query(project,'operation.list_recent',{before_cursor:older?this.recentCursor:null,client_request_id:null,limit:30});
+    if(page.status!=='ready')return;
+    const data=page.data as RecentOperations;
+    if(older || this.recentCursor===null)this.recentCursor=data.next_cursor;
+    for(const summary of [...data.operations].reverse()) {
+      if(!summary.capability.id.startsWith('workspace.'))continue;
+      const existing=this.records.get(summary.operation_id);
+      if(existing && existing.updated_at_ms===summary.updated_at_ms && existing.status===summary.status)continue;
+      await this.acceptRecord(project,summary.operation_id);
+    }
+  }
+  private async acceptRecord(project:string,id:string) {
+    const record=await this.client.getOperation(project,id);
+    if(project!==this.project || !record || record.operation.idempotency_scope!==project)return;
+    this.records.set(id,record);
+    const pending=this.pending.find(p=>p.invocation.client_request_id===record.operation.client_request_id);
+    if(pending) {pending.operationId=id;pending.error=undefined;if(terminal(record.status)){this.pending=this.pending.filter(p=>p!==pending);this.persist();}}
+    this.emit();
+  }
+  async observe() {
+    const project=this.project;if(!project)return;
+    await this.loadRecent();
+    if(this.info?.capabilities.some(c=>c.capability.id==='workspace.runtime_status')) {
+      const status=await this.client.query(project,'workspace.runtime_status');
+      if(project===this.project && status.status==='ready')this.runtime=status.data as RuntimeStatus;
+    }
+    for(const pending of [...this.pending]) {
+      if(pending.operationId){await this.acceptRecord(project,pending.operationId);continue;}
+      const page=await this.client.query(project,'operation.list_recent',{client_request_id:pending.invocation.client_request_id,limit:1});
+      const summary=(page.data as RecentOperations | null)?.operations[0];
+      if(summary)await this.acceptRecord(project,summary.operation_id);
+    }
+    this.observedAt=Date.now();this.emit();
+  }
   private schedule() { if(!this.stopped) this.timer=setTimeout(()=>{void this.poll();},250); }
   private async poll() {
-    const project=this.project, generation=this.generation;
+    const project=this.project,generation=this.generation;
     try {
       if(project) {
+        if(Date.now()-this.observedAt>2000 || this.pending.some(p=>!p.operationId && !p.error))await this.observe();
         const events=await this.client.subscribe(project,this.cursor);
-        if(generation!==this.generation) return;
-        const ids=[...new Set(events.map(e=>e.operation_id))];
-        for(const id of ids) {
-          const record=await this.client.getOperation(project,id);
-          if(generation!==this.generation) return;
-          if(record && (record.operation.idempotency_scope===project || record.operation.target.identity===project)) {
-            this.records.set(id,record);
-            const pending=this.pending.find(p=>p.invocation.client_request_id===record.operation.client_request_id);
-            if(pending) { pending.operationId=id; if(terminal(record.status)) { this.pending=this.pending.filter(p=>p!==pending); this.persist(); } }
+        if(generation!==this.generation)return;
+        for(const id of new Set(events.map(e=>e.operation_id)))if(this.records.has(id))await this.acceptRecord(project,id);
+        if(events.length)this.cursor=events.at(-1)!.sequence;
+        for(const [id,record] of this.records) {
+          if(this.outputDone.has(id) || !record.operation.capability.id.startsWith('workspace.'))continue;
+          const snapshot=await this.client.query(project,'workspace.output_events',{operation_id:id,after_sequence:this.outputCursors.get(id)??0,limit:100});
+          if(project!==this.project)return;
+          if(snapshot.status!=='ready') {
+            if(terminal(record.status)){this.outputNotices.set(id,snapshot.notices.join('\n'));this.outputDone.add(id);this.emit();}continue;
           }
+          const page=snapshot.data as OutputEvents;
+          if(page.operation_id!==id || !Number.isSafeInteger(page.next_sequence))throw new Error('输出关联不一致');
+          this.outputCursors.set(id,page.next_sequence);
+          if(page.events.length){this.outputEvents.set(id,[...(this.outputEvents.get(id)??[]),...page.events]);
+            if(!this.selectedPlot){const media=page.events.find(e=>e.media)?.media;if(media)this.selectedPlot=this.mediaKey(media);}
+            this.emit();
+          }
+          if(page.truncated || page.gap)this.outputNotices.set(id,[...page.notices,page.truncated?'输出已达到观察上限，后续内容省略。':''].filter(Boolean).join('\n'));
+          if(terminal(record.status) && !page.has_more)this.outputDone.add(id);
         }
-        if(events.length) { this.cursor=events.at(-1)!.sequence; this.emit(); }
       }
-      if(!this.connected) {this.connected=true;this.emit();}
-    } catch(error) { if(this.connected) { this.connected=false;this.error=message(error);this.emit(); } }
-    finally { this.schedule(); }
+      if(!this.connected){this.connected=true;this.emit();}
+    }catch(error){if(this.connected){this.connected=false;this.error=message(error);this.emit();}}
+    finally{this.schedule();}
   }
 }

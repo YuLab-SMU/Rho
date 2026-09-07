@@ -6,6 +6,10 @@ mod host;
 pub use host::*;
 mod workbench;
 pub use workbench::*;
+mod scientific;
+pub use scientific::*;
+mod observations;
+pub use observations::*;
 mod studio;
 pub use studio::*;
 

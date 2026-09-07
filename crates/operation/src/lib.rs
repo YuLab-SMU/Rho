@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod recent;
+pub use recent::RecentOperationsHandler;
 mod query;
 pub use query::{QueryGateway, QueryHandler};
 
@@ -244,6 +246,16 @@ pub trait OperationHandler: Send + Sync {
 
 #[async_trait]
 pub trait OperationJournal: Send + Sync {
+    async fn list_recent(
+        &self,
+        _scope: &str,
+        _caller: &rho_contract::CallerIdentity,
+        _args: &rho_contract::RecentOperationsArguments,
+    ) -> Result<rho_contract::RecentOperations, OperationError> {
+        Err(OperationError::InvalidInput(
+            "operation summaries are unavailable".into(),
+        ))
+    }
     async fn admit(&self, operation: &Operation) -> Result<Admission, OperationError>;
 
     async fn mark_running(

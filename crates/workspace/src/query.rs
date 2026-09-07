@@ -1,5 +1,6 @@
 use super::WorkspaceRunHandler;
 use async_trait::async_trait;
+pub use rho_contract::{BindingSummary, WorkspaceSnapshotData};
 use rho_contract::{
     CancellationClass, CapabilityDescriptor, CapabilityKind, CapabilityRef, IdempotencyClass,
     ObservationCompleteness, QuerySnapshot, QueryStatus, RetryClass, TargetRef,
@@ -56,33 +57,6 @@ impl WorkspaceQuery {
             Self::InspectObject(arguments) => arguments.expected_session.as_deref(),
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct BindingSummary {
-    pub name: String,
-    pub kind: String,
-    pub object_type: Option<String>,
-    pub classes: Vec<String>,
-    pub length: Option<u64>,
-    pub dimensions: Vec<u64>,
-    pub preview: Option<Value>,
-    pub truncated: bool,
-    pub notice: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkspaceSnapshotData {
-    pub objects: Vec<BindingSummary>,
-    pub total_bindings: u64,
-    pub truncated: bool,
-    pub working_directory: String,
-    pub r_version: String,
-    pub library_paths: Vec<String>,
-    pub namespace_paths: Vec<String>,
-    pub library_usage_complete: bool,
 }
 
 pub struct WorkspaceObservation {

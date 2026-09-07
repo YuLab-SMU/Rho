@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { Actions } from 'flexlayout-react';
-import { HostClient, message } from './host-client';
-import { Studio } from './studio';
+import { message } from './host-client';
+import { useStudio } from './context';
+import { ConsolePanel, PlotPanel } from './panels/output-panels';
 import { LayoutHost, PanelLayout, defaultLayout, panelNames } from './layout-host';
 import type { RProbe } from './generated/RProbe';
 
-const studio = new Studio(HostClient.fromLocation());
-export function useStudio() { useSyncExternalStore(studio.subscribe,studio.snapshot); return studio; }
 function Modal({title,description,children,onClose}:{title:string;description:string;children:React.ReactNode;onClose:()=>void}) {
   return <Dialog.Root open onOpenChange={open=>{if(!open)onClose();}}><Dialog.Portal><Dialog.Overlay className="overlay"/><Dialog.Content className="dialog">
     <Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description>{children}
@@ -40,22 +39,6 @@ function SettingsDialog({onClose}:{onClose:()=>void}) {
     {error && <p className="error" role="alert">{error}</p>}
   </Modal>;
 }
-function ConsolePanel() {
-  const s=useStudio(),last=useRef<HTMLDivElement>(null);
-  const records=[...s.records.values()].filter(r=>r.operation.capability.id.startsWith('workspace.'));
-  useEffect(()=>{last.current?.scrollIntoView({block:'end'});},[records.length,s.busy]);
-  return <section className="panel console-panel">
-    <div className="console-history">{!records.length && <p className="muted">{s.info?.runtime==='ark'?'本机 R 已就绪。输入代码，按 ⌘ Enter 执行。':'配置本机 R 后开始执行。'}</p>}
-      {records.map(r=>{const out=r.output as {stdout?:string;stderr?:string} | null;const args=r.operation.normalized_arguments as {code?:string};return <div className="run" key={r.operation.operation_id}>
-        <div className="run-meta"><span>{r.status}</span><time>{new Date(r.operation.accepted_at_ms).toLocaleTimeString()}</time></div>
-        <pre className="input-code">{args.code}</pre>{out?.stdout && <pre>{out.stdout}</pre>}{out?.stderr && <pre className="error">{out.stderr}</pre>}{r.error && <pre className="error">{r.error}</pre>}
-      </div>;})}<div ref={last}/>
-    </div>
-    <form className="console-prompt" onSubmit={e=>{e.preventDefault();const code=s.consoleInput;if(s.canRun && code.trim()){s.consoleInput='';s.persist();s.emit();void s.run(code).catch(e=>{s.error=message(e);s.emit();});}}}>
-      <span>&gt;</span><textarea aria-label="R Console 输入" value={s.consoleInput} onChange={e=>{s.consoleInput=e.target.value;s.persist();s.emit();}} onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!e.nativeEvent.isComposing){e.preventDefault();e.currentTarget.form?.requestSubmit();}}}/><button className="primary" disabled={!s.canRun || !s.consoleInput.trim()}>执行</button>
-    </form><div className="panel-footer"><span>{s.busy?'运行中':'当前会话：本机 R'}</span><button disabled={!s.busy} onClick={()=>void s.cancel()}>中断运行</button></div>
-  </section>;
-}
 export function AppShell() {
   const s=useStudio(),[dialog,setDialog]=useState<'project'|'settings'|'commands'|null>(null),layout=useRef<PanelLayout|null>(null);
   const [resetKey,setResetKey]=useState(0);
@@ -68,11 +51,11 @@ export function AppShell() {
       <button className="secondary" onClick={reset}>恢复默认</button><button className="bordered" aria-label="命令入口" onClick={()=>setDialog('commands')}>⌕ <kbd>⌘ K</kbd></button>
     </header>
     <div className="work-area"><nav className="rail" aria-label="主导航"><button className="active" title="Studio" onClick={()=>layout.current?.show('editor')}>▦</button><button title="项目文件" onClick={()=>layout.current?.show('files')}>▤</button><button title="组件" onClick={()=>setDialog('commands')}>⊞</button><div className="spacer"/><button aria-label="设置" onClick={()=>setDialog('settings')}>☷</button></nav>
-      {s.project ? <LayoutHost key={`${s.project}:${resetKey}`} studio={s} onLayout={l=>{layout.current=l;}} registry={node=>node.getComponent()==='console'?<ConsolePanel/>:<section className="panel"><div className="empty"><p>{panelNames[node.getComponent()??'']}</p><p className="muted">{node.getComponent()==='editor'?'打开项目文件或创建 R 脚本。':node.getComponent()==='objects'?'运行代码后查看 Workspace 对象。':node.getComponent()==='plots'?'R 产生的图形将在这里显示。':'项目文件浏览'}</p></div></section>}/>
+      {s.project ? <LayoutHost key={`${s.project}:${resetKey}`} studio={s} onLayout={l=>{layout.current=l;s.showPanel=(component,id,name,config)=>l.show(component,id,name,config);}} registry={node=>node.getComponent()==='console'?<ConsolePanel/>:node.getComponent()==='plots'?<PlotPanel/>:<section className="panel"><div className="empty"><p>{panelNames[node.getComponent()??'']}</p><p className="muted">{node.getComponent()==='editor'?'打开项目文件或创建 R 脚本。':node.getComponent()==='objects'?'运行代码后查看 Workspace 对象。':node.getComponent()==='plots'?'R 产生的图形将在这里显示。':'项目文件浏览'}</p></div></section>}/>
         : <main className="welcome"><div className="welcome-mark">rho</div><h1>你的本机科学工作空间</h1><p>打开项目，编辑 R 脚本，检查对象与图形。</p><button className="primary" onClick={()=>setDialog('project')}>打开项目</button><button onClick={()=>setDialog('settings')}>配置本机 R</button>{s.recent.map(p=><button key={p} onClick={()=>void s.selectProject(p).catch(e=>{s.error=message(e);s.emit();})}>{p}</button>)}</main>}
     </div>
     {(s.error || s.syncError) && <div className="notice" role="alert"><span>{s.syncError || s.error}</span>{s.syncError && <button onClick={()=>void s.flush()}>重试草稿同步</button>}<button aria-label="关闭提示" onClick={()=>{s.error='';s.emit();}}>×</button></div>}
-    <footer className="statusbar"><button onClick={()=>setDialog('settings')}><i className={s.connected?'dot':'dot offline'}/>本机　R {s.r?.current?.version ?? '未配置'}</button><span>{s.connected?(s.busy?'运行中':s.info?.runtime==='ark'?'空闲':'不可用'):'连接中断'}</span><span className="secondary">内存 未知　CPU 未知</span><div className="spacer"/><span className="project-path">{s.project}</span><span>{s.unsynced?'草稿待同步':'草稿已同步'}</span><button onClick={()=>setDialog('settings')}>环境</button></footer>
+    <footer className="statusbar"><button onClick={()=>setDialog('settings')}><i className={s.connected?'dot':'dot offline'}/>本机　R {s.r?.current?.version ?? '未配置'}</button><span>{s.connected?(s.busy?'运行中':s.runtime?.state==='idle'?'空闲':s.runtime?.state==='busy'?'运行中':'不可用'):'连接中断'}</span><span className="secondary" title={s.runtime?.notices.join("\n")}>内存 {s.runtime?.processes[0]?.memory_bytes == null ? "未知" : `${(s.runtime.processes[0].memory_bytes/1048576).toFixed(0)} MiB`}　CPU {s.runtime?.processes[0]?.cpu_percent == null ? "未知" : `${s.runtime.processes[0].cpu_percent.toFixed(1)}%`}</span><div className="spacer"/><span className="project-path">{s.project}</span><span>{s.unsynced?'草稿待同步':'草稿已同步'}</span><button onClick={()=>setDialog('settings')}>环境</button></footer>
     {dialog==='project' && <ProjectDialog onClose={()=>setDialog(null)}/>}{dialog==='settings' && <SettingsDialog onClose={()=>setDialog(null)}/>}
     {dialog==='commands' && <Modal title="命令与组件" description="打开组件或恢复默认工作区布局。" onClose={()=>setDialog(null)}><div className="command-list">{Object.entries(panelNames).map(([id,name])=><button key={id} onClick={()=>{layout.current?.show(id);setDialog(null);}}>{name}</button>)}<button onClick={()=>{reset();setDialog(null);}}>恢复默认布局</button><button onClick={()=>{const tabset=layout.current?.model.getActiveTabset();if(tabset)layout.current?.model.doAction(Actions.maximizeToggle(tabset.getId()));setDialog(null);}}>最大化 / 还原当前面板</button></div></Modal>}
   </div>;

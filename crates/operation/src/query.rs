@@ -9,6 +9,13 @@ pub trait QueryHandler: Send + Sync {
     fn descriptor(&self) -> &CapabilityDescriptor;
     fn normalize_arguments(&self, arguments: &Value) -> Result<Value, OperationError>;
     async fn query(&self, arguments: &Value) -> Result<QuerySnapshot, OperationError>;
+    async fn query_for(
+        &self,
+        _context: &CallContext,
+        arguments: &Value,
+    ) -> Result<QuerySnapshot, OperationError> {
+        self.query(arguments).await
+    }
 }
 
 /// No journal/ID generator: reading cannot accidentally create an Operation.
@@ -45,7 +52,7 @@ impl QueryGateway {
             ..request
         }
         .validate()?;
-        let snapshot = handler.query(&arguments).await?;
+        let snapshot = handler.query_for(context, &arguments).await?;
         snapshot.target.validate()?;
         if serde_json::to_vec(&snapshot).map_or(true, |bytes| bytes.len() > 1024 * 1024) {
             return Err(OperationError::InvalidInput(

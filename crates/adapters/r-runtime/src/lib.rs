@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod outputs;
 
 use async_trait::async_trait;
 use jet_core::{
@@ -48,6 +49,8 @@ pub struct ArkRuntime {
     library_path: Option<String>,
     data_root: PathBuf,
     timeout: Duration,
+    outputs: outputs::OutputStore,
+    resources: Mutex<(sysinfo::System, bool)>,
 }
 
 impl ArkRuntime {
@@ -127,6 +130,8 @@ impl ArkRuntime {
                 .library_path
                 .as_ref()
                 .map(|path| path.to_string_lossy().into_owned()),
+            outputs: outputs::OutputStore::open(&config.data_root, &project.to_string_lossy())?,
+            resources: Mutex::new((sysinfo::System::new(), false)),
             data_root,
             timeout: config.execution_timeout,
         };
@@ -143,7 +148,7 @@ impl ArkRuntime {
             quote(&project.to_string_lossy())?
         );
         let bootstrap_output = runtime
-            .evaluate(bootstrap, watch::channel(false).1)
+            .evaluate(bootstrap, watch::channel(false).1, None)
             .await
             .map_err(|e| e.message)?;
         if let Some(error) = bootstrap_output.protocol_error {
@@ -182,7 +187,12 @@ impl ArkRuntime {
         &self,
         code: String,
         mut cancellation: watch::Receiver<bool>,
+        operation_id: Option<&rho_contract::OperationId>,
     ) -> Result<CapturedOutput, WorkspaceRuntimeError> {
+        let mut writer = operation_id
+            .map(|id| self.outputs.begin(id))
+            .transpose()
+            .map_err(before)?;
         let client = self.client()?;
         let mut listener = client.listen(ListenFilter::default());
         let message: JupyterMessage = ExecuteRequest {
@@ -221,6 +231,9 @@ impl ArkRuntime {
                             if value["status"] != "ok" { captured.protocol_error = Some(value); }
                         }
                         JupyterMessageContent::StreamContent(stream) => {
+                            if let Some(writer) = &mut writer {
+                                if let Err(error) = writer.stream(match stream.name { Stdio::Stdout => "stdout", Stdio::Stderr => "stderr" }, &stream.text) { captured.observation_error = Some(error); }
+                            }
                             let output = match stream.name {
                                 Stdio::Stdout => &mut captured.stdout,
                                 Stdio::Stderr => &mut captured.stderr,
@@ -229,15 +242,43 @@ impl ArkRuntime {
                         }
                         JupyterMessageContent::DisplayData(display) => {
                             let value = serde_json::to_value(display).unwrap_or(Value::Null);
-                            let size = serde_json::to_vec(&value).map_or(OUTPUT_LIMIT + 1, |v| v.len());
-                            if captured.display_bytes + size <= OUTPUT_LIMIT {
-                                captured.display_bytes += size;
-                                captured.displays.push(value);
-                            } else { captured.truncated = true; }
+                            if let Some(writer) = &mut writer {
+                                match writer.display(&value) {
+                                    Ok(Some(reference)) => captured.displays.push(serde_json::to_value(reference).map_err(before)?),
+                                    Ok(None) => {},
+                                    Err(error) => { captured.observation_error = Some(error); },
+                                }
+                            }
                         }
+
+                        JupyterMessageContent::ExecuteResult(display) => {
+                            let value = serde_json::to_value(display).unwrap_or(Value::Null);
+                            if let Some(writer) = &mut writer {
+                                match writer.display(&value) {
+                                    Ok(Some(reference)) => captured.displays.push(serde_json::to_value(reference).map_err(before)?),
+                                    Ok(None) => {},
+                                    Err(error) => { captured.observation_error = Some(error); },
+                                }
+                            }
+                        }
+
+                        JupyterMessageContent::UpdateDisplayData(display) => {
+                            let value = serde_json::to_value(display).unwrap_or(Value::Null);
+                            if let Some(writer) = &mut writer {
+                                match writer.display(&value) {
+                                    Ok(Some(reference)) => captured.displays.push(serde_json::to_value(reference).map_err(before)?),
+                                    Ok(None) => {},
+                                    Err(error) => { captured.observation_error = Some(error); },
+                                }
+                            }
+                        }
+
                         _ => {}
                     }
-                    if idle && reply { return Ok(captured); }
+                    if idle && reply {
+                        if let Some(writer) = &mut writer { if let Err(error) = writer.finish() { captured.observation_error = Some(error); } }
+                        return Ok(captured);
+                    }
                 }
                 change = cancellation.changed(), if cancellation_open && !interrupted => {
                     if change.is_err() { cancellation_open = false; }
@@ -272,7 +313,7 @@ struct CapturedOutput {
     stderr: String,
     truncated: bool,
     displays: Vec<Value>,
-    display_bytes: usize,
+    observation_error: Option<String>,
     protocol_error: Option<Value>,
 }
 
@@ -309,6 +350,55 @@ struct BridgeRequest<'a> {
 
 #[async_trait]
 impl WorkspaceRuntime for ArkRuntime {
+    async fn output_events(
+        &self,
+        args: &rho_contract::OutputEventsArguments,
+    ) -> Result<rho_contract::OutputEvents, String> {
+        self.outputs.events(args)
+    }
+    async fn read_output(
+        &self,
+        args: &rho_contract::ReadOutputArguments,
+    ) -> Result<rho_contract::OutputPage, String> {
+        self.outputs.read(args)
+    }
+    fn runtime_status(&self) -> rho_contract::RuntimeStatus {
+        let (state, pid) = match self.client() {
+            Ok(client) => (
+                match *client.watch_status().borrow() {
+                    KernelStatus::Starting => "starting",
+                    KernelStatus::Idle => "idle",
+                    KernelStatus::Busy => "busy",
+                    KernelStatus::Exited => "unavailable",
+                },
+                client.child_pid(),
+            ),
+            Err(_) => ("unavailable", None),
+        };
+        let mut processes = Vec::new();
+        if let Some(pid) = pid {
+            let mut resources = self.resources.lock().unwrap_or_else(|e| e.into_inner());
+            let sampled = resources.1;
+            resources.0.refresh_processes_specifics(
+                sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
+                true,
+                sysinfo::ProcessRefreshKind::nothing()
+                    .with_memory()
+                    .with_cpu(),
+            );
+            if let Some(process) = resources.0.process(sysinfo::Pid::from_u32(pid)) {
+                processes.push(rho_contract::ProcessObservation {
+                    pid,
+                    role: "Ark/R".into(),
+                    memory_bytes: Some(process.memory()),
+                    cpu_percent: sampled.then(|| process.cpu_usage()),
+                });
+            }
+            resources.1 = true;
+        }
+        rho_contract::RuntimeStatus {session_id:self.session_id.clone(),state:state.into(),observed_at_ms:now_ms(),processes,notices:vec!["Resource observations cover the known Ark process, which embeds R; unrelated child processes are not included.".into()]}
+    }
+
     fn project_root(&self) -> Option<&str> {
         Some(&self.project_root)
     }
@@ -406,7 +496,13 @@ impl ArkRuntime {
             value: response.value,
             stdout: captured.stdout,
             stderr: captured.stderr,
-            conditions: response.conditions,
+            conditions: {
+                let mut conditions = response.conditions;
+                if let Some(error) = &captured.observation_error {
+                    conditions.push(json!({"kind":"output_observation","message":format!("Output observation is incomplete: {error}")}));
+                }
+                conditions
+            },
             output_references: captured.displays,
             effect_observations: vec![EffectObservation {
                 kind: "r_execution".into(),
@@ -414,6 +510,7 @@ impl ArkRuntime {
                 detail: json!({"child_pid":self.child_pid(), "outcome":response.outcome,
                     "environment_library":self.library_path, "action":action_name,
                     "output_truncated":captured.truncated || response.conditions_truncated,
+                    "output_observation_error":captured.observation_error,
                     "containment":"native_user_process", "result_path":result_path}),
                 observed_at_ms,
                 completeness: ObservationCompleteness::Partial,
@@ -434,6 +531,10 @@ impl ArkRuntime {
         let result_path = self
             .data_root
             .join(format!("{:x}.json", Sha256::digest(id.as_bytes())));
+        let recording = match &action {
+            BridgeAction::Snapshot(_) | BridgeAction::InspectObject(_) => None,
+            _ => Some(rho_contract::OperationId::new(id).map_err(before)?),
+        };
         let bridge_request = BridgeRequest {
             protocol_version: 1,
             request_id: id,
@@ -445,7 +546,9 @@ impl ArkRuntime {
             quote(&request_json).map_err(before)?,
             quote(&result_path.to_string_lossy()).map_err(before)?
         );
-        let captured = self.evaluate(code, cancellation).await?;
+        let captured = self
+            .evaluate(code, cancellation, recording.as_ref())
+            .await?;
         if let Some(error) = &captured.protocol_error {
             return Err(WorkspaceRuntimeError::after_possible_effect(
                 format!("Ark execution protocol returned an error: {error}"),

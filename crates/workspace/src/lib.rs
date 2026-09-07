@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
+pub use rho_contract::RunROutput;
 
+mod outputs;
 mod query;
+pub use outputs::{OutputQueryKind, WorkspaceOutputHandler};
 pub use query::*;
 mod tools;
 pub use tools::*;
@@ -32,17 +35,6 @@ const MAX_CODE_BYTES: usize = rho_contract::MAX_ARGUMENT_BYTES;
 pub struct RunRArguments {
     #[schemars(length(min = 1))]
     pub code: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct RunROutput {
-    pub session_id: String,
-    pub value: Value,
-    pub stdout: String,
-    pub stderr: String,
-    pub conditions: Vec<Value>,
-    pub output_references: Vec<Value>,
 }
 
 #[derive(Serialize)]
@@ -114,6 +106,27 @@ impl WorkspaceRuntimeError {
 
 #[async_trait]
 pub trait WorkspaceRuntime: Send + Sync {
+    async fn output_events(
+        &self,
+        _args: &rho_contract::OutputEventsArguments,
+    ) -> Result<rho_contract::OutputEvents, String> {
+        Err("output observation log is unavailable".into())
+    }
+    async fn read_output(
+        &self,
+        _args: &rho_contract::ReadOutputArguments,
+    ) -> Result<rho_contract::OutputPage, String> {
+        Err("output content is unavailable".into())
+    }
+    fn runtime_status(&self) -> rho_contract::RuntimeStatus {
+        rho_contract::RuntimeStatus {
+            session_id: self.session_id().into(),
+            state: "unavailable".into(),
+            observed_at_ms: 0,
+            processes: Vec::new(),
+            notices: vec!["native runtime observations are unavailable".into()],
+        }
+    }
     fn session_id(&self) -> &str;
     fn project_root(&self) -> Option<&str> {
         None

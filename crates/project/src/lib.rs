@@ -1,4 +1,7 @@
 #![forbid(unsafe_code)]
+pub use rho_contract::{
+    FileObservation, FilePage, GitObservation, GitStatusEntry, ProjectPatchResult, ProjectSnapshot,
+};
 
 use async_trait::async_trait;
 use rho_contract::{
@@ -37,46 +40,6 @@ pub fn validate_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct FileObservation {
-    pub path: String,
-    pub kind: String,
-    pub sha256: Option<String>,
-    pub byte_size: u64,
-    pub mode: Option<u32>,
-    pub modified_at_ns: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct GitStatusEntry {
-    pub path: String,
-    pub original_path: Option<String>,
-    pub index_status: String,
-    pub worktree_status: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct GitObservation {
-    pub repository_root: String,
-    pub head: Option<String>,
-    pub changes: Vec<GitStatusEntry>,
-    pub truncated: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ProjectSnapshot {
-    pub root: String,
-    pub git: Option<GitObservation>,
-    pub files: Vec<FileObservation>,
-    pub entries: Vec<String>,
-    pub entries_truncated: bool,
-    pub observed_at_ms: i64,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ReadFileArguments {
@@ -91,14 +54,6 @@ pub struct ReadFileArguments {
 }
 fn default_read_limit() -> u32 {
     32 * 1024
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct FilePage {
-    pub file: FileObservation,
-    pub offset: u64,
-    pub bytes: Vec<u8>,
-    pub has_more: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -120,18 +75,6 @@ fn default_limit() -> usize {
 pub struct ApplyPatchArguments {
     #[schemars(length(min = 1))]
     pub patch: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ProjectPatchResult {
-    pub before: ProjectSnapshot,
-    pub after: ProjectSnapshot,
-    pub affected_paths: Vec<String>,
-    pub changed_paths: Vec<String>,
-    pub git_exit_code: Option<i32>,
-    pub diagnostic: String,
-    pub committed_to_git: bool,
 }
 
 pub struct GitApplyReport {

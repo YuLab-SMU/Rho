@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+base64 = "0.22.1"
+sysinfo.workspace = true
 async-trait.workspace = true
 jet_core = { path = "../../../vendor/jet/crates/core" }
 rho-contract = { path = "../../contract" }

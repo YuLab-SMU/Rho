@@ -385,6 +385,7 @@ impl NextHost {
                 id: "local-user".into(),
             },
             scopes: std::collections::BTreeSet::from([
+                "operation.read".into(),
                 RUN_R_SCOPE.into(),
                 WORKSPACE_READ_SCOPE.into(),
                 PROJECT_READ_SCOPE.into(),
@@ -489,6 +490,17 @@ impl NextHost {
             let workspace = Arc::new(WorkspaceRunHandler::with_lane(runtime, lane.clone()));
             registry.register(workspace.clone())?;
             for kind in [
+                rho_workspace::OutputQueryKind::Events,
+                rho_workspace::OutputQueryKind::Read,
+                rho_workspace::OutputQueryKind::Status,
+            ] {
+                registry.register_query(Arc::new(rho_workspace::WorkspaceOutputHandler::new(
+                    workspace.clone(),
+                    records.clone(),
+                    kind,
+                )))?;
+            }
+            for kind in [
                 WorkspaceToolKind::Help,
                 WorkspaceToolKind::Lint,
                 WorkspaceToolKind::Format,
@@ -505,6 +517,10 @@ impl NextHost {
             )))?;
         }
         if let Some(project) = project {
+            registry.register_query(Arc::new(rho_operation::RecentOperationsHandler::new(
+                journal.clone(),
+                project.root().into(),
+            )))?;
             let process = Arc::new(
                 LocalProcessExecutor::new(project.root())
                     .map_err(|e| OperationError::TargetResolution(e.to_string()))?,
