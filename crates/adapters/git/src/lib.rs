@@ -213,6 +213,79 @@ impl GitProject {
 
 #[async_trait]
 impl ProjectRuntime for GitProject {
+    async fn list_directory(
+        &self,
+        args: &rho_project::ListDirectoryArguments,
+    ) -> Result<rho_project::DirectoryPage, String> {
+        self.check_root()?;
+        let directory = if args.path.is_empty() {
+            self.root.clone()
+        } else {
+            self.checked_path(&args.path)?
+        };
+        let metadata = std::fs::symlink_metadata(&directory).map_err(display)?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err("directory must not be a symbolic link".into());
+        }
+        let mut entries = Vec::new();
+        let mut truncated = false;
+        let mut scanned = 0;
+        for entry in std::fs::read_dir(&directory).map_err(display)?.take(5001) {
+            scanned += 1;
+            if scanned > 5000 {
+                truncated = true;
+                break;
+            }
+            let entry = entry.map_err(display)?;
+            let Ok(name) = entry.file_name().into_string() else {
+                truncated = true;
+                continue;
+            };
+            let path = if args.path.is_empty() {
+                name.clone()
+            } else {
+                format!("{}/{}", args.path, name)
+            };
+            if self.checked_path(&path).is_err() {
+                continue;
+            }
+            if args.after_name.as_ref().is_some_and(|after| &name <= after) {
+                continue;
+            }
+            let metadata = std::fs::symlink_metadata(entry.path()).map_err(display)?;
+            let kind = if metadata.file_type().is_symlink() {
+                "symlink"
+            } else if metadata.is_dir() {
+                "directory"
+            } else if metadata.is_file() {
+                "regular"
+            } else {
+                "special"
+            };
+            entries.push(rho_project::DirectoryEntry {
+                path,
+                name,
+                kind: kind.into(),
+                byte_size: metadata.len(),
+            });
+        }
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        let next_name = (entries.len() > args.limit as usize)
+            .then(|| entries[args.limit as usize - 1].name.clone());
+        entries.truncate(args.limit as usize);
+        Ok(rho_project::DirectoryPage {
+            path: args.path.clone(),
+            entries,
+            next_name,
+            truncated,
+            notices: if truncated {
+                vec!["Directory scan was bounded to 5000 entries; some names may be unavailable. Open a known relative path directly.".into()]
+            } else {
+                Vec::new()
+            },
+        })
+    }
+
     async fn read_file(&self, args: &ReadFileArguments) -> Result<FilePage, String> {
         self.read_page(args).await
     }

@@ -19,18 +19,18 @@ rho_binding_summary <- function(name, inspect = FALSE, max_items = 20L) {
     return(result)
   }
   result$kind <- "value"
-  if (!inspect) return(result)
   value <- get(name, envir = .GlobalEnv, inherits = FALSE)
   result$object_type <- typeof(value)
   classes <- attr(value, "class", exact = TRUE)
-  if (is.character(classes)) result$classes <- as.list(substr(head(classes, 16L), 1L, 128L))
+  if (is.character(classes) && !is.object(classes)) result$classes <- as.list(substr(.subset(classes, seq_len(min(length(classes), 16L))), 1L, 128L))
   dimensions <- attr(value, "dim", exact = TRUE)
-  if (is.integer(dimensions) || is.double(dimensions)) result$dimensions <- as.list(head(dimensions, 16L))
+  if (!is.object(dimensions) && (is.integer(dimensions) || is.double(dimensions))) result$dimensions <- as.list(.subset(dimensions, seq_len(min(length(dimensions), 16L))))
   if (identical(classes, "data.frame")) {
     column_names <- attr(value, "names", exact = TRUE)
     rows <- .row_names_info(value, 2L)
     columns <- length(column_names)
     result$dimensions <- list(rows, columns)
+    if (!inspect) return(result)
     selected_columns <- seq_len(min(columns, 10L))
     selected_rows <- seq_len(min(rows, max_items, 20L))
     truncated_cells <- FALSE
@@ -59,6 +59,7 @@ rho_binding_summary <- function(name, inspect = FALSE, max_items = 20L) {
   }
   if (typeof(value) %in% c("integer", "double", "logical", "character")) {
     result$length <- length(value)
+    if (!inspect) return(result)
     count <- min(length(value), max_items)
     preview <- .subset(value, seq_len(count))
     if (is.character(preview)) {

@@ -33,5 +33,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ReadOutputArguments::export_all(&config)?;
     OutputPage::export_all(&config)?;
     RuntimeStatus::export_all(&config)?;
+    DirectoryPage::export_all(&config)?;
+    ListDirectoryArguments::export_all(&config)?;
+    FormatResult::export_all(&config)?;
     Ok(())
 }

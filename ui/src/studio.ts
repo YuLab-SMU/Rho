@@ -1,3 +1,7 @@
+import { Documents } from './documents';
+import type { DirectoryPage } from './generated/DirectoryPage';
+import type { WorkspaceSnapshotData } from './generated/WorkspaceSnapshotData';
+import type { BindingSummary } from './generated/BindingSummary';
 import { HostClient, json, message } from './host-client';
 import type { WorkbenchInfo } from './generated/WorkbenchInfo';
 import type { RConfiguration } from './generated/RConfiguration';
@@ -18,6 +22,16 @@ export const terminal = (status: string) => ['succeeded','failed','cancelled','u
 /** Documents, requests and observations outlive every panel and layout. */
 export class Studio {
   info: WorkbenchInfo | null = null;
+  readonly documents = new Documents(this);
+  directory: DirectoryPage | null = null;
+  directoryError = '';
+  directoryLoading = false;
+  objects: WorkspaceSnapshotData | null = null;
+  objectsObservedAt: number | null = null;
+  objectsNotice = '';
+  inspectors = new Map<string,{binding:BindingSummary;observedAt:number;notice:string}>();
+  selectedObject: string | null = null;
+
   r: RConfiguration | null = null;
   error = '';
   connected = false;
@@ -74,7 +88,7 @@ export class Studio {
     await this.flush();
     if (this.unsynced) throw new Error(this.syncError || '草稿尚未同步，项目未切换');
     this.info = await this.client.selectProject(path);
-    this.generation++; this.cursor=0; this.records.clear(); this.pending=[]; this.layout=null; this.clearOutputs(); this.observedAt=0;
+    this.generation++; this.cursor=0; this.records.clear(); this.pending=[]; this.layout=null; this.clearOutputs(); this.observedAt=0; this.directory=null;this.directoryError="";this.objects=null;this.inspectors.clear();
     await this.restore();
     await this.observe();
     const recent = await this.client.readState(null,'recent');
@@ -86,8 +100,9 @@ export class Studio {
   async restore() {
     if (!this.project) return;
     this.state = await this.client.readState(this.project,'studio');
-    const data = this.state.value as {layout?:unknown;pending?:PendingRequest[];consoleInput?:string;selectedPlot?:string;cursor?:number} | null;
+    const data = this.state.value as {layout?:unknown;pending?:PendingRequest[];consoleInput?:string;documents?:unknown;selectedPlot?:string;cursor?:number} | null;
     this.layout = data?.layout ?? null;
+    this.documents.restore(data?.documents);
     this.pending = Array.isArray(data?.pending) ? data.pending : [];
     this.consoleInput = typeof data?.consoleInput === 'string' ? data.consoleInput : '';
     this.selectedPlot=typeof data?.selectedPlot==='string'?data.selectedPlot:null;
@@ -99,7 +114,7 @@ export class Studio {
     this.unsynced=true; clearTimeout(this.saveTimer);
     this.saveTimer=setTimeout(()=>{void this.flush();},400);
   }
-  serialize(): unknown { return {layout:this.layout,pending:this.pending,consoleInput:this.consoleInput,selectedPlot:this.selectedPlot,cursor:this.cursor}; }
+  serialize(): unknown { return {documents:this.documents.serialize(),layout:this.layout,pending:this.pending,consoleInput:this.consoleInput,selectedPlot:this.selectedPlot,cursor:this.cursor}; }
   async flush(): Promise<void> {
     clearTimeout(this.saveTimer);
     if (this.saving) { await this.saving; if(this.unsynced && !this.syncError) await this.flush(); return; }
@@ -120,7 +135,9 @@ export class Studio {
   async invoke(id:string,args:unknown,preconditions:Precondition[]=[]):Promise<OperationRecord> {
     if(!this.project) throw new Error('先打开项目');
     const project=this.project;
+    if(new TextEncoder().encode(JSON.stringify(args)).length>256*1024)throw new Error('请求参数超过 256 KiB 上限；未提交，草稿仍保留');
     const request: PendingRequest = {invocation:{client_request_id:crypto.randomUUID(),capability:{id,version:1},arguments:json(args),preconditions}};
+    if(new TextEncoder().encode(JSON.stringify({project_root:project,frame:{id:crypto.randomUUID(),request:{method:'invoke',params:request.invocation}}})).length>272*1024)throw new Error('请求超过 272 KiB 传输上限；未提交，草稿仍保留');
     this.pending.push(request); this.persist(); this.emit();
     await this.flush();
     if(this.unsynced) {
@@ -138,6 +155,24 @@ export class Studio {
   async cancel() {
     if(!this.project) return;
     for(const record of this.records.values()) if(!terminal(record.status)) await this.client.cancel(this.project,record.operation.operation_id);
+  }
+  async listDirectory(path='',append=false) {
+    const project=this.project;if(!project)return;
+    this.directoryLoading=true;this.directoryError='';this.emit();
+    try {
+      const result=await this.client.query(project,'project.list_directory',{path,after_name:append?this.directory?.next_name:null,limit:200});
+      if(result.status!=='ready')throw new Error(result.notices.join('\n'));
+      const page=result.data as DirectoryPage;
+      if(this.project===project)this.directory={...page,entries:append&&this.directory?.path===path?[...this.directory.entries,...page.entries]:page.entries};
+    }catch(error){this.directoryError=message(error);}finally{this.directoryLoading=false;this.emit();}
+  }
+  async inspectObject(name:string) {
+    const project=this.project;if(!project)return;
+    const snapshot=await this.client.query(project,'workspace.inspect_object',{name,max_items:20});
+    if(project!==this.project)return;
+    if(snapshot.status!=='ready'){this.objectsNotice=snapshot.notices.join('\n');this.emit();return;}
+    this.inspectors.set(name,{binding:snapshot.data as BindingSummary,observedAt:snapshot.observed_at_ms,notice:snapshot.notices.join('\n')});
+    this.selectedObject=name;this.showPanel?.('viewer',`object:${name}`,name,{name});this.emit();
   }
   clearOutputs() {
     for(const url of this.mediaUrls.values()) URL.revokeObjectURL(url);
@@ -198,6 +233,13 @@ export class Studio {
     if(this.info?.capabilities.some(c=>c.capability.id==='workspace.runtime_status')) {
       const status=await this.client.query(project,'workspace.runtime_status');
       if(project===this.project && status.status==='ready')this.runtime=status.data as RuntimeStatus;
+    }
+    if(this.info?.capabilities.some(c=>c.capability.id==='workspace.snapshot')) {
+      const objects=await this.client.query(project,'workspace.snapshot',{limit:200});
+      if(project===this.project) {
+        if(objects.status==='ready'){this.objects=objects.data as WorkspaceSnapshotData;this.objectsObservedAt=objects.observed_at_ms;this.objectsNotice='';}
+        else this.objectsNotice=objects.notices.join('\n');
+      }
     }
     for(const pending of [...this.pending]) {
       if(pending.operationId){await this.acceptRecord(project,pending.operationId);continue;}

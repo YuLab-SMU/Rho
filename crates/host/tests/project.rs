@@ -599,3 +599,50 @@ async fn recent_summaries_are_project_and_principal_scoped_and_paginated() {
         json!([])
     );
 }
+
+#[tokio::test]
+async fn directory_browsing_includes_ignored_data_and_rejects_escape_paths() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("project");
+    repository(&root);
+    std::fs::write(root.join(".gitignore"), "data/\n").unwrap();
+    std::fs::create_dir(root.join("data")).unwrap();
+    std::fs::write(root.join("data/忽略的数据.csv"), "x,y\n1,2\n").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(directory.path(), root.join("outside")).unwrap();
+    let host = NextHost::open_project(directory.path().join("state/next.sqlite"), &root)
+        .await
+        .unwrap();
+    let query = |path: &str| QueryRequest {
+        capability: CapabilityRef::new("project.list_directory", 1).unwrap(),
+        arguments: json!({"path":path,"limit":1}),
+    };
+    let context = NextHost::local_context();
+    let page = host.query_snapshot(&context, query("data")).await.unwrap();
+    assert_eq!(page.status, QueryStatus::Ready);
+    assert_eq!(
+        page.data.unwrap()["entries"][0]["path"],
+        "data/忽略的数据.csv"
+    );
+    assert!(
+        host.query_snapshot(&context, query("../outside"))
+            .await
+            .is_err()
+    );
+    #[cfg(unix)]
+    assert_eq!(
+        host.query_snapshot(&context, query("outside"))
+            .await
+            .unwrap()
+            .status,
+        QueryStatus::Unavailable
+    );
+    let page = host
+        .query_snapshot(&context, query(""))
+        .await
+        .unwrap()
+        .data
+        .unwrap();
+    assert!(page["next_name"].is_string());
+    assert!(host.outbox(&context, 0, 10).await.unwrap().is_empty());
+}

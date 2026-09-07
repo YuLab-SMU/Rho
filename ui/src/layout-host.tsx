@@ -33,7 +33,8 @@ export class PanelLayout {
   show(component:string,id=component,name=panelNames[component],config?:unknown) {
     if(this.model.getNodeById(id)) this.model.doAction(Actions.selectTab(id));
     else {
-      const target=this.model.getActiveTabset() ?? this.model.getFirstTabSet();
+      const preferred=(component==='document'?this.model.getNodeById('editor-group'):component==='viewer'?this.model.getNodeById('objects-group'):null);
+      const target=preferred ?? this.model.getActiveTabset() ?? this.model.getFirstTabSet();
       if(!target) return;
       this.model.doAction(Actions.addTab({type:'tab',id,name,component,config},target.getId(),DockLocation.CENTER,-1,true));
     }
@@ -69,6 +70,7 @@ export function LayoutHost({studio,registry,onLayout}:{studio:Studio;registry:(n
   onLayout(layout);
   return <div className="layout-host"><Layout model={layout.model} factory={node=><PanelBoundary>{registry(node)}</PanelBoundary>}
     realtimeResize onModelChange={layout.changed}
+    onRenderTab={(node,values)=>{const document=studio.documents.items.get(node.getId());if(document)values.content=<span>{document.name}{document.dirty&&!document.draft.readonly?' •':''}</span>;}}
     onRenderTabSet={(node,values)=>{
       if(node instanceof TabSetNode) values.buttons.unshift(<button className="icon-button" key="collapse" aria-label={node.getConfig()?.collapsed?'展开面板组':'收起面板组'} title={node.getConfig()?.collapsed?'展开面板组':'收起面板组'} onClick={()=>layout.collapse(node)}>{node.getConfig()?.collapsed?'⌄':'−'}</button>);
     }} />

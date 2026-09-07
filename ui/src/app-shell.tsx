@@ -1,19 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { Actions } from 'flexlayout-react';
 import { message } from './host-client';
+import { Modal } from './primitives';
+import { DocumentPanel, EditorHub } from './panels/editor-panel';
+import { FilesPanel, ObjectsPanel, ObjectViewer } from './panels/resource-panels';
 import { useStudio } from './context';
 import { ConsolePanel, PlotPanel } from './panels/output-panels';
 import { LayoutHost, PanelLayout, defaultLayout, panelNames } from './layout-host';
 import type { RProbe } from './generated/RProbe';
 
-function Modal({title,description,children,onClose}:{title:string;description:string;children:React.ReactNode;onClose:()=>void}) {
-  return <Dialog.Root open onOpenChange={open=>{if(!open)onClose();}}><Dialog.Portal><Dialog.Overlay className="overlay"/><Dialog.Content className="dialog">
-    <Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description>{children}
-    <Dialog.Close className="dialog-close icon-button" aria-label="关闭">×</Dialog.Close>
-  </Dialog.Content></Dialog.Portal></Dialog.Root>;
-}
 function ProjectDialog({onClose}:{onClose:()=>void}) {
   const s=useStudio(),[path,setPath]=useState(s.project ?? ''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   async function open(value:string) { setBusy(true);try {await s.selectProject(value);onClose();}catch(e){setError(message(e));}finally{setBusy(false);} }
@@ -50,8 +46,19 @@ export function AppShell() {
       <Menu.Root><Menu.Trigger className="bordered">▦ 组件</Menu.Trigger><Menu.Portal><Menu.Content className="menu" sideOffset={6}>{Object.entries(panelNames).map(([id,name])=><Menu.Item key={id} onSelect={()=>layout.current?.show(id)}>{name}</Menu.Item>)}</Menu.Content></Menu.Portal></Menu.Root>
       <button className="secondary" onClick={reset}>恢复默认</button><button className="bordered" aria-label="命令入口" onClick={()=>setDialog('commands')}>⌕ <kbd>⌘ K</kbd></button>
     </header>
-    <div className="work-area"><nav className="rail" aria-label="主导航"><button className="active" title="Studio" onClick={()=>layout.current?.show('editor')}>▦</button><button title="项目文件" onClick={()=>layout.current?.show('files')}>▤</button><button title="组件" onClick={()=>setDialog('commands')}>⊞</button><div className="spacer"/><button aria-label="设置" onClick={()=>setDialog('settings')}>☷</button></nav>
-      {s.project ? <LayoutHost key={`${s.project}:${resetKey}`} studio={s} onLayout={l=>{layout.current=l;s.showPanel=(component,id,name,config)=>l.show(component,id,name,config);}} registry={node=>node.getComponent()==='console'?<ConsolePanel/>:node.getComponent()==='plots'?<PlotPanel/>:<section className="panel"><div className="empty"><p>{panelNames[node.getComponent()??'']}</p><p className="muted">{node.getComponent()==='editor'?'打开项目文件或创建 R 脚本。':node.getComponent()==='objects'?'运行代码后查看 Workspace 对象。':node.getComponent()==='plots'?'R 产生的图形将在这里显示。':'项目文件浏览'}</p></div></section>}/>
+    <div className="work-area"><nav className="rail" aria-label="主导航"><button className="active" title="Studio" aria-label="Studio" onClick={()=>layout.current?.show('editor')}>▦</button><button title="项目文件" aria-label="项目文件" onClick={()=>layout.current?.show('files')}>▤</button><button title="组件" aria-label="组件" onClick={()=>setDialog('commands')}>⊞</button><div className="spacer"/><button aria-label="设置" onClick={()=>setDialog('settings')}>☷</button></nav>
+      {s.project ? <LayoutHost key={`${s.project}:${resetKey}`} studio={s} onLayout={l=>{layout.current=l;s.showPanel=(component,id,name,config)=>l.show(component,id,name,config);}} registry={node=>{
+        switch(node.getComponent()) {
+          case 'console':return <ConsolePanel/>;
+          case 'plots':return <PlotPanel/>;
+          case 'editor':return <EditorHub/>;
+          case 'document':return <DocumentPanel documentId={node.getId()}/>;
+          case 'files':return <FilesPanel/>;
+          case 'objects':return <ObjectsPanel/>;
+          case 'viewer':return <ObjectViewer name={node.getConfig()?.name ?? ''}/>;
+          default:return <div className="empty">组件不可用</div>;
+        }
+      }}/>
         : <main className="welcome"><div className="welcome-mark">rho</div><h1>你的本机科学工作空间</h1><p>打开项目，编辑 R 脚本，检查对象与图形。</p><button className="primary" onClick={()=>setDialog('project')}>打开项目</button><button onClick={()=>setDialog('settings')}>配置本机 R</button>{s.recent.map(p=><button key={p} onClick={()=>void s.selectProject(p).catch(e=>{s.error=message(e);s.emit();})}>{p}</button>)}</main>}
     </div>
     {(s.error || s.syncError) && <div className="notice" role="alert"><span>{s.syncError || s.error}</span>{s.syncError && <button onClick={()=>void s.flush()}>重试草稿同步</button>}<button aria-label="关闭提示" onClick={()=>{s.error='';s.emit();}}>×</button></div>}

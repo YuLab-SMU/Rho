@@ -33,7 +33,7 @@ rho_dispatch <- function(request) {
   value <- tryCatch(
     withCallingHandlers({
       if (identical(request$action, "execute")) {
-        expressions <- parse(text = request$payload$code, keep.source = TRUE)
+        expressions <- parse(text = sub("^\ufeff", "", request$payload$code, perl = TRUE), keep.source = TRUE)
         result <- NULL
         for (expression in expressions) result <- withVisible(eval(expression, envir = .GlobalEnv))
         if (is.null(result) || !result$visible) NULL else result$value

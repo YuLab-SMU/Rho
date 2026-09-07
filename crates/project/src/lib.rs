@@ -1,4 +1,7 @@
 #![forbid(unsafe_code)]
+mod directory;
+pub use directory::ProjectDirectoryHandler;
+pub use rho_contract::{DirectoryEntry, DirectoryPage, ListDirectoryArguments};
 pub use rho_contract::{
     FileObservation, FilePage, GitObservation, GitStatusEntry, ProjectPatchResult, ProjectSnapshot,
 };
@@ -84,6 +87,12 @@ pub struct GitApplyReport {
 
 #[async_trait]
 pub trait ProjectRuntime: Send + Sync {
+    async fn list_directory(
+        &self,
+        _args: &rho_contract::ListDirectoryArguments,
+    ) -> Result<rho_contract::DirectoryPage, String> {
+        Err("directory listing unavailable".into())
+    }
     fn root(&self) -> &str;
     async fn snapshot(&self, paths: &[String], limit: usize) -> Result<ProjectSnapshot, String>;
     async fn patch_paths(&self, patch: &str) -> Result<Vec<String>, String>;

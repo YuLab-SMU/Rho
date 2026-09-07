@@ -3,6 +3,41 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+pub struct DirectoryEntry {
+    pub path: String,
+    pub name: String,
+    pub kind: String,
+    pub byte_size: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+pub struct DirectoryPage {
+    pub path: String,
+    pub entries: Vec<DirectoryEntry>,
+    pub next_name: Option<String>,
+    pub truncated: bool,
+    pub notices: Vec<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ListDirectoryArguments {
+    #[serde(default)]
+    pub path: String,
+    pub after_name: Option<String>,
+    #[serde(default = "directory_limit")]
+    pub limit: u32,
+}
+fn directory_limit() -> u32 {
+    200
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+pub struct FormatResult {
+    pub tool_version: String,
+    pub code: String,
+    pub changed: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct FileObservation {

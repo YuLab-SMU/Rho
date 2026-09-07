@@ -537,6 +537,9 @@ impl NextHost {
             let owner = Arc::new(ProjectOwner::new(project, lane.clone()));
             registry.register(Arc::new(ProjectPatchHandler::new(owner.clone())))?;
             registry.register_query(Arc::new(ProjectSnapshotHandler::new(owner.clone())))?;
+            registry.register_query(Arc::new(rho_project::ProjectDirectoryHandler::new(
+                owner.clone(),
+            )))?;
             registry.register_query(Arc::new(ProjectReadHandler::new(owner)))?;
         }
         if let Some(environment) = environment {

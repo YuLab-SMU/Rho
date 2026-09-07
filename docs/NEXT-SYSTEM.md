@@ -1462,7 +1462,7 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 ## 27. 当前唯一下一步
 
-N0—N8 替换目标已完成。当前用户授权的唯一下一步是第 28 节 Studio 第一轮：M2 输出链已通过真实浏览器验收，接着推进 M3 编辑保存与恢复闭环。
+N0—N8 替换目标已完成。当前用户授权的唯一下一步是第 28 节 Studio 第一轮：M3 编辑闭环已通过本机真实浏览器检查，接着完成 M4 布局生命周期、异常恢复与完整回归。
 
 [复杂场景插件研究](SCENARIO-PLUGINS.md)仍只是一份研究文档。插件、通道和工作组合机制的开发不在本轮范围内，也不新增为 Next 的完成门槛。旧数据继续全部放弃，不恢复迁移或兼容工作。
 
@@ -1475,7 +1475,7 @@ N0—N8 替换目标已完成。当前用户授权的唯一下一步是第 28 �
 | --- | --- | --- |
 | M1 | React/FlexLayout 外壳、统一 HostClient、R 发现/配置、开发资源模式 | Implemented；生成契约与资产检查、Host/SQLite lib 测试、隔离 Chrome 的真实 R Console 与设置检查通过；开发资源不重启 R 的持续运行验收待 M4 |
 | M2 | Operation 摘要、运行期增量输出、媒体引用/读取、真实 runtime 状态 | Implemented；真实 Chrome 增量文本、PNG 定位、失败前输出、历史图选择保持通过 |
-| M3 | 文件浏览、CodeMirror 编辑、摘要前置保存、先保存再运行、对象/草稿恢复 | Target |
+| M3 | 文件浏览、CodeMirror 编辑、摘要前置保存、先保存再运行、对象/草稿恢复 | Implemented；真实 Chrome 新建中文 R 文件、保存/执行/对象与图形、修改重跑、UTF-8 跨页/BOM/CRLF、磁盘冲突停止运行与刷新草稿恢复通过 |
 | M4 | H01—H05 尺寸/交互、异常恢复、性能与真实浏览器闭环验收 | Target |
 
 实现边界：科学操作继续走五端口与 Gateway。UI 状态由本机 SQLite application store 保存，不进 Operation/outbox；以版本比较拒绝过期窗口覆盖。R 配置是宿主职责，候选先验证，显式结束会话；活动请求、任务和 MCP 引用拒绝切换。生产使用嵌入 JS/CSS；`--dev-assets` 只读取指定目录的允许资产。React 19.2.8、TypeScript 6.0.3、Vite 8.2.2、FlexLayout 0.10.8 固定版本，其余依赖也固定于 lockfile。Radix 动态样式与后续 CodeMirror 使用宿主 CSP nonce；媒体不会取得页面脚本权限。
@@ -1484,3 +1484,8 @@ M1 工作树依据：`cargo test -p rho-workbench -p rho-sqlite -p rho-host --li
 
 
 M2：Ark 接收消息时记录有界运行期观察日志，图形材料以 OperationId/序号独立保存；摘要由原 Journal 按项目与 principal 查询，不复制运行终态。读取媒体验证原始引用、字节数及 SHA-256；前端以图片上下文加载 SVG，不注入 HTML。新增 `operation.list_recent`、`workspace.output_events/read_output/runtime_status`。对象/文件/运行结果 DTO 移入 contract 并生成 TypeScript。日志限制 1 MiB/4096 事件，单图 16 MiB、单次运行图形 32 MiB；截断和不完整尾记录显式返回。真实测试发现 Ark PNG Base64 可省略 padding，已按解码库规范接受两种合法形式并添加回归测试。浏览器测试 `npm run test:browser --prefix ui` 已通过 2 项；覆盖 `cat → Sys.sleep → cat` 结束前输出、真实 PNG、失败前输出保留及历史图不被新输出覆盖。当前仍未完成 M3/M4。
+
+
+M3：`project.list_directory` 直接读取文件系统，包含未跟踪和 Git 忽略条目；有界分页及符号链接/受保护路径校验。CodeMirror 的文本、光标、视图位置与同次运行撤销状态由共享文档模型持有；SQLite 恢复草稿，不自动改写项目文件。保存使用 jsdiff 与 `project.apply_patch` 的原文件摘要前置条件，只有返回的实际文件摘要匹配点击快照才确认保存；运行文件使用该快照，期间新输入保留为脏状态。UTF-8 BOM 和既有换行字节在普通编辑中保留；格式化期间文本变化则提供比较，磁盘冲突也可显式比较/重载。对象列表补充安全元数据，普通数据框只读预览上限 20×10。
+
+M3 验证：`npm run test --prefix ui`（13 项，含 React Testing Library、真实 Git 补丁落盘与保存失败/并发输入纪律）；真实浏览器分别通过新建中文脚本闭环和跨页/BOM/CRLF/冲突/刷新恢复。集成中发现 jsdiff 已负责文件名引号，重复加引号会产生错误目标；保存摘要检查阻止了后续 R 执行，现已去掉重复转义并以真实 Git 回归验证中文、空格、引号和空文件。所有失败试验都在隔离临时项目内，未改写用户项目文件。当前完整布局/异常/跨端口恢复与最终回归仍属于 M4，不能把 M3 记为整轮完成。
