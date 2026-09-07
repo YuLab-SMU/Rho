@@ -51,6 +51,7 @@ Documentation:
 
 - [Documentation map](<README.md>) — `DOCS`
 - [Scenario plugin design research (no implementation scope)](<SCENARIO-PLUGINS.md>) — `SCENARIO-PLUGINS`
+- [Studio usability feedback and scenario reference](<STUDIO-FEEDBACK.md>) — `STUDIO-FEEDBACK`
 
 Sources:
 

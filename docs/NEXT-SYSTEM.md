@@ -1465,7 +1465,7 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 ## 27. 当前唯一下一步
 
-N0—N8 与第 28 节 Studio 第一轮的约定目标均已完成。本轮没有剩余自动实施项；新的能力、平台或分发范围需要新的具体请求。
+N0—N8 与第 28 节 Studio 第一轮的实现基线保留。用户于 2026-09-07 提出新一轮体验反馈，并要求继续开发前先独立归档。当前仅完成 [Studio 反馈与场景文档](STUDIO-FEEDBACK.md) 的整理；尚未开始打磨实现，也未把教程中的额外功能转成开发范围。
 
 [复杂场景插件研究](SCENARIO-PLUGINS.md)仍只是一份研究文档。插件、通道和工作组合机制的开发不在本轮范围内，也不新增为 Next 的完成门槛。旧数据继续全部放弃，不恢复迁移或兼容工作。
 
@@ -1504,3 +1504,11 @@ M3 验证：`npm run test --prefix ui`（13 项，含 React Testing Library、�
 - 原生与协议：`test-real-r.mjs`、`test-environment.mjs`、`test-process-recovery.mjs`、`test-mcp.mjs`（普通与 `--real-r`）、`test-workbench.mjs`（普通与 `--real-r`）、`test-remote-protocol.mjs`、architecture 与 governance/tool 检查通过。Environment 使用隔离 fixture / 临时库，验证用户 R 库未改变；本轮没有自动安装 R/Ark 或向用户库安装包。
 - 视觉依据：Paper H01—H05 的共享变量、52px 外壳、38px 标签栏和容器收缩规则已接入。隔离 Chrome 生成本地截图 `target/studio-browser/`；另经原生 Chrome 连接观察真实 Console 和对象预览。SVG/HTML 攻击样本是独立的渲染边界 fixture，真实 R 图形验收使用 Ark PNG，未将 mock 视为科学闭环完成。
 - 检查点：M1 `4c149da`、M2 `b09d90e`、M3 `19e5f5b`；M4 为包含本记录的阶段提交。完整回归基于当前 macOS、R 4.5.2 与 Chrome；不声明 Windows/Linux、其他浏览器、远程作业、原生安装器或分发已完成。
+
+
+### 2026-09-07 — 固定第一轮基线，归档体验反馈
+
+- 基线：`d5a970b1559c9bd85567073108d05bca21886de4`；本地标签 `studio-round1-baseline-2026-09-07`。应用代码、构建资产与运行会话不在本次文档变更范围内。
+- 用户反馈：整体外观方向得到认可，但组件移除、面向多个面板的停靠、英语界面、R 高亮、Console 交互、对象原位展开及图表体验需要继续打磨。既有功能验收不等于专业工作流体验已被用户接受。
+- 文档：用户明确授权 `STUDIO-FEEDBACK.md` 为专有反馈文档。已读取其提供的 RStudio 教程设计，提炼真实项目工作流与待调查问题；Quarto、包管理、.Rproj 等教程功能未自动加入实施范围。
+- 当前状态：反馈已归档，打磨实现未开始。后续进度仍只记在本文档，不在反馈文档维护另一份完成台账。

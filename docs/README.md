@@ -26,6 +26,12 @@ source or a reproducible run is wrong and should be corrected or deleted.
   and deterministic execution, and explores possible plugin forms. Implementation
   is outside the current Rho Next goal; this page is not a second progress ledger.
 
+## Product feedback
+
+- [Studio usability feedback and scenario reference](STUDIO-FEEDBACK.md) —
+  user feedback against the frozen M1–M4 baseline and a workflow reference for
+  refinement. This is not an implementation plan or a second progress ledger.
+
 ## Page shapes
 
 The documentation tree has only three useful shapes:
@@ -42,6 +48,9 @@ them. Git retains the evolution.
 
 `SCENARIO-PLUGINS.md` is the separately authorized research exception: candidate
 interfaces and concepts must remain explicitly distinct from implemented code.
+
+`STUDIO-FEEDBACK.md` is a user-authorized feedback exception. Requirements and
+open investigation questions stay distinct from implemented or verified behavior.
 
 ## Updating the map
 

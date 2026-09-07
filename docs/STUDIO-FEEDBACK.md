@@ -1,0 +1,217 @@
+# Studio usability feedback and scenario reference
+
+Captured: 2026-09-07.
+
+This is the user-authorized feedback document for the next Studio refinement
+round. It records user experience requirements and investigation questions;
+it is not an implementation plan, a completion checklist, or another progress
+ledger. Implementation decisions and verified progress remain in
+[NEXT-SYSTEM.md](NEXT-SYSTEM.md).
+
+## Baseline and evidence
+
+The implementation baseline is commit
+`d5a970b1559c9bd85567073108d05bca21886de4`, identified by the local Git tag
+`studio-round1-baseline-2026-09-07`. This preserves the delivered M1–M4 code.
+
+The user considers the overall appearance promising, but has identified substantial
+interaction problems. The previous functional and automated acceptance does not
+establish that Studio is sufficiently polished for sustained professional use.
+
+This feedback comes from:
+
+- The user's seven-point review and accompanying screenshot on 2026-09-07. The
+  screenshot shows Files on the left, an editor above Console in the middle,
+  and Workspace objects above a plot on the right. The session contains actual
+  R objects and a PlantGrowth boxplot.
+- The supplied *RStudio Data Analysis Practical Introduction — Tutorial Design*,
+  v0.1, dated 2026-09-07, read from
+  `/Users/xiayh/Downloads/rstudio-tutorial-design.md`.
+
+The screenshot is a visual reference, not evidence of why an interaction fails.
+The tutorial is a workflow reference; its RStudio commands and shortcuts are not
+claims about current Rho functionality. The issues below have not been newly
+reproduced or diagnosed during this documentation pass. The list is open-ended.
+
+## User feedback
+
+### F01 — Components cannot be removed
+
+**Reported experience:** The user cannot remove a component.
+
+**Required experience:** Removing an unwanted component from the layout must be
+obvious and reliable, including after docking, grouping, and maximizing.
+
+**Questions for investigation:** Does the problem concern a tab, a whole panel
+group, a component instance, or all instances of a component? Is the control
+missing, difficult to discover, or ineffective? A screenshot containing an X
+icon does not establish that removal works for the user's attempted action.
+
+Distinguish closing a view, collapsing a group, and discarding a document.
+Removing a view must preserve drafts and must not delete a project file or
+implicitly cancel an execution. Reopening the component should be discoverable.
+
+### F02 — Docking relative to several components is unclear
+
+**User question:** How can one component move to the common left, right, or top
+of two or more components?
+
+**Required experience:** Users need to distinguish docking beside one panel,
+beside a group of panels, and at the workspace boundary. Moving a panel to the
+left of Editor and Console together must be possible to understand without
+trial-and-error dragging.
+
+**Questions for investigation:** Which layout levels can be targeted today?
+Does the drop preview identify the whole region that will move or split? Can a
+user deliberately target a parent group instead of the nearest child panel?
+Can they recover from an unintended drop without resetting the entire layout?
+
+Visible drop targets and explicit placement commands are candidates to evaluate,
+not chosen solutions. The requested positions are left, right, and top; broader
+docking behavior should be assessed consistently without inventing new scope.
+
+### F03 — The product interface should use English
+
+**User direction:** Use English for professionalism and international use; do not
+use Chinese for product-authored interface text.
+
+This covers navigation, panel names, actions, menus, dialogs, settings, tooltips,
+status messages, empty states, error explanations, and accessibility labels.
+Use consistent scientific-workbench terminology across surfaces. A few translated
+buttons would not satisfy this requirement.
+
+Preserve user-authored filenames, paths, code, comments, data, object names, and
+runtime output in their original language. English UI must not remove Unicode
+support or rewrite diagnostic evidence produced by R or another native tool.
+Additional language packs are not requested by this feedback.
+
+### F04 — R syntax highlighting is weak
+
+**Reported experience:** Editor highlighting is inadequate.
+
+**Required experience:** Real analysis scripts should remain readable as they
+combine comments, literals, function calls, package-qualified calls, operators,
+formulas, indexing, and multiline expressions.
+
+**Questions for investigation:** Separate missing or incorrect language tokens
+from an ineffective color theme. Use representative code containing `pkg::fn`,
+`<-`, `|>`, `%>%`, `$`, `[[ ]]`, model formulas, named arguments, and ggplot layers.
+Inspect readability at the normal font size and in narrow panels.
+
+Changing colors alone should not be assumed to fix parsing problems. Conversely,
+this feedback does not automatically require a new language server, semantic
+analysis engine, or debugger.
+
+### F05 — Console does not feel like a command line
+
+**Reported experience:** R Console lacks a command-line interaction feel.
+
+**Required experience:** Console should support quick exploratory work, with a
+clear prompt, an immediate input position, readable command/output continuity,
+and predictable keyboard behavior. The analysis itself should remain in scripts.
+
+**Questions for investigation:** Assess how execution cards, operation metadata,
+whitespace, and embedded plot previews interrupt the command transcript. Examine
+command history navigation, multiline entry and continuation prompts, error and
+warning display, interruption, clear-screen behavior, scrolling, and the return
+to the prompt after a run. These are investigation areas, not separately reported
+or reproduced bugs.
+
+Execution identity and truthful status remain necessary, but should be presented
+without dominating ordinary Console use. A terminal appearance alone is not an
+adequate fix if typing and keyboard interaction remain awkward.
+
+### F06 — Object inspection should expand in place by default
+
+**Reported experience:** Selecting an object opens and switches to another tab,
+although the user often only wants a quick look.
+
+**Explicit interaction direction:** Default inspection should expand bounded
+details inside the existing objects panel. Opening a dedicated viewer tab should
+require an explicit action such as **Open in New Tab**.
+
+**Questions for investigation:** Determine the disclosure hit area, how expanded
+rows collapse, how selection and scroll position behave, and whether multiple
+objects may be expanded at once. Assess vectors, lists, ordinary data frames,
+and opaque classed objects. A dedicated viewer must not silently replace the
+quick-inspection interaction.
+
+Keep read-only, bounded inspection and the existing protections against evaluating
+active bindings, promises, or user-defined print/format/subset methods. When R is
+busy, label the previous observation rather than presenting it as fresh data.
+
+### F07 — Plot viewing needs substantial refinement
+
+**Reported experience:** The plot panel is rough and the viewing experience is
+poor, with more problems than the user has enumerated.
+
+This is a broad experience issue, not a confirmed list of individual defects.
+Do not reduce it to cosmetic spacing changes or claim a specific cause from the
+screenshot alone.
+
+**Scenario-based investigation should cover:**
+
+- Plot history: identifying the current plot, navigating several outputs, relating
+  a plot to its source execution, and retaining a deliberately selected old plot.
+- Viewing: fit-to-panel versus original size, zoom and panning, aspect ratio,
+  resizing, maximization, large plots, and narrow or short containers.
+- Interaction: discoverable controls, focus behavior, selection feedback, and
+  the relationship between a Console preview and the main plot viewer.
+- Export: what bytes, dimensions, and format the interactive action exports, and
+  how that differs from reproducible, script-controlled `ggsave()` output.
+- Failure states: loading, unavailable originals, decoding failures, unsupported
+  formats, and the absence of any plot.
+
+Continue to identify outputs by their actual operation/output reference. Viewing
+must not rerun R; a missing original must not be replaced with a same-named image.
+SVG remains an image, and HTML/widgets must not acquire page execution privileges.
+
+## Workflow reference: a country development analysis
+
+The supplied tutorial follows a complete project using gapminder: import, clean,
+transform, visualize, model, and report. Its central distinction is useful for
+Studio: reusable logic belongs in scripts; Console supports exploration; objects
+and generated files can be reconstructed from those scripts.
+
+Use a fixed local dataset and a prepared dependency environment for repeatable
+interaction review. The tutorial's optional live TidyTuesday exercise is not needed
+to establish this baseline. Do not automatically install tools or packages as
+part of this feedback-capture task.
+
+| Workflow moment | Interaction to examine | Related feedback |
+| --- | --- | --- |
+| Open a project with `data/raw`, `data/processed`, `R`, `scripts`, and `output/figures` | Locate files; arrange Files beside Editor and Console together; remove unwanted panels and reopen them | F01, F02, F03 |
+| Write `scripts/01_import_clean.R`, using project-relative paths | Read actual R syntax; save; run a line, selection, or file; keep the input position predictable | F03, F04, F05 |
+| Explore data and create vectors, factors, lists, and a data frame | Make short Console queries; expand an object without changing tabs; explicitly open a viewer when needed | F05, F06 |
+| Transform and summarize data; write processed RDS files | Keep track of changing objects and files while several panels are visible; distinguish old observations from current state | F02, F05, F06 |
+| Produce a scatter/facet plot and a trend plot; assign a ggplot object and print it | Navigate plot history, compare outputs, resize/zoom, return to editing, and contrast interactive export with `ggsave()` | F02, F05, F06, F07 |
+| Move repeated code into `R/utils.R`; create an `lm` object | Work across scripts, use `source()`, read formulas and function calls, and inspect model/function metadata without unwanted tab changes | F04, F05, F06 |
+| Explicitly restart R and replay the scripts | Distinguish retained drafts/layout/history from reset R memory; verify that inputs can recreate objects and generated outputs | F01–F07 |
+
+A meaningful review should follow the same project across these transitions, not
+start each panel test in a freshly idealized state. Record the user's intention,
+exact action, resulting focus/layout/output, and point of friction. Exercise
+mistakes as well: wrong paths, unsaved edits, an R error, an interruption, and a
+plot selected from an earlier run.
+
+## Tutorial features that need separate scope decisions
+
+The tutorial describes RStudio features beyond the delivered Studio baseline.
+Their presence in the tutorial is not authorization to implement them here:
+
+- `.Rproj` creation, file association, and double-click launching;
+- Files operations such as directory creation, moving, and renaming;
+- code sections, folding, outline navigation, and additional execution modes;
+- package installation/management UI, import wizards, and full data browsers;
+- Quarto rendering, report previews, and HTML Viewer behavior;
+- RStudio-specific shortcuts, project options, and session menus.
+
+The report stage remains a useful end-to-end reference and a place to expose
+capability gaps. It must not become an unannounced Quarto/Viewer implementation
+requirement. Similarly, ordinary data-frame inspection does not prove that a
+tibble, ggplot object, or model has a full structural preview.
+
+The next design review should establish the concrete plot and Console problems,
+resolve panel-removal and group-docking behavior, and distinguish experience
+refinement from new scientific capabilities. No library replacement, development
+sequence, or additional capability scope is decided by this document.

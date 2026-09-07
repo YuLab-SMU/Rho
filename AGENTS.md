@@ -14,6 +14,10 @@ note. Its possible plugin, channel and work-composition designs are not current
 capabilities, an implementation plan, or completion requirements for Rho Next.
 Do not implement that research without a new request. Progress remains only in
 `docs/NEXT-SYSTEM.md`.
+The user also authorized `docs/STUDIO-FEEDBACK.md` for Studio usability feedback
+and scenario references. It records experience requirements and investigation
+questions, not implementation progress or an automatic expansion of scope.
+Progress remains only in `docs/NEXT-SYSTEM.md`.
 There are no real legacy users. Legacy architecture data assets are abandoned:
 do not build data migration, import, archive-reader or compatibility work. Next
 starts with fresh application state; focus on capabilities, entrypoints and

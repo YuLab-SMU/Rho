@@ -1,12 +1,13 @@
 {
   "schema_version": 1,
   "pages": [
-    { "id": "DOCS", "title": "Documentation map", "document": "docs/README.md", "area": "documentation" },
-    { "id": "ARCHITECTURE", "title": "Architecture", "document": "docs/ARCHITECTURE.md", "area": "system" },
-    { "id": "DEVELOPMENT", "title": "Development loop", "document": "docs/DEVELOPMENT.md", "area": "system" },
-    { "id": "OPERATIONS", "title": "Runtime operator guide", "document": "docs/OPERATIONS.md", "area": "system" },
-    { "id": "NEXT-SYSTEM", "title": "Rho system charter and replacement ledger", "document": "docs/NEXT-SYSTEM.md", "area": "system" },
-    { "id": "SCENARIO-PLUGINS", "title": "Scenario plugin design research (no implementation scope)", "document": "docs/SCENARIO-PLUGINS.md", "area": "documentation" },
-    { "id": "RELEASE", "title": "Build and release operations", "document": "docs/RELEASE.md", "area": "delivery" }
+    {"id": "DOCS", "title": "Documentation map", "document": "docs/README.md", "area": "documentation"},
+    {"id": "ARCHITECTURE", "title": "Architecture", "document": "docs/ARCHITECTURE.md", "area": "system"},
+    {"id": "DEVELOPMENT", "title": "Development loop", "document": "docs/DEVELOPMENT.md", "area": "system"},
+    {"id": "OPERATIONS", "title": "Runtime operator guide", "document": "docs/OPERATIONS.md", "area": "system"},
+    {"id": "NEXT-SYSTEM", "title": "Rho system charter and replacement ledger", "document": "docs/NEXT-SYSTEM.md", "area": "system"},
+    {"id": "SCENARIO-PLUGINS", "title": "Scenario plugin design research (no implementation scope)", "document": "docs/SCENARIO-PLUGINS.md", "area": "documentation"},
+    {"id": "STUDIO-FEEDBACK", "title": "Studio usability feedback and scenario reference", "document": "docs/STUDIO-FEEDBACK.md", "area": "documentation"},
+    {"id": "RELEASE", "title": "Build and release operations", "document": "docs/RELEASE.md", "area": "delivery"}
   ]
 }
