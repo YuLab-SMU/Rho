@@ -24,31 +24,6 @@ function files(dir, prefix = "") {
     .sort();
 }
 try {
-  const html = fs.readFileSync(
-    path.join(root, "crates/workbench/assets/index.html"),
-    "utf8",
-  );
-  const source = fs.readFileSync(path.join(root, "ui/src/app.ts"), "utf8");
-  const ids = [...html.matchAll(/\bid="([^"]+)"/gu)].map((match) => match[1]);
-  assert.equal(ids.length, new Set(ids).size, "duplicate client element id");
-  for (const match of source.matchAll(
-    /(?:el(?:<[^>]+>)?|button|display)\s*\(\s*"([^"]+)"/gu,
-  )) {
-    assert.ok(
-      ids.includes(match[1]),
-      `client references missing element: ${match[1]}`,
-    );
-  }
-  assert.equal(
-    [...html.matchAll(/<script\b/gu)].length,
-    1,
-    "client must have one embedded entry script",
-  );
-  assert.ok(html.includes('src="/app.js"'));
-  assert.ok(
-    !/\b(?:src|href)="https?:/u.test(html),
-    "local workbench must not load third-party assets",
-  );
   if (mode !== "build") {
     const generated = path.join(temp, "types");
     execFileSync(
@@ -103,31 +78,22 @@ try {
       }
   }
   if (mode !== "generate") {
-    const output = path.join(temp, "js");
-    execFileSync(
-      process.execPath,
-      [
-        path.join(root, "ui/node_modules/typescript/bin/tsc"),
-        "-p",
-        path.join(root, "ui/tsconfig.json"),
-        "--outDir",
-        output,
-      ],
-      { stdio: "inherit" },
-    );
-    const javascript = fs.readFileSync(path.join(output, "app.js"), "utf8");
-    assert.ok(
-      !/^\s*import\s/mu.test(javascript),
-      "embedded app unexpectedly needs additional runtime modules",
-    );
-    const target = path.join(root, "crates/workbench/assets/app.js");
-    if (mode === "build") fs.writeFileSync(target, javascript);
-    else
-      assert.equal(
-        fs.readFileSync(target, "utf8"),
-        javascript,
-        "embedded app.js is stale; run npm run build --prefix ui",
-      );
+    execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"), "-p", path.join(root, "ui/tsconfig.json"), "--noEmit"], { stdio: "inherit" });
+    const output = path.join(temp, "assets");
+    const { build } = await import("../ui/node_modules/vite/dist/node/index.js");
+    await build({ configFile: path.join(root, "ui/vite.config.ts"), build: { outDir: output, watch: null } });
+    fs.copyFileSync(path.join(root, "ui/index.html"), path.join(output, "index.html"));
+    const html = fs.readFileSync(path.join(output, "index.html"), "utf8");
+    assert.ok(html.includes('src="/app.js"') && html.includes('href="/style.css"'));
+    assert.ok(!/\b(?:src|href)="https?:/u.test(html), "workbench must use local assets");
+    const committed = path.join(root, "crates/workbench/assets");
+    const names = files(output);
+    assert.deepEqual(names, ["app.js", "index.html", "style.css"], "embedded asset inventory changed");
+    if (mode === "check") assert.deepEqual(files(committed), names);
+    for (const name of names) {
+      if (mode === "build") fs.copyFileSync(path.join(output, name), path.join(committed, name));
+      else assert.ok(fs.readFileSync(path.join(output,name)).equals(fs.readFileSync(path.join(committed,name))), `stale embedded asset: ${name}; run npm run build --prefix ui`);
+    }
   }
   console.log(
     `Next client ${mode}: generated Rust contract and embedded client agree.`,

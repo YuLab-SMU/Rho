@@ -1,10 +1,10 @@
 # Rho Next 系统宪章与替换台账
 
-> 状态：Complete（本轮约定范围）
+> 状态：N0—N8 Complete；Studio 第一轮 Building
 >
-> 最后更新：2026-09-06
+> 最后更新：2026-09-07
 >
-> 当前阶段：N0—N8 已按约定完成，最终回归通过；旧源码已退役，旧数据不迁移。场景插件研究、完整桌面与分发不在本轮实施范围内。
+> 当前阶段：N0—N8 历史验收保留；2026-09-07 用户授权单机浏览器 Studio 第一轮，见第 28 节。旧源码与旧数据仍不恢复，场景插件与分发不在范围内。
 >
 > 适用范围：新底座、能力迁移、旧实现退役
 >
@@ -1462,6 +1462,22 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 ## 27. 当前唯一下一步
 
-本轮目标已完成，无继续自动实施的事项。后续工作需要新的具体请求，不再用重复验收维持进行中状态。
+N0—N8 替换目标已完成。当前用户授权的唯一下一步是第 28 节 Studio 第一轮：M1 外壳接入后推进 M2 增量输出与媒体读取。
 
 [复杂场景插件研究](SCENARIO-PLUGINS.md)仍只是一份研究文档。插件、通道和工作组合机制的开发不在本轮范围内，也不新增为 Next 的完成门槛。旧数据继续全部放弃，不恢复迁移或兼容工作。
+
+
+## 28. Studio 第一轮：单机主程序与 Studio
+
+用户于 2026-09-07 授权实施既定 M1—M4 计划，以 Paper 高保真 H01—H05 为基准。载体继续是 `rho workbench`，验收环境为当前 macOS 与 Chrome。一个项目、一个本机 R 会话，闭环为打开项目、编辑、保存、运行、查看对象/图形、修改重跑。无 R 时仍可使用文件功能。不增加原生壳、安装器、Vibe、插件、远程编排、LSP/DAP 或完整包管理，不安装 R/Ark/包，不迁移旧数据。
+
+| 阶段 | 目标 | 当前状态与证据 |
+| --- | --- | --- |
+| M1 | React/FlexLayout 外壳、统一 HostClient、R 发现/配置、开发资源模式 | Implemented；生成契约与资产检查、Host/SQLite lib 测试、隔离 Chrome 的真实 R Console 与设置检查通过；开发资源不重启 R 的持续运行验收待 M4 |
+| M2 | Operation 摘要、运行期增量输出、媒体引用/读取、真实 runtime 状态 | Target |
+| M3 | 文件浏览、CodeMirror 编辑、摘要前置保存、先保存再运行、对象/草稿恢复 | Target |
+| M4 | H01—H05 尺寸/交互、异常恢复、性能与真实浏览器闭环验收 | Target |
+
+实现边界：科学操作继续走五端口与 Gateway。UI 状态由本机 SQLite application store 保存，不进 Operation/outbox；以版本比较拒绝过期窗口覆盖。R 配置是宿主职责，候选先验证，显式结束会话；活动请求、任务和 MCP 引用拒绝切换。生产使用嵌入 JS/CSS；`--dev-assets` 只读取指定目录的允许资产。React 19.2.8、TypeScript 6.0.3、Vite 8.2.2、FlexLayout 0.10.8 固定版本，其余依赖也固定于 lockfile。Radix 动态样式与后续 CodeMirror 使用宿主 CSP nonce；媒体不会取得页面脚本权限。
+
+M1 工作树依据：`cargo test -p rho-workbench -p rho-sqlite -p rho-host --lib`（15 tests）、`npm run generate --prefix ui`、`npm run build --prefix ui`、`npm run check --prefix ui`、`cargo build --locked`、`npm run test:browser --prefix ui`（真实 R 4.5.2、隔离 Chrome Console/设置，1 test）。旧客户端 DOM 渲染与 DOM ID 专属构建检查已移除；当前阶段的编辑器/对象/图表仅有面板入口，不能视为 Studio 闭环完成。顶部历史 N0—N8 结论不替代本轮验收。

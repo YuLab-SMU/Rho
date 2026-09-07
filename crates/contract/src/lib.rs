@@ -6,6 +6,8 @@ mod host;
 pub use host::*;
 mod workbench;
 pub use workbench::*;
+mod studio;
+pub use studio::*;
 
 use std::collections::BTreeSet;
 

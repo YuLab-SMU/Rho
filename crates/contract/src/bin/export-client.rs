@@ -16,5 +16,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     OperationRecord::export_all(&config)?;
     QuerySnapshot::export_all(&config)?;
     OutboxRecord::export_all(&config)?;
+    ApplicationState::export_all(&config)?;
+    ReadApplicationState::export_all(&config)?;
+    WriteApplicationState::export_all(&config)?;
+    RConfiguration::export_all(&config)?;
+    ApplyRConfiguration::export_all(&config)?;
     Ok(())
 }

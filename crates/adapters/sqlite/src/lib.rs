@@ -1,4 +1,6 @@
 #![forbid(unsafe_code)]
+mod application;
+pub use application::ApplicationStore;
 
 use std::fs::{File, OpenOptions, TryLockError};
 use std::path::Path;

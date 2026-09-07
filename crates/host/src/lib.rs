@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
 mod config;
+mod r_configuration;
+pub use r_configuration::{default_database, discover_r, probe_r};
+pub use rho_sqlite::ApplicationStore;
 mod environment;
 mod ownership;
 pub use config::{HostProfile, ReservedHost, RuntimeConfiguration};
@@ -677,7 +680,13 @@ fn protected_project_paths(database: &Path) -> Result<Vec<std::path::PathBuf>, O
     let database = database
         .canonicalize()
         .map_err(|e| OperationError::Storage(e.to_string()))?;
-    let mut excluded = vec![database.clone()];
+    let application = database.with_extension("studio.sqlite");
+    let mut excluded = vec![database.clone(), application.clone()];
+    for suffix in ["-journal", "-wal", "-shm"] {
+        let mut path = application.as_os_str().to_os_string();
+        path.push(suffix);
+        excluded.push(path.into());
+    }
     for suffix in [".host.lock", "-journal", "-wal", "-shm"] {
         let mut path = database.as_os_str().to_os_string();
         path.push(suffix);

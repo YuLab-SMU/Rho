@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod settings;
 
 use std::{
     io::Write,
@@ -35,6 +36,7 @@ struct SelectedHost {
 struct Hosting {
     selected: Option<SelectedHost>,
     profile: HostProfile,
+    r_configuration: rho_contract::RConfiguration,
 }
 
 impl Hosting {
@@ -60,6 +62,9 @@ struct AppState {
     origin: String,
     authorization: String,
     calls: Arc<Semaphore>,
+    application: Arc<rho_host::ApplicationStore>,
+    dev_assets: Option<PathBuf>,
+    nonce: String,
 }
 
 fn failure(status: StatusCode, error: impl Into<String>) -> Response {
@@ -101,7 +106,7 @@ async fn boundary(State(state): State<AppState>, request: Request, next: Next) -
     headers.insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
     headers.insert("referrer-policy", "no-referrer".parse().unwrap());
     headers.insert("x-content-type-options", "nosniff".parse().unwrap());
-    headers.insert("content-security-policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'".parse().unwrap());
+    headers.insert("content-security-policy", format!("default-src 'none'; script-src 'self'; style-src 'self' 'nonce-{}'; style-src-attr 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", state.nonce).parse().unwrap());
     response
 }
 
@@ -240,6 +245,55 @@ async fn dispatch(State(state): State<AppState>, Json(request): Json<WorkbenchFr
     }
 }
 
+async fn shell(State(state): State<AppState>) -> Html<String> {
+    Html(include_str!("../assets/index.html").replace("__RHO_CSP_NONCE__", &state.nonce))
+}
+async fn asset(state: AppState, name: &str, kind: &str, embedded: &'static str) -> Response {
+    let bytes = if let Some(root) = state.dev_assets {
+        let path = root.join(name);
+        match path.canonicalize() {
+            Ok(path) if path.parent() == Some(root.as_path()) => {
+                match tokio::fs::read(path).await {
+                    Ok(bytes) if bytes.len() <= 16 * 1024 * 1024 => bytes,
+                    _ => {
+                        return failure(
+                            StatusCode::NOT_FOUND,
+                            "development asset is unavailable or too large",
+                        );
+                    }
+                }
+            }
+            _ => {
+                return failure(
+                    StatusCode::NOT_FOUND,
+                    "development asset is outside the selected directory",
+                );
+            }
+        }
+    } else {
+        embedded.as_bytes().to_vec()
+    };
+    ([(header::CONTENT_TYPE, kind)], bytes).into_response()
+}
+async fn javascript(State(state): State<AppState>) -> Response {
+    asset(
+        state,
+        "app.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../assets/app.js"),
+    )
+    .await
+}
+async fn stylesheet(State(state): State<AppState>) -> Response {
+    asset(
+        state,
+        "style.css",
+        "text/css; charset=utf-8",
+        include_str!("../assets/style.css"),
+    )
+    .await
+}
+
 fn router(state: AppState, shutdown: CancellationToken) -> Router {
     let hosting = state.hosting.clone();
     let mcp = StreamableHttpService::new(
@@ -261,34 +315,24 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
             .with_cancellation_token(shutdown),
     );
     Router::new()
-        .route(
-            "/",
-            get(|| async { Html(include_str!("../assets/index.html")) }),
-        )
-        .route(
-            "/app.js",
-            get(|| async {
-                (
-                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
-                    include_str!("../assets/app.js"),
-                )
-            }),
-        )
-        .route(
-            "/style.css",
-            get(|| async {
-                (
-                    [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
-                    include_str!("../assets/style.css"),
-                )
-            }),
-        )
+        .route("/", get(shell))
+        .route("/app.js", get(javascript))
+        .route("/style.css", get(stylesheet))
         .route("/api/info", get(info))
         .route("/api/project", post(select_project))
-        .route("/api/host", post(dispatch))
+        .route("/api/r", get(settings::read_r).post(settings::apply_r))
+        .route("/api/r/probe", post(settings::probe))
+        .route("/api/state/read", post(settings::read_state))
+        .route("/api/state/write", post(settings::write_state))
+        .route(
+            "/api/host",
+            post(dispatch)
+                .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(MAX_BODY))
+                .layer(RequestBodyLimitLayer::new(MAX_BODY)),
+        )
         .nest_service("/mcp", mcp)
-        .layer(DefaultBodyLimit::max(MAX_BODY))
-        .layer(RequestBodyLimitLayer::new(MAX_BODY))
+        .layer(DefaultBodyLimit::max(2 * 1024 * 1024 + 8192))
+        .layer(RequestBodyLimitLayer::new(2 * 1024 * 1024 + 8192))
         .layer(middleware::from_fn_with_state(state.clone(), boundary))
         .with_state(state)
 }
@@ -301,16 +345,44 @@ pub async fn serve(
     port: u16,
     url_file: Option<&Path>,
 ) -> Result<(), String> {
+    serve_with_assets(profile, project, port, url_file, None).await
+}
+
+pub async fn serve_with_assets(
+    mut profile: HostProfile,
+    project: Option<&Path>,
+    port: u16,
+    url_file: Option<&Path>,
+    dev_assets: Option<&Path>,
+) -> Result<(), String> {
+    let application = Arc::new(rho_host::ApplicationStore::open(
+        &profile.database.with_extension("studio.sqlite"),
+    )?);
+    let mut r_configuration = settings::configure_startup(&mut profile, &application).await;
+    let dev_assets = dev_assets
+        .map(|p| p.canonicalize().map_err(|e| e.to_string()))
+        .transpose()?;
     let selected = if let Some(project) = project {
         let root = project_root(&project.to_string_lossy())?;
         Some(SelectedHost {
-            host: Arc::new(profile.open(&root).await?),
+            host: Arc::new(match profile.open(&root).await {
+                Ok(host) => host,
+                Err(error) => {
+                    r_configuration.error = Some(format!("R startup failed: {error}"));
+                    profile.runtime = rho_host::RuntimeConfiguration::Project;
+                    profile.open(&root).await?
+                }
+            }),
             root,
         })
     } else {
         None
     };
-    let hosting = Arc::new(RwLock::new(Hosting { selected, profile }));
+    let hosting = Arc::new(RwLock::new(Hosting {
+        selected,
+        profile,
+        r_configuration,
+    }));
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port))
         .await
         .map_err(|e| e.to_string())?;
@@ -331,6 +403,9 @@ pub async fn serve(
         origin: origin.clone(),
         authorization: format!("Bearer {token}"),
         calls: Arc::new(Semaphore::new(32)),
+        application,
+        dev_assets,
+        nonce: uuid::Uuid::new_v4().simple().to_string(),
     };
     let shutdown = CancellationToken::new();
     let app = router(state, shutdown.clone());
@@ -385,6 +460,12 @@ mod tests {
         let host = Arc::new(profile.open(&root).await.unwrap());
         let state = AppState {
             hosting: Arc::new(RwLock::new(Hosting {
+                r_configuration: rho_contract::RConfiguration {
+                    source: "test".into(),
+                    current: None,
+                    candidates: Vec::new(),
+                    error: None,
+                },
                 profile,
                 selected: Some(SelectedHost { host, root }),
             })),
@@ -392,6 +473,11 @@ mod tests {
             origin: "http://127.0.0.1:10001".into(),
             authorization: "Bearer fixture-only".into(),
             calls: Arc::new(Semaphore::new(32)),
+            application: Arc::new(
+                rho_host::ApplicationStore::open(&temp.path().join("studio.sqlite")).unwrap(),
+            ),
+            dev_assets: None,
+            nonce: "fixture-nonce".into(),
         };
         let app = router(state.clone(), CancellationToken::new());
         (temp, state, app)

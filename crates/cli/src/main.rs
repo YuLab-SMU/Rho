@@ -10,7 +10,7 @@ use serde_json::json;
 #[derive(Debug, Parser)]
 #[command(name = "rho", about = "Rho scientific workspace")]
 struct Cli {
-    #[arg(long)]
+    #[arg(long, default_value_os_t = rho_host::default_database())]
     database: PathBuf,
     /// Explicit test-only runtime; does not run R.
     #[arg(long, conflicts_with = "ark")]
@@ -92,6 +92,9 @@ enum Command {
         /// Write the private launch URL to a new file instead of stdout.
         #[arg(long)]
         url_file: Option<PathBuf>,
+        /// Read app.js and style.css from this build directory without restarting R.
+        #[arg(long)]
+        dev_assets: Option<PathBuf>,
     },
     Invoke {
         #[arg(long)]
@@ -136,7 +139,12 @@ async fn main() {
 async fn run() -> Result<(), String> {
     let cli = Cli::parse();
     let context = NextHost::local_context();
-    if let Command::Workbench { port, url_file } = &cli.command {
+    if let Command::Workbench {
+        port,
+        url_file,
+        dev_assets,
+    } = &cli.command
+    {
         if cli.demo {
             return Err("workbench requires a real project/runtime; --demo is test-only".into());
         }
@@ -145,11 +153,12 @@ async fn run() -> Result<(), String> {
                 "--project is required for an initial environment or remote binding".into(),
             );
         }
-        return rho_workbench::serve(
+        return rho_workbench::serve_with_assets(
             cli.profile()?,
             cli.project.as_deref(),
             *port,
             url_file.as_deref(),
+            dev_assets.as_deref(),
         )
         .await;
     }

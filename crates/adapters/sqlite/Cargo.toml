@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+uuid.workspace = true
 async-trait.workspace = true
 rho-contract = { path = "../../contract" }
 rho-operation = { path = "../../operation" }
@@ -15,4 +16,5 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 tokio.workspace = true
