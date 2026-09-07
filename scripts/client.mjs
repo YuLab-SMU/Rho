@@ -78,21 +78,54 @@ try {
       }
   }
   if (mode !== "generate") {
-    execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"), "-p", path.join(root, "ui/tsconfig.json"), "--noEmit"], { stdio: "inherit" });
+    execFileSync(
+      process.execPath,
+      [
+        path.join(root, "ui/node_modules/typescript/bin/tsc"),
+        "-p",
+        path.join(root, "ui/tsconfig.json"),
+        "--noEmit",
+      ],
+      { stdio: "inherit" },
+    );
     const output = path.join(temp, "assets");
-    const { build } = await import("../ui/node_modules/vite/dist/node/index.js");
-    await build({ configFile: path.join(root, "ui/vite.config.ts"), build: { outDir: output, watch: null } });
-    fs.copyFileSync(path.join(root, "ui/index.html"), path.join(output, "index.html"));
+    const { build } = await import(
+      "../ui/node_modules/vite/dist/node/index.js"
+    );
+    await build({
+      configFile: path.join(root, "ui/vite.config.ts"),
+      build: { outDir: output, watch: null },
+    });
+    fs.copyFileSync(
+      path.join(root, "ui/index.html"),
+      path.join(output, "index.html"),
+    );
     const html = fs.readFileSync(path.join(output, "index.html"), "utf8");
-    assert.ok(html.includes('src="/app.js"') && html.includes('href="/style.css"'));
-    assert.ok(!/\b(?:src|href)="https?:/u.test(html), "workbench must use local assets");
+    assert.ok(
+      html.includes('src="/app.js"') && html.includes('href="/style.css"'),
+    );
+    assert.ok(
+      !/\b(?:src|href)="https?:/u.test(html),
+      "workbench must use local assets",
+    );
     const committed = path.join(root, "crates/workbench/assets");
     const names = files(output);
-    assert.deepEqual(names, ["app.js", "index.html", "style.css"], "embedded asset inventory changed");
+    assert.deepEqual(
+      names,
+      ["app.js", "index.html", "style.css"],
+      "embedded asset inventory changed",
+    );
     if (mode === "check") assert.deepEqual(files(committed), names);
     for (const name of names) {
-      if (mode === "build") fs.copyFileSync(path.join(output, name), path.join(committed, name));
-      else assert.ok(fs.readFileSync(path.join(output,name)).equals(fs.readFileSync(path.join(committed,name))), `stale embedded asset: ${name}; run npm run build --prefix ui`);
+      if (mode === "build")
+        fs.copyFileSync(path.join(output, name), path.join(committed, name));
+      else
+        assert.ok(
+          fs
+            .readFileSync(path.join(output, name))
+            .equals(fs.readFileSync(path.join(committed, name))),
+          `stale embedded asset: ${name}; run npm run build --prefix ui`,
+        );
     }
   }
   console.log(

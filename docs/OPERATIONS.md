@@ -14,7 +14,10 @@ must not be delayed by legacy data compatibility.
 ## Local workbench
 
 The browser client is served by the native Rust Host; it is not an external website
-or the old desktop. Build and launch it with the same runtime flags:
+or the old desktop. `rho workbench` discovers local R and Ark, with configuration
+and diagnostics in Settings. The default database is in the local OS application
+data directory (`~/Library/Application Support/rho/next.sqlite` on macOS).
+An explicit reproducible launch can still select all paths:
 
 ```sh
 cargo build --locked
@@ -24,9 +27,13 @@ target/debug/rho --database /absolute/path/to/next-data/next.sqlite \
 ```
 
 The URL file must not already exist. Open its full URL in a browser, then select an
-absolute project directory. `--project` can preselect a directory. Omit Ark/R flags
-for Project/Process-only hosting, or use `--rscript` for Environment without a live R
-session. The `--demo` test runtime is not accepted by this workbench.
+absolute project directory. `--project` can preselect a directory. R selection
+uses explicit launch arguments, a saved user choice, then discovered installations.
+An invalid explicit or saved choice is reported without silently substituting R.
+With no usable R, project browsing/editing remain available. R, Ark and packages
+are never installed automatically. `--rscript` explicitly selects Environment-only
+hosting; `--demo` is not accepted by the workbench. CLI/session/MCP runtime selection
+continues to use the explicit flags.
 
 The server binds only `127.0.0.1` on an ephemeral port (`--port` overrides it). The
 launch fragment contains a per-run bearer token: keep the URL private. With no
@@ -37,12 +44,15 @@ request bodies and same-origin resources protect the local entry; R and native
 commands still run with the user's OS permissions, not in a sandbox.
 
 UI scientific requests forward the five Host ports at `/api/host`. `/api/info` and
-`/api/project` manage hosting selection only, not scientific capabilities. An old
+`/api/project`, `/api/r` and `/api/r/probe` manage hosting selection only, not
+scientific capabilities. `/api/state/read` and `/api/state/write` store local
+preferences and drafts with version preconditions, outside Operation history. An old
 browser project's requests are rejected after a switch. A switch ends the old R
 session (in-memory objects are not restored), clears project-specific environment
 and remote bindings, and is refused while work or an MCP session is active. If new
-startup fails, the UI reports no open project; it does not claim an old session was
-rolled back. Files and recorded Operations remain.
+R startup fails, the error is retained and the project reopens without R when
+possible. The ended session memory is never reported as restored. Files and
+recorded Operations remain.
 
 The same Host exposes official Streamable HTTP MCP at `/mcp`. Configure the MCP
 client's URL and `Authorization: Bearer <launch-token>` header; the token is the
@@ -52,23 +62,42 @@ same database is intentionally rejected by the existing writer lock. MCP session
 pin their project until the client closes them with the protocol's DELETE request.
 No conversation, Agent plan or user-approval database is created.
 
-Closing a page only stops waiting. A pending command is retained in that tab's
-session storage for explicit same-ID retry; no automatic command retry occurs.
-The UI reads durable event pages and fetches actual Operation results, displays at
-most 200 loaded Operations, and re-queries owner observations after new terminal
-results. It does not infer success from notifications or cancellation receipt.
-Cursor paging is not a live push or exactly-once delivery promise.
+Closing a page only stops waiting. Pending requests are synchronized to the local
+SQLite application store before submission and retain their original client request
+ID. Reconnection queries the original Operation; retry is explicit and uses that
+same ID. A receipt or missing observation never proves execution success or failure.
+Operation summaries are paginated, while the shared client reads bounded output
+events every 250 ms during runs. PNG/JPEG/SVG originals are addressed by OperationId
+and sequence, verified by digest, and loaded as images. HTML/widgets are not run.
+The plot selection survives later outputs and viewing never reruns R.
+
+Studio saves UTF-8 files through `project.apply_patch`, preserving BOM and existing
+line endings. Run File captures the click-time text, verifies its saved digest,
+then submits that snapshot. A conflict, rejected/oversized patch, network error or
+unconfirmed result stops before execution. New typing remains dirty. Cmd/Ctrl-S
+saves, Cmd/Ctrl-Enter runs the selection or current line, and Cmd/Ctrl-Shift-Enter
+runs the file. Multi-line expressions must be selected. Object previews are read-only
+and bounded; busy sessions show the previous observation with its timestamp.
+
+The sibling `next.studio.sqlite` contains project layouts, text drafts, view positions,
+recent projects, preferences and pending requests. Closing a panel retains its draft;
+explicit discard is separate. Layout corruption falls back to the default layout.
+Drafts do not overwrite project files on reload. Concurrent windows use compare-and-swap;
+conflicting local text remains available for explicit resolution. Restart restores synced
+application state across ports, but does not restore R memory or the prior undo stack.
 
 Client types come from ts-rs 12.0.1 over Rust contracts. JSON integers remain
 numbers; unsafe event cursors are rejected by the client. Static HTML/CSS and the
 compiled app.js are embedded, so running the binary does not require Node. To edit
-the plain TypeScript client (no frontend framework or separate business server):
+the React/TypeScript client (no separate business server):
 
 ```sh
 npm ci --ignore-scripts --prefix ui
 npm run generate --prefix ui
 npm run build --prefix ui
 npm run check --prefix ui
+npm run test --prefix ui
+npm run test:browser --prefix ui
 node scripts/test-workbench.mjs
 node scripts/test-workbench.mjs --real-r
 ```
@@ -78,26 +107,17 @@ they do not substitute for browser interaction and visual acceptance. A working
 computer/browser connection is needed for that separate check. Ctrl-C stops the
 local server and drains accepted Host work; it does not report work as cancelled.
 
-Manual browser acceptance uses disposable projects and fresh application data:
+For frontend iteration, run `npm run dev --prefix ui`. Its watched Vite build writes
+`target/studio-assets`. Launch `rho workbench --dev-assets /absolute/path/to/target/studio-assets`
+(with any database/project/runtime flags before `workbench`). Only app.js and style.css
+are loaded from that directory; reload the browser to see changes without ending R.
+Production continues to use embedded assets and locally bundled fonts/icons.
 
-1. Select a project, run R that returns 42 with stdout/warnings, inspect its objects,
-   and open the corresponding Operation. Empty event polling must preserve controls.
-2. Run a counter increment followed by a short sleep, reload the page while it is
-   running, then retry the same pending request. The OperationId must stay the same
-   and the counter must remain 1. A closed page must not imply cancellation.
-3. Cancel a long R operation through its detail panel and observe the real terminal
-   result. The brief receipt is not proof that execution has stopped.
-4. Invoke workspace.help from the capability form. Its waiting/result display must
-   not replace the Console's previous operation status.
-5. Switch to a second project. Runtime objects and result views must belong to that
-   project; a previous capability result must not remain under the new heading.
-6. Check desktop and narrow layouts, including scrolling and cancellation controls.
-   The verified 390 × 844 Chrome device viewport is emulation, not a real phone test.
-
-These interactions were completed on local Chrome on 2026-09-06; see the ledger
-for findings and validation scope. No whole-browser/platform compatibility claim
-is made. On restart with a new launch token at the same origin, reload after opening
-the new private fragment URL so the startup credential is read again.
+Browser regression uses isolated Chrome through Playwright and disposable projects.
+It covers the real save/run/object/plot loop, streaming, draft conflicts, layout,
+restart/reconnect, R switching and media isolation. SVG attack fixtures exercise the
+image boundary separately from the real Ark PNG tests. Check the ledger for the actual
+commands and platform scope; the tests do not claim cross-platform certification.
 
 Host startup acquires a native OS lease on the canonical project's
 `.rho/next-host.lock` before creating a journal or runtime. A second database is

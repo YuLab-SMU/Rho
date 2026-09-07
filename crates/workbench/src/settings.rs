@@ -56,10 +56,19 @@ pub(super) async fn configure_startup(
             }
         }
     };
-    let current = match selection {
+    let mut current = match selection {
         Some(selection) => Some(probe_r(&selection).await),
         None => None,
     };
+    if source == "discovered" && !current.as_ref().is_some_and(|probe| probe.usable) {
+        for candidate in candidates.iter().skip(1) {
+            let probe = probe_r(candidate).await;
+            if probe.usable {
+                current = Some(probe);
+                break;
+            }
+        }
+    }
     let error = if let Some(probe) = &current {
         if probe.usable {
             let environment = match &profile.runtime {

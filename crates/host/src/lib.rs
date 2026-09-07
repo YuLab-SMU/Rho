@@ -696,10 +696,22 @@ impl NextHost {
 }
 
 fn protected_project_paths(database: &Path) -> Result<Vec<std::path::PathBuf>, OperationError> {
+    // The application store follows the configured database name, which may be
+    // a symlink alias. Protect that sibling before canonicalizing the journal.
+    let configured_application = database.with_extension("studio.sqlite");
+    let parent = configured_application
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let application = parent
+        .canonicalize()
+        .map_err(|e| OperationError::Storage(e.to_string()))?
+        .join(configured_application.file_name().ok_or_else(|| {
+            OperationError::Storage("application state path has no filename".into())
+        })?);
     let database = database
         .canonicalize()
         .map_err(|e| OperationError::Storage(e.to_string()))?;
-    let application = database.with_extension("studio.sqlite");
     let mut excluded = vec![database.clone(), application.clone()];
     for suffix in ["-journal", "-wal", "-shm"] {
         let mut path = application.as_os_str().to_os_string();

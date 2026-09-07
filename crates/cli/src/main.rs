@@ -53,6 +53,15 @@ impl Cli {
                     .ok_or("--r-home is required with --ark")?,
                 environment: self.environment.clone(),
             }
+        } else if matches!(self.command, Command::Workbench { .. }) && self.r_home.is_some() {
+            RuntimeConfiguration::Ark {
+                executable: rho_host::discover_r()
+                    .first()
+                    .map(|s| PathBuf::from(&s.ark))
+                    .unwrap_or_default(),
+                r_home: self.r_home.clone().unwrap(),
+                environment: None,
+            }
         } else if let Some(rscript) = &self.rscript {
             RuntimeConfiguration::Environment {
                 rscript: rscript.clone(),

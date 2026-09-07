@@ -646,3 +646,41 @@ async fn directory_browsing_includes_ignored_data_and_rejects_escape_paths() {
     assert!(page["next_name"].is_string());
     assert!(host.outbox(&context, 0, 10).await.unwrap().is_empty());
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn database_alias_does_not_expose_the_sibling_application_store() {
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let real = temp.path().join("real.sqlite");
+    std::fs::write(&real, []).unwrap();
+    let alias = project.join("alias.sqlite");
+    std::os::unix::fs::symlink(&real, &alias).unwrap();
+    let application =
+        rho_host::ApplicationStore::open(&alias.with_extension("studio.sqlite")).unwrap();
+    application
+        .write(
+            "user",
+            &rho_contract::ApplicationState {
+                key: "preferences".into(),
+                version: None,
+                value: json!({"private":"application state"}),
+            },
+        )
+        .unwrap();
+    drop(application);
+    let host = NextHost::open_project(&alias, &project).await.unwrap();
+    let read = host
+        .query_snapshot(
+            &NextHost::local_context(),
+            QueryRequest {
+                capability: CapabilityRef::new("project.read_file", 1).unwrap(),
+                arguments: json!({"path":"alias.studio.sqlite"}),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(read.status, QueryStatus::Unavailable);
+    assert!(read.data.is_none());
+}

@@ -1,12 +1,12 @@
 # Rho Next 系统宪章与替换台账
 
-> 状态：N0—N8 Complete；Studio 第一轮 Building
+> 状态：N0—N8 Complete；Studio 第一轮 M1—M4 Verified
 >
 > 最后更新：2026-09-07
 >
-> 当前阶段：N0—N8 历史验收保留；2026-09-07 用户授权单机浏览器 Studio 第一轮，见第 28 节。旧源码与旧数据仍不恢复，场景插件与分发不在范围内。
+> 当前阶段：单机浏览器 Studio 第一轮已实现并完成当前 macOS / Chrome 验收，见第 28 节。N0—N8 历史保留；旧数据、场景插件、原生壳与分发不在本轮范围内。
 >
-> 适用范围：新底座、能力迁移、旧实现退役
+> 适用范围：新底座、能力迁移、旧实现退役、单机 Studio
 >
 > 事实优先级：可复现运行结果 > 源代码 > 本文档 > 讨论记录
 
@@ -66,11 +66,11 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 项目 | 当前事实 |
 | --- | --- |
 | 总体状态 | 根 Cargo 工作区只构建 Next，默认程序为 rho；真实 Ark/R、Project、Environment 与本机执行经新 Host 运行 |
-| 当前里程碑 | N0—N8 完成；本机回归、浏览器验收与 YuLabServer / Slurm 19.05.2 CPU 作业验收通过 |
+| 当前里程碑 | N0—N8 与 Studio M1—M4 完成约定范围；本轮验证 macOS / Chrome。原 YuLab / Slurm CPU 验收作为历史保留，本轮未新增远程验收 |
 | 已切换的默认入口 | rho CLI/session、stdio MCP、workbench HTTP/MCP；没有保留旧入口启动代理或旧数据库兼容层 |
 | 已退役的旧源码 | 全部旧 crates/、desktop/、r/，旧 test/、fuzz/、programs/ 与旧插件示例；专属脚本已删除，必要 Ark 获取与治理工具保留 |
 | 旧系统策略 | 不再保存平行源码树；Git 保留代码历史，旧数据全部放弃，不做迁移 |
-| 前端策略 | 本机浏览器客户端已验证；纯 TypeScript、嵌入式静态资产和五端口。完整桌面仍延后，模拟窄屏不等于真实移动设备验收 |
+| 前端策略 | React / FlexLayout / CodeMirror Studio 已替换极简客户端；本机浏览器、嵌入资产与五端口不变。当前 macOS / Chrome 已验证，原生壳与分发仍不在范围内 |
 | 数据策略 | 无真实旧用户；放弃旧架构全部数据资产。Next 使用全新应用状态，不做迁移、导入、只读兼容或会话接力（N-D025） |
 | 最终核对补项 | workspace.help/lint/format 已进入统一 Operation 主线，本机 Ark/R 与 MCP 验证通过；见 N-D030 |
 | 首版执行边界 | 用户接受原生用户权限、无文件/网络沙箱；原有机械校验与真实结果语义保留，见 N-D031 |
@@ -85,7 +85,7 @@ Rho Next 的定位：站在成熟工具之上的薄科学工作空间协调层�
 | 真实 Workspace 与无求值 Query | `test-real-r.mjs`：真实 Ark/R、条件、取消、kernel exit、help/lint/format、对象读取和 CLI session |
 | Git/filesystem 与 Environment | Project Rust/CLI 测试；`test-environment.mjs` 的 pak/renv、安装取消、绑定、回收与恢复 |
 | 本机与远程执行 | `test-process-recovery.mjs`；`test-remote-protocol.mjs`；`4228e59` 的真实远程验收与作业 28676/28677 |
-| 统一公共入口与极简界面 | MCP/workbench 测试含真实 R；`8259a5a` 的本机浏览器验收，之后 UI 源码和嵌入资产未改变 |
+| 统一公共入口与 Studio | MCP/workbench 测试含真实 R；当前 React Studio 的真实编辑闭环、输出、恢复及布局验收见第 28 节 |
 | 旧源码退役、全新应用状态 | Git 路径核对无旧 crates/rho-*、r/rho.*、desktop/、next/；无旧数据迁移或兼容实现 |
 | 文档、生成契约与代码质量 | governance/tool、客户端类型与资产检查、全工作区 Clippy（-D warnings）、格式检查通过 |
 
@@ -798,8 +798,11 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | workspace.run_r | Operation | 默认 rho Host | workspace | Next-owned；Legacy Retired | 保持真实 R 验收范围 |
 | workspace.help / lint / format | Operation | 默认 rho Host | workspace | Next-owned（本机 Ark/R Verified） | 保持显式调用、输入/输出上限与缺包失败语义 |
 | workspace.snapshot | Query | 默认 rho Host | workspace | Next-owned | 维持 bounded/busy/无 Operation |
+| workspace.output_events / read_output / runtime_status | Query | 默认 rho Host | workspace / Ark observation | Next-owned（Studio 本机 Verified） | 保持原始引用、项目/principal、字节与观察边界 |
+| operation.list_recent | Query | 默认 rho Host | operation / sqlite | Next-owned（Studio Verified） | 仅分页摘要；不返回大块运行输出 |
 | workspace.inspect_object | Query | 默认 rho Host | workspace | Next-owned | 维持不求值绑定与有限预览 |
 | project.snapshot | Query | 默认 rho Host | project | Next-owned；Legacy Retired | 保持原生 Git/filesystem 观察 |
+| project.list_directory | Query | 默认 rho Host | project / filesystem | Next-owned（Studio Verified） | 包含 Git 忽略数据；保留分页及路径边界 |
 | project.read_file | Query | 默认 rho Host | project | Next-owned | 维持分段精确字节读取 |
 | project.apply_patch | Operation | 默认 rho Host | project | Next-owned；Legacy Retired | 保持原生前置条件与部分失败语义 |
 | environment.observe | Query | 默认 rho Host | environment | Next-owned | 维持原生 R/library 观察 |
@@ -818,7 +821,7 @@ N2 是第一条真实 capability。workspace.inspect 作为 Query 在 N3 实现�
 | slurm.request_cancel | Operation | 默认 rho Host（显式配置） | execution / ssh adapter | Next-owned（真实取消 Verified） | 请求回执与后续 CANCELLED 观察分离 |
 | CLI entry | Edge | 默认 rho | cli | 旧独立 crate Retired | 不再提供旧 SemanticStore 数据观察器 |
 | MCP edge | Edge | 默认 rho stdio/HTTP | mcp / host | Next-owned；Legacy Retired | 保持同 Host 语义，旧桌面引用已删除 |
-| desktop-lite | Edge | 默认 rho workbench | workbench / unified client | Next-owned（本机浏览器 Verified） | 保持轮询控件稳定、面板状态独立与项目结果分离；不扩张为全平台声明 |
+| Studio | Edge | 默认 rho workbench | workbench / React shared client | Next-owned（M1—M4 本机 Chrome Verified）；极简 DOM 客户端 Retired | 保持单一 HostClient、文档/面板生命周期分离、保存摘要纪律；不扩张为全平台声明 |
 | evidence projection | Query projection | 当前默认系统未启用 | 未决定 | Deferred；旧实现已删除 | 出现真实消费者时再评估，不复制旧事实系统 |
 | extensions | Capability source | 当前默认系统未启用 | 未决定 | Deferred；旧实现已删除 | 场景插件另作设计研究；本轮不实施、不增加 Next 完成条件 |
 
@@ -1462,7 +1465,7 @@ Ready 必须有行为证据；Next-owned 必须有入口切换证据；Retired �
 
 ## 27. 当前唯一下一步
 
-N0—N8 替换目标已完成。当前用户授权的唯一下一步是第 28 节 Studio 第一轮：M3 编辑闭环已通过本机真实浏览器检查，接着完成 M4 布局生命周期、异常恢复与完整回归。
+N0—N8 与第 28 节 Studio 第一轮的约定目标均已完成。本轮没有剩余自动实施项；新的能力、平台或分发范围需要新的具体请求。
 
 [复杂场景插件研究](SCENARIO-PLUGINS.md)仍只是一份研究文档。插件、通道和工作组合机制的开发不在本轮范围内，也不新增为 Next 的完成门槛。旧数据继续全部放弃，不恢复迁移或兼容工作。
 
@@ -1473,19 +1476,31 @@ N0—N8 替换目标已完成。当前用户授权的唯一下一步是第 28 �
 
 | 阶段 | 目标 | 当前状态与证据 |
 | --- | --- | --- |
-| M1 | React/FlexLayout 外壳、统一 HostClient、R 发现/配置、开发资源模式 | Implemented；生成契约与资产检查、Host/SQLite lib 测试、隔离 Chrome 的真实 R Console 与设置检查通过；开发资源不重启 R 的持续运行验收待 M4 |
-| M2 | Operation 摘要、运行期增量输出、媒体引用/读取、真实 runtime 状态 | Implemented；真实 Chrome 增量文本、PNG 定位、失败前输出、历史图选择保持通过 |
-| M3 | 文件浏览、CodeMirror 编辑、摘要前置保存、先保存再运行、对象/草稿恢复 | Implemented；真实 Chrome 新建中文 R 文件、保存/执行/对象与图形、修改重跑、UTF-8 跨页/BOM/CRLF、磁盘冲突停止运行与刷新草稿恢复通过 |
-| M4 | H01—H05 尺寸/交互、异常恢复、性能与真实浏览器闭环验收 | Target |
+| M1 | React/FlexLayout 外壳、统一 HostClient、R 发现/配置、开发资源模式 | Verified；开发资源刷新前后 R session/PID 与会话对象保持一致 |
+| M2 | Operation 摘要、运行期增量输出、媒体引用/读取、真实 runtime 状态 | Verified；真实 Chrome 增量文本、PNG 定位、失败前输出、历史图选择保持通过 |
+| M3 | 文件浏览、CodeMirror 编辑、摘要前置保存、先保存再运行、对象/草稿恢复 | Verified；真实 Chrome 新建中文 R 文件、保存/执行/对象与图形、修改重跑、UTF-8 跨页/BOM/CRLF、磁盘冲突停止运行与刷新草稿恢复通过 |
+| M4 | H01—H05 尺寸/交互、异常恢复、性能与真实浏览器闭环验收 | Verified；1440×900、1280×800、280px 窄列 / 104px Console、38px 收起和 560×300 组合边界；关闭恢复/撤销、跨端口、断线与多窗口、长输出下输入焦点通过 |
 
 实现边界：科学操作继续走五端口与 Gateway。UI 状态由本机 SQLite application store 保存，不进 Operation/outbox；以版本比较拒绝过期窗口覆盖。R 配置是宿主职责，候选先验证，显式结束会话；活动请求、任务和 MCP 引用拒绝切换。生产使用嵌入 JS/CSS；`--dev-assets` 只读取指定目录的允许资产。React 19.2.8、TypeScript 6.0.3、Vite 8.2.2、FlexLayout 0.10.8 固定版本，其余依赖也固定于 lockfile。Radix 动态样式与后续 CodeMirror 使用宿主 CSP nonce；媒体不会取得页面脚本权限。
 
-M1 工作树依据：`cargo test -p rho-workbench -p rho-sqlite -p rho-host --lib`（15 tests）、`npm run generate --prefix ui`、`npm run build --prefix ui`、`npm run check --prefix ui`、`cargo build --locked`、`npm run test:browser --prefix ui`（真实 R 4.5.2、隔离 Chrome Console/设置，1 test）。旧客户端 DOM 渲染与 DOM ID 专属构建检查已移除；当前阶段的编辑器/对象/图表仅有面板入口，不能视为 Studio 闭环完成。顶部历史 N0—N8 结论不替代本轮验收。
+M1 工作树依据：`cargo test -p rho-workbench -p rho-sqlite -p rho-host --lib`（15 tests）、`npm run generate --prefix ui`、`npm run build --prefix ui`、`npm run check --prefix ui`、`cargo build --locked`、`npm run test:browser --prefix ui`（真实 R 4.5.2、隔离 Chrome Console/设置，1 test）。旧客户端 DOM 渲染与 DOM ID 专属构建检查已移除；M1 验证仅针对外壳；编辑/对象/图表的完整闭环证据见 M3/M4。顶部历史 N0—N8 结论不替代本轮验收。
 
 
-M2：Ark 接收消息时记录有界运行期观察日志，图形材料以 OperationId/序号独立保存；摘要由原 Journal 按项目与 principal 查询，不复制运行终态。读取媒体验证原始引用、字节数及 SHA-256；前端以图片上下文加载 SVG，不注入 HTML。新增 `operation.list_recent`、`workspace.output_events/read_output/runtime_status`。对象/文件/运行结果 DTO 移入 contract 并生成 TypeScript。日志限制 1 MiB/4096 事件，单图 16 MiB、单次运行图形 32 MiB；截断和不完整尾记录显式返回。真实测试发现 Ark PNG Base64 可省略 padding，已按解码库规范接受两种合法形式并添加回归测试。浏览器测试 `npm run test:browser --prefix ui` 已通过 2 项；覆盖 `cat → Sys.sleep → cat` 结束前输出、真实 PNG、失败前输出保留及历史图不被新输出覆盖。当前仍未完成 M3/M4。
+M2：Ark 接收消息时记录有界运行期观察日志，图形材料以 OperationId/序号独立保存；摘要由原 Journal 按项目与 principal 查询，不复制运行终态。读取媒体验证原始引用、字节数及 SHA-256；前端以图片上下文加载 SVG，不注入 HTML。新增 `operation.list_recent`、`workspace.output_events/read_output/runtime_status`。对象/文件/运行结果 DTO 移入 contract 并生成 TypeScript。日志限制 1 MiB/4096 事件，单图 16 MiB、单次运行图形 32 MiB；截断和不完整尾记录显式返回。真实测试发现 Ark PNG Base64 可省略 padding，已按解码库规范接受两种合法形式并添加回归测试。浏览器测试 `npm run test:browser --prefix ui` 已通过 2 项；覆盖 `cat → Sys.sleep → cat` 结束前输出、真实 PNG、失败前输出保留及历史图不被新输出覆盖。当时 M3/M4 尚未完成，现见下方 M4 验证。
 
 
 M3：`project.list_directory` 直接读取文件系统，包含未跟踪和 Git 忽略条目；有界分页及符号链接/受保护路径校验。CodeMirror 的文本、光标、视图位置与同次运行撤销状态由共享文档模型持有；SQLite 恢复草稿，不自动改写项目文件。保存使用 jsdiff 与 `project.apply_patch` 的原文件摘要前置条件，只有返回的实际文件摘要匹配点击快照才确认保存；运行文件使用该快照，期间新输入保留为脏状态。UTF-8 BOM 和既有换行字节在普通编辑中保留；格式化期间文本变化则提供比较，磁盘冲突也可显式比较/重载。对象列表补充安全元数据，普通数据框只读预览上限 20×10。
 
-M3 验证：`npm run test --prefix ui`（13 项，含 React Testing Library、真实 Git 补丁落盘与保存失败/并发输入纪律）；真实浏览器分别通过新建中文脚本闭环和跨页/BOM/CRLF/冲突/刷新恢复。集成中发现 jsdiff 已负责文件名引号，重复加引号会产生错误目标；保存摘要检查阻止了后续 R 执行，现已去掉重复转义并以真实 Git 回归验证中文、空格、引号和空文件。所有失败试验都在隔离临时项目内，未改写用户项目文件。当前完整布局/异常/跨端口恢复与最终回归仍属于 M4，不能把 M3 记为整轮完成。
+M3 验证：`npm run test --prefix ui`（13 项，含 React Testing Library、真实 Git 补丁落盘与保存失败/并发输入纪律）；真实浏览器分别通过新建中文脚本闭环和跨页/BOM/CRLF/冲突/刷新恢复。集成中发现 jsdiff 已负责文件名引号，重复加引号会产生错误目标；保存摘要检查阻止了后续 R 执行，现已去掉重复转义并以真实 Git 回归验证中文、空格、引号和空文件。所有失败试验都在隔离临时项目内，未改写用户项目文件。当时的剩余布局/异常/跨端口恢复与最终回归已在 M4 完成。
+
+
+### 2026-09-07 — M4 验证与 Studio 切换
+
+- Implemented / Verified：字体与缩进偏好保存于用户 SQLite 状态；图形选择/缩放、布局与草稿按项目保存。断线后的草稿同步核对原版本与未确认内容；多窗口冲突保留本地文本并提供显式比较/替换。未确认运行沿用原 client request ID，刷新不重新执行，显式重试仍复用 ID。
+- 布局：组件级容器适配、面板分组收起、最大化后还原；收起组最大化再还原的测量回归固定为 38px。真实拖拽/分组、关闭并重新打开后，文档文本与同次运行撤销历史保留；长输出期间编辑器 DOM、中文输入和焦点稳定。运行按钮与快捷键共享可用条件。
+- 宿主：活动请求或 MCP 引用阻止 R 切换；无效候选和缺失依赖不结束旧会话；启动失败保留诊断并在可行时提供没有 R 的项目工作台。开发目录只读取允许且有界的资产；刷新 CSS 后实际 R session/PID 和会话对象保持。数据库使用符号链接别名时，其配置名旁的应用状态文件仍受项目边界保护。
+- 生产切换 / Retired：当前 `rho workbench` 默认内嵌 React Studio，旧极简 DOM 客户端及其专属构建检查已删除。没有第二条前端业务服务或第二条科学执行主线；CLI/MCP 语义、领域 owner 和科学后端测试保留。
+- 已运行：全工作区 Rust 测试、全工作区 Clippy（`-D warnings`）、格式检查；`npm run generate/build/check --prefix ui`；Vitest / React Testing Library 14 项；Playwright 隔离 Chrome 15 项，关闭/重新打开后的 redo 另经增强的布局用例复核。
+- 原生与协议：`test-real-r.mjs`、`test-environment.mjs`、`test-process-recovery.mjs`、`test-mcp.mjs`（普通与 `--real-r`）、`test-workbench.mjs`（普通与 `--real-r`）、`test-remote-protocol.mjs`、architecture 与 governance/tool 检查通过。Environment 使用隔离 fixture / 临时库，验证用户 R 库未改变；本轮没有自动安装 R/Ark 或向用户库安装包。
+- 视觉依据：Paper H01—H05 的共享变量、52px 外壳、38px 标签栏和容器收缩规则已接入。隔离 Chrome 生成本地截图 `target/studio-browser/`；另经原生 Chrome 连接观察真实 Console 和对象预览。SVG/HTML 攻击样本是独立的渲染边界 fixture，真实 R 图形验收使用 Ark PNG，未将 mock 视为科学闭环完成。
+- 检查点：M1 `4c149da`、M2 `b09d90e`、M3 `19e5f5b`；M4 为包含本记录的阶段提交。完整回归基于当前 macOS、R 4.5.2 与 Chrome；不声明 Windows/Linux、其他浏览器、远程作业、原生安装器或分发已完成。

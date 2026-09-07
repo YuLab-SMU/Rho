@@ -45,6 +45,15 @@ active work blocks a switch. A new project's ownership is reserved before the ol
 session is ended. Core ports are `invoke`, `getOperation`, `requestCancellation`,
 `querySnapshot` and cursor-based `subscribe`. Types are generated from Rust.
 
+The Studio shell, docking layout and panels share one client model and HostClient.
+Documents own their CodeMirror states independently of panel lifetime. Save verifies
+the filesystem digest before Run File can submit its captured text. R configuration
+and UI state are hosting concerns; SQLite application state is not scientific history
+and uses optimistic concurrency between windows. Runtime output logs are bounded
+observations, with separately referenced media; the Operation journal remains the
+sole execution result authority. Resource metrics describe known Ark/R processes,
+not inferred UI activity. SVG is loaded only through the browser image context.
+
 Legacy data assets are abandoned. Source replacement uses fresh application
 state, not imports, archive readers, dual writes or cross-version session handoff.
 See [the charter and ledger](NEXT-SYSTEM.md) for decisions, remaining work and

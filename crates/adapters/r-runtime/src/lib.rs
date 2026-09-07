@@ -231,9 +231,8 @@ impl ArkRuntime {
                             if value["status"] != "ok" { captured.protocol_error = Some(value); }
                         }
                         JupyterMessageContent::StreamContent(stream) => {
-                            if let Some(writer) = &mut writer {
-                                if let Err(error) = writer.stream(match stream.name { Stdio::Stdout => "stdout", Stdio::Stderr => "stderr" }, &stream.text) { captured.observation_error = Some(error); }
-                            }
+                            if let Some(writer) = &mut writer
+                                && let Err(error) = writer.stream(match stream.name { Stdio::Stdout => "stdout", Stdio::Stderr => "stderr" }, &stream.text) { captured.observation_error = Some(error); }
                             let output = match stream.name {
                                 Stdio::Stdout => &mut captured.stdout,
                                 Stdio::Stderr => &mut captured.stderr,
@@ -276,7 +275,7 @@ impl ArkRuntime {
                         _ => {}
                     }
                     if idle && reply {
-                        if let Some(writer) = &mut writer { if let Err(error) = writer.finish() { captured.observation_error = Some(error); } }
+                        if let Some(writer) = &mut writer && let Err(error) = writer.finish() { captured.observation_error = Some(error); }
                         return Ok(captured);
                     }
                 }

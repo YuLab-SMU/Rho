@@ -21,6 +21,7 @@ use rho_mcp::McpEdge;
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
+use tokio::io::AsyncReadExt;
 use tokio::sync::{RwLock, Semaphore};
 use tokio_util::sync::CancellationToken;
 use tower_http::limit::RequestBodyLimitLayer;
@@ -181,12 +182,25 @@ async fn select_project(
             });
             Json(hosting.info()).into_response()
         }
-        Err(error) => failure(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!(
-                "No project is open. The previous session, if any, has ended; its memory is not restored. {error}"
-            ),
-        ),
+        Err(error) => {
+            hosting.r_configuration.error = Some(format!(
+                "R startup failed; previous session memory has ended. {error}"
+            ));
+            hosting.profile.runtime = rho_host::RuntimeConfiguration::Project;
+            match hosting.profile.open(&root).await {
+                Ok(host) => {
+                    hosting.selected = Some(SelectedHost {
+                        host: Arc::new(host),
+                        root,
+                    });
+                    Json(hosting.info()).into_response()
+                }
+                Err(error) => failure(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Project is unavailable; previous session memory has ended. {error}"),
+                ),
+            }
+        }
     }
 }
 
@@ -253,7 +267,21 @@ async fn asset(state: AppState, name: &str, kind: &str, embedded: &'static str) 
         let path = root.join(name);
         match path.canonicalize() {
             Ok(path) if path.parent() == Some(root.as_path()) => {
-                match tokio::fs::read(path).await {
+                let read = async {
+                    let metadata = tokio::fs::metadata(&path).await?;
+                    if !metadata.is_file() || metadata.len() > 16 * 1024 * 1024 {
+                        return Err(std::io::Error::other("invalid development asset"));
+                    }
+                    let mut bytes = Vec::new();
+                    tokio::fs::File::open(path)
+                        .await?
+                        .take(16 * 1024 * 1024 + 1)
+                        .read_to_end(&mut bytes)
+                        .await?;
+                    Ok::<_, std::io::Error>(bytes)
+                }
+                .await;
+                match read {
                     Ok(bytes) if bytes.len() <= 16 * 1024 * 1024 => bytes,
                     _ => {
                         return failure(
@@ -673,5 +701,181 @@ mod tests {
         );
         assert_eq!(state.hosting.read().await.info().project_root, before);
         other_host.drain().await;
+    }
+    #[tokio::test]
+    async fn application_state_is_scoped_and_uses_compare_and_swap() {
+        let (_temp, state, app) = fixture().await;
+        let project = state.hosting.read().await.info().project_root;
+        let initial = json_body(
+            request(
+                &app,
+                "/api/state/read",
+                Some(json!({"project_root":project,"key":"studio"})),
+            )
+            .await,
+        )
+        .await;
+        let write = json!({"project_root":project,"state":{"key":"studio","version":initial["version"],"value":{"draft":"retained"}}});
+        let saved = request(&app, "/api/state/write", Some(write.clone())).await;
+        assert_eq!(saved.status(), StatusCode::OK);
+        assert_eq!(
+            request(&app, "/api/state/write", Some(write))
+                .await
+                .status(),
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            request(
+                &app,
+                "/api/state/read",
+                Some(json!({"project_root":"/other","key":"studio"}))
+            )
+            .await
+            .status(),
+            StatusCode::CONFLICT
+        );
+        let outbox = frame(&state, "subscribe", json!({"after_sequence":0,"limit":100})).await;
+        assert_eq!(
+            json_body(request(&app, "/api/host", Some(outbox)).await).await["result"],
+            json!([])
+        );
+    }
+
+    #[tokio::test]
+    async fn development_assets_are_bounded_and_only_selected_files_are_served() {
+        let (temp, mut state, _app) = fixture().await;
+        let assets = temp.path().join("assets");
+        std::fs::create_dir(&assets).unwrap();
+        std::fs::write(assets.join("app.js"), "first").unwrap();
+        state.dev_assets = Some(assets.canonicalize().unwrap());
+        let app = router(state, CancellationToken::new());
+        let response = request(&app, "/app.js", None).await;
+        assert_eq!(
+            &to_bytes(response.into_body(), MAX_REPLY).await.unwrap()[..],
+            b"first"
+        );
+        std::fs::write(assets.join("app.js"), "second").unwrap();
+        assert_eq!(
+            &to_bytes(request(&app, "/app.js", None).await.into_body(), MAX_REPLY)
+                .await
+                .unwrap()[..],
+            b"second"
+        );
+        assert_eq!(
+            request(&app, "/secret.txt", None).await.status(),
+            StatusCode::NOT_FOUND
+        );
+        #[cfg(unix)]
+        {
+            std::fs::remove_file(assets.join("app.js")).unwrap();
+            std::fs::write(temp.path().join("outside.js"), "not served").unwrap();
+            std::os::unix::fs::symlink(temp.path().join("outside.js"), assets.join("app.js"))
+                .unwrap();
+            assert_eq!(
+                request(&app, "/app.js", None).await.status(),
+                StatusCode::NOT_FOUND
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn r_selection_validates_before_teardown_and_reports_startup_failure() {
+        use std::os::unix::fs::PermissionsExt;
+        let (temp, state, app) = fixture().await;
+        let r = temp.path().join("R");
+        let ark = temp.path().join("ark");
+        std::fs::write(
+            &r,
+            format!(
+                "#!/bin/sh\nprintf 'RHO_PROBE\\n{}\\n4.5.2\\naarch64\\nTRUE\\nTRUE\\n'\n",
+                temp.path().display()
+            ),
+        )
+        .unwrap();
+        std::fs::write(&ark, "#!/bin/sh\nprintf 'ark fixture\\n'\n").unwrap();
+        for path in [&r, &ark] {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let selection = json!({"executable":r,"ark":ark});
+        let current = {
+            let hosting = state.hosting.read().await;
+            Arc::downgrade(&hosting.selected.as_ref().unwrap().host)
+        };
+        let invalid =
+            json!({"selection":{"executable":"/missing/rho-test-R","ark":ark},"end_session":true});
+        assert_eq!(
+            request(&app, "/api/r", Some(invalid)).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert!(current.upgrade().is_some());
+        assert_eq!(
+            request(
+                &app,
+                "/api/r",
+                Some(json!({"selection":selection,"end_session":false}))
+            )
+            .await
+            .status(),
+            StatusCode::CONFLICT
+        );
+        let edge = {
+            let hosting = state.hosting.read().await;
+            McpEdge::local(hosting.selected.as_ref().unwrap().host.clone()).unwrap()
+        };
+        assert_eq!(
+            request(
+                &app,
+                "/api/r",
+                Some(json!({"selection":selection,"end_session":true}))
+            )
+            .await
+            .status(),
+            StatusCode::CONFLICT
+        );
+        assert!(current.upgrade().is_some());
+        drop(edge);
+        // Probe succeeds, actual runtime startup fails (no Rscript/bridge at this R home).
+        let failed = json_body(
+            request(
+                &app,
+                "/api/r",
+                Some(json!({"selection":selection,"end_session":true})),
+            )
+            .await,
+        )
+        .await;
+        assert!(failed["error"].as_str().unwrap().contains("startup failed"));
+        assert!(current.upgrade().is_none());
+        let info = json_body(request(&app, "/api/info", None).await).await;
+        assert_eq!(info["runtime"], "project");
+        assert!(info["project_root"].is_string());
+        assert!(
+            !info["capabilities"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["capability"]["id"] == "workspace.run_r")
+        );
+        // Missing bridge dependency never tears down this file-only host.
+        std::fs::write(
+            &r,
+            format!(
+                "#!/bin/sh\nprintf 'RHO_PROBE\\n{}\\n4.5.2\\naarch64\\nFALSE\\nFALSE\\n'\n",
+                temp.path().display()
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            request(
+                &app,
+                "/api/r",
+                Some(json!({"selection":selection,"end_session":true}))
+            )
+            .await
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert!(state.hosting.read().await.selected.is_some());
     }
 }
