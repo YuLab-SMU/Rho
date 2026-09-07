@@ -33,6 +33,9 @@ The tutorial is a workflow reference; its RStudio commands and shortcuts are not
 claims about current Rho functionality. The issues below have not been newly
 reproduced or diagnosed during this documentation pass. The list is open-ended.
 
+The proposed cross-product principles for interpreting this feedback are in
+[RHO-DESIGN.md](RHO-DESIGN.md). They do not replace or close the reported issues.
+
 ## User feedback
 
 ### F01 — Components cannot be removed

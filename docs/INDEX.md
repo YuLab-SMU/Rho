@@ -11,6 +11,7 @@ Generated from `governance/registry.json`. Edit the JSON source and regenerate.
 ## `documentation`
 
 - [Documentation map](<README.md>) — `DOCS`
+- [Rho product design philosophy (proposed foundation)](<RHO-DESIGN.md>) — `RHO-DESIGN`
 - [Scenario plugin design research (no implementation scope)](<SCENARIO-PLUGINS.md>) — `SCENARIO-PLUGINS`
 - [Studio usability feedback and scenario reference](<STUDIO-FEEDBACK.md>) — `STUDIO-FEEDBACK`
 

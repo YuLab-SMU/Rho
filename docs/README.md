@@ -26,7 +26,12 @@ source or a reproducible run is wrong and should be corrected or deleted.
   and deterministic execution, and explores possible plugin forms. Implementation
   is outside the current Rho Next goal; this page is not a second progress ledger.
 
-## Product feedback
+## Product design and feedback
+
+- [Rho product design philosophy](RHO-DESIGN.md) — proposed principles, shared
+  interaction vocabulary and design review criteria for the scientific workspace.
+  This is a design foundation, not a statement of implemented behavior.
+
 
 - [Studio usability feedback and scenario reference](STUDIO-FEEDBACK.md) —
   user feedback against the frozen M1–M4 baseline and a workflow reference for

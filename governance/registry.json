@@ -8,6 +8,7 @@
     {"id": "NEXT-SYSTEM", "title": "Rho system charter and replacement ledger", "document": "docs/NEXT-SYSTEM.md", "area": "system"},
     {"id": "SCENARIO-PLUGINS", "title": "Scenario plugin design research (no implementation scope)", "document": "docs/SCENARIO-PLUGINS.md", "area": "documentation"},
     {"id": "STUDIO-FEEDBACK", "title": "Studio usability feedback and scenario reference", "document": "docs/STUDIO-FEEDBACK.md", "area": "documentation"},
+    {"id": "RHO-DESIGN", "title": "Rho product design philosophy (proposed foundation)", "document": "docs/RHO-DESIGN.md", "area": "documentation"},
     {"id": "RELEASE", "title": "Build and release operations", "document": "docs/RELEASE.md", "area": "delivery"}
   ]
 }

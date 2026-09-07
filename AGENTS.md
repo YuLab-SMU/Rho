@@ -18,6 +18,10 @@ The user also authorized `docs/STUDIO-FEEDBACK.md` for Studio usability feedback
 and scenario references. It records experience requirements and investigation
 questions, not implementation progress or an automatic expansion of scope.
 Progress remains only in `docs/NEXT-SYSTEM.md`.
+Product design philosophy is described in `docs/RHO-DESIGN.md`, following the
+user request to establish Rho-specific professional design principles. Its v0.1
+proposals are distinct from accepted requirements and implemented behavior; it
+is not another implementation or progress ledger.
 There are no real legacy users. Legacy architecture data assets are abandoned:
 do not build data migration, import, archive-reader or compatibility work. Next
 starts with fresh application state; focus on capabilities, entrypoints and
