@@ -1,10 +1,8 @@
 # Rho Privacy Policy
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
-This page describes the current CLI and local browser workbench. The retired
-Tauri application's model settings, conversation store, approval records and
-automatic updater are not features of the current implementation.
+This page describes the current CLI, Studio and MCP entry points.
 
 ## Local data
 
@@ -15,9 +13,11 @@ can contain stdout/stderr, conditions, output files, package plans, isolated
 libraries and recovery material. The selected database and runtime paths are
 described in the [operator guide](docs/OPERATIONS.md).
 
-The browser uses session storage for the local access token and an unconfirmed
-request retained for explicit same-ID retry. Browser storage is managed by the
-browser. Closing a page does not cancel work already accepted by the Host.
+A separate local SQLite application store holds Studio drafts, layouts, view
+positions, recent projects, preferences and unconfirmed request identities. Draft
+synchronization does not overwrite project files. The browser uses session storage
+for the current local access token. Closing a page does not cancel accepted work;
+reconnection queries the original request and retry is explicit.
 
 Rho does not maintain an internal Agent conversation or model-provider account
 database. An external Agent platform manages its own conversations, credentials
@@ -57,8 +57,9 @@ locations until removed. Environment material cleanup is explicit and protects
 the references and active use it can observe; it is not a general sweep of all
 outputs. See the operator guide for its quarantine, restore and purge behavior.
 
-Stop the relevant Host before manually removing its application database or
-runtime directory. Removing the Rho executable does not remove project files,
+Stop the relevant Host before manually removing its application databases or
+runtime directory. Synchronized drafts live in the application store, so deleting
+that store removes the saved drafts as well. Removing the Rho executable does not remove project files,
 R libraries, browser storage or credentials managed by other tools. Git history
 and external scheduler records have their own lifetimes.
 

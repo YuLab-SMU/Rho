@@ -25,12 +25,17 @@ license, and notice files remain controlling.
 | --- | --- | --- |
 | Jet | `vendor/jet/` | MIT; [`vendor/jet/LICENSE`](vendor/jet/LICENSE) |
 | Ark runtime | external executable, pinned for optional acquisition by `runtime/ark.json` | MIT plus upstream notices; acquisition retains the archive's `LICENSE` and `NOTICE` with the executable |
-| sysinfo | native process observation in the new execution adapter | MIT; exact version/features are pinned in `Cargo.toml` and `Cargo.lock` |
+| sysinfo | native process observation in the execution adapter | MIT; exact version/features are pinned in `Cargo.toml` and `Cargo.lock` |
 
-The former Tauri/Vite frontend, Wasm extension host and embedded graph engine
-are no longer part of the production build. Their old copied notice files are
-not distribution inputs for the new binary. Upstream Jet's source and license
-remain in the repository; Ark notices remain with any acquired runtime.
+The embedded Studio also includes React/React DOM, FlexLayout, CodeMirror and
+Radix Primitives (MIT), jsdiff (BSD-3-Clause), and Inter font assets (OFL-1.1).
+The installed packages' license files and the exact versions in
+`ui/package-lock.json` are the source evidence for those entries. Vite and
+TypeScript are build dependencies. This summary is not a complete redistribution
+notice bundle; inspect the actual payload before distributing it.
+
+Upstream Jet's source and license remain in the repository; Ark notices accompany
+any acquired runtime. License texts and publisher attribution must be preserved.
 
 Rust, Node, and R dependency manifests identify additional source/runtime
 dependencies. Those dependencies remain under the licenses published by their

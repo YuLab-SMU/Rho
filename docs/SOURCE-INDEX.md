@@ -52,6 +52,7 @@ Documentation:
 - [Documentation map](<README.md>) — `DOCS`
 - [Rho product design philosophy (proposed foundation)](<RHO-DESIGN.md>) — `RHO-DESIGN`
 - [Scenario plugin design research (no implementation scope)](<SCENARIO-PLUGINS.md>) — `SCENARIO-PLUGINS`
+- [Rho current state and focus](<STATUS.md>) — `STATUS`
 - [Studio usability feedback and scenario reference](<STUDIO-FEEDBACK.md>) — `STUDIO-FEEDBACK`
 
 Sources:
@@ -76,7 +77,6 @@ Documentation:
 
 - [Architecture](<ARCHITECTURE.md>) — `ARCHITECTURE`
 - [Development loop](<DEVELOPMENT.md>) — `DEVELOPMENT`
-- [Rho system charter and replacement ledger](<NEXT-SYSTEM.md>) — `NEXT-SYSTEM`
 - [Runtime operator guide](<OPERATIONS.md>) — `OPERATIONS`
 
 Sources:
@@ -84,7 +84,7 @@ Sources:
 - `Cargo.lock`
 - `Cargo.toml`
 - `crates/**`
-- `docs/NEXT-SYSTEM.md`
+- `docs/ARCHITECTURE.md`
 - `r/**`
 - `rust-toolchain.toml`
 - `scripts/check-architecture.mjs`

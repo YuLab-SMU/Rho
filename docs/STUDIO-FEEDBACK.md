@@ -6,13 +6,13 @@ This is the user-authorized feedback document for the next Studio refinement
 round. It records user experience requirements and investigation questions;
 it is not an implementation plan, a completion checklist, or another progress
 ledger. Implementation decisions and verified progress remain in
-[NEXT-SYSTEM.md](NEXT-SYSTEM.md).
+[STATUS.md](STATUS.md).
 
 ## Baseline and evidence
 
 The implementation baseline is commit
 `d5a970b1559c9bd85567073108d05bca21886de4`, identified by the local Git tag
-`studio-round1-baseline-2026-09-07`. This preserves the delivered M1–M4 code.
+`studio-round1-baseline-2026-09-07`. This preserves the delivered Studio code.
 
 The user considers the overall appearance promising, but has identified substantial
 interaction problems. The previous functional and automated acceptance does not

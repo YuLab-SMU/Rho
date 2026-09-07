@@ -25,5 +25,7 @@ unless you separately agree to a written assignment.
 
 Read the short [development guide](docs/DEVELOPMENT.md). Preserve unrelated
 working-tree changes, add the closest useful regression test, and update
-documentation only when it clarifies the current code. Planning and status stay
-with the issue or working branch; run evidence stays with the run.
+documentation only when it clarifies the current code. Detailed task plans stay with the issue or working branch.
+[Current state](docs/STATUS.md) summarizes product focus and verified behavior;
+run evidence stays with the run. Read the [design philosophy](docs/RHO-DESIGN.md)
+and [Studio feedback](docs/STUDIO-FEEDBACK.md) for interaction changes.

@@ -1,187 +1,95 @@
-# Rho agent notes
+# Working on Rho
 
-Code and reproducible command output are the source of truth. Documentation is
-a compact map of the current implementation; Git is the history. Plans and
-status stay with the working issue or branch rather than becoming repository
-documents.
+Rho is the operable scientific workspace. Current work concerns product quality
+and scientific capabilities. The root Cargo workspace builds `rho`; source lives
+in `crates/`, `r/`, `ui/` and `scripts/`.
 
-The user-authorized exception is `docs/NEXT-SYSTEM.md`: the single living
-design, replacement ledger and milestone record for Rho Next. Read it before
-Next work; keep target, implemented, verified, production cutover and legacy
-retirement distinct. Do not create a parallel plan or status document.
-The user also authorized `docs/SCENARIO-PLUGINS.md` as a separate design-research
-note. Its possible plugin, channel and work-composition designs are not current
-capabilities, an implementation plan, or completion requirements for Rho Next.
-Do not implement that research without a new request. Progress remains only in
-`docs/NEXT-SYSTEM.md`.
-The user also authorized `docs/STUDIO-FEEDBACK.md` for Studio usability feedback
-and scenario references. It records experience requirements and investigation
-questions, not implementation progress or an automatic expansion of scope.
-Progress remains only in `docs/NEXT-SYSTEM.md`.
-Product design philosophy is described in `docs/RHO-DESIGN.md`, following the
-user request to establish Rho-specific professional design principles. Its v0.1
-proposals are distinct from accepted requirements and implemented behavior; it
-is not another implementation or progress ledger.
-There are no real legacy users. Legacy architecture data assets are abandoned:
-do not build data migration, import, archive-reader or compatibility work. Next
-starts with fresh application state; focus on capabilities, entrypoints and
-removing replaced code, not preserving old runtime or application data.
+## Read for the task
 
-The root Cargo workspace now builds the new system only, with `rho` as its
-default binary. Current source is under `crates/`, `r/`, `ui/` and `scripts/`;
-the temporary next/ source tree and old implementations are gone. Do not restore old code as
-a production dependency or run retired desktop/release gates for new changes.
+Start with `docs/README.md` and `docs/STATUS.md`. Read `docs/ARCHITECTURE.md` for
+ownership and execution constraints. For Studio work, read `docs/RHO-DESIGN.md`
+and `docs/STUDIO-FEEDBACK.md`; the philosophy is proposed and the feedback remains
+open until addressed and verified.
 
-## Architecture Philosophy
+`docs/STATUS.md` is the single current status summary. Durable constraints belong
+in Architecture; interaction principles in Design; user problems in Feedback.
+Detailed plans stay with the working issue/branch. Git is the history; do not add
+completed-work archives or another progress ledger. `docs/SCENARIO-PLUGINS.md` is
+research, not an implementation commitment.
 
-**Rho is the operable scientific space. The Agent platform owns conversation
-and behavior. ACP is the thin boundary between them.**
+Data from abandoned implementations is not a supported input. Do not introduce
+migration, import, archive-reader or compatibility work without a new request.
 
-Most product code belongs to Rho's scientific space:
+## Architecture rules
 
-- project files, editors, resources and user-visible scientific assets;
-- the live Workspace R session, Environment state and runtime lifecycle;
-- tools, executions, jobs, outputs, artifacts, evidence and revisions;
-- capability schemas, containment, audit facts and recovery/rollback;
-- truthful state snapshots, tool events and execution results.
-
-The external Agent platform (Claude Code ACP, Codex, etc.) owns the smaller
-agency layer:
-
-- Conversation and Agent-session lifecycle;
-- understanding intent, planning and choosing actions;
-- model/provider configuration and private reasoning;
-- permission modes, risk decisions and user prompting;
-- retry, continuation and behavioral policy.
-
-Rho's Agent integration should remain a small ACP adapter. For an Agent-facing
-operation, Rho receives the request, validates protocol shape and mechanical
-execution constraints, dispatches it to the scientific-space owner, and returns
-the real state, tool events and run result. Rho must not rewrite the goal,
-construct an internal plan, imitate an Agent loop, or introduce a second
-permission decision.
-
-Conversation content is not Rho authority. Persist only the minimal correlation
-identities or visible audit projection required by the product; do not build a
-parallel Conversation, planning or behavioral subsystem inside Rho.
-
-### Key Principles
-
-1. **Scientific space first** - Put capabilities in their real Rho owner, not
-   in an Agent subsystem.
-2. **Agent owns agency** - Conversation, planning, tool choice and behavioral
-   control remain in the external Agent platform.
-3. **Respond, don't orchestrate** - Rho reacts to requested operations and
-   reports facts; it does not run a competing Agent loop.
-4. **Expose the whole usable space** - Agents receive discoverable state and
-   executable capabilities for Workspace, Environment, files, assets, evidence
-   and runtimes.
-5. **Validate mechanics, not intent** - Validate identity, schema, containment,
-   quotas and revision integrity, not whether an action seems reasonable.
-6. **No double approval** - The Agent platform's permission flow is
-   authoritative. Rho does not create approval records or re-prompt the user.
-7. **Return owner truth** - State, tool events and results come from the
-   component that performed or observed the operation, never UI inference.
-8. **Recover truthfully** - Preserve rollback/reconciliation material and
-   report partial or uncertain outcomes instead of claiming success.
-
-### Operation and Host Role
-
-`rho-operation` registers capabilities and enforces schema, scope,
-idempotency and commit discipline. Domain handlers interpret native observations
-and return CommitPlan; they do not own independent result databases. Native
-identities and owner-specific preconditions replace global revision counters.
-`rho-host` is the composition root. CLI, browser and official MCP use its
-five shared ports; none contains a second scientific operation flow.
-
-**Removed concepts** (legacy from internal Agent era):
-- ~~PermissionPosture~~ - Agent has its own permission modes
-- ~~ApprovalBinding~~ - Agent's RequestPermission carries user approval
-- ~~BrokerAdmissionOutcome::Ask~~ - Rho never prompts users, only Agent does
+- Scientific owners manage files, the live R Workspace, Environment, executions,
+  jobs, outputs and recovery. Add capabilities to their real owner.
+- External Agent platforms own conversation, intent, planning, tool choice,
+  model/provider settings, permissions and continuation. Rho receives requests
+  and reports facts; it does not run another Agent behavior loop.
+- Agent requests are trusted subject to mechanical identity, schema, scope,
+  containment, quota and native-precondition checks. Do not add Rho approvals or
+  re-prompt for Agent-authorized operations. Extension isolation is a separate concern.
+- `rho-operation` owns registration, idempotency and commit discipline. Domain
+  handlers interpret observations and return CommitPlan. Adapters do not own
+  independent result databases or commit scientific truth.
+- `rho-host` is the composition root. CLI, browser and official MCP share its five
+  ports; edges must not contain a second scientific operation flow.
+- Use native identities and owner-specific preconditions instead of a global
+  scientific revision counter. A mutation succeeds only when authoritative state
+  agrees. Cancellation requests, confirmed cancellation and rollback are distinct.
+- Queries are bounded observations; they must not start a runtime or recover work
+  simply to read it. Preserve partial/uncertain outcomes and recovery material.
 
 ## Working loop
 
-1. Inspect `git status` and the relevant source/tests.
-2. Use `node scripts/governance.mjs impact --changed-auto` to see mapped areas
-   and checks.
-3. Make a small coherent change and run the closest test while iterating.
-4. Run the affected checks when the behavior settles, inspect the diff, and
-   report only results that actually ran.
-5. Update a current document only when it explains something the code cannot
-   express clearly. Delete obsolete explanation instead of archiving it.
+1. Inspect `git status` and the relevant source/tests. Preserve unrelated changes.
+2. Run `node scripts/governance.mjs impact --changed-auto` for mapped checks.
+3. Make a coherent change and iterate with the closest useful test.
+4. Run affected checks once behavior settles; inspect the diff and report only
+   commands that ran. Compare failures against a pre-change baseline.
+5. Update a current document when it clarifies behavior or changes current focus.
+   Keep proposed, implemented and verified claims distinct.
 
-Preserve unrelated working-tree changes. A mutation reports success only when
-its authoritative state agrees. Keep identity, capability, schema, containment
-and revision checks at the execution boundary, contain project data and
-secrets, bound external data, and leave truthful recovery after failure. Agent
-permissions belong to the Agent platform; extension sandbox permissions remain
-a separate component concern. These are implementation properties, not
-paperwork gates.
+## Verification and iteration
 
-Documentation starts at `docs/README.md`. Its machine-readable page and source
-maps live in `governance/registry.json` and `governance/source-map.json`.
+- Cargo invocations share `target/`: never run two Cargo build/test/check commands
+  in parallel. Type generation invokes Cargo too. Wait for completion; do not
+  poll background tests with sleeps.
+- Rust changes: use `cargo test -p <crate> <filter> --locked` while iterating.
+- Contract/client changes: run `npm run generate --prefix ui`, then
+  `npm run build --prefix ui`, then `npm run check --prefix ui`.
+- UI behavior: use `npm run test --prefix ui` and relevant isolated Chrome tests.
+  Build the current binary before `npm run test:browser --prefix ui`.
+- Real R checks use `node scripts/test-real-r.mjs`; skipped external checks are not
+  passes. Full checks and prerequisites are in `docs/DEVELOPMENT.md`.
+- For a real visual run, build the client and `cargo build --locked`, then open the
+  private workbench URL through an available browser connection. Development assets
+  support browser refresh without restarting R; see `docs/OPERATIONS.md`.
 
-## Verification
+## Implementation details worth preserving
 
-- Cargo invocations share one `target/` directory. Never run two
-  `cargo test` or `cargo build` processes in parallel; the build lock
-  serializes them and both appear hung until they time out.
-- Iterate with the closest fast gate; run full suites once at the end.
-  - Contract or client change: `npm run generate --prefix ui`,
-    `npm run build --prefix ui`, then `npm run check --prefix ui`.
-  - Rust change: filtered `cargo test -p <crate> <filter>`; reruns take
-    seconds once the test binary is built.
-- Do not poll background test runs with sleeps; wait for completion.
-- When tests fail, compare the failing set against a pre-change baseline
-  before attributing it to the current change.
-
-## Repository details
-
-- **Agent requests are trusted** - Rho validates mechanical constraints,
-  dispatches to the owning scientific component, and never re-prompts users.
-- New scientific capabilities belong in Workspace, Environment, project,
-  runtime, artifact, evidence or other domain owners. The ACP/MCP layer only
-  exposes and forwards them.
-- Direct UI and Agent-triggered operations must report the same owner truth;
-  neither path creates Rho-owned Agent approval records.
-- Pass the normalized broker/store project root to Workspace R environment
-  helpers. Do not rely on the process working directory.
+- Pass the normalized Host/project root to R environment helpers; do not infer it
+  from the process working directory.
 - In R, test name membership before indexing a named atomic vector.
-- Client types come from Rust contract through ts-rs. Keep generated types and
-  embedded app.js current; do not reintroduce per-capability Tauri commands.
-- The current React Studio starts at `ui/src/app.ts`; shared tokens live in
-  `ui/src/style.css`. `crates/workbench/assets/` is generated by Vite; edit
-  source and rebuild it. Panels consume the shared Studio/Document models and
-  HostClient; do not extend the retired desktop UI.
-- Project skill discovery validates the `.rho/skills` root itself, including
+- Rust contracts generate TypeScript DTOs through ts-rs. Keep generated bindings
+  and embedded assets current; use the shared Host ports.
+- Studio starts in `ui/src/app.ts`; tokens live in `ui/src/style.css`.
+  `crates/workbench/assets/` is generated. Panels use the shared Studio/Document
+  models and HostClient; preserve document state across layout changes.
+- Product-authored UI uses English. Preserve Unicode user content and native output.
+- Project skill discovery must validate the `.rho/skills` root itself, including
   symlink containment.
-- Windows GNU Rust commands require the Rtools45 toolchain at the front of
-  `PATH`.
+- Windows GNU Rust commands require Rtools45 at the front of PATH.
 
-## Parallel work
+## Parallel work and distribution
 
-Register only genuinely independent worktrees:
+Register only genuinely independent worktrees with `scripts/dev-lanes.mjs`:
+`start --id NAME --own 'path/**'`, `check --id NAME --changed-auto`, and
+`finish --id NAME`. Keep real workbench runs in the integration checkout.
+Before switching tasks, preserve unfinished work in a clearly named WIP commit.
 
-```bash
-node scripts/dev-lanes.mjs start --id example --own 'path/**'
-node scripts/dev-lanes.mjs check --id example --changed-auto
-node scripts/dev-lanes.mjs finish --id example
-```
-
-Keep real workbench runs in the integration checkout. Before changing
-tasks, preserve unfinished work in a clearly named WIP branch commit.
-
-## Visual and installer operations
-
-For a real visual run, build the embedded client and current binary, then open
-its private local workbench URL through an available browser connection:
-
-```bash
-npm run build --prefix ui
-cargo build --locked
-```
-
-The old installer/updater workflows are retired, not evidence of new packaging.
-When distribution is explicitly requested, use a verified new-system packaging
-path and report exact paths, sizes and hashes. Do not install or publish
-automatically. See `docs/RELEASE.md` for the current operator map.
+Distribution requires an explicit task and a verified packaging path. Report exact
+commit, artifacts, sizes, hashes and executed checks. Build, signing, installation
+and publication are separate outcomes; do not install or publish automatically.
+Use `docs/RELEASE.md` for the current operator map.

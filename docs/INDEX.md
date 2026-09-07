@@ -13,11 +13,11 @@ Generated from `governance/registry.json`. Edit the JSON source and regenerate.
 - [Documentation map](<README.md>) — `DOCS`
 - [Rho product design philosophy (proposed foundation)](<RHO-DESIGN.md>) — `RHO-DESIGN`
 - [Scenario plugin design research (no implementation scope)](<SCENARIO-PLUGINS.md>) — `SCENARIO-PLUGINS`
+- [Rho current state and focus](<STATUS.md>) — `STATUS`
 - [Studio usability feedback and scenario reference](<STUDIO-FEEDBACK.md>) — `STUDIO-FEEDBACK`
 
 ## `system`
 
 - [Architecture](<ARCHITECTURE.md>) — `ARCHITECTURE`
 - [Development loop](<DEVELOPMENT.md>) — `DEVELOPMENT`
-- [Rho system charter and replacement ledger](<NEXT-SYSTEM.md>) — `NEXT-SYSTEM`
 - [Runtime operator guide](<OPERATIONS.md>) — `OPERATIONS`

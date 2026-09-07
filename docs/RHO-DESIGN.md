@@ -6,9 +6,9 @@ This document expresses the proposed product design philosophy and interaction
 conventions for Rho. It provides reasons for design decisions, not an implementation
 plan or a claim that the interface already follows them. User feedback remains in
 [STUDIO-FEEDBACK.md](STUDIO-FEEDBACK.md); implementation decisions, milestones and
-verification remain in [NEXT-SYSTEM.md](NEXT-SYSTEM.md).
+verification remain in [STATUS.md](STATUS.md).
 
-The frozen Studio baseline remains `studio-round1-baseline-2026-09-07`. Establishing
+The Studio regression baseline is `studio-round1-baseline-2026-09-07`. Establishing
 this philosophy does not authorize implementing the tutorial's additional features
 or replacing the current libraries. Existing scientific and Agent ownership
 constraints remain authoritative.

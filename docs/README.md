@@ -1,70 +1,38 @@
 # Rho documentation
 
-Rho documentation explains the code that exists now. Git stores history;
-command output reports what actually works. A document that disagrees with the
-source or a reproducible run is wrong and should be corrected or deleted.
+Start with the current product and the work being improved. Each page has one job.
 
-## Start here
+| Need | Read |
+| --- | --- |
+| Understand what works and what needs attention | [Current state and focus](STATUS.md) |
+| Judge product and interaction decisions | [Product design philosophy](RHO-DESIGN.md) |
+| Review the user's Studio issues and analysis scenario | [Studio feedback](STUDIO-FEEDBACK.md) |
+| Understand ownership, request flow and recovery | [Architecture](ARCHITECTURE.md) |
+| Change and verify the application | [Development](DEVELOPMENT.md) |
+| Launch Studio, configure R or use CLI/MCP | [Operator guide](OPERATIONS.md) |
+| Prepare a requested build or distribution | [Build and release](RELEASE.md) |
 
-- [Architecture](ARCHITECTURE.md) — the shortest map of processes, authority,
-  persistence, and interfaces.
-- [Development](DEVELOPMENT.md) — the fast edit–run–inspect–commit loop.
-- [Rho Next system charter and replacement ledger](NEXT-SYSTEM.md) — the
-  normative design, capability ownership, decisions, progress, and verified
-  work log for the greenfield replacement.
-- [Operator guide](OPERATIONS.md) — running the default `rho` binary,
-  local workbench/MCP, R runtimes, Environment and native acceptance.
-- [Documentation index](INDEX.md) — generated list of current pages.
-- [Source index](SOURCE-INDEX.md) — generated paths and checks by
-  domain.
-- [Build and release](RELEASE.md) — operator commands, loaded only when needed.
+[Scenario plugins](SCENARIO-PLUGINS.md) is exploratory research, separate from
+current product commitments. The [page index](INDEX.md) and
+[source/check index](SOURCE-INDEX.md) are generated navigation aids.
 
-## Design research
+## Maintenance
 
-- [Scenario plugins, runtime context and work bindings](SCENARIO-PLUGINS.md) —
-  a user-authorized research note. It separates user choices, Agent assistance
-  and deterministic execution, and explores possible plugin forms. Implementation
-  is outside the current Rho Next goal; this page is not a second progress ledger.
+Code and reproducible results establish current behavior. Product principles
+explain design choices; feedback preserves user experience problems; `STATUS.md`
+summarizes current focus and evidence. Git stores completed work and past decisions.
+Do not copy history into a growing status archive or repeat a capability registry
+that the running Host already provides.
 
-## Product design and feedback
+Keep proposed, implemented and verified behavior distinct. Replace stale text and
+broken examples. Document a stable constraint once and link to its owning page.
+A documentation edit does not establish a new runtime test result.
 
-- [Rho product design philosophy](RHO-DESIGN.md) — proposed principles, shared
-  interaction vocabulary and design review criteria for the scientific workspace.
-  This is a design foundation, not a statement of implemented behavior.
+Register pages in `governance/registry.json`; map source areas and checks in
+`governance/source-map.json`. After changing the map:
 
-
-- [Studio usability feedback and scenario reference](STUDIO-FEEDBACK.md) —
-  user feedback against the frozen M1–M4 baseline and a workflow reference for
-  refinement. This is not an implementation plan or a second progress ledger.
-
-## Page shapes
-
-The documentation tree has only three useful shapes:
-
-- an overview maps a system and its boundaries;
-- a component page explains behavior that source layout cannot make obvious;
-- an operator page gives reproducible commands.
-
-Plans and status normally live with the working issue or branch. The explicitly
-authorized exception is `NEXT-SYSTEM.md`, the single living charter and
-replacement ledger for Rho Next. It must distinguish target, implemented, and
-verified claims. Command output and artifacts live with the run that produced
-them. Git retains the evolution.
-
-`SCENARIO-PLUGINS.md` is the separately authorized research exception: candidate
-interfaces and concepts must remain explicitly distinct from implemented code.
-
-`STUDIO-FEEDBACK.md` is a user-authorized feedback exception. Requirements and
-open investigation questions stay distinct from implemented or verified behavior.
-
-## Updating the map
-
-```bash
-node scripts/governance.mjs impact --changed-auto
+```sh
 node scripts/governance.mjs generate
 node scripts/governance.mjs check
+node scripts/test-governance.mjs
 ```
-
-`governance/registry.json` lists the small set of current pages.
-`governance/source-map.json` maps code areas to paths and executable checks.
-`docs/INDEX.md` and `docs/SOURCE-INDEX.md` are generated from those files.

@@ -1,538 +1,303 @@
-# Rho Next
+# Running and using Rho
 
-Operator guide for the production Rust workspace at the repository root.
-The default `rho` binary exposes a project-only Host, a real Ark/R Host, or an
-explicit test-only demo. Rust components live under `crates/`, R helpers under
-`r/` and the client under `ui/`. The old app's source has been removed. Progress
-and remaining work are in [the system ledger](NEXT-SYSTEM.md).
+## Start Studio
 
-Legacy architecture data assets are abandoned; there are no real legacy users.
-Next starts with fresh application state. There is no migration, import, archive
-reader or old-session handoff work. Replacing capabilities and deleting old code
-must not be delayed by legacy data compatibility.
-
-## Local workbench
-
-The browser client is served by the native Rust Host; it is not an external website
-or the old desktop. `rho workbench` discovers local R and Ark, with configuration
-and diagnostics in Settings. The default database is in the local OS application
-data directory (`~/Library/Application Support/rho/next.sqlite` on macOS).
-An explicit reproducible launch can still select all paths:
+From the repository, build the binary with the pinned Rust toolchain:
 
 ```sh
 cargo build --locked
-target/debug/rho --database /absolute/path/to/next-data/next.sqlite \
+target/debug/rho workbench
+```
+
+Open the full private URL printed by the command. Select an absolute project
+directory, then use Studio to edit scripts, run R, inspect objects and view plots.
+Node is needed for frontend development, not for running the embedded application.
+
+For explicit storage, runtime and project paths:
+
+```sh
+target/debug/rho --database /absolute/path/to/state.sqlite \
+  --project /absolute/path/to/project \
   --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
   workbench --url-file /absolute/path/to/private-launch-url
 ```
 
-The URL file must not already exist. Open its full URL in a browser, then select an
-absolute project directory. `--project` can preselect a directory. R selection
-uses explicit launch arguments, a saved user choice, then discovered installations.
+Global flags precede the subcommand. `--url-file` must name a new file; otherwise
+the private URL is printed to stdout. The server listens on `127.0.0.1` using an
+ephemeral port, or the workbench's explicit `--port`. Keep the launch token private.
+Unix URL files use mode 0600. Ctrl-C stops the server and drains accepted work;
+closing a browser page does not cancel it.
+
+## Select R
+
+Workbench selection uses explicit launch arguments, a saved user choice, available
+R executables on PATH, then the standard macOS installation location. Ark discovery
+checks beside the running binary and on PATH. Settings can select existing absolute
+R and Ark executable paths and probe version, architecture, R home and bridge support.
+
 An invalid explicit or saved choice is reported without silently substituting R.
-With no usable R, project browsing/editing remain available. R, Ark and packages
-are never installed automatically. `--rscript` explicitly selects Environment-only
-hosting; `--demo` is not accepted by the workbench. CLI/session/MCP runtime selection
-continues to use the explicit flags.
+The bridge needs jsonlite; rlang enables non-forcing object inspection. Without
+usable R, project browsing and editing remain available. R, Ark and R packages
+are not installed automatically. Optional Ark acquisition scripts live under
+`scripts/bootstrap-ark-*`; they retain upstream notices and return an executable
+path to configure explicitly.
 
-The server binds only `127.0.0.1` on an ephemeral port (`--port` overrides it). The
-launch fragment contains a per-run bearer token: keep the URL private. With no
-`--url-file`, the URL is printed to stdout. Unix URL files are created with mode
-0600; other platforms inherit directory access controls and are not yet verified.
-The static shell contains no token or project data. Host/Origin checks, bounded
-request bodies and same-origin resources protect the local entry; R and native
-commands still run with the user's OS permissions, not in a sandbox.
+Changing R requires an explicit acknowledgement that session memory ends. Invalid
+candidates do not tear down the existing session. Active requests/work and attached
+MCP sessions prevent switching. Failed startup retains its diagnostic and provides
+a project without R where possible; it does not restore the ended memory.
 
-UI scientific requests forward the five Host ports at `/api/host`. `/api/info` and
-`/api/project`, `/api/r` and `/api/r/probe` manage hosting selection only, not
-scientific capabilities. `/api/state/read` and `/api/state/write` store local
-preferences and drafts with version preconditions, outside Operation history. An old
-browser project's requests are rejected after a switch. A switch ends the old R
-session (in-memory objects are not restored), clears project-specific environment
-and remote bindings, and is refused while work or an MCP session is active. If new
-R startup fails, the error is retained and the project reopens without R when
-possible. The ended session memory is never reported as restored. Files and
-recorded Operations remain.
+CLI `invoke`, `session` and stdio `mcp` use explicit runtime flags. Omitting R flags
+there selects Project/Process-only hosting; `--rscript /path/to/Rscript` adds
+Environment capabilities without live R. `--demo` is a test-only fake runtime and
+is not accepted by the workbench.
 
-The same Host exposes official Streamable HTTP MCP at `/mcp`. Configure the MCP
-client's URL and `Authorization: Bearer <launch-token>` header; the token is the
-`token` value in the private launch fragment, not the entire URL. Use this endpoint
-to share live R state with the workbench. Starting a second stdio Host against the
-same database is intentionally rejected by the existing writer lock. MCP sessions
-pin their project until the client closes them with the protocol's DELETE request.
-No conversation, Agent plan or user-approval database is created.
+## Work with scripts and outputs
 
-Closing a page only stops waiting. Pending requests are synchronized to the local
-SQLite application store before submission and retain their original client request
-ID. Reconnection queries the original Operation; retry is explicit and uses that
-same ID. A receipt or missing observation never proves execution success or failure.
-Operation summaries are paginated, while the shared client reads bounded output
-events every 250 ms during runs. PNG/JPEG/SVG originals are addressed by OperationId
-and sequence, verified by digest, and loaded as images. HTML/widgets are not run.
-The plot selection survives later outputs and viewing never reruns R.
+| Action | Current behavior |
+| --- | --- |
+| Open | Browse the real project filesystem, including Git-ignored data, or enter a relative file path |
+| Save | Apply a bounded patch with the original file digest and verify the resulting bytes; no Git commit |
+| Run selection/current line | Execute selected text, or the current line when selection is empty; no automatic save |
+| Run File | Capture the text, save and verify it, then execute that snapshot; later edits remain dirty |
+| Format | Invoke native R tooling; apply only if the document still matches, otherwise offer comparison |
+| Inspect objects | Retrieve read-only metadata/bounded previews; unsupported classed objects remain metadata-only |
+| View/export a plot | Use the original operation/output reference; viewing does not execute R |
 
-Studio saves UTF-8 files through `project.apply_patch`, preserving BOM and existing
-line endings. Run File captures the click-time text, verifies its saved digest,
-then submits that snapshot. A conflict, rejected/oversized patch, network error or
-unconfirmed result stops before execution. New typing remains dirty. Cmd/Ctrl-S
-saves, Cmd/Ctrl-Enter runs the selection or current line, and Cmd/Ctrl-Shift-Enter
-runs the file. Multi-line expressions must be selected. Object previews are read-only
-and bounded; busy sessions show the previous observation with its timestamp.
+Cmd/Ctrl-S saves, Cmd/Ctrl-Enter runs a selection/current line, and
+Cmd/Ctrl-Shift-Enter runs a file. Multiline expressions must be selected for
+selection execution. New files need a path before Run File. Conflict, rejected or
+oversized input, or an unconfirmed save stops before execution.
 
-The sibling `next.studio.sqlite` contains project layouts, text drafts, view positions,
-recent projects, preferences and pending requests. Closing a panel retains its draft;
-explicit discard is separate. Layout corruption falls back to the default layout.
-Drafts do not overwrite project files on reload. Concurrent windows use compare-and-swap;
-conflicting local text remains available for explicit resolution. Restart restores synced
-application state across ports, but does not restore R memory or the prior undo stack.
+The editor preserves UTF-8 BOM and existing line endings. The editing limit is
+512 KiB; larger, binary or non-UTF-8 files receive read-only information or a
+bounded preview. Patch input is limited to 200 KiB and transport limits also apply.
+Drafts are retained when a write is refused.
 
-Client types come from ts-rs 12.0.1 over Rust contracts. JSON integers remain
-numbers; unsafe event cursors are rejected by the client. Static HTML/CSS and the
-compiled app.js are embedded, so running the binary does not require Node. To edit
-the React/TypeScript client (no separate business server):
+Studio supports PNG, JPEG and SVG output references. SVG is loaded as an image;
+HTML/widgets are not executed. Original export saves the selected output's bytes,
+not a new rendering with arbitrary dimensions. Script-controlled rendering is
+appropriate when dimensions and reproducibility matter.
+
+Output is observed incrementally, with explicit truncation/gap information.
+Execution outcome still comes from the Operation record. Resource metrics cover
+known Ark/R processes, not every descendant or inferred UI activity. The current
+interaction limitations and requested refinements are in [Status](STATUS.md)
+and [Studio feedback](STUDIO-FEEDBACK.md).
+
+## Application state and recovery
+
+The default macOS journal is
+`~/Library/Application Support/rho/next.sqlite`. An explicit `--database` overrides
+it. The application store is its sibling with the extension `.studio.sqlite`
+(for example, `state.sqlite` uses `state.studio.sqlite`). Runtime/environment
+materials live in the configured data area beside the journal.
+
+The application store contains project layouts, drafts, view positions, recent
+projects, preferences and unconfirmed request IDs. Browser session storage retains
+the current local access token. Draft synchronization is separate from saving a
+project file. Restart restores synchronized UI state across ports, not R memory
+or the previous in-memory undo stack.
+
+Closing a panel retains its document. Discarding a draft is explicit. Concurrent
+windows use version checks; conflicts preserve local text for comparison and
+explicit resolution. A reconnect queries original requests without replaying them.
+Explicit retry retains the original client request ID; using a new ID means a
+new intended action.
+
+One Host owns a canonical project at a time through `.rho/next-host.lock`, and a
+journal allows one writer. A second database does not bypass project ownership.
+Lock-file existence alone does not indicate a running Host. Project metadata must
+be writable. Use the existing workbench's MCP endpoint to share its session.
+
+If a connection fails, inspect the original Operation before retrying. A writer
+opening after a crash reconciles incomplete journal state; read-only `get-operation`
+does not start R, change the record or clean up processes. Explicit reconciliation
+preserves the original terminal outcome and reports observed remaining resources.
+
+## Frontend development without restarting R
+
+In one terminal:
 
 ```sh
 npm ci --ignore-scripts --prefix ui
-npm run generate --prefix ui
-npm run build --prefix ui
-npm run check --prefix ui
-npm run test --prefix ui
-npm run test:browser --prefix ui
-node scripts/test-workbench.mjs
-node scripts/test-workbench.mjs --real-r
+npm run dev --prefix ui
 ```
 
-The checks cover generated type drift and actual HTTP/MCP/native-runtime behavior;
-they do not substitute for browser interaction and visual acceptance. A working
-computer/browser connection is needed for that separate check. Ctrl-C stops the
-local server and drains accepted Host work; it does not report work as cancelled.
+The watched build writes `target/studio-assets`. Start the workbench in another
+terminal, then reload the browser after changes:
 
-For frontend iteration, run `npm run dev --prefix ui`. Its watched Vite build writes
-`target/studio-assets`. Launch `rho workbench --dev-assets /absolute/path/to/target/studio-assets`
-(with any database/project/runtime flags before `workbench`). Only app.js and style.css
-are loaded from that directory; reload the browser to see changes without ending R.
-Production continues to use embedded assets and locally bundled fonts/icons.
+```sh
+target/debug/rho --project /absolute/path/to/project \
+  workbench --dev-assets /absolute/path/to/Rho/target/studio-assets
+```
 
-Browser regression uses isolated Chrome through Playwright and disposable projects.
-It covers the real save/run/object/plot loop, streaming, draft conflicts, layout,
-restart/reconnect, R switching and media isolation. SVG attack fixtures exercise the
-image boundary separately from the real Ark PNG tests. Check the ledger for the actual
-commands and platform scope; the tests do not claim cross-platform certification.
+Only allowed, bounded `app.js` and `style.css` assets are served from that directory.
+The Host and R session remain running. Normal launches use embedded assets.
+See [Development](DEVELOPMENT.md) for generation, tests and visual review.
 
-Host startup acquires a native OS lease on the canonical project's
-`.rho/next-host.lock` before creating a journal or runtime. A second database is
-not a way to start a second Host for that project; connect through the existing
-Host instead. The file stays empty and is not deleted on release; its presence
-does not indicate a live process. Project metadata must be writable for startup.
-This cooperative Next lease is not a sandbox and does not constrain old binaries
-or arbitrary external editors/processes. Queries of an existing Operation can
-still use the read-only `get-operation` entry without acquiring a project lease.
+## Share Studio's R session through MCP
 
-## MCP stdio
+Configure an MCP client with the workbench's `/mcp` URL and
+`Authorization: Bearer <launch-token>`. The token is the `token` value from the
+private launch fragment. The HTTP endpoint uses official Streamable HTTP MCP.
+Host/Origin and bearer checks also protect hosting/state endpoints.
 
-Use the same startup flags with `mcp` instead of `session` to serve the official
-MCP protocol over stdio. The implementation uses rmcp; stdout contains only MCP
-frames. For example, an MCP client can launch `rho --database /path/state.sqlite
---project /path/project mcp`, adding the existing Ark/Rscript/remote flags as needed.
+MCP sessions pin the selected Host until the client closes them with the protocol's
+DELETE request. RPC cancellation or disconnection does not prove native work stopped;
+use the explicit cancellation tool and inspect the actual outcome.
 
-Capability tools are derived from the Host registry and named `rho.<capability>.v<version>`.
-Query tools accept their capability arguments directly. Command tools accept:
+For a standalone stdio Host:
+
+```sh
+target/debug/rho --database /absolute/path/to/state.sqlite \
+  --project /absolute/path/to/project \
+  --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home mcp
+```
+
+Capability tools are derived from the registry as `rho.<capability>.v<version>`.
+Query tools accept capability arguments directly. Command tools accept:
 
 ```json
 {"client_request_id":"unique-action-id","arguments":{"code":"x <- 21; x * 2"},"preconditions":[]}
 ```
 
-Generate a unique client_request_id for each intended action, and reuse it only
-when retrying that same action. Results are returned under `structuredContent.result`
-with a text fallback. Failed/uncertain Operations are tool errors but retain their
-real OperationId and outcome. `rho.operation.get`, `rho.operation.request_cancellation`
-and `rho.events.poll` reuse the other Host ports. Events are bounded cursor pages,
-not live push. Cancel is subject to the source capability's granted scopes.
+Results use `structuredContent.result` with a text fallback. Failed/uncertain
+operations retain their identity and outcome. `rho.operation.get`,
+`rho.operation.request_cancellation` and `rho.events.poll` expose the remaining
+ports. Events are cursor pages, not a push-delivery guarantee.
 
-MCP records its actor as `agent/local-mcp`, with the native local-user principal
-bound by the stdio edge. Client initialization names and tool arguments cannot
-declare authority. The local CLI and MCP therefore see the same owner's facts,
-while the acting caller remains truthful. Records without an explicit principal
-keep their caller as principal; equivalent Human representations preserve existing
-idempotency digests. This local binding is not network authentication.
+The local MCP actor and human caller share the OS user's principal while retaining
+separate actor identity. Tool arguments and client initialization names do not
+grant authority. The Agent platform owns conversation and permission behavior.
 
-MCP RPC cancellation/EOF does not claim a runtime stopped. Use the explicit
-cancellation tool and inspect the actual outcome. Host tracks and drains accepted
-work when the stdio service ends. Input frames are bounded, malformed/oversized
-frames close the bounded codec stream, and capability calls have an in-flight
-limit. No Agent conversation, sampling loop, elicitation or second approval system
-is created.
+## CLI and JSON sessions
+
+A one-shot invocation starts its Host, performs the action, and closes on exit:
 
 ```sh
-node scripts/test-mcp.mjs
-node scripts/test-mcp.mjs --real-r
-```
-
-The first test uses the actual MCP SDK and local files/processes; the second also
-executes real R and lets Agent/MCP realize a Human/CLI-created package plan. They
-verify discovery, generated schemas, query purity, shared principal visibility,
-idempotency, explicit cancellation, disconnect draining and the input frame bound.
-
-Build and check the foundation:
-
-```sh
-cargo test --workspace --locked
-node scripts/check-architecture.mjs
-```
-
-Verify real R (requires Ark, R with jsonlite/rlang/lintr/styler, and local loopback access):
-
-Optional pinned Ark acquisition uses `scripts/bootstrap-ark-macos.sh`,
-`scripts/bootstrap-ark-linux.sh` or `scripts/bootstrap-ark-windows.ps1`. The scripts
-return a standalone executable under `target/runtime/` and retain upstream
-notices; pass the returned path as `--ark` or `RHO_ARK`. They do not install R,
-create a kernelspec, or recreate old desktop directories. Linux/Windows execution
-still requires verification on those platforms; macOS fixtures are not a claim
-that every downloaded runtime or platform has been tested.
-
-```sh
-RHO_ARK=/absolute/path/to/ark node scripts/test-real-r.mjs
-```
-
-The script discovers R home using Rscript, or accepts RHO_R_HOME. It tests
-a persistent R session through the Host API, then exercises the CLI in a disposable
-project. Ordinary Cargo tests explicitly skip this external-runtime acceptance.
-
-Run a real operation:
-
-```sh
-cargo run --locked -- \
-  --database /absolute/path/to/next-data/next.sqlite \
-  --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
+target/debug/rho --database /absolute/path/to/state.sqlite \
   --project /absolute/path/to/project \
+  --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
   invoke --client-request-id example-1 --code 'x <- 21; x * 2'
 ```
 
-Use the returned operation ID with `get-operation <id>` and the same database.
-That query opens a read-only connection and does not start R or recover operations.
-Repeating a client request ID with different input is an error. The CLI uses the
-local OS user's application context; Invocation cannot supply actor or scopes.
-
-Each one-shot invocation starts a session and closes it on exit. Use `session`
-instead of `invoke ...` with the same startup flags to keep one Host/R process
-alive. It prints a ready frame with registered capability descriptors, then
-accepts one JSON frame per line. Replies carry the same transport id and may
-arrive out of order. Wait for an invoke reply before querying its resulting
-objects. For example, send these frames in sequence:
-
-```json
-{"id":"run-1","request":{"method":"invoke","params":{"client_request_id":"run-1","capability":{"id":"workspace.run_r","version":1},"arguments":{"code":"x <- 21; x * 2"}}}}
-{"id":"view-1","request":{"method":"query_snapshot","params":{"capability":{"id":"workspace.inspect_object","version":1},"arguments":{"name":"x","max_items":5}}}}
-{"id":"list-1","request":{"method":"query_snapshot","params":{"capability":{"id":"workspace.snapshot","version":1},"arguments":{"limit":100}}}}
-```
-
-The five methods are `invoke`, `get_operation`, `request_cancellation`,
-`query_snapshot`, and `subscribe`. Cancellation/get parameters contain
-`operation_id`. Subscribe accepts `after_sequence` and `limit`; it returns one
-durable cursor page, not a live push subscription. End stdin to finish accepted
-requests and close the session.
-
-Workspace queries return ready/busy/unavailable, source, session identity,
-observation time and completeness. They do not create Operations. The busy
-response does not submit R code. Snapshots are limited to 200 bindings; vector
-previews to 100 items; plain data frames to 10 columns and 20 rows. Lazy and
-active bindings are not forced; other classed objects expose metadata only.
-rlang enables non-forcing binding inspection. Without it, bindings remain
-uninspected rather than being forced to produce a preview.
-
-R code tools are explicit Operations in the same session, not background Queries:
-
-| Capability | Arguments and result |
-| --- | --- |
-| workspace.help | `topic`, optional `package` (base), `max_chars` (16384, max 32768); bounded native R help text with found/truncated flags |
-| workspace.lint | `code` (max 64 KiB), optional `limit` (100, max 200); lintr diagnostics and truncation flag |
-| workspace.format | `code` (max 64 KiB); styler-formatted text and changed flag, never a file edit |
-
-Invoke them through the existing session/MCP ports, or use one-shot
-`invoke --client-request-id help-1 --capability workspace.help --arguments '{"topic":"mean"}'`
-with the same Ark startup flags. Tools share the Workspace write lane, run scope,
-session preconditions, idempotency, cancellation and durable result path.
-Loading installed tooling can change runtime namespaces; it is not a pure read.
-Missing lintr/styler returns a failed Operation, never automatic installation.
-
-The lint preset uses built-in assignment, comma, infix-spacing and 120-column
-linters, plus native parse diagnostics. It does not evaluate project `.lintr`
-configuration. Format disables the styler cache for the call, restores its options,
-and does not format roxygen examples. Neither tool evaluates the supplied program
-or writes project files. Help renders native Rd without evaluating dynamic render
-expressions. Format output over 128 KiB is an error, not a silently truncated edit.
-The native library checks are `Rscript --vanilla scripts/test-r-tools.R`; the real
-Host acceptance is included in `scripts/test-real-r.mjs`.
-
-Native R runs with the user's OS access; it is not a filesystem/network sandbox.
-Effect observations are partial. R errors and cancellation do not roll back
-assignments, files, or other effects. Ark result files stay in the selected
-data directory for recovery; retention/garbage collection is still pending.
-
-The Jupyter transport reuses the existing third-party
-[Jet source](../vendor/jet/crates/core/src/lib.rs); no old Rho crate is linked.
-[Ark](https://github.com/posit-dev/ark) owns the R kernel and protocol.
-
-For foundation-only demonstrations use `--demo`; output explicitly says
-`deterministic_fake`. The demo does not evaluate R.
-
-Project operations need Git but do not require an R installation. Start a project
-session with `--database /path/to/state/next.sqlite --project /path/to/project session`,
-omitting `--ark`. The same project capabilities are available in an Ark Host.
-
-```json
-{"id":"files","request":{"method":"query_snapshot","params":{"capability":{"id":"project.snapshot","version":1},"arguments":{"paths":["analysis.R"],"limit":100}}}}
-{"id":"read","request":{"method":"query_snapshot","params":{"capability":{"id":"project.read_file","version":1},"arguments":{"path":"analysis.R","offset":0,"limit_bytes":32768}}}}
-```
-
-Snapshot returns Git HEAD/status when present, discovered entries, and requested
-file hashes. A folder without Git reports `git: null`; it is not assigned a
-synthetic project revision. File reads return a byte array and a next-page flag,
-so binary data and UTF-8 split across pages remain exact. Reads are limited to
-64 KiB per page; hashed files to 64 MiB; snapshot paths to 64 and entries to 200.
-
-`project.apply_patch` accepts a unified `patch` string. Generic one-shot calls use
-`invoke --client-request-id ID --capability project.apply_patch --arguments JSON`.
-Use Invocation preconditions (or one-shot `--preconditions JSON`) for
-`{"kind":"git.head","subject":"project","expected":"<commit SHA>"}` and
-`{"kind":"file.sha256","subject":"analysis.R","expected":"sha256:<digest>"}`.
-A null file digest precondition means that the path must be absent.
-
-Patches modify the working tree only: Git index and HEAD stay unchanged.
-Existing staged/dirty/untracked files outside the patch are preserved. Native
-Git parses both forward and reverse patch paths, including both sides of
-renames. Host-owned data and paths traversing symbolic links are excluded.
-R execution and project mutation share one Host lane; external editors are not
-locked. A lost process outcome or observed partial change is recorded as
-`uncertain`, with a new snapshot as the recovery path. No automatic Git commit
-or retry is performed.
-
-Environment support uses an explicit Rscript installation (`--rscript /path/to/Rscript`)
-or the R installation selected by `--ark ... --r-home ...`. It registers
-`environment.observe` (Query), `environment.plan`, `environment.realize`, and
-`environment.verify` (Operations). Example session requests:
-
-```json
-{"id":"env","request":{"method":"query_snapshot","params":{"capability":{"id":"environment.observe","version":1},"arguments":{}}}}
-{"id":"plan","request":{"method":"invoke","params":{"client_request_id":"env-plan-1","capability":{"id":"environment.plan","version":1},"arguments":{"manager":"pak","packages":["local::pkg"]}}}}
-```
-
-Plans also accept `{"manager":"renv","lockfile":"renv.lock"}`. Realize with
-`{"plan_operation_id":"<successful plan operation ID>"}`; verify with
-`{"realization_operation_id":"<successful realization operation ID>"}`.
-References are checked against the project and caller; native lockfile and local
-source digests are checked before installation. New libraries live in the
-selected data directory, never in the user's existing library.
-
-Verification loads every planned namespace in a separate R process using only
-the new library and R's base library. The receipt records actual versions/paths,
-a library content digest and a candidate renv.lock. It reports
-`available_not_active`; an existing R session is unchanged. Start a new Ark
-session with `--environment <realization operation ID>` to use it. Startup
-re-verifies the library before selecting it. JSON/inspection support namespaces
-load before the scientific library path is switched; other user libraries are
-not used as dependency fallbacks.
+Read its result with the returned ID and the same database:
 
 ```sh
-node scripts/test-environment.mjs
+target/debug/rho --database /absolute/path/to/state.sqlite get-operation OPERATION_ID
 ```
 
-This acceptance installs the small local fixture into temporary libraries,
-restores its generated renv.lock, checks source/lock/library tampering, and
-exercises real CLI selection and cancellation of an actual installation child.
-It requires renv, pak, ps, jsonlite, R and Ark.
-Remote repository behavior follows pak/renv and is not covered by this local
-fixture. Native package scripts run with the user's OS permissions. Environment
-cancellation is supported by plan/realize/verify. Confirmed cancellation retains
-the staged library and does not produce an activatable receipt. The adapter uses
-ps-native tree markers to find and stop callr/processx descendants that create
-separate sessions; cleanup failure is uncertain, not cancelled. Staged-library
-retention uses explicit preview/quarantine/restore/purge operations. Keep the data
-directory outside any local source package to avoid self-containing builds.
-
-Before an effectful Environment helper starts, its native ps marker is atomically
-saved under `environment/recovery/`, bound to the original Operation and project.
-The file is synchronized before execution (the directory is also synchronized on
-Unix). It is recovery material, not a second status/result database. Completed
-markers remain available for later observation; a later helper replaces a marker
-only after the earlier helper's cleanup was confirmed. Pure observe queries do
-not create durable Operation recovery records.
-
-After a Host crash, opening a writer marks incomplete operations uncertain; reading
-with `get-operation` does neither that transition nor process cleanup. Use a new,
-explicit Operation to reconcile resources belonging to a terminal plan/realize/verify:
+Use `session` with the same startup flags for a persistent Host/R session. It emits
+a ready frame containing capability descriptors and accepts one JSON frame per
+line. Send these in sequence, waiting for the run reply before reading its object:
 
 ```json
-{"id":"reconcile","request":{"method":"invoke","params":{"client_request_id":"recover-1","capability":{"id":"environment.reconcile","version":1},"arguments":{"operation_id":"<original operation ID>"}}}}
+{"id":"run","request":{"method":"invoke","params":{"client_request_id":"example-1","capability":{"id":"workspace.run_r","version":1},"arguments":{"code":"x <- 21; x * 2"},"preconditions":[]}}}
+{"id":"inspect","request":{"method":"query_snapshot","params":{"capability":{"id":"workspace.inspect_object","version":1},"arguments":{"name":"x","max_items":5}}}}
 ```
 
-Use the same project, database and Environment data directory. The handler checks
-caller/project scope, and native cleanup verifies the processes' Operation tag
-before sending signals. A missing reference is uncertain, not proof of cleanup.
-The result identifies stopped local processes and retained staging paths. It does
-not roll back package effects, activate a library, cancel remote jobs, or rewrite
-the original operation's outcome. Retrying the original invocation still returns
-its original uncertain record; it does not restart installation. Reconciliation
-itself is non-cancellable so its cleanup can finish after an edge disconnects.
+Replies carry the transport ID and may arrive out of order. The methods are
+`invoke`, `get_operation`, `request_cancellation`, `query_snapshot` and `subscribe`.
+Get/cancel use `operation_id`; subscribe uses `after_sequence` and `limit`.
+End stdin to drain accepted work and close the session. Exact schemas are in the
+ready frame/MCP discovery and [Rust contract](../crates/contract/src/lib.rs).
 
-`test-environment.mjs` also kills a real CLI Host during installation and verifies
-the recovery path, wrong-project/marker rejection, immutable uncertainty and no
-re-execution. This has been validated on macOS, not all operating systems. Ordinary
-`process.run_local` uses the R-free recovery path described below.
+## Domain capabilities
 
-Local process execution is available in every project Host through the same
-session port, without starting an R session:
+Availability depends on the selected Host configuration. These are scientific
+capabilities, not a promise of dedicated Studio controls for each one.
+
+| Family | Main operations and queries | Important behavior |
+| --- | --- | --- |
+| Workspace | `run_r`, `snapshot`, `inspect_object`, `help`, `lint`, `format` | One live session; pure queries do not force active/lazy bindings; native code tools are explicit Operations |
+| Outputs | `operation.list_recent`, `workspace.output_events`, `workspace.read_output`, `workspace.runtime_status` | Bounded summaries/observations; original references rather than filename lookup |
+| Project | `snapshot`, `list_directory`, `read_file`, `apply_patch` | Real filesystem/Git observations; patch preserves unrelated work and does not commit |
+| Environment | `observe`, `plan`, `realize`, `verify`, `reconcile` | Native pak/renv, isolated libraries, explicit verification and activation |
+| Environment material | `retention`, `cleanup`, `cleanup_status`, `restore_cleanup`, `purge_cleanup` | Preview/fingerprint checks, quarantine, restore and explicit permanent purge |
+| Local process | `process.run_local`, `process.reconcile` | Program/argument vector, exact bounded streams, cancellation and tagged-process recovery; works without R |
+| Configured remote | `process.run_remote`, `slurm.submit`, `slurm.snapshot`, `slurm.reconcile`, `slurm.request_cancel` | Native remote/job identities; connection loss is not proof of job termination |
+
+### Workspace and file bounds
+
+Workspace snapshots list at most 200 bindings. Vector previews support at most
+100 items; ordinary data frames at most 20 rows and 10 columns. Classed objects
+may expose only metadata. Busy/unavailable observations carry source, time and
+completeness rather than fabricated values.
+
+`workspace.help` accepts `topic`, optional `package` and bounded `max_chars`.
+Lint/format accept up to 64 KiB of code; lintr/styler must already be installed.
+They do not evaluate the supplied program or edit files. Help avoids dynamic Rd
+execution; lint avoids project `.lintr` configuration. Format output over 128 KiB
+fails instead of returning a truncated program.
+
+File pages contain exact byte arrays, at most 64 KiB per page, with optional
+`expected_sha256`. Hashed file observations are bounded to 64 MiB. Snapshot requests
+allow up to 64 paths and 200 entries. `project.list_directory` lists actual files
+including ignored data and reports when its bounded scan is incomplete.
+
+Use `project.apply_patch` with a unified `patch` and native preconditions:
 
 ```json
-{"id":"process","request":{"method":"invoke","params":{"client_request_id":"process-1","capability":{"id":"process.run_local","version":1},"arguments":{"program":"git","args":["status","--short"],"timeout_ms":60000,"output_limit_bytes":65536}}}}
+{"kind":"file.sha256","subject":"analysis.R","expected":"sha256:<digest>"}
 ```
 
-The program and argument vector are passed directly to the OS (no implicit shell),
-with the normalized project root as working directory. Optional `stdin` is UTF-8
-text, limited to 128 KiB. Output is exact byte arrays with total byte counts,
-truncation and EOF flags; each stream retains 64 KiB by default (maximum 128 KiB)
-while continuing to drain. Timeout defaults to 60 seconds, capped at one hour.
-The child receives `RHO_OPERATION_ID` for correlation. The shared Project/Workspace
-lane prevents overlapping Host-managed mutations; external editors are not locked.
+A null digest requires absence. `git.head` can name the expected project commit.
+Host-owned data and disallowed/symlink-traversing paths are excluded. External
+editors are not locked; partial or unconfirmed writes retain recovery observations.
 
-Results contain the native PID, exit code/signal, termination reason and supervision
-mechanism. Cancellation requests stop the process group/job and collect the result;
-an unconfirmed stop or incomplete stream closure is uncertain. Nonzero exits and
-timeouts are failures, not rollbacks. The supervisor cleans background group members
-after the leader exits. It is not a filesystem/network sandbox and cannot contain
-deliberately escaped descendants. Unix behavior is tested on macOS; the Windows
-Job Object branch has not been validated on a Windows host.
+Output logs are bounded to 1 MiB/4096 events per run; originals to 16 MiB per image
+and 32 MiB of images per run. Read original content with the returned reference,
+offset and bounded page size. Missing or changed originals produce explicit errors.
 
-After a Host crash, use `process.reconcile` with the original terminal Operation:
+### Environments and cleanup
 
-```json
-{"id":"recover-process","request":{"method":"invoke","params":{"client_request_id":"recover-process-1","capability":{"id":"process.reconcile","version":1},"arguments":{"operation_id":"<original process.run_local operation ID>"}}}}
-```
+Use `environment.plan` with `{"manager":"pak","packages":["local::pkg"]}` or
+`{"manager":"renv","lockfile":"renv.lock"}`. Realize with `plan_operation_id`,
+then verify with `realization_operation_id`. Source/lock/library references are
+checked against native content and scope. Keep application data outside a local
+source package to avoid self-containing builds.
 
-This works in a Project-only Host without R. The persisted OperationId was already
-placed in the child environment before execution. The adapter uses sysinfo to find
-currently visible, same-user processes retaining that tag, including detached
-descendants. Before each signal it refreshes the tag, user and native start time;
-neither a caller-provided PID nor a PID in an old result authorizes termination.
-Observation rounds are bounded; the adapter does not use sysinfo's unbounded wait.
+Verified libraries are `available_not_active`; an existing R session is unchanged.
+Start a new Ark Host with `--environment <realization operation ID>` to reverify and
+activate the library. Explicit package operations write isolated libraries rather
+than modifying the user's existing library. Package scripts still have native OS access.
 
-The result reports observed/signalled/remaining identities and
-`no_matching_processes_observed`, explicitly with partial completeness. It is not
-a claim about unobservable processes, processes that discard their tag, remote
-jobs, or rollback. POSIX signal delivery and inspection are not an atomic ownership
-primitive, so this is cooperative lifecycle management, not adversarial containment.
-The original uncertain outcome is preserved and its invocation is never replayed.
-Live sources, other projects and other callers are rejected before cleanup.
+After a crash, invoke `environment.reconcile` or `process.reconcile` with the original
+terminal `operation_id`, a new client request ID, and the same project/data context.
+Cleanup checks observed ownership and retained markers; an old PID or missing
+reference is not proof that termination is safe or complete. Reconciliation does
+not roll back effects or replay the original action.
 
-```sh
-node scripts/test-process-recovery.mjs
-```
+For environment staging, query `environment.retention` by source `operation_id`.
+`environment.cleanup` requires its `expected_fingerprint`; `cleanup_status` reads
+by `cleanup_operation_id`. Restore/purge use that ID and the current trash
+fingerprint. Only eligible failed/confirmed-cancelled staging is collected.
+Successful, uncertain, active or unobservable references are protected. Purge is
+irreversible; original operation records and native recovery markers remain.
 
-This acceptance kills a real CLI Host, observes parent and detached-child exit,
-checks that an unrelated process survives, and verifies idempotency and unchanged
-original uncertainty. Environment and Execution share a read-only OperationRecords
-port to the same journal; no recovery status database or persisted PID table was added.
+### Remote execution
 
-SSH and Slurm adapters are wired into Host. Local protocol fixtures and real CPU
-jobs on the user-selected YuLabServer / Slurm 19.05.2 have been verified, including
-lost-receipt recovery and confirmed cancellation. This is not a claim about every
-cluster, connection implementation, GPU allocation or Slurm version. Configure an existing OpenSSH alias
-and a canonical absolute POSIX project directory with `--remote-host ALIAS
---remote-root /absolute/project`; add `--slurm-cluster NAME` to expose Slurm.
-These flags work with Project-only, Rscript and Ark Hosts. Opening Host does not
-connect to SSH. Authentication and known hosts remain with OpenSSH; unknown or
-changed host keys are not automatically accepted and there is no password prompt.
+Supply an existing OpenSSH alias with `--remote-host ALIAS --remote-root /absolute/project`;
+add `--slurm-cluster NAME` for Slurm. Host startup does not connect. OpenSSH owns
+credentials and host-key verification; unknown/changed host keys are not accepted
+automatically and there is no password prompt.
 
-The same five session ports expose these capabilities:
+`slurm.submit` takes Bash `body` and optional explicit resource fields such as
+`cpus`, `memory_mb`, `time_minutes`, `gpus`, `partition` and `account`. Version 1
+uses one node/task allocation. The result is a submission receipt, not completion.
+Snapshot/reconcile/cancel use `submission_operation_id`. Lost receipts are reconciled
+through a unique native job reference without resubmission; missing/ambiguous
+accounting is not proof of absence. Cancel acknowledgement is separate from
+scheduler terminal state.
 
-| Capability | Input / result |
-| --- | --- |
-| process.run_remote | Same program/args/stdin bounds as local execution; SSH loss or local cancellation yields uncertain, not proof of remote termination |
-| slurm.submit | Bash `body`, optional cpus/memory_mb/time_minutes/gpus/partition/account; returns native cluster + JobID + log paths, not job completion |
-| slurm.snapshot | Query by `submission_operation_id`; reads scheduler queue or bounded accounting history |
-| slurm.reconcile | New Operation observing a unique native job after a lost submission receipt; never resubmits or rewrites the source outcome |
-| slurm.request_cancel | Requests cancellation of the matching job; separately returns any subsequent scheduler observation |
-
-For example, in a configured session:
-
-```json
-{"id":"submit","request":{"method":"invoke","params":{"client_request_id":"batch-1","capability":{"id":"slurm.submit","version":1},"arguments":{"body":"Rscript analysis.R","cpus":2,"memory_mb":4096,"time_minutes":10}}}}
-```
-
-Version 1 submits one node/task allocation. Resource settings are explicit flags;
-the supplied body is not a file of `#SBATCH` directives. Inherited Slurm CLI option
-environment variables are cleared. An Operation-derived job name is the recovery
-marker, because [accounting comments are configuration-dependent](https://slurm.schedmd.com/sacct.html).
-Query results preserve native state strings and source (`squeue`/`sacct`), with partial
-completeness. Accounting lookup is limited to 30 days; missing/ambiguous results are
-not proof that no job exists. No background scheduler polling or automatic requeue
-is introduced. [Cancellation](https://slurm.schedmd.com/scancel.html) uses the native
-name/current-user filter and does not turn its acknowledgement into `CANCELLED`.
-
-```sh
-node scripts/test-remote-protocol.mjs
-```
-
-This POSIX-only test replaces SSH/Slurm executables inside a private temporary PATH.
-It verifies real argument/stream handling, quote preservation, no startup connection,
-lost receipts without replay, query purity and cancel-request semantics. It is not
-remote acceptance.
-
-Opt-in real acceptance uses an installed Server Manager and an explicitly supplied,
-empty, writable shared scratch directory on the chosen host:
+Opt-in live verification requires a chosen host and empty writable shared scratch:
 
 ```sh
 node scripts/test-remote-live.mjs HOST_ALIAS /absolute/empty/shared/scratch CLUSTER CPU_PARTITION
 ```
 
-The script submits two real jobs (1 CPU, 64 MiB each; 1- and 2-minute run limits),
-then cancels only its own lost-receipt test job. A temporary connection relay keeps
-authentication in the existing manager; it is test tooling, not a new Rho provider
-or plugin API. Remote commands and Slurm results are real. Receipt loss is deliberate
-fault injection after successful submission; reconciliation must discover that job
-without receiving its numeric ID. Waiting happens inside one bounded remote command.
-
-The Journal, evidence.json and remote output files are retained for inspection.
-On failure, use those original Operations and native references; do not rerun the
-script or resubmit blindly. This test is intentionally excluded from default CI.
-Actual validation scope and native job IDs are recorded in the system ledger.
-
-Environment material retention is explicit, not an age-based background sweep:
-
-| Port / capability | Purpose |
-| --- | --- |
-| environment.retention (Query) | Preview a source plan/realization by `operation_id` |
-| environment.cleanup | Move eligible staging into quarantine; requires the preview's `expected_fingerprint` |
-| environment.cleanup_status (Query) | Observe both locations by `cleanup_operation_id`, including after a lost commit |
-| environment.restore_cleanup | Restore quarantined staging if its original path is vacant; requires the current trash fingerprint |
-| environment.purge_cleanup | Permanently delete only that quarantined directory; requires the current trash fingerprint |
-
-Only failed or confirmed-cancelled attempts are candidates. Successful reusable
-outputs, uncertain source operations, live native processes and unavailable
-recovery references are retained. Bounded successful-output pages identify plan
-source/library references. The existing R session supplies its actual library
-paths and loaded-namespace paths, so changing `.libPaths()` cannot bypass protection.
-If those observations are unavailable or incomplete, collection is refused.
-
-```json
-{"id":"preview","request":{"method":"query_snapshot","params":{"capability":{"id":"environment.retention","version":1},"arguments":{"operation_id":"<failed or cancelled attempt>"}}}}
-{"id":"collect","request":{"method":"invoke","params":{"client_request_id":"collect-1","capability":{"id":"environment.cleanup","version":1},"arguments":{"operation_id":"<same attempt>","expected_fingerprint":"<material.stage.fingerprint from preview>"}}}}
-```
-
-Restore/purge arguments contain `cleanup_operation_id` and `expected_fingerprint`
-from `material.trash` in cleanup_status. The token describes current filesystem
-metadata, not a new scientific revision. Inventory is limited to 50,000 entries;
-symbolic links are not followed and special files prevent collection. Operations
-recheck source scope, references, native processes and the preview token before
-changing anything. Quarantine paths derive from the cleanup OperationId, so a
-rename followed by a failed database commit can be inspected without replay.
-
-Purge is irreversible; quarantine/restore preserve bytes. Native recovery markers
-and original Operation records are kept, even after purge. Project files,
-successful environment libraries, Workspace result/log files and unidentified
-orphan material are not part of this sweep. External processes outside Rho's
-observable ownership are not a claimed containment boundary.
-
-The real Environment acceptance covers live-library protection, stale previews,
-quarantine/restore/purge, external symlink-target preservation and lost-commit
-recovery. It only removes private test material, never the user's environments.
+It submits two real CPU jobs and cancels only its own receipt-loss test job. It
+retains evidence and is excluded from default CI. Inspect original operations/native
+references after failure instead of resubmitting blindly. See [Status](STATUS.md)
+for the actual tested scope and [Development](DEVELOPMENT.md) for local fixtures.
