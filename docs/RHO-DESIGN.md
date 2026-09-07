@@ -1,6 +1,6 @@
 # Rho product design philosophy
 
-Version: 0.1 — proposed foundation for review, 2026-09-07.
+Version: 0.2 — proposed foundation and interaction mechanics, 2026-09-07.
 
 This document expresses the proposed product design philosophy and interaction
 conventions for Rho. It provides reasons for design decisions, not an implementation
@@ -32,7 +32,9 @@ The proposed design character is **Calm Precision**:
 
 Professional quality is demonstrated by dependable behavior over an entire task.
 It is not established by visual resemblance to another product or by a successful
-smoke test.
+smoke test. For Rho, delight should come from control, orientation and confidence
+during real analysis. A physically responsive interface still has to report
+scientific results truthfully.
 
 ## 2. Principles
 
@@ -206,8 +208,9 @@ Existing Paper variables are a starting point, not proof of an adequate design.
   state cues. A chart's scientific colors belong to the plot, not the UI theme.
 - Preserve content size when a container shrinks. Adapt secondary controls and
   metadata first; retain essential actions and clear overflow access.
-- Use motion only to explain a change of state or spatial relationship. Honor
-  reduced-motion preferences; avoid perpetual decorative movement.
+- Use motion to explain state and spatial relationships. Direct pointer tracking
+  and released-state transitions have different roles; see section 5. Keep scientific
+  content legible during movement and provide reduced-motion alternatives.
 - Use English for product-authored UI and consistent domain terminology. Preserve
   the original language of user content, paths and native runtime output.
 
@@ -220,30 +223,124 @@ that the delivery surface does not provide.
 
 This philosophy intentionally does not prescribe new pixel values, colors,
 animation durations or library choices before representative interaction work.
-Those choices should follow from the principles and measured use.
+Those choices should follow from the principles and measured use. Blur and
+translucency are optional treatments, not identity requirements. Keep code, tables
+and plot interpretation surfaces stable and high-contrast; test any layered chrome
+against realistic content and accessibility preferences.
 
-## 5. Resolve design tradeoffs consistently
+## 5. Interaction mechanics for Studio
 
-Truthful results, preservation of user work, and the established execution
-boundaries are constraints. Within them, prefer the design that preserves context,
-reduces repeated effort, remains discoverable and is comfortable to read.
+Apple's [fluid-interface work](https://developer.apple.com/videos/play/wwdc2018/803/)
+emphasizes prompt response, redirection and spatial continuity. Its
+[drag-and-drop guidance](https://developer.apple.com/design/human-interface-guidelines/drag-and-drop)
+requires feedback throughout a drag, including destination validity and failure.
+The following are proposed Rho-specific consequences, not implemented features.
 
-Examples:
+### Direct tracking and deliberate placement
 
-- Quiet status is desirable; hiding an unconfirmed save to achieve visual calm is
-  unacceptable.
-- A compact toolbar is desirable; removing access to Stop in a short Console is
-  unacceptable.
-- A clean objects list is desirable; forcing every quick inspection into a new tab
-  adds avoidable navigation.
-- Flexible docking is desirable; invisible parent-group targets defeat that flexibility.
-- Rich detail is useful; showing it at the user's chosen depth preserves attention.
+- Preserve the grab offset when a panel or plot is picked up. During free dragging,
+  preview displacement follows pointer displacement; do not insert spring lag
+  between the pointer and the representation being held. At constraints, explain
+  the boundary rather than making the interface appear unresponsive.
+- Distinguish an individual panel, a containing group and a workspace-edge target.
+  Highlight the complete proposed destination and communicate what will move.
+  Stabilize adjacent target selection so tiny pointer movements do not cause flicker.
+- Treat press feedback, drag recognition, preview and drop commitment separately.
+  Pressing a close control must not begin a panel drag. A cancelled drag must not
+  become a click, close, scientific operation or silent layout commit.
+- Provide an explicit placement command and keyboard path alongside dragging.
+  Pointer release outside a valid destination, Escape, lost capture and focus loss
+  need defined cleanup behavior. Retain the last committed layout when abandoning
+  an uncommitted preview.
 
-A proposal should explain the user's task, action scope, feedback and recovery
-path. Visual polish cannot compensate for an unclear answer to those questions.
-This is a design review convention, not a permission gate or a second approval system.
+### Motion can be redirected
 
-## 6. Apply the philosophy to the reported issues
+A new interaction takes over from the visible presentation, not from an unseen
+animation target. Avoid queues that require one transition to finish before the
+next input can act. For motion with inertia, preserve an appropriate velocity
+handoff; Apple's [SwiftUI animation explanation](https://developer.apple.com/videos/play/wwdc2023/10156/)
+shows how springs merge prior animation state to retarget continuously.
+
+Rho should select behavior by the task:
+
+| Interaction | Proposed motion behavior |
+| --- | --- |
+| Splitter resize or panel placement | Track input precisely; respect size limits; do not throw a panel into another group based on release speed |
+| Panel maximize/restore | Preserve a recognizable origin and return destination; allow a new request to retarget the visual transition |
+| Inline object details | Expand from the source row, preserving its position and selection as far as available space allows |
+| Plot pan/zoom | Preserve the inspected location or pointer anchor, aspect ratio and output identity; validate any inertia before adopting it |
+| New output arriving | Update without stealing focus, changing a chosen historical plot, or pulling a user away from scrolled-back output |
+
+Use springs when settling or momentum is useful, with little or no visible bounce
+for precision work. Simple state feedback can use CSS transitions. A spring library
+alone does not guarantee correct cancellation, velocity transfer or input ownership.
+Community timing constants are examples, not universal Apple or Rho parameters.
+Never animate scientific values between unrelated results or distort plot geometry
+to make a transition feel physical.
+
+### Feedback describes the right event
+
+Apple's [audio-haptic design principles](https://developer.apple.com/videos/play/wwdc2019/810/)
+connect feedback to a recognizable cause, compatible sensory qualities and actual
+user benefit. They support restraint, not adding another signal to every action.
+For the browser Studio, visual/text feedback and accessible state carry the meaning.
+Sound is optional; native haptics are not a dependency or a current capability.
+
+| Event | Proposed feedback |
+| --- | --- |
+| Press / drag / destination change | Immediate local response showing what input was recognized and where it applies |
+| Save or execution request sent | Show pending/accepted state; do not imply that bytes were saved or R completed |
+| Owner confirms a result | Update the relevant state and result; reserve attention-grabbing feedback for meaningful events |
+| Conflict / unavailable original / uncertain outcome | Keep an understandable explanation and recovery path available; do not rely on a transient animation or sound |
+
+A reversible visual transition and a native execution have different lifecycles.
+Taking control of an animation does not reverse an R effect; an immediate Stop
+button response still waits for the owner's actual cancellation outcome.
+
+### Web translation and accessibility
+
+Use the existing layout and editor owners before introducing custom gesture logic.
+For a custom interaction, [Pointer Events](https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events)
+provide pointer capture to retain event targeting outside an element, with release
+and cancellation events to handle. Capture is not a guarantee of input outside
+the browser, nor a substitute for drop-target detection and cleanup. Limit any
+`touch-action` restriction to the relevant surface and preserve native scrolling,
+text selection and browser zoom elsewhere.
+
+When motion needs velocity, use timestamped recent samples rather than one pointer
+position. Keep coordinate spaces and velocity units consistent. Schedule custom
+painting through [requestAnimationFrame](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame),
+use its time information, and handle background-tab suspension without a jump.
+Do not put network waits, SQLite synchronization or whole-workbench rendering on
+the pointer-tracking path. No refresh-rate or latency guarantee is claimed without
+measurement on the actual input device and workload.
+
+Honor [reduced-motion preferences](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion)
+with restrained/static transitions while retaining tracking, focus, target cues
+and result feedback. Keyboard operation, silent use, larger text and readable
+contrast must remain complete experiences. Apple's [motion guidance](https://developer.apple.com/design/human-interface-guidelines/motion)
+adapts to input method; touch-oriented effects need not be copied onto a mouse-driven
+scientific workbench.
+
+## 6. Make quality repeatable
+
+Reuse interaction semantics as well as colors and spacing. Shared controls should
+specify hover, focus, pressed, disabled, busy and error behavior, including keyboard
+activation and focus return. Panel chrome, disclosure, menus and plot controls
+should follow these contracts across components. Code written by people or generated
+during development receives the same review and tests.
+
+Truthful results, preservation of user work and execution boundaries constrain every
+design choice. Within them, favor context, discoverability, low repeated effort and
+legibility. Quiet styling must not hide an unconfirmed save; compactness must not
+remove Stop; an overflow menu must not become the only discoverable working model.
+
+Build confidence through shared primitives, interaction tests, accessibility review
+and sustained scenarios. This is a product engineering convention, not another
+runtime approval system. Library behavior still needs observation; adopting a
+component package does not establish that Rho's complete interaction is correct.
+
+## 7. Apply the philosophy to the reported issues
 
 | Feedback | Relevant principles | Design question to answer |
 | --- | --- | --- |
@@ -255,7 +352,7 @@ This is a design review convention, not a permission gate or a second approval s
 | F06: object clicks create tabs | P2, P3 | Can someone inspect in place, with dedicated views opened only deliberately? |
 | F07: rough plot experience | P1, P2, P3, P7 | Can someone identify, inspect, compare and export a plot while retaining context and original identity? |
 
-## 7. Validate through a sustained scientific workflow
+## 8. Validate through a sustained scientific workflow
 
 Use the supplied gapminder tutorial as a scenario source, as described in
 [STUDIO-FEEDBACK.md](STUDIO-FEEDBACK.md). Follow the same project through scripts,
@@ -266,34 +363,52 @@ Tutorial features outside the current scope remain separate decisions.
 Observe task completion, mistaken actions, forced navigation, focus loss, hidden
 controls, recovery effort and uncertainty about scientific state. Include both
 first-use discovery and repeated keyboard-heavy work, with normal, narrow, short
-and maximized views. Include errors and interrupted work.
+and maximized views. Review press, drag, reversal, release, cancellation, rapid
+repetition and return of focus—not just the final screenshot. Include slow owner
+responses, heavy output, reduced motion, and a background/foreground transition.
+Check perceived response and frame behavior separately from total execution time.
 
 Functional tests, accessibility inspection, scenario observation and visual review
 provide different evidence. None is a substitute for the others. Do not claim
 universal correctness, an arbitrary usability score, or measured performance
 without observations. Refine these proposed principles when real work exposes a
-conflict, and record the rationale in the existing system ledger.
+conflict. Keep current decisions and evidence in [STATUS.md](STATUS.md).
 
-## 8. Reference and adaptation
+## 9. Reading Apple accurately
 
-Apple's guidance is useful for its attention to sustained desktop work and the
-relationship between controls and consequences. The following are specific
-references reviewed for this document, not a claim of Apple compliance:
+The current [HIG design principles](https://developer.apple.com/design/human-interface-guidelines/design-principles),
+updated in June 2026, name Purpose, Agency, Responsibility, Familiarity, Flexibility,
+Simplicity, Craft and Delight. They are tools for weighing decisions, not a visual
+recipe. [Principles of great design](https://developer.apple.com/videos/play/wwdc2026/250/)
+distinguishes simplicity from minimizing controls and treats delight as an outcome
+of a coherent experience. Rho's seven principles adapt that perspective to scientific
+identity, concentrated work and reproducibility.
 
-- [Designing for macOS](https://developer.apple.com/design/human-interface-guidelines/designing-for-macos/)
-  describes long working sessions, comfortable information density, adaptable
-  workspaces, keyboard efficiency and personalization.
-- [Disclosure controls](https://developer.apple.com/design/human-interface-guidelines/disclosure-controls)
-  explains revealing relevant detail near the content it belongs to.
-- [Feedback](https://developer.apple.com/design/human-interface-guidelines/feedback)
-  relates the prominence of feedback to the importance of the information and
-  recommends explanations when a command cannot be performed.
-- [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility)
-  supports perceivable state, readable content, keyboard use and alternatives to
-  gestures.
+Keep these distinctions when interpreting secondary articles and community skills:
 
-Rho's scientific identity model, save/execute distinction, bounded object
-inspection, output provenance and reproducibility principles are this proposal's
-application-specific synthesis. They are not prescriptions quoted from Apple.
-Translucency, large radii or other fashionable surface treatments are not implied
-by adopting these interaction lessons.
+- The preference for indirect gestures on common controls is in the **visionOS**
+  section of [Gestures](https://developer.apple.com/design/human-interface-guidelines/gestures).
+  It concerns gaze/hand input versus reaching to virtual objects; it is not a
+  universal classification of an iPhone tap or a desktop mouse action.
+- Apple does not define all haptics as four vibration levels. Current
+  [Playing haptics](https://developer.apple.com/design/human-interface-guidelines/playing-haptics)
+  describes notification, impact and selection feedback on iPhone, five impact
+  styles, and transient/continuous custom events. Native Mac trackpad feedback
+  has its own patterns. These do not establish portable browser haptic support.
+- [App Review](https://developer.apple.com/app-store/review/guidelines/#design)
+  publishes approval requirements, some of which refer to HIG. This is different
+  from claiming that every HIG recommendation is universally mandatory or that
+  third-party apps must share one appearance. Standard components and their default
+  behaviors also support consistency.
+- The supplied [community apple-design skill](https://mcpservers.org/zh-TW/agent-skills/emilkowalski/apple-design)
+  is a useful discovery aid, not Apple documentation. Its web techniques, timing
+  values, blanket animation rules and material treatments require independent
+  validation. No new dependency or skill installation follows from reviewing it.
+
+Additional foundations remain [Designing for macOS](https://developer.apple.com/design/human-interface-guidelines/designing-for-macos/),
+[Disclosure controls](https://developer.apple.com/design/human-interface-guidelines/disclosure-controls),
+[Feedback](https://developer.apple.com/design/human-interface-guidelines/feedback),
+and [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility).
+Sources inform the proposal; they do not certify Rho's implementation. The current
+browser delivery, scientific owners and open user feedback remain the basis for
+choosing and validating each interaction.

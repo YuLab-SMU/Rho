@@ -15,10 +15,11 @@ The next design work should apply the proposed
 [product philosophy](RHO-DESIGN.md) to the
 [reported usability issues](STUDIO-FEEDBACK.md), using the same analysis project
 across editing, Console exploration, object inspection and repeated plotting.
-The philosophy is v0.1 for review; it is not a claim that the UI implements it.
+The philosophy is v0.2 for review, including Apple-informed interaction, motion
+and feedback mechanics adapted to the browser Studio; these remain proposals.
 The gapminder tutorial supplies scenarios, not an automatic feature roadmap.
 
-This documentation rewrite does not start UI refinement or change running sessions.
+Current design work has not yet changed the frozen UI implementation.
 
 ## Implemented baseline
 
