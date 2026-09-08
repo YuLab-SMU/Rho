@@ -5,8 +5,9 @@ results establish behavior; Git retains the implementation history.
 
 ## Current focus
 
-**Calm Precision is implemented and has passed the automated and native R checks
-below; remaining acceptance concerns native OS IME and user interaction review.** The interaction
+**Calm Precision implementation and acceptance are complete for this round.**
+The automated and native R checks below passed, and the user confirmed the final
+macOS Chinese input-method manual check passed on 2026-09-08. The interaction
 specification is in [Design](RHO-DESIGN.md#10-studio-interaction-contract), with
 repeatable checks mapped to the seven reported issues in
 [Studio feedback](STUDIO-FEEDBACK.md#acceptance-map-for-the-calm-precision-implementation).
@@ -80,10 +81,12 @@ six historical operations remained available. The recovery observation is in
 
 Chrome's native IME composition path is exercised through CDP, in addition to
 composition-event regression tests. Native macOS keyboard/menu use and the same
-analysis project have also been inspected through Chrome. The automation did not
-establish an OS input-method candidate-window acceptance; this must remain distinct
-from the passing browser composition tests. User review of the complete interaction
-is still valuable; passing functional checks is not a universal usability claim.
+analysis project have also been inspected through Chrome. On 2026-09-08, after
+reviewing the expected candidate selection, Enter-to-confirm without Console
+submission, and stable Chinese text/cursor behavior, the user reported the manual
+test successful and accepted it. This closes the native OS candidate-window check;
+its evidence is user confirmation, separate from the automated browser composition
+tests. Acceptance applies to the stated scope, not every input method or platform.
 
 ## Scope
 
