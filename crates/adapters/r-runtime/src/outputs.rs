@@ -585,3 +585,70 @@ mod tests {
         assert!(store.events(&args).unwrap().gap);
     }
 }
+
+#[cfg(test)]
+mod evidence_cache_tests {
+    use super::*;
+    #[test]
+    fn concurrent_reads_share_verified_original_and_reject_changed_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = Arc::new(OutputStore::open(temp.path(), "project").unwrap());
+        let id = OperationId::new("op-concurrent").unwrap();
+        let mut writer = store.begin(&id).unwrap();
+        let reference = writer
+            .display(&serde_json::json!({"data":{"image/svg+xml":"<svg width='1' height='1'/>"}}))
+            .unwrap()
+            .unwrap();
+        writer.finish().unwrap();
+        let threads = (0..8)
+            .map(|_| {
+                let store = store.clone();
+                let reference = reference.clone();
+                std::thread::spawn(move || store.verified_original(&reference).unwrap())
+            })
+            .collect::<Vec<_>>();
+        let originals = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>();
+        assert!(
+            originals
+                .iter()
+                .all(|original| Arc::ptr_eq(original, &originals[0]))
+        );
+        let cache = store.verified.lock().unwrap();
+        assert_eq!(cache.entries.len(), 1);
+        assert_eq!(cache.bytes, reference.byte_size as usize);
+        drop(cache);
+        let path = store
+            .directory(&id)
+            .join(format!("{}.bin", reference.sequence));
+        std::fs::write(path, b"<svg width='2' height='2'/>").unwrap();
+        assert!(store.verified_original(&reference).is_err());
+    }
+    #[tokio::test]
+    async fn text_artifact_is_discoverable_but_never_a_plot() {
+        use rho_workspace::WorkspaceOutputs;
+        let temp = tempfile::tempdir().unwrap();
+        let store = OutputStore::open(temp.path(), "project").unwrap();
+        let id = OperationId::new("op-help").unwrap();
+        store.begin(&id).unwrap().finish().unwrap();
+        let reference = store.append_text(&id, "help text").unwrap();
+        assert_eq!(store.append_text(&id, "help text").unwrap(), reference);
+        let args = OutputEventsArguments {
+            operation_id: id,
+            after_sequence: 0,
+            limit: 100,
+        };
+        assert!(
+            store
+                .events(&args)
+                .unwrap()
+                .events
+                .iter()
+                .any(|event| event.media.as_ref() == Some(&reference))
+        );
+        assert!(store.list_outputs(&args).await.unwrap().media.is_empty());
+        assert_eq!(&*store.verified_original(&reference).unwrap(), b"help text");
+    }
+}

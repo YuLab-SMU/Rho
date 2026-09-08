@@ -566,3 +566,148 @@ fn text_page(
         }
     }
 }
+
+#[cfg(test)]
+mod media_tests {
+    use super::*;
+    use base64::Engine;
+    fn reference(bytes: &[u8], mime: &str) -> MediaReference {
+        MediaReference {
+            operation_id: OperationId::new("op-media-test").unwrap(),
+            sequence: 1,
+            mime_type: mime.into(),
+            byte_size: bytes.len() as u64,
+            sha256: media_digest(bytes),
+            display_id: None,
+        }
+    }
+    fn args(bytes: &[u8], mime: &str) -> ViewOutputArguments {
+        ViewOutputArguments {
+            reference: reference(bytes, mime),
+            crop: None,
+            max_edge: 1600,
+        }
+    }
+    fn encoded_image(format: image::ImageFormat) -> Vec<u8> {
+        let image = image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(80, 40, |x, y| {
+            image::Rgb([x as u8, y as u8, 50])
+        }));
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image.write_to(&mut bytes, format).unwrap();
+        bytes.into_inner()
+    }
+    #[test]
+    fn png_jpeg_previews_crop_and_validate_original_dimensions() {
+        for (format, mime) in [
+            (image::ImageFormat::Png, "image/png"),
+            (image::ImageFormat::Jpeg, "image/jpeg"),
+        ] {
+            let bytes = encoded_image(format);
+            let mut args = args(&bytes, mime);
+            args.crop = Some(ImageCrop {
+                x: 10,
+                y: 5,
+                width: 20,
+                height: 10,
+            });
+            let preview = render_preview(&bytes, &args).unwrap();
+            assert_eq!((preview.original_width, preview.original_height), (80, 40));
+            assert_eq!((preview.preview_width, preview.preview_height), (20, 10));
+            assert!(!preview.rasterized);
+            let png = base64::engine::general_purpose::STANDARD
+                .decode(preview.preview_base64)
+                .unwrap();
+            assert_eq!(media_digest(&png), preview.preview_sha256);
+            assert!(png.len() <= 512 * 1024);
+            args.crop = Some(ImageCrop {
+                x: 79,
+                y: 0,
+                width: 2,
+                height: 1,
+            });
+            assert!(render_preview(&bytes, &args).is_err());
+        }
+    }
+    #[test]
+    fn svg_is_static_cropped_and_external_images_are_unreadable() {
+        let svg=br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><script>throw new Error('must never run')</script><image href="file:///not-permitted/secret.png" width="100" height="50"/><rect x="50" y="0" width="50" height="50" fill="#ff0000"/></svg>"##;
+        let mut args = args(svg, "image/svg+xml");
+        args.crop = Some(ImageCrop {
+            x: 50,
+            y: 0,
+            width: 50,
+            height: 50,
+        });
+        let preview = render_preview(svg, &args).unwrap();
+        assert!(preview.rasterized);
+        let png = base64::engine::general_purpose::STANDARD
+            .decode(preview.preview_base64)
+            .unwrap();
+        let pixels = image::load_from_memory(&png).unwrap().to_rgba8();
+        assert_eq!(pixels.get_pixel(25, 25).0, [255, 0, 0, 255]);
+        assert_eq!(preview.reference, args.reference);
+    }
+    #[test]
+    fn noisy_preview_adapts_dimensions_to_actual_encoded_byte_budget() {
+        let mut state = 17u32;
+        let image = image::RgbImage::from_fn(1800, 1200, |_, _| {
+            let mut channels = [0; 3];
+            for channel in &mut channels {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                *channel = (state >> 24) as u8;
+            }
+            image::Rgb(channels)
+        });
+        let mut original = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(image)
+            .write_to(&mut original, image::ImageFormat::Png)
+            .unwrap();
+        let bytes = original.into_inner();
+        let args = args(&bytes, "image/png");
+        let preview = render_preview(&bytes, &args).unwrap();
+        assert!(preview.preview_byte_size <= 512 * 1024);
+        assert!(preview.preview_width < 1600);
+        assert!(
+            preview
+                .transformations
+                .iter()
+                .any(|text| text.contains("512 KiB"))
+        );
+        assert_eq!(preview.reference.sha256, media_digest(&bytes));
+    }
+    #[test]
+    fn invalid_images_and_out_of_bounds_previews_are_explicit_errors() {
+        assert!(render_preview(b"not png", &args(b"not png", "image/png")).is_err());
+        assert!(render_preview(b"not svg", &args(b"not svg", "image/svg+xml")).is_err());
+        let bytes = encoded_image(image::ImageFormat::Png);
+        let mut args = args(&bytes, "image/png");
+        args.max_edge = 2401;
+        assert!(render_preview(&bytes, &args).is_err());
+    }
+    #[test]
+    fn help_text_is_utf8_and_json_bounded_without_rerendering() {
+        let text = "😀\\\"\n".repeat(20000);
+        let bytes = text.as_bytes();
+        let mut args = ReadOutputTextArguments {
+            reference: reference(bytes, "text/plain"),
+            offset: 0,
+            limit_bytes: 65536,
+        };
+        let mut collected = String::new();
+        let mut pages = 0;
+        loop {
+            let page = text_page(bytes, &args).unwrap();
+            assert!(serde_json::to_vec(&page).unwrap().len() <= 65536);
+            collected.push_str(&page.text);
+            pages += 1;
+            match page.continuation {
+                Some(next) => args = next,
+                None => break,
+            }
+        }
+        assert!(pages > 1);
+        assert_eq!(collected, text);
+        args.offset = 1;
+        assert!(text_page(bytes, &args).is_err());
+    }
+}
