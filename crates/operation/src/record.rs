@@ -7,14 +7,14 @@ use std::{collections::BTreeSet, sync::Arc};
 
 pub struct OperationGetHandler {
     journal: Arc<dyn OperationJournal>,
-    project: String,
+    project: Option<String>,
     known: BTreeSet<CapabilityRef>,
     descriptor: CapabilityDescriptor,
 }
 impl OperationGetHandler {
     pub fn new(
         journal: Arc<dyn OperationJournal>,
-        project: String,
+        project: Option<String>,
         descriptors: &[CapabilityDescriptor],
     ) -> Result<Self, OperationError> {
         let documentation = CapabilityDocumentation {
@@ -78,7 +78,10 @@ impl QueryHandler for OperationGetHandler {
             .map_err(|e| OperationError::InvalidInput(e.to_string()))?;
         let record = self.journal.get(&args.operation_id).await?.filter(|r| {
             r.operation.principal() == context.principal()
-                && r.operation.idempotency_scope.as_ref() == Some(&self.project)
+                && self
+                    .project
+                    .as_ref()
+                    .is_none_or(|project| r.operation.idempotency_scope.as_ref() == Some(project))
         });
         let output_contract = record.as_ref().map(|r| RecordedOperationContract {
             capability: r.operation.capability.clone(),
@@ -91,8 +94,16 @@ impl QueryHandler for OperationGetHandler {
         });
         Ok(QuerySnapshot {
             target: TargetRef {
-                kind: "project".into(),
-                identity: self.project.clone(),
+                kind: if self.project.is_some() {
+                    "project"
+                } else {
+                    "operation"
+                }
+                .into(),
+                identity: self
+                    .project
+                    .clone()
+                    .unwrap_or_else(|| args.operation_id.as_str().into()),
             },
             source: "operation-journal".into(),
             observed_at_ms: SystemClock.now_ms()?,

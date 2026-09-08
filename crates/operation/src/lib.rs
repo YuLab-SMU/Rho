@@ -493,6 +493,22 @@ impl CapabilityRegistry {
         descriptor.recovery_schema =
             rho_contract::operation_recovery_schema(descriptor.recovery_schema);
         let schemas = schema::CapabilitySchemas::new(&descriptor)?;
+        for example in &descriptor.documentation.examples {
+            let normalized = handler
+                .normalize_arguments(&example.arguments)
+                .map_err(|e| {
+                    OperationError::Contract(format!(
+                        "{} example normalization failed: {e}",
+                        capability.display_key()
+                    ))
+                })?;
+            schemas.input(&normalized).map_err(|e| {
+                OperationError::Contract(format!(
+                    "{} normalized example violates its input schema: {e}",
+                    capability.display_key()
+                ))
+            })?;
+        }
         self.schemas.insert(capability.clone(), schemas);
         self.descriptors.insert(capability.clone(), descriptor);
         self.handlers.insert(capability, handler);
@@ -514,6 +530,22 @@ impl CapabilityRegistry {
             ));
         }
         let schemas = schema::CapabilitySchemas::new(handler.descriptor())?;
+        for example in &descriptor.documentation.examples {
+            let normalized = handler
+                .normalize_arguments(&example.arguments)
+                .map_err(|e| {
+                    OperationError::Contract(format!(
+                        "{} example normalization failed: {e}",
+                        capability.display_key()
+                    ))
+                })?;
+            schemas.input(&normalized).map_err(|e| {
+                OperationError::Contract(format!(
+                    "{} normalized example violates its input schema: {e}",
+                    capability.display_key()
+                ))
+            })?;
+        }
         self.schemas.insert(capability.clone(), schemas);
         self.descriptors
             .insert(capability.clone(), descriptor.clone());
@@ -1156,3 +1188,6 @@ mod tests {
         assert!(matches!(error, OperationError::DuplicateCapability(_)));
     }
 }
+
+#[cfg(test)]
+mod contract_tests;

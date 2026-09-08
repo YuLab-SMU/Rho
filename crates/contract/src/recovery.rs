@@ -116,15 +116,47 @@ pub fn rebase_local_schema(mut schema: Value, pointer: &str) -> Value {
                 // A composed contract has one document identity and dialect.
                 object.remove("$id");
                 object.remove("$schema");
-                if let Some(Value::String(reference)) = object.get_mut("$ref") {
-                    if reference == "#" {
-                        *reference = format!("#{pointer}");
-                    } else if reference.starts_with("#/") {
-                        *reference = format!("#{pointer}{}", &reference[1..]);
+                for key in ["$ref", "$dynamicRef", "$recursiveRef"] {
+                    if let Some(Value::String(reference)) = object.get_mut(key) {
+                        if reference == "#" {
+                            *reference = format!("#{pointer}");
+                        } else if reference.starts_with("#/") {
+                            *reference = format!("#{pointer}{}", &reference[1..]);
+                        }
                     }
                 }
-                for child in object.values_mut() {
-                    rewrite(child, pointer);
+                for (key, child) in object {
+                    match key.as_str() {
+                        "$defs" | "definitions" | "properties" | "patternProperties"
+                        | "dependentSchemas" | "dependencies" => {
+                            if let Some(schemas) = child.as_object_mut() {
+                                for schema in schemas.values_mut() {
+                                    rewrite(schema, pointer);
+                                }
+                            }
+                        }
+                        "anyOf" | "allOf" | "oneOf" | "prefixItems" => {
+                            if let Some(schemas) = child.as_array_mut() {
+                                for schema in schemas {
+                                    rewrite(schema, pointer);
+                                }
+                            }
+                        }
+                        "items"
+                        | "additionalItems"
+                        | "additionalProperties"
+                        | "unevaluatedItems"
+                        | "unevaluatedProperties"
+                        | "contains"
+                        | "not"
+                        | "if"
+                        | "then"
+                        | "else"
+                        | "propertyNames"
+                        | "contentSchema" => rewrite(child, pointer),
+                        // Defaults, const/enum data and examples are not schemas.
+                        _ => (),
+                    }
                 }
             }
             Value::Array(values) => {
