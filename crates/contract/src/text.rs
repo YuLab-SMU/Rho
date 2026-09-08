@@ -132,6 +132,7 @@ pub struct SearchTextPage {
     pub scanned_entries: u32,
     /// Bytes examined for literal matches, distinct from full-file identity verification.
     pub scanned_bytes: u64,
+    /// Bytes of successfully loaded files verified on this page, including cached reads.
     pub verified_bytes: u64,
     pub continuation: Option<SearchTextCursor>,
     pub complete: bool,

@@ -367,6 +367,7 @@ impl GitProject {
         }
         let mut page = SearchTextPage { matches: vec![], skipped: vec![], scanned_entries: 0, scanned_bytes: 0, verified_bytes: 0, continuation: None, complete: false, limit_reason: None, consistency: "Each file has its own verified content version. Directory traversal is live lexical enumeration, not an atomic tree snapshot; entries added behind an already visited name require a new search.".into() };
         let mut loaded = None;
+        let mut verification_budget_used = 0u64;
         let mut directory_cache: Option<(String, std::collections::VecDeque<DirectoryEntry>)> =
             None;
         loop {
@@ -382,7 +383,7 @@ impl GitProject {
             }
             if page.scanned_bytes >= MATCH_SCAN_BYTES as u64
                 || page.scanned_entries >= SCAN_ENTRIES
-                || page.verified_bytes >= VERIFY_BYTES
+                || (verification_budget_used >= VERIFY_BYTES && loaded.is_none())
             {
                 page.limit_reason = Some("scan_budget".into());
                 break;
@@ -396,6 +397,7 @@ impl GitProject {
                 {
                     return Err("active search file outside requested directory".into());
                 }
+                let cached = loaded.is_some();
                 let data = if let Some(data) = loaded.take() {
                     data
                 } else {
@@ -406,8 +408,11 @@ impl GitProject {
                         )
                     })?
                 };
+                if !cached {
+                    page.verified_bytes += data.identity.byte_size;
+                    verification_budget_used += data.identity.byte_size;
+                }
                 let (mut offset, mut line) = self.verify_cursor(&data, &active)?;
-                page.verified_bytes += data.identity.byte_size;
                 let stop = (offset + MATCH_SCAN_BYTES.saturating_sub(page.scanned_bytes as usize))
                     .min(data.text.len());
                 while offset < stop {
@@ -545,7 +550,7 @@ impl GitProject {
                 continue;
             }
             if entry.byte_size <= MAX_FILE_BYTES
-                && page.verified_bytes + entry.byte_size > VERIFY_BYTES
+                && verification_budget_used + entry.byte_size > VERIFY_BYTES
             {
                 // Leave this name unconsumed so the next page can verify it with a fresh budget.
                 // Restore the parent position from before this entry, avoiding a skip under budget exhaustion.
@@ -556,11 +561,13 @@ impl GitProject {
             match self.load_text(&entry.path).await {
                 Ok(data) => {
                     // Search immediately in the active-file branch. Validation is accounted there.
+                    page.verified_bytes += data.identity.byte_size;
+                    verification_budget_used += data.identity.byte_size;
                     cursor.active_file = Some(self.cursor(&data, data.bom, 1));
                     loaded = Some(data);
                 }
                 Err(skipped) => {
-                    page.verified_bytes += entry.byte_size.min(MAX_FILE_BYTES);
+                    verification_budget_used += entry.byte_size.min(MAX_FILE_BYTES);
                     page.skipped.push(skipped);
                 }
             }
