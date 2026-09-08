@@ -846,6 +846,29 @@ impl ApplicationOwner {
         self.store
             .write_method_binding(&self.scope(context)?, expected_version, binding)
     }
+    pub fn record_skill_read(
+        &self,
+        context: &CallContext,
+        receipt: &ApplicationSkillReadReceipt,
+    ) -> Result<(), ApplicationError> {
+        let _lock = self.lock()?;
+        validate_relative_directory(&receipt.working_directory)?;
+        if serde_json::to_vec(receipt).map_err(storage)?.len() > 16 * 1024 {
+            return Err(ApplicationError::Budget(
+                "skill read receipt exceeds 16 KiB".into(),
+            ));
+        }
+        self.store.record_skill_read(&self.scope(context)?, receipt)
+    }
+    pub fn skill_reads(
+        &self,
+        context: &CallContext,
+        external_task_ref: Option<&str>,
+    ) -> Result<Vec<ApplicationSkillReadReceipt>, ApplicationError> {
+        let _lock = self.lock()?;
+        self.store
+            .skill_reads(&self.scope(context)?, external_task_ref)
+    }
 }
 
 pub fn sha256(text: impl AsRef<[u8]>) -> String {

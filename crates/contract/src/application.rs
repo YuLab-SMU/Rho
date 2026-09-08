@@ -481,6 +481,20 @@ pub struct ApplicationMethodBinding {
     pub resources: Vec<ApplicationMethodResource>,
     pub modules: Vec<String>,
     pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub required_capabilities: Vec<crate::CapabilityRef>,
     pub target: Option<crate::TargetRef>,
     pub excluded: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationSkillReadReceipt {
+    pub working_directory: String,
+    pub skill_ref: String,
+    pub source_ref: String,
+    pub resource_ref: String,
+    pub sha256: String,
+    pub external_task_ref: Option<String>,
+    pub observed_at_ms: u64,
 }

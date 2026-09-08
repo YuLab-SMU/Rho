@@ -2,12 +2,13 @@ import { HostClient } from "./host-client";
 import { Notifications } from "./shared/events";
 import { RuntimeCoordinator } from "./runtime-coordinator";
 import { ApplicationPersistence, Preferences } from "./application-state";
+import { ApplicationBridge } from "./application-bridge";
 import { Session } from "./session";
 import { Operations } from "./operations";
 import { Console } from "./console";
 import { Documents } from "./documents";
 import { Objects } from "./objects";
-import { Packages } from "./packages";
+import { Packages, packageCopyKey } from "./packages";
 import { Files } from "./files";
 import { Outputs } from "./outputs";
 import { MediaCache } from "./media-cache";
@@ -15,6 +16,11 @@ import { Plots } from "./plots";
 import { PanelLayout } from "./layout-model";
 import { Navigation } from "./navigation";
 import { browserMedia } from "./media-adapter";
+import { mediaKey } from "./output-ports";
+import type { ApplicationBridgeSession } from "./generated/ApplicationBridgeSession";
+import type { ApplicationContextState } from "./generated/ApplicationContextState";
+import type { MediaPage } from "./generated/MediaPage";
+import type { PackageSnapshotData } from "./generated/PackageSnapshotData";
 
 /** Composition and client lifecycle only. Scientific state lives in its module. */
 export class Studio {
@@ -34,13 +40,14 @@ export class Studio {
   readonly navigation: Navigation;
   readonly persistence: ApplicationPersistence;
   readonly preferences: Preferences;
+  readonly application: ApplicationBridge;
   private readonly subscriptions: (() => void)[] = [];
   private stopped = false;
   private lifecycle = 0;
-  private phase: "session" | "preferences" | "checkpoint" | "restore" | "native" | "operations" | "ready" = "session";
+  private phase: "session" | "preferences" | "checkpoint" | "restore" | "native" | "operations" | "application" | "ready" = "session";
   private booting: Promise<void> | null = null;
 
-  constructor(private readonly client: HostClient, options: { width?: number } = {}) {
+  constructor(private readonly client: HostClient, options: { width?: number; applicationIdentity?: { windowId: string; incarnation: string; previousSession?: ApplicationBridgeSession } } = {}) {
     const query = this.coordinator.query(client.query.bind(client));
     const state = { readState: client.readState.bind(client), writeState: client.writeState.bind(client) };
     this.session = new Session({
@@ -49,7 +56,8 @@ export class Studio {
       selectProject: client.selectProject.bind(client), probeR: client.probeR.bind(client), applyR: client.applyR.bind(client),
       transition: { before: () => this.suspend(), after: (changed) => this.initialize(changed), failed: () => this.resumeAfterFailure() },
     });
-    this.persistence = new ApplicationPersistence(state, this.session.context);
+    const windowId = options.applicationIdentity?.windowId ?? client.windowId;
+    this.persistence = new ApplicationPersistence(state, this.session.context, `studio.${windowId}`, true);
     this.preferences = new Preferences(state);
     this.layout = new PanelLayout({ changed: this.persistence.changed, width: options.width });
     this.operations = new Operations({
@@ -93,9 +101,100 @@ export class Studio {
       openDocument: this.documents.open.bind(this.documents), createDocument: this.documents.create.bind(this.documents),
       locatePlot: this.plots.locate.bind(this.plots), reportError: this.session.reportError.bind(this.session) });
 
+    const context = (): Omit<ApplicationContextState, "version"> => {
+      const layout = this.layout.getSnapshot(), session = this.session.context().session;
+      const selected = this.plots.view(layout.activeTabId && layout.knownViews[layout.activeTabId]?.component === "plots" ? layout.activeTabId : "plots").selected;
+      const plot = this.outputs.getSnapshot().media.find((reference) => mediaKey(reference) === selected);
+      const packageName = this.packages.selected;
+      const copy = packageName ? this.packages.details.get(packageName)?.copies.find((copy) => packageCopyKey(copy) === this.packages.sourceCopy) : null;
+      return {
+        label: this.session.project?.split("/").at(-1) ?? "Rho Studio", active_document_id: this.documents.active, native_session_id: session,
+        views: Object.entries(layout.knownViews).filter(([id]) => !layout.closedViews.has(id)).map(([view_id, view]) => ({ view_id,
+          view_type: view.component, document_id: view.component === "document" ? (view.config as { documentId?: string } | undefined)?.documentId ?? view_id : null,
+          active: layout.activeViewIds.includes(view_id),
+        })),
+        selected_object: this.objects.applicationSelection ?? (this.objects.selected && session ? { name: this.objects.selected, native_session_id: session, object_ref: null } : null),
+        selected_package: packageName && copy && session && this.packages.session === session && this.packages.data?.observation_id
+          ? { package: packageName, copy_id: packageCopyKey(copy), observation_id: this.packages.data.observation_id, native_session_id: session } : null,
+        selected_plot: plot ? { operation_id: plot.operation_id, sequence: plot.sequence } : null,
+      };
+    };
+    const activateView = (id: string) => {
+      const view = this.layout.getSnapshot().knownViews[id];
+      if (!view || !this.layout.has(id)) throw new Error("The requested view is not open.");
+      this.layout.show(view.component, id, view.name, view.config);
+      if (view.component === "document") this.documents.activate((view.config as { documentId?: string } | undefined)?.documentId ?? id);
+    };
+    const identity = options.applicationIdentity ?? {
+      windowId, incarnation: client.incarnation,
+      get previousSession() { const project = clientStudio.session.project; return project ? client.previousBridgeSession(project) : undefined; },
+    };
+    const clientStudio = this;
+    this.application = new ApplicationBridge({ scope: this.session.context, identity,
+      transport: { bridge: client.applicationBridge.bind(client), execute: client.applicationExecute.bind(client), status: client.applicationStatus.bind(client), readDocument: client.applicationReadDocument.bind(client) },
+      registered: (session) => { if (this.session.project) client.rememberBridgeSession(this.session.project, session); },
+      reportError: this.session.reportError.bind(this.session),
+      modules: {
+        context, documents: this.documents.applicationDocuments.bind(this.documents), restoreDocuments: this.documents.applicationRestore.bind(this.documents),
+        restoreViews: (saved) => {
+          const current = this.layout.getSnapshot();
+          for (const id of Object.keys(current.knownViews)) if (this.layout.has(id) && !saved.views.some((view) => view.view_id === id)) this.layout.close(id);
+          for (const view of saved.views) {
+            const known = current.knownViews[view.view_id];
+            const document = view.document_id ? this.documents.getDocumentSnapshot(view.document_id) : null;
+            this.layout.show(view.view_type, view.view_id, document?.name ?? known?.name,
+              document ? { documentId: document.id } : known?.config);
+          }
+          for (const view of saved.views) if (view.active) activateView(view.view_id);
+          if (saved.active_document_id) this.documents.activate(saved.active_document_id);
+        },
+        openView: (type, id) => {
+          if (type === "console" && id && id !== "console") this.console.updateView(id, {});
+          if (type === "plots" && id) this.plots.ensureView(id);
+          this.layout.show(type, id);
+        },
+        activateView, closeView: this.layout.close.bind(this.layout), openDocument: this.documents.open.bind(this.documents),
+        createDocument: (path, text) => { this.documents.applicationCreate(path, text); },
+        checkDocument: this.documents.applicationCheck.bind(this.documents), setSelection: this.documents.applicationSetSelection.bind(this.documents),
+        editDocument: this.documents.applicationEdit.bind(this.documents), confirmSave: this.documents.applicationConfirmSave.bind(this.documents),
+        selectObject: async (selection) => {
+          if (this.session.context().session !== selection.native_session_id) throw new Error("The object's native session changed.");
+          if (!selection.object_ref) throw new Error("An object observation reference is required.");
+          const observed = await query(this.session.project!, "workspace.read_object", { expected_session: selection.native_session_id, object_ref: selection.object_ref, kind: "structure" });
+          if (observed.status !== "ready" || this.session.context().session !== selection.native_session_id) throw new Error(observed.notices.join("\n") || "The object observation is no longer valid.");
+          this.objects.selectObservation(selection); this.layout.show("objects");
+        },
+        selectPackage: async (selection) => {
+          const project = this.session.project!, pages: PackageSnapshotData[] = [];
+          let offset: number | null = 0;
+          while (offset !== null) {
+            const observed = await query(project, "workspace.packages", { mode: "installed", grouped: true, filter: "", package_name: selection.package,
+              observation_id: selection.observation_id, expected_session: selection.native_session_id, offset, limit: 200 });
+            const page = observed.data as PackageSnapshotData | null;
+            if (observed.status !== "ready" || !page || page.observation_id !== selection.observation_id || page.offset !== offset || this.session.project !== project || this.session.context().session !== selection.native_session_id)
+              throw new Error(observed.notices.join("\n") || "The exact installed-copy observation is no longer available.");
+            pages.push(page);
+            if (page.packages.some((copy) => packageCopyKey(copy) === selection.copy_id)) break;
+            if (page.next_offset !== null && page.next_offset <= offset) throw new Error("Package copy continuation did not advance.");
+            offset = page.next_offset;
+          }
+          this.packages.selectObservedCopy(pages, selection.copy_id, selection.native_session_id); this.layout.show("packages");
+        },
+        selectPlot: async (selection) => {
+          const project = this.session.project!;
+          await this.operations.ensureOperation(selection.operation_id);
+          const observed = await query(project, "workspace.list_outputs", { operation_id: selection.operation_id, after_sequence: Math.max(0, selection.sequence - 1), limit: 1 });
+          const page = observed.data as MediaPage | null;
+          const reference = page?.media.find((item) => item.reference.sequence === selection.sequence)?.reference;
+          if (this.session.project !== project || observed.status !== "ready" || !reference || reference.operation_id !== selection.operation_id) throw new Error(observed.notices.join("\n") || "The original plot reference is unavailable.");
+          this.outputs.restoreReferences([mediaKey(reference)]); this.plots.locate(reference);
+        },
+      },
+    });
+
     for (const fragment of [this.operations, this.console, this.files, this.objects, this.packages, this.plots, this.layout])
       this.persistence.register(fragment);
-    this.persistence.register({ serialize: () => ({ documents: this.documents.serialize() }),
+    this.persistence.register({ serialize: () => ({}),
       restore: (value) => this.documents.restore((value as { documents?: unknown } | null)?.documents) });
 
     this.subscriptions.push(
@@ -104,8 +203,10 @@ export class Studio {
         this.session.setReady(false);
         this.operations.reset(); this.console.reset(); this.files.reset(); this.objects.reset(); this.packages.reset();
         this.documents.reset(); this.outputs.reset(); this.mediaCache.reset(); this.plots.reset(); this.layout.resetState(); this.navigation.reset();
+        this.application.reset();
       }),
       this.notifications.on("sessionChanged", () => {
+        this.application.disconnected();
         this.operations.sessionChanged(); this.console.resetSession(); this.documents.sessionChanged();
         this.objects.sessionChanged(); this.packages.sessionChanged(); this.outputs.sessionChanged(); this.mediaCache.sessionChanged();
       }),
@@ -130,6 +231,8 @@ export class Studio {
       if (this.phase === "ready" && this.persistence.unsynced) await this.persistence.flush();
     });
     this.coordinator.register("control", 250, ready(() => this.console.refresh()));
+    this.coordinator.register("application", 250, ready(() => this.application.step()));
+    this.coordinator.register("application-lease", 5000, async () => { if (!this.stopped) await this.application.heartbeat(); });
     this.coordinator.register("events", 250, ready(async () => {
       await this.operations.initialize(this.console.operationIds());
       return this.operations.consumeEvents();
@@ -151,6 +254,7 @@ export class Studio {
     if (!this.stopped) this.coordinator.start();
   }
   private async suspend() {
+    await this.application.flush();
     await this.persistence.flush();
     if (this.persistence.unsynced) throw new Error(this.persistence.syncError || "Drafts are not synced. The project was not switched.");
     this.lifecycle++;
@@ -213,6 +317,11 @@ export class Studio {
           if (this.session.project && !this.operations.initialized) return;
           this.outputs.restoreReferences(this.plots.retainedReferences());
           this.files.listDirectory();
+          this.phase = "application";
+        }
+        if (this.phase === "application") {
+          await this.application.start();
+          if (!current() || !this.application.ready) return;
           this.phase = "ready";
           this.session.setReady(true);
           this.operations.refreshAdmission();
@@ -227,6 +336,7 @@ export class Studio {
     finally { if (this.booting === task) this.booting = null; }
   }
   stop() {
+    this.application.stop();
     this.stopped = true; this.lifecycle++; this.session.stop(); this.coordinator.stop(); this.client.stopReads(); this.persistence.stop(); this.preferences.stop();
     this.operations.stop(); this.console.stop(); this.documents.stop(); this.files.stop(); this.objects.stop(); this.packages.stop();
     this.outputs.stop(); this.mediaCache.stop(); this.plots.stop(); this.navigation.stop(); this.layout.stop();

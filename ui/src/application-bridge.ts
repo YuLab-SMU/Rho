@@ -1,5 +1,4 @@
 import { Model } from "./shared/model";
-import { sameScope } from "./shared/ports";
 import { actionDocument } from "./application-ports";
 import type { ApplicationBridgePorts } from "./application-ports";
 import type { ApplicationBridgeSession } from "./generated/ApplicationBridgeSession";
@@ -20,6 +19,7 @@ type PendingCompletion = { value: ApplicationCommandCompletion; snapshot: LocalS
 type PendingExecution = { grant: ApplicationCommandGrant; captured: string | null; step: ApplicationExecutionStep; continueRun: boolean; saveConfirmed: boolean };
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const sameProject = (a: RequestContext, b: RequestContext) => a.project === b.project;
 const ref = (d: ApplicationDocument) => ({ document_id: d.document_id, document_version: d.version, selection_version: d.selection.version });
 
 /** One resident bridge per window, stepped by Studio's existing coordinator.
@@ -28,6 +28,7 @@ const ref = (d: ApplicationDocument) => ({ document_id: d.document_id, document_
  */
 export class ApplicationBridge extends Model<{ online: boolean; initialized: boolean; error: string; receipt: ApplicationCommandReceipt | null }> {
   private session: ApplicationBridgeSession | null = null;
+  private registeringSession: ApplicationBridgeSession | null = null;
   private registeredScope: RequestContext | null = null;
   private acknowledged: LocalSnapshot | null = null;
   private localContext: ApplicationContextState | null = null;
@@ -37,17 +38,19 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
   private recovery: PendingExecution | null = null;
   private claimRequestId: string | null = null;
   private inFlight: Promise<void> | null = null;
+  private renewing: Promise<void> | null = null;
   private generation = 0;
   private renewedAt = 0;
   private lastSyncedAt = 0;
   private error = "";
   private lastReceipt: ApplicationCommandReceipt | null = null;
   private initialized = false;
+  private restoreConflict = false;
   private stopped = false;
   constructor(private readonly ports: ApplicationBridgePorts) { super(); }
   protected readSnapshot() { return { online: !!this.session && this.ports.scope().connected && this.now() < this.renewedAt + 15000, initialized: this.initialized, error: this.error, receipt: this.lastReceipt }; }
   private now() { return this.ports.now?.() ?? Date.now(); }
-  get window() { return this.session?.window ?? null; }
+  get window() { return (this.session ?? this.registeringSession)?.window ?? null; }
   get ready() { return this.initialized; }
   private snapshot(): LocalSnapshot {
     const data = this.ports.modules.context();
@@ -70,7 +73,7 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
   }
   private empty(changes: ApplicationChanges) { return !changes.context && !changes.documents.length && !changes.removed_documents.length; }
   private assertScope(scope: RequestContext, generation: number) {
-    if (this.stopped || generation !== this.generation || !sameScope(scope, this.ports.scope())) throw new Error("The application project changed; this result was fenced.");
+    if (this.stopped || generation !== this.generation || !sameProject(scope, this.ports.scope())) throw new Error("The application project changed; this result was fenced.");
   }
   async start(): Promise<void> {
     this.stopped = false;
@@ -82,7 +85,7 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
     if (this.stopped || !scope.project) return Promise.resolve();
     if (!scope.connected) { this.disconnected(); return Promise.resolve(); }
     const task = this.perform(scope, generation).catch((error) => {
-      if (this.stopped || generation !== this.generation || !sameScope(scope, this.ports.scope())) return;
+      if (this.stopped || generation !== this.generation || !sameProject(scope, this.ports.scope())) return;
       this.error = message(error); this.ports.reportError(this.error);
       if (this.execution) { this.execution.continueRun = false; this.recovery = this.execution; this.execution = null; }
       if (this.pendingCompletion) this.pendingCompletion.uncertain = true;
@@ -94,21 +97,26 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
   private async perform(scope: RequestContext, generation: number) {
     const project = scope.project!, transport = this.ports.transport;
     const current = () => this.assertScope(scope, generation);
-    if (this.registeredScope && !sameScope(this.registeredScope, scope)) { this.reset(); return; }
+    if (this.restoreConflict) return;
+    if (this.registeredScope && !sameProject(this.registeredScope, scope)) { this.reset(); return; }
     if (!this.session) {
+      const localBefore = this.ports.modules.documents().map((d) => ({ id: d.document_id, version: d.version, selection: d.selection.version }));
+      const contextBefore = structuredClone(this.ports.modules.context());
       const registration = await transport.bridge(project, { kind: "register", window_id: this.ports.identity.windowId,
         incarnation: this.ports.identity.incarnation, label: this.ports.modules.context().label,
         previous_session: this.ports.identity.previousSession ?? null });
       current();
       if (registration.kind !== "registered") throw new Error("Host did not return a bridge registration.");
-      this.session = registration.data.session; this.ports.registered(this.session); this.registeredScope = scope;
+      const session = registration.data.session;
+      this.registeringSession = session;
+      this.ports.registered(session);
       this.renewedAt = this.now();
       const restored: ApplicationDocument[] = [];
       for (const summary of registration.data.documents) {
         const read = async (content: "draft" | "base", digest: string) => {
           let offset = 0, text = "";
           do {
-            const page = await transport.readDocument(project, { window: this.session!.window, document: summary.document,
+            const page = await transport.readDocument(project, { window: session.window, document: summary.document,
               expected_sha256: digest, content, offset_utf8: offset, limit_bytes: 65536, allow_offline: false });
             current();
             if (page.offset_utf8 !== offset || page.document.sha256 !== summary.sha256 || page.content !== content || page.content_sha256 !== digest)
@@ -124,8 +132,14 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
         restored.push({ document_id: summary.document.document_id, version: summary.document.document_version, path: summary.path,
           text, base_text: base, base_hash: summary.base_hash, selection: summary.selection, readonly_reason: summary.readonly_reason });
       }
+      if (restored.length && (!same(localBefore, this.ports.modules.documents().map((d) => ({ id: d.document_id, version: d.version, selection: d.selection.version }))) || !same(contextBefore, this.ports.modules.context()))) {
+        this.restoreConflict = true;
+        throw new Error("Local input changed while synchronized window state was being restored. Local input was retained; restoration needs explicit resolution.");
+      }
       if (restored.length) this.ports.modules.restoreDocuments(restored, registration.data.context.active_document_id);
-      this.ports.modules.restoreViews(registration.data.context);
+      if (registration.data.context.views.length) this.ports.modules.restoreViews(registration.data.context);
+      this.session = session; this.registeredScope = scope;
+      this.registeringSession = null;
       this.localContext = structuredClone(registration.data.context);
       this.acknowledged = { context: structuredClone(registration.data.context), documents: restored };
       this.initialized = true;
@@ -133,9 +147,7 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
     }
     current();
     if (this.now() - this.renewedAt >= 5000) {
-      const renewed = await transport.bridge(project, { kind: "renew", session: this.session! });
-      current(); if (renewed.kind !== "renewed") throw new Error("Host did not renew this window lease.");
-      this.renewedAt = this.now();
+      await this.heartbeat(); current();
     }
     if (this.pendingCompletion) { await this.finishCompletion(project, current); return; }
     if (this.recovery) { await this.observeRecovery(project, current); return; }
@@ -189,6 +201,7 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
       await this.applyAction(grant.request.action);
       current();
     } catch (error) { outcome = "rejected"; diagnostic = message(error); }
+    current();
     const snapshot = this.snapshot();
     this.pendingCompletion = { value: { request_id: grant.request.request_id, claim_id: grant.claim_id, outcome, changes: this.changes(snapshot), diagnostic }, snapshot, grant, captured, uncertain: false };
     await this.finishCompletion(project, current);
@@ -203,8 +216,8 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
       case "create_document": modules.createDocument(action.path, action.text); break;
       case "set_selection": modules.setSelection(action.document, action.anchor, action.head); break;
       case "edit_document": modules.editDocument(action.document, action.edits); break;
-      case "select_object": modules.selectObject(action.selection); break;
-      case "select_package": modules.selectPackage(action.selection); break;
+      case "select_object": await modules.selectObject(action.selection); break;
+      case "select_package": await modules.selectPackage(action.selection); break;
       case "select_plot": await modules.selectPlot(action.selection); break;
       case "save": case "run_selection": case "run_file": break;
     }
@@ -271,10 +284,37 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
     if (this.pendingCompletion) this.pendingCompletion.uncertain = true;
     this.publish();
   }
+  /** Independent of command/read latency; called by Studio's five-second lane. */
+  heartbeat(): Promise<void> {
+    if (this.renewing) return this.renewing;
+    const session = this.session ?? this.registeringSession, scope = this.ports.scope(), generation = this.generation;
+    if (this.stopped || !session || !scope.project || !scope.connected) { this.disconnected(); return Promise.resolve(); }
+    if (this.now() - this.renewedAt < 5000) return Promise.resolve();
+    const task = this.ports.transport.bridge(scope.project, { kind: "renew", session }).then((reply) => {
+      this.assertScope(scope, generation);
+      if (reply.kind !== "renewed") throw new Error("Host did not renew this window lease.");
+      this.renewedAt = this.now(); this.publish();
+    }).catch((error) => {
+      if (!this.stopped && generation === this.generation && sameProject(scope, this.ports.scope())) {
+        this.disconnected(); this.error = message(error); this.ports.reportError(this.error);
+      }
+      throw error;
+    }).finally(() => { if (this.renewing === task) this.renewing = null; });
+    this.renewing = task; return task;
+  }
+  async flush() {
+    await this.step();
+    if (!this.session || !this.initialized || this.restoreConflict) throw new Error(this.error || "Application drafts have not been synchronized.");
+    const scope = this.ports.scope(), generation = this.generation;
+    if (!scope.project || !scope.connected) throw new Error("The window is offline; drafts are retained locally.");
+    if (this.pendingCompletion) await this.finishCompletion(scope.project, () => this.assertScope(scope, generation));
+    await this.sync(scope.project, () => this.assertScope(scope, generation));
+    if (this.pendingSync || !this.empty(this.changes(this.snapshot()))) throw new Error("The latest application draft is not yet synchronized.");
+  }
   reset() {
-    this.generation++; this.session = null; this.registeredScope = null; this.acknowledged = null; this.localContext = null;
+    this.generation++; this.session = null; this.registeringSession = null; this.registeredScope = null; this.acknowledged = null; this.localContext = null;
     this.pendingSync = null; this.pendingCompletion = null; this.execution = null; this.recovery = null; this.claimRequestId = null;
-    this.initialized = false; this.error = ""; this.lastReceipt = null; this.publish();
+    this.initialized = false; this.restoreConflict = false; this.error = ""; this.lastReceipt = null; this.publish();
   }
   stop() { this.stopped = true; this.generation++; this.disconnected(); this.dispose(); }
 }

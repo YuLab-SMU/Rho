@@ -203,6 +203,28 @@ export class Packages extends Model<PackagesSnapshot> {
     this.inspection = "overview"; this.selectedCopy = null; this.publish(); this.ports.changed();
     if (this.selectedName) this.inspect(this.selectedName);
   }
+  /** Adopt only a verified native observation through this module's own commands. */
+  selectObservedCopy(pages: readonly PackageSnapshotData[], copyKey: string, session: string) {
+    const first = pages[0], last = pages.at(-1);
+    if (!first?.observation_id || !first.package_name || !last || this.ports.context().session !== session)
+      throw new Error("The installed-copy observation does not identify the active session.");
+    let expectedOffset = 0;
+    for (const page of pages) {
+      if (page.observation_id !== first.observation_id || page.package_name !== first.package_name || page.offset !== expectedOffset)
+        throw new Error("Package copy pages do not belong to one observation.");
+      expectedOffset = page.next_offset ?? -1;
+    }
+    const copies = pages.flatMap((page) => page.packages);
+    if (!copies.some((copy) => packageCopyKey(copy) === copyKey)) throw new Error("The exact installed copy is absent from this observation.");
+    const changedObservation = this.dataValue?.observation_id !== first.observation_id || this.sessionValue !== session;
+    this.revision++; this.flight = null; this.retryRead = null; this.detailRequests.clear();
+    if (changedObservation) { this.groupIndex.clear(); this.copyDetails.clear(); this.nextOffset = 0; }
+    this.dataValue = immutable(first); this.sessionValue = session; this.time = first.observed_at_ms;
+    this.dirtyValue = false; this.staleValue = false; this.expiredValue = false; this.error = "";
+    this.copyDetails.set(first.package_name, immutable({ copies, total: first.total_matches, next: last.next_offset, loading: false, notice: "" }));
+    this.selectedName = first.package_name; this.selectedCopy = copyKey; this.inspection = "source";
+    this.publish(); this.ports.changed(); this.ports.schedule();
+  }
   inspect(name: string, more = false) {
     const previous = this.copyDetails.get(name);
     if (previous?.loading || (previous && !previous.notice && !more)) return;

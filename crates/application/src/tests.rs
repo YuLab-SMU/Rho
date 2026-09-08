@@ -7,6 +7,7 @@ struct MemoryState {
     documents: BTreeMap<(String, String, String, String), ApplicationDocument>,
     commands: BTreeMap<(String, String, String, String), StoredCommand>,
     bindings: BTreeMap<(String, String, String), ApplicationMethodBinding>,
+    skill_reads: Vec<(String, String, ApplicationSkillReadReceipt)>,
 }
 #[derive(Default)]
 struct MemoryRepository(Mutex<MemoryState>);
@@ -156,6 +157,37 @@ impl ApplicationRepository for MemoryRepository {
         }
         state.bindings.insert(key(s, &b.binding_id), b.clone());
         Ok(())
+    }
+    fn record_skill_read(
+        &self,
+        scope: &ApplicationScope,
+        receipt: &ApplicationSkillReadReceipt,
+    ) -> Result<(), ApplicationError> {
+        self.0.lock().unwrap().skill_reads.push((
+            scope.project.clone(),
+            scope.principal.clone(),
+            receipt.clone(),
+        ));
+        Ok(())
+    }
+    fn skill_reads(
+        &self,
+        scope: &ApplicationScope,
+        task: Option<&str>,
+    ) -> Result<Vec<ApplicationSkillReadReceipt>, ApplicationError> {
+        Ok(self
+            .0
+            .lock()
+            .unwrap()
+            .skill_reads
+            .iter()
+            .filter(|(p, a, r)| {
+                p == &scope.project
+                    && a == &scope.principal
+                    && task.is_none_or(|t| r.external_task_ref.as_deref() == Some(t))
+            })
+            .map(|(_, _, r)| r.clone())
+            .collect())
     }
 }
 fn actor(agent: bool) -> CallContext {

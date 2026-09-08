@@ -23,7 +23,7 @@ export class ApplicationPersistence extends Model<SyncState> {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private generation = 0;
   private stopped = false;
-  constructor(private port: StatePort, private context: () => RequestContext, private readonly stateKey = "studio") {
+  constructor(private port: StatePort, private context: () => RequestContext, private readonly stateKey = "studio", private readonly adoptCurrentStudio = false) {
     super(); this.state = { key: stateKey, version: null, value: null };
   }
   protected readSnapshot() { return { unsynced: this.dirty, syncError: this.error, stateConflict: this.conflict }; }
@@ -38,8 +38,15 @@ export class ApplicationPersistence extends Model<SyncState> {
     const scope = this.context(), generation = ++this.generation;
     this.stopped = false;
     clearTimeout(this.timer);
-    const state = scope.project ? await this.port.readState(scope.project, this.stateKey) :
+    let state = scope.project ? await this.port.readState(scope.project, this.stateKey) :
       { key: this.stateKey, version: null, value: null };
+    if (scope.project && this.adoptCurrentStudio && state.version === null && this.stateKey !== "studio") {
+      // Explicitly give this newly identified window its own copy of the currently
+      // supported Studio state. Document restoration remains in its existing owner.
+      const current = await this.port.readState(scope.project, "studio");
+      if (generation !== this.generation || !sameScope(scope, this.context())) return;
+      if (current.version !== null) state = await this.port.writeState(scope.project, { key: this.stateKey, version: null, value: current.value });
+    }
     if (generation !== this.generation || !sameScope(scope, this.context())) return;
     for (const fragment of this.fragments) fragment.restore(state.value);
     this.state = state;

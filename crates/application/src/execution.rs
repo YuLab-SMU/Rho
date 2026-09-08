@@ -19,6 +19,52 @@ pub struct ApplicationOperationLookup {
 }
 
 impl ApplicationOwner {
+    /// Private Host reconciliation input, never returned through an Agent query.
+    /// It includes only steps already submitted, so status reads cannot run work.
+    pub fn status_executions(
+        &self,
+        context: &CallContext,
+        args: &ApplicationCommandStatusArguments,
+    ) -> Result<Vec<(ApplicationExecuteRequest, ApplicationOperationLookup)>, ApplicationError>
+    {
+        let _lock = self.lock()?;
+        let scope = self.scope(context)?;
+        let command = self
+            .store
+            .command(&scope, &args.window.window_id, &args.request_id)?
+            .ok_or(ApplicationError::NotFound)?;
+        if command.request.window != args.window {
+            return Err(ApplicationError::IncarnationChanged);
+        }
+        let Some(execution_ref) = command.execution_ref.as_ref() else {
+            return Ok(vec![]);
+        };
+        let mut result = vec![];
+        for step in [
+            ApplicationExecutionStep::Save,
+            ApplicationExecutionStep::Run,
+        ] {
+            let receipt = match step {
+                ApplicationExecutionStep::Save => command.receipt.save.as_ref(),
+                ApplicationExecutionStep::Run => command.receipt.run.as_ref(),
+            };
+            if receipt.is_some_and(|r| r.state != ApplicationStepState::NotSubmitted) {
+                result.push((
+                    ApplicationExecuteRequest {
+                        session: ApplicationBridgeSession {
+                            window: args.window.clone(),
+                            bridge_token: String::new(),
+                        },
+                        request_id: args.request_id.clone(),
+                        execution_ref: execution_ref.clone(),
+                        step,
+                    },
+                    lookup(&command, step)?,
+                ));
+            }
+        }
+        Ok(result)
+    }
     pub(crate) fn capture(
         &self,
         scope: &ApplicationScope,

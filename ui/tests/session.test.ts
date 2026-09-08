@@ -7,6 +7,8 @@ import type { RProbe } from "../src/generated/RProbe";
 import type { RSelection } from "../src/generated/RSelection";
 import type { ApplicationState } from "../src/generated/ApplicationState";
 import type { QuerySnapshot } from "../src/generated/QuerySnapshot";
+import type { ApplicationBridgeRequest } from "../src/generated/ApplicationBridgeRequest";
+import type { ApplicationBridgeReply } from "../src/generated/ApplicationBridgeReply";
 
 function deferred<T>() { let resolve!: (value: T) => void, reject!: (error: unknown) => void;
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
@@ -136,7 +138,19 @@ async function studioFixture() {
   const { Studio } = await import("../src/studio");
   const f = fixture();
   const host = { ...f.ports, invoke: vi.fn(), cancel: vi.fn(async () => {}), respondInput: vi.fn(async () => ({})),
-    subscribe: vi.fn(async () => []), getOperation: vi.fn(async () => null), stopReads: vi.fn() };
+    subscribe: vi.fn(async () => []), getOperation: vi.fn(async () => null), stopReads: vi.fn(),
+    windowId: "test-window", incarnation: "test-incarnation", previousBridgeSession: () => undefined, rememberBridgeSession: vi.fn(),
+    applicationExecute: vi.fn(), applicationStatus: vi.fn(), applicationReadDocument: vi.fn(),
+    applicationBridge: vi.fn(async (_project: string, request: ApplicationBridgeRequest): Promise<ApplicationBridgeReply> => {
+      if (request.kind === "register") return { kind: "registered", data: { session: { window: { window_id: request.window_id, incarnation: request.incarnation }, bridge_token: "test-bridge" },
+        context: { version: "context-1", label: "test", active_document_id: null, native_session_id: null, views: [], selected_object: null, selected_package: null, selected_plot: null }, documents: [], heartbeat_interval_ms: 5000, offline_after_ms: 15000 } };
+      if (request.kind === "sync") return { kind: "synced", data: { sync_id: request.sync_id, synced_at_ms: Date.now(), context_version: request.changes.context?.context.version ?? "context-1",
+        document_versions: request.changes.documents.map(({ document: d }) => ({ document_id: d.document_id, document_version: d.version, selection_version: d.selection.version })) } };
+      if (request.kind === "claim") return { kind: "claimed", data: null };
+      if (request.kind === "renew") return { kind: "renewed", data: { window: request.session.window, label: "test", online: true, renewed_at_ms: Date.now(), lease_expires_at_ms: Date.now() + 15000, synced_at_ms: Date.now(), context_version: "context-1", document_count: 0 } };
+      throw new Error("Unexpected application request in lifecycle fixture");
+    }),
+  };
   host.readState.mockImplementation(async (_project, key): Promise<ApplicationState> => ({ key, version: "v1", value: key === "recent" ? ["/a"]
     : key === "preferences" ? { editorFontSize: 14, indentWidth: 4 }
       : { version: 2, consoleViews: { console: { input: "persisted draft" } }, pending: [{ invocation: { client_request_id: "unconfirmed", capability: { id: "workspace.run_r", version: 1 }, arguments: { code: "never replay" }, preconditions: [] } }] } }));

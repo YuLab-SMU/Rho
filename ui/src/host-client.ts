@@ -11,6 +11,16 @@ import type { RConfiguration } from "./generated/RConfiguration";
 import type { RSelection } from "./generated/RSelection";
 import type { RProbe } from "./generated/RProbe";
 import type { JsonValue } from "./generated/serde_json/JsonValue";
+import type { ApplicationBridgeSession } from "./generated/ApplicationBridgeSession";
+import type { ApplicationBridgeRequest } from "./generated/ApplicationBridgeRequest";
+import type { ApplicationBridgeReply } from "./generated/ApplicationBridgeReply";
+import type { ApplicationCommandRequest } from "./generated/ApplicationCommandRequest";
+import type { ApplicationCommandReceipt } from "./generated/ApplicationCommandReceipt";
+import type { ApplicationExecuteRequest } from "./generated/ApplicationExecuteRequest";
+import type { ApplicationExecuteReply } from "./generated/ApplicationExecuteReply";
+import type { ApplicationCommandStatusArguments } from "./generated/ApplicationCommandStatusArguments";
+import type { ApplicationReadDocumentArguments } from "./generated/ApplicationReadDocumentArguments";
+import type { ApplicationDocumentPage } from "./generated/ApplicationDocumentPage";
 
 export function json(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue;
@@ -21,7 +31,23 @@ export const message = (error: unknown) =>
 /** The only transport owner. Domain owners receive narrow injected ports. */
 export class HostClient {
   private reads = new Set<AbortController>();
-  constructor(private token: string) {}
+  readonly windowId: string;
+  readonly incarnation = crypto.randomUUID();
+  constructor(private token: string, windowId?: string) {
+    this.windowId = windowId ?? sessionStorage.getItem("rho-window-id") ?? crypto.randomUUID();
+    if (!windowId) sessionStorage.setItem("rho-window-id", this.windowId);
+  }
+  previousBridgeSession(project: string): ApplicationBridgeSession | undefined {
+    const saved = sessionStorage.getItem(`rho-application-session:${project}`);
+    if (!saved) return undefined;
+    try {
+      const value = JSON.parse(saved) as ApplicationBridgeSession;
+      return value.window?.window_id === this.windowId && typeof value.window.incarnation === "string" && typeof value.bridge_token === "string" ? value : undefined;
+    } catch { return undefined; }
+  }
+  rememberBridgeSession(project: string, session: ApplicationBridgeSession) {
+    sessionStorage.setItem(`rho-application-session:${project}`, JSON.stringify(session));
+  }
   static fromLocation() {
     const token = new URLSearchParams(location.hash.slice(1)).get("token");
     if (token) {
@@ -42,6 +68,7 @@ export class HostClient {
       method: body === undefined ? "GET" : "POST",
       headers: {
         Authorization: `Bearer ${this.token}`,
+        "X-Rho-Studio-Window": this.windowId,
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -109,6 +136,25 @@ export class HostClient {
       method: "query_snapshot",
       params: { capability: { id, version: 1 }, arguments: json(args) },
     });
+  }
+  applicationBridge(project: string, params: ApplicationBridgeRequest) {
+    return this.port<ApplicationBridgeReply>(project, { method: "application_bridge", params });
+  }
+  applicationControl(project: string, params: ApplicationCommandRequest) {
+    return this.port<ApplicationCommandReceipt>(project, { method: "application_control", params });
+  }
+  applicationExecute(project: string, params: ApplicationExecuteRequest) {
+    return this.port<ApplicationExecuteReply>(project, { method: "application_execute", params });
+  }
+  async applicationStatus(project: string, args: ApplicationCommandStatusArguments) {
+    const reply = await this.query(project, "application.command_status", args);
+    if (reply.status !== "ready") throw new Error(reply.notices.join("\n") || "Application command status is unavailable.");
+    return reply.data as unknown as ApplicationCommandReceipt;
+  }
+  async applicationReadDocument(project: string, args: ApplicationReadDocumentArguments) {
+    const reply = await this.query(project, "application.read_document", args);
+    if (reply.status !== "ready") throw new Error(reply.notices.join("\n") || "The synchronized document is unavailable.");
+    return reply.data as unknown as ApplicationDocumentPage;
   }
   invoke(
     project: string,

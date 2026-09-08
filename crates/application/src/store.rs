@@ -100,4 +100,14 @@ pub trait ApplicationRepository: Send + Sync {
         expected_version: Option<&str>,
         binding: &ApplicationMethodBinding,
     ) -> Result<(), ApplicationError>;
+    fn record_skill_read(
+        &self,
+        scope: &ApplicationScope,
+        receipt: &ApplicationSkillReadReceipt,
+    ) -> Result<(), ApplicationError>;
+    fn skill_reads(
+        &self,
+        scope: &ApplicationScope,
+        external_task_ref: Option<&str>,
+    ) -> Result<Vec<ApplicationSkillReadReceipt>, ApplicationError>;
 }

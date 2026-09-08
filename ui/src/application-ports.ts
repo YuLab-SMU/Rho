@@ -39,8 +39,8 @@ export interface ApplicationModules {
   checkDocument(document: ApplicationDocumentRef): void;
   setSelection(document: ApplicationDocumentRef, anchor: number, head: number): void;
   editDocument(document: ApplicationDocumentRef, edits: readonly ApplicationTextEdit[]): void;
-  selectObject(selection: ApplicationObjectSelection): void;
-  selectPackage(selection: ApplicationPackageSelection): void;
+  selectObject(selection: ApplicationObjectSelection): Promise<void> | void;
+  selectPackage(selection: ApplicationPackageSelection): Promise<void> | void;
   selectPlot(selection: ApplicationPlotSelection): Promise<void> | void;
   confirmSave(documentId: string, captured: string, path: string, digest: string): void;
 }

@@ -2,6 +2,7 @@ import { Model, immutable, readonlyMap, readonlySet } from "./shared/model";
 import { sameScope, terminal, message } from "./shared/ports";
 import type { OperationChange, DomainEvents } from "./shared/events";
 import type { ResourcePorts } from "./resource-ports";
+import type { ApplicationObjectSelection } from "./generated/ApplicationObjectSelection";
 import type { BindingSummary } from "./generated/BindingSummary";
 import type { WorkspaceSnapshotData } from "./generated/WorkspaceSnapshotData";
 
@@ -34,6 +35,7 @@ export class Objects extends Model<ObjectsSnapshot> {
   private manual = new Set<string>();
   private names: readonly string[] = Object.freeze([]);
   private selectedName: string | null = null;
+  private applicationReference: ApplicationObjectSelection | null = null;
   private pending = new Set<string>();
   private listDirty = true;
   private inFlight: { revision: number; generation: number } | null = null;
@@ -54,6 +56,17 @@ export class Objects extends Model<ObjectsSnapshot> {
   get expanded() { return this.getSnapshot().expanded; }
   get inspectors() { return this.getSnapshot().inspectors; }
   get selected() { return this.selectedName; }
+  get applicationSelection(): ApplicationObjectSelection | null {
+    const reference = this.applicationReference;
+    return reference && reference.name === this.selectedName && reference.native_session_id === this.ports.context().session ? reference : null;
+  }
+  selectObservation(selection: ApplicationObjectSelection) {
+    if (!selection.object_ref || selection.native_session_id !== this.ports.context().session) throw new Error("The selected object observation is no longer current.");
+    this.applicationReference = Object.freeze({ ...selection });
+    this.selectedName = selection.name; this.expandedNames.add(selection.name);
+    this.manual.add(selection.name); this.pending.add(selection.name);
+    this.publish(); this.ports.changed(); this.ports.schedule();
+  }
   get visibleNames(): readonly string[] {
     return [...new Set([...this.demands.values()].filter((demand) => !this.activeViewIds || this.activeViewIds.has(demand.viewId)).map((demand) => demand.name))];
   }

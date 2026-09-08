@@ -39,7 +39,11 @@ impl ApplicationStore {
             CREATE TABLE IF NOT EXISTS application_method_bindings (
                 project TEXT NOT NULL, principal TEXT NOT NULL, binding_id TEXT NOT NULL,
                 version TEXT NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
-                PRIMARY KEY(project,principal,binding_id));",
+                PRIMARY KEY(project,principal,binding_id));
+            CREATE TABLE IF NOT EXISTS application_skill_reads (
+                project TEXT NOT NULL, principal TEXT NOT NULL, receipt_key TEXT NOT NULL,
+                external_task_ref TEXT, value TEXT NOT NULL CHECK(json_valid(value)),
+                PRIMARY KEY(project,principal,receipt_key));",
             )
             .map_err(err)?;
         Ok(Self(Mutex::new(connection)))
@@ -264,6 +268,61 @@ impl ApplicationRepository for ApplicationStore {
             ON CONFLICT(project,principal,binding_id) DO UPDATE SET version=excluded.version,value=excluded.value",
             params![scope.project, scope.principal, binding.binding_id, binding.version, value]).map_err(app_err)?;
         tx.commit().map_err(app_err)
+    }
+    fn record_skill_read(
+        &self,
+        scope: &ApplicationScope,
+        receipt: &rho_contract::ApplicationSkillReadReceipt,
+    ) -> Result<(), ApplicationError> {
+        // Re-reading exactly the same resource for the same task refreshes its
+        // observation time. A changed digest remains a distinct recorded resource.
+        let value = serde_json::to_string(receipt).map_err(app_err)?;
+        let key = rho_application::sha256(
+            serde_json::to_vec(&(
+                &receipt.working_directory,
+                &receipt.skill_ref,
+                &receipt.source_ref,
+                &receipt.resource_ref,
+                &receipt.sha256,
+                &receipt.external_task_ref,
+            ))
+            .map_err(app_err)?,
+        );
+        let mut connection = self.0.lock().map_err(app_err)?;
+        let tx = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(app_err)?;
+        let existing: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM application_skill_reads WHERE project=?1 AND principal=?2 AND receipt_key=?3)", params![scope.project, scope.principal, key], |r| r.get(0)).map_err(app_err)?;
+        let count: usize = tx
+            .query_row(
+                "SELECT count(*) FROM application_skill_reads WHERE project=?1 AND principal=?2",
+                params![scope.project, scope.principal],
+                |r| r.get(0),
+            )
+            .map_err(app_err)?;
+        if !existing && count >= 10_000 {
+            return Err(ApplicationError::Budget(
+                "10000 recorded Skill resources per principal/project".into(),
+            ));
+        }
+        tx.execute("INSERT INTO application_skill_reads(project,principal,receipt_key,external_task_ref,value) VALUES(?1,?2,?3,?4,?5)
+            ON CONFLICT(project,principal,receipt_key) DO UPDATE SET value=excluded.value", params![scope.project, scope.principal, key, receipt.external_task_ref, value]).map_err(app_err)?;
+        tx.commit().map_err(app_err)
+    }
+    fn skill_reads(
+        &self,
+        scope: &ApplicationScope,
+        task: Option<&str>,
+    ) -> Result<Vec<rho_contract::ApplicationSkillReadReceipt>, ApplicationError> {
+        let connection = self.0.lock().map_err(app_err)?;
+        let mut statement = connection.prepare("SELECT value FROM application_skill_reads WHERE project=?1 AND principal=?2 AND (?3 IS NULL OR external_task_ref=?3) ORDER BY receipt_key").map_err(app_err)?;
+        let rows = statement
+            .query_map(params![scope.project, scope.principal, task], |r| {
+                r.get::<_, String>(0)
+            })
+            .map_err(app_err)?;
+        rows.map(|r| serde_json::from_str(&r.map_err(app_err)?).map_err(app_err))
+            .collect()
     }
 }
 fn app_err(error: impl std::fmt::Display) -> ApplicationError {
