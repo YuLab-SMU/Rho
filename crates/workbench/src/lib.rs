@@ -10,7 +10,7 @@ use std::{
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Request, State},
-    http::{StatusCode, header},
+    http::{StatusCode, header, HeaderMap},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -205,12 +205,12 @@ async fn select_project(
     }
 }
 
-async fn dispatch(State(state): State<AppState>, Json(request): Json<WorkbenchFrame>) -> Response {
+async fn dispatch(State(state): State<AppState>, headers:HeaderMap, Json(request): Json<WorkbenchFrame>) -> Response {
     if request.frame.id.is_empty() || request.frame.id.len() > 160 {
         return failure(StatusCode::BAD_REQUEST, "invalid transport request id");
     }
     let quota = match &request.frame.request {
-        HostRequest::Invoke(_) => Some(&state.calls),
+        HostRequest::Invoke(_) | HostRequest::ApplicationExecute(_) => Some(&state.calls),
         HostRequest::QuerySnapshot(_) => Some(&state.observations),
         _ => None,
     };
@@ -232,9 +232,14 @@ async fn dispatch(State(state): State<AppState>, Json(request): Json<WorkbenchFr
             "project changed; refresh before making another request",
         );
     }
+    let mut context=NextHost::local_context();
+    if let Some(window)=headers.get("x-rho-studio-window").and_then(|v|v.to_str().ok()) {
+        if window.is_empty() || window.len()>128 || !window.bytes().all(|c|c.is_ascii_alphanumeric() || matches!(c,b'-'|b'_')) {return failure(StatusCode::BAD_REQUEST,"invalid Studio window transport identity");}
+        context.connection_id=format!("studio:{window}");
+    }
     let result = selected
         .host
-        .dispatch(&NextHost::local_context(), request.frame.request)
+        .dispatch(&context, request.frame.request)
         .await;
     let reply = match result {
         Ok(result) => SessionReply {

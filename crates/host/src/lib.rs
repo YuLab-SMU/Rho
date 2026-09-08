@@ -1,4 +1,6 @@
 #![forbid(unsafe_code)]
+mod discovery;
+mod application;
 
 mod config;
 mod r_configuration;
@@ -134,11 +136,14 @@ struct HostRuntime {
     gateway: Arc<OperationGateway>,
     queries: Arc<QueryGateway>,
     workspace: Option<Arc<WorkspaceRunHandler>>,
+    application: Option<Arc<rho_application::ApplicationOwner>>,
+    output_owner: Option<Arc<rho_workspace::WorkspaceOutputHandler>>,
     _project_lease: Option<ProjectLease>,
 }
 
 #[derive(Default)]
 struct HostDomains {
+    application_store: Option<Arc<ApplicationStore>>,
     workspace: Option<Arc<dyn WorkspaceRuntime>>,
     outputs: Option<Arc<dyn rho_workspace::WorkspaceOutputs>>,
     project: Option<Arc<dyn ProjectRuntime>>,
@@ -191,6 +196,7 @@ impl NextHost {
         Self::compose(
             journal,
             HostDomains {
+                application_store: Some(Arc::new(ApplicationStore::open(&database.with_extension("studio.sqlite")).map_err(OperationError::Storage)?)),
                 outputs: Some(Arc::new(
                     rho_r_runtime::OutputStore::open(
                         &database.parent().unwrap_or(Path::new(".")).join("runtime"),
@@ -263,6 +269,18 @@ impl NextHost {
             HostRequest::QuerySnapshot(query) => {
                 serde_json::to_value(self.query_snapshot(context, query).await?)
             }
+            HostRequest::ApplicationControl(request) => {
+                application::scope(context,"application.control","application.control")?;
+                serde_json::to_value(self.application_owner()?.control(context,request,application::now()?).map_err(application::error)?)
+            }
+            HostRequest::ApplicationBridge(request) => {
+                application::studio(context)?;
+                serde_json::to_value(self.application_owner()?.bridge(context,request,application::now()?).map_err(application::error)?)
+            }
+            HostRequest::ApplicationExecute(request) => {
+                application::studio(context)?;
+                serde_json::to_value(self.application_execute(context,request).await?)
+            }
             HostRequest::Subscribe {
                 after_sequence,
                 limit,
@@ -305,6 +323,9 @@ impl NextHost {
         let data = config.data_root.clone();
         let environment =
             Arc::new(REnvironment::open(config).map_err(OperationError::TargetResolution)?);
+        // Startup is explicit. The adapter retains a failed seed as Unavailable;
+        // later Environment queries never launch a helper to fill this cache.
+        let _ = environment.initialize_observation().await;
         let mut excluded = protected_project_paths(database)?;
         excluded.push(lease.path().to_owned());
         excluded.push(
@@ -316,6 +337,7 @@ impl NextHost {
         Self::compose(
             journal,
             HostDomains {
+                application_store: Some(Arc::new(ApplicationStore::open(&database.with_extension("studio.sqlite")).map_err(OperationError::Storage)?)),
                 outputs: Some(Arc::new(
                     rho_r_runtime::OutputStore::open(
                         &database.parent().unwrap_or(Path::new(".")).join("runtime"),
@@ -391,6 +413,7 @@ impl NextHost {
             })
             .map_err(OperationError::TargetResolution)?,
         );
+        let _ = environment.initialize_observation().await;
         excluded.push(
             environment_root
                 .canonicalize()
@@ -420,6 +443,7 @@ impl NextHost {
         Self::compose(
             journal,
             HostDomains {
+                application_store: Some(Arc::new(ApplicationStore::open(&database.with_extension("studio.sqlite")).map_err(OperationError::Storage)?)),
                 workspace: Some(runtime),
                 outputs: Some(outputs),
                 project: Some(project),
@@ -443,6 +467,9 @@ impl NextHost {
             },
             scopes: std::collections::BTreeSet::from([
                 "operation.read".into(),
+                "application.read".into(),
+                "application.control".into(),
+                "skill.read".into(),
                 RUN_R_SCOPE.into(),
                 WORKSPACE_READ_SCOPE.into(),
                 PROJECT_READ_SCOPE.into(),
@@ -473,6 +500,8 @@ impl NextHost {
                 )),
                 queries: Arc::new(QueryGateway::new(registry)),
                 workspace: None,
+                application: None,
+                output_owner: None,
                 _project_lease: None,
             }),
             recovered_on_open: Vec::new(),
@@ -515,6 +544,7 @@ impl NextHost {
         id_generator: Arc<dyn OperationIdGenerator>,
     ) -> Result<Self, OperationError> {
         let HostDomains {
+            application_store,
             workspace: runtime,
             outputs,
             project,
@@ -524,7 +554,18 @@ impl NextHost {
             project_lease,
         } = domains;
         let output_project = project.as_ref().map(|p| p.root().to_string());
+        let application_owner = application_store.zip(output_project.clone()).map(|(store,project)|Arc::new(rho_application::ApplicationOwner::new(project,store)));
         let mut registry = CapabilityRegistry::new();
+        let discovery = discovery::DiscoveryOwner::new(output_project.clone());
+        for id in ["host.overview", "host.catalog", "host.describe"] {
+            registry.register_query(Arc::new(discovery::DiscoveryHandler::new(discovery.clone(), id)))?;
+        }
+        if let Some(owner) = &application_owner {
+            for id in ["application.windows", "application.context", "application.read_document", "application.command_status"] {
+                registry.register_query(Arc::new(application::ApplicationHandler::new(owner.clone(),output_project.clone().unwrap(),id)))?;
+            }
+            registry.register_control(application::descriptor("application.control"))?;
+        }
         let lane = Arc::new(tokio::sync::Mutex::new(()));
         let records = Arc::new(JournalRecords(journal.clone()));
         if let Some(remote) = remote {
@@ -593,15 +634,22 @@ impl NextHost {
                 WorkspaceQueryKind::Packages,
             )))?;
             registry.register_query(Arc::new(WorkspaceQueryHandler::new(
-                workspace,
+                workspace.clone(),
                 WorkspaceQueryKind::InspectObject,
             )))?;
+            for kind in [WorkspaceQueryKind::ListObjects, WorkspaceQueryKind::ObserveObject, WorkspaceQueryKind::ReadObject, WorkspaceQueryKind::PackageIndex] {
+                registry.register_query(Arc::new(WorkspaceQueryHandler::new(workspace.clone(), kind)))?;
+            }
         }
+        let mut output_owner = None;
         if let Some(outputs) = outputs {
+            output_owner = Some(Arc::new(rho_workspace::WorkspaceOutputHandler::with_store(workspace_owner.clone(),Some(outputs.clone()),output_project.clone(),records.clone(),rho_workspace::OutputQueryKind::Read)));
             for kind in [
                 rho_workspace::OutputQueryKind::Events,
                 rho_workspace::OutputQueryKind::Read,
                 rho_workspace::OutputQueryKind::List,
+                rho_workspace::OutputQueryKind::View,
+                rho_workspace::OutputQueryKind::ReadText,
             ] {
                 registry.register_query(Arc::new(
                     rho_workspace::WorkspaceOutputHandler::with_store(
@@ -647,6 +695,8 @@ impl NextHost {
             registry.register_query(Arc::new(rho_project::ProjectSearchHandler::new(
                 owner.clone(),
             )))?;
+            registry.register_query(Arc::new(rho_project::ProjectReadTextHandler::new(owner.clone())))?;
+            registry.register_query(Arc::new(rho_project::ProjectSearchTextHandler::new(owner.clone())))?;
             registry.register_query(Arc::new(ProjectReadHandler::new(owner)))?;
         }
         if let Some(environment) = environment {
@@ -681,6 +731,8 @@ impl NextHost {
             }
         }
         let registry = Arc::new(registry);
+        registry.validate_links()?;
+        discovery.bind(&registry);
         let gateway = Arc::new(
             OperationGateway::new(registry.clone(), journal, clock, id_generator)
                 .with_project_scope(output_project),
@@ -691,6 +743,8 @@ impl NextHost {
                 gateway,
                 queries: Arc::new(QueryGateway::new(registry)),
                 workspace: workspace_owner,
+                application: application_owner,
+                output_owner,
                 _project_lease: project_lease,
             }),
             recovered_on_open,
@@ -700,6 +754,56 @@ impl NextHost {
 
     pub fn capabilities(&self) -> Vec<CapabilityDescriptor> {
         self.runtime.gateway.registry_descriptors()
+    }
+
+    fn application_owner(&self)->Result<&Arc<rho_application::ApplicationOwner>,OperationError>{self.runtime.application.as_ref().ok_or_else(||OperationError::Unavailable("No project Application owner is composed".into()))}
+
+    pub async fn verified_output(&self,context:&CallContext,reference:&rho_contract::MediaReference)->Result<Arc<[u8]>,OperationError>{
+        self.runtime.output_owner.as_ref().ok_or_else(||OperationError::Unavailable("Output owner is unavailable".into()))?.verified_original_for(context,reference).await
+    }
+
+    async fn application_execute(&self,context:&CallContext,request:rho_contract::ApplicationExecuteRequest)->Result<rho_contract::ApplicationExecuteReply,OperationError>{
+        let runtime=self.runtime.clone();let context=context.clone();
+        // Own admission, scientific execution and receipt persistence independently
+        // of the browser wait. There is no automatic submission of a later step.
+        self.tasks.spawn(async move {
+            let owner=runtime.application.as_ref().ok_or_else(||OperationError::Unavailable("Application owner unavailable".into()))?;
+            let admission=owner.begin_execution(&context,&request,application::now()?).map_err(application::error)?;
+            let result=match admission {
+                rho_application::ApplicationExecutionAdmission::VerifySaved{context:original,path,sha256}=>{
+                    let observation=runtime.queries.query(&original,QueryRequest{capability:rho_contract::CapabilityRef::new("project.read_text",1)?,arguments:json!({"path":path,"expected_sha256":sha256,"limit_lines":1})}).await;
+                    let verification=observation.and_then(|snapshot|{
+                        let page:rho_contract::TextPage=serde_json::from_value(snapshot.data.ok_or_else(||OperationError::Unavailable(snapshot.notices.join("; ")))?).map_err(|e|OperationError::Contract(e.to_string()))?;
+                        let file=page.file.ok_or_else(||OperationError::Unavailable("Captured file could not be read by Project owner".into()))?;
+                        if file.path!=path || file.sha256!=sha256 || file.byte_size!=0 || page.skipped.is_some(){return Err(OperationError::ContentChanged("Captured empty file no longer matches the Project observation".into()));}
+                        Ok(rho_contract::ApplicationSaveVerification{path:file.path,sha256:file.sha256,source:snapshot.source,observed_at_ms:snapshot.observed_at_ms.max(0) as u64})
+                    });
+                    let receipt=match verification{
+                        Ok(verification)=>owner.record_saved_verification(&context,&request,&verification,application::now()?).map_err(application::error)?,
+                        Err(error)=>owner.record_saved_verification_failure(&context,&request,&error.to_string(),application::now()?).map_err(application::error)?,
+                    };
+                    return Ok(rho_contract::ApplicationExecuteReply{receipt,operation:None});
+                },
+                rho_application::ApplicationExecutionAdmission::Invoke{context:original,invocation}=>runtime.gateway.invoke(&original,invocation).await.map(Some),
+                rho_application::ApplicationExecutionAdmission::Observe{lookup}=>{
+                    if let Some(id)=lookup.operation_id {runtime.gateway.get_operation(&lookup.context,&id).await}else{runtime.gateway.get_request_operation(&lookup.context,&lookup.client_request_id).await}
+                }
+            };
+            match result {
+                Ok(Some(record))=>{
+                    let receipt=owner.record_execution(&context,&request,&record,application::now()?).map_err(application::error)?;
+                    Ok(rho_contract::ApplicationExecuteReply{receipt,operation:Some(record)})
+                },
+                Ok(None)=>{
+                    let receipt=owner.command_status(&context,rho_contract::ApplicationCommandStatusArguments{window:request.session.window,request_id:request.request_id},application::now()?).map_err(application::error)?;
+                    Ok(rho_contract::ApplicationExecuteReply{receipt,operation:None})
+                },
+                Err(error)=>{
+                    let receipt=owner.record_execution_error(&context,&request,error.to_string(),application::now()?).map_err(application::error)?;
+                    Ok(rho_contract::ApplicationExecuteReply{receipt,operation:None})
+                }
+            }
+        }).await.map_err(|e|OperationError::Storage(format!("application execution observation interrupted: {e}")))?
     }
 
     pub fn recovered_on_open(&self) -> &[OperationRecord] {

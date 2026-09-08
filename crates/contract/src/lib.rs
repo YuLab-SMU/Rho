@@ -18,6 +18,20 @@ mod capability_docs;
 pub use capability_docs::builtin_documentation;
 pub mod text;
 pub use text::*;
+pub mod objects;
+pub use objects::*;
+pub mod package_index;
+pub use package_index::*;
+pub mod application;
+pub use application::*;
+pub mod media;
+pub use media::*;
+pub mod skills;
+pub use skills::*;
+pub mod environment;
+pub use environment::*;
+pub mod execution;
+pub use execution::*;
 
 use std::collections::BTreeSet;
 
@@ -452,6 +466,13 @@ pub struct OperationRecord {
     pub recovery: Option<Value>,
     pub cancellation_requested: bool,
     pub updated_at_ms: i64,
+    /// Read-only navigation derived from this record and visible registered capabilities.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub next_reads: Option<Vec<NextRead>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub diagnostics: Option<Vec<Diagnostic>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

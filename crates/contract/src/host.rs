@@ -23,6 +23,9 @@ pub enum HostRequest {
     },
     RespondInput(RespondInput),
     QuerySnapshot(QueryRequest),
+    ApplicationControl(crate::ApplicationCommandRequest),
+    ApplicationBridge(crate::ApplicationBridgeRequest),
+    ApplicationExecute(crate::ApplicationExecuteRequest),
     Subscribe {
         after_sequence: u64,
         limit: usize,

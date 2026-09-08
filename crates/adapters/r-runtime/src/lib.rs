@@ -301,7 +301,7 @@ impl ArkRuntime {
                             let value = serde_json::to_value(display).unwrap_or(Value::Null);
                             if let Some(writer) = &mut writer {
                                 match writer.display(&value) {
-                                    Ok(Some(reference)) => captured.displays.push(serde_json::to_value(reference).map_err(before)?),
+                                    Ok(Some(reference)) => captured.displays.push(reference),
                                     Ok(None) => {},
                                     Err(error) => { captured.observation_error = Some(error); },
                                 }
@@ -312,7 +312,7 @@ impl ArkRuntime {
                             let value = serde_json::to_value(display).unwrap_or(Value::Null);
                             if let Some(writer) = &mut writer {
                                 match writer.display(&value) {
-                                    Ok(Some(reference)) => captured.displays.push(serde_json::to_value(reference).map_err(before)?),
+                                    Ok(Some(reference)) => captured.displays.push(reference),
                                     Ok(None) => {},
                                     Err(error) => { captured.observation_error = Some(error); },
                                 }
@@ -323,7 +323,7 @@ impl ArkRuntime {
                             let value = serde_json::to_value(display).unwrap_or(Value::Null);
                             if let Some(writer) = &mut writer {
                                 match writer.display(&value) {
-                                    Ok(Some(reference)) => captured.displays.push(serde_json::to_value(reference).map_err(before)?),
+                                    Ok(Some(reference)) => captured.displays.push(reference),
                                     Ok(None) => {},
                                     Err(error) => { captured.observation_error = Some(error); },
                                 }
@@ -371,7 +371,7 @@ struct CapturedOutput {
     stdout: String,
     stderr: String,
     truncated: bool,
-    displays: Vec<Value>,
+    displays: Vec<rho_contract::MediaReference>,
     observation_error: Option<String>,
     protocol_error: Option<Value>,
 }
@@ -384,7 +384,7 @@ struct BridgeResponse {
     outcome: OperationOutcome,
     error: Option<String>,
     value: Value,
-    conditions: Vec<Value>,
+    conditions: Vec<rho_contract::WorkspaceCondition>,
     conditions_truncated: bool,
 }
 
@@ -694,7 +694,7 @@ impl ArkRuntime {
                     Some(json!({"operation_id":operation.operation_id, "session_id":self.session_id, "result_path":result_path, "next_read":"workspace.output_events"}))))?;
             captured
                 .displays
-                .push(serde_json::to_value(&reference).map_err(before)?);
+                .push(reference.clone());
             let preview = response
                 .value
                 .get("preview")
@@ -718,7 +718,7 @@ impl ArkRuntime {
             conditions: {
                 let mut conditions = response.conditions;
                 if let Some(error) = &captured.observation_error {
-                    conditions.push(json!({"kind":"output_observation","message":format!("Output observation is incomplete: {error}")}));
+                    conditions.push(rho_contract::WorkspaceCondition {kind:"output_observation".into(),message:format!("Output observation is incomplete: {error}")});
                 }
                 conditions
             },

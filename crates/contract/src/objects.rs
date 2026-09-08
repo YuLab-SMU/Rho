@@ -12,6 +12,7 @@ fn one() -> u64 {
 fn column_limit() -> u32 {
     50
 }
+fn first_column() -> u32 { 1 }
 fn text_limit() -> u32 {
     16384
 }
@@ -67,7 +68,7 @@ pub struct ReadObjectArguments {
     pub start: u64,
     #[serde(default = "page_limit")]
     pub limit: u32,
-    #[serde(default = "one")]
+    #[serde(default = "first_column")]
     pub column_start: u32,
     #[serde(default = "column_limit")]
     pub column_limit: u32,
@@ -148,6 +149,9 @@ pub struct ObjectColumn {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct ObjectReadPage {
     pub object_ref: String,
+    pub root_name: String,
+    /// Path fixed when the observation opened, separate from this read's relative path.
+    pub observed_path: Vec<ObjectPathElement>,
     pub path: Vec<ObjectPathElement>,
     pub kind: ObjectReadKind,
     pub metadata: ObjectMetadata,

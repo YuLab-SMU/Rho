@@ -83,8 +83,8 @@ pub struct WorkspaceRuntimeReport {
     pub value: Value,
     pub stdout: String,
     pub stderr: String,
-    pub conditions: Vec<Value>,
-    pub output_references: Vec<Value>,
+    pub conditions: Vec<rho_contract::WorkspaceCondition>,
+    pub output_references: Vec<rho_contract::MediaReference>,
     pub effect_observations: Vec<EffectObservation>,
     pub outcome: OperationOutcome,
     pub error: Option<String>,
@@ -624,7 +624,7 @@ mod tests {
         let help = WorkspaceToolHandler::new(owner.clone(), WorkspaceToolKind::Help);
         assert_eq!(
             help.normalize_arguments(&json!({"topic":"mean"})).unwrap(),
-            json!({"topic":"mean","package":"base","max_chars":16384})
+            json!({"topic":"mean","package":"base","max_chars":16384,"library_path":null,"observation_id":null,"expected_index_files":null})
         );
         for args in [
             json!({"topic":""}),

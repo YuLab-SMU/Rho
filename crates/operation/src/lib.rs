@@ -427,11 +427,21 @@ pub struct CapabilityRegistry {
     handlers: BTreeMap<CapabilityRef, Arc<dyn OperationHandler>>,
     queries: BTreeMap<CapabilityRef, Arc<dyn QueryHandler>>,
     schemas: BTreeMap<CapabilityRef, schema::CapabilitySchemas>,
+    controls: BTreeMap<CapabilityRef, CapabilityDescriptor>,
 }
 
 impl CapabilityRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+    pub fn register_control(&mut self, descriptor: CapabilityDescriptor) -> Result<(), OperationError> {
+        descriptor.validate()?;
+        if descriptor.kind != CapabilityKind::Control { return Err(OperationError::Contract("control metadata requires Control kind".into())); }
+        let capability=descriptor.capability.clone();
+        if self.schemas.contains_key(&capability) {return Err(OperationError::DuplicateCapability(capability.display_key()));}
+        self.schemas.insert(capability.clone(),schema::CapabilitySchemas::new(&descriptor)?);
+        self.controls.insert(capability,descriptor);
+        Ok(())
     }
 
     pub fn register(&mut self, handler: Arc<dyn OperationHandler>) -> Result<(), OperationError> {
@@ -502,6 +512,7 @@ impl CapabilityRegistry {
                     .values()
                     .map(|handler| handler.descriptor().clone()),
             )
+            .chain(self.controls.values().cloned())
             .collect()
     }
 
@@ -761,6 +772,15 @@ impl OperationGateway {
                     .as_ref()
                     .is_none_or(|scope| record.operation.idempotency_scope.as_ref() == Some(scope))
         }))
+    }
+
+    pub async fn get_request_operation(&self, context:&CallContext, request_id:&str) -> Result<Option<OperationRecord>,OperationError> {
+        context.validate()?;
+        let Some(project)=&self.project_scope else{return Ok(None)};
+        let args=rho_contract::RecentOperationsArguments{limit:1,before_cursor:None,client_request_id:Some(request_id.into()),operation_id:None};
+        crate::recent::validate_recent_arguments(&args)?;
+        let page=self.journal.list_recent(project,context.principal(),&args).await?;
+        match page.operations.first(){Some(summary)=>self.get_operation(context,&summary.operation_id).await,None=>Ok(None)}
     }
 
     pub async fn request_cancellation(

@@ -333,7 +333,7 @@ impl ConsoleQueryHandler {
     pub fn new(owner: Arc<WorkspaceRunHandler>, check: bool) -> Self {
         let mut descriptor = owner.descriptor.clone();
         descriptor.kind = rho_contract::CapabilityKind::Query;
-        descriptor.output_schema = schema_for!(rho_contract::QuerySnapshot).to_value();
+        descriptor.output_schema = if check { schema_for!(rho_contract::CodeCompleteness).to_value() } else { schema_for!(rho_contract::ConsoleState).to_value() };
         descriptor.capability = CapabilityRef::new(
             if check {
                 "workspace.check_code"
@@ -349,6 +349,7 @@ impl ConsoleQueryHandler {
             json!({"type":"object","properties":{},"additionalProperties":false})
         };
         descriptor.required_scopes = BTreeSet::from([super::WORKSPACE_READ_SCOPE.into()]);
+        descriptor.documentation = rho_contract::builtin_documentation(&descriptor.capability.id);
         descriptor.potential_effects.clear();
         descriptor.idempotency = IdempotencyClass::Pure;
         descriptor.retry = RetryClass::Safe;
@@ -474,6 +475,7 @@ impl QueueControlHandler {
         )
         .unwrap();
         descriptor.input_schema = schema_for!(rho_contract::QueueControlArguments).to_value();
+        descriptor.documentation = rho_contract::builtin_documentation(&descriptor.capability.id);
         descriptor.output_schema = json!({"type":"object","properties":{"paused":{"type":"boolean"}},"required":["paused"],"additionalProperties":false});
         descriptor.potential_effects.clear();
         descriptor.cancellation = CancellationClass::Unsupported;

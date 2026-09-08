@@ -114,8 +114,9 @@ migration, import, archive-reader or compatibility work without a new request.
   `crates/workbench/assets/` is generated. Panels use the shared Studio/Document
   models and HostClient; preserve document state across layout changes.
 - Product-authored UI uses English. Preserve Unicode user content and native output.
-- Project skill discovery must validate the `.rho/skills` root itself, including
-  symlink containment.
+- Skills use standard `.agents/skills` sources and explicit host-provided references.
+  Validate each source root and package/resource symlink containment; project links
+  cannot expand the project read scope. Do not scan other products' private catalogs.
 - Windows GNU Rust commands require Rtools45 at the front of PATH.
 
 ## Parallel work and distribution

@@ -979,6 +979,8 @@ fn raw_operation(row: &Row<'_>) -> rusqlite::Result<RawOperation> {
 
 fn decode_operation(raw: RawOperation) -> Result<OperationRecord, OperationError> {
     Ok(OperationRecord {
+        next_reads: None,
+        diagnostics: None,
         operation: serde_json::from_str(&raw.operation_json).map_err(storage)?,
         status: parse_operation_status(&raw.status)?,
         outcome: raw

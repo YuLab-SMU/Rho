@@ -131,12 +131,38 @@ pub struct WorkspaceSnapshotData {
 #[serde(deny_unknown_fields)]
 pub struct RunROutput {
     pub session_id: String,
+    /// Intentionally open: bounded native R scalar values or safe metadata vary by executed code.
     pub value: Value,
     pub stdout: String,
     pub stderr: String,
-    pub conditions: Vec<Value>,
-    pub output_references: Vec<Value>,
+    pub conditions: Vec<WorkspaceCondition>,
+    pub output_references: Vec<crate::MediaReference>,
 }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceCondition { pub kind: String, pub message: String }
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct HelpResult {
+    pub topic: String,
+    pub package: String,
+    pub library_path: Option<String>,
+    pub found: bool,
+    pub text: String,
+    pub text_reference: Option<crate::MediaReference>,
+    pub preview_truncated: Option<bool>,
+    pub truncated: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct LintDiagnostic {
+    pub line: u32, pub column: u32,
+    #[serde(rename = "type")] pub kind: String,
+    pub message: String, pub linter: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct LintResult { pub tool_version: String, pub diagnostics: Vec<LintDiagnostic>, pub truncated: bool }
 
 /// Bounded observation of the libraries and namespaces of the existing R session.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]

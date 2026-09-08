@@ -175,7 +175,7 @@ impl ProjectSnapshotHandler {
                 "project.snapshot",
                 CapabilityKind::Query,
                 schema_for!(ProjectSnapshotArguments).to_value(),
-                schema_for!(QuerySnapshot).to_value(),
+                schema_for!(ProjectSnapshot).to_value(),
             ),
         }
     }
@@ -252,7 +252,7 @@ impl ProjectReadHandler {
                 "project.read_file",
                 CapabilityKind::Query,
                 schema_for!(ReadFileArguments).to_value(),
-                schema_for!(QuerySnapshot).to_value(),
+                schema_for!(FilePage).to_value(),
             ),
         }
     }

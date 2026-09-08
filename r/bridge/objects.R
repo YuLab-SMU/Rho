@@ -175,7 +175,7 @@ rho_read_object <- function(payload) {
   metadata <- rho_object_metadata(value)
   if (!payload$kind %in% unlist(metadata$supported_reads)) rho_object_error("unsupported", "This read kind is not supported; inspect metadata.supported_reads.")
   bare <- value
-  result <- list(object_ref = payload$object_ref, path = payload$path, kind = payload$kind, metadata = metadata, values = list(), children = list(), columns = list(), start = payload$start, next_start = NULL, column_start = payload$column_start, next_column_start = NULL, text_start = payload$text_start, next_text_start = NULL, observed_at_ms = h$created, complete = TRUE, notices = list())
+  result <- list(object_ref = payload$object_ref, root_name = h$name, observed_path = h$path, path = payload$path, kind = payload$kind, metadata = metadata, values = list(), children = list(), columns = list(), start = payload$start, next_start = NULL, column_start = payload$column_start, next_column_start = NULL, text_start = payload$text_start, next_text_start = NULL, observed_at_ms = h$created, complete = TRUE, notices = list())
   start <- payload$start; limit <- payload$limit
   if (payload$kind %in% c("values", "levels", "names", "text")) {
     if (payload$kind == "text" && !is.null(payload$text_attribute)) { bare <- attr(value, payload$text_attribute, exact = TRUE); if (!is.character(bare) || is.object(bare)) rho_object_error("unsupported", "Text attribute is absent or nonstandard.") }

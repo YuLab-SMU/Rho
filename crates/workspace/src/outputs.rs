@@ -853,6 +853,8 @@ mod media_authority_tests {
             display_id: None,
         };
         let record = OperationRecord {
+            next_reads: None,
+            diagnostics: None,
             operation: Operation {
                 operation_id: reference.operation_id.clone(),
                 client_request_id: "request".into(),

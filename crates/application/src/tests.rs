@@ -812,6 +812,8 @@ fn operation_record(
         "workspace"
     };
     OperationRecord {
+        next_reads: None,
+        diagnostics: None,
         operation: Operation {
             operation_id: OperationId::new(format!("operation-{domain}")).unwrap(),
             client_request_id: invocation.client_request_id.clone(),
