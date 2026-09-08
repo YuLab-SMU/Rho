@@ -371,7 +371,7 @@ impl ServerHandler for McpEdge {
                 Ok(permit) => Some(permit),
                 Err(_) => {
                     return Ok(CallToolResult::structured_error(
-                        json!({"error":"MCP in-flight limit reached; request not accepted"}),
+                        json!({"error":"MCP in-flight limit reached; request not accepted","diagnostic":OperationError::HostBusy.diagnostic()}),
                     ));
                 }
             }
@@ -410,7 +410,7 @@ impl ServerHandler for McpEdge {
             > MAX_REPLY
         {
             return Ok(CallToolResult::structured_error(
-                json!({"error":"result exceeds the MCP reply bound; query a smaller page or use the local CLI", "stored_result_unchanged":true}),
+                json!({"error":"result exceeds the MCP reply bound; use a smaller page or the supplied continuation", "stored_result_unchanged":true,"diagnostic":OperationError::BudgetExceeded("MCP reply exceeds 8 MiB".into()).diagnostic()}),
             ));
         }
         Ok(result)

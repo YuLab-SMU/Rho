@@ -138,45 +138,132 @@ impl McpEdge {
         };
         let reference = token_reference(token)?;
         let bytes = self.host.verified_output(&self.context, &reference).await?;
-        let content = match kind {
-            "original" => {
-                if bytes.len() > 4 * 1024 * 1024 {
-                    return Err(OperationError::BudgetExceeded(
-                        "Use the original manifest and its 64 KiB chunks".into(),
-                    ));
-                }
-                ResourceContents::blob(STANDARD.encode(&bytes), uri)
-                    .with_mime_type(reference.mime_type.clone())
-            }
-            "manifest" => {
-                let chunks = (0..bytes.len())
-                    .step_by(65536)
-                    .map(|offset| OutputResourceChunk {
-                        uri: format!("rho-output://chunk/{offset}/{token}"),
-                        offset: offset as u64,
-                        byte_size: (bytes.len() - offset).min(65536) as u32,
-                    })
-                    .collect();
-                let manifest=OutputResourceManifest{reference,chunk_bytes:65536,chunks,verification:"Concatenate chunks in offset order; assembled UTF-8-independent raw bytes must match reference.byte_size and reference.sha256.".into()};
-                ResourceContents::text(
-                    serde_json::to_string(&manifest).map_err(invalid_operation)?,
-                    uri,
-                )
-                .with_mime_type("application/json")
-            }
-            _ => {
-                if offset % 65536 != 0 || offset >= bytes.len() {
-                    return Err(invalid_operation(
-                        "chunk offset must be an existing aligned manifest position",
-                    ));
-                }
-                ResourceContents::blob(
-                    STANDARD.encode(&bytes[offset..(offset + 65536).min(bytes.len())]),
-                    uri,
-                )
-                .with_mime_type("application/octet-stream")
-            }
-        };
+        let content = resource_content(uri, kind, offset, token, reference, &bytes)?;
         Ok(ReadResourceResult::new(vec![content]))
+    }
+}
+
+fn resource_content(
+    uri: &str,
+    kind: &str,
+    offset: usize,
+    token: &str,
+    reference: MediaReference,
+    bytes: &[u8],
+) -> Result<ResourceContents, OperationError> {
+    let content = match kind {
+        "original" => {
+            if bytes.len() > 4 * 1024 * 1024 {
+                return Err(OperationError::BudgetExceeded(
+                    "Use the original manifest and its 64 KiB chunks".into(),
+                ));
+            }
+            ResourceContents::blob(STANDARD.encode(&bytes), uri)
+                .with_mime_type(reference.mime_type.clone())
+        }
+        "manifest" => {
+            let chunks = (0..bytes.len())
+                .step_by(65536)
+                .map(|offset| OutputResourceChunk {
+                    uri: format!("rho-output://chunk/{offset}/{token}"),
+                    offset: offset as u64,
+                    byte_size: (bytes.len() - offset).min(65536) as u32,
+                })
+                .collect();
+            let manifest=OutputResourceManifest{reference,chunk_bytes:65536,chunks,verification:"Concatenate chunks in offset order; assembled UTF-8-independent raw bytes must match reference.byte_size and reference.sha256.".into()};
+            ResourceContents::text(
+                serde_json::to_string(&manifest).map_err(invalid_operation)?,
+                uri,
+            )
+            .with_mime_type("application/json")
+        }
+        _ => {
+            if offset % 65536 != 0 || offset >= bytes.len() {
+                return Err(invalid_operation(
+                    "chunk offset must be an existing aligned manifest position",
+                ));
+            }
+            ResourceContents::blob(
+                STANDARD.encode(&bytes[offset..(offset + 65536).min(bytes.len())]),
+                uri,
+            )
+            .with_mime_type("application/octet-stream")
+        }
+    };
+
+    Ok(content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn reference(size: usize) -> MediaReference {
+        MediaReference {
+            operation_id: OperationId::new("op-resource").unwrap(),
+            sequence: 2,
+            mime_type: "image/png".into(),
+            byte_size: size as u64,
+            sha256: "sha256:expected-original-digest".into(),
+            display_id: Some("图".into()),
+        }
+    }
+    #[test]
+    fn large_original_manifest_chunks_reassemble_exact_bytes() {
+        let bytes = (0..4 * 1024 * 1024 + 173)
+            .map(|index| (index % 251) as u8)
+            .collect::<Vec<_>>();
+        let reference = reference(bytes.len());
+        let uri = original_uri(&reference).unwrap();
+        assert!(uri.starts_with("rho-output://manifest/"));
+        let token = uri.rsplit('/').next().unwrap();
+        assert_eq!(token_reference(token).unwrap(), reference);
+        assert!(
+            resource_content("unused", "original", 0, token, reference.clone(), &bytes).is_err()
+        );
+        let manifest =
+            resource_content(&uri, "manifest", 0, token, reference.clone(), &bytes).unwrap();
+        let ResourceContents::TextResourceContents { text, .. } = manifest else {
+            panic!("manifest must be JSON text")
+        };
+        let manifest: OutputResourceManifest = serde_json::from_str(&text).unwrap();
+        assert_eq!(manifest.reference, reference);
+        assert_eq!(manifest.chunk_bytes, 65536);
+        let mut reassembled = Vec::new();
+        for chunk in manifest.chunks {
+            let content = resource_content(
+                &chunk.uri,
+                "chunk",
+                chunk.offset as usize,
+                token,
+                reference.clone(),
+                &bytes,
+            )
+            .unwrap();
+            let ResourceContents::BlobResourceContents { blob, .. } = content else {
+                panic!("chunk must be blob")
+            };
+            let data = STANDARD.decode(blob).unwrap();
+            assert_eq!(data.len(), chunk.byte_size as usize);
+            assert!(data.len() <= 65536);
+            reassembled.extend(data);
+        }
+        assert_eq!(reassembled, bytes);
+        assert!(resource_content("unused", "chunk", 1, token, reference.clone(), &bytes).is_err());
+        assert!(
+            resource_content("unused", "chunk", bytes.len(), token, reference, &bytes).is_err()
+        );
+    }
+    #[test]
+    fn small_original_is_complete_blob_without_path_tokens() {
+        let reference = reference(3);
+        let uri = original_uri(&reference).unwrap();
+        assert!(uri.starts_with("rho-output://original/"));
+        let content = resource_content(&uri, "original", 0, "unused", reference, b"abc").unwrap();
+        let ResourceContents::BlobResourceContents { blob, .. } = content else {
+            panic!("original must be blob")
+        };
+        assert_eq!(STANDARD.decode(blob).unwrap(), b"abc");
+        assert!(token_reference("../private").is_err());
+        assert!(token_reference(&"a".repeat(8193)).is_err());
     }
 }
