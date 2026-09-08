@@ -78,7 +78,7 @@ it.each(["promise", "active_binding", "unsupported_class"])("%s exposes metadata
 });
 it("owner-reported expiry blocks retries until explicit refresh and preserves cached values", async () => {
   const f = fixture(); await f.owner.observe(); f.owner.inspect("x"); await f.owner.observe(); await f.owner.observe(); f.owner.inspect("x"); f.query.mockRejectedValueOnce(new Error("observation_expired: original reference ended"));
-  await expect(f.owner.observe()).rejects.toThrow("observation_expired"); expect(f.owner.applicationSelection).toBeNull(); expect(f.owner.needsObservation).toBe(false); expect(f.owner.inspectors.get("x")?.binding.preview).toEqual([1]);
+  await expect(f.owner.observe()).rejects.toThrow("observation_expired"); expect(f.owner.applicationSelection).toBeNull(); expect(f.owner.needsObservation).toBe(false); expect(f.owner.inspectors.get("x")?.binding.preview).toEqual([1]); expect(f.owner.inspectors.get("x")?.stale).toBe(true);
   f.owner.inspect("x"); await f.owner.observe(); expect(f.query.mock.calls.at(-1)?.[1]).toBe("workspace.observe_object");
 });
 it("inactive retained views and stale release callbacks cannot schedule or cancel another view", async () => {

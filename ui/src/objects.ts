@@ -233,6 +233,7 @@ export class Objects extends Model<ObjectsSnapshot> {
   private block(request: ObjectRead) {
     this.retryRead = null;
     if (request.kind === "directory") { this.directoryExpired = true; this.listDirty = false; this.requestedOffset = null; }
-    else { this.blocked.add(request.name); this.pending.delete(request.name); const reference = this.references.get(request.name); if (reference) reference.validated = false; }
+    else { this.blocked.add(request.name); this.pending.delete(request.name); const reference = this.references.get(request.name); if (reference) reference.validated = false;
+      const previous = this.previews.get(request.name); if (previous) this.previews.set(request.name, Object.freeze({ ...previous, stale: true, notice: this.error })); }
   }
 }
