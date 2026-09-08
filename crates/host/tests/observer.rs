@@ -154,24 +154,30 @@ async fn orphan_accepted_and_running_records_are_observed_without_recovery_or_da
     drop(journal);
     let before = fs::read(&database).unwrap();
     let observer = NextHost::open_query_observer(&database, Some(&root)).unwrap();
-    assert_eq!(
-        query(
-            &observer,
-            "operation.get",
-            json!({"operation_id":accepted.operation_id})
+    for (original, status) in [
+        (&accepted, OperationStatus::Accepted),
+        (&running, OperationStatus::Running),
+    ] {
+        let result: rho_contract::OperationGetResult = serde_json::from_value(
+            query(
+                &observer,
+                "operation.get",
+                json!({"operation_id":original.operation_id}),
+            )
+            .await,
         )
-        .await["status"],
-        "accepted"
-    );
-    assert_eq!(
-        query(
-            &observer,
-            "operation.get",
-            json!({"operation_id":running.operation_id})
-        )
-        .await["status"],
-        "running"
-    );
+        .unwrap();
+        let observed = result
+            .record
+            .expect("The exact principal/project operation must remain visible");
+        assert_eq!(observed.operation.operation_id, original.operation_id);
+        assert_eq!(
+            observed.operation.idempotency_scope,
+            original.idempotency_scope
+        );
+        assert_eq!(observed.operation.principal(), original.principal());
+        assert_eq!(observed.status, status);
+    }
     query(&observer, "host.overview", json!({})).await;
     drop(observer);
     assert_eq!(fs::read(&database).unwrap(), before);
