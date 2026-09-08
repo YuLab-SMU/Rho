@@ -11,10 +11,10 @@ interface SyncState {
   unsynced: boolean; syncError: string; stateConflict: ApplicationState | null;
 }
 
-/** All project fragments share one optimistic, atomic SQLite studio write. */
+/** A window's non-document fragments share one optimistic SQLite write. */
 export class ApplicationPersistence extends Model<SyncState> {
   private fragments: PersistenceFragment[] = [];
-  private state: ApplicationState = { key: "studio", version: null, value: null };
+  private state: ApplicationState;
   private dirty = false;
   private error = "";
   private conflict: ApplicationState | null = null;
@@ -23,7 +23,9 @@ export class ApplicationPersistence extends Model<SyncState> {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private generation = 0;
   private stopped = false;
-  constructor(private port: StatePort, private context: () => RequestContext) { super(); }
+  constructor(private port: StatePort, private context: () => RequestContext, private readonly stateKey = "studio") {
+    super(); this.state = { key: stateKey, version: null, value: null };
+  }
   protected readSnapshot() { return { unsynced: this.dirty, syncError: this.error, stateConflict: this.conflict }; }
   get unsynced() { return this.dirty; }
   get syncError() { return this.error; }
@@ -36,8 +38,8 @@ export class ApplicationPersistence extends Model<SyncState> {
     const scope = this.context(), generation = ++this.generation;
     this.stopped = false;
     clearTimeout(this.timer);
-    const state = scope.project ? await this.port.readState(scope.project, "studio") :
-      { key: "studio", version: null, value: null };
+    const state = scope.project ? await this.port.readState(scope.project, this.stateKey) :
+      { key: this.stateKey, version: null, value: null };
     if (generation !== this.generation || !sameScope(scope, this.context())) return;
     for (const fragment of this.fragments) fragment.restore(state.value);
     this.state = state;

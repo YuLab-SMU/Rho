@@ -1,3 +1,7 @@
+use rho_application::{
+    ApplicationError, ApplicationRepository, ApplicationScope, ApplicationStoreChanges,
+    StoredCommand, StoredWindow,
+};
 use rho_contract::ApplicationState;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use std::{path::Path, sync::Mutex, time::Duration};
@@ -19,7 +23,23 @@ impl ApplicationStore {
                 "PRAGMA synchronous = FULL;
             CREATE TABLE IF NOT EXISTS application_state (
                 scope TEXT NOT NULL, key TEXT NOT NULL, version TEXT NOT NULL,
-                value TEXT NOT NULL CHECK(json_valid(value)), PRIMARY KEY(scope,key));",
+                value TEXT NOT NULL CHECK(json_valid(value)), PRIMARY KEY(scope,key));
+            CREATE TABLE IF NOT EXISTS application_windows (
+                project TEXT NOT NULL, principal TEXT NOT NULL, window_id TEXT NOT NULL,
+                revision TEXT NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
+                PRIMARY KEY(project,principal,window_id));
+            CREATE TABLE IF NOT EXISTS application_documents (
+                project TEXT NOT NULL, principal TEXT NOT NULL, window_id TEXT NOT NULL,
+                document_id TEXT NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
+                PRIMARY KEY(project,principal,window_id,document_id));
+            CREATE TABLE IF NOT EXISTS application_commands (
+                project TEXT NOT NULL, principal TEXT NOT NULL, window_id TEXT NOT NULL,
+                request_id TEXT NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
+                PRIMARY KEY(project,principal,window_id,request_id));
+            CREATE TABLE IF NOT EXISTS application_method_bindings (
+                project TEXT NOT NULL, principal TEXT NOT NULL, binding_id TEXT NOT NULL,
+                version TEXT NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
+                PRIMARY KEY(project,principal,binding_id));",
             )
             .map_err(err)?;
         Ok(Self(Mutex::new(connection)))
@@ -88,6 +108,166 @@ impl ApplicationStore {
             value: state.value.clone(),
         })
     }
+}
+
+impl ApplicationRepository for ApplicationStore {
+    fn windows(&self, scope: &ApplicationScope) -> Result<Vec<StoredWindow>, ApplicationError> {
+        let connection = self.0.lock().map_err(app_err)?;
+        let mut statement = connection.prepare("SELECT value FROM application_windows WHERE project=?1 AND principal=?2 ORDER BY window_id").map_err(app_err)?;
+        let rows = statement
+            .query_map(params![scope.project, scope.principal], |r| {
+                r.get::<_, String>(0)
+            })
+            .map_err(app_err)?;
+        rows.map(|r| serde_json::from_str(&r.map_err(app_err)?).map_err(app_err))
+            .collect()
+    }
+    fn window(
+        &self,
+        scope: &ApplicationScope,
+        window_id: &str,
+    ) -> Result<Option<StoredWindow>, ApplicationError> {
+        let connection = self.0.lock().map_err(app_err)?;
+        let value = connection.query_row("SELECT value FROM application_windows WHERE project=?1 AND principal=?2 AND window_id=?3",
+            params![scope.project, scope.principal, window_id], |r| r.get::<_, String>(0)).optional().map_err(app_err)?;
+        value
+            .map(|v| serde_json::from_str(&v).map_err(app_err))
+            .transpose()
+    }
+    fn documents(
+        &self,
+        scope: &ApplicationScope,
+        window_id: &str,
+    ) -> Result<Vec<rho_contract::ApplicationDocument>, ApplicationError> {
+        let connection = self.0.lock().map_err(app_err)?;
+        let mut statement = connection.prepare("SELECT value FROM application_documents WHERE project=?1 AND principal=?2 AND window_id=?3 ORDER BY document_id").map_err(app_err)?;
+        let rows = statement
+            .query_map(params![scope.project, scope.principal, window_id], |r| {
+                r.get::<_, String>(0)
+            })
+            .map_err(app_err)?;
+        rows.map(|r| serde_json::from_str(&r.map_err(app_err)?).map_err(app_err))
+            .collect()
+    }
+    fn command(
+        &self,
+        scope: &ApplicationScope,
+        window_id: &str,
+        request_id: &str,
+    ) -> Result<Option<StoredCommand>, ApplicationError> {
+        let connection = self.0.lock().map_err(app_err)?;
+        let value = connection.query_row("SELECT value FROM application_commands WHERE project=?1 AND principal=?2 AND window_id=?3 AND request_id=?4",
+            params![scope.project, scope.principal, window_id, request_id], |r| r.get::<_, String>(0)).optional().map_err(app_err)?;
+        value
+            .map(|v| serde_json::from_str(&v).map_err(app_err))
+            .transpose()
+    }
+    fn commands(
+        &self,
+        scope: &ApplicationScope,
+        window_id: &str,
+    ) -> Result<Vec<StoredCommand>, ApplicationError> {
+        let connection = self.0.lock().map_err(app_err)?;
+        let mut statement = connection.prepare("SELECT value FROM application_commands WHERE project=?1 AND principal=?2 AND window_id=?3 ORDER BY request_id").map_err(app_err)?;
+        let rows = statement
+            .query_map(params![scope.project, scope.principal, window_id], |r| {
+                r.get::<_, String>(0)
+            })
+            .map_err(app_err)?;
+        rows.map(|r| serde_json::from_str(&r.map_err(app_err)?).map_err(app_err))
+            .collect()
+    }
+    fn commit(
+        &self,
+        scope: &ApplicationScope,
+        expected_revision: Option<&str>,
+        window: &StoredWindow,
+        changes: &ApplicationStoreChanges,
+    ) -> Result<(), ApplicationError> {
+        // Serialize before opening the transaction: neither a malformed draft nor
+        // a failed receipt encoding can leave half of an application command.
+        let window_json = serde_json::to_string(window).map_err(app_err)?;
+        let documents = changes
+            .documents
+            .iter()
+            .map(|d| Ok((&d.document_id, serde_json::to_string(d).map_err(app_err)?)))
+            .collect::<Result<Vec<_>, ApplicationError>>()?;
+        let commands = changes
+            .commands
+            .iter()
+            .map(|c| {
+                Ok((
+                    &c.request.request_id,
+                    serde_json::to_string(c).map_err(app_err)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, ApplicationError>>()?;
+        let mut connection = self.0.lock().map_err(app_err)?;
+        let tx = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(app_err)?;
+        let previous: Option<String> = tx.query_row("SELECT revision FROM application_windows WHERE project=?1 AND principal=?2 AND window_id=?3",
+            params![scope.project, scope.principal, window.window.window_id], |r| r.get(0)).optional().map_err(app_err)?;
+        if previous.as_deref() != expected_revision {
+            return Err(ApplicationError::Conflict);
+        }
+        tx.execute("INSERT INTO application_windows(project,principal,window_id,revision,value) VALUES(?1,?2,?3,?4,?5)
+            ON CONFLICT(project,principal,window_id) DO UPDATE SET revision=excluded.revision,value=excluded.value",
+            params![scope.project, scope.principal, window.window.window_id, window.revision, window_json]).map_err(app_err)?;
+        for (id, value) in documents {
+            tx.execute("INSERT INTO application_documents(project,principal,window_id,document_id,value) VALUES(?1,?2,?3,?4,?5)
+                ON CONFLICT(project,principal,window_id,document_id) DO UPDATE SET value=excluded.value",
+                params![scope.project, scope.principal, window.window.window_id, id, value]).map_err(app_err)?;
+        }
+        for id in &changes.removed_document_ids {
+            tx.execute("DELETE FROM application_documents WHERE project=?1 AND principal=?2 AND window_id=?3 AND document_id=?4",
+                params![scope.project, scope.principal, window.window.window_id, id]).map_err(app_err)?;
+        }
+        for (id, value) in commands {
+            tx.execute("INSERT INTO application_commands(project,principal,window_id,request_id,value) VALUES(?1,?2,?3,?4,?5)
+                ON CONFLICT(project,principal,window_id,request_id) DO UPDATE SET value=excluded.value",
+                params![scope.project, scope.principal, window.window.window_id, id, value]).map_err(app_err)?;
+        }
+        tx.commit().map_err(app_err)
+    }
+    fn method_bindings(
+        &self,
+        scope: &ApplicationScope,
+    ) -> Result<Vec<rho_contract::ApplicationMethodBinding>, ApplicationError> {
+        let connection = self.0.lock().map_err(app_err)?;
+        let mut statement = connection.prepare("SELECT value FROM application_method_bindings WHERE project=?1 AND principal=?2 ORDER BY binding_id").map_err(app_err)?;
+        let rows = statement
+            .query_map(params![scope.project, scope.principal], |r| {
+                r.get::<_, String>(0)
+            })
+            .map_err(app_err)?;
+        rows.map(|r| serde_json::from_str(&r.map_err(app_err)?).map_err(app_err))
+            .collect()
+    }
+    fn write_method_binding(
+        &self,
+        scope: &ApplicationScope,
+        expected_version: Option<&str>,
+        binding: &rho_contract::ApplicationMethodBinding,
+    ) -> Result<(), ApplicationError> {
+        let value = serde_json::to_string(binding).map_err(app_err)?;
+        let mut connection = self.0.lock().map_err(app_err)?;
+        let tx = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(app_err)?;
+        let previous: Option<String> = tx.query_row("SELECT version FROM application_method_bindings WHERE project=?1 AND principal=?2 AND binding_id=?3",
+            params![scope.project, scope.principal, binding.binding_id], |r| r.get(0)).optional().map_err(app_err)?;
+        if previous.as_deref() != expected_version {
+            return Err(ApplicationError::Conflict);
+        }
+        tx.execute("INSERT INTO application_method_bindings(project,principal,binding_id,version,value) VALUES(?1,?2,?3,?4,?5)
+            ON CONFLICT(project,principal,binding_id) DO UPDATE SET version=excluded.version,value=excluded.value",
+            params![scope.project, scope.principal, binding.binding_id, binding.version, value]).map_err(app_err)?;
+        tx.commit().map_err(app_err)
+    }
+}
+fn app_err(error: impl std::fmt::Display) -> ApplicationError {
+    ApplicationError::Storage(error.to_string())
 }
 
 fn err(error: impl std::fmt::Display) -> String {

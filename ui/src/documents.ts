@@ -11,6 +11,9 @@ import type { ProjectSnapshot } from "./generated/ProjectSnapshot";
 import type { ProjectPatchResult } from "./generated/ProjectPatchResult";
 import type { RunROutput } from "./generated/RunROutput";
 import type { FormatResult } from "./generated/FormatResult";
+import type { ApplicationDocument } from "./generated/ApplicationDocument";
+import type { ApplicationDocumentRef } from "./generated/ApplicationDocumentRef";
+import type { ApplicationTextEdit } from "./generated/ApplicationTextEdit";
 
 export const MAX_EDIT_BYTES = 512 * 1024;
 export const normalizeText = (raw: string) => raw.replace(/\r\n|\r/g, "\n");
@@ -98,12 +101,16 @@ export interface Draft {
   head: number;
   scrollTop: number;
   scrollLeft: number;
+  version?: string;
+  selectionVersion?: string;
 }
 
 export interface DocumentSnapshot {
   readonly id: string;
   readonly path: string | null;
   readonly name: string;
+  readonly version: string;
+  readonly selectionVersion: string;
   readonly raw: string;
   readonly dirty: boolean;
   readonly draft: Readonly<Draft>;
@@ -129,6 +136,8 @@ class DocumentState {
   snapshot: DocumentSnapshot | null = null;
   generations = new Map<string, number>();
   constructor(readonly draft: Draft) {
+    draft.version ??= crypto.randomUUID();
+    draft.selectionVersion ??= crypto.randomUUID();
     const text = normalizeText(draft.raw);
     this.state = EditorState.create({
       doc: text,
@@ -144,6 +153,7 @@ class DocumentState {
     if (this.snapshot) return this.snapshot;
     this.snapshot = Object.freeze({
       id: this.draft.id, path: this.draft.path, name: this.name, raw: this.raw,
+      version: this.draft.version!, selectionVersion: this.draft.selectionVersion!,
       dirty: this.draft.baseRaw !== this.raw, draft: Object.freeze({ ...this.draft }),
       state: this.state, saving: this.saving, runningFile: this.runningFile,
       error: this.error,
@@ -157,6 +167,7 @@ class DocumentState {
     if (transaction.startState !== this.state)
       throw new Error("The editor changed before this edit could be applied.");
     if (transaction.docChanged) {
+      this.draft.version = crypto.randomUUID();
       let value = "", end = 0;
       const raw = this.draft.raw;
       transaction.changes.iterChanges((from, to, _fromB, _toB, inserted) => {
@@ -166,6 +177,7 @@ class DocumentState {
       this.draft.raw = value + raw.slice(end);
     }
     this.state = transaction.state;
+    if (transaction.docChanged || !transaction.startState.selection.eq(transaction.state.selection)) this.draft.selectionVersion = crypto.randomUUID();
     this.draft.anchor = this.state.selection.main.anchor;
     this.draft.head = this.state.selection.main.head;
     this.snapshot = null;
@@ -306,6 +318,73 @@ export class Documents extends Model<DocumentsSnapshot> {
     return d.read();
   }
   replace(ref: DocumentRef, text: string) { const d = this.resolve(ref); d.replace(text); this.changed(d); }
+  /** Stable application resources are available even when no editor is mounted. */
+  applicationDocuments(): ApplicationDocument[] {
+    return [...this.entries.values()].map((d) => ({
+      document_id: d.draft.id, version: d.draft.version!, path: d.draft.path,
+      text: d.raw, base_text: d.draft.baseRaw, base_hash: d.draft.baseHash,
+      selection: { anchor: d.state.selection.main.anchor, head: d.state.selection.main.head, version: d.draft.selectionVersion! },
+      readonly_reason: d.draft.readonly,
+    }));
+  }
+  private applicationDocument(reference: ApplicationDocumentRef) {
+    const d = this.resolve(reference.document_id);
+    if (d.draft.version !== reference.document_version || d.draft.selectionVersion !== reference.selection_version)
+      throw new Error("The document or selection changed. Current input was retained.");
+    return d;
+  }
+  applicationCheck(reference: ApplicationDocumentRef) { this.applicationDocument(reference); }
+  applicationSetSelection(reference: ApplicationDocumentRef, anchor: number, head: number) {
+    const d = this.applicationDocument(reference), text = d.state.doc.toString();
+    this.checkEditorOffset(text, anchor); this.checkEditorOffset(text, head);
+    d.update(d.state.update({ selection: { anchor, head } })); this.changed(d);
+  }
+  applicationEdit(reference: ApplicationDocumentRef, edits: readonly ApplicationTextEdit[]) {
+    const d = this.applicationDocument(reference);
+    if (d.draft.readonly) throw new Error("This document is read-only.");
+    if (!edits.length || edits.length > 200) throw new Error("Use 1..200 ordered, nonoverlapping edits.");
+    const text = d.state.doc.toString(); let end = 0;
+    for (const edit of edits) {
+      this.checkEditorOffset(text, edit.from); this.checkEditorOffset(text, edit.to);
+      if (edit.from < end || edit.to < edit.from || edit.insert.includes("\0")) throw new Error("Invalid or overlapping editor ranges.");
+      end = edit.to;
+    }
+    const transaction = d.state.update({ changes: edits.map((edit) => ({ ...edit, insert: normalizeText(edit.insert) })) });
+    const eolBytes = bytes(transaction.state.doc.toString().replace(/\n/g, d.draft.eol)).length + (d.draft.bom ? 3 : 0);
+    if (eolBytes > MAX_EDIT_BYTES) throw new Error("The edit exceeds the 512 KiB document limit.");
+    d.update(transaction); this.changed(d);
+  }
+  private checkEditorOffset(text: string, offset: number) {
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > text.length ||
+      (offset > 0 && offset < text.length && /[\uD800-\uDBFF]/u.test(text[offset - 1]) && /[\uDC00-\uDFFF]/u.test(text[offset])))
+      throw new Error("Position is not a valid zero-based UTF-16 editor boundary.");
+  }
+  applicationCreate(path: string | null, text: string) {
+    if (path) { validatePath(path); if ([...this.entries.values()].some((d) => d.draft.path === path)) throw new Error("The path is already open."); }
+    if (bytes(text).length > MAX_EDIT_BYTES || text.includes("\0")) throw new Error("New document exceeds the UTF-8 editing limit.");
+    const created = this.create(), d = this.resolve(created);
+    d.draft.path = path; d.draft.bom = text.startsWith("\uFEFF"); d.draft.eol = text.match(/\r\n|\r|\n/)?.[0] ?? "\n";
+    d.replace(text.replace(/^\uFEFF/, "")); this.ports.renameDocument(d.draft.id, d.name); this.changed(d);
+    return d.read();
+  }
+  applicationRestore(documents: readonly ApplicationDocument[], active: string | null) {
+    this.restore({ active, items: documents.map((d): Draft => ({ id: d.document_id, path: d.path, raw: d.text.replace(/^\uFEFF/, ""),
+      bom: d.text.startsWith("\uFEFF"), eol: d.text.match(/\r\n|\r|\n/)?.[0] ?? "\n", baseRaw: d.base_text, baseHash: d.base_hash,
+      readonly: d.readonly_reason, byteSize: bytes(d.text).length, anchor: d.selection.anchor, head: d.selection.head,
+      scrollTop: 0, scrollLeft: 0, version: d.version, selectionVersion: d.selection.version })) });
+  }
+  /** A saved capture changes the base; later keystrokes retain their current text. */
+  applicationConfirmSave(documentId: string, captured: string, path: string, hash: string) {
+    const d = this.entries.get(documentId);
+    if (!d) return;
+    validatePath(path);
+    d.draft.path = path; d.draft.baseRaw = captured; d.draft.baseHash = hash;
+    d.draft.byteSize = bytes(captured).length; d.draft.version = crypto.randomUUID();
+    this.ports.renameDocument(documentId, d.name);
+    const project = this.ports.context().project;
+    if (project) this.ports.fileSaved(project, path, hash);
+    this.changed(d);
+  }
   setScroll(ref: DocumentRef, top: number, left: number) {
     if (!this.owns(ref)) return;
     const d = this.resolve(ref);
@@ -433,6 +512,7 @@ export class Documents extends Model<DocumentsSnapshot> {
       }
       guard.assert();
       d.draft.path = target; d.draft.baseRaw = captured; d.draft.baseHash = expected; d.draft.byteSize = bytes(captured).length;
+      d.draft.version = crypto.randomUUID();
       this.ports.renameDocument(d.draft.id, d.name);
       this.ports.fileSaved(project, target, expected); this.changed(d); return captured;
     } catch (error) {
@@ -490,6 +570,7 @@ export class Documents extends Model<DocumentsSnapshot> {
   acceptDiskBase(ref: DocumentRef, useDisk: boolean) {
     const d = this.resolve(ref), comparison = d.diskComparison; if (!comparison) return;
     d.draft.baseHash = comparison.hash; d.draft.baseRaw = comparison.raw;
+    d.draft.version = crypto.randomUUID();
     if (useDisk) { d.draft.bom = comparison.raw.startsWith("\uFEFF"); d.draft.eol = comparison.raw.match(/\r\n|\r|\n/)?.[0] ?? "\n"; d.replace(comparison.raw.replace(/^\uFEFF/, "")); }
     d.diskComparison = null; d.error = ""; this.changed(d);
   }
