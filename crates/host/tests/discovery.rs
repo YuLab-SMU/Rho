@@ -276,10 +276,20 @@ async fn native_control_visibility_is_shared_and_executor_only_context_keeps_con
                     .any(|module| module.module == "operations" && module.available)
             );
             assert!(
-                !overview.modules.iter().any(
-                    |module| ["objects", "packages", "files"].contains(&module.module.as_str())
-                )
+                !overview
+                    .modules
+                    .iter()
+                    .any(|module| ["objects", "files"].contains(&module.module.as_str()))
             );
+            assert_eq!(
+                overview
+                    .modules
+                    .iter()
+                    .any(|module| module.module == "packages" && module.available),
+                ids.contains("workspace.help"),
+                "authorized explicit help execution remains discoverable in Packages"
+            );
+            assert!(!ids.contains("workspace.packages"));
             assert!(
                 overview.observations.is_empty(),
                 "write authority must not expose read-only scientific observations"
