@@ -308,9 +308,31 @@ mod tests {
     #[tokio::test]
     async fn retention_observation_never_runs_r_or_recovers_processes() {
         let (_dir, runtime) = crate::recovery_tests::environment();
+        #[cfg(unix)]
+        let mut runtime = runtime;
+        // Independently record any attempted helper launch; an implementation
+        // that catches a helper error must still fail the read-only invariant.
+        let forbidden_launch = runtime.config.data_root.join("native-helper-called");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let script = runtime.config.data_root.join("forbidden-rscript");
+            fs::write(
+                &script,
+                "#!/bin/sh\nprintf called > \"${0%/*}/native-helper-called\"\nexit 1\n",
+            )
+            .unwrap();
+            fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+            runtime.config.rscript = script;
+        }
         let temporary = tempfile::NamedTempFile::new_in(&runtime.config.data_root).unwrap();
+        let since = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let marker = format!("PSreadfixture_{since}");
         runtime
-            .persist_marker(temporary, "op_retention_read", "PSreadfixture_1700000000")
+            .persist_marker(temporary, "op_retention_read", &marker)
             .unwrap();
         let stage = runtime.stage("plans", "op_retention_read").unwrap();
         fs::write(stage.join("retained.txt"), "retain these bytes").unwrap();
@@ -323,8 +345,12 @@ mod tests {
         assert!(state.live_processes.is_empty());
         assert!(state.stage.unwrap().fingerprint.starts_with("sha256:"));
         assert_eq!(fs::read(stage.join("retained.txt")).unwrap(), before);
-        // The configured executable is the test binary, so starting any former
-        // R/ps helper would fail instead of providing this material observation.
+        // The durable marker and retained bytes must survive the observation;
+        // neither helper execution nor recovery is part of this query.
         assert!(runtime.read_marker("op_retention_read").unwrap().is_some());
+        assert!(
+            !forbidden_launch.exists(),
+            "retention observation must not launch an R or ps helper, even if its error is swallowed"
+        );
     }
 }
