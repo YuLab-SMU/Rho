@@ -314,13 +314,23 @@ impl ServerHandler for McpEdge {
             ));
         }
         let mut result = ListToolsResult::default();
-        result.tools = self
-            .entries
-            .values()
-            .skip(offset)
-            .take(PAGE_SIZE)
-            .map(|entry| entry.tool.clone())
-            .collect();
+        for entry in self.entries.values().skip(offset).take(PAGE_SIZE) {
+            result.tools.push(entry.tool.clone());
+            if serde_json::to_vec(&result)
+                .map_err(|error| ErrorData::internal_error(error.to_string(), None))?
+                .len()
+                > MAX_REPLY - 16384
+            {
+                result.tools.pop();
+                if result.tools.is_empty() {
+                    return Err(ErrorData::internal_error(
+                        "A tool descriptor exceeds the MCP reply budget",
+                        None,
+                    ));
+                }
+                break;
+            }
+        }
         result.next_cursor = (offset + result.tools.len() < self.entries.len())
             .then(|| (offset + result.tools.len()).to_string());
         Ok(result)
