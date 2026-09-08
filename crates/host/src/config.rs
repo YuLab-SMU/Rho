@@ -23,6 +23,8 @@ pub struct HostProfile {
     pub database: PathBuf,
     pub runtime: RuntimeConfiguration,
     pub remote: Option<SshConfig>,
+    /// Exact Skill roots discovered and attested by the external platform launcher.
+    pub host_skills: Option<PathBuf>,
 }
 
 /// A native project lease, reserved before ending the old Host. No database
@@ -56,6 +58,12 @@ impl HostProfile {
     }
 
     pub fn reserve(&self, project: &Path) -> Result<ReservedHost, String> {
+        crate::skills::validate_manifest_for_project(
+            project,
+            &self.database,
+            self.host_skills.as_deref(),
+        )
+        .map_err(|error| error.to_string())?;
         Ok(ReservedHost {
             profile: self.clone(),
             lease: ProjectLease::acquire(project).map_err(|error| error.to_string())?,
@@ -70,8 +78,13 @@ impl ReservedHost {
         let data = profile.database.parent().unwrap_or(Path::new("."));
         match &profile.runtime {
             RuntimeConfiguration::Project => {
-                NextHost::open_project_reserved(&profile.database, lease, profile.remote.clone())
-                    .await
+                NextHost::open_project_reserved(
+                    &profile.database,
+                    lease,
+                    profile.remote.clone(),
+                    profile.host_skills.as_deref(),
+                )
+                .await
             }
             RuntimeConfiguration::Environment { rscript } => {
                 NextHost::open_environment_reserved(
@@ -84,6 +97,7 @@ impl ReservedHost {
                     },
                     profile.remote.clone(),
                     lease,
+                    profile.host_skills.as_deref(),
                 )
                 .await
             }
@@ -105,6 +119,7 @@ impl ReservedHost {
                     environment.as_deref(),
                     profile.remote.clone(),
                     lease,
+                    profile.host_skills.as_deref(),
                 )
                 .await
             }

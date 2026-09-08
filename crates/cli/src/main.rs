@@ -3,7 +3,7 @@ use std::sync::Arc;
 mod session;
 
 use clap::{Parser, Subcommand};
-use rho_contract::{CapabilityRef, Invocation, OperationId, Precondition};
+use rho_contract::{CapabilityRef, Invocation, OperationId, Precondition, QueryRequest};
 use rho_host::{HostProfile, NextHost, RUN_R_CAPABILITY_ID, RuntimeConfiguration, SshConfig};
 use serde_json::json;
 
@@ -26,6 +26,9 @@ struct Cli {
     environment: Option<String>,
     #[arg(long)]
     project: Option<PathBuf>,
+    /// Launcher-attested JSON manifest of exact existing Skill package roots.
+    #[arg(long, conflicts_with = "demo")]
+    host_skills: Option<PathBuf>,
     /// An existing OpenSSH host alias. No connection is made while opening Host.
     #[arg(long, requires = "remote_root", conflicts_with = "demo")]
     remote_host: Option<String>,
@@ -73,6 +76,7 @@ impl Cli {
             database: self.database.clone(),
             runtime,
             remote,
+            host_skills: self.host_skills.clone(),
         })
     }
 
@@ -124,6 +128,22 @@ enum Command {
         preconditions: String,
         #[arg(long)]
         expected_session: Option<String>,
+    },
+    /// Read a shared Host query; a project-only profile does not start R.
+    Query {
+        #[arg(long)]
+        capability: String,
+        #[arg(long, default_value_t = 1)]
+        capability_version: u16,
+        #[arg(long, default_value = "{}")]
+        arguments: String,
+    },
+    /// Record an explicitly selected or excluded method through shared Application control.
+    BindMethod {
+        #[arg(long)]
+        expected_version: Option<String>,
+        #[arg(long)]
+        binding: String,
     },
     GetOperation {
         operation_id: String,
@@ -179,7 +199,10 @@ async fn run() -> Result<(), String> {
         let host = Arc::new(cli.open_host().await?);
         return session::serve(host, tokio::io::stdin(), tokio::io::stdout()).await;
     }
-    let active_host = if matches!(cli.command, Command::Invoke { .. }) {
+    let active_host = if matches!(
+        cli.command,
+        Command::Invoke { .. } | Command::Query { .. } | Command::BindMethod { .. }
+    ) {
         Some(cli.open_host().await?)
     } else {
         None
@@ -226,6 +249,43 @@ async fn run() -> Result<(), String> {
                 "runtime": if cli.demo { "deterministic_fake" } else if cli.ark.is_some() { "ark" } else if cli.rscript.is_some() { "environment" } else { "project" },
                 "operation": record,
             }))
+        }
+        Command::Query {
+            capability,
+            capability_version,
+            arguments,
+        } => {
+            let host = active_host.expect("query opens one Host");
+            let observation = host
+                .query_snapshot(
+                    &context,
+                    QueryRequest {
+                        capability: CapabilityRef::new(capability, capability_version)
+                            .map_err(|e| e.to_string())?,
+                        arguments: serde_json::from_str(&arguments).map_err(|e| e.to_string())?,
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            print_json(&json!({"ok":true,"observation":observation}))
+        }
+        Command::BindMethod {
+            expected_version,
+            binding,
+        } => {
+            let host = active_host.expect("method binding opens one Host");
+            let binding = serde_json::from_str(&binding).map_err(|e| e.to_string())?;
+            let binding = host
+                .dispatch(
+                    &context,
+                    rho_contract::HostRequest::BindMethod(rho_contract::BindMethodRequest {
+                        expected_version,
+                        binding,
+                    }),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            print_json(&json!({"ok":true,"binding":binding}))
         }
         Command::GetOperation { operation_id } => {
             let host =

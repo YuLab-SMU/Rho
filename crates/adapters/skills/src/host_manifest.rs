@@ -32,6 +32,27 @@ impl HostDiscoveredSkillSource {
             filesystem,
         })
     }
+
+    /// Strict native launch preflight, before a live Host is replaced. No runtime or store is opened.
+    pub fn validate_for_project(&self) -> Result<(), OperationError> {
+        let inventory = self.discover_sync(&SkillScope {
+            project_root: self.filesystem.project.to_string_lossy().into(),
+            working_directory: ".".into(),
+            principal: self.principal.clone(),
+        })?;
+        if !inventory.notices.is_empty() {
+            return Err(OperationError::InvalidInput(format!(
+                "Invalid host Skill source: {}",
+                inventory
+                    .notices
+                    .iter()
+                    .map(|n| format!("{}: {}", n.location, n.message))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            )));
+        }
+        Ok(())
+    }
     fn discover_sync(&self, scope: &SkillScope) -> Result<SkillSourceInventory, OperationError> {
         if scope.principal != self.principal
             || scope.project_root != self.filesystem.project.to_string_lossy()

@@ -36,10 +36,19 @@ impl FilesystemSkillSource {
     }
     /// Use the same Host-owned data exclusions as the Project file adapter.
     pub fn with_excluded_paths(mut self, paths: Vec<PathBuf>) -> Result<Self, OperationError> {
-        self.excluded_paths = paths
-            .into_iter()
-            .map(|p| p.canonicalize().map_err(io_error))
-            .collect::<Result<_, _>>()?;
+        let mut excluded = Vec::new();
+        for path in paths {
+            let absolute = if path.is_absolute() {
+                path
+            } else {
+                std::env::current_dir().map_err(io_error)?.join(path)
+            };
+            excluded.push(normalize_exclusion(&absolute)?);
+            excluded.push(absolute);
+        }
+        excluded.sort();
+        excluded.dedup();
+        self.excluded_paths = excluded;
         Ok(self)
     }
     fn roots(&self, scope: &SkillScope) -> Result<Vec<(String, PathBuf, bool)>, OperationError> {
@@ -402,16 +411,54 @@ fn scan_resources(
     }
     Ok(())
 }
+/// Resolve existing ancestors while preserving protected filenames that do not exist yet.
+fn normalize_exclusion(path: &Path) -> Result<PathBuf, OperationError> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir().map_err(io_error)?.join(path)
+    };
+    let mut normalized = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                if !normalized.pop() {
+                    return Err(OperationError::InvalidInput(
+                        "Invalid private path ancestor".into(),
+                    ));
+                }
+            }
+            std::path::Component::Normal(name) => {
+                normalized.push(name);
+                match normalized.canonicalize() {
+                    Ok(canonical) => normalized = canonical,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(io_error(e)),
+                }
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    Ok(normalized)
+}
+
 fn check_private(path: &Path, excluded: &[PathBuf]) -> Result<(), OperationError> {
     if path.components().any(|part| {
         part.as_os_str()
             .to_str()
             .is_some_and(|s| s.eq_ignore_ascii_case(".git") || s.eq_ignore_ascii_case(".rho"))
-    }) || excluded.iter().any(|root| path.starts_with(root))
-    {
+    }) {
         return Err(OperationError::InvalidInput(
             "Skill resource resolves into private Host or repository data".into(),
         ));
+    }
+    for root in excluded {
+        if path.starts_with(root) || path.starts_with(normalize_exclusion(root)?) {
+            return Err(OperationError::InvalidInput(
+                "Skill resource resolves into private Host or repository data".into(),
+            ));
+        }
     }
     Ok(())
 }
@@ -536,4 +583,47 @@ fn notice(path: &Path, code: &str, message: &str) -> SkillSourceNotice {
 }
 fn io_error(error: impl std::fmt::Display) -> OperationError {
     OperationError::Unavailable(error.to_string())
+}
+
+#[cfg(test)]
+mod exclusion_tests {
+    use super::*;
+    #[test]
+    fn future_sqlite_sidecars_remain_excluded_after_creation() {
+        let root = tempfile::tempdir().unwrap();
+        let protected = root.path().join("future/app.studio.sqlite-wal");
+        let source = FilesystemSkillSource::new(root.path(), None)
+            .unwrap()
+            .with_excluded_paths(vec![protected.clone()])
+            .unwrap();
+        fs::create_dir(root.path().join("future")).unwrap();
+        fs::write(&protected, "private WAL").unwrap();
+        assert!(check_private(&protected.canonicalize().unwrap(), &source.excluded_paths).is_err());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn exclusion_retains_configured_alias_when_its_existing_parent_link_changes() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let a = root.path().join("a");
+        let b = root.path().join("b");
+        fs::create_dir(&a).unwrap();
+        fs::create_dir(&b).unwrap();
+        let alias = root.path().join("alias");
+        symlink(&a, &alias).unwrap();
+        let source = FilesystemSkillSource::new(root.path(), None)
+            .unwrap()
+            .with_excluded_paths(vec![alias.join("app.sqlite-shm")])
+            .unwrap();
+        fs::remove_file(&alias).unwrap();
+        symlink(&b, &alias).unwrap();
+        fs::write(b.join("app.sqlite-shm"), "private SHM").unwrap();
+        assert!(
+            check_private(
+                &b.join("app.sqlite-shm").canonicalize().unwrap(),
+                &source.excluded_paths
+            )
+            .is_err()
+        );
+    }
 }
