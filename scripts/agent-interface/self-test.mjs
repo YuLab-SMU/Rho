@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {parseRpc,digest} from './runtime.mjs';
 import {nativeReadPath} from './agent.mjs';
-import {operationRecord} from './proxy.mjs';
+import {operationRecord,textResponseBytes} from './proxy.mjs';
 import {createScenario,CORE_CASES,ADDITIONAL_CASES,FINAL_SCHEMA} from './scenarios.mjs';
 assert.deepEqual(parseRpc('data: {"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n\n'),[{jsonrpc:'2.0',id:1,result:{ok:true}}]);
 assert.deepEqual(parseRpc('{"id":2,"result":null}'),[{id:2,result:null}]);
@@ -23,4 +23,6 @@ assert.equal(operationRecord('rho.operation.get',record),record);
 assert.equal(operationRecord('rho.workspace.run_r.v1',record),record);
 assert.equal(operationRecord('rho.application.context.v1',{data:{record}}),null);
 
+const imageResult={result:{content:[{type:'text',text:'α🙂'},{type:'image',mimeType:'image/png',data:'YWJjZA=='}]}};
+assert.equal(textResponseBytes(imageResult),Buffer.byteLength(JSON.stringify(imageResult))-8);
 console.log('Harness parser and assertion checks passed. No Agent acceptance runs executed.');
