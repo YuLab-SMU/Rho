@@ -58,9 +58,10 @@ pub struct SkillMetadata {
     pub description: String,
     pub license: Option<String>,
     pub compatibility: Option<String>,
-    pub metadata: BTreeMap<String, String>,
+    /// Uninterpreted native-host metadata; standard sources enforce a string-to-string map.
+    pub metadata: serde_json::Value,
     /// Preserved provider syntax. This field never grants a Rho scope.
-    pub allowed_tools: Option<String>,
+    pub allowed_tools: Option<serde_json::Value>,
     /// Optional host fields are preserved as data; Rho does not infer requirements.
     pub extra: BTreeMap<String, serde_json::Value>,
     pub dependencies: String,

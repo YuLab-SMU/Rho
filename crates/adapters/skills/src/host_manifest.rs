@@ -33,6 +33,10 @@ impl HostDiscoveredSkillSource {
         })
     }
 
+    /// Native launch manifest, for Host-private path exclusion; never a Skill resource.
+    pub fn manifest_path(&self) -> &Path {
+        &self.manifest_path
+    }
     /// Strict native launch preflight, before a live Host is replaced. No runtime or store is opened.
     pub fn validate_for_project(&self) -> Result<(), OperationError> {
         let inventory = self.discover_sync(&SkillScope {
@@ -77,6 +81,7 @@ impl HostDiscoveredSkillSource {
                 &root,
                 matches!(entry.source_kind, HostSkillSourceKind::Project),
                 entry.source_key,
+                rho_skills::SkillMetadataPolicy::HostAttested,
             ) {
                 Ok(mut package) => {
                     package.source_id = self.provider_id.clone();

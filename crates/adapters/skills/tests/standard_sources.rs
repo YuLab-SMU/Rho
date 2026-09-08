@@ -148,10 +148,13 @@ async fn standard_sources_pages_same_names_and_resource_identity_changes() {
         3
     );
     assert!(all.iter().all(|s| s.metadata.dependencies == "undeclared"));
-    assert!(
-        all.iter()
-            .all(|s| s.metadata.allowed_tools.as_deref() == Some("Bash(*)"))
-    );
+    assert!(all.iter().all(|s| {
+        s.metadata
+            .allowed_tools
+            .as_ref()
+            .and_then(serde_json::Value::as_str)
+            == Some("Bash(*)")
+    }));
     let root = owner.list(&ctx, &list(".")).await.unwrap();
     assert_eq!(root.skills.len(), 2);
     let skill = root
@@ -607,4 +610,235 @@ async fn binding_validation_requires_current_resources_target_and_explicit_unexc
     owner.validate_binding(&ctx, &binding).await.unwrap();
     fs::write(path.join("scripts/run.R"), "different content\n").unwrap();
     assert!(owner.validate_binding(&ctx, &binding).await.is_err());
+}
+
+#[tokio::test]
+async fn attested_native_names_preserve_case_directory_mismatch_and_original_bytes() {
+    let project = tempfile::tempdir().unwrap();
+    let external = tempfile::tempdir().unwrap();
+    let ctx = context("caller");
+    let scope = scope(project.path(), &ctx, ".");
+    // These are the actual name/directory pairs used by the native Codex sources.
+    let cases = [
+        ("presentations", "Presentations"),
+        ("western-astrology", "astrology-analysis"),
+    ];
+    let mut roots = vec![];
+    let mut originals = BTreeMap::new();
+    for (directory, name) in cases {
+        let root = external.path().join(directory);
+        fs::create_dir_all(root.join("scripts")).unwrap();
+        let body=format!("---\nname: {name}\ndescription: Host-attested source fidelity fixture\nallowed-tools: [Read, 'Bash(*)', workspace.run_r]\nmetadata:\n  native-format-version: 2\n  source-enabled: true\n---\nOriginal host text — 不转换。\n").into_bytes();
+        fs::write(root.join("SKILL.md"), &body).unwrap();
+        fs::write(
+            root.join("scripts/source.R"),
+            "stop('Do not execute while discovering')\n",
+        )
+        .unwrap();
+        originals.insert(name.to_string(), body);
+        roots.push(HostDiscoveredSkill {
+            source_key: format!("host/{directory}"),
+            root_path: root.to_string_lossy().into(),
+            source_kind: HostSkillSourceKind::Plugin,
+            enablement: SkillEnablement::Enabled,
+            reason: None,
+        });
+    }
+    let manifest_path = project.path().join("host-native-names.json");
+    let mut manifest = HostDiscoveredSkills {
+        provider_id: "codex-native-names".into(),
+        skills: roots,
+    };
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let source = Arc::new(
+        HostDiscoveredSkillSource::from_manifest(
+            project.path(),
+            scope.principal,
+            &manifest_path,
+            vec![],
+        )
+        .unwrap(),
+    );
+    source.validate_for_project().unwrap();
+    assert_eq!(
+        source.manifest_path(),
+        manifest_path.canonicalize().unwrap()
+    );
+    let app = Arc::new(Application::default());
+    let owner = owner(project.path(), vec![source.clone()], app);
+    let listed = owner.list(&ctx, &list(".")).await.unwrap();
+    assert_eq!(listed.skills.len(), 2);
+    assert!(listed.source_notices.is_empty());
+    for skill in &listed.skills {
+        assert!(skill.available);
+        assert_eq!(
+            skill.metadata.allowed_tools,
+            Some(serde_json::json!(["Read", "Bash(*)", "workspace.run_r"]))
+        );
+        assert_eq!(skill.metadata.metadata["native-format-version"], 2);
+        let mut args = read(skill, SkillReadKind::Bytes);
+        args.limit_bytes = 65536;
+        let page = owner.read(&ctx, &args).await.unwrap();
+        assert_eq!(
+            page.bytes.as_ref().unwrap(),
+            &originals[&skill.metadata.name]
+        );
+        assert_eq!(skill.skill_digest, hash(&originals[&skill.metadata.name]));
+    }
+    assert_eq!(ctx.scopes, BTreeSet::from(["skill.read".into()]));
+    let previous = listed
+        .skills
+        .iter()
+        .find(|s| s.metadata.name == "Presentations")
+        .unwrap();
+    fs::write(
+        external.path().join("presentations/SKILL.md"),
+        String::from_utf8(originals["Presentations"].clone()).unwrap() + "Changed original body.\n",
+    )
+    .unwrap();
+    assert!(
+        owner
+            .read(&ctx, &read(previous, SkillReadKind::Text))
+            .await
+            .is_err()
+    );
+    let current = owner.list(&ctx, &list(".")).await.unwrap();
+    let current = current
+        .skills
+        .iter()
+        .find(|s| s.metadata.name == "Presentations")
+        .unwrap();
+    assert_eq!(current.metadata.name, "Presentations");
+    assert_ne!(current.skill_digest, previous.skill_digest);
+    manifest.skills[0].enablement = SkillEnablement::Disabled;
+    manifest.skills[0].reason = Some("Disabled by native Codex source".into());
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let disabled = owner.list(&ctx, &list(".")).await.unwrap();
+    let disabled = disabled
+        .skills
+        .iter()
+        .find(|s| s.metadata.name == "Presentations")
+        .unwrap();
+    assert!(!disabled.available);
+    assert!(
+        owner
+            .read(&ctx, &read(disabled, SkillReadKind::Text))
+            .await
+            .is_err()
+    );
+    let binding:ApplicationMethodBinding=serde_json::from_value(serde_json::json!({"binding_id":"cannot-reenable","version":"v1","working_directory":".","external_goal_ref":null,"external_task_ref":null,"external_actor_ref":null,"skill_ref":disabled.skill_ref,"source_ref":disabled.source.source_ref,"resources":[],"modules":[],"capabilities":["workspace.run_r"],"required_capabilities":[],"target":null,"excluded":false})).unwrap();
+    assert!(owner.validate_binding(&ctx, &binding).await.is_err());
+}
+
+#[tokio::test]
+async fn provided_byte_sources_preserve_native_metadata_and_strict_sources_stay_strict() {
+    let project = tempfile::tempdir().unwrap();
+    let ctx = context("caller");
+    let scope = scope(project.path(), &ctx, ".");
+    let source = Arc::new(
+        HostProvidedSkillSource::new(
+            "native-byte-host".into(),
+            scope.project_root,
+            scope.principal,
+        )
+        .unwrap(),
+    );
+    let text=b"---\nname: Presentations\ndescription: Native enabled uppercase method\ncompatibility: [native-host, 2]\nmetadata: {enabled: true, version: 2}\nallowed-tools: [Read, workspace.run_r]\n---\nKeep this source unchanged.\n".to_vec();
+    source
+        .replace(
+            0,
+            vec![HostProvidedPackage {
+                source_key: "plugin/different-directory".into(),
+                canonical_resource: "host://different-directory".into(),
+                location: "host://different-directory/SKILL.md".into(),
+                enablement: SkillEnablement::Enabled,
+                reason: None,
+                resources: BTreeMap::from([("SKILL.md".into(), text.clone())]),
+            }],
+        )
+        .unwrap();
+    let owner = owner(
+        project.path(),
+        vec![source],
+        Arc::new(Application::default()),
+    );
+    let listed = owner.list(&ctx, &list(".")).await.unwrap();
+    let skill = &listed.skills[0];
+    assert_eq!(skill.metadata.name, "Presentations");
+    assert_eq!(
+        skill.metadata.extra["compatibility"],
+        serde_json::json!(["native-host", 2])
+    );
+    assert_eq!(
+        skill.metadata.allowed_tools,
+        Some(serde_json::json!(["Read", "workspace.run_r"]))
+    );
+    let mut args = read(skill, SkillReadKind::Bytes);
+    args.limit_bytes = 65536;
+    assert_eq!(
+        owner.read(&ctx, &args).await.unwrap().bytes,
+        Some(text.clone())
+    );
+    let unauthorized:ApplicationMethodBinding=serde_json::from_value(serde_json::json!({"binding_id":"no-native-scope-grant","version":"v1","working_directory":".","external_goal_ref":null,"external_task_ref":null,"external_actor_ref":null,"skill_ref":skill.skill_ref,"source_ref":skill.source.source_ref,"resources":[],"modules":[],"capabilities":[],"required_capabilities":[{"id":"workspace.run_r","version":1}],"target":null,"excluded":false})).unwrap();
+    assert!(owner.validate_binding(&ctx, &unauthorized).await.is_err());
+    assert!(parse_frontmatter(&frontmatter(&text).unwrap()).is_err());
+    for (directory, name) in [
+        ("presentations", "Presentations"),
+        ("western-astrology", "astrology-analysis"),
+    ] {
+        let root = project.path().join(".agents/skills").join(directory);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("SKILL.md"),
+            format!(
+                "---\nname: {name}\ndescription: Standard directory remains strict\n---\nText.\n"
+            ),
+        )
+        .unwrap();
+    }
+    let native = FilesystemSkillSource::new(project.path(), None).unwrap();
+    let inventory = native
+        .discover(&scope_for(project.path(), &ctx))
+        .await
+        .unwrap();
+    assert!(inventory.packages.is_empty());
+    assert_eq!(inventory.notices.len(), 2);
+    assert!(
+        parse_frontmatter_for("name: [broken YAML", SkillMetadataPolicy::HostAttested).is_err()
+    );
+    assert!(
+        parse_frontmatter_for(
+            "description: Must not infer a name from the directory",
+            SkillMetadataPolicy::HostAttested
+        )
+        .is_err()
+    );
+}
+fn scope_for(root: &std::path::Path, context: &CallContext) -> SkillScope {
+    scope(root, context, ".")
+}
+
+#[test]
+fn host_metadata_policy_preserves_bounded_native_fields_without_standard_reinterpretation() {
+    let yaml = format!(
+        "name: Native.Name With Case\ndescription: {}\ncompatibility: {}\nmetadata: [native, 3]\nallowed-tools: {{native-syntax: true}}\n",
+        "d".repeat(1500),
+        "c".repeat(600)
+    );
+    assert!(parse_frontmatter(&yaml).is_err());
+    let metadata = parse_frontmatter_for(&yaml, SkillMetadataPolicy::HostAttested).unwrap();
+    assert_eq!(metadata.name, "Native.Name With Case");
+    assert_eq!(metadata.description.len(), 1500);
+    assert_eq!(metadata.metadata, serde_json::json!(["native", 3]));
+    assert_eq!(
+        metadata.allowed_tools,
+        Some(serde_json::json!({"native-syntax":true}))
+    );
+    assert!(
+        parse_frontmatter_for(
+            "name: \"bad\\u0000name\"\ndescription: text",
+            SkillMetadataPolicy::HostAttested
+        )
+        .is_err()
+    );
 }

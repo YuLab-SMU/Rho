@@ -99,6 +99,7 @@ impl FilesystemSkillSource {
         entry: &Path,
         project: bool,
         key: String,
+        metadata_policy: rho_skills::SkillMetadataPolicy,
     ) -> Result<SourcePackage, OperationError> {
         let canonical_root = root.canonicalize().map_err(io_error)?;
         if project && !canonical_root.starts_with(&self.project) {
@@ -141,8 +142,10 @@ impl FilesystemSkillSource {
             ));
         }
         let frontmatter = frontmatter(&body)?;
-        let metadata = rho_skills::parse_frontmatter(&frontmatter)?;
-        if entry.file_name().and_then(|s| s.to_str()) != Some(metadata.name.as_str()) {
+        let metadata = rho_skills::parse_frontmatter_for(&frontmatter, metadata_policy)?;
+        if metadata_policy == rho_skills::SkillMetadataPolicy::Standard
+            && entry.file_name().and_then(|s| s.to_str()) != Some(metadata.name.as_str())
+        {
             return Err(OperationError::InvalidInput(
                 "Standard Skill name must match its package directory".into(),
             ));
@@ -156,6 +159,7 @@ impl FilesystemSkillSource {
             ));
         }
         Ok(SourcePackage {
+            metadata_policy,
             source_id: self.source_id().into(),
             key,
             canonical_resource: canonical.to_string_lossy().into(),
@@ -235,7 +239,13 @@ impl FilesystemSkillSource {
                     ));
                     continue;
                 };
-                match self.package(&root, &path, project, format!("{label}/{name}")) {
+                match self.package(
+                    &root,
+                    &path,
+                    project,
+                    format!("{label}/{name}"),
+                    rho_skills::SkillMetadataPolicy::Standard,
+                ) {
                     Ok(package) => {
                         source_bytes += package.resources.iter().map(|r| r.byte_size).sum::<u64>();
                         if source_bytes > MAX_SOURCE_BYTES as u64 {

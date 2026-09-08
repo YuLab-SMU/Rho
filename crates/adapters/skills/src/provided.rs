@@ -137,6 +137,7 @@ impl HostProvidedSkillSource {
             })
             .collect();
         Ok(SourcePackage {
+            metadata_policy: rho_skills::SkillMetadataPolicy::HostAttested,
             source_id: self.source_id.clone(),
             key: package.source_key.clone(),
             canonical_resource: package.canonical_resource.clone(),

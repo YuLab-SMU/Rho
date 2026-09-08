@@ -35,8 +35,15 @@ pub struct SourceResource {
     /// Includes native resolved identity; source adapters must fence symlink replacements.
     pub identity: String,
 }
+/// Parsing authority comes from a trusted source adapter, never from Skill content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkillMetadataPolicy {
+    Standard,
+    HostAttested,
+}
 #[derive(Debug, Clone)]
 pub struct SourcePackage {
+    pub metadata_policy: SkillMetadataPolicy,
     pub source_id: String,
     pub key: String,
     /// Same canonical resource can retain relationships to independent sources.
@@ -138,18 +145,19 @@ impl SkillOwner {
                     ));
                 }
                 package.resources.sort_by(|a, b| a.path.cmp(&b.path));
-                let metadata = match parse_frontmatter(&package.frontmatter) {
-                    Ok(metadata) => metadata,
-                    Err(error) => {
-                        notices.push(SkillSourceNotice {
-                            source_id: package.source_id.clone(),
-                            location: package.location.clone(),
-                            code: "invalid_skill".into(),
-                            message: error.to_string(),
-                        });
-                        continue;
-                    }
-                };
+                let metadata =
+                    match parse_frontmatter_for(&package.frontmatter, package.metadata_policy) {
+                        Ok(metadata) => metadata,
+                        Err(error) => {
+                            notices.push(SkillSourceNotice {
+                                source_id: package.source_id.clone(),
+                                location: package.location.clone(),
+                                code: "invalid_skill".into(),
+                                message: error.to_string(),
+                            });
+                            continue;
+                        }
+                    };
                 if package.resources.len() > MAX_RESOURCES {
                     return Err(OperationError::BudgetExceeded(
                         "Skill resource manifest exceeds 2000 entries".into(),
@@ -410,6 +418,7 @@ pub fn hash(bytes: &[u8]) -> String {
 pub fn package_digest(package: &SourcePackage) -> String {
     let mut h = Sha256::new();
     h.update(package.canonical_resource.as_bytes());
+    h.update(format!("{:?}", package.metadata_policy).as_bytes());
     h.update(format!("{:?}", package.enablement).as_bytes());
     for r in &package.resources {
         for part in [&r.path, &r.sha256, &r.identity] {
@@ -475,54 +484,107 @@ pub fn validate_relative(path: &str, allow_root: bool) -> Result<(), OperationEr
 }
 #[derive(Deserialize)]
 struct Frontmatter {
-    name: String,
-    description: String,
-    license: Option<String>,
-    compatibility: Option<String>,
-    #[serde(default)]
-    metadata: BTreeMap<String, String>,
+    name: serde_json::Value,
+    description: serde_json::Value,
+    license: Option<serde_json::Value>,
+    compatibility: Option<serde_json::Value>,
+    #[serde(default = "empty_metadata")]
+    metadata: serde_json::Value,
     #[serde(rename = "allowed-tools")]
-    allowed_tools: Option<String>,
+    allowed_tools: Option<serde_json::Value>,
     #[serde(flatten)]
     extra: BTreeMap<String, serde_json::Value>,
 }
+fn empty_metadata() -> serde_json::Value {
+    serde_json::json!({})
+}
 pub fn parse_frontmatter(text: &str) -> Result<SkillMetadata, OperationError> {
+    parse_frontmatter_for(text, SkillMetadataPolicy::Standard)
+}
+pub fn parse_frontmatter_for(
+    text: &str,
+    policy: SkillMetadataPolicy,
+) -> Result<SkillMetadata, OperationError> {
     if text.len() > MAX_FRONTMATTER_BYTES {
         return Err(OperationError::BudgetExceeded(
             "Skill frontmatter exceeds 64 KiB".into(),
         ));
     }
-    let f: Frontmatter = yaml_serde::from_str(text).map_err(invalid)?;
-    if f.name.is_empty()
-        || f.name.chars().count() > 64
-        || f.name.starts_with('-')
-        || f.name.ends_with('-')
-        || f.name.contains("--")
-        || !f
-            .name
+    let mut f: Frontmatter = yaml_serde::from_str(text).map_err(invalid)?;
+    let name = f.name.as_str().ok_or_else(|| {
+        OperationError::InvalidInput("Skill name must be explicitly declared as YAML text".into())
+    })?;
+    let description = f.description.as_str().ok_or_else(|| {
+        OperationError::InvalidInput(
+            "Skill description must be explicitly declared as YAML text".into(),
+        )
+    })?;
+    let standard_name = !name.is_empty()
+        && name.chars().count() <= 64
+        && !name.starts_with('-')
+        && !name.ends_with('-')
+        && !name.contains("--")
+        && name
             .chars()
-            .all(|c| c.is_lowercase() || c.is_numeric() || c == '-')
-        || f.description.trim().is_empty()
-        || f.description.chars().count() > 1024
-        || f.compatibility
-            .as_ref()
-            .is_some_and(|s| s.chars().count() > 500)
+            .all(|c| c.is_lowercase() || c.is_numeric() || c == '-');
+    if policy == SkillMetadataPolicy::Standard {
+        if !standard_name
+            || description.trim().is_empty()
+            || description.chars().count() > 1024
+            || f.compatibility
+                .as_ref()
+                .is_some_and(|v| v.as_str().is_none_or(|s| s.chars().count() > 500))
+            || f.license.as_ref().is_some_and(|v| !v.is_string())
+            || f.allowed_tools.as_ref().is_some_and(|v| !v.is_string())
+            || !f
+                .metadata
+                .as_object()
+                .is_some_and(|m| m.values().all(|v| v.is_string()))
+        {
+            return Err(OperationError::InvalidInput(
+                "Invalid standard Skill frontmatter name, description, optional fields or metadata"
+                    .into(),
+            ));
+        }
+    } else if name.trim().is_empty()
+        || name.len() > 1024
+        || name.chars().any(char::is_control)
+        || description.trim().is_empty()
+        || description.len() > 16384
+        || description
+            .chars()
+            .any(|c| c.is_control() && c != '\n' && c != '\r' && c != '\t')
     {
         return Err(OperationError::InvalidInput(
-            "Invalid standard Skill name, description or compatibility frontmatter".into(),
+            "Attested host Skill names/descriptions must be nonempty, bounded and control-safe"
+                .into(),
         ));
     }
+    // Preserve optional provider fields as raw data when they do not use the standard textual form.
+    let mut textual = |field: &str, value: Option<serde_json::Value>| -> Option<String> {
+        match value {
+            Some(serde_json::Value::String(text)) => Some(text),
+            Some(raw) => {
+                f.extra.insert(field.into(), raw);
+                None
+            }
+            None => None,
+        }
+    };
+    let license = textual("license", f.license);
+    let compatibility = textual("compatibility", f.compatibility);
     Ok(SkillMetadata {
-        name: f.name,
-        description: f.description,
-        license: f.license,
-        compatibility: f.compatibility,
+        name: name.into(),
+        description: description.into(),
+        license,
+        compatibility,
         metadata: f.metadata,
         allowed_tools: f.allowed_tools,
         extra: f.extra,
         dependencies: "undeclared".into(),
     })
 }
+
 fn list_page(
     scope: &SkillScope,
     args: &SkillListArguments,
