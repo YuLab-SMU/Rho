@@ -55,11 +55,12 @@ for(const test of selected) {
     json(path.join(caseEvidence,'private-fixture-truth.json'),{expected:scenario.expected,seed_operations:host.seedRecords,native_session:host.session,project:host.project,marker:scenario.marker});
     await host.screenshot('before.png');proxy=await new RecordingProxy(host,scenario,caseEvidence).start();
     agent=await runAgent({...options,evidence:caseEvidence},scenario,proxy,agentCwd,override);
+    Object.assign(result,{facts:agent.report?.facts??null,tokens:agent.tokens,thread_id:agent.thread_id,calls:proxy.calls.length,text_bytes:proxy.textBytes,image_bytes:proxy.images.reduce((sum,image)=>sum+image.bytes,0),elapsed_ms:agent.elapsed_ms});
     assert.deepEqual(agent.violations,[],'Agent boundary/token/run violations');assert.ok(agent.report,'Real Codex final JSON is required');
     assert.ok(agent.report.complete,'Agent did not finish the requested task');await scenario.verify(agent.report,host,proxy,agent);await verifyScientificHistory(host,scenario,proxy,caseEvidence);
     proxy.assertNoDuplicateExecution();assert.deepEqual(proxy.violations,[],'Transport/scientific mechanical violations');
     assert.ok(proxy.calls.length+agent.nativeSkillReads.length<=80);assert.ok(proxy.textBytes+agent.native_text_bytes<=1048576);
-    result.passed=true;result.facts=agent.report.facts;result.tokens=agent.tokens;result.thread_id=agent.thread_id;result.calls=proxy.calls.length;result.text_bytes=proxy.textBytes;result.image_bytes=proxy.images.reduce((sum,image)=>sum+image.bytes,0);result.elapsed_ms=agent.elapsed_ms;
+    result.passed=true;
   } catch(error) {failures++;result.errors.push(error.stack??String(error));console.error(`FAILED ${test.id}-${test.repetition}: ${error.message}`);}
   finally {clearInterval(heartbeat);if(host.origin&&!fs.existsSync(path.join(caseEvidence,'authoritative-operations.json')))await captureScientificHistory(host,caseEvidence).catch(error=>result.errors.push(`history capture: ${error.message}`));await proxy?.close().catch(error=>result.errors.push(`proxy cleanup: ${error.message}`));await host.close().catch(error=>result.errors.push(`Host cleanup: ${error.message}`));if(result.errors.length&&result.passed){result.passed=false;failures++;}json(path.join(caseEvidence,'result.json'),result);startManifest.cases.push(result);json(path.join(evidence,'manifest.json'),startManifest);if(!process.argv.includes('--keep-fixtures')){fs.rmSync(scientific,{recursive:true,force:true});fs.rmSync(agentCwd,{recursive:true,force:true});}else result.private_fixture_roots={scientific,agent:agentCwd};}
   console.log(`${result.passed?'PASS':'FAIL'} ${test.id}-${test.repetition}`);
