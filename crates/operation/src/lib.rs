@@ -4,9 +4,13 @@ mod recent;
 pub use recent::{RecentOperationsHandler, validate_recent_arguments};
 mod checkpoint;
 pub use checkpoint::OperationEventsCheckpointHandler;
+mod commit_contract;
+mod navigation;
 mod query;
+mod record;
 mod schema;
 pub use query::{QueryGateway, QueryHandler};
+pub use record::OperationGetHandler;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -79,25 +83,38 @@ pub enum OperationError {
 
 impl OperationError {
     pub fn diagnostic(&self) -> rho_contract::Diagnostic {
-        use rho_contract::{DiagnosticCode as Code, DiagnosticContinuation as Continue, NextRead};
+        use rho_contract::{DiagnosticCode as Code, DiagnosticContinuation as Continue};
         let (code, continuation) = match self {
             Self::HostBusy | Self::ProjectBusy(_) => (Code::Busy, Continue::ReadAgain),
             Self::StaleSession(_) => (Code::StaleSession, Continue::RefreshObservation),
             Self::ObservationExpired(_) => (Code::ObservationExpired, Continue::RefreshObservation),
             Self::ContentChanged(_) => (Code::ContentChanged, Continue::RefreshObservation),
             Self::BudgetExceeded(_) => (Code::BudgetExceeded, Continue::CorrectInput),
-            Self::Unavailable(_) | Self::UnknownCapability(_) | Self::TargetResolution(_) => (Code::Unavailable, Continue::None),
-            Self::AccessDenied {..} => (Code::AccessDenied, Continue::None),
+            Self::Unavailable(_) | Self::UnknownCapability(_) | Self::TargetResolution(_) => {
+                (Code::Unavailable, Continue::None)
+            }
+            Self::AccessDenied { .. } => (Code::AccessDenied, Continue::None),
             Self::IdempotencyConflict => (Code::IdempotencyConflict, Continue::InspectOriginal),
             Self::NotFound(_) => (Code::NotFound, Continue::CorrectInput),
-            Self::InvalidInput(_) | Self::CancellationUnsupported(_) => (Code::InvalidInput, Continue::CorrectInput),
-            Self::Contract(_) | Self::DuplicateCapability(_) => (Code::ContractViolation, Continue::None),
-            Self::CommitPending {..} | Self::Storage(_) | Self::LifecycleConflict(_) => (Code::OutcomeUncertain, Continue::InspectOriginal),
+            Self::InvalidInput(_) | Self::CancellationUnsupported(_) => {
+                (Code::InvalidInput, Continue::CorrectInput)
+            }
+            Self::Contract(_) | Self::DuplicateCapability(_) => {
+                (Code::ContractViolation, Continue::None)
+            }
+            Self::CommitPending { .. } | Self::Storage(_) | Self::LifecycleConflict(_) => {
+                (Code::OutcomeUncertain, Continue::InspectOriginal)
+            }
         };
-        let next_reads = if let Self::CommitPending {operation_id,..} = self {
-            vec![NextRead::query("operation.list_recent", "Inspect the original operation; do not replay uncertain effects", json!({"operation_id":operation_id,"limit":1}))]
-        } else {vec![]};
-        rho_contract::Diagnostic {code, message:self.to_string(), continuation, next_reads}
+        // Context-free errors cannot promise that a read capability is registered
+        // or permission-visible. Gateways attach available identity-bound reads.
+        let next_reads = vec![];
+        rho_contract::Diagnostic {
+            code,
+            message: self.to_string(),
+            continuation,
+            next_reads,
+        }
     }
 }
 
@@ -206,10 +223,8 @@ impl CommitPlan {
             error: Some(error.message),
             recovery: error.recovery.or_else(|| {
                 (outcome == OperationOutcome::Uncertain).then(|| {
-                    json!({
-                        "action": "observe_owner_before_any_retry",
-                        "automatic_reexecution": false
-                    })
+                    serde_json::to_value(rho_contract::ObserveOwnerRecovery::default())
+                        .expect("fixed recovery DTO")
                 })
             }),
             facts: Vec::new(),
@@ -428,19 +443,36 @@ pub struct CapabilityRegistry {
     queries: BTreeMap<CapabilityRef, Arc<dyn QueryHandler>>,
     schemas: BTreeMap<CapabilityRef, schema::CapabilitySchemas>,
     controls: BTreeMap<CapabilityRef, CapabilityDescriptor>,
+    descriptors: BTreeMap<CapabilityRef, CapabilityDescriptor>,
 }
 
 impl CapabilityRegistry {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn register_control(&mut self, descriptor: CapabilityDescriptor) -> Result<(), OperationError> {
+    pub fn register_control(
+        &mut self,
+        descriptor: CapabilityDescriptor,
+    ) -> Result<(), OperationError> {
         descriptor.validate()?;
-        if descriptor.kind != CapabilityKind::Control { return Err(OperationError::Contract("control metadata requires Control kind".into())); }
-        let capability=descriptor.capability.clone();
-        if self.schemas.contains_key(&capability) {return Err(OperationError::DuplicateCapability(capability.display_key()));}
-        self.schemas.insert(capability.clone(),schema::CapabilitySchemas::new(&descriptor)?);
-        self.controls.insert(capability,descriptor);
+        if descriptor.kind != CapabilityKind::Control {
+            return Err(OperationError::Contract(
+                "control metadata requires Control kind".into(),
+            ));
+        }
+        let capability = descriptor.capability.clone();
+        if self.schemas.contains_key(&capability) {
+            return Err(OperationError::DuplicateCapability(
+                capability.display_key(),
+            ));
+        }
+        self.schemas.insert(
+            capability.clone(),
+            schema::CapabilitySchemas::new(&descriptor)?,
+        );
+        self.descriptors
+            .insert(capability.clone(), descriptor.clone());
+        self.controls.insert(capability, descriptor);
         Ok(())
     }
 
@@ -452,13 +484,17 @@ impl CapabilityRegistry {
             ));
         }
         let capability = handler.descriptor().capability.clone();
-        if self.handlers.contains_key(&capability) || self.queries.contains_key(&capability) {
+        if self.schemas.contains_key(&capability) {
             return Err(OperationError::DuplicateCapability(
                 capability.display_key(),
             ));
         }
-        let schemas = schema::CapabilitySchemas::new(handler.descriptor())?;
+        let mut descriptor = handler.descriptor().clone();
+        descriptor.recovery_schema =
+            rho_contract::operation_recovery_schema(descriptor.recovery_schema);
+        let schemas = schema::CapabilitySchemas::new(&descriptor)?;
         self.schemas.insert(capability.clone(), schemas);
+        self.descriptors.insert(capability.clone(), descriptor);
         self.handlers.insert(capability, handler);
         Ok(())
     }
@@ -472,13 +508,15 @@ impl CapabilityRegistry {
             ));
         }
         let capability = descriptor.capability.clone();
-        if self.handlers.contains_key(&capability) || self.queries.contains_key(&capability) {
+        if self.schemas.contains_key(&capability) {
             return Err(OperationError::DuplicateCapability(
                 capability.display_key(),
             ));
         }
         let schemas = schema::CapabilitySchemas::new(handler.descriptor())?;
         self.schemas.insert(capability.clone(), schemas);
+        self.descriptors
+            .insert(capability.clone(), descriptor.clone());
         self.queries.insert(capability, handler);
         Ok(())
     }
@@ -504,35 +542,138 @@ impl CapabilityRegistry {
     }
 
     pub fn descriptors(&self) -> Vec<CapabilityDescriptor> {
-        self.handlers
-            .values()
-            .map(|handler| handler.descriptor().clone())
-            .chain(
-                self.queries
-                    .values()
-                    .map(|handler| handler.descriptor().clone()),
-            )
-            .chain(self.controls.values().cloned())
-            .collect()
+        self.descriptors.values().cloned().collect()
+    }
+    pub fn descriptor(&self, capability: &CapabilityRef) -> Option<&CapabilityDescriptor> {
+        self.descriptors.get(capability)
     }
 
-    pub fn validate_links(&self) -> Result<(), OperationError> {
-        let descriptors: BTreeMap<_, _> = self.descriptors().into_iter().map(|d|(d.capability.clone(),d)).collect();
-        for descriptor in descriptors.values() {
+    pub fn validate_links(&mut self) -> Result<(), OperationError> {
+        let kinds = self
+            .descriptors
+            .iter()
+            .map(|(reference, d)| (reference.clone(), d.kind))
+            .collect::<BTreeMap<_, _>>();
+        for descriptor in self.descriptors.values_mut() {
             for related in &descriptor.documentation.related_capabilities {
-                if !descriptors.contains_key(related) { return Err(OperationError::Contract(format!("{} links to unregistered {}", descriptor.capability.display_key(), related.display_key()))); }
+                if !kinds.contains_key(related) {
+                    return Err(OperationError::Contract(format!(
+                        "{} links to unregistered {}",
+                        descriptor.capability.display_key(),
+                        related.display_key()
+                    )));
+                }
+            }
+            for condition in &mut descriptor.documentation.preconditions {
+                if let Some(reference) = condition.read_from.as_ref() {
+                    reference.validate()?;
+                    match kinds.get(reference) {
+                        Some(CapabilityKind::Query) => (),
+                        Some(_) => {
+                            return Err(OperationError::Contract(format!(
+                                "precondition read_from must be read-only: {}",
+                                reference.display_key()
+                            )));
+                        }
+                        None => {
+                            condition.requirement.push_str(&format!(" The reading source {} is unavailable in this Host configuration; discovery does not start that owner or a runtime.", reference.display_key()));
+                            condition.read_from = None;
+                        }
+                    }
+                }
             }
         }
         Ok(())
     }
 
-    pub fn validate_query_result(&self, capability: &CapabilityRef, snapshot: &rho_contract::QuerySnapshot) -> Result<(), OperationError> {
-        let schemas = self.schemas.get(capability).ok_or_else(||OperationError::UnknownCapability(capability.display_key()))?;
-        if let Some(data) = &snapshot.data { schemas.output(data)?; }
-        let descriptors = self.descriptors().into_iter().map(|d|(d.capability.clone(),d)).collect();
-        schema::validate_reads(&snapshot.next_reads, &descriptors)?;
-        for diagnostic in &snapshot.diagnostics { schema::validate_reads(&diagnostic.next_reads, &descriptors)?; }
+    pub fn validate_query_result(
+        &self,
+        capability: &CapabilityRef,
+        snapshot: &rho_contract::QuerySnapshot,
+    ) -> Result<(), OperationError> {
+        let schemas = self
+            .schemas
+            .get(capability)
+            .ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))?;
+        if let Some(data) = &snapshot.data {
+            schemas.output(data)?;
+        }
+        self.validate_reads(&snapshot.next_reads)?;
+        for diagnostic in &snapshot.diagnostics {
+            self.validate_reads(&diagnostic.next_reads)?;
+        }
         Ok(())
+    }
+    fn validate_reads(&self, reads: &[rho_contract::NextRead]) -> Result<(), OperationError> {
+        for read in reads {
+            let descriptor = self.descriptors.get(&read.capability).ok_or_else(|| {
+                OperationError::Contract(format!(
+                    "next read is not registered: {}",
+                    read.capability.display_key()
+                ))
+            })?;
+            if descriptor.kind != CapabilityKind::Query {
+                return Err(OperationError::Contract(
+                    "next_reads may only identify read-only queries".into(),
+                ));
+            }
+            self.schemas
+                .get(&read.capability)
+                .expect("registered schema")
+                .read(read)?;
+        }
+        Ok(())
+    }
+    fn filter_reads(&self, context: &CallContext, reads: &mut Vec<rho_contract::NextRead>) {
+        reads.retain(|read| {
+            self.descriptors
+                .get(&read.capability)
+                .is_none_or(|d| d.required_scopes.is_subset(&context.scopes))
+        });
+    }
+    pub fn prepare_query_result(
+        &self,
+        context: &CallContext,
+        capability: &CapabilityRef,
+        snapshot: &mut rho_contract::QuerySnapshot,
+    ) -> Result<(), OperationError> {
+        if capability.id == "operation.get" {
+            if let Some(data) = snapshot.data.as_ref() {
+                let mut result: rho_contract::OperationGetResult =
+                    serde_json::from_value(data.clone())
+                        .map_err(|e| OperationError::Contract(e.to_string()))?;
+                if let Some(record) = &mut result.record {
+                    self.decorate_record(context, record)?;
+                }
+                if let Some(contract) = &mut result.output_contract {
+                    if result
+                        .record
+                        .as_ref()
+                        .is_none_or(|record| record.operation.capability != contract.capability)
+                    {
+                        return Err(OperationError::Contract("record query schema association does not match the original capability".into()));
+                    }
+                    let visible = self.descriptors.get(&contract.capability).is_some_and(|d| {
+                        d.kind == CapabilityKind::Operation
+                            && d.required_scopes.is_subset(&context.scopes)
+                    });
+                    contract.describe = if visible {
+                        self.read_link(context, "host.describe", "Read the exact capability contract associated with this original result", json!({"capability":contract.capability}))?
+                    } else {
+                        None
+                    };
+                }
+                snapshot.data = Some(
+                    serde_json::to_value(result)
+                        .map_err(|e| OperationError::Contract(e.to_string()))?,
+                );
+            }
+        }
+        self.filter_reads(context, &mut snapshot.next_reads);
+        for diagnostic in &mut snapshot.diagnostics {
+            self.filter_reads(context, &mut diagnostic.next_reads);
+        }
+        self.validate_query_result(capability, snapshot)
     }
 }
 
@@ -614,7 +755,14 @@ impl OperationGateway {
             });
         }
 
+        let schemas = self
+            .registry
+            .schemas
+            .get(&invocation.capability)
+            .expect("registered schema");
+        schemas.input(&invocation.arguments)?;
         let normalized_arguments = handler.normalize_arguments(&invocation.arguments)?;
+        schemas.input(&normalized_arguments)?;
         Invocation {
             arguments: normalized_arguments.clone(),
             ..invocation.clone()
@@ -661,6 +809,7 @@ impl OperationGateway {
         let admission_lock = self.admission.lock().await;
         let admitted_record = match self.journal.admit(&operation).await? {
             Admission::Existing(existing) => {
+                let existing = self.registry.public_record(context, existing);
                 info!(
                     operation_id = existing.operation.operation_id.as_str(),
                     capability = existing.operation.capability.id,
@@ -687,19 +836,12 @@ impl OperationGateway {
         drop(admission_lock);
         if let Err(error) = admission_result {
             return self
-                .journal
-                .commit(
-                    &operation_id,
-                    &CommitPlan::from_handler_error(error),
-                    self.clock.now_ms()?,
-                )
+                .commit_result(&operation, CommitPlan::from_handler_error(error), false)
                 .await
-                .map_err(|error| OperationError::CommitPending {
-                    operation_id: operation_id.clone(),
-                    detail: error.to_string(),
-                });
+                .map(|record| self.registry.public_record(context, record));
         }
         if let Some(sender) = accepted.take() {
+            let admitted_record = self.registry.public_record(context, admitted_record);
             let _ = sender.send(admitted_record);
         }
         let mut lease = match handler
@@ -709,17 +851,9 @@ impl OperationGateway {
             Ok(lease) => lease,
             Err(error) => {
                 return self
-                    .journal
-                    .commit(
-                        &operation_id,
-                        &CommitPlan::from_handler_error(error),
-                        self.clock.now_ms()?,
-                    )
+                    .commit_result(&operation, CommitPlan::from_handler_error(error), false)
                     .await
-                    .map_err(|error| OperationError::CommitPending {
-                        operation_id: operation_id.clone(),
-                        detail: error.to_string(),
-                    });
+                    .map(|record| self.registry.public_record(context, record));
             }
         };
         self.journal
@@ -743,20 +877,50 @@ impl OperationGateway {
                 CommitPlan::from_handler_error(error)
             }
         };
-        let result = self
+        let result = self.commit_result(&operation, plan, true).await;
+        lease.completed(&result);
+        result.map(|record| self.registry.public_record(context, record))
+    }
+    async fn commit_result(
+        &self,
+        operation: &Operation,
+        plan: CommitPlan,
+        execution_started: bool,
+    ) -> Result<OperationRecord, OperationError> {
+        let plan = self
+            .registry
+            .checked_plan(operation, plan, execution_started)?;
+        let record = self
             .journal
-            .commit(&operation_id, &plan, self.clock.now_ms()?)
+            .commit(&operation.operation_id, &plan, self.clock.now_ms()?)
             .await
             .map_err(|error| OperationError::CommitPending {
-                operation_id,
+                operation_id: operation.operation_id.clone(),
                 detail: error.to_string(),
-            });
-        lease.completed(&result);
-        result
+            })?;
+        Ok(record)
     }
 
     pub fn registry_descriptors(&self) -> Vec<CapabilityDescriptor> {
         self.registry.descriptors()
+    }
+    pub fn diagnostic(
+        &self,
+        context: &CallContext,
+        error: &OperationError,
+    ) -> rho_contract::Diagnostic {
+        let mut diagnostic = error.diagnostic();
+        if let OperationError::CommitPending { operation_id, .. } = error {
+            if let Ok(Some(read)) = self.registry.read_link(
+                context,
+                "operation.get",
+                "Inspect the original operation and retained evidence without replaying it",
+                json!({"operation_id":operation_id}),
+            ) {
+                diagnostic.next_reads.push(read);
+            }
+        }
+        diagnostic
     }
 
     pub async fn get_operation(
@@ -765,22 +929,40 @@ impl OperationGateway {
         operation_id: &OperationId,
     ) -> Result<Option<OperationRecord>, OperationError> {
         context.validate()?;
-        Ok(self.journal.get(operation_id).await?.filter(|record| {
+        let record = self.journal.get(operation_id).await?.filter(|record| {
             record.operation.principal() == context.principal()
                 && self
                     .project_scope
                     .as_ref()
                     .is_none_or(|scope| record.operation.idempotency_scope.as_ref() == Some(scope))
-        }))
+        });
+        Ok(record.map(|record| self.registry.public_record(context, record)))
     }
 
-    pub async fn get_request_operation(&self, context:&CallContext, request_id:&str) -> Result<Option<OperationRecord>,OperationError> {
+    pub async fn get_request_operation(
+        &self,
+        context: &CallContext,
+        request_id: &str,
+    ) -> Result<Option<OperationRecord>, OperationError> {
         context.validate()?;
-        let Some(project)=&self.project_scope else{return Ok(None)};
-        let args=rho_contract::RecentOperationsArguments{limit:1,before_cursor:None,client_request_id:Some(request_id.into()),operation_id:None};
+        let Some(project) = &self.project_scope else {
+            return Ok(None);
+        };
+        let args = rho_contract::RecentOperationsArguments {
+            limit: 1,
+            before_cursor: None,
+            client_request_id: Some(request_id.into()),
+            operation_id: None,
+        };
         crate::recent::validate_recent_arguments(&args)?;
-        let page=self.journal.list_recent(project,context.principal(),&args).await?;
-        match page.operations.first(){Some(summary)=>self.get_operation(context,&summary.operation_id).await,None=>Ok(None)}
+        let page = self
+            .journal
+            .list_recent(project, context.principal(), &args)
+            .await?;
+        match page.operations.first() {
+            Some(summary) => self.get_operation(context, &summary.operation_id).await,
+            None => Ok(None),
+        }
     }
 
     pub async fn request_cancellation(
@@ -823,7 +1005,7 @@ impl OperationGateway {
         if only_if_pending && !handler.cancel_pending(&operation.operation) {
             return Err(OperationError::InvalidInput("The run has started or ended. Refresh its state; use Interrupt explicitly for a running operation.".into()));
         }
-        let outcome = self
+        let mut outcome = self
             .journal
             .request_cancellation(operation_id, self.clock.now_ms()?)
             .await?;
@@ -836,6 +1018,7 @@ impl OperationGateway {
         {
             sender.send_replace(true);
         }
+        outcome.operation = self.registry.public_record(context, outcome.operation);
         Ok(outcome)
     }
 
