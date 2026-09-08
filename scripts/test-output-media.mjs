@@ -32,21 +32,21 @@ let passed=false;
 try{
  const hello=await request('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'output-media-acceptance',version:'1'}});assert.ok(hello.capabilities.resources);child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized',params:{}})+'\n');
  let cursor;const tools=[];do{const page=await request('tools/list',cursor?{cursor}:{});tools.push(...page.tools);cursor=page.nextCursor;}while(cursor);
- assert.ok(tools.some(tool=>tool.name==='rho.output.view'));assert.ok((await request('resources/templates/list',{})).resourceTemplates.length>=3);
+ const viewTool=tools.find(tool=>tool.name==='rho.output.view.v1');const viewAlias=tools.find(tool=>tool.name==='rho.output.view');assert.ok(viewTool);assert.ok(viewAlias);assert.deepEqual(viewTool.inputSchema,viewAlias.inputSchema);assert.deepEqual(viewTool.outputSchema,viewAlias.outputSchema);assert.ok((await request('resources/templates/list',{})).resourceTemplates.length>=3);
  const executed=(await call('rho.workspace.run_r.v1',{client_request_id:'native-media-plot',arguments:{code:"plot(1:5, (1:5)^2, main='Verified MCP evidence', col='red', pch=19)",output_mode:'console'}})).structuredContent.result;
  assert.equal(executed.status,'succeeded',JSON.stringify(executed));
  const id=executed.operation.operation_id;
  const outputs=(await call('rho.workspace.list_outputs.v1',{operation_id:id,after_sequence:0,limit:100})).structuredContent.result.data;assert.ok(outputs.media.length>0);
  const reference=outputs.media.at(-1).reference;
- const view=await call('rho.output.view',{reference,max_edge:1600});assert.notEqual(view.isError,true,JSON.stringify(view));
+ const view=await call('rho.output.view.v1',{reference,max_edge:1600});assert.notEqual(view.isError,true,JSON.stringify(view));
  const image=view.content.find(content=>content.type==='image');assert.ok(image,'Native MCP ImageContent is required');const png=Buffer.from(image.data,'base64');assert.ok(png.length<=512*1024);fs.writeFileSync(path.join(evidence,'preview.png'),png);
  const metadata=view.structuredContent.result.data;assert.equal(digest(png),metadata.preview_sha256);assert.equal(metadata.preview_base64,undefined);assert.equal(metadata.reference.sha256,reference.sha256);
+ const alias=await call('rho.output.view',{reference,max_edge:1600});assert.notEqual(alias.isError,true,JSON.stringify(alias));assert.equal(alias.content.find(content=>content.type==='image')?.data,image.data);assert.equal(alias.structuredContent.result.data.preview_base64,undefined);assert.equal(alias.structuredContent.result.data.preview_sha256,metadata.preview_sha256);assert.deepEqual(alias.structuredContent.result.data.reference,metadata.reference);
  const resource=view.content.find(content=>content.type==='resource_link');assert.ok(resource);
  const original=(await request('resources/read',{uri:resource.uri})).contents[0];let bytes;
  if(original.blob){bytes=Buffer.from(original.blob,'base64');}else{const manifest=JSON.parse(original.text);const chunks=[];for(const part of manifest.chunks){const result=(await request('resources/read',{uri:part.uri})).contents[0];const chunk=Buffer.from(result.blob,'base64');assert.equal(chunk.length,part.byte_size);chunks.push(chunk);}bytes=Buffer.concat(chunks);}
  assert.equal(bytes.length,reference.byte_size);assert.equal(digest(bytes),reference.sha256);fs.writeFileSync(path.join(evidence,'original.bin'),bytes);
- const cropped=await call('rho.output.view',{reference,crop:{x:0,y:0,width:Math.max(1,Math.floor(metadata.original_width/2)),height:Math.max(1,Math.floor(metadata.original_height/2))},max_edge:1200});assert.ok(cropped.content.some(content=>content.type==='image'));
- assert.equal(cropped.structuredContent.result.data.reference.sha256,reference.sha256);
+ for(const name of ['rho.output.view.v1','rho.output.view']){const cropped=await call(name,{reference,crop:{x:0,y:0,width:Math.max(1,Math.floor(metadata.original_width/2)),height:Math.max(1,Math.floor(metadata.original_height/2))},max_edge:1200});assert.notEqual(cropped.isError,true,JSON.stringify(cropped));assert.ok(cropped.content.some(content=>content.type==='image'));assert.equal(cropped.structuredContent.result.data.preview_base64,undefined);assert.equal(cropped.structuredContent.result.data.reference.sha256,reference.sha256);}
  const help=(await call('rho.workspace.help.v1',{client_request_id:'native-media-help',arguments:{topic:'mean'}})).structuredContent.result;assert.equal(help.status,'succeeded',JSON.stringify(help));
  const helpEvents=(await call('rho.workspace.output_events.v1',{operation_id:help.operation.operation_id,after_sequence:0,limit:100})).structuredContent.result.data;
  const textReference=helpEvents.events.find(event=>event.kind==='text_artifact')?.media;assert.ok(textReference,'Help must become a text artifact');

@@ -82,37 +82,41 @@ impl McpEdge {
                     capability.capability.display_key()
                 ));
             }
-            let query = capability.kind == CapabilityKind::Query;
-            let control = capability.kind == CapabilityKind::Control;
-            let input = if query || control {
-                capability.input_schema.clone()
+            let (tool, route) = if capability.capability.id == "output.view"
+                && capability.kind == CapabilityKind::Query
+            {
+                (native_view_tool(&name, capability)?, Route::View)
             } else {
-                command_schema(capability.input_schema.clone())?
-            };
-            let output = if query {
-                rho_contract::query_result_schema(capability.output_schema.clone())
-            } else if control {
-                capability.output_schema.clone()
-            } else {
-                rho_contract::operation_result_schema(
-                    capability.output_schema.clone(),
-                    capability.recovery_schema.clone(),
+                let query = capability.kind == CapabilityKind::Query;
+                let control = capability.kind == CapabilityKind::Control;
+                let input = if query || control {
+                    capability.input_schema.clone()
+                } else {
+                    command_schema(capability.input_schema.clone())?
+                };
+                let output = if query {
+                    rho_contract::query_result_schema(capability.output_schema.clone())
+                } else if control {
+                    capability.output_schema.clone()
+                } else {
+                    rho_contract::operation_result_schema(
+                        capability.output_schema.clone(),
+                        capability.recovery_schema.clone(),
+                    )
+                };
+                let tool = Tool::new(
+                    name.clone(),
+                    capability_description(capability),
+                    object(input)?,
                 )
-            };
-            let description = capability_description(capability);
-            let tool = Tool::new(name.clone(), description, object(input)?)
                 .with_raw_output_schema(Arc::new(object(result_schema(output))?))
                 .with_annotations(ToolAnnotations::new().read_only(query));
-            if entries
-                .insert(
-                    name,
-                    Entry {
-                        tool,
-                        route: Route::Capability(capability.capability.clone(), capability.kind),
-                    },
+                (
+                    tool,
+                    Route::Capability(capability.capability.clone(), capability.kind),
                 )
-                .is_some()
-            {
+            };
+            if entries.insert(name, Entry { tool, route }).is_some() {
                 return Err("MCP tool name collision".into());
             }
         }
@@ -169,27 +173,13 @@ impl McpEdge {
                 return Err("MCP control tool name collision".into());
             }
         }
-        if context.scopes.contains("workspace.read")
-            && host
-                .capabilities()
-                .iter()
-                .any(|capability| capability.capability.id == "output.view")
-        {
-            let mut payload = schema_for!(rho_contract::OutputView).to_value();
-            if let Some(properties) = payload.get_mut("properties").and_then(Value::as_object_mut) {
-                properties.remove("preview_base64");
-            }
-            if let Some(required) = payload.get_mut("required").and_then(Value::as_array_mut) {
-                required.retain(|field| field != "preview_base64");
-            }
-            let output = rho_contract::query_result_schema(payload);
-            let tool = Tool::new("rho.output.view","View a verified original PNG/JPEG/static SVG with native image content, optional original-coordinate crop, and original resource link. Preview is not a new scientific result.",object(schema_for!(rho_contract::ViewOutputArguments).to_value())?)
-                .with_raw_output_schema(Arc::new(object(result_schema(output))?))
-                .with_annotations(ToolAnnotations::new().read_only(true));
+        if let Some(capability) = capabilities.iter().find(|capability| {
+            capability.capability.id == "output.view" && capability.kind == CapabilityKind::Query
+        }) {
             entries.insert(
                 "rho.output.view".into(),
                 Entry {
-                    tool,
+                    tool: native_view_tool("rho.output.view", capability)?,
                     route: Route::View,
                 },
             );
@@ -461,6 +451,38 @@ fn command_schema(mut arguments: Value) -> Result<Value, String> {
         schema["$defs"] = definitions;
     }
     Ok(schema)
+}
+
+/// MCP has native image content. Both names present the same Host-verified
+/// payload and remove only the duplicated image bytes from structured metadata.
+fn native_view_tool(
+    name: &str,
+    capability: &rho_contract::CapabilityDescriptor,
+) -> Result<Tool, String> {
+    let mut payload = capability.output_schema.clone();
+    let properties = payload
+        .get_mut("properties")
+        .and_then(Value::as_object_mut)
+        .ok_or("output.view must describe an object payload")?;
+    properties
+        .remove("preview_base64")
+        .ok_or("output.view must describe its bounded preview bytes")?;
+    if let Some(required) = payload.get_mut("required").and_then(Value::as_array_mut) {
+        required.retain(|field| field != "preview_base64");
+    }
+    let description = format!(
+        "{}\nMCP presentation: returns native ImageContent, the original ResourceLink, and structured preview metadata without duplicated preview_base64. Optional crop uses original coordinates; preview is not a new scientific result.",
+        capability_description(capability)
+    );
+    Ok(Tool::new(
+        name.to_string(),
+        description,
+        object(capability.input_schema.clone())?,
+    )
+    .with_raw_output_schema(Arc::new(object(result_schema(
+        rho_contract::query_result_schema(payload),
+    ))?))
+    .with_annotations(ToolAnnotations::new().read_only(true)))
 }
 
 fn capability_description(capability: &rho_contract::CapabilityDescriptor) -> String {
@@ -776,5 +798,60 @@ mod port_contract_tests {
         );
         assert!(edge.get_tool("rho.operation.events.v1").is_some());
         assert!(edge.get_tool("rho.events.poll").is_some());
+    }
+
+    #[tokio::test]
+    async fn discovered_and_compatibility_view_tools_share_native_image_route_and_metadata_schema()
+    {
+        let directory = tempfile::tempdir().unwrap();
+        let project = directory.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        let host = Arc::new(
+            NextHost::open_project(directory.path().join("state/next.sqlite"), &project)
+                .await
+                .unwrap(),
+        );
+        let context = NextHost::local_context();
+        let edge = McpEdge::new(host.clone(), context.clone()).unwrap();
+        let bare = edge.get_tool("rho.output.view").unwrap();
+        let versioned = edge.get_tool("rho.output.view.v1").unwrap();
+        assert_eq!(bare.input_schema, versioned.input_schema);
+        assert_eq!(bare.output_schema, versioned.output_schema);
+        assert_eq!(bare.description, versioned.description);
+        for name in ["rho.output.view", "rho.output.view.v1"] {
+            assert!(
+                matches!(edge.entries.get(name).unwrap().route, Route::View),
+                "{name} must emit native image content"
+            );
+        }
+        let descriptor = host
+            .capabilities_for(&context)
+            .into_iter()
+            .find(|descriptor| descriptor.capability.id == "output.view")
+            .unwrap();
+        assert!(
+            descriptor.output_schema["properties"]
+                .get("preview_base64")
+                .is_some(),
+            "Host/browser domain DTO remains unchanged"
+        );
+        let exposed = serde_json::to_value(versioned).unwrap()["outputSchema"].clone();
+        let reference = exposed["properties"]["result"]["properties"]["data"]["anyOf"][0]["$ref"]
+            .as_str()
+            .unwrap();
+        let payload = exposed.pointer(&reference[1..]).unwrap();
+        assert!(payload["properties"].get("preview_base64").is_none());
+        assert!(payload["properties"].get("preview_sha256").is_some());
+        assert!(
+            !payload["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("preview_base64"))
+        );
+        let mut denied = context;
+        denied.scopes.clear();
+        let edge = McpEdge::new(host, denied).unwrap();
+        assert!(edge.get_tool("rho.output.view").is_none());
+        assert!(edge.get_tool("rho.output.view.v1").is_none());
     }
 }
