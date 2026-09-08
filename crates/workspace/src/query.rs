@@ -478,6 +478,27 @@ impl WorkspaceQueryHandler {
                 }
             }
         }
+        if matches!(
+            self.kind,
+            WorkspaceQueryKind::ListObjects
+                | WorkspaceQueryKind::ObserveObject
+                | WorkspaceQueryKind::ReadObject
+        ) {
+            let bytes = |snapshot: &QuerySnapshot| {
+                serde_json::to_vec(snapshot)
+                    .map(|bytes| bytes.len())
+                    .map_err(|error| OperationError::Contract(error.to_string()))
+            };
+            if bytes(&snapshot)? > 256 * 1024 && !snapshot.next_reads.is_empty() {
+                snapshot.notices.push("Bound next-read arguments exceed this page's byte budget. Use the exact reference, path and continuation fields returned in data; no object content was omitted by this navigation limit.".into());
+                while bytes(&snapshot)? > 256 * 1024 && !snapshot.next_reads.is_empty() {
+                    snapshot.next_reads.pop();
+                }
+            }
+            if bytes(&snapshot)? > 256 * 1024 {
+                return Err(OperationError::BudgetExceeded("Object observation exceeds 256 KiB including its envelope; narrow the filter, path or page size".into()));
+            }
+        }
         Ok(snapshot)
     }
 }

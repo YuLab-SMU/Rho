@@ -26,7 +26,10 @@ fn independent_cli_processes_reuse_durable_operation_and_query_without_writes() 
     let repeat = invoke("x <- 1");
     let repeated: Value = serde_json::from_slice(&repeat.stdout).unwrap();
     assert_eq!(repeated, value);
-    assert!(!invoke("x <- 2").status.success());
+    let conflict = invoke("x <- 2");
+    assert!(!conflict.status.success());
+    let conflict: Value = serde_json::from_slice(&conflict.stderr).unwrap();
+    assert_eq!(conflict["diagnostic"]["code"], "idempotency_conflict");
 
     let before = std::fs::read(&db).unwrap();
     let query = Command::new(env!("CARGO_BIN_EXE_rho"))

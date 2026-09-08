@@ -27,7 +27,7 @@ pub fn builtin_documentation(id: &str) -> CapabilityDocumentation {
         ),
         "workspace.read_object" => (
             "Continue object investigation",
-            "Read structure, base vector values, list children, table rows/columns or long text through an exact object_ref. Follow next_start, next_column_start and next_text_start separately as appropriate. R indices and text character positions start at 1; text_limit_bytes is a UTF-8 byte budget. Unknown classes remain metadata only.",
+            "Read structure, base vector values, list children, table rows/columns or long text through an exact object_ref. Follow next_start, next_column_start and next_text_start separately. For a shortened data-frame cell append its column index to path and use kind=text/start=row. For an atomic matrix cell retain path and use start=row+(column-1)*nrow. For names/levels set text_attribute. R indices and text character positions start at 1; text_limit_bytes is a UTF-8 byte budget. Unknown classes remain metadata only.",
             json!({"expected_session":"session-example","object_ref":"object_2","kind":"table","start":201,"limit":100,"column_start":1,"column_limit":20}),
         ),
         "workspace.package_index" => (

@@ -49,12 +49,23 @@ export class HostClient {
     sessionStorage.setItem(`rho-application-session:${project}`, JSON.stringify(session));
   }
   static fromLocation() {
-    const token = new URLSearchParams(location.hash.slice(1)).get("token");
+    const address = new URL(location.href);
+    const token = new URLSearchParams(address.hash.slice(1)).get("token");
+    const requestedWindow = address.searchParams.get("window");
+    if (requestedWindow !== null && !/^[A-Za-z0-9._:/-]{1,160}$/.test(requestedWindow))
+      throw new Error("The Workbench URL contains an invalid window identity.");
     if (token) {
       sessionStorage.setItem("rho-token", token);
-      history.replaceState(null, "", location.pathname);
     }
-    return new HostClient(token ?? sessionStorage.getItem("rho-token") ?? "");
+    const client = new HostClient(token ?? sessionStorage.getItem("rho-token") ?? "", requestedWindow ?? undefined);
+    sessionStorage.setItem("rho-window-id", client.windowId);
+    // Window identity is a nonsecret reference. Keeping it in the document URL
+    // lets this exact window be resumed after a Host port change without choosing
+    // another window's drafts. Credentials remain scoped to sessionStorage.
+    address.hash = "";
+    address.searchParams.set("window", client.windowId);
+    history.replaceState(null, "", address.pathname + address.search);
+    return client;
   }
   async request<T>(path: string, body?: unknown): Promise<T> {
     const method = (body as WorkbenchFrame | undefined)?.frame?.request?.method;

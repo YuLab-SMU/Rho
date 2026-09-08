@@ -34,6 +34,11 @@ local({
   matrix_page <- read(matrix_object$object_ref, "table", start = 251L, column_start = 30L)
   stopifnot(length(matrix_page$columns) == 11L, matrix_page$columns[[1L]]$values[[1L]]$number == 8951,
             sum(vapply(matrix_page$columns, function(x) length(x$values), 1L)) <= 2000L)
+  assign("fixture_text_matrix", matrix(rep(paste(rep("界", 1000), collapse = ""), 4L), nrow = 2L), .GlobalEnv)
+  text_matrix <- observe("fixture_text_matrix")
+  text_matrix_page <- read(text_matrix$object_ref, "table", start = 2L, column_start = 2L)
+  continued_matrix <- read(text_matrix$object_ref, "text", start = 2L + (2L - 1L) * 2L, text_start = text_matrix_page$columns[[1L]]$values[[1L]]$next_text_start)
+  stopifnot(is.null(continued_matrix$next_text_start), nchar(continued_matrix$values[[1L]]$text) > 0L)
   assign("fixture_named", setNames("value", paste(rep("名", 1000), collapse = "")), .GlobalEnv)
   named_object <- observe("fixture_named")
   named_page <- read(named_object$object_ref, "names")

@@ -5,6 +5,24 @@ import type { Invocation } from "../src/generated/Invocation";
 const invocation: Invocation = { client_request_id: "request-1", capability: { id: "workspace.run", version: 1 }, arguments: { code: "x <- 1" }, preconditions: [] };
 const response = (value: unknown, ok = true, status = 200) => ({ ok, status, json: async () => value }) as Response;
 const clients: HostClient[] = [];
+it("keeps an explicit window reference in a credential-free resume URL", () => {
+  const previous = location.pathname + location.search + location.hash;
+  try {
+    history.replaceState(null, "", "/?window=window-to-resume#token=test-launch-token");
+    const host = HostClient.fromLocation(); clients.push(host);
+    expect(host.windowId).toBe("window-to-resume");
+    expect(location.search).toBe("?window=window-to-resume");
+    expect(location.hash).toBe("");
+    expect(sessionStorage.getItem("rho-window-id")).toBe("window-to-resume");
+    expect(sessionStorage.getItem("rho-token")).toBe("test-launch-token");
+    expect(location.href).not.toContain("test-launch-token");
+    history.replaceState(null, "", "/?window=bad%20identity");
+    expect(() => HostClient.fromLocation()).toThrow("invalid window identity");
+  } finally {
+    history.replaceState(null, "", previous);
+    sessionStorage.clear();
+  }
+});
 function client() { const host = new HostClient("test-only-token"); clients.push(host); return host; }
 function pendingRead(signal?: AbortSignal | null): Promise<Response> {
   return new Promise((_resolve, reject) => {

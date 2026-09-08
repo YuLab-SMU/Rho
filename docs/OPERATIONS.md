@@ -208,6 +208,12 @@ observations, reopen deliberately; do not join pages from different versions.
 
 ## Read and control a Studio window
 
+Studio keeps the nonsecret `window` reference in its document URL. When resuming
+that window after a Host port change, retain `?window=...` and use the new Host's
+launch token. A plain new launch URL opens a separate window identity. Rho never
+chooses another window's drafts implicitly; discover window identities with
+`application.windows` when the original URL is unavailable.
+
 `application.windows` lists explicit `{window_id, incarnation}` identities.
 `application.context` returns document/selection versions, dirty state and current
 object/package/plot selections; `application.read_document` reads versioned draft

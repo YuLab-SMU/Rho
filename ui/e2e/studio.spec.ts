@@ -352,10 +352,14 @@ test("draft and layout recover after Host restart on another port", async ({
     .fill("# 跨端口保留的草稿");
   await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
   const previous = url;
+  const windowId = new URL(page.url()).searchParams.get("window");
+  expect(windowId).toBeTruthy();
   await stopHost();
   await startHost();
   expect(new URL(url).port).not.toBe(new URL(previous).port);
-  await page.goto(url);
+  const resume = new URL(url);
+  resume.searchParams.set("window", windowId!);
+  await page.goto(resume.toString());
   await expect(
     page.locator(".document-panel:visible .cm-content"),
   ).toContainText("跨端口保留的草稿");
@@ -436,13 +440,13 @@ test("two windows do not silently overwrite each other’s drafts", async ({
   await newFile(page);
   await page
     .locator(".document-panel:visible .cm-content")
-    .fill("# shared starting draft");
+    .fill("# window one starting draft");
   await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
   const second = await context.newPage();
   await second.goto(url);
-  await expect(
-    second.locator(".document-panel:visible .cm-content"),
-  ).toContainText("shared starting draft");
+  await resetLayout(second);
+  await newFile(second);
+  expect(new URL(second.url()).searchParams.get("window")).not.toBe(new URL(page.url()).searchParams.get("window"));
   await page
     .locator(".document-panel:visible .cm-content")
     .fill("# window one");
@@ -450,9 +454,7 @@ test("two windows do not silently overwrite each other’s drafts", async ({
   await second
     .locator(".document-panel:visible .cm-content")
     .fill("# window two retained");
-  await expect(second.locator(".notice")).toContainText(
-    /another window|另一个窗口/,
-  );
+  await expect(second.getByText("Draft synced", { exact: true })).toBeVisible();
   await expect(
     second.locator(".document-panel:visible .cm-content"),
   ).toContainText("window two retained");
@@ -460,11 +462,8 @@ test("two windows do not silently overwrite each other’s drafts", async ({
   await expect(
     page.locator(".document-panel:visible .cm-content"),
   ).toContainText("window one");
-  await second.getByRole("button", { name: "Retry Draft Sync" }).click();
-  await second.getByRole("button", { name: "Resolve Window Conflict" }).click();
-  await second
-    .getByRole("button", { name: "Use this window’s drafts and layout" })
-    .click();
+  await second.reload();
+  await expect(second.locator(".document-panel:visible .cm-content")).toContainText("window two retained");
   await expect(second.getByText("Draft synced", { exact: true })).toBeVisible();
   await second.close();
 });
@@ -1824,7 +1823,7 @@ test("same-name previews retain independent demand and closed Packages restores 
   page.on("request", (request) => {
     if (!request.url().endsWith("/api/host")) return;
     const call = request.postDataJSON()?.frame?.request;
-    if (call?.method === "query_snapshot" && call.params.capability.id === "workspace.inspect_object" && call.params.arguments.name === "rho_dual_preview") inspections++;
+    if (call?.method === "query_snapshot" && call.params.capability.id === "workspace.observe_object" && call.params.arguments.name === "rho_dual_preview") inspections++;
   });
   await invokeNative("rho_dual_preview$value <- 22L");
   await expect(page.locator(".objects-panel:visible table")).toContainText("22");

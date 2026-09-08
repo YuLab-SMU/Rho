@@ -226,6 +226,6 @@ rho_read_object <- function(payload) {
     else rho_object_error("budget_exhausted", "One metadata entry exceeds the page budget; a narrower structural path is required.")
   }
   result$complete <- is.null(result$next_start) && is.null(result$next_column_start) && is.null(result$next_text_start) && !any(vapply(result$values, function(v) !is.null(v$next_text_start), TRUE)) && !any(vapply(result$columns, function(c) any(vapply(c$values, function(v) !is.null(v$next_text_start), TRUE)), TRUE))
-  if (!result$complete) result$notices <- list("Continue row/column pages independently with the same reference and path. For shortened character values use kind=text, one-based element index and next_text_start; table cells use a column path. Text offsets count Unicode scalar characters; budgets count UTF-8 bytes.")
+  if (!result$complete) result$notices <- list("Continue row/column pages independently with the same reference and path. For shortened character values use kind=text, one-based element index and next_text_start. Data-frame cells append the exact column index to path and use start=row; atomic matrix cells keep path and use start=row+(column-1)*nrow. For names/levels use text_attribute=names/levels. Text offsets count Unicode scalar characters; budgets count UTF-8 bytes.")
   result
 }

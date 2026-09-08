@@ -331,7 +331,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
         {
           key: "Enter",
           run: (v) => {
-            if (v.composing || composingKey.current) return false;
+            if (v.compositionStarted || composition.current || composingKey.current) return false;
             if (completionStatus(v.state) === "active" && acceptCompletion(v))
               return true;
             submit.current(false);
@@ -342,7 +342,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
         {
           key: "Mod-Enter",
           run: (v) => {
-            if (!v.composing && !composingKey.current) submit.current(true);
+            if (!v.compositionStarted && !composition.current && !composingKey.current) submit.current(true);
             return true;
           },
         },
@@ -436,7 +436,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
   async function run(force: boolean) {
     const v = input.current,
       code = v?.state.doc.toString() ?? "";
-    if (!v || v.composing || submitting || !code.trim()) return;
+    if (!v || v.compositionStarted || composition.current || submitting || !code.trim()) return;
     const scope = session.context();
     setError("");
     if (!force) {
@@ -453,7 +453,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
           /* Native execution remains the parser authority. */
         }
       }
-      if (input.current !== v || !sameScope(scope, session.context(), true) || v.state.doc.toString() !== code) return;
+      if (input.current !== v || v.compositionStarted || composition.current || !sameScope(scope, session.context(), true) || v.state.doc.toString() !== code) return;
       if (incomplete) {
         v.dispatch(v.state.replaceSelection("\n" + indent));
         return;
