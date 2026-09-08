@@ -26,6 +26,8 @@ rho_package_exact_copy <- function(payload) {
   path <- file.path(payload$library_path, payload$package)
   if (!dir.exists(path)) rho_object_error("content_changed", "Package copy is no longer installed.")
   # A retained inventory cannot attribute an updated installation to its old version.
+  description_size <- file.info(file.path(path, "DESCRIPTION"))$size
+  if (is.na(description_size) || description_size > 262144L) rho_object_error("budget_exhausted", "Package DESCRIPTION exceeds the inventory 256 KiB bound or is unavailable.")
   current <- tryCatch(read.dcf(file.path(path, "DESCRIPTION"), fields = c("Package", "Version")), error = function(e) NULL)
   if (is.null(current) || nrow(current) != 1L || !identical(unname(current[1L, "Package"]), payload$package) || !identical(unname(current[1L, "Version"]), matches[[1L]]$version)) rho_object_error("content_changed", "Installed copy changed since its package observation.")
   list(path = path, copy = matches[[1L]], observed_at_ms = inventory$observed_at_ms)
