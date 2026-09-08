@@ -40,6 +40,16 @@ client reports the mismatch while withholding native availability.
 
 Durable boundaries and protocol details are in [Architecture](ARCHITECTURE.md).
 
+The user accepted the [future multiple-runtime direction](ARCHITECTURE.md#future-multiple-runtime-support--direction-only)
+and deferred implementation. One project Host would manage independent Workspace
+instances, including same-version and different-version R processes. The architecture
+records identity, routing, environment, concurrency and recovery constraints; current
+support remains one local R session. This follow-up changes documentation only and
+does not add runtime verification evidence or start an implementation task.
+Documentation governance validation, governance regression checks and whitespace
+checks passed for this follow-up; the runtime results below belong to the modular
+Studio delivery.
+
 ## Executed verification
 
 | Check | Result |

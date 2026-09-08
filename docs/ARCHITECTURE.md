@@ -278,6 +278,80 @@ FlexLayout containment with allow/reject fixtures. CI runs it with frontend unit
 Visual approval and scientific/interactive evidence remain separate from these
 structural checks; see [Design](RHO-DESIGN.md) and [Status](STATUS.md).
 
+## Future multiple-runtime support — direction only
+
+The user accepted this extension direction on 2026-09-08 and deferred implementation.
+The current Host and Studio still own one live R session. Existing module boundaries
+provide a foundation for multiple runtimes; they do not establish implemented or
+verified multi-session or multi-version support. This section records the boundaries
+future work must preserve, not new capabilities or a delivery commitment.
+
+### Identities and ownership
+
+| Identity | Meaning |
+| --- | --- |
+| Runtime definition | Selected interpreter installation and adapter, including actual paths, version and architecture |
+| Environment | Dependency realization and library configuration bound to a launch |
+| Workspace instance | Logical analysis session to which views and execution targets bind |
+| Native session | One actual process lifetime; restart always creates a new identity |
+
+One project Host should own multiple Workspace instances under the existing project
+lease. Host owns instance creation, shutdown, restart, health and resource limits;
+each Workspace owner owns its execution queue, stdin, objects and package observations.
+Project files, Environment management and the Operation journal retain their current
+owners. Do not create competing Hosts or independent scientific journals for the
+same project merely to obtain additional R processes.
+
+Each R instance runs in a separate native process. Multiple instances may use the
+same installation or different R versions. Bind the selected R/Ark paths, R_HOME,
+environment, library paths, working directory and connection/log directories per
+launch, and verify the actual runtime through a startup handshake. Validate each
+version/environment combination; do not assume a writable package library is safe
+to share across R versions. An environment in use remains protected from cleanup.
+
+### Routing, concurrency and views
+
+- Every execution, query, cancellation and stdin reply must resolve an explicit
+  Workspace instance and the relevant native-session precondition through the
+  shared Host ports. UI selection is not an authority for an already submitted
+  request. Editor execution captures its target with its code; MCP targets are
+  explicit and do not follow whichever Console the user currently selects.
+- Execution remains serial within one R instance and can proceed concurrently
+  across instances. Replace the current shared execution/observation lane with
+  instance-specific lanes and resource-appropriate project coordination. Stopping
+  or blocking one instance must not stop another instance's execution or controls.
+- Console, Objects and Packages models and caches are scoped to their instance.
+  Views may follow a selected instance or remain pinned. Files/Documents stay
+  project-owned; Plots may compare outputs across instances while retaining their
+  producing operation and session identities. Switching a view does not restart R.
+- Extend typed notifications, observations and lifecycle fences with instance
+  identity. An instance's execution invalidates its own live observations; shared
+  file effects also invalidate relevant project observations. Preserve project and
+  principal visibility, event replay and deduplication through the common journal.
+
+### Data and recovery boundaries
+
+R memory is private to each native session. Cross-instance data transfer must be
+explicit, with source identity, format and compatibility checks; equal object names
+do not imply shared objects. Independent default output directories reduce file
+collisions. Arbitrary R code can still write shared project files, so managed request
+coordination is not a guarantee against all concurrent native writes or a rollback
+mechanism.
+
+Persist instance definitions and view bindings with drafts and history. Reconnecting
+to a live instance and starting a replacement process are distinct actions. Restart
+may retain the logical instance but must fence old responses and requests with a new
+native-session identity; it does not restore R memory or replay unconfirmed code.
+
+Future delivery should establish same-version multiple R sessions first, then verify
+multiple R versions with their bound environments. Remote and other-language runtimes
+can subsequently implement the shared lifecycle/execution/output contracts and expose
+their own inspection capabilities; R package semantics are not a universal runtime
+contract. Acceptance must exercise simultaneous runs, independent cancellation and
+stdin, cross-instance cache isolation, restart fencing, shared-file conflicts and
+version/environment identity before claiming these capabilities. Package installation
+and runtime acquisition remain separate from read-only package inspection.
+
 ## Source map and dependency direction
 
 | Location | Role |
