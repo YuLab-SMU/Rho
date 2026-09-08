@@ -86,6 +86,28 @@ impl OperationJournal for TestJournal {
     async fn get(&self, id: &OperationId) -> Result<Option<OperationRecord>, OperationError> {
         Ok(self.0.lock().unwrap().records.get(id).cloned())
     }
+    async fn get_request(
+        &self,
+        caller: &CallerIdentity,
+        principal: &CallerIdentity,
+        project: Option<&str>,
+        client_request_id: &str,
+    ) -> Result<Option<OperationRecord>, OperationError> {
+        Ok(self
+            .0
+            .lock()
+            .unwrap()
+            .records
+            .values()
+            .find(|r| {
+                &r.operation.caller == caller
+                    && r.operation.principal() == principal
+                    && r.operation.client_request_id == client_request_id
+                    && project
+                        .is_none_or(|scope| r.operation.idempotency_scope.as_deref() == Some(scope))
+            })
+            .cloned())
+    }
     async fn read_evidence(
         &self,
         args: &OperationReadEvidenceArguments,
@@ -887,4 +909,132 @@ async fn schema_composition_does_not_interpret_ref_keys_inside_literal_data() {
         .unwrap();
     let result: OperationGetResult = serde_json::from_value(read.data.unwrap()).unwrap();
     assert_eq!(result.record.unwrap().output, Some(output));
+}
+
+#[tokio::test]
+async fn legacy_public_record_and_event_reads_require_scope_even_for_the_same_principal() {
+    let journal = Arc::new(TestJournal::default());
+    let mut registry = CapabilityRegistry::new();
+    registry
+        .register(Arc::new(TestHandler::new(CommitPlan::succeeded(
+            json!({"value":1}),
+        ))))
+        .unwrap();
+    register_get(&mut registry, journal.clone(), Some("/project".into()));
+    let gateway = gateway(Arc::new(registry), journal);
+    let record = gateway
+        .invoke(&context(), invocation(json!({"value":1})))
+        .await
+        .unwrap();
+    let mut denied = context();
+    denied.scopes.clear();
+    assert!(matches!(
+        gateway
+            .get_operation(&denied, &record.operation.operation_id)
+            .await,
+        Err(OperationError::AccessDenied { .. })
+    ));
+    assert!(matches!(
+        gateway.get_request_operation(&denied, "request-1").await,
+        Err(OperationError::AccessDenied { .. })
+    ));
+    assert!(matches!(
+        gateway
+            .events(&denied, &record.operation.operation_id)
+            .await,
+        Err(OperationError::AccessDenied { .. })
+    ));
+    assert!(matches!(
+        gateway.outbox(&denied, 0, 100).await,
+        Err(OperationError::AccessDenied { .. })
+    ));
+    assert!(matches!(
+        gateway
+            .facts_for_operation(&denied, &record.operation.operation_id)
+            .await,
+        Err(OperationError::AccessDenied { .. })
+    ));
+}
+#[tokio::test]
+async fn native_cancellation_authority_does_not_require_an_additional_public_read_scope() {
+    let started = Arc::new(tokio::sync::Notify::new());
+    let finish = Arc::new(tokio::sync::Notify::new());
+    let mut handler = TestHandler::new(CommitPlan::succeeded(json!({"value":1})));
+    handler.started = Some(started.clone());
+    handler.finish = Some(finish.clone());
+    let journal = Arc::new(TestJournal::default());
+    let mut registry = CapabilityRegistry::new();
+    registry.register(Arc::new(handler)).unwrap();
+    register_get(&mut registry, journal.clone(), Some("/project".into()));
+    let gateway = Arc::new(gateway(Arc::new(registry), journal));
+    let mut native = context();
+    native.scopes.remove("operation.read");
+    let task_gateway = gateway.clone();
+    let task_context = native.clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let task = tokio::spawn(async move {
+        task_gateway
+            .invoke_notifying(&task_context, invocation(json!({"value":1})), Some(tx))
+            .await
+    });
+    let accepted = rx.await.unwrap();
+    started.notified().await;
+    assert!(
+        gateway
+            .request_cancellation(&native, &accepted.operation.operation_id)
+            .await
+            .unwrap()
+            .accepted
+    );
+    assert!(
+        gateway
+            .owner_record(&native, &accepted.operation.operation_id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    finish.notify_one();
+    task.await.unwrap().unwrap();
+}
+#[tokio::test]
+async fn original_request_lookup_uses_actor_identity_not_a_principal_summary_page() {
+    let journal = Arc::new(TestJournal::default());
+    let mut registry = CapabilityRegistry::new();
+    registry
+        .register(Arc::new(TestHandler::new(CommitPlan::succeeded(
+            json!({"value":1}),
+        ))))
+        .unwrap();
+    let gateway = gateway(Arc::new(registry), journal);
+    let first = gateway
+        .invoke(&context(), invocation(json!({"value":1})))
+        .await
+        .unwrap();
+    let mut second_context = context();
+    second_context.caller.id = "another-agent".into();
+    let second = gateway
+        .invoke(&second_context, invocation(json!({"value":2})))
+        .await
+        .unwrap();
+    assert_ne!(first.operation.operation_id, second.operation.operation_id);
+    assert_eq!(
+        gateway
+            .owner_request_record(&context(), "request-1")
+            .await
+            .unwrap()
+            .unwrap()
+            .operation
+            .operation_id,
+        first.operation.operation_id
+    );
+    assert_eq!(
+        gateway
+            .owner_request_record(&second_context, "request-1")
+            .await
+            .unwrap()
+            .unwrap()
+            .operation
+            .operation_id,
+        second.operation.operation_id
+    );
 }

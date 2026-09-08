@@ -920,6 +920,24 @@ impl OperationJournal for SqliteOperationJournal {
             next_offset: (end < size).then_some(end),
         })
     }
+    async fn get_request(
+        &self,
+        caller: &CallerIdentity,
+        principal: &CallerIdentity,
+        project: Option<&str>,
+        client_request_id: &str,
+    ) -> Result<Option<OperationRecord>, OperationError> {
+        let connection = self.connection()?;
+        Ok(
+            operation_by_idempotency_key(&connection, caller.kind, &caller.id, client_request_id)?
+                .filter(|record| {
+                    record.operation.principal() == principal
+                        && project.is_none_or(|scope| {
+                            record.operation.idempotency_scope.as_deref() == Some(scope)
+                        })
+                }),
+        )
+    }
 }
 
 fn validate_plan(plan: &CommitPlan) -> Result<(), OperationError> {

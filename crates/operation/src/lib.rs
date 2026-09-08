@@ -374,6 +374,13 @@ pub trait OperationJournal: Send + Sync {
         &self,
         operation_id: &OperationId,
     ) -> Result<Option<OperationRecord>, OperationError>;
+    async fn get_request(
+        &self,
+        caller: &CallerIdentity,
+        principal: &CallerIdentity,
+        project: Option<&str>,
+        client_request_id: &str,
+    ) -> Result<Option<OperationRecord>, OperationError>;
     async fn read_evidence(
         &self,
         arguments: &rho_contract::OperationReadEvidenceArguments,
@@ -1029,6 +1036,16 @@ impl OperationGateway {
         context: &CallContext,
         operation_id: &OperationId,
     ) -> Result<Option<OperationRecord>, OperationError> {
+        require_read_scope(context)?;
+        self.owner_record(context, operation_id).await
+    }
+    /// Trusted owner/control lookup. Public record reads use get_operation;
+    /// cancellation and stdin retain their own native authority requirements.
+    pub async fn owner_record(
+        &self,
+        context: &CallContext,
+        operation_id: &OperationId,
+    ) -> Result<Option<OperationRecord>, OperationError> {
         context.validate()?;
         let record = self.journal.get(operation_id).await?.filter(|record| {
             record.operation.principal() == context.principal()
@@ -1045,10 +1062,17 @@ impl OperationGateway {
         context: &CallContext,
         request_id: &str,
     ) -> Result<Option<OperationRecord>, OperationError> {
+        require_read_scope(context)?;
+        self.owner_request_record(context, request_id).await
+    }
+    /// Resolve a trusted owner's original submission using its exact caller key.
+    /// This is not a public read port and does not broaden another actor's scope.
+    pub async fn owner_request_record(
+        &self,
+        context: &CallContext,
+        request_id: &str,
+    ) -> Result<Option<OperationRecord>, OperationError> {
         context.validate()?;
-        let Some(project) = &self.project_scope else {
-            return Ok(None);
-        };
         let args = rho_contract::RecentOperationsArguments {
             limit: 1,
             before_cursor: None,
@@ -1056,14 +1080,16 @@ impl OperationGateway {
             operation_id: None,
         };
         crate::recent::validate_recent_arguments(&args)?;
-        let page = self
+        let record = self
             .journal
-            .list_recent(project, context.principal(), &args)
+            .get_request(
+                &context.caller,
+                context.principal(),
+                self.project_scope.as_deref(),
+                request_id,
+            )
             .await?;
-        match page.operations.first() {
-            Some(summary) => self.get_operation(context, &summary.operation_id).await,
-            None => Ok(None),
-        }
+        Ok(record.map(|record| self.registry.public_record(context, record)))
     }
 
     pub async fn request_cancellation(
@@ -1082,7 +1108,7 @@ impl OperationGateway {
     ) -> Result<CancellationRequestOutcome, OperationError> {
         let _admission = self.admission.lock().await;
         let operation = self
-            .get_operation(context, operation_id)
+            .owner_record(context, operation_id)
             .await?
             .ok_or_else(|| OperationError::NotFound(operation_id.as_str().to_string()))?;
         let handler = self.registry.handler(&operation.operation.capability)?;
@@ -1142,7 +1168,7 @@ impl OperationGateway {
         after_sequence: u64,
         limit: usize,
     ) -> Result<Vec<OutboxRecord>, OperationError> {
-        context.validate()?;
+        require_read_scope(context)?;
         self.journal
             .outbox(
                 self.project_scope.as_deref(),
@@ -1167,11 +1193,22 @@ impl OperationGateway {
         context: &CallContext,
         id: &OperationId,
     ) -> Result<(), OperationError> {
-        self.get_operation(context, id)
+        require_read_scope(context)?;
+        self.owner_record(context, id)
             .await?
             .ok_or_else(|| OperationError::NotFound(id.as_str().into()))?;
         Ok(())
     }
+}
+fn require_read_scope(context: &CallContext) -> Result<(), OperationError> {
+    context.validate()?;
+    if !context.scopes.contains("operation.read") {
+        return Err(OperationError::AccessDenied {
+            capability: "operation.read".into(),
+            missing: vec!["operation.read".into()],
+        });
+    }
+    Ok(())
 }
 
 fn invocation_digest(
