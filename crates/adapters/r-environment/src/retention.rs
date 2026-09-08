@@ -56,10 +56,15 @@ impl REnvironment {
         let (stage, trash) = self.material_paths(source, kind, cleanup)?;
         let marker = self.read_marker(source)?;
         let live_processes = if let Some(marker) = &marker {
+            let original_session_id = marker.host_process_session_id;
             let marker = marker.marker.clone();
             let source = source.to_string();
             tokio::task::spawn_blocking(move || {
-                rho_process::inspect_process_marker(&marker, &source)
+                rho_process::inspect_process_marker_in_session(
+                    &marker,
+                    &source,
+                    original_session_id,
+                )
             })
             .await
             .map_err(display)??

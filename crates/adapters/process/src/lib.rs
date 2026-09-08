@@ -7,7 +7,9 @@ use process_wrap::tokio::JobObject;
 #[cfg(unix)]
 use process_wrap::tokio::ProcessGroup;
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
-pub use recovery::inspect_process_marker;
+pub use recovery::{
+    current_process_session_id, inspect_process_marker, inspect_process_marker_in_session,
+};
 use rho_contract::Operation;
 use rho_execution::{OutputCapture, ProcessExecutor, ProcessReconciliation, RunLocalArguments};
 pub use rho_execution::{ProcessReport, ProcessTermination};

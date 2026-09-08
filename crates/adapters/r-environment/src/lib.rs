@@ -72,6 +72,9 @@ struct RecoveryMarker {
     operation_id: String,
     project_root: String,
     marker: String,
+    /// Original native helper-family session, never replaced with an observer session.
+    #[serde(default)]
+    host_process_session_id: Option<u32>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -156,6 +159,7 @@ impl REnvironment {
             operation_id: id.into(),
             project_root: self.root.clone(),
             marker: marker.into(),
+            host_process_session_id: rho_process::current_process_session_id(),
         };
         std::fs::write(file.path(), serde_json::to_vec(&material).map_err(display)?)
             .map_err(display)?;
@@ -951,6 +955,10 @@ mod recovery_tests {
             .unwrap();
         let saved = runtime.read_marker("op_test").unwrap().unwrap();
         assert_eq!(saved.marker, "PSexample_1700000000");
+        assert_eq!(
+            saved.host_process_session_id,
+            rho_process::current_process_session_id()
+        );
         assert!(runtime.read_marker("op_other").unwrap().is_none());
         let file = runtime.recovery_path("op_test").unwrap();
         let mut contents: Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();

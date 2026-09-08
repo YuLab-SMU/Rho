@@ -46,13 +46,14 @@ fn tagged(process: &Process, marker: &OsStr, user: &Uid) -> bool {
         && process.environ().iter().any(|entry| entry == marker)
 }
 fn snapshot(marker: &OsStr, user: &Uid) -> Result<Vec<NativeProcessIdentity>, String> {
-    snapshot_with_owner(marker, user, None, None)
+    snapshot_with_owner(marker, user, None, None, None)
 }
 fn snapshot_with_owner(
     marker: &OsStr,
     user: &Uid,
     owner: Option<&OsStr>,
     not_before_seconds: Option<u64>,
+    original_session_id: Option<u32>,
 ) -> Result<Vec<NativeProcessIdentity>, String> {
     let mut system = System::new();
     system.refresh_processes_specifics(
@@ -79,13 +80,17 @@ fn snapshot_with_owner(
         return Err("same-user process inspection exceeds its bound".into());
     }
     system.refresh_processes_specifics(ProcessesToUpdate::Some(&owned), true, refresh_kind());
-    let unavailable_identity = system.processes().values().any(|process| {
-        process.user_id() == Some(user)
-            && alive(process)
-            && not_before_seconds
-                .is_none_or(|since| process.start_time() == 0 || process.start_time() >= since)
-            && (process.start_time() == 0 || process.environ().is_empty())
-    });
+    let uncertain = system
+        .processes()
+        .values()
+        .filter(|process| {
+            process.user_id() == Some(user)
+                && alive(process)
+                && not_before_seconds
+                    .is_none_or(|since| process.start_time() == 0 || process.start_time() >= since)
+                && (process.start_time() == 0 || process.environ().is_empty())
+        })
+        .collect::<Vec<_>>();
     if let Some(owner) = owner
         && system.processes().values().any(|process| {
             tagged(process, marker, user) && !process.environ().iter().any(|entry| entry == owner)
@@ -111,11 +116,117 @@ fn snapshot_with_owner(
     // An observable positive match is enough to retain material. An empty list
     // is not negative evidence while another same-user process lacks a native
     // environment/lifetime observation (notably protected binaries on macOS).
-    if owner.is_some() && matches.is_empty() && unavailable_identity {
-        return Err("native process marker absence is unavailable: a same-user process has no environment or lifetime evidence".into());
+    if let Some(owner) = owner.filter(|_| matches.is_empty()) {
+        if uncertain.len() > 128 {
+            return Err("native uncertain process follow-up exceeds its 128-identity bound".into());
+        }
+        let mut unavailable = false;
+        for previous in uncertain {
+            let fresh = fresh_identity(previous.pid());
+            let Some(process) = fresh.process(previous.pid()) else {
+                // A missing sysinfo row is not itself proof of process death.
+                // On Darwin its getsid wrapper preserves ESRCH for a vanished PID.
+                if !native_pid_is_gone(previous) {
+                    unavailable = true;
+                }
+                continue;
+            };
+            if !alive(process)
+                || process.user_id().is_some_and(|uid| uid != user)
+                || not_before_seconds
+                    .is_some_and(|since| process.start_time() > 0 && process.start_time() < since)
+            {
+                continue;
+            }
+            if tagged(process, marker, user) {
+                if !process.environ().iter().any(|entry| entry == owner) {
+                    return Err("native process marker belongs to a different Operation".into());
+                }
+                if process.start_time() == 0 {
+                    unavailable = true;
+                } else {
+                    matches.push(identity(process));
+                }
+                continue;
+            }
+            if process.user_id() == Some(user)
+                && process.start_time() > 0
+                && !process.environ().is_empty()
+            {
+                continue;
+            }
+            if !outside_original_helper_session(process, original_session_id, marker)? {
+                unavailable = true;
+            }
+        }
+        if matches.is_empty() && unavailable {
+            return Err("native process marker absence is unavailable: a same-user process has no environment or lifetime evidence".into());
+        }
     }
     matches.sort_by_key(|process| process.pid);
     Ok(matches)
+}
+
+fn fresh_identity(pid: Pid) -> System {
+    let mut system = System::new();
+    system.refresh_processes_specifics(ProcessesToUpdate::Some(&[pid]), true, refresh_kind());
+    system
+}
+
+#[cfg(target_os = "macos")]
+fn native_pid_is_gone(process: &Process) -> bool {
+    // sysinfo 0.39's Darwin session_id is a direct getsid(pid) wrapper. Observe
+    // errno immediately: EPERM/other failures remain unknown, ESRCH proves gone.
+    process.session_id().is_none()
+        && std::io::Error::last_os_error().raw_os_error() == Some(nix::errno::Errno::ESRCH as i32)
+}
+#[cfg(not(target_os = "macos"))]
+fn native_pid_is_gone(_: &Process) -> bool {
+    false
+}
+
+#[cfg(target_os = "macos")]
+fn outside_original_helper_session(
+    process: &Process,
+    original: Option<u32>,
+    marker: &OsStr,
+) -> Result<bool, String> {
+    if !original.is_some_and(|id| id > 1) || process.session_id() != Some(Pid::from_u32(1)) {
+        return Ok(false);
+    }
+    // fork/exec preserve the original session; setsid creates the caller's own
+    // PID as a new session. Neither can join the already-existing init session.
+    // This scopes evidence to the owned helper family, not arbitrary work
+    // delegated to external service managers and not rollback of side effects.
+    let verified = fresh_identity(process.pid());
+    let Some(after) = verified.process(process.pid()) else {
+        return Ok(false);
+    };
+    if after.environ().iter().any(|entry| entry == marker) {
+        return Err(
+            "native original-session proof conflicts with an observed process marker".into(),
+        );
+    }
+    Ok(identity(after) == identity(process)
+        && after.start_time() > 0
+        && after.user_id() == process.user_id()
+        && after.session_id() == Some(Pid::from_u32(1)))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn outside_original_helper_session(_: &Process, _: Option<u32>, _: &OsStr) -> Result<bool, String> {
+    Ok(false)
+}
+
+/// Native session inherited by managed helpers. Record at launch; a later
+/// observer's session cannot substitute for this original process-family fact.
+pub fn current_process_session_id() -> Option<u32> {
+    let pid = Pid::from_u32(std::process::id());
+    fresh_identity(pid)
+        .process(pid)?
+        .session_id()
+        .map(|session| session.as_u32())
+        .filter(|id| *id > 0)
 }
 
 /// Bounded OS observation only: no helper process, signal, wait or recovery.
@@ -125,6 +236,17 @@ fn snapshot_with_owner(
 pub fn inspect_process_marker(
     marker: &str,
     operation_id: &str,
+) -> Result<Vec<NativeProcessIdentity>, String> {
+    inspect_process_marker_in_session(marker, operation_id, None)
+}
+
+/// Inspect an owned native helper family using its original recorded session.
+/// Missing session evidence remains conservative; it is never inferred from the
+/// current observer, an executable name, or an orphan's parent PID.
+pub fn inspect_process_marker_in_session(
+    marker: &str,
+    operation_id: &str,
+    original_session_id: Option<u32>,
 ) -> Result<Vec<NativeProcessIdentity>, String> {
     if marker.is_empty()
         || marker.len() > 200
@@ -176,6 +298,7 @@ pub fn inspect_process_marker(
         user,
         Some(OsStr::new(&format!("RHO_OPERATION_ID={operation_id}"))),
         Some(not_before_seconds),
+        original_session_id,
     )
 }
 
@@ -340,6 +463,14 @@ mod tests {
             child.0.try_wait().unwrap().is_none(),
             "a read must not signal the process"
         );
+        let observed_with_scope =
+            inspect_process_marker_in_session(&marker, "op_native_read_fixture", Some(1)).unwrap();
+        assert!(
+            observed_with_scope
+                .iter()
+                .any(|identity| identity.pid == child.0.id()),
+            "recorded session hints must never discard positive marker/owner evidence"
+        );
         assert!(
             inspect_process_marker(&marker, "op_wrong_owner")
                 .unwrap_err()
@@ -397,6 +528,14 @@ mod tests {
                     .unwrap_err()
                     .contains("marker absence is unavailable")
             );
+            for original in [None, Some(1), current_process_session_id()] {
+                assert!(
+                    inspect_process_marker_in_session(&marker, "op_native_read_fixture", original)
+                        .unwrap_err()
+                        .contains("marker absence is unavailable"),
+                    "a hidden child in the original non-init family remains unknown"
+                );
+            }
         } else {
             // Older macOS releases may expose this Apple binary's environment;
             // positive native evidence must then match the live child exactly.
