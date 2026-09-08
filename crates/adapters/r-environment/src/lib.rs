@@ -1,13 +1,15 @@
 #![forbid(unsafe_code)]
 
+mod observation;
 mod retention;
 use async_trait::async_trait;
 use rho_environment::{
-    EnvironmentPlan, EnvironmentRealization, EnvironmentReconciliation, EnvironmentRuntime,
-    MaterialAction, MaterialChange, MaterialKind, MaterialState, NamespaceProbe, PackageVersion,
-    PlanArguments, SourceDigest, Verification,
+    EnvironmentObservation, EnvironmentPlan, EnvironmentRealization, EnvironmentReconcileRecovery,
+    EnvironmentReconciliation, EnvironmentRuntime, EnvironmentRuntimeRecovery,
+    EnvironmentStageRecovery, MaterialAction, MaterialChange, MaterialKind, MaterialState,
+    NamespaceProbe, PackageVersion, PlanArguments, SourceDigest, Verification,
 };
-use rho_operation::HandlerError;
+use rho_operation::{Clock, HandlerError, SystemClock};
 use rho_process::{ProcessOptions, ProcessTermination, run_command};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -16,6 +18,7 @@ use std::{
     collections::BTreeSet,
     io::Read,
     path::{Path, PathBuf},
+    sync::Mutex,
     time::Duration,
 };
 use tempfile::{NamedTempFile, TempDir};
@@ -39,6 +42,7 @@ pub struct REnvironment {
     helper: NamedTempFile,
     verifier: NamedTempFile,
     process_tree: NamedTempFile,
+    observation: Mutex<Result<observation::NativeConfiguration, String>>,
 }
 #[derive(Deserialize)]
 struct Response {
@@ -97,6 +101,7 @@ impl REnvironment {
             helper,
             verifier,
             process_tree,
+            observation: Mutex::new(Err("Native Environment configuration has not been established during explicit Host startup or an Environment operation.".into())),
         })
     }
     fn source_path(&self, value: &str) -> Result<PathBuf, String> {
@@ -217,7 +222,11 @@ impl REnvironment {
             cancellation,
         )
         .await?;
-        response(&output, request_id).map_err(uncertain)
+        let value = response(&output, request_id).map_err(uncertain)?;
+        if action == "observe" {
+            self.remember_configuration(&value, id).map_err(uncertain)?;
+        }
+        Ok(value)
     }
     async fn run(
         &self,
@@ -239,8 +248,8 @@ impl REnvironment {
         if !valid_marker(&marker) {
             return Err(before("ps returned an invalid process-tree marker"));
         }
-        // Pure observe queries have no Operation identity; keep their marker
-        // ephemeral. Every effectful Environment call supplies its real ID.
+        // Explicit Host startup has no Operation identity; keep its marker
+        // ephemeral. Queries never enter this runtime execution path.
         let _ephemeral_marker = if let Some(id) = id {
             self.persist_marker(marker_file, id, &marker)
                 .map_err(before)?;
@@ -309,8 +318,12 @@ impl REnvironment {
             String::from_utf8_lossy(&report.stdout.bytes),
             String::from_utf8_lossy(&report.stderr.bytes)
         );
-        let recovery = Some(json!({"process":report,"process_tree_marker":marker,
-            "tree_cleanup_confirmed":tree_cleanup.is_ok(),"action":"inspect_staged_effects_before_retry"}));
+        let recovery = Some(json!(EnvironmentRuntimeRecovery {
+            process: report.clone(),
+            process_tree_marker: marker,
+            tree_cleanup_confirmed: tree_cleanup.is_ok(),
+            action: "inspect_staged_effects_before_retry".into(),
+        }));
         Err(if report.termination == ProcessTermination::Cancelled {
             HandlerError::cancelled(message, recovery)
         } else {
@@ -469,9 +482,19 @@ impl EnvironmentRuntime for REnvironment {
             notices: Vec::new(),
         };
         if let Some(material) = material {
-            let cleanup = self.cleanup_tree(&material.marker, operation_id).await.map_err(|error| {
-                HandlerError::after_possible_effect(error, Some(json!({"source_operation_id":operation_id,"process_tree_marker":material.marker,"action":"reconcile_again_without_reexecuting_source"})))
-            })?;
+            let cleanup = self
+                .cleanup_tree(&material.marker, operation_id)
+                .await
+                .map_err(|error| {
+                    HandlerError::after_possible_effect(
+                        error,
+                        Some(json!(EnvironmentReconcileRecovery {
+                            source_operation_id: operation_id.into(),
+                            process_tree_marker: Some(material.marker),
+                            action: "reconcile_again_without_reexecuting_source".into(),
+                        })),
+                    )
+                })?;
             report.stopped_pids = cleanup.stopped_pids;
             report.cleanup_confirmed = true;
             report.notices.push("Native marked children stopped; staged files were retained and no library was activated. This does not establish the original operation outcome.".into());
@@ -480,19 +503,12 @@ impl EnvironmentRuntime for REnvironment {
         }
         Ok(report)
     }
-    async fn observe(&self, library: Option<&str>, limit: usize) -> Result<Value, String> {
-        if !(1..=500).contains(&limit) {
-            return Err("Environment observation limit is invalid".into());
-        }
-        let library = library.map(|path| self.owned_path(path)).transpose()?;
-        self.helper_call(
-            None,
-            "observe",
-            json!({"library":library,"limit":limit}),
-            watch::channel(false).1,
-        )
-        .await
-        .map_err(|e| e.message)
+    async fn observe(
+        &self,
+        library: Option<&str>,
+        limit: usize,
+    ) -> Result<EnvironmentObservation, String> {
+        self.observe_filesystem(library, limit).await
     }
     async fn plan(
         &self,
@@ -632,12 +648,23 @@ impl EnvironmentRuntime for REnvironment {
         let stage = self.stage("realizations", operation_id).map_err(before)?;
         let library = stage.join("library");
         std::fs::create_dir(&library).map_err(|e| before(e.to_string()))?;
-        let recovery = json!({"stage":stage,"plan_operation_id":plan_id,"action":"inspect_staged_library_before_retry"});
+        let recovery = EnvironmentStageRecovery {
+            stage: stage.to_string_lossy().into_owned(),
+            plan_operation_id: plan_id.into(),
+            runtime: None,
+            action: "inspect_staged_library_before_retry".into(),
+        };
         let after =
-            |error: String| HandlerError::after_possible_effect(error, Some(recovery.clone()));
+            |error: String| HandlerError::after_possible_effect(error, Some(json!(recovery)));
         let with_stage = |mut error: HandlerError| {
-            error.recovery = Some(json!({"stage":stage,"plan_operation_id":plan_id,
-                "runtime":error.recovery,"action":"inspect_staged_library_before_retry"}));
+            let mut stage = recovery.clone();
+            stage.runtime = error
+                .recovery
+                .take()
+                .map(serde_json::from_value)
+                .transpose()
+                .expect("Environment native errors use EnvironmentRuntimeRecovery");
+            error.recovery = Some(json!(stage));
             error
         };
         let action = match plan.manager.as_str() {
@@ -900,7 +927,7 @@ fn uncertain(error: impl std::fmt::Display) -> HandlerError {
 mod recovery_tests {
     use super::*;
 
-    fn environment() -> (TempDir, REnvironment) {
+    pub(super) fn environment() -> (TempDir, REnvironment) {
         let dir = tempfile::tempdir().unwrap();
         let project = dir.path().join("project");
         std::fs::create_dir(&project).unwrap();

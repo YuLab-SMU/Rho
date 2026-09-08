@@ -5,91 +5,23 @@ pub mod slurm;
 use async_trait::async_trait;
 use rho_contract::{
     CancellationClass, CapabilityDescriptor, CapabilityKind, CapabilityRef, EffectHint,
-    EffectObservation, IdempotencyClass, ObservationCompleteness, Operation, OperationId,
-    OperationOutcome, RetryClass, TargetRef,
+    EffectObservation, IdempotencyClass, LocalProcessRecovery, ObservationCompleteness, Operation,
+    OperationId, OperationOutcome, ProcessReconcileRecovery, RetryClass, TargetRef,
 };
 use rho_operation::{
     Clock, CommitPlan, HandlerError, OperationError, OperationHandler, OperationRecords,
     PlannedEvent, SystemClock, wait_cancellation,
 };
-use schemars::{JsonSchema, schema_for};
-use serde::{Deserialize, Serialize};
+use schemars::schema_for;
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, sync::Arc};
 use tokio::sync::{Mutex, watch};
 
 pub const RUN_LOCAL_SCOPE: &str = "process.run_local";
-fn default_timeout() -> u64 {
-    60_000
-}
-fn default_output() -> usize {
-    64 * 1024
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct RunLocalArguments {
-    pub program: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub stdin: Option<String>,
-    #[serde(default = "default_timeout")]
-    #[schemars(range(min = 1, max = 3600000))]
-    pub timeout_ms: u64,
-    #[serde(default = "default_output")]
-    #[schemars(range(min = 1, max = 131072))]
-    pub output_limit_bytes: usize,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct OutputCapture {
-    pub bytes: Vec<u8>,
-    pub total_bytes: u64,
-    pub truncated: bool,
-    pub eof: bool,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ProcessTermination {
-    Exited,
-    Cancelled,
-    TimedOut,
-    Uncertain,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ProcessReport {
-    pub pid: Option<u32>,
-    pub exit_code: Option<i32>,
-    pub exit_signal: Option<i32>,
-    pub termination: ProcessTermination,
-    pub stdout: OutputCapture,
-    pub stderr: OutputCapture,
-    pub elapsed_ms: u64,
-    pub supervision: String,
-    pub stdin_error: Option<String>,
-    pub cleanup_requested: bool,
-    pub cleanup_error: Option<String>,
-}
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct NativeProcessIdentity {
-    pub pid: u32,
-    pub started_at_seconds: u64,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ProcessReconciliation {
-    pub source_operation_id: String,
-    pub observed: Vec<NativeProcessIdentity>,
-    pub signalled: Vec<NativeProcessIdentity>,
-    pub remaining: Vec<NativeProcessIdentity>,
-    pub no_matching_processes_observed: bool,
-    pub completeness: ObservationCompleteness,
-    pub notices: Vec<String>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ReconcileProcessArguments {
-    /// Original terminal process.run_local Operation, never a caller-supplied PID.
-    pub operation_id: String,
-}
+pub use rho_contract::{
+    NativeProcessIdentity, OutputCapture, ProcessReconciliation, ProcessReport, ProcessTermination,
+    ReconcileProcessArguments, RunLocalArguments,
+};
 #[async_trait]
 pub trait ProcessExecutor: Send + Sync {
     fn root(&self) -> &str;
@@ -121,8 +53,8 @@ impl ReconcileProcessHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Operation,
                 capability: CapabilityRef::new("process.reconcile", 1).unwrap(),
-                documentation: rho_contract::builtin_documentation("process.reconcile"),
-                recovery_schema: serde_json::json!({"type":"null"}),
+                documentation: crate::documentation("process.reconcile"),
+                recovery_schema: schema_for!(Option<ProcessReconcileRecovery>).to_value(),
                 domain: "execution".into(),
                 input_schema: schema_for!(ReconcileProcessArguments).to_value(),
                 output_schema: schema_for!(ProcessReconciliation).to_value(),
@@ -188,7 +120,10 @@ impl OperationHandler for ReconcileProcessHandler {
         {
             return Err(HandlerError::after_possible_effect(
                 "inconsistent native reconciliation report",
-                Some(json!({"source_operation_id":args.operation_id})),
+                Some(json!(ProcessReconcileRecovery {
+                    source_operation_id: args.operation_id.clone(),
+                    action: None
+                })),
             ));
         }
         let mut plan = CommitPlan::succeeded(
@@ -198,9 +133,10 @@ impl OperationHandler for ReconcileProcessHandler {
         if !report.no_matching_processes_observed {
             plan.outcome = OperationOutcome::Uncertain;
             plan.error = Some("tagged processes remain after bounded reconciliation".into());
-            plan.recovery = Some(
-                json!({"source_operation_id":args.operation_id,"action":"reconcile_again_without_reexecuting_source"}),
-            );
+            plan.recovery = Some(json!(ProcessReconcileRecovery {
+                source_operation_id: args.operation_id.clone(),
+                action: Some("reconcile_again_without_reexecuting_source".into())
+            }));
         }
         plan.effect_observations.push(EffectObservation {
             kind: "tagged_process_reconciliation".into(), source: "os/sysinfo".into(),
@@ -210,7 +146,10 @@ impl OperationHandler for ReconcileProcessHandler {
         });
         plan.events.push(PlannedEvent {
             kind: "execution.processes_reconciled".into(),
-            payload: json!({"source_operation_id":args.operation_id}),
+            payload: json!(ProcessReconcileRecovery {
+                source_operation_id: args.operation_id.clone(),
+                action: None
+            }),
         });
         Ok(plan)
     }
@@ -228,8 +167,8 @@ impl RunLocalHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Operation,
                 capability: CapabilityRef::new("process.run_local", 1).unwrap(),
-                documentation: rho_contract::builtin_documentation("process.run_local"),
-                recovery_schema: serde_json::json!({"type":"null"}),
+                documentation: crate::documentation("process.run_local"),
+                recovery_schema: schema_for!(Option<LocalProcessRecovery>).to_value(),
                 domain: "execution".into(),
                 input_schema: schema_for!(RunLocalArguments).to_value(),
                 output_schema: schema_for!(ProcessReport).to_value(),
@@ -311,9 +250,12 @@ impl OperationHandler for RunLocalHandler {
             ));
         }
         if outcome == OperationOutcome::Uncertain {
-            plan.recovery = Some(
-                json!({"pid":report.pid,"root":self.executor.root(),"action":"inspect_process_and_outputs_before_retry"}),
-            );
+            plan.recovery = Some(json!(LocalProcessRecovery {
+                source_operation_id: operation.operation_id.as_str().into(),
+                pid: report.pid,
+                root: self.executor.root().into(),
+                action: "inspect_process_and_outputs_before_retry".into()
+            }));
         }
         plan.effect_observations.push(EffectObservation {
             kind: "local_process".into(),
@@ -354,4 +296,50 @@ pub fn normalize_run_arguments(value: &Value) -> Result<Value, OperationError> {
         return Err(invalid("process arguments exceed their declared bounds"));
     }
     serde_json::to_value(args).map_err(invalid)
+}
+
+fn documentation(id: &str) -> rho_contract::CapabilityDocumentation {
+    let mut documentation = rho_contract::builtin_documentation(id);
+    let condition = match id {
+        "process.reconcile" => Some((
+            "operation_id",
+            "Use the original terminal process.run_local OperationId from this project/caller. Saved PID values never authorize signals: the native owner rechecks same-user process lifetime and original Operation tag before signalling.",
+            "operation.list_recent",
+        )),
+        "process.run_remote" | "slurm.submit" => Some((
+            "configured remote target",
+            "The Host selects the SSH host alias, canonical remote project root and optional Slurm cluster. Arguments cannot override this target. Authentication/transport availability is established by actual native execution, never inferred from configuration.",
+            "host.overview",
+        )),
+        "slurm.snapshot" | "slurm.reconcile" | "slurm.request_cancel" => Some((
+            "submission_operation_id",
+            "Use the original slurm.submit operation in this configured target and caller scope. Native evidence binds host_alias, cluster, job_id, operation_marker and project_root. Cancellation requires exactly one current matching job; a submission response loss never authorizes resubmission.",
+            "operation.list_recent",
+        )),
+        _ => None,
+    };
+    if let Some((parameter, requirement, read)) = condition {
+        documentation
+            .preconditions
+            .push(rho_contract::CapabilityPrecondition {
+                parameter: parameter.into(),
+                requirement: requirement.into(),
+                read_from: Some(CapabilityRef::new(read, 1).unwrap()),
+            });
+    }
+    if id.starts_with("slurm.") {
+        documentation.limitations.push("Scheduler observations are bounded by accounting_lookback_days. An empty/ambiguous lookup and a missing post-cancellation observation retain uncertainty. request_sent records a cancellation request, not confirmed terminal cancellation; inspect the native state separately.".into());
+    }
+    if id == "process.run_remote" {
+        documentation.limitations.push("SSH transport termination is not proof that the remote process ended. Recovery retains the original operation and configured target; no automatic remote replay is available.".into());
+    }
+    documentation.related_capabilities = if id.starts_with("slurm.") {
+        vec!["operation.list_recent", "slurm.snapshot"]
+    } else {
+        vec!["operation.list_recent"]
+    }
+    .into_iter()
+    .map(|id| CapabilityRef::new(id, 1).unwrap())
+    .collect();
+    documentation
 }

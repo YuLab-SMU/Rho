@@ -1,35 +1,21 @@
-use crate::{ProcessReport, RunLocalArguments, normalize_run_arguments};
+use crate::{RunLocalArguments, normalize_run_arguments};
 use async_trait::async_trait;
 use rho_contract::{
     CancellationClass, CapabilityDescriptor, CapabilityKind, CapabilityRef, EffectHint,
     EffectObservation, IdempotencyClass, ObservationCompleteness, Operation, OperationOutcome,
-    RetryClass, TargetRef,
+    RemoteProcessRecovery, RetryClass, TargetRef,
 };
 use rho_operation::{
     Clock, CommitPlan, HandlerError, OperationError, OperationHandler, PlannedEvent, SystemClock,
 };
-use schemars::{JsonSchema, schema_for};
-use serde::{Deserialize, Serialize};
+use schemars::schema_for;
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, sync::Arc};
 use tokio::sync::watch;
 
 pub const REMOTE_EXECUTE_SCOPE: &str = "remote.execute";
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct RemoteTarget {
-    pub host_alias: String,
-    pub project_root: String,
-    pub slurm_cluster: Option<String>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct RemoteExecutionReport {
-    pub target: RemoteTarget,
-    pub transport: ProcessReport,
-    pub remote_exit_code: Option<i32>,
-    pub outcome: OperationOutcome,
-    pub notice: String,
-}
+pub use rho_contract::{RemoteExecutionReport, RemoteTarget};
 #[async_trait]
 pub trait RemoteExecutor: Send + Sync {
     fn target(&self) -> TargetRef;
@@ -51,8 +37,8 @@ impl RemoteRunHandler {
             runtime,
             descriptor: CapabilityDescriptor {
                 capability: CapabilityRef::new("process.run_remote", 1).unwrap(),
-                documentation: rho_contract::builtin_documentation("process.run_remote"),
-                recovery_schema: serde_json::json!({"type":"null"}),
+                documentation: crate::documentation("process.run_remote"),
+                recovery_schema: schema_for!(Option<RemoteProcessRecovery>).to_value(),
                 kind: CapabilityKind::Operation,
                 domain: "execution".into(),
                 input_schema: schema_for!(RunLocalArguments).to_value(),
@@ -119,9 +105,12 @@ impl OperationHandler for RemoteRunHandler {
         plan.outcome = report.outcome;
         if report.outcome == OperationOutcome::Uncertain {
             plan.error = Some(report.notice.clone());
-            plan.recovery = Some(
-                json!({"target":report.target,"source_operation_id":operation.operation_id,"action":"observe_remote_owner_before_retry","automatic_reexecution":false}),
-            );
+            plan.recovery = Some(json!(RemoteProcessRecovery {
+                target: report.target.clone(),
+                source_operation_id: operation.operation_id.as_str().into(),
+                action: "observe_remote_owner_before_retry".into(),
+                automatic_reexecution: false
+            }));
         } else if report.outcome == OperationOutcome::Failed {
             plan.error = Some(format!("remote exit code {:?}", report.remote_exit_code));
         }

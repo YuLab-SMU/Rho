@@ -113,7 +113,12 @@ impl SlurmRuntime for SshRemote {
         args: &SlurmSubmitArguments,
     ) -> Result<SlurmJobRef, HandlerError> {
         let marker = marker(operation);
-        let recovery = json!({"source_operation_id":operation.operation_id,"operation_marker":marker,"target":self.target,"action":"slurm.reconcile_without_resubmission"});
+        let recovery = json!(rho_contract::SlurmSubmissionRecovery {
+            source_operation_id: operation.operation_id.as_str().into(),
+            operation_marker: marker.clone(),
+            target: self.target.clone(),
+            action: "slurm.reconcile_without_resubmission".into()
+        });
         let fail = |error| HandlerError::after_possible_effect(error, Some(recovery.clone()));
         let mut argv = vec![
             "--parsable".into(),
@@ -224,7 +229,10 @@ impl SlurmRuntime for SshRemote {
             .map_err(|error| {
                 HandlerError::after_possible_effect(
                     error,
-                    Some(json!({"source_operation_id":source.operation_id,"job":before.job})),
+                    Some(json!(rho_contract::SlurmCancelRecovery::RequestUncertain {
+                        source_operation_id: source.operation_id.as_str().into(),
+                        job: before.job.clone()
+                    })),
                 )
             })?;
         let (after, notice) = match self.find(source).await {

@@ -1,75 +1,15 @@
 use super::*;
-use rho_contract::OperationStatus;
+use rho_contract::{EnvironmentMaterialRecovery, NextRead, OperationStatus};
 
 pub const CLEANUP_CAPABILITY: &str = "environment.cleanup";
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum MaterialKind {
-    Plan,
-    Realization,
-}
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum MaterialAction {
-    Quarantine,
-    Restore,
-    Purge,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct MaterialObject {
-    pub path: String,
-    pub fingerprint: String,
-    pub bytes: u64,
-    pub entries: u64,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct MaterialState {
-    pub stage: Option<MaterialObject>,
-    pub trash: Option<MaterialObject>,
-    pub native_marker_present: bool,
-    pub live_processes: Vec<u32>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct MaterialChange {
-    pub source_operation_id: String,
-    pub cleanup_operation_id: String,
-    pub action: MaterialAction,
-    pub stage_path: String,
-    pub trash_path: String,
-    pub bytes: u64,
-    pub recoverable: bool,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct RetentionView {
-    pub source_operation_id: String,
-    pub material: MaterialState,
-    pub can_quarantine: bool,
-    pub can_restore: bool,
-    pub can_purge: bool,
-    pub retained_reasons: Vec<String>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct SourceArguments {
-    operation_id: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct CleanupArguments {
-    operation_id: String,
-    expected_fingerprint: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct TrashArguments {
-    cleanup_operation_id: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct ChangeTrashArguments {
-    cleanup_operation_id: String,
-    expected_fingerprint: String,
-}
+use rho_contract::{
+    EnvironmentChangeTrashArguments as ChangeTrashArguments,
+    EnvironmentCleanupArguments as CleanupArguments, EnvironmentSourceArguments as SourceArguments,
+    EnvironmentTrashArguments as TrashArguments,
+};
+pub use rho_contract::{
+    MaterialAction, MaterialChange, MaterialKind, MaterialObject, MaterialState, RetentionView,
+};
 
 #[async_trait]
 pub trait EnvironmentUsage: Send + Sync {
@@ -255,7 +195,7 @@ impl RetentionQuery {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Query,
                 capability: CapabilityRef::new(id, 1).unwrap(),
-                documentation: rho_contract::builtin_documentation(id),
+                documentation: documentation(id),
                 recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "environment".into(),
                 input_schema: if trash {
@@ -304,6 +244,10 @@ impl QueryHandler for RetentionQuery {
             notices: Vec::new(),
         };
         let Ok(_lane) = self.owner.lane.try_lock() else {
+            reply.diagnostics.push(
+                OperationError::ProjectBusy("Environment material lane is busy.".into())
+                    .diagnostic(),
+            );
             return Ok(reply);
         };
         let (source, kind, cleanup_id) = if self.trash {
@@ -323,6 +267,18 @@ impl QueryHandler for RetentionQuery {
                 .map_err(|error| invalid(error.message))?;
             (source, kind, None)
         };
+        reply.next_reads.push(NextRead::query(
+            "operation.list_recent",
+            "Read the original material-producing operation and its outcome.",
+            json!({"operation_id":source.operation.operation_id,"limit":1}),
+        ));
+        if let Some(id) = &cleanup_id {
+            reply.next_reads.push(NextRead::query(
+                "operation.list_recent",
+                "Read the original cleanup operation and recovery identity.",
+                json!({"operation_id":id,"limit":1}),
+            ));
+        }
         match self
             .owner
             .retention_view(&source, kind, cleanup_id.as_deref())
@@ -334,6 +290,9 @@ impl QueryHandler for RetentionQuery {
             }
             Err(error) => {
                 reply.status = QueryStatus::Unavailable;
+                reply
+                    .diagnostics
+                    .push(OperationError::Unavailable(error.message.clone()).diagnostic());
                 reply.notices.push(error.message);
             }
         }
@@ -358,8 +317,8 @@ impl RetentionHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Operation,
                 capability: CapabilityRef::new(id, 1).unwrap(),
-                documentation: rho_contract::builtin_documentation(id),
-                recovery_schema: serde_json::json!({"type":"null"}),
+                documentation: documentation(id),
+                recovery_schema: schema_for!(Option<EnvironmentMaterialRecovery>).to_value(),
                 domain: "environment".into(),
                 input_schema: if matches!(action, MaterialAction::Quarantine) {
                     schema_for!(CleanupArguments).to_value()

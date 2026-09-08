@@ -38,6 +38,13 @@ fn tagged(process: &Process, marker: &OsStr, user: &Uid) -> bool {
         && process.environ().iter().any(|entry| entry == marker)
 }
 fn snapshot(marker: &OsStr, user: &Uid) -> Result<Vec<NativeProcessIdentity>, String> {
+    snapshot_with_owner(marker, user, None)
+}
+fn snapshot_with_owner(
+    marker: &OsStr,
+    user: &Uid,
+    owner: Option<&OsStr>,
+) -> Result<Vec<NativeProcessIdentity>, String> {
     let mut system = System::new();
     system.refresh_processes_specifics(
         ProcessesToUpdate::All,
@@ -59,6 +66,13 @@ fn snapshot(marker: &OsStr, user: &Uid) -> Result<Vec<NativeProcessIdentity>, St
         return Err("same-user process inspection exceeds its bound".into());
     }
     system.refresh_processes_specifics(ProcessesToUpdate::Some(&owned), true, refresh_kind());
+    if let Some(owner) = owner {
+        if system.processes().values().any(|process| {
+            tagged(process, marker, user) && !process.environ().iter().any(|entry| entry == owner)
+        }) {
+            return Err("native process marker belongs to a different Operation".into());
+        }
+    }
     let mut matches = system
         .processes()
         .values()
@@ -70,6 +84,43 @@ fn snapshot(marker: &OsStr, user: &Uid) -> Result<Vec<NativeProcessIdentity>, St
     }
     matches.sort_by_key(|process| process.pid);
     Ok(matches)
+}
+
+/// Bounded OS observation only: no helper process, signal, wait or recovery.
+/// Matches the native tree marker and original Operation tag for the same user.
+pub fn inspect_process_marker(
+    marker: &str,
+    operation_id: &str,
+) -> Result<Vec<NativeProcessIdentity>, String> {
+    if marker.is_empty()
+        || marker.len() > 200
+        || !marker
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return Err("invalid native process marker".into());
+    }
+    rho_contract::OperationId::new(operation_id).map_err(|error| error.to_string())?;
+    if !sysinfo::IS_SUPPORTED_SYSTEM {
+        return Err("native process inspection is unsupported on this platform".into());
+    }
+    let mut own = System::new();
+    let self_pid = Pid::from_u32(std::process::id());
+    own.refresh_processes_specifics(ProcessesToUpdate::Some(&[self_pid]), true, refresh_kind());
+    let process = own
+        .process(self_pid)
+        .ok_or("native self inspection is unavailable")?;
+    if process.environ().is_empty() {
+        return Err("native process environment inspection is unavailable".into());
+    }
+    let user = process
+        .user_id()
+        .ok_or("native process owner is unavailable")?;
+    snapshot_with_owner(
+        OsStr::new(&format!("{marker}=YES")),
+        user,
+        Some(OsStr::new(&format!("RHO_OPERATION_ID={operation_id}"))),
+    )
 }
 
 /// Query fresh native state. No PID saved in a result or journal authorizes a signal.

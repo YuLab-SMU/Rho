@@ -1,15 +1,15 @@
 use async_trait::async_trait;
 use rho_contract::{
     CallerIdentity, CancellationClass, CapabilityDescriptor, CapabilityKind, CapabilityRef,
-    EffectHint, IdempotencyClass, ObservationCompleteness, Operation, OperationOutcome,
-    OperationRecord, QuerySnapshot, QueryStatus, RetryClass, TargetRef,
+    EffectHint, IdempotencyClass, NextRead, ObservationCompleteness, Operation, OperationOutcome,
+    OperationRecord, QuerySnapshot, QueryStatus, RetryClass, SlurmCancelRecovery,
+    SlurmReconcileRecovery, SlurmSubmissionRecovery, TargetRef,
 };
 use rho_operation::{
     Clock, CommitPlan, HandlerError, OperationError, OperationHandler, OperationRecords,
     PlannedEvent, QueryHandler, SystemClock,
 };
-use schemars::{JsonSchema, schema_for};
-use serde::{Deserialize, Serialize};
+use schemars::schema_for;
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, sync::Arc};
 use tokio::sync::Mutex;
@@ -17,72 +17,10 @@ use tokio::sync::Mutex;
 pub const SLURM_READ_SCOPE: &str = "slurm.read";
 pub const SLURM_WRITE_SCOPE: &str = "slurm.write";
 pub const SUBMIT_CAPABILITY: &str = "slurm.submit";
-fn one() -> u16 {
-    1
-}
-fn memory_default() -> u32 {
-    1024
-}
-fn time_default() -> u32 {
-    10
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct SlurmSubmitArguments {
-    /// Bash body, not an sbatch option file. Resource options are typed fields.
-    pub body: String,
-    #[serde(default = "one")]
-    #[schemars(range(min = 1, max = 512))]
-    pub cpus: u16,
-    #[serde(default = "memory_default")]
-    #[schemars(range(min = 1, max = 1048576))]
-    pub memory_mb: u32,
-    #[serde(default = "time_default")]
-    #[schemars(range(min = 1, max = 10080))]
-    pub time_minutes: u32,
-    #[serde(default)]
-    #[schemars(range(max = 64))]
-    pub gpus: u16,
-    #[serde(default)]
-    pub partition: Option<String>,
-    #[serde(default)]
-    pub account: Option<String>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct SlurmSourceArguments {
-    pub submission_operation_id: String,
-}
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct SlurmJobRef {
-    pub host_alias: String,
-    pub cluster: String,
-    pub job_id: String,
-    pub operation_marker: String,
-    pub project_root: String,
-    pub stdout_path: String,
-    pub stderr_path: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct SlurmObservation {
-    pub job: SlurmJobRef,
-    pub state: String,
-    pub exit_code: Option<String>,
-    pub source: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct SlurmLookup {
-    pub source_operation_id: String,
-    pub jobs: Vec<SlurmObservation>,
-    pub accounting_lookback_days: u16,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct SlurmCancellation {
-    pub request_sent: bool,
-    pub before: SlurmObservation,
-    pub after: Option<SlurmObservation>,
-    pub notice: String,
-}
+pub use rho_contract::{
+    SlurmCancellation, SlurmJobRef, SlurmLookup, SlurmObservation, SlurmSourceArguments,
+    SlurmSubmitArguments,
+};
 pub fn terminal_state(state: &str) -> bool {
     matches!(
         state.split([' ', '+']).next().unwrap_or(state),
@@ -184,8 +122,16 @@ impl SlurmHandler {
             action,
             descriptor: CapabilityDescriptor {
                 capability: CapabilityRef::new(name, 1).unwrap(),
-                documentation: rho_contract::builtin_documentation(name),
-                recovery_schema: serde_json::json!({"type":"null"}),
+                documentation: crate::documentation(name),
+                recovery_schema: match action {
+                    SlurmAction::Submit => schema_for!(Option<SlurmSubmissionRecovery>).to_value(),
+                    SlurmAction::Reconcile => {
+                        schema_for!(Option<SlurmReconcileRecovery>).to_value()
+                    }
+                    SlurmAction::RequestCancel => {
+                        schema_for!(Option<SlurmCancelRecovery>).to_value()
+                    }
+                },
                 kind: CapabilityKind::Operation,
                 domain: "execution".into(),
                 input_schema: input,
@@ -270,16 +216,30 @@ impl OperationHandler for SlurmHandler {
             }
             SlurmAction::Reconcile | SlurmAction::RequestCancel => {
                 let source = source.as_ref().unwrap();
-                let lookup = self.owner.runtime.find(&source.operation).await.map_err(|error| HandlerError::after_possible_effect(error, Some(json!({"source_operation_id":source.operation.operation_id,"automatic_reexecution":false}))))?;
+                let lookup = self
+                    .owner
+                    .runtime
+                    .find(&source.operation)
+                    .await
+                    .map_err(|error| {
+                        HandlerError::after_possible_effect(
+                            error,
+                            Some(json!(SlurmReconcileRecovery::LookupUnavailable {
+                                source_operation_id: source.operation.operation_id.as_str().into(),
+                                automatic_reexecution: false
+                            })),
+                        )
+                    })?;
                 if lookup.jobs.len() != 1 {
                     unresolved = Some(source.operation.operation_id.clone());
                     // Cancel cannot guess a job from an absent or ambiguous lookup.
                     if matches!(self.action, SlurmAction::RequestCancel) {
                         return Err(HandlerError::after_possible_effect(
                             "exactly one native job must match before cancellation",
-                            Some(
-                                json!({"source_operation_id":source.operation.operation_id,"lookup":lookup}),
-                            ),
+                            Some(json!(SlurmCancelRecovery::Ambiguous {
+                                source_operation_id: source.operation.operation_id.as_str().into(),
+                                lookup
+                            })),
                         ));
                     }
                 }
@@ -302,9 +262,10 @@ impl OperationHandler for SlurmHandler {
             plan.error = Some(
                 "no unique scheduler job was observed; submission must not be replayed".into(),
             );
-            plan.recovery = Some(
-                json!({"source_operation_id":id,"action":"query_scheduler_without_resubmitting"}),
-            );
+            plan.recovery = Some(json!(SlurmReconcileRecovery::Unresolved {
+                source_operation_id: id.as_str().into(),
+                action: "query_scheduler_without_resubmitting".into()
+            }));
         }
         plan.events.push(PlannedEvent {
             kind: "execution.slurm_observed".into(),
@@ -323,7 +284,7 @@ impl SlurmQueryHandler {
             owner,
             descriptor: CapabilityDescriptor {
                 capability: CapabilityRef::new("slurm.snapshot", 1).unwrap(),
-                documentation: rho_contract::builtin_documentation("slurm.snapshot"),
+                documentation: crate::documentation("slurm.snapshot"),
                 recovery_schema: serde_json::json!({"type":"null"}),
                 kind: CapabilityKind::Query,
                 domain: "execution".into(),
@@ -354,7 +315,11 @@ impl QueryHandler for SlurmQueryHandler {
             .await
             .map_err(|error| invalid(error.message))?;
         let mut snapshot = QuerySnapshot {
-            next_reads: Vec::new(),
+            next_reads: vec![NextRead::query(
+                "operation.list_recent",
+                "Read the original submission result and recovery markers without resubmitting.",
+                json!({"operation_id":args.submission_operation_id,"limit":1}),
+            )],
             diagnostics: Vec::new(),
             target: self.owner.runtime.target(),
             source: "slurm".into(),
@@ -365,21 +330,33 @@ impl QueryHandler for SlurmQueryHandler {
             notices: Vec::new(),
         };
         if !source.status.is_terminal() {
+            snapshot.diagnostics.push(OperationError::ProjectBusy("The original Slurm submission is still active; no second job is submitted by this read.".into()).diagnostic());
             return Ok(snapshot);
         }
         let Ok(_lane) = self.owner.lane.try_lock() else {
+            snapshot.diagnostics.push(
+                OperationError::ProjectBusy("The configured scheduler lane is busy.".into())
+                    .diagnostic(),
+            );
             return Ok(snapshot);
         };
         match self.owner.runtime.find(&source.operation).await {
             Ok(lookup) => {
+                if lookup.jobs.len() != 1 {
+                    snapshot.notices.push("No unique native job is observed within the stated accounting lookback. Absence or ambiguity does not establish that submission failed; preserve the original submission identity.".into());
+                }
                 snapshot.status = QueryStatus::Ready;
                 snapshot.data = Some(serde_json::to_value(lookup).map_err(invalid)?);
             }
             Err(error) => {
                 snapshot.status = QueryStatus::Unavailable;
+                snapshot
+                    .diagnostics
+                    .push(OperationError::Unavailable(error.clone()).diagnostic());
                 snapshot.notices.push(error);
             }
         }
+        snapshot.observed_at_ms = SystemClock.now_ms()?;
         Ok(snapshot)
     }
 }

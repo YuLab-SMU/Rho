@@ -5,15 +5,14 @@ use async_trait::async_trait;
 pub use retention::*;
 use rho_contract::{
     CallerIdentity, CancellationClass, CapabilityDescriptor, CapabilityKind, CapabilityRef,
-    EffectHint, IdempotencyClass, ObservationCompleteness, Operation, OperationOutcome,
+    EffectHint, IdempotencyClass, NextRead, ObservationCompleteness, Operation, OperationOutcome,
     OperationRecord, QuerySnapshot, QueryStatus, RetryClass, TargetRef,
 };
 use rho_operation::{
     Clock, CommitPlan, DomainFactMutation, HandlerError, OperationError, OperationHandler,
     OperationRecords, PlannedEvent, QueryHandler, SystemClock, wait_cancellation,
 };
-use schemars::{JsonSchema, schema_for};
-use serde::{Deserialize, Serialize};
+use schemars::schema_for;
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, sync::Arc};
 use tokio::sync::{Mutex, watch};
@@ -25,108 +24,22 @@ pub const REALIZE_CAPABILITY: &str = "environment.realize";
 pub const VERIFY_CAPABILITY: &str = "environment.verify";
 pub const RECONCILE_CAPABILITY: &str = "environment.reconcile";
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "manager", rename_all = "snake_case", deny_unknown_fields)]
-pub enum PlanArguments {
-    Pak { packages: Vec<String> },
-    Renv { lockfile: String },
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct RealizeArguments {
-    pub plan_operation_id: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct VerifyArguments {
-    pub realization_operation_id: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ReconcileArguments {
-    pub operation_id: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ObserveArguments {
-    #[serde(default)]
-    pub realization_operation_id: Option<String>,
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-}
-fn default_limit() -> usize {
-    200
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct PackageVersion {
-    pub name: String,
-    pub version: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct SourceDigest {
-    pub path: String,
-    pub sha256: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct EnvironmentPlan {
-    pub project_root: String,
-    pub manager: String,
-    pub lock_path: String,
-    pub lock_digest: String,
-    pub r_version: String,
-    pub platform: String,
-    pub packages: Vec<PackageVersion>,
-    pub local_sources: Vec<SourceDigest>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct NamespaceProbe {
-    pub name: String,
-    pub version: Option<String>,
-    pub library: Option<String>,
-    pub loadable: bool,
-    pub error: Option<String>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct EnvironmentRealization {
-    pub project_root: String,
-    pub plan_operation_id: String,
-    pub manager: String,
-    pub lock_digest: String,
-    pub library_path: String,
-    pub library_digest: String,
-    pub renv_lockfile: String,
-    pub r_version: String,
-    pub platform: String,
-    pub packages: Vec<PackageVersion>,
-    pub probes: Vec<NamespaceProbe>,
-    pub verified: bool,
-    pub restart_required: bool,
-    pub activation: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct Verification {
-    pub verified: bool,
-    pub library_digest_matches: bool,
-    pub probes: Vec<NamespaceProbe>,
-    pub errors: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct EnvironmentReconciliation {
-    pub source_operation_id: String,
-    pub project_root: String,
-    pub native_marker: Option<String>,
-    pub cleanup_confirmed: bool,
-    pub stopped_pids: Vec<u32>,
-    pub retained_stage_paths: Vec<String>,
-    pub notices: Vec<String>,
-}
+pub use rho_contract::{
+    EnvironmentMaterialRecovery, EnvironmentObservation, EnvironmentPlan, EnvironmentRealization,
+    EnvironmentRealizeRecovery, EnvironmentReconcileRecovery, EnvironmentReconciliation,
+    EnvironmentRuntimeRecovery, EnvironmentStageRecovery, InstalledEnvironmentPackage,
+    NamespaceProbe, ObserveArguments, PackageVersion, PlanArguments, RealizeArguments,
+    ReconcileArguments, SourceDigest, Verification, VerifyArguments,
+};
 
 #[async_trait]
 pub trait EnvironmentRuntime: Send + Sync {
     fn root(&self) -> &str;
-    async fn observe(&self, library: Option<&str>, limit: usize) -> Result<Value, String>;
+    async fn observe(
+        &self,
+        library: Option<&str>,
+        limit: usize,
+    ) -> Result<EnvironmentObservation, String>;
     async fn plan(
         &self,
         operation_id: &str,
@@ -294,8 +207,18 @@ impl EnvironmentHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Operation,
                 capability: CapabilityRef::new(id, 1).unwrap(),
-                documentation: rho_contract::builtin_documentation(id),
-                recovery_schema: serde_json::json!({"type":"null"}),
+                documentation: documentation(id),
+                recovery_schema: match action {
+                    EnvironmentAction::Plan | EnvironmentAction::Verify => {
+                        schema_for!(Option<EnvironmentRuntimeRecovery>).to_value()
+                    }
+                    EnvironmentAction::Realize => {
+                        schema_for!(Option<EnvironmentRealizeRecovery>).to_value()
+                    }
+                    EnvironmentAction::Reconcile => {
+                        schema_for!(Option<EnvironmentReconcileRecovery>).to_value()
+                    }
+                },
                 domain: "environment".into(),
                 input_schema: input,
                 output_schema: output,
@@ -351,14 +274,18 @@ impl OperationHandler for EnvironmentHandler {
                 }
                 serde_json::to_value(args).map_err(invalid)
             }
-            EnvironmentAction::Realize => serde_json::to_value(
-                serde_json::from_value::<RealizeArguments>(value.clone()).map_err(invalid)?,
-            )
-            .map_err(invalid),
-            EnvironmentAction::Verify => serde_json::to_value(
-                serde_json::from_value::<VerifyArguments>(value.clone()).map_err(invalid)?,
-            )
-            .map_err(invalid),
+            EnvironmentAction::Realize => {
+                let args: RealizeArguments =
+                    serde_json::from_value(value.clone()).map_err(invalid)?;
+                rho_contract::OperationId::new(&args.plan_operation_id).map_err(invalid)?;
+                serde_json::to_value(args).map_err(invalid)
+            }
+            EnvironmentAction::Verify => {
+                let args: VerifyArguments =
+                    serde_json::from_value(value.clone()).map_err(invalid)?;
+                rho_contract::OperationId::new(&args.realization_operation_id).map_err(invalid)?;
+                serde_json::to_value(args).map_err(invalid)
+            }
             EnvironmentAction::Reconcile => {
                 let args: ReconcileArguments =
                     serde_json::from_value(value.clone()).map_err(invalid)?;
@@ -464,8 +391,11 @@ impl OperationHandler for EnvironmentHandler {
                 let report = self.owner.runtime.reconcile(&args.operation_id).await?;
                 successful = report.cleanup_confirmed;
                 if !successful {
-                    recovery = Some(json!({"source_operation_id":args.operation_id,
-                        "action":"inspect_owner_without_automatic_reexecution"}));
+                    recovery = Some(json!(EnvironmentReconcileRecovery {
+                        source_operation_id: args.operation_id,
+                        process_tree_marker: report.native_marker.clone(),
+                        action: "inspect_owner_without_automatic_reexecution".into(),
+                    }));
                 }
                 serde_json::to_value(report).map_err(parse_error)?
             }
@@ -508,11 +438,11 @@ impl EnvironmentObserveHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Query,
                 capability: CapabilityRef::new("environment.observe", 1).unwrap(),
-                documentation: rho_contract::builtin_documentation("environment.observe"),
+                documentation: documentation("environment.observe"),
                 recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "environment".into(),
                 input_schema: schema_for!(ObserveArguments).to_value(),
-                output_schema: schema_for!(QuerySnapshot).to_value(),
+                output_schema: schema_for!(EnvironmentObservation).to_value(),
                 required_scopes: BTreeSet::from([ENVIRONMENT_READ_SCOPE.into()]),
                 potential_effects: BTreeSet::new(),
                 idempotency: IdempotencyClass::Pure,
@@ -532,6 +462,9 @@ impl QueryHandler for EnvironmentObserveHandler {
         if !(1..=500).contains(&args.limit) {
             return Err(invalid("environment observation limit must be 1..=500"));
         }
+        if let Some(id) = &args.realization_operation_id {
+            rho_contract::OperationId::new(id).map_err(invalid)?;
+        }
         serde_json::to_value(args).map_err(invalid)
     }
     async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
@@ -540,7 +473,7 @@ impl QueryHandler for EnvironmentObserveHandler {
             next_reads: Vec::new(),
             diagnostics: Vec::new(),
             target: self.owner.target(),
-            source: "R/environment".into(),
+            source: "environment/cached-native-configuration-and-filesystem".into(),
             observed_at_ms: SystemClock.now_ms()?,
             status: QueryStatus::Busy,
             completeness: ObservationCompleteness::Partial,
@@ -549,9 +482,22 @@ impl QueryHandler for EnvironmentObserveHandler {
         };
         let Ok(_lane) = self.owner.lane.try_lock() else {
             reply.notices.push("Project/Workspace is busy.".into());
+            reply.diagnostics.push(
+                OperationError::ProjectBusy("Project/Workspace is busy.".into()).diagnostic(),
+            );
             return Ok(reply);
         };
         let library = if let Some(id) = &args.realization_operation_id {
+            reply.next_reads.push(NextRead::query(
+                "operation.list_recent",
+                "Read the original realization record and recovery identity.",
+                json!({"operation_id":id,"limit":1}),
+            ));
+            reply.next_reads.push(NextRead::query(
+                "environment.retention",
+                "Inspect material and its current cleanup fingerprint.",
+                json!({"operation_id":id}),
+            ));
             let receipt: EnvironmentRealization = serde_json::from_value(
                 self.owner
                     .output(id, REALIZE_CAPABILITY, None)
@@ -570,18 +516,95 @@ impl QueryHandler for EnvironmentObserveHandler {
             .await
         {
             Ok(mut data) => {
-                data["active_workspace_library"] = json!(self.owner.active_library);
+                data.active_workspace_library = self.owner.active_library.clone();
+                reply.observed_at_ms = data.inventory_observed_at_ms;
+                reply.notices.extend(data.notices.clone());
                 reply.status = QueryStatus::Ready;
-                reply.data = Some(data);
+                reply.data = Some(serde_json::to_value(data).map_err(invalid)?);
             }
             Err(error) => {
                 reply.status = QueryStatus::Unavailable;
+                reply
+                    .diagnostics
+                    .push(OperationError::Unavailable(error.clone()).diagnostic());
                 reply.notices.push(error);
             }
         }
-        reply.observed_at_ms = SystemClock.now_ms()?;
         Ok(reply)
     }
+}
+fn documentation(id: &str) -> rho_contract::CapabilityDocumentation {
+    use rho_contract::CapabilityPrecondition;
+    let mut documentation = rho_contract::builtin_documentation(id);
+    let precondition = match id {
+        REALIZE_CAPABILITY => Some((
+            "plan_operation_id",
+            "Reference a succeeded environment.plan operation in this project and caller scope. Its lock_digest, local source digests and selected R version/platform must still match native bytes and configuration.",
+        )),
+        VERIFY_CAPABILITY => Some((
+            "realization_operation_id",
+            "Reference a succeeded environment.realize operation in this project and caller scope. Verification uses its exact library_path and library_digest; it executes native namespace probes.",
+        )),
+        RECONCILE_CAPABILITY => Some((
+            "operation_id",
+            "Reference the original terminal environment.plan, realize or verify operation in this project and caller scope. Its durable native marker is required to confirm cleanup; reconciliation never reruns the original action.",
+        )),
+        "environment.cleanup" => Some((
+            "operation_id and expected_fingerprint",
+            "Use the original failed/cancelled plan or realization and material.stage.fingerprint from environment.retention. Successful/live/uncertain/referenced material is protected.",
+        )),
+        "environment.restore_cleanup" | "environment.purge_cleanup" => Some((
+            "cleanup_operation_id and expected_fingerprint",
+            "Use the original environment.cleanup identity and material.trash.fingerprint from environment.cleanup_status. Native state is checked again immediately before the requested change.",
+        )),
+        _ => None,
+    };
+    if let Some((parameter, requirement)) = precondition {
+        let read = match id {
+            "environment.cleanup" => "environment.retention",
+            "environment.restore_cleanup" | "environment.purge_cleanup" => {
+                "environment.cleanup_status"
+            }
+            _ => "operation.list_recent",
+        };
+        documentation.preconditions.push(CapabilityPrecondition {
+            parameter: parameter.into(),
+            requirement: requirement.into(),
+            read_from: Some(CapabilityRef::new(read, 1).unwrap()),
+        });
+    }
+    if id == "environment.observe" {
+        documentation.purpose = "Read established native configuration and current bounded filesystem DESCRIPTION metadata. configuration_observed_at_ms/source identify the cached runtime/tool facts; inventory_observed_at_ms identifies package metadata. This query never starts R, loads a namespace, tests loadability, or refreshes native configuration.".into();
+        documentation.limitations.push("Cached renv_available/pak_available describe the stated startup or operation probe, not current loadability. Missing startup evidence is Unavailable; changes to native configuration require an explicit lifecycle or Environment operation.".into());
+    }
+    if matches!(
+        id,
+        "environment.cleanup" | "environment.restore_cleanup" | "environment.purge_cleanup"
+    ) {
+        for example in &mut documentation.examples {
+            example.arguments["expected_fingerprint"] = json!(format!("sha256:{}", "0".repeat(64)));
+        }
+    }
+    documentation.related_capabilities = match id {
+        PLAN_CAPABILITY => vec!["operation.list_recent", REALIZE_CAPABILITY],
+        REALIZE_CAPABILITY => vec![
+            "operation.list_recent",
+            VERIFY_CAPABILITY,
+            "environment.observe",
+            "environment.retention",
+        ],
+        VERIFY_CAPABILITY | RECONCILE_CAPABILITY => {
+            vec!["operation.list_recent", "environment.observe"]
+        }
+        "environment.cleanup" | "environment.restore_cleanup" | "environment.purge_cleanup" => {
+            vec!["environment.cleanup_status", "operation.list_recent"]
+        }
+        _ => vec!["operation.list_recent"],
+    }
+    .into_iter()
+    .map(|id| CapabilityRef::new(id, 1).unwrap())
+    .collect();
+    documentation
 }
 fn invalid(error: impl std::fmt::Display) -> OperationError {
     OperationError::InvalidInput(error.to_string())

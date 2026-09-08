@@ -7,6 +7,7 @@ use process_wrap::tokio::JobObject;
 #[cfg(unix)]
 use process_wrap::tokio::ProcessGroup;
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
+pub use recovery::inspect_process_marker;
 use rho_contract::Operation;
 use rho_execution::{OutputCapture, ProcessExecutor, ProcessReconciliation, RunLocalArguments};
 pub use rho_execution::{ProcessReport, ProcessTermination};
@@ -323,9 +324,18 @@ impl ProcessExecutor for LocalProcessExecutor {
         }
         let operation_id = source.operation_id.as_str().to_owned();
         let recovery_id = operation_id.clone();
-        tokio::task::spawn_blocking(move || recovery::reconcile_tagged(&operation_id)).await
+        tokio::task::spawn_blocking(move || recovery::reconcile_tagged(&operation_id))
+            .await
             .map_err(|error| HandlerError::after_possible_effect(error.to_string(), None))?
-            .map_err(|error| HandlerError::after_possible_effect(error, Some(serde_json::json!({"source_operation_id":recovery_id,"action":"inspect_tagged_processes_without_reexecution"}))))
+            .map_err(|error| {
+                HandlerError::after_possible_effect(
+                    error,
+                    Some(serde_json::json!(rho_contract::ProcessReconcileRecovery {
+                        source_operation_id: recovery_id,
+                        action: Some("inspect_tagged_processes_without_reexecution".into())
+                    })),
+                )
+            })
     }
     async fn run(
         &self,

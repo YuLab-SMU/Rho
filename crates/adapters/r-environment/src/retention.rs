@@ -1,8 +1,7 @@
 use super::{
-    MaterialAction, MaterialChange, MaterialKind, MaterialState, NativeCleanup, REnvironment,
-    before, display,
+    MaterialAction, MaterialChange, MaterialKind, MaterialState, REnvironment, before, display,
 };
-use rho_environment::MaterialObject;
+use rho_environment::{EnvironmentMaterialRecovery, MaterialObject};
 use rho_operation::HandlerError;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -57,13 +56,16 @@ impl REnvironment {
         let (stage, trash) = self.material_paths(source, kind, cleanup)?;
         let marker = self.read_marker(source)?;
         let live_processes = if let Some(marker) = &marker {
-            let report: NativeCleanup = serde_json::from_str(
-                &self
-                    .tree_action("inspect", &marker.marker, Some(source))
-                    .await?,
-            )
-            .map_err(display)?;
-            report.remaining_pids
+            let marker = marker.marker.clone();
+            let source = source.to_string();
+            tokio::task::spawn_blocking(move || {
+                rho_process::inspect_process_marker(&marker, &source)
+            })
+            .await
+            .map_err(display)??
+            .into_iter()
+            .map(|process| process.pid)
+            .collect()
         } else {
             Vec::new()
         };
@@ -171,10 +173,13 @@ impl REnvironment {
         result.map_err(|error| {
             HandlerError::after_possible_effect(
                 error,
-                Some(
-                    json!({"source_operation_id":source,"cleanup_operation_id":cleanup,
-            "stage_path":stage,"trash_path":trash,"action":"query_cleanup_status_before_retry"}),
-                ),
+                Some(json!(EnvironmentMaterialRecovery::Paths {
+                    source_operation_id: source.into(),
+                    cleanup_operation_id: cleanup.into(),
+                    stage_path: stage.to_string_lossy().into_owned(),
+                    trash_path: trash.to_string_lossy().into_owned(),
+                    action: "query_cleanup_status_before_retry".into()
+                })),
             )
         })?;
         let (check_stage, check_trash) =
@@ -182,7 +187,9 @@ impl REnvironment {
                 .map_err(|error| {
                     HandlerError::after_possible_effect(
                         error,
-                        Some(json!({"cleanup_operation_id":cleanup})),
+                        Some(json!(EnvironmentMaterialRecovery::Identity {
+                            cleanup_operation_id: cleanup.into()
+                        })),
                     )
                 })?;
         let agrees = match action {
@@ -197,7 +204,9 @@ impl REnvironment {
         if !agrees {
             return Err(HandlerError::after_possible_effect(
                 "filesystem does not agree with material change",
-                Some(json!({"cleanup_operation_id":cleanup})),
+                Some(json!(EnvironmentMaterialRecovery::Identity {
+                    cleanup_operation_id: cleanup.into()
+                })),
             ));
         }
         Ok(MaterialChange {
