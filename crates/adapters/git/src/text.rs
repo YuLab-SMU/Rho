@@ -797,3 +797,85 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod continuation_tests {
+    use super::*;
+    fn search(text: &str) -> SearchTextArguments {
+        SearchTextArguments {
+            text: text.into(),
+            case_sensitive: true,
+            directory: String::new(),
+            filename_contains: None,
+            show_hidden: false,
+            limit_matches: 1,
+            continuation: None,
+        }
+    }
+    #[tokio::test]
+    async fn skipped_records_span_pages_and_missing_file_is_explicit() {
+        let dir = tempfile::tempdir().unwrap();
+        for index in 0..251 {
+            std::fs::write(dir.path().join(format!("binary{index:03}")), [0, 255]).unwrap();
+        }
+        let project = GitProject::open(dir.path(), vec![]).unwrap();
+        let mut args = search("absent");
+        let mut skipped = BTreeSet::new();
+        let mut pages = 0;
+        loop {
+            let page = project.search_text_page(&args).await.unwrap();
+            assert!(page.matches.is_empty());
+            assert!(json_size(&page) <= PAGE_BYTES);
+            for record in page.skipped {
+                assert!(skipped.insert(record.path));
+            }
+            pages += 1;
+            args.continuation = page.continuation;
+            if page.complete {
+                break;
+            }
+            assert!(pages < 10);
+        }
+        assert!(pages >= 2);
+        assert_eq!(skipped.len(), 251);
+        let page = project
+            .read_text_page(&ReadTextArguments {
+                path: "missing".into(),
+                expected_sha256: None,
+                start_line: 1,
+                limit_lines: 200,
+                continuation: None,
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            page.skipped.unwrap().reason,
+            TextSkipReason::Unreadable
+        ));
+    }
+    #[tokio::test]
+    async fn all_match_positions_are_read_once_across_nested_directories() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("nested")).unwrap();
+        std::fs::write(dir.path().join("a"), "hit hit\nhit").unwrap();
+        std::fs::write(dir.path().join("nested/b"), "hit\nhit").unwrap();
+        std::fs::write(dir.path().join("z"), "hit").unwrap();
+        let project = GitProject::open(dir.path(), vec![]).unwrap();
+        let mut args = search("hit");
+        let mut positions = BTreeSet::new();
+        let mut pages = 0;
+        loop {
+            let page = project.search_text_page(&args).await.unwrap();
+            for found in page.matches {
+                assert!(positions.insert((found.file.path, found.byte_start)));
+            }
+            pages += 1;
+            args.continuation = page.continuation;
+            if page.complete {
+                break;
+            }
+            assert!(pages < 20);
+        }
+        assert_eq!(positions.len(), 6);
+    }
+}
