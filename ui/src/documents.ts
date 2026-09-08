@@ -365,10 +365,26 @@ export class Documents extends Model<DocumentsSnapshot> {
     this.entries.set(d.draft.id, d); this.focus(d.read()); this.changed(d); return d.read();
   }
   applicationRestore(documents: readonly ApplicationDocument[], active: string | null) {
-    this.restore({ active, items: documents.map((d): Draft => ({ id: d.document_id, path: d.path, raw: d.text.replace(/^\uFEFF/, ""),
-      bom: d.text.startsWith("\uFEFF"), eol: d.text.match(/\r\n|\r|\n/)?.[0] ?? "\n", baseRaw: d.base_text, baseHash: d.base_hash,
-      readonly: d.readonly_reason, byteSize: bytes(d.text).length, anchor: d.selection.anchor, head: d.selection.head,
-      scrollTop: 0, scrollLeft: 0, version: d.version, selectionVersion: d.selection.version })) });
+    // Bridge has merged versioned remote resources with concurrent local input.
+    // Keep the resident editor/undo state for every unchanged resource, and do
+    // not invalidate unrelated user file reads which are still in flight.
+    const ids = new Set(documents.map((d) => d.document_id));
+    for (const id of this.entries.keys()) if (!ids.has(id)) { this.entries.delete(id); this.emitDocument(id); }
+    for (const d of documents) {
+      const existing = this.entries.get(d.document_id);
+      if (existing && existing.draft.version === d.version && existing.draft.selectionVersion === d.selection.version &&
+        existing.draft.path === d.path && existing.raw === d.text && existing.draft.baseRaw === d.base_text &&
+        existing.draft.baseHash === d.base_hash && existing.draft.readonly === d.readonly_reason &&
+        existing.state.selection.main.anchor === d.selection.anchor && existing.state.selection.main.head === d.selection.head) continue;
+      const draft: Draft = { id: d.document_id, path: d.path, raw: d.text.replace(/^\uFEFF/, ""),
+        bom: d.text.startsWith("\uFEFF"), eol: d.text.match(/\r\n|\r|\n/)?.[0] ?? "\n", baseRaw: d.base_text, baseHash: d.base_hash,
+        readonly: d.readonly_reason, byteSize: bytes(d.text).length, anchor: d.selection.anchor, head: d.selection.head,
+        scrollTop: existing?.draft.scrollTop ?? 0, scrollLeft: existing?.draft.scrollLeft ?? 0,
+        version: d.version, selectionVersion: d.selection.version };
+      this.entries.set(d.document_id, new DocumentState(draft)); this.emitDocument(d.document_id);
+    }
+    this.activeId = active && this.entries.has(active) ? active : null;
+    this.publish();
   }
   /** A saved capture changes the base; later keystrokes retain their current text. */
   applicationConfirmSave(documentId: string, captured: string, path: string, hash: string) {

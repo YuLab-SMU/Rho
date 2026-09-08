@@ -22,6 +22,8 @@ import type { ApplicationContextState } from "./generated/ApplicationContextStat
 import type { MediaPage } from "./generated/MediaPage";
 import type { PackageSnapshotData } from "./generated/PackageSnapshotData";
 import type { ObjectReadPage } from "./generated/ObjectReadPage";
+import type { MediaReference } from "./generated/MediaReference";
+import type { PersistenceFragment } from "./shared/ports";
 
 /** Composition and client lifecycle only. Scientific state lives in its module. */
 export class Studio {
@@ -42,6 +44,7 @@ export class Studio {
   readonly persistence: ApplicationPersistence;
   readonly preferences: Preferences;
   readonly application: ApplicationBridge;
+  private readonly documentPersistence: PersistenceFragment;
   private readonly subscriptions: (() => void)[] = [];
   private stopped = false;
   private lifecycle = 0;
@@ -135,7 +138,22 @@ export class Studio {
       reportError: this.session.reportError.bind(this.session),
       modules: {
         context, documents: this.documents.applicationDocuments.bind(this.documents), restoreDocuments: this.documents.applicationRestore.bind(this.documents),
-        restoreViews: async (saved) => {
+        restoreViews: async (desired) => {
+          // Observe any scientific evidence first. Resolve the latest local
+          // intent only when all remaining layout commands can run together.
+          const requested = desired(), project = this.session.project;
+          let reference: MediaReference | null = null, plotError = "";
+          if (requested.selected_plot && project) {
+            const selection = requested.selected_plot;
+            try {
+              const observed = await query(project, "workspace.list_outputs", { operation_id: selection.operation_id, after_sequence: Math.max(0, selection.sequence - 1), limit: 1 });
+              const found = (observed.data as MediaPage | null)?.media.find((item) => item.reference.sequence === selection.sequence)?.reference;
+              if (observed.status === "ready" && found?.operation_id === selection.operation_id) reference = found;
+              else plotError = observed.notices.join("\n") || "The synchronized selected plot is currently unavailable.";
+            } catch (error) { plotError = error instanceof Error ? error.message : String(error); }
+          }
+          if (project !== this.session.project) throw new Error("The project changed while restoring the selected plot.");
+          const saved = desired();
           const current = this.layout.getSnapshot();
           for (const id of Object.keys(current.knownViews)) if (this.layout.has(id) && !saved.views.some((view) => view.view_id === id)) this.layout.close(id);
           for (const view of saved.views) {
@@ -147,16 +165,10 @@ export class Studio {
           const session = this.session.context().session;
           if (saved.selected_object?.native_session_id === session && saved.selected_object.object_ref) this.objects.selectObservation(saved.selected_object);
           if (saved.selected_package?.native_session_id === session) this.packages.restoreSelection(saved.selected_package);
-          if (saved.selected_plot) {
-            const project = this.session.project!, selection = saved.selected_plot;
-            const observed = await query(project, "workspace.list_outputs", { operation_id: selection.operation_id, after_sequence: Math.max(0, selection.sequence - 1), limit: 1 });
-            const reference = (observed.data as MediaPage | null)?.media.find((item) => item.reference.sequence === selection.sequence)?.reference;
-            if (project !== this.session.project) throw new Error("The project changed while restoring the selected plot.");
-            if (observed.status !== "ready" || !reference || reference.operation_id !== selection.operation_id) {
-              this.session.reportError(observed.notices.join("\n") || "The synchronized selected plot is currently unavailable.");
-            } else {
-              this.outputs.restoreReferences([mediaKey(reference)]); this.plots.locate(reference);
-            }
+          if (saved.selected_plot && requested.selected_plot && saved.selected_plot.operation_id === requested.selected_plot.operation_id && saved.selected_plot.sequence === requested.selected_plot.sequence) {
+            if (reference) {
+              this.outputs.restoreReferences([mediaKey(reference)]); this.plots.restoreSelection(reference);
+            } else if (plotError) this.session.reportError(plotError);
           }
           for (const view of saved.views) if (view.active) activateView(view.view_id);
           if (saved.active_view_id) activateView(saved.active_view_id);
@@ -210,8 +222,11 @@ export class Studio {
 
     for (const fragment of [this.operations, this.console, this.files, this.objects, this.packages, this.plots, this.layout])
       this.persistence.register(fragment);
-    this.persistence.register({ serialize: () => ({}),
-      restore: (value) => this.documents.restore((value as { documents?: unknown } | null)?.documents) });
+    this.documentPersistence = { serialize: () => ({}),
+      restorationKey: () => ({ active: this.documents.active, documents: this.documents.applicationDocuments().map((d) => [d.document_id, d.version, d.selection.version]) }),
+      restore: (value) => this.documents.restore((value as { documents?: unknown } | null)?.documents) };
+    this.persistence.register(this.documentPersistence);
+    this.persistence.prepareRestore();
 
     this.subscriptions.push(
       this.notifications.on("projectChanged", () => {
@@ -220,6 +235,7 @@ export class Studio {
         this.operations.reset(); this.console.reset(); this.files.reset(); this.objects.reset(); this.packages.reset();
         this.documents.reset(); this.outputs.reset(); this.mediaCache.reset(); this.plots.reset(); this.layout.resetState(); this.navigation.reset();
         this.application.reset();
+        this.persistence.prepareRestore();
       }),
       this.notifications.on("sessionChanged", () => {
         this.application.disconnected();
@@ -316,8 +332,10 @@ export class Studio {
           this.phase = "restore";
         }
         if (this.phase === "restore") {
-          await this.persistence.restore();
+          const retained = await this.persistence.restore();
           if (!current()) return;
+          this.application.prepareRestore({ views: retained.has(this.layout), documents: retained.has(this.documentPersistence),
+            object: retained.has(this.objects), package: retained.has(this.packages), plot: retained.has(this.plots) });
           this.phase = "native";
         }
         if (this.phase === "native") {

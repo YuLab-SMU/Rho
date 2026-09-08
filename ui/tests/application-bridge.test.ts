@@ -77,7 +77,7 @@ function fixture(initial: ApplicationDocument[] = [draft()], remoteInitial: Appl
   const modules: ApplicationModules = {
     context: () => structuredClone(localContext), documents: () => structuredClone(local),
     restoreDocuments: vi.fn((documents, active) => { local = structuredClone([...documents]); localContext.active_document_id = active; }),
-    restoreViews: vi.fn((next) => { localContext.views = structuredClone(next.views); }),
+    restoreViews: vi.fn((desired) => { localContext = structuredClone(desired()); }),
     openView: vi.fn(), activateView: vi.fn(), closeView: vi.fn(), openDocument: vi.fn(async () => {}), createDocument: vi.fn(), checkDocument: check,
     setSelection: vi.fn(), selectObject: vi.fn(), selectPackage: vi.fn(), selectPlot: vi.fn(),
     editDocument: vi.fn((r, changes) => { check(r); edits++; const d = local.find((d) => d.document_id === r.document_id)!; for (const change of [...changes].reverse()) d.text = d.text.slice(0, change.from) + change.insert + d.text.slice(change.to); d.version = crypto.randomUUID(); d.selection.version = crypto.randomUUID(); }),
@@ -94,6 +94,9 @@ function fixture(initial: ApplicationDocument[] = [draft()], remoteInitial: Appl
     queued.push(grant); return grant;
   };
   return { bridge, ports, transport, modules, scope, queue, receipts, local: () => local, remote: () => remote, edits: () => edits, savedText: () => savedText,
+    localContext: () => localContext, remoteContext: () => remoteContext,
+    setLocalContext: (patch: Partial<ApplicationContextState>) => { localContext = { ...localContext, ...patch }; },
+    setRemoteContext: (patch: Partial<ApplicationContextState>) => { remoteContext = { ...remoteContext, ...patch }; },
     advance: (ms: number) => { time += ms; }, type: (text: string) => { local[0].text = text; local[0].version = crypto.randomUUID(); local[0].selection.version = crypto.randomUUID(); } };
 }
 
@@ -128,11 +131,55 @@ it("restores the exact draft and independent disk base through paged owner reads
   expect(f.local()[0]).toMatchObject({ text: d.text, base_text: d.base_text, base_hash: d.base_hash });
   expect(vi.mocked(f.transport.readDocument).mock.calls.map(([, args]) => [args.content, args.offset_utf8])).toEqual([["draft", 0], ["draft", 65536], ["base", 0]]);
 });
-it("retains local input when it arrives during restoration", async () => {
+it("retains local input during restoration and synchronizes it against the observed remote version", async () => {
   const f = fixture([draft("local")], [draft("remote")]); const original = f.transport.readDocument, delay = deferred<void>();
   f.transport.readDocument = vi.fn(async (...args) => { await delay.promise; return original(...args); });
   const starting = f.bridge.start(); for (let i = 0; i < 20; i++) await Promise.resolve(); f.type("input during restore"); delay.resolve(); await starting;
-  expect(f.local()[0].text).toBe("input during restore"); expect(f.modules.restoreDocuments).not.toHaveBeenCalled(); expect(f.bridge.ready).toBe(false);
+  expect(f.local()[0].text).toBe("input during restore"); expect(f.remote()[0].text).toBe("input during restore"); expect(f.bridge.ready).toBe(true);
+  const request = vi.mocked(f.transport.bridge).mock.calls.find(([, request]) => request.kind === "sync")![1];
+  expect(request.kind === "sync" && request.changes.documents[0]).toMatchObject({ expected_version: "v1", expected_selection_version: "selection-1" });
+});
+it("preserves a view opened after persistence but before bridge registration with no documents", async () => {
+  const f = fixture([], []), consoleView = { view_id: "console", view_type: "console", document_id: null, active: true } as const;
+  f.setLocalContext({ views: [consoleView], active_view_id: "console" });
+  f.setRemoteContext({ views: [consoleView], active_view_id: "console" });
+  f.bridge.prepareRestore();
+  const packages = { view_id: "packages", view_type: "packages", document_id: null, active: true } as const;
+  f.setLocalContext({ views: [consoleView, packages], active_view_id: "packages" });
+  await f.bridge.start();
+  expect(f.localContext().views).toContainEqual(packages); expect(f.localContext().active_view_id).toBe("packages");
+  expect(f.remoteContext().active_view_id).toBe("packages"); expect(f.bridge.ready).toBe(true);
+});
+it("resolves current view intent after delayed evidence and never reopens a newly closed view", async () => {
+  const f = fixture([], []), consoleView = { view_id: "console", view_type: "console", document_id: null, active: true } as const;
+  const packages = { view_id: "packages", view_type: "packages", document_id: null, active: true } as const;
+  f.setLocalContext({ views: [consoleView, packages], active_view_id: "packages" });
+  f.setRemoteContext({ views: [consoleView, packages], active_view_id: "packages" });
+  const delayed = deferred<void>(), entered = deferred<void>();
+  f.modules.restoreViews = vi.fn(async (desired) => { entered.resolve(); await delayed.promise; f.setLocalContext(desired()); });
+  const starting = f.bridge.start(); await entered.promise;
+  f.setLocalContext({ views: [consoleView], active_view_id: "console" }); delayed.resolve(); await starting;
+  expect(f.localContext().views).toEqual([consoleView]); expect(f.remoteContext().views).toEqual([consoleView]);
+  expect(f.bridge.ready).toBe(true); expect(f.ports.reportError).not.toHaveBeenCalled();
+});
+it("restores unrelated remote drafts while retaining only the draft edited during the read", async () => {
+  const first = draft("old first"), other = { ...draft("remote second"), document_id: "d2", path: "other.R" };
+  const f = fixture([first], [draft("remote first"), other]), entered = deferred<void>(), delayed = deferred<void>();
+  const read = f.transport.readDocument;
+  f.transport.readDocument = vi.fn(async (...args) => { entered.resolve(); await delayed.promise; return read(...args); });
+  const starting = f.bridge.start(); await entered.promise; f.type("user first"); delayed.resolve(); await starting;
+  expect(f.local().find((d) => d.document_id === "d1")?.text).toBe("user first");
+  expect(f.local().find((d) => d.document_id === "d2")?.text).toBe("remote second");
+  expect(f.remote().find((d) => d.document_id === "d1")?.text).toBe("user first"); expect(f.bridge.ready).toBe(true);
+});
+it("native observation handle refreshes do not block draft restoration", async () => {
+  const f = fixture([], [draft("remote")]), entered = deferred<void>(), delayed = deferred<void>();
+  f.setLocalContext({ selected_object: { name: "data", native_session_id: "native-1", object_ref: "old-observation" } });
+  const read = f.transport.readDocument;
+  f.transport.readDocument = vi.fn(async (...args) => { entered.resolve(); await delayed.promise; return read(...args); });
+  const starting = f.bridge.start(); await entered.promise;
+  f.setLocalContext({ selected_object: { name: "data", native_session_id: "native-1", object_ref: "new-observation" } });
+  delayed.resolve(); await starting; expect(f.local()[0].text).toBe("remote"); expect(f.bridge.ready).toBe(true);
 });
 it("saves one captured version while keeping subsequent input dirty and never runs after disconnect", async () => {
   const f = fixture(); await f.bridge.start(); const grant = await f.queue({ kind: "run_file", document: reference(f.local()[0]), target_path: null });

@@ -30,7 +30,8 @@ export interface ApplicationModules {
   context(): Omit<ApplicationContextState, "version">;
   documents(): readonly ApplicationDocument[];
   restoreDocuments(documents: readonly ApplicationDocument[], active: string | null): void;
-  restoreViews(context: ApplicationContextState): Promise<void> | void;
+  /** Resolve the latest merged intent after asynchronous evidence reads, then apply synchronously. */
+  restoreViews(context: () => ApplicationContextState): Promise<void> | void;
   openView(type: ApplicationViewType, id?: string): void;
   activateView(id: string): void;
   closeView(id: string): void;

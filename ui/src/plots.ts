@@ -83,9 +83,12 @@ export class Plots extends Model<PlotsSnapshot> {
     const next = constrain(current, image, canvas);
     if (next.x !== current.x || next.y !== current.y) this.transform(id, key, next, false);
   }
-  locate(reference: MediaReference) {
+  restoreSelection(reference: MediaReference) {
     this.rememberReference(reference);
     this.update("plots", { selected: mediaKey(reference) }, true);
+  }
+  locate(reference: MediaReference) {
+    this.restoreSelection(reference);
     this.deps.showPlots?.();
   }
   newView(reference: MediaReference) {

@@ -29,11 +29,49 @@ function fixture() {
   persistence.register({ serialize: () => ({ layout }), restore: (value) => { layout = (value as { layout?: string } | null)?.layout ?? "layout-a"; } });
   cleanup.push(() => { persistence.stop(); persistence.dispose(); });
   return { persistence, port, restore, draft: () => draft, disk: () => disk,
+    layoutValue: () => layout,
     edit: (value: string) => { draft = value; persistence.changed(); },
     layout: (value: string) => { layout = value; persistence.changed(); },
     remote: (value: string) => { disk = { ...disk, version: `v${++revision}`, value: { version: 2, draft: value, layout } }; },
     setScope: (patch: Partial<RequestContext>) => { scope = { ...scope, ...patch }; } };
 }
+
+it("retains startup view actions while independently restoring saved module state and its CAS version", async () => {
+  const f = fixture(), read = deferred<ApplicationState>();
+  f.persistence.prepareRestore();
+  f.layout("opened before persistence read");
+  f.port.readState.mockReturnValueOnce(read.promise);
+  const restoring = f.persistence.restore();
+  await vi.advanceTimersByTimeAsync(500);
+  expect(f.port.writeState).not.toHaveBeenCalled();
+  f.layout("opened during persistence read"); read.resolve(structuredClone(f.disk()));
+  const retained = await restoring;
+  expect(retained.size).toBe(1); expect(f.draft()).toBe("server");
+  expect(f.layoutValue()).toBe("opened during persistence read"); expect(f.persistence.unsynced).toBe(true);
+  await f.persistence.flush();
+  expect(f.port.writeState).toHaveBeenCalledExactlyOnceWith("/a", { key: "studio", version: "v1", value: { version: 2, draft: "server", layout: "opened during persistence read" } });
+  expect(f.persistence.unsynced).toBe(false);
+});
+
+it("uses an independent restore identity for documents without copying their body into the fragment store", async () => {
+  const f = fixture(); let version = "initial", text = "local", restored = false;
+  const fragment = { serialize: () => ({}), restorationKey: () => version, restore: () => { restored = true; text = "old persisted draft"; } };
+  f.persistence.register(fragment); f.persistence.prepareRestore();
+  version = "typed-version"; text = "new typed draft"; f.persistence.changed();
+  const retained = await f.persistence.restore();
+  expect(retained.has(fragment)).toBe(true); expect(restored).toBe(false); expect(text).toBe("new typed draft");
+  await f.persistence.flush(); expect(JSON.stringify(f.port.writeState.mock.calls)).not.toContain("new typed draft");
+});
+
+it("keeps the startup baseline across a failed read and never writes before reading the remote version", async () => {
+  const f = fixture(); f.port.readState.mockRejectedValueOnce(new Error("offline"));
+  await expect(f.persistence.restore()).rejects.toThrow("offline");
+  f.layout("user layout while disconnected"); await vi.advanceTimersByTimeAsync(500);
+  expect(f.port.writeState).not.toHaveBeenCalled();
+  await f.persistence.restore();
+  expect(f.layoutValue()).toBe("user layout while disconnected"); expect(f.draft()).toBe("server");
+  await f.persistence.flush(); expect(f.port.writeState.mock.calls[0][1].version).toBe("v1");
+});
 
 it("coalesces edits for 400 ms and writes all module fragments in one versioned studio record", async () => {
   const f = fixture(); await f.persistence.restore();

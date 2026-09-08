@@ -17,10 +17,16 @@ type LocalSnapshot = { context: ApplicationContextState; documents: ApplicationD
 type PendingSync = { id: string; changes: ApplicationChanges; snapshot: LocalSnapshot };
 type PendingCompletion = { value: ApplicationCommandCompletion; snapshot: LocalSnapshot; grant: ApplicationCommandGrant; captured: string | null; uncertain: boolean };
 type PendingExecution = { grant: ApplicationCommandGrant; captured: string | null; step: ApplicationExecutionStep; continueRun: boolean; saveConfirmed: boolean };
+type RestoreKeep = { documents?: boolean; views?: boolean; object?: boolean; package?: boolean; plot?: boolean };
+type RestoreBaseline = { documents: ReturnType<typeof ref>[]; context: Omit<ApplicationContextState, "version">; keep: RestoreKeep };
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const sameProject = (a: RequestContext, b: RequestContext) => a.project === b.project;
 const ref = (d: ApplicationDocument) => ({ document_id: d.document_id, document_version: d.version, selection_version: d.selection.version });
+// Compare user-visible selection identities, never observation timestamps or
+// refreshed object/package handles that can change without a user action.
+const objectChoice = (c: Omit<ApplicationContextState, "version">) => c.selected_object && [c.selected_object.name, c.selected_object.native_session_id];
+const packageChoice = (c: Omit<ApplicationContextState, "version">) => c.selected_package && [c.selected_package.package, c.selected_package.copy_id, c.selected_package.native_session_id];
 
 /** One resident bridge per window, stepped by Studio's existing coordinator.
  * Delivery, CAS synchronization and scientific acceptance each retain their own
@@ -45,13 +51,33 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
   private error = "";
   private lastReceipt: ApplicationCommandReceipt | null = null;
   private initialized = false;
-  private restoreConflict = false;
+  private restoreBaseline: RestoreBaseline | null = null;
   private stopped = false;
   constructor(private readonly ports: ApplicationBridgePorts) { super(); }
   protected readSnapshot() { return { online: !!this.session && this.ports.scope().connected && this.now() < this.renewedAt + 15000, initialized: this.initialized, error: this.error, receipt: this.lastReceipt }; }
   private now() { return this.ports.now?.() ?? Date.now(); }
   get window() { return (this.session ?? this.registeringSession)?.window ?? null; }
   get ready() { return this.initialized; }
+  /** Studio calls this immediately after persistent fragments restore, before
+   * native/checkpoint waits. Edits retained by those fragments stay local. */
+  prepareRestore(keep: RestoreKeep = {}) {
+    this.restoreBaseline = { documents: this.ports.modules.documents().map(ref), context: structuredClone(this.ports.modules.context()), keep };
+  }
+  private restoredContext(saved: ApplicationContextState, baseline: RestoreBaseline, documents = this.ports.modules.documents()): ApplicationContextState {
+    const local = this.ports.modules.context(), before = baseline.context, keep = baseline.keep;
+    const viewsChanged = keep.views || !same(local.views, before.views);
+    const activeChanged = viewsChanged || local.active_view_id !== before.active_view_id;
+    const active = keep.documents || activeChanged || local.active_document_id !== before.active_document_id ? local.active_document_id : saved.active_document_id;
+    const views = (viewsChanged ? local.views : saved.views).filter((view) => !view.document_id || documents.some((d) => d.document_id === view.document_id));
+    const activeView = activeChanged ? local.active_view_id : saved.active_view_id;
+    return { ...saved, label: local.label, native_session_id: local.native_session_id,
+      views, active_view_id: views.some((view) => view.view_id === activeView) ? activeView : null,
+      active_document_id: documents.some((d) => d.document_id === active) ? active : null,
+      selected_object: keep.object || !same(objectChoice(local), objectChoice(before)) ? local.selected_object : saved.selected_object,
+      selected_package: keep.package || !same(packageChoice(local), packageChoice(before)) ? local.selected_package : saved.selected_package,
+      selected_plot: keep.plot || !same(local.selected_plot, before.selected_plot) ? local.selected_plot : saved.selected_plot,
+    };
+  }
   private snapshot(): LocalSnapshot {
     const data = this.ports.modules.context();
     const previous = this.localContext;
@@ -97,11 +123,10 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
   private async perform(scope: RequestContext, generation: number) {
     const project = scope.project!, transport = this.ports.transport;
     const current = () => this.assertScope(scope, generation);
-    if (this.restoreConflict) return;
     if (this.registeredScope && !sameProject(this.registeredScope, scope)) { this.reset(); return; }
     if (!this.session) {
-      const localBefore = this.ports.modules.documents().map((d) => ({ id: d.document_id, version: d.version, selection: d.selection.version }));
-      const contextBefore = structuredClone(this.ports.modules.context());
+      this.restoreBaseline ??= { documents: this.ports.modules.documents().map(ref), context: structuredClone(this.ports.modules.context()), keep: {} };
+      const baseline = this.restoreBaseline;
       const registration = await transport.bridge(project, { kind: "register", window_id: this.ports.identity.windowId,
         incarnation: this.ports.identity.incarnation, label: this.ports.modules.context().label,
         previous_session: this.ports.previousSession?.() ?? this.ports.identity.previousSession ?? null });
@@ -132,17 +157,21 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
         restored.push({ document_id: summary.document.document_id, version: summary.document.document_version, path: summary.path,
           text, base_text: base, base_hash: summary.base_hash, selection: summary.selection, readonly_reason: summary.readonly_reason });
       }
-      if (restored.length && (!same(localBefore, this.ports.modules.documents().map((d) => ({ id: d.document_id, version: d.version, selection: d.selection.version }))) || !same(contextBefore, this.ports.modules.context()))) {
-        this.restoreConflict = true;
-        throw new Error("Local input changed while synchronized window state was being restored. Local input was retained; restoration needs explicit resolution.");
+      if (restored.length) {
+        const local = this.ports.modules.documents();
+        const removed = new Set(baseline.documents.filter((d) => !local.some((now) => now.document_id === d.document_id)).map((d) => d.document_id));
+        const retained = local.filter((d) => baseline.keep.documents || !same(ref(d), baseline.documents.find((before) => before.document_id === d.document_id)) || !restored.some((saved) => saved.document_id === d.document_id));
+        const documents = [...restored.filter((d) => !removed.has(d.document_id) && !retained.some((now) => now.document_id === d.document_id)), ...retained];
+        const active = this.restoredContext(registration.data.context, baseline, documents).active_document_id;
+        this.ports.modules.restoreDocuments(documents, documents.some((d) => d.document_id === active) ? active : null);
       }
-      if (restored.length) this.ports.modules.restoreDocuments(restored, registration.data.context.active_document_id);
-      if (registration.data.context.views.length) await this.ports.modules.restoreViews(registration.data.context);
+      if (registration.data.context.views.length) await this.ports.modules.restoreViews(() => this.restoredContext(registration.data.context, baseline));
       current();
       this.session = session; this.registeredScope = scope;
       this.registeringSession = null;
       this.localContext = structuredClone(registration.data.context);
       this.acknowledged = { context: structuredClone(registration.data.context), documents: restored };
+      this.restoreBaseline = null;
       this.initialized = true;
       this.publish();
     }
@@ -305,7 +334,7 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
   }
   async flush() {
     await this.step();
-    if (!this.session || !this.initialized || this.restoreConflict) throw new Error(this.error || "Application drafts have not been synchronized.");
+    if (!this.session || !this.initialized) throw new Error(this.error || "Application drafts have not been synchronized.");
     const scope = this.ports.scope(), generation = this.generation;
     if (!scope.project || !scope.connected) throw new Error("The window is offline; drafts are retained locally.");
     if (this.pendingCompletion) await this.finishCompletion(scope.project, () => this.assertScope(scope, generation));
@@ -315,7 +344,7 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
   reset() {
     this.generation++; this.session = null; this.registeringSession = null; this.registeredScope = null; this.acknowledged = null; this.localContext = null;
     this.pendingSync = null; this.pendingCompletion = null; this.execution = null; this.recovery = null; this.claimRequestId = null;
-    this.initialized = false; this.restoreConflict = false; this.error = ""; this.lastReceipt = null; this.publish();
+    this.initialized = false; this.restoreBaseline = null; this.error = ""; this.lastReceipt = null; this.publish();
   }
   stop() { this.stopped = true; this.generation++; this.disconnected(); this.dispose(); }
 }

@@ -1844,9 +1844,30 @@ test("same-name previews retain independent demand and closed Packages restores 
   await page.locator(".packages-panel:visible").getByLabel("Search Packages").fill("stats");
   await page.getByRole("tab", { name: "Packages", exact: true }).locator(".flexlayout__tab_button_trailing").click();
   await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
-  await page.reload();
-  await page.getByRole("button", { name: "Commands", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Show Packages", exact: true }).click();
+  // Hold a real registration response so the command necessarily competes
+  // with restoration; waiting for restoration before clicking would hide it.
+  let registered!: () => void, releaseRestore!: () => void;
+  const registration = new Promise<void>((resolve) => { registered = resolve; });
+  const restoreGate = new Promise<void>((resolve) => { releaseRestore = resolve; });
+  const bridgeRoute = async (route: import("@playwright/test").Route) => {
+    const request = route.request().postDataJSON()?.frame?.request;
+    if (request?.method === "application_bridge" && request.params.kind === "register") {
+      const response = await route.fetch(); registered(); await restoreGate; await route.fulfill({ response });
+    } else await route.continue();
+  };
+  await page.route("**/api/application/bridge", bridgeRoute);
+  try {
+    await page.reload(); await registration;
+    await page.getByRole("button", { name: "Commands", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Show Packages", exact: true }).click();
+    const preserved = page.waitForResponse((response) => {
+      if (!response.url().endsWith("/api/application/bridge")) return false;
+      const request = response.request().postDataJSON()?.frame?.request;
+      return request?.method === "application_bridge" && request.params.kind === "sync" &&
+        request.params.changes.context?.context.views.some((view: { view_id: string }) => view.view_id === "packages") === true;
+    });
+    releaseRestore(); expect((await (await preserved).json()).ok).toBe(true);
+  } finally { releaseRestore(); await page.unroute("**/api/application/bridge", bridgeRoute); }
   await expect(page.locator(".packages-panel:visible").getByLabel("Search Packages")).toHaveValue("stats");
   await page.getByRole("tab", { name: "Objects", exact: true }).click();
   await page.getByLabel("Filter Objects").fill("rho_dual_preview");

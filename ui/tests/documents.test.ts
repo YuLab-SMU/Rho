@@ -184,6 +184,29 @@ it("preserves editor selection and undo when a view reconfigures its extensions"
   expect(undo({ state: d().state, dispatch: (transaction) => { documents.applyTransactions(d(), [transaction]); } })).toBe(true);
   expect(d().raw).toBe("first");
 });
+it("merges restored resources without replacing a retained editor state, selection, scroll or undo", () => {
+  const { documents, d } = fixture("first");
+  documents.applyTransactions(d(), [d().state.update({ effects: StateEffect.reconfigure.of([history()]) })]);
+  documents.applyTransactions(d(), [d().state.update({ changes: { from: 0, to: 5, insert: "typed locally" }, selection: { anchor: 5 } })]);
+  documents.setScroll(d(), 120, 3);
+  const original = d(), remote = { ...documents.applicationDocuments()[0], document_id: "remote-document", path: "remote.R", text: "restored remote", version: "remote-version", selection: { anchor: 0, head: 0, version: "remote-selection" } };
+  documents.applicationRestore([...documents.applicationDocuments(), remote], original.id);
+  expect(documents.owns(original)).toBe(true); expect(d().state).toBe(original.state);
+  expect(d().state.selection.main.head).toBe(5); expect(d().draft.scrollTop).toBe(120);
+  expect(documents.getDocumentSnapshot(remote.document_id)?.raw).toBe("restored remote");
+  expect(undo({ state: d().state, dispatch: (transaction) => documents.applyTransactions(d(), [transaction]) })).toBe(true);
+  expect(d().raw).toBe("first");
+});
+it("keeps a user file read in flight while another restored resource is incorporated", async () => {
+  const { documents, query } = fixture(); let release!: (value: unknown) => void;
+  query.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  const opening = documents.open("delayed.R");
+  const remote = { ...documents.applicationDocuments()[0], document_id: "remote-document", path: "remote.R", text: "remote body", version: "remote-version" };
+  documents.applicationRestore([...documents.applicationDocuments(), remote], "document-one");
+  release(file("user opened this file"));
+  await expect(opening).resolves.toMatchObject({ raw: "user opened this file" });
+  expect(documents.items.size).toBe(3);
+});
 it("old view callbacks cannot mutate a restored draft with the same persisted id", () => {
   const { documents, d, scope } = fixture("original"), oldView = d();
   scope({ epoch: 2, project: "/other" }); documents.restore(null);

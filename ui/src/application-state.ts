@@ -23,6 +23,8 @@ export class ApplicationPersistence extends Model<SyncState> {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private generation = 0;
   private stopped = false;
+  private restorePending = true;
+  private restoreBaseline: Map<PersistenceFragment, string> | null = null;
   constructor(private port: StatePort, private context: () => RequestContext, private readonly stateKey = "studio", private readonly adoptCurrentStudio = false) {
     super(); this.state = { key: stateKey, version: null, value: null };
   }
@@ -31,11 +33,20 @@ export class ApplicationPersistence extends Model<SyncState> {
   get syncError() { return this.error; }
   get stateConflict() { return this.conflict; }
   register(fragment: PersistenceFragment) { this.fragments.push(fragment); }
+  private fragmentKey(fragment: PersistenceFragment) { return JSON.stringify(fragment.restorationKey?.() ?? fragment.serialize()); }
+  /** Capture before startup reads, while all current state still belongs to this window. */
+  prepareRestore() {
+    this.restoreBaseline = new Map(this.fragments.map((fragment) => [fragment, this.fragmentKey(fragment)]));
+    this.restorePending = true;
+  }
   serialize(): Record<string, unknown> {
     return Object.assign({ version: 2 }, ...this.fragments.map((f) => f.serialize()));
   }
   async restore() {
     const scope = this.context(), generation = ++this.generation;
+    const baseline = this.restoreBaseline ??= new Map(this.fragments.map((fragment) => [fragment, this.fragmentKey(fragment)]));
+    const retained = new Set<PersistenceFragment>();
+    this.restorePending = true;
     this.stopped = false;
     clearTimeout(this.timer);
     let state = scope.project ? await this.port.readState(scope.project, this.stateKey) :
@@ -44,14 +55,20 @@ export class ApplicationPersistence extends Model<SyncState> {
       // Explicitly give this newly identified window its own copy of the currently
       // supported Studio state. Document restoration remains in its existing owner.
       const current = await this.port.readState(scope.project, "studio");
-      if (generation !== this.generation || !sameScope(scope, this.context())) return;
+      if (generation !== this.generation || !sameScope(scope, this.context())) return retained;
       if (current.version !== null) state = await this.port.writeState(scope.project, { key: this.stateKey, version: null, value: current.value });
     }
-    if (generation !== this.generation || !sameScope(scope, this.context())) return;
-    for (const fragment of this.fragments) fragment.restore(state.value);
+    if (generation !== this.generation || !sameScope(scope, this.context())) return retained;
+    for (const fragment of this.fragments) {
+      if (baseline.get(fragment) !== this.fragmentKey(fragment)) retained.add(fragment);
+      else fragment.restore(state.value);
+    }
     this.state = state;
-    this.dirty = false; this.error = ""; this.conflict = null; this.unconfirmed = undefined;
+    this.restorePending = false; this.restoreBaseline = null;
+    this.dirty = retained.size > 0; this.error = ""; this.conflict = null; this.unconfirmed = undefined;
+    if (this.dirty) this.timer = setTimeout(() => { void this.flush(); }, 400);
     this.publish();
+    return retained;
   }
   changed = () => {
     if (this.stopped) return;
@@ -69,7 +86,7 @@ export class ApplicationPersistence extends Model<SyncState> {
       return;
     }
     const scope = this.context(), generation = this.generation;
-    if (!scope.project || !this.dirty || this.stopped) return;
+    if (!scope.project || !this.dirty || this.stopped || this.restorePending) return;
     const current = () => generation === this.generation && !this.stopped && sameScope(scope, this.context());
     const value = json(this.serialize());
     const task = (async () => {
@@ -120,6 +137,7 @@ export class ApplicationPersistence extends Model<SyncState> {
   }
   stop() {
     this.stopped = true; this.generation++;
+    this.restorePending = true; this.restoreBaseline = null;
     clearTimeout(this.timer);
     this.saving = null;
   }

@@ -35,6 +35,8 @@ export interface OperationCommands {
 }
 export interface PersistenceFragment {
   serialize(): Record<string, unknown>;
+  /** Cheap local identity for restoration fencing when content is stored elsewhere. */
+  restorationKey?(): unknown;
   restore(value: unknown): void;
 }
 export const terminal = (status: string) =>
