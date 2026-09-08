@@ -749,7 +749,13 @@ mod tests {
         let project = GitProject::open(dir.path(), vec![]).unwrap();
         let mut args = search_args("needle");
         let page = project.search_text_page(&args).await.unwrap();
-        assert_eq!(page.matches.len(), 100);
+        assert!(!page.matches.is_empty() && page.matches.len() <= 100);
+        let first_count = page.matches.len();
+        let mut lines = page
+            .matches
+            .iter()
+            .map(|found| found.line)
+            .collect::<BTreeSet<_>>();
         args.continuation = page.continuation;
         let mut changed = args.clone();
         changed.text = "other".into();
@@ -761,8 +767,23 @@ mod tests {
                 .contains("mismatch")
         );
         let second = project.search_text_page(&args).await.unwrap();
-        assert_eq!(second.matches.len(), 100);
-        assert_eq!(second.matches[0].line, 101);
+        assert!(!second.matches.is_empty() && second.matches.len() <= 100);
+        assert_eq!(second.matches[0].line, first_count as u64 + 1);
+        let pinned_args = args.clone();
+        for found in second.matches {
+            assert!(lines.insert(found.line));
+        }
+        args.continuation = second.continuation;
+        while args.continuation.is_some() {
+            let page = project.search_text_page(&args).await.unwrap();
+            assert!(json_size(&page) <= PAGE_BYTES);
+            for found in page.matches {
+                assert!(lines.insert(found.line));
+            }
+            args.continuation = page.continuation;
+        }
+        assert_eq!(lines, (1..=250).collect());
+        args = pinned_args;
         std::fs::write(&path, "Needle\n".repeat(250)).unwrap();
         assert!(
             project

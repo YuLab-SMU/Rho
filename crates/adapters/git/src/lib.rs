@@ -43,10 +43,38 @@ impl GitProject {
             .to_str()
             .ok_or("project root must be UTF-8")?
             .to_string();
+        let mut normalized_exclusions = Vec::new();
+        for excluded in excluded {
+            // Preserve the lexical exclusion as well as its canonical spelling. macOS
+            // temporary paths commonly enter as /var while the project root is /private/var.
+            let absolute = if excluded.is_absolute() {
+                excluded
+            } else {
+                root.join(excluded)
+            };
+            let mut ancestor = absolute.as_path();
+            let mut suffix = Vec::new();
+            while !ancestor.exists() {
+                let Some(name) = ancestor.file_name() else {
+                    break;
+                };
+                suffix.push(name.to_os_string());
+                let Some(parent) = ancestor.parent() else {
+                    break;
+                };
+                ancestor = parent;
+            }
+            let mut canonical = ancestor.canonicalize().map_err(display)?;
+            for component in suffix.into_iter().rev() {
+                canonical.push(component);
+            }
+            normalized_exclusions.push(absolute);
+            normalized_exclusions.push(canonical);
+        }
         Ok(Self {
             root,
             identity,
-            excluded,
+            excluded: normalized_exclusions,
         })
     }
 
