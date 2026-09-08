@@ -43,7 +43,7 @@ export class McpClient {
   }
   call(name,args={}) { return this.request('tools/call',{name,arguments:args}); }
   async query(id,args={}) { const r=await this.call(`rho.${id}.v1`,args);assert.notEqual(r.isError,true,JSON.stringify(r));return r.structuredContent.result; }
-  async close() { if(this.session) await fetch(this.url,{method:'DELETE',headers:{authorization:`Bearer ${this.token}`,'mcp-session-id':this.session}}).catch(()=>{}); }
+  async close() { if(this.session) await fetch(this.url,{method:'DELETE',headers:{authorization:`Bearer ${this.token}`,'mcp-session-id':this.session},signal:AbortSignal.timeout(10000)}).catch(()=>{}); }
 }
 export class FixtureHost {
   constructor(options, directory) { this.options=options;this.directory=directory;this.pages=[];this.contexts=[];this.seedRecords=[];this.browserTraffic=[]; }
@@ -53,8 +53,8 @@ export class FixtureHost {
     const args=['--database',this.database,'--project',this.project,'--ark',this.options.ark,'--r-home',this.options.rHome,...(skillsManifest?['--host-skills',skillsManifest]:[]),'workbench','--url-file',urlFile];
     this.child=spawn(this.options.binary,args,{stdio:['ignore','pipe','pipe']});
     const log=fs.createWriteStream(path.join(this.options.evidence,'host.stderr.log'),{mode:0o600});this.child.stderr.pipe(log);this.child.stdout.resume();
-    this.exit=once(this.child,'exit');
-    await until(()=>{if(this.child.exitCode!==null)throw new Error(`Fixture Host exited ${this.child.exitCode}`);return fs.existsSync(urlFile)?fs.readFileSync(urlFile,'utf8').trim():null;},Boolean,'private Host startup',90000).then(url=>{this.launchUrl=url;const u=new URL(url);this.origin=u.origin;this.token=new URLSearchParams(u.hash.slice(1)).get('token');assert.ok(this.token);});
+    this.startError=null;this.exit=new Promise(resolve=>{this.child.once('exit',(code,signal)=>resolve({code,signal}));this.child.once('error',error=>{this.startError=error;resolve({error:error.message});});});
+    await until(()=>{if(this.startError)throw this.startError;if(this.child.exitCode!==null)throw new Error(`Fixture Host exited ${this.child.exitCode}`);return fs.existsSync(urlFile)?fs.readFileSync(urlFile,'utf8').trim():null;},Boolean,'private Host startup',90000).then(url=>{this.launchUrl=url;const u=new URL(url);this.origin=u.origin;this.token=new URLSearchParams(u.hash.slice(1)).get('token');assert.ok(this.token);});
     this.mcp=new McpClient(`${this.origin}/mcp`,this.token);await this.mcp.initialize();
     const status=await this.query('workspace.runtime_status');assert.equal(status.status,'ready','Fixture requires a real running R runtime, not Host project-only fallback');assert.ok(status.data?.session_id||status.target?.identity);
     this.session=(await this.query('workspace.console_state')).data.session_id;assert.ok(this.session,'real native R session required');

@@ -35,7 +35,7 @@ for(const test of selected) {
   console.log(`Starting ${test.id} ${test.repetition}/${CORE_CASES.includes(test.id)?runs:1}`);
   const heartbeat=setInterval(()=>console.log(`Running ${test.id}-${test.repetition}: ${proxy?.calls.length??0} tool calls, ${proxy?.textBytes??0} text bytes`),45000);
   try {
-    scenario.prepareSkills?.(agentCwd);
+    assert.equal(exec(codex,['--version']),codexVersion,'Codex version changed during the fixed-version evaluation');scenario.prepareSkills?.(agentCwd);
     const initialDiscovery=await discoverSkills(codex,agentCwd);
     const allowed=scenario.allowedSkillFiles.filter(file=>path.basename(file)==='SKILL.md');
     const selectedRoots=[...allowed,...(scenario.disabledSkill?[scenario.disabledSkill]:[])];
@@ -61,20 +61,20 @@ for(const test of selected) {
     assert.ok(proxy.calls.length+agent.nativeSkillReads.length<=80);assert.ok(proxy.textBytes+agent.native_text_bytes<=1048576);
     result.passed=true;result.facts=agent.report.facts;result.tokens=agent.tokens;result.thread_id=agent.thread_id;result.calls=proxy.calls.length;result.text_bytes=proxy.textBytes;result.image_bytes=proxy.images.reduce((sum,image)=>sum+image.bytes,0);result.elapsed_ms=agent.elapsed_ms;
   } catch(error) {failures++;result.errors.push(error.stack??String(error));console.error(`FAILED ${test.id}-${test.repetition}: ${error.message}`);}
-  finally {clearInterval(heartbeat);await proxy?.close().catch(error=>result.errors.push(`proxy cleanup: ${error.message}`));await host.close().catch(error=>result.errors.push(`Host cleanup: ${error.message}`));if(result.errors.length&&result.passed){result.passed=false;failures++;}json(path.join(caseEvidence,'result.json'),result);startManifest.cases.push(result);json(path.join(evidence,'manifest.json'),startManifest);if(!process.argv.includes('--keep-fixtures')){fs.rmSync(scientific,{recursive:true,force:true});fs.rmSync(agentCwd,{recursive:true,force:true});}else result.private_fixture_roots={scientific,agent:agentCwd};}
+  finally {clearInterval(heartbeat);if(host.origin&&!fs.existsSync(path.join(caseEvidence,'authoritative-operations.json')))await captureScientificHistory(host,caseEvidence).catch(error=>result.errors.push(`history capture: ${error.message}`));await proxy?.close().catch(error=>result.errors.push(`proxy cleanup: ${error.message}`));await host.close().catch(error=>result.errors.push(`Host cleanup: ${error.message}`));if(result.errors.length&&result.passed){result.passed=false;failures++;}json(path.join(caseEvidence,'result.json'),result);startManifest.cases.push(result);json(path.join(evidence,'manifest.json'),startManifest);if(!process.argv.includes('--keep-fixtures')){fs.rmSync(scientific,{recursive:true,force:true});fs.rmSync(agentCwd,{recursive:true,force:true});}else result.private_fixture_roots={scientific,agent:agentCwd};}
   console.log(`${result.passed?'PASS':'FAIL'} ${test.id}-${test.repetition}`);
 }
 let equivalence={checked:false};const native=startManifest.cases.find(c=>c.id==='skill_native');const rho=startManifest.cases.find(c=>c.id==='skill_rho');
 if(native&&rho){try{assert.ok(native.passed&&rho.passed);assert.deepEqual(native.skill_resources,rho.skill_resources,'Native and Rho must read byte-identical standard Skill resources');const core=run=>run.facts.map(({key,value})=>({key,value})).sort((a,b)=>a.key.localeCompare(b.key));assert.deepEqual(core(native),core(rho),'Native and Rho standard method results must agree');equivalence={checked:true,passed:true};}catch(error){failures++;equivalence={checked:true,passed:false,error:error.message};}}
 const endCommit=exec('git',['rev-parse','HEAD'],{cwd:root});const endStatus=exec('git',['status','--porcelain'],{cwd:root});
-const fixedTree=commit===endCommit&&status===endStatus&&digest(fs.readFileSync(binary))===startManifest.binaries.rho.sha256&&digest(fs.readFileSync(ark))===startManifest.binaries.ark.sha256;if(!fixedTree){failures++;startManifest.fixed_tree_error='Source or native binary changed during evaluation';}
+const fixedTree=commit===endCommit&&status===endStatus&&exec(codex,['--version'])===codexVersion&&digest(fs.readFileSync(fs.realpathSync(codex)))===startManifest.binaries.codex.sha256&&digest(fs.readFileSync(binary))===startManifest.binaries.rho.sha256&&digest(fs.readFileSync(ark))===startManifest.binaries.ark.sha256;if(!fixedTree){failures++;startManifest.fixed_tree_error='Source or native binary changed during evaluation';}
 const coreRuns=startManifest.cases.filter(c=>CORE_CASES.includes(c.id));
 startManifest.completed_at=new Date().toISOString();startManifest.fixed_tree=fixedTree;startManifest.skill_equivalence=equivalence;startManifest.failures=failures;startManifest.core_total=coreRuns.length;startManifest.core_passed=coreRuns.filter(c=>c.passed).length;startManifest.passed=failures===0&&(!final||(coreRuns.length===30&&startManifest.cases.length===34&&equivalence.passed));
 startManifest.artifacts=hashArtifacts(evidence);json(path.join(evidence,'manifest.json'),startManifest);
 console.log(`${startManifest.passed?'PASS':'FAIL'}: ${startManifest.core_passed}/${startManifest.core_total} core runs, ${startManifest.cases.length-coreRuns.length} extra runs; ${failures} failures. ${final?'Final acceptance':'Debug run; not final acceptance'}.`);if(!startManifest.passed)process.exitCode=1;
 function hashArtifacts(directory,prefix='') {return fs.readdirSync(directory,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name)).flatMap(entry=>{const relative=path.join(prefix,entry.name);if(relative==='manifest.json')return [];const full=path.join(directory,entry.name);return entry.isDirectory()?hashArtifacts(full,relative):[{path:relative,bytes:fs.statSync(full).size,sha256:digest(fs.readFileSync(full))}];});}
 
-async function verifyScientificHistory(host,scenario,proxy,evidence) {
+async function captureScientificHistory(host,evidence) {
   const records=[];let cursor;
   for(let page=0;page<16;page++) {
     const snapshot=await host.query('operation.list_recent',{limit:100,...(cursor?{before_cursor:cursor}:{})});
@@ -83,7 +83,10 @@ async function verifyScientificHistory(host,scenario,proxy,evidence) {
     cursor=snapshot.data.next_cursor;if(!cursor)break;
     assert.ok(page<15,'Scientific history exceeded acceptance inspection budget');
   }
-  json(path.join(evidence,'authoritative-operations.json'),records);
+  json(path.join(evidence,'authoritative-operations.json'),records);return records;
+}
+async function verifyScientificHistory(host,scenario,proxy,evidence) {
+  const records=await captureScientificHistory(host,evidence);
   const byRequest=new Map();const byCode=new Map();
   for(const record of records){const op=record.operation;if(host.seedRecords.includes(op.operation_id))continue;
     assert.equal(op.principal.kind,'human','principal mixup');assert.equal(op.principal.id,'local-user','principal mixup');assert.equal(op.caller.kind,'agent','Agent scientific actor was lost');assert.equal(op.caller.id,'local-mcp','Agent scientific actor was replaced by the Studio bridge');
