@@ -1,4 +1,4 @@
-use crate::{Invocation, OperationId, QueryRequest};
+use crate::{InvokeRequest, OperationId, QueryRequest, RespondInput};
 use serde::{Deserialize, Serialize};
 
 /// The local session edge forwards these five ports to the Host.
@@ -11,11 +11,22 @@ use serde::{Deserialize, Serialize};
 )]
 #[derive(ts_rs::TS)]
 pub enum HostRequest {
-    Invoke(Invocation),
-    GetOperation { operation_id: OperationId },
-    RequestCancellation { operation_id: OperationId },
+    Invoke(InvokeRequest),
+    GetOperation {
+        operation_id: OperationId,
+    },
+    RequestCancellation {
+        operation_id: OperationId,
+        #[serde(default)]
+        #[ts(optional)]
+        only_if_pending: Option<bool>,
+    },
+    RespondInput(RespondInput),
     QuerySnapshot(QueryRequest),
-    Subscribe { after_sequence: u64, limit: usize },
+    Subscribe {
+        after_sequence: u64,
+        limit: usize,
+    },
 }
 
 #[derive(Debug, Deserialize)]

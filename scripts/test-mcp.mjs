@@ -114,6 +114,36 @@ try {
     const executed = (await peer.call("rho.workspace.run_r.v1", { client_request_id: "mcp-real-r", arguments: { code: "x <- 21; x * 2" } }).result).structuredContent.result;
     assert.equal(executed.status, "succeeded", JSON.stringify(executed));
     assert.equal(executed.output.value, 42);
+    assert.ok(tools.some(tool=>tool.name==="rho.workspace.respond_input"));
+    const inputRun=(await peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-stdin",return_after_acceptance:true,arguments:{code:"mcp_answer <- readline('MCP answer: '); stopifnot(mcp_answer == 'verified')",output_mode:"console"}}).result).structuredContent.result;
+    assert.equal(inputRun.status,"accepted");
+    let pendingInput;
+    for(let attempt=0;attempt<100;attempt++){
+      const state=(await peer.call("rho.workspace.console_state.v1",{}).result).structuredContent.result.data;
+      if(state.input){pendingInput=state.input;break;}
+      await new Promise(resolve=>setTimeout(resolve,20));
+    }
+    assert.ok(pendingInput,"native stdin request was observed");
+    const answer=(await peer.call("rho.workspace.respond_input",{session_id:pendingInput.session_id,operation_id:inputRun.operation.operation_id,request_id:pendingInput.request_id,reply_id:"mcp-stdin-answer",value:"verified"}).result).structuredContent.result;
+    assert.equal(answer.submitted,true);
+    for(let attempt=0;attempt<100;attempt++){
+      const state=(await peer.call("rho.operation.get",{operation_id:inputRun.operation.operation_id}).result).structuredContent.result;
+      if(state.status==="succeeded")break;
+      assert.notEqual(state.status,"failed",JSON.stringify(state));
+      assert.ok(attempt<99,"stdin execution completed");
+      await new Promise(resolve=>setTimeout(resolve,20));
+    }
+    // Observations and stdin remain available while all 32 terminal-wait calls are occupied.
+    const waitingCalls=[peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-full-input",arguments:{code:"readline('Full queue: ')",output_mode:"console"}}).result];
+    for(let i=0;i<31;i++)waitingCalls.push(peer.call("rho.workspace.run_r.v1",{client_request_id:`mcp-full-${i}`,arguments:{code:"invisible(1)"}}).result);
+    let full;
+    for(let attempt=0;attempt<100;attempt++){
+      const reply=await peer.call("rho.workspace.console_state.v1",{}).result;assert.notEqual(reply.isError,true,JSON.stringify(reply));
+      full=reply.structuredContent.result.data;if(full.input&&full.pending.length===31)break;
+      assert.ok(attempt<99,"all pending calls were accepted");await new Promise(resolve=>setTimeout(resolve,20));
+    }
+    await peer.call("rho.workspace.respond_input",{session_id:full.input.session_id,operation_id:full.input.operation_id,request_id:full.input.request_id,reply_id:"mcp-full-answer",value:"continue"}).result;
+    for(const result of await Promise.all(waitingCalls))assert.equal(result.structuredContent.result.status,"succeeded");
     for (const capability of ["help", "lint", "format"]) {
       assert.ok(tools.some((tool) => tool.name === `rho.workspace.${capability}.v1`));
     }

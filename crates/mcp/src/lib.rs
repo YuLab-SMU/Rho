@@ -38,6 +38,8 @@ struct CommandArguments {
     arguments: Value,
     #[serde(default)]
     preconditions: Vec<Precondition>,
+    #[serde(default)]
+    return_after_acceptance: Option<bool>,
 }
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -61,6 +63,7 @@ enum Route {
     Capability(CapabilityRef, CapabilityKind),
     Get,
     Cancel,
+    Input,
     Events,
 }
 struct Entry {
@@ -72,6 +75,7 @@ pub struct McpEdge {
     context: CallContext,
     entries: BTreeMap<String, Entry>,
     in_flight: Semaphore,
+    observations: Semaphore,
 }
 impl McpEdge {
     pub fn new(host: Arc<NextHost>, context: CallContext) -> Result<Self, String> {
@@ -145,9 +149,17 @@ impl McpEdge {
             (
                 "rho.operation.request_cancellation",
                 "Request cancellation by OperationId. Acceptance is not confirmation of a stopped runtime.",
-                schema_for!(OperationArguments).to_value(),
+                schema_for!(rho_contract::CancelOperation).to_value(),
                 json!({"type":"object"}),
                 Route::Cancel,
+                false,
+            ),
+            (
+                "rho.workspace.respond_input",
+                "Reply once to the identified R stdin request. This does not submit code or start R. Password answers are transient and are not journaled.",
+                schema_for!(rho_contract::RespondInput).to_value(),
+                json!({"type":"object","properties":{"submitted":{"type":"boolean"}},"required":["submitted"]}),
+                Route::Input,
                 false,
             ),
             (
@@ -171,6 +183,7 @@ impl McpEdge {
             context,
             entries,
             in_flight: Semaphore::new(32),
+            observations: Semaphore::new(16),
         })
     }
     pub fn local(host: Arc<NextHost>) -> Result<Self, String> {
@@ -188,11 +201,14 @@ impl McpEdge {
             Route::Capability(capability, CapabilityKind::Operation) => {
                 let input: CommandArguments =
                     serde_json::from_value(args).map_err(|error| error.to_string())?;
-                HostRequest::Invoke(Invocation {
-                    client_request_id: input.client_request_id,
-                    capability: capability.clone(),
-                    arguments: input.arguments,
-                    preconditions: input.preconditions,
+                HostRequest::Invoke(rho_contract::InvokeRequest {
+                    return_after_acceptance: input.return_after_acceptance,
+                    invocation: Invocation {
+                        client_request_id: input.client_request_id,
+                        capability: capability.clone(),
+                        arguments: input.arguments,
+                        preconditions: input.preconditions,
+                    },
                 })
             }
             Route::Capability(capability, CapabilityKind::Query) => {
@@ -201,18 +217,23 @@ impl McpEdge {
                     arguments: args,
                 })
             }
-            Route::Get | Route::Cancel => {
+            Route::Get => {
                 let input: OperationArguments =
-                    serde_json::from_value(args).map_err(|error| error.to_string())?;
-                if matches!(route, Route::Get) {
-                    HostRequest::GetOperation {
-                        operation_id: input.operation_id,
-                    }
-                } else {
-                    HostRequest::RequestCancellation {
-                        operation_id: input.operation_id,
-                    }
+                    serde_json::from_value(args).map_err(|e| e.to_string())?;
+                HostRequest::GetOperation {
+                    operation_id: input.operation_id,
                 }
+            }
+            Route::Cancel => {
+                let input: rho_contract::CancelOperation =
+                    serde_json::from_value(args).map_err(|e| e.to_string())?;
+                HostRequest::RequestCancellation {
+                    operation_id: input.operation_id,
+                    only_if_pending: input.only_if_pending,
+                }
+            }
+            Route::Input => {
+                HostRequest::RespondInput(serde_json::from_value(args).map_err(|e| e.to_string())?)
             }
             Route::Events => {
                 let input: EventArguments =
@@ -275,8 +296,13 @@ impl ServerHandler for McpEdge {
         let Some(entry) = self.entries.get(request.name.as_ref()) else {
             return Err(ErrorData::invalid_params("unknown Rho tool", None));
         };
-        let _permit = if matches!(entry.route, Route::Capability(..)) {
-            match self.in_flight.try_acquire() {
+        let quota = match entry.route {
+            Route::Capability(_, CapabilityKind::Operation) => Some(&self.in_flight),
+            Route::Capability(_, CapabilityKind::Query) => Some(&self.observations),
+            _ => None,
+        };
+        let _permit = if let Some(quota) = quota {
+            match quota.try_acquire() {
                 Ok(permit) => Some(permit),
                 Err(_) => {
                     return Ok(CallToolResult::structured_error(
@@ -367,6 +393,7 @@ fn command_schema(mut arguments: Value) -> Result<Value, String> {
     let mut schema = json!({"type":"object", "properties":{
         "client_request_id":{"type":"string","minLength":1,"maxLength":160},
         "arguments":arguments,
+        "return_after_acceptance":{"type":"boolean","default":false},
         "preconditions":{"type":"array","maxItems":32,"items":schema_for!(Precondition).to_value(),"default":[]}
     }, "required":["client_request_id","arguments"], "additionalProperties":false});
     if let Some(definitions) = definitions {

@@ -9,6 +9,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::new()
         .with_out_dir(directory)
         .with_large_int("number");
+    CancelOperation::export_all(&config)?;
+    RunRArguments::export_all(&config)?;
+    SearchFilesArguments::export_all(&config)?;
+    FileSearchResult::export_all(&config)?;
+    Invocation::export_all(&config)?;
+    MediaPage::export_all(&config)?;
     WorkbenchInfo::export_all(&config)?;
     WorkbenchFrame::export_all(&config)?;
     SelectProject::export_all(&config)?;
@@ -36,5 +42,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     DirectoryPage::export_all(&config)?;
     ListDirectoryArguments::export_all(&config)?;
     FormatResult::export_all(&config)?;
+    ConsoleState::export_all(&config)?;
+    CheckCodeArguments::export_all(&config)?;
+    CodeCompleteness::export_all(&config)?;
+    QueueControlArguments::export_all(&config)?;
     Ok(())
 }

@@ -224,6 +224,19 @@ pub async fn wait_cancellation(receiver: &mut tokio::sync::watch::Receiver<bool>
 
 #[async_trait]
 pub trait OperationHandler: Send + Sync {
+    fn admitted(&self, _operation: &Operation) -> Result<(), HandlerError> {
+        Ok(())
+    }
+    fn cancel_pending(&self, _operation: &Operation) -> bool {
+        false
+    }
+    async fn acquire_execution(
+        &self,
+        _operation: &Operation,
+        _cancellation: tokio::sync::watch::Receiver<bool>,
+    ) -> Result<Box<dyn ExecutionLease>, HandlerError> {
+        Ok(Box::new(()))
+    }
     fn descriptor(&self) -> &CapabilityDescriptor;
     fn idempotency_scope(&self) -> Option<String> {
         None
@@ -243,6 +256,12 @@ pub trait OperationHandler: Send + Sync {
         self.execute(operation).await
     }
 }
+
+/// Domain-owned execution qualification outlives the final journal commit.
+pub trait ExecutionLease: Send + Sync {
+    fn completed(&mut self, _result: &Result<OperationRecord, OperationError>) {}
+}
+impl ExecutionLease for () {}
 
 #[async_trait]
 pub trait OperationJournal: Send + Sync {
@@ -439,6 +458,7 @@ impl CapabilityRegistry {
 }
 
 pub struct OperationGateway {
+    admission: tokio::sync::Mutex<()>,
     registry: Arc<CapabilityRegistry>,
     journal: Arc<dyn OperationJournal>,
     clock: Arc<dyn Clock>,
@@ -472,6 +492,7 @@ impl OperationGateway {
             journal,
             clock,
             id_generator,
+            admission: tokio::sync::Mutex::new(()),
             active: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
@@ -480,6 +501,15 @@ impl OperationGateway {
         &self,
         context: &CallContext,
         invocation: Invocation,
+    ) -> Result<OperationRecord, OperationError> {
+        self.invoke_notifying(context, invocation, None).await
+    }
+
+    pub async fn invoke_notifying(
+        &self,
+        context: &CallContext,
+        invocation: Invocation,
+        mut accepted: Option<tokio::sync::oneshot::Sender<OperationRecord>>,
     ) -> Result<OperationRecord, OperationError> {
         context.validate()?;
         invocation.validate()?;
@@ -541,17 +571,22 @@ impl OperationGateway {
             accepted_at_ms,
         };
 
-        match self.journal.admit(&operation).await? {
+        let admission_lock = self.admission.lock().await;
+        let admitted_record = match self.journal.admit(&operation).await? {
             Admission::Existing(existing) => {
                 info!(
                     operation_id = existing.operation.operation_id.as_str(),
                     capability = existing.operation.capability.id,
                     "returned existing idempotent operation"
                 );
+                if let Some(sender) = accepted.take() {
+                    let _ = sender.send(existing.clone());
+                }
                 return Ok(existing);
             }
-            Admission::New(_) => {}
-        }
+            Admission::New(record) => record,
+        };
+        let admission_result = handler.admitted(&operation);
 
         let (cancel, cancelled) = tokio::sync::watch::channel(false);
         self.active
@@ -561,6 +596,44 @@ impl OperationGateway {
         let _active = ActiveOperation {
             id: operation_id.clone(),
             active: self.active.clone(),
+        };
+        drop(admission_lock);
+        if let Err(error) = admission_result {
+            return self
+                .journal
+                .commit(
+                    &operation_id,
+                    &CommitPlan::from_handler_error(error),
+                    self.clock.now_ms()?,
+                )
+                .await
+                .map_err(|error| OperationError::CommitPending {
+                    operation_id: operation_id.clone(),
+                    detail: error.to_string(),
+                });
+        }
+        if let Some(sender) = accepted.take() {
+            let _ = sender.send(admitted_record);
+        }
+        let mut lease = match handler
+            .acquire_execution(&operation, cancelled.clone())
+            .await
+        {
+            Ok(lease) => lease,
+            Err(error) => {
+                return self
+                    .journal
+                    .commit(
+                        &operation_id,
+                        &CommitPlan::from_handler_error(error),
+                        self.clock.now_ms()?,
+                    )
+                    .await
+                    .map_err(|error| OperationError::CommitPending {
+                        operation_id: operation_id.clone(),
+                        detail: error.to_string(),
+                    });
+            }
         };
         self.journal
             .mark_running(&operation_id, self.clock.now_ms()?)
@@ -583,13 +656,16 @@ impl OperationGateway {
                 CommitPlan::from_handler_error(error)
             }
         };
-        self.journal
+        let result = self
+            .journal
             .commit(&operation_id, &plan, self.clock.now_ms()?)
             .await
             .map_err(|error| OperationError::CommitPending {
                 operation_id,
                 detail: error.to_string(),
-            })
+            });
+        lease.completed(&result);
+        result
     }
 
     pub fn registry_descriptors(&self) -> Vec<CapabilityDescriptor> {
@@ -614,6 +690,16 @@ impl OperationGateway {
         context: &CallContext,
         operation_id: &OperationId,
     ) -> Result<CancellationRequestOutcome, OperationError> {
+        self.request_cancellation_conditional(context, operation_id, false)
+            .await
+    }
+    pub async fn request_cancellation_conditional(
+        &self,
+        context: &CallContext,
+        operation_id: &OperationId,
+        only_if_pending: bool,
+    ) -> Result<CancellationRequestOutcome, OperationError> {
+        let _admission = self.admission.lock().await;
         let operation = self
             .get_operation(context, operation_id)
             .await?
@@ -635,6 +721,9 @@ impl OperationGateway {
             return Err(OperationError::CancellationUnsupported(
                 operation.operation.capability.display_key(),
             ));
+        }
+        if only_if_pending && !handler.cancel_pending(&operation.operation) {
+            return Err(OperationError::InvalidInput("The run has started or ended. Refresh its state; use Interrupt explicitly for a running operation.".into()));
         }
         let outcome = self
             .journal

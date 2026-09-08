@@ -141,10 +141,22 @@ impl Watchdog {
         }
         let read_fd = unsafe { OwnedFd::from_raw_fd(fds[0]) };
         let write_fd = unsafe { OwnedFd::from_raw_fd(fds[1]) };
+        // A later kernel exec must not inherit another watchdog's EOF pipe.
+        for fd in fds {
+            if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+        // Compute the bound before fork: the child may use only signal-safe calls.
+        let max_fd = unsafe { libc::sysconf(libc::_SC_OPEN_MAX) };
+        if max_fd < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let max_fd = max_fd.min(i32::MAX as _) as i32;
 
         match unsafe { libc::fork() } {
             -1 => Err(std::io::Error::last_os_error()),
-            0 => unsafe { watchdog_child(read_fd.as_raw_fd(), write_fd.as_raw_fd(), kernel_pgid) },
+            0 => unsafe { watchdog_child(read_fd.as_raw_fd(), max_fd, kernel_pgid) },
             pid => Ok(Self {
                 pid,
                 _write_fd: write_fd,
@@ -157,9 +169,15 @@ impl Watchdog {
 /// `!` because every exit path goes through `_exit`. Uses only async-
 /// signal-safe libc calls.
 #[cfg(unix)]
-unsafe fn watchdog_child(read_fd: i32, write_fd: i32, kernel_pgid: libc::pid_t) -> ! {
+unsafe fn watchdog_child(read_fd: i32, max_fd: i32, kernel_pgid: libc::pid_t) -> ! {
     unsafe {
-        libc::close(write_fd);
+        // This process owns only its read pipe. Inheriting journal/project locks,
+        // sockets or other watchdog pipes keeps unrelated Hosts alive after Drop.
+        for fd in 0..max_fd {
+            if fd != read_fd {
+                libc::close(fd);
+            }
+        }
         let mut buf = [0u8; 1];
         loop {
             let n = libc::read(read_fd, buf.as_mut_ptr() as *mut _, 1);

@@ -108,6 +108,8 @@ pub struct BindingSummary {
     pub length: Option<u64>,
     pub dimensions: Vec<u64>,
     pub preview: Option<Value>,
+    #[serde(default)]
+    pub preview_kind: Option<String>,
     pub truncated: bool,
     pub notice: Option<String>,
 }

@@ -364,10 +364,21 @@ impl OperationJournal for SqliteOperationJournal {
                 operation_id.as_str()
             )));
         }
-        if !matches!(
-            current.status,
-            OperationStatus::Running | OperationStatus::Reconciling
-        ) {
+        let before_start = current.status == OperationStatus::Accepted
+            && matches!(
+                plan.outcome,
+                OperationOutcome::Failed | OperationOutcome::Cancelled
+            )
+            && plan.output.is_none()
+            && plan.facts.is_empty()
+            && plan.effect_observations.is_empty()
+            && plan.events.is_empty();
+        if !before_start
+            && !matches!(
+                current.status,
+                OperationStatus::Running | OperationStatus::Reconciling
+            )
+        {
             return Err(OperationError::LifecycleConflict(format!(
                 "operation {} cannot commit from {:?}",
                 operation_id.as_str(),

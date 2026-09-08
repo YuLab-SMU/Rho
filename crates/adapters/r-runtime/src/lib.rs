@@ -1,11 +1,13 @@
 #![forbid(unsafe_code)]
 mod outputs;
+pub use outputs::OutputStore;
 
 use async_trait::async_trait;
 use jet_core::{
     client::{Client, KernelStatus, ListenFilter},
     jupyter_protocol::{
-        ExecuteRequest, ExecutionState, JupyterMessage, JupyterMessageContent, Stdio,
+        ExecuteRequest, ExecutionState, InputReply, IsCompleteRequest, JupyterMessage,
+        JupyterMessageContent, Stdio,
     },
     kernel_spec::{InterruptMode, KernelSpec},
 };
@@ -42,6 +44,13 @@ pub struct ArkConfig {
     pub library_path: Option<PathBuf>,
 }
 
+struct ActiveInput {
+    public: rho_contract::InputRequest,
+    message: JupyterMessage,
+    started: Instant,
+    submitted_at: Option<Instant>,
+    echo: Option<String>,
+}
 pub struct ArkRuntime {
     client: Mutex<Option<Arc<Client>>>,
     session_id: String,
@@ -49,6 +58,9 @@ pub struct ArkRuntime {
     library_path: Option<String>,
     data_root: PathBuf,
     timeout: Duration,
+    input: Mutex<Option<ActiveInput>>,
+    input_changed: watch::Sender<u64>,
+    closing: std::sync::atomic::AtomicBool,
     outputs: outputs::OutputStore,
     resources: Mutex<(sysinfo::System, bool)>,
 }
@@ -134,6 +146,9 @@ impl ArkRuntime {
             resources: Mutex::new((sysinfo::System::new(), false)),
             data_root,
             timeout: config.execution_timeout,
+            input: Mutex::new(None),
+            input_changed: watch::channel(0).0,
+            closing: std::sync::atomic::AtomicBool::new(false),
         };
         let library_setup = match &config.library_path {
             Some(library) => format!(
@@ -180,6 +195,7 @@ impl ArkRuntime {
     }
 
     fn invalidate(&self) {
+        self.input.lock().unwrap_or_else(|e| e.into_inner()).take();
         self.client.lock().unwrap_or_else(|e| e.into_inner()).take();
     }
 
@@ -200,7 +216,7 @@ impl ArkRuntime {
             silent: false,
             store_history: false,
             user_expressions: None,
-            allow_stdin: false,
+            allow_stdin: operation_id.is_some(),
             stop_on_error: true,
         }
         .into();
@@ -214,16 +230,53 @@ impl ArkRuntime {
         let mut reply = false;
         let mut cancellation_open = true;
         let mut interrupted = false;
-        let deadline = Instant::now() + self.timeout;
+        let mut deadline = Instant::now() + self.timeout;
+        let mut input_changed = self.input_changed.subscribe();
+        let mut waiting_input = false;
         let mut interrupt_deadline = deadline + Duration::from_secs(5);
         loop {
+            if waiting_input {
+                let mut input = self.input.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(active) = input.as_mut()
+                    && let Some(at) = active.submitted_at.take()
+                {
+                    deadline += at.duration_since(active.started);
+                    waiting_input = false;
+                    if let Some(echo) = active.echo.take()
+                        && let Some(writer) = &mut writer
+                    {
+                        let _ = writer.stream("stdout", &format!("{echo}\n"));
+                    }
+                }
+            }
+            if waiting_input
+                && !interrupted
+                && self.closing.load(std::sync::atomic::Ordering::Acquire)
+            {
+                client.interrupt().await.map_err(|e| {
+                    WorkspaceRuntimeError::after_possible_effect(e.to_string(), None)
+                })?;
+                interrupted = true;
+                interrupt_deadline = Instant::now() + Duration::from_secs(5);
+            }
             tokio::select! {
                 frame = listener.recv() => {
                     let Some(frame) = frame else { break };
                     if frame.message.parent_header.as_ref().map(|h| h.msg_id.as_str()) != Some(request_id.as_str()) {
                         continue;
                     }
+                    if self.input.lock().unwrap_or_else(|e|e.into_inner()).as_ref().is_some_and(|i|i.public.submitted) && !waiting_input { self.input.lock().unwrap_or_else(|e|e.into_inner()).take(); }
+                    let input_message = if matches!(&frame.message.content, JupyterMessageContent::InputRequest(_)) { Some(frame.message.clone()) } else { None };
                     match frame.message.content {
+                        JupyterMessageContent::InputRequest(input) => {
+                            if let Some(id)=operation_id {
+                                *self.input.lock().unwrap_or_else(|e|e.into_inner())=Some(ActiveInput {
+                                    public:rho_contract::InputRequest{session_id:self.session_id.clone(),operation_id:id.clone(),request_id:frame.message.header.msg_id.clone(),prompt:input.prompt.chars().take(8192).collect(),password:input.password,submitted:false},
+                                    message:input_message.unwrap(),started:Instant::now(),submitted_at:None,echo:None,
+                                });
+                                waiting_input=true;
+                            }
+                        }
                         JupyterMessageContent::Status(status) => { idle |= status.execution_state == ExecutionState::Idle; }
                         JupyterMessageContent::ExecuteReply(result) => {
                             reply = true;
@@ -275,10 +328,12 @@ impl ArkRuntime {
                         _ => {}
                     }
                     if idle && reply {
+                        self.input.lock().unwrap_or_else(|e|e.into_inner()).take();
                         if let Some(writer) = &mut writer && let Err(error) = writer.finish() { captured.observation_error = Some(error); }
                         return Ok(captured);
                     }
                 }
+                _ = input_changed.changed(), if waiting_input => {}
                 change = cancellation.changed(), if cancellation_open && !interrupted => {
                     if change.is_err() { cancellation_open = false; }
                     else if *cancellation.borrow() {
@@ -287,7 +342,7 @@ impl ArkRuntime {
                         interrupt_deadline = Instant::now() + Duration::from_secs(5);
                     }
                 }
-                _ = tokio::time::sleep_until(deadline), if !interrupted => {
+                _ = tokio::time::sleep_until(deadline), if !interrupted && !waiting_input => {
                     client.interrupt().await.map_err(|error| WorkspaceRuntimeError::after_possible_effect(error.to_string(), None))?;
                     interrupted = true;
                     interrupt_deadline = Instant::now() + Duration::from_secs(5);
@@ -349,6 +404,78 @@ struct BridgeRequest<'a> {
 
 #[async_trait]
 impl WorkspaceRuntime for ArkRuntime {
+    fn begin_shutdown(&self) {
+        self.closing
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.input_changed.send_modify(|v| *v = v.wrapping_add(1));
+    }
+    fn input_request(&self) -> Option<rho_contract::InputRequest> {
+        self.input
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|i| i.public.clone())
+    }
+    fn respond_input(&self, reply: rho_contract::RespondInput) -> Result<(), String> {
+        if reply.value.len() > 65536
+            || reply.value.contains('\0')
+            || reply.reply_id.is_empty()
+            || reply.reply_id.len() > 160
+        {
+            return Err("Invalid input response bounds".into());
+        }
+        let client = self.client().map_err(|e| e.message)?;
+        let mut input = self.input.lock().unwrap_or_else(|e| e.into_inner());
+        let active = input
+            .as_mut()
+            .ok_or("This input request is no longer pending")?;
+        if active.public.session_id != reply.session_id
+            || active.public.operation_id != reply.operation_id
+            || active.public.request_id != reply.request_id
+            || active.public.submitted
+        {
+            return Err("Input identity changed or an answer was already submitted".into());
+        }
+        let mut message: JupyterMessage = InputReply {
+            value: reply.value.clone(),
+            ..Default::default()
+        }
+        .into();
+        message.parent_header = Some(active.message.header.clone());
+        client
+            .reply_stdin(message)
+            .map_err(|_| "Input transport is unavailable".to_string())?;
+        active.public.submitted = true;
+        active.submitted_at = Some(Instant::now());
+        if !active.public.password {
+            active.echo = Some(reply.value);
+        }
+        self.input_changed.send_modify(|v| *v = v.wrapping_add(1));
+        Ok(())
+    }
+    async fn check_code(&self, code: &str) -> Result<rho_contract::CodeCompleteness, String> {
+        let client = self.client().map_err(|e| e.message)?;
+        if *client.watch_status().borrow() != KernelStatus::Idle {
+            return Err("R is busy".into());
+        }
+        let mut stream = client
+            .request(IsCompleteRequest { code: code.into() }.into())
+            .map_err(|e| e.to_string())?;
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while let Some(frame) = stream.recv().await {
+                if let JupyterMessageContent::IsCompleteReply(reply) = frame.message.content {
+                    let value = serde_json::to_value(reply).map_err(|e| e.to_string())?;
+                    return Ok(rho_contract::CodeCompleteness {
+                        status: value["status"].as_str().unwrap_or("unknown").into(),
+                        indent: value["indent"].as_str().unwrap_or("").into(),
+                    });
+                }
+            }
+            Err("No R completeness reply".into())
+        })
+        .await
+        .map_err(|_| "R completeness timed out".to_string())?
+    }
     async fn output_events(
         &self,
         args: &rho_contract::OutputEventsArguments,

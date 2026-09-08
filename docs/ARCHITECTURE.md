@@ -39,8 +39,10 @@ CLI / session / browser / official MCP
       actual result -> CommitPlan -> SQLite transaction
 ```
 
-The five shared ports are `invoke`, `getOperation`, `requestCancellation`,
-`querySnapshot` and cursor-based `subscribe`. JSON session names use snake_case.
+The five shared scientific ports are `invoke`, `getOperation`, `requestCancellation`,
+`querySnapshot` and cursor-based `subscribe`. A sibling `respond_input` control
+replies only to an identified pending stdin request; it neither creates an
+Operation nor acquires the ordinary execution lane. JSON session names use snake_case.
 The browser's `/api/host` forwards them. HTTP hosting endpoints separately manage
 project/R selection and application state; they do not create another scientific
 operation flow. CLI/session and official MCP use the same composition root.
@@ -63,6 +65,30 @@ effects may have occurred but the outcome cannot be confirmed, retain uncertaint
 and native recovery references. Reconciliation is an explicit operation; it does
 not replay the original action or rewrite its terminal result.
 
+### Workspace execution admission
+
+The Workspace owner holds the serial R queue. Gateway admission/idempotency runs
+before enqueueing; retries do not create another queue entry. Domain execution
+leases keep a request Accepted while it waits, arbitrate pending cancellation with
+start, and retain the native lane until the final commit finishes. A final commit
+failure pauses following work. Queue controls also fence starts until their commit
+finishes. They never introduce another analysis execution or approval path.
+
+The optional Invoke transport acceptance reply preserves the default terminal
+reply. Detached edge waits do not detach accepted work from the Host. Pending
+requests are not replayed on restart; existing recovery distinguishes Accepted
+from possibly started work. A before-start failed/cancelled commit cannot contain
+scientific facts, output or effect observations.
+
+Read/control capacity is reserved separately from waiting Invoke calls, so a full
+transport queue cannot prevent observing or answering stdin.
+
+Input replies bind the existing session, operation, native request and caller.
+They bypass the execution queue, accept one answer, and carry no journal/draft
+payload. Waiting for input suspends the runtime timeout, not cancellation.
+The Jupyter reaper retains only its own pipe; inherited project/journal descriptors
+and other reaper pipes must not keep another Host alive.
+
 ### Queries and observations
 
 Queries perform bounded reads with source, observation time, status and completeness.
@@ -77,7 +103,9 @@ subset methods. Unsupported classed objects remain metadata-only.
 
 Paginated summaries come from the journal. Runtime output logs contain ordered,
 bounded observations and media references; they do not determine execution outcome.
-A missing output event is not itself execution failure. Media is addressed by
+A missing output event is not itself execution failure. Output storage has an
+independent owner port, so historical media queries also work in a project-only
+Host. Media is addressed by
 OperationId and output sequence, with original bytes checked against the reference.
 
 ## Native identities and concurrency

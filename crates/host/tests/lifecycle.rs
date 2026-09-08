@@ -371,3 +371,260 @@ async fn second_host_cannot_recover_live_writer_and_reader_does_not_mutate() {
         Some(record)
     );
 }
+
+async fn console_state(host: &NextHost) -> rho_contract::ConsoleState {
+    let result = host
+        .query_snapshot(
+            &NextHost::local_context(),
+            rho_contract::QueryRequest {
+                capability: CapabilityRef::new("workspace.console_state", 1).unwrap(),
+                arguments: json!({}),
+            },
+        )
+        .await
+        .unwrap();
+    serde_json::from_value(result.data.unwrap()).unwrap()
+}
+#[tokio::test]
+async fn accepted_queue_is_fifo_and_pending_cancellation_never_executes() {
+    let runtime = Arc::new(WaitingRuntime {
+        started: Notify::new(),
+        release: Notify::new(),
+        calls: AtomicUsize::new(0),
+    });
+    let host = host(runtime.clone()).await;
+    let context = NextHost::local_context();
+    let first = host
+        .invoke_accepted(&context, invocation("queue-first"))
+        .await
+        .unwrap();
+    runtime.started.notified().await;
+    let second = host
+        .invoke_accepted(&context, invocation("queue-second"))
+        .await
+        .unwrap();
+    let third = host
+        .invoke_accepted(&context, invocation("queue-third"))
+        .await
+        .unwrap();
+    assert_eq!(second.status, OperationStatus::Accepted);
+    assert_eq!(
+        host.get_operation(&context, &second.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        OperationStatus::Accepted
+    );
+    let state = console_state(&host).await;
+    assert_eq!(
+        state
+            .pending
+            .iter()
+            .map(|r| r.operation_id.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            second.operation.operation_id.clone(),
+            third.operation.operation_id.clone()
+        ]
+    );
+    let retry = host
+        .invoke_accepted(&context, invocation("queue-second"))
+        .await
+        .unwrap();
+    assert_eq!(retry.operation.operation_id, second.operation.operation_id);
+    assert!(
+        host.dispatch(
+            &context,
+            rho_contract::HostRequest::RequestCancellation {
+                operation_id: first.operation.operation_id.clone(),
+                only_if_pending: Some(true)
+            }
+        )
+        .await
+        .is_err()
+    );
+    host.dispatch(
+        &context,
+        rho_contract::HostRequest::RequestCancellation {
+            operation_id: second.operation.operation_id.clone(),
+            only_if_pending: Some(true),
+        },
+    )
+    .await
+    .unwrap();
+    runtime.release.notify_one();
+    // Shutdown cancels remaining pending work even if a failure paused the queue.
+    tokio::time::timeout(std::time::Duration::from_secs(2), host.drain())
+        .await
+        .unwrap();
+    assert_eq!(runtime.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        host.get_operation(&context, &second.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        OperationStatus::Cancelled
+    );
+}
+#[tokio::test]
+async fn queue_pause_is_bound_to_its_observed_identity_and_queries_hide_other_principals() {
+    let runtime = Arc::new(WaitingRuntime {
+        started: Notify::new(),
+        release: Notify::new(),
+        calls: AtomicUsize::new(0),
+    });
+    let host = host(runtime.clone()).await;
+    let context = NextHost::local_context();
+    let mut pause = invocation("pause");
+    pause.capability = CapabilityRef::new("workspace.pause_queue", 1).unwrap();
+    pause.arguments = json!({"session_id":"waiting-session","pause_id":null});
+    host.invoke(&context, pause).await.unwrap();
+    let queued = host
+        .invoke_accepted(&context, invocation("paused-run"))
+        .await
+        .unwrap();
+    let state = console_state(&host).await;
+    assert_eq!(state.pending.len(), 1);
+    assert!(state.current.is_none());
+    let mut outsider = context.clone();
+    outsider.caller.id = "other".into();
+    let observed = host
+        .query_snapshot(
+            &outsider,
+            rho_contract::QueryRequest {
+                capability: CapabilityRef::new("workspace.console_state", 1).unwrap(),
+                arguments: json!({}),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(observed.data.unwrap()["pending"], json!([]));
+    let mut resume = invocation("stale-resume");
+    resume.capability = CapabilityRef::new("workspace.resume_queue", 1).unwrap();
+    resume.arguments = json!({"session_id":"waiting-session","pause_id":"stale"});
+    assert_eq!(
+        host.invoke(&context, resume.clone()).await.unwrap().status,
+        OperationStatus::Failed
+    );
+    resume.client_request_id = "valid-resume".into();
+    resume.arguments["pause_id"] = json!(state.pause.unwrap().id);
+    assert_eq!(
+        host.invoke(&context, resume).await.unwrap().status,
+        OperationStatus::Succeeded
+    );
+    runtime.started.notified().await;
+    runtime.release.notify_one();
+    host.drain().await;
+    assert_eq!(
+        host.get_operation(&context, &queued.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        OperationStatus::Succeeded
+    );
+}
+
+#[tokio::test]
+async fn failed_final_commit_pauses_pending_runs_without_releasing_them_to_r() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("commit.sqlite");
+    let runtime = Arc::new(WaitingRuntime {
+        started: Notify::new(),
+        release: Notify::new(),
+        calls: AtomicUsize::new(0),
+    });
+    let host = NextHost::with_components(
+        Arc::new(SqliteOperationJournal::open(&database).unwrap()),
+        runtime.clone(),
+        Arc::new(SystemClock),
+        Arc::new(UuidOperationIdGenerator),
+    )
+    .await
+    .unwrap();
+    let context = NextHost::local_context();
+    let first = host
+        .invoke_accepted(&context, invocation("commit-fails"))
+        .await
+        .unwrap();
+    runtime.started.notified().await;
+    let second = host
+        .invoke_accepted(&context, invocation("commit-pending"))
+        .await
+        .unwrap();
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    connection.execute_batch("CREATE TRIGGER reject_result BEFORE UPDATE OF status ON operations WHEN NEW.client_request_id = 'commit-fails' AND NEW.status = 'succeeded' BEGIN SELECT RAISE(ABORT, 'fixture final commit failed'); END;").unwrap();
+    runtime.release.notify_one();
+    let paused = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let state = console_state(&host).await;
+            if state.pause.is_some() {
+                break state;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(paused.pause.unwrap().reason.contains("commit"));
+    assert_eq!(runtime.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        host.get_operation(&context, &first.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        OperationStatus::Running
+    );
+    assert_eq!(
+        host.get_operation(&context, &second.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        OperationStatus::Accepted
+    );
+    host.drain().await;
+    assert_eq!(runtime.calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn normal_shutdown_drains_unpaused_accepted_r_work_in_order() {
+    let runtime = Arc::new(WaitingRuntime {
+        started: Notify::new(),
+        release: Notify::new(),
+        calls: AtomicUsize::new(0),
+    });
+    let host = Arc::new(host(runtime.clone()).await);
+    let context = NextHost::local_context();
+    host.invoke_accepted(&context, invocation("drain-first"))
+        .await
+        .unwrap();
+    runtime.started.notified().await;
+    let second = host
+        .invoke_accepted(&context, invocation("drain-second"))
+        .await
+        .unwrap();
+    let draining = host.clone();
+    let task = tokio::spawn(async move {
+        draining.drain().await;
+    });
+    runtime.release.notify_one();
+    runtime.started.notified().await;
+    runtime.release.notify_one();
+    tokio::time::timeout(std::time::Duration::from_secs(2), task)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(runtime.calls.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        host.get_operation(&context, &second.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        OperationStatus::Succeeded
+    );
+}

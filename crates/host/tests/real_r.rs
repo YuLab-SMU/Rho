@@ -207,6 +207,7 @@ async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
         .unwrap();
     assert_eq!(failed.status, OperationStatus::Failed, "{failed:?}");
     assert!(failed.error.as_ref().unwrap().contains("actual R error"));
+    resume_console(&host, "after-error").await;
     let retained = host
         .invoke(&context, request("retained", "x"))
         .await
@@ -282,6 +283,7 @@ async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
         OperationStatus::Cancelled,
         "{cancelled:?}"
     );
+    resume_console(&host, "after-interrupt").await;
     let after = host
         .invoke(&context, request("after-cancel", "x + 1"))
         .await
@@ -482,4 +484,213 @@ async fn real_workspace_queries_are_bounded_and_do_not_force_bindings_or_record_
         .await
         .unwrap();
     assert_eq!(proof.output.as_ref().unwrap()["value"], json!(0));
+}
+
+async fn resume_console(host: &NextHost, id: &str) {
+    let context = NextHost::local_context();
+    let state = host
+        .query_snapshot(
+            &context,
+            rho_contract::QueryRequest {
+                capability: CapabilityRef::new("workspace.console_state", 1).unwrap(),
+                arguments: json!({}),
+            },
+        )
+        .await
+        .unwrap()
+        .data
+        .unwrap();
+    if !state["pause"].is_null() {
+        let result=host.invoke(&context,Invocation{client_request_id:format!("resume-{id}"),capability:CapabilityRef::new("workspace.resume_queue",1).unwrap(),arguments:json!({"session_id":state["session_id"],"pause_id":state["pause"]["id"]}),preconditions:vec![]}).await.unwrap();
+        assert_eq!(result.status, OperationStatus::Succeeded);
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; run scripts/test-real-r.mjs"]
+async fn real_console_prints_each_expression_and_answers_native_stdin_once() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("console.sqlite");
+    let host = NextHost::open_ark(
+        &database,
+        ArkConfig {
+            executable: PathBuf::from(std::env::var_os("RHO_ARK").unwrap()),
+            r_home: PathBuf::from(std::env::var_os("RHO_R_HOME").unwrap()),
+            project_root: directory.path().into(),
+            data_root: directory.path().join("runtime"),
+            execution_timeout: Duration::from_secs(5),
+            library_path: None,
+        },
+    )
+    .await
+    .unwrap();
+    let context = NextHost::local_context();
+    let mut printed = request(
+        "console-print",
+        "1+1; message('message-sequence'); warning('warning-sequence'); 2+2; plot(1:3)",
+    );
+    printed.arguments["output_mode"] = json!("console");
+    let record = host.invoke(&context, printed).await.unwrap();
+    assert_eq!(record.status, OperationStatus::Succeeded);
+    let output = record.output.as_ref().unwrap();
+    assert!(output["stdout"].as_str().unwrap().contains("[1] 2"));
+    assert!(output["stdout"].as_str().unwrap().contains("[1] 4"));
+    assert!(
+        output["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("message-sequence")
+    );
+    assert!(
+        output["stderr"]
+            .as_str()
+            .unwrap()
+            .contains("warning-sequence")
+    );
+    assert!(output["value"].is_null());
+    let media = host
+        .query_snapshot(
+            &context,
+            query(
+                "workspace.list_outputs",
+                json!({"operation_id":record.operation.operation_id,"limit":100}),
+            ),
+        )
+        .await
+        .unwrap();
+    let reference: rho_contract::MediaReference =
+        serde_json::from_value(media.data.unwrap()["media"][0]["reference"].clone()).unwrap();
+    let complete = host
+        .query_snapshot(
+            &context,
+            query("workspace.check_code", json!({"code":"mean("})),
+        )
+        .await
+        .unwrap();
+    assert_eq!(complete.data.unwrap()["status"], "incomplete");
+    let mut input = request(
+        "input-once",
+        "answer <- readline('Country: '); cat('answer=',answer,'\\n',sep='')",
+    );
+    input.arguments["output_mode"] = json!("console");
+    let accepted = host.invoke_accepted(&context, input).await.unwrap();
+    let pending = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let state = host
+                .query_snapshot(&context, query("workspace.console_state", json!({})))
+                .await
+                .unwrap()
+                .data
+                .unwrap();
+            if !state["input"].is_null() {
+                break state["input"].clone();
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let response = |session: String| {
+        rho_contract::HostRequest::RespondInput(rho_contract::RespondInput {
+            session_id: session,
+            operation_id: accepted.operation.operation_id.clone(),
+            request_id: pending["request_id"].as_str().unwrap().into(),
+            reply_id: "answer-once".into(),
+            value: "China".into(),
+        })
+    };
+    assert!(
+        host.dispatch(&context, response("wrong-session".into()))
+            .await
+            .is_err()
+    );
+    host.dispatch(
+        &context,
+        response(pending["session_id"].as_str().unwrap().into()),
+    )
+    .await
+    .unwrap();
+    assert!(
+        host.dispatch(
+            &context,
+            response(pending["session_id"].as_str().unwrap().into())
+        )
+        .await
+        .is_err()
+    );
+    host.drain().await;
+    let answered = host
+        .get_operation(&context, &accepted.operation.operation_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(answered.status, OperationStatus::Succeeded);
+    assert!(
+        answered.output.unwrap()["stdout"]
+            .as_str()
+            .unwrap()
+            .contains("answer=China")
+    );
+    drop(host);
+    // Saved originals remain readable with a project-only Host; no R launch is needed.
+    let offline = NextHost::open_project(&database, directory.path())
+        .await
+        .unwrap();
+    assert!(
+        !offline
+            .capabilities()
+            .iter()
+            .any(|c| c.capability.id == "workspace.run_r")
+    );
+    let bytes = offline
+        .query_snapshot(
+            &context,
+            query(
+                "workspace.read_output",
+                json!({"reference":reference,"offset":0,"limit_bytes":65536}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(bytes.status, QueryStatus::Ready);
+    assert!(!bytes.data.unwrap()["bytes"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; run scripts/test-real-r.mjs"]
+async fn host_shutdown_interrupts_unanswerable_stdin_without_abandoning_the_commit() {
+    let directory = tempfile::tempdir().unwrap();
+    let host = NextHost::open_ark(
+        directory.path().join("stdin-close.sqlite"),
+        ArkConfig {
+            executable: PathBuf::from(std::env::var_os("RHO_ARK").unwrap()),
+            r_home: PathBuf::from(std::env::var_os("RHO_R_HOME").unwrap()),
+            project_root: directory.path().into(),
+            data_root: directory.path().join("runtime"),
+            execution_timeout: Duration::from_secs(5),
+            library_path: None,
+        },
+    )
+    .await
+    .unwrap();
+    let context = NextHost::local_context();
+    let accepted = host
+        .invoke_accepted(
+            &context,
+            request(
+                "closing-input",
+                "Sys.sleep(0.1); readline('No client remains: ')",
+            ),
+        )
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(10), host.drain())
+        .await
+        .unwrap();
+    let ended = host
+        .get_operation(&context, &accepted.operation.operation_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(ended.status, OperationStatus::Cancelled, "{ended:?}");
 }

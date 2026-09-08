@@ -63,6 +63,7 @@ struct AppState {
     origin: String,
     authorization: String,
     calls: Arc<Semaphore>,
+    observations: Arc<Semaphore>,
     application: Arc<rho_host::ApplicationStore>,
     dev_assets: Option<PathBuf>,
     nonce: String,
@@ -208,11 +209,13 @@ async fn dispatch(State(state): State<AppState>, Json(request): Json<WorkbenchFr
     if request.frame.id.is_empty() || request.frame.id.len() > 160 {
         return failure(StatusCode::BAD_REQUEST, "invalid transport request id");
     }
-    let _permit = if matches!(
-        request.frame.request,
-        HostRequest::Invoke(_) | HostRequest::QuerySnapshot(_)
-    ) {
-        match state.calls.try_acquire() {
+    let quota = match &request.frame.request {
+        HostRequest::Invoke(_) => Some(&state.calls),
+        HostRequest::QuerySnapshot(_) => Some(&state.observations),
+        _ => None,
+    };
+    let _permit = if let Some(quota) = quota {
+        match quota.try_acquire() {
             Ok(permit) => Some(permit),
             Err(_) => return failure(StatusCode::TOO_MANY_REQUESTS, "too many active calls"),
         }
@@ -431,6 +434,7 @@ pub async fn serve_with_assets(
         origin: origin.clone(),
         authorization: format!("Bearer {token}"),
         calls: Arc::new(Semaphore::new(32)),
+        observations: Arc::new(Semaphore::new(16)),
         application,
         dev_assets,
         nonce: uuid::Uuid::new_v4().simple().to_string(),
@@ -501,6 +505,7 @@ mod tests {
             origin: "http://127.0.0.1:10001".into(),
             authorization: "Bearer fixture-only".into(),
             calls: Arc::new(Semaphore::new(32)),
+            observations: Arc::new(Semaphore::new(16)),
             application: Arc::new(
                 rho_host::ApplicationStore::open(&temp.path().join("studio.sqlite")).unwrap(),
             ),

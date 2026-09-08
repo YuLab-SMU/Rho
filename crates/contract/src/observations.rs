@@ -107,3 +107,33 @@ pub struct RuntimeStatus {
     pub processes: Vec<ProcessObservation>,
     pub notices: Vec<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+pub struct MediaSummary {
+    pub reference: MediaReference,
+    pub observed_at_ms: i64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+pub struct MediaPage {
+    pub operation_id: OperationId,
+    pub media: Vec<MediaSummary>,
+    pub next_sequence: u64,
+    pub has_more: bool,
+    pub gap: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SearchFilesArguments {
+    pub text: String,
+    #[serde(default)]
+    pub show_hidden: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+pub struct FileSearchResult {
+    pub entries: Vec<crate::DirectoryEntry>,
+    pub scanned_entries: u32,
+    pub scanned_directories: u32,
+    pub truncated: bool,
+    pub notices: Vec<String>,
+}

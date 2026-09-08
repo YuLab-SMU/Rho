@@ -35,16 +35,22 @@ rho_dispatch <- function(request) {
       if (identical(request$action, "execute")) {
         expressions <- parse(text = sub("^\ufeff", "", request$payload$code, perl = TRUE), keep.source = TRUE)
         result <- NULL
-        for (expression in expressions) result <- withVisible(eval(expression, envir = .GlobalEnv))
-        if (is.null(result) || !result$visible) NULL else result$value
+        console <- identical(request$payload$output_mode, "console")
+        for (expression in expressions) {
+          result <- withVisible(eval(expression, envir = .GlobalEnv))
+          if (console && result$visible) base::print(result$value)
+        }
+        if (console || is.null(result) || !result$visible) NULL else result$value
       } else {
         switch(request$action, help = rho_help(request$payload),
                lint = rho_lint(request$payload), format = rho_format(request$payload))
       }
     }, warning = function(condition) {
+      if (identical(request$payload$output_mode, "console")) cat("Warning: ", conditionMessage(condition), "\n", sep = "", file = stderr())
       add_condition("warning", condition)
       invokeRestart("muffleWarning")
     }, message = function(condition) {
+      if (identical(request$payload$output_mode, "console")) cat(conditionMessage(condition), file = stderr())
       add_condition("message", condition)
       invokeRestart("muffleMessage")
     }),

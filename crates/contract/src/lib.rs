@@ -492,3 +492,6 @@ mod tests {
         assert!(OperationOutcome::from_status(OperationStatus::Running).is_err());
     }
 }
+
+mod console;
+pub use console::*;

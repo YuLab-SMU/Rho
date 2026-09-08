@@ -65,3 +65,110 @@ impl QueryHandler for ProjectDirectoryHandler {
         })
     }
 }
+
+pub struct ProjectSearchHandler {
+    owner: Arc<ProjectOwner>,
+    descriptor: CapabilityDescriptor,
+}
+impl ProjectSearchHandler {
+    pub fn new(owner: Arc<ProjectOwner>) -> Self {
+        Self {
+            owner,
+            descriptor: descriptor(
+                "project.search_files",
+                CapabilityKind::Query,
+                schema_for!(rho_contract::SearchFilesArguments).to_value(),
+                schema_for!(QuerySnapshot).to_value(),
+            ),
+        }
+    }
+}
+#[async_trait]
+impl QueryHandler for ProjectSearchHandler {
+    fn descriptor(&self) -> &CapabilityDescriptor {
+        &self.descriptor
+    }
+    fn normalize_arguments(&self, value: &Value) -> Result<Value, OperationError> {
+        let args: rho_contract::SearchFilesArguments =
+            serde_json::from_value(value.clone()).map_err(invalid)?;
+        if args.text.trim().is_empty() || args.text.len() > 1024 {
+            return Err(invalid("Search text must be 1..=1024 bytes"));
+        }
+        serde_json::to_value(args).map_err(invalid)
+    }
+    async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
+        let args: rho_contract::SearchFilesArguments =
+            serde_json::from_value(value.clone()).map_err(invalid)?;
+        let mut remaining = std::collections::VecDeque::from([(String::new(), None)]);
+        let mut result = rho_contract::FileSearchResult {
+            entries: vec![],
+            scanned_entries: 0,
+            scanned_directories: 0,
+            truncated: false,
+            notices: vec![],
+        };
+        let needle = args.text.to_lowercase();
+        while let Some((path, after_name)) = remaining.pop_front() {
+            if result.scanned_entries >= 10000
+                || result.scanned_directories >= 200
+                || result.entries.len() >= 200
+            {
+                result.truncated = true;
+                break;
+            }
+            if after_name.is_none() {
+                result.scanned_directories += 1;
+            }
+            match self
+                .owner
+                .runtime
+                .list_directory(&ListDirectoryArguments {
+                    path,
+                    after_name,
+                    limit: 200,
+                })
+                .await
+            {
+                Ok(page) => {
+                    if let Some(next) = page.next_name {
+                        remaining.push_back((page.path, Some(next)));
+                    }
+                    result.scanned_entries += page.entries.len() as u32;
+                    for entry in page.entries {
+                        if !args.show_hidden && entry.name.starts_with('.') {
+                            continue;
+                        }
+                        if entry.kind == "directory" {
+                            remaining.push_back((entry.path.clone(), None));
+                        }
+                        if entry.path.to_lowercase().contains(&needle) {
+                            if result.entries.len() < 200 {
+                                result.entries.push(entry);
+                            } else {
+                                result.truncated = true;
+                            }
+                        }
+                    }
+                }
+                Err(error) => {
+                    result.truncated = true;
+                    if result.notices.len() < 10 {
+                        result.notices.push(error);
+                    }
+                }
+            }
+        }
+        if result.truncated {
+            result.notices.push("Search is bounded to 200 results, 200 directories and 10,000 entries. Refine the name or browse a directory.".into());
+        }
+        Ok(QuerySnapshot {
+            target: self.owner.target(),
+            source: "filesystem/search".into(),
+            observed_at_ms: SystemClock.now_ms()?,
+            status: QueryStatus::Ready,
+            completeness: ObservationCompleteness::Partial,
+            data: Some(serde_json::to_value(result).map_err(invalid)?),
+            notices: vec![],
+        })
+    }
+}

@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 mod directory;
-pub use directory::ProjectDirectoryHandler;
+pub use directory::{ProjectDirectoryHandler, ProjectSearchHandler};
 pub use rho_contract::{DirectoryEntry, DirectoryPage, ListDirectoryArguments};
 pub use rho_contract::{
     FileObservation, FilePage, GitObservation, GitStatusEntry, ProjectPatchResult, ProjectSnapshot,

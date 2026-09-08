@@ -1,9 +1,11 @@
 #![forbid(unsafe_code)]
 pub use rho_contract::RunROutput;
 
+mod console;
+pub use console::{ConsoleQueryHandler, ConsoleQueue, QueueControlHandler};
 mod outputs;
 mod query;
-pub use outputs::{OutputQueryKind, WorkspaceOutputHandler};
+pub use outputs::{OutputQueryKind, WorkspaceOutputHandler, WorkspaceOutputs};
 pub use query::*;
 mod tools;
 pub use tools::*;
@@ -20,7 +22,7 @@ use rho_operation::{
     CommitPlan, DomainFactMutation, EffectBoundary, HandlerError, OperationError, OperationHandler,
     PlannedEvent,
 };
-use schemars::{JsonSchema, schema_for};
+use schemars::schema_for;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -30,12 +32,7 @@ pub const RUN_R_CAPABILITY_VERSION: u16 = 1;
 pub const RUN_R_SCOPE: &str = "workspace.run_r";
 const MAX_CODE_BYTES: usize = rho_contract::MAX_ARGUMENT_BYTES;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct RunRArguments {
-    #[schemars(length(min = 1))]
-    pub code: String,
-}
+pub use rho_contract::RunRArguments;
 
 #[derive(Serialize)]
 struct WorkspaceExecutionFact<'a> {
@@ -45,7 +42,10 @@ struct WorkspaceExecutionFact<'a> {
     operation_id: &'a rho_contract::OperationId,
 }
 
-impl RunRArguments {
+trait ValidateRun {
+    fn validate(&self) -> Result<(), OperationError>;
+}
+impl ValidateRun for RunRArguments {
     fn validate(&self) -> Result<(), OperationError> {
         if self.code.trim().is_empty() {
             return Err(OperationError::InvalidInput(
@@ -60,6 +60,17 @@ impl RunRArguments {
         if self.code.contains('\0') {
             return Err(OperationError::InvalidInput(
                 "workspace.run_r code contains NUL".to_string(),
+            ));
+        }
+        if self.output_mode.as_deref().is_some_and(|m| m != "console")
+            || self.source.as_ref().is_some_and(|s| {
+                s.view_id.len() > 160
+                    || s.label.len() > 1024
+                    || !["console", "line", "selection", "file"].contains(&s.kind.as_str())
+            })
+        {
+            return Err(OperationError::InvalidInput(
+                "Invalid Console mode or source".into(),
             ));
         }
         Ok(())
@@ -106,6 +117,16 @@ impl WorkspaceRuntimeError {
 
 #[async_trait]
 pub trait WorkspaceRuntime: Send + Sync {
+    fn begin_shutdown(&self) {}
+    fn input_request(&self) -> Option<rho_contract::InputRequest> {
+        None
+    }
+    fn respond_input(&self, _reply: rho_contract::RespondInput) -> Result<(), String> {
+        Err("R input is unavailable".into())
+    }
+    async fn check_code(&self, _code: &str) -> Result<rho_contract::CodeCompleteness, String> {
+        Err("R code completeness is unavailable".into())
+    }
     async fn output_events(
         &self,
         _args: &rho_contract::OutputEventsArguments,
@@ -172,9 +193,17 @@ pub struct WorkspaceRunHandler {
     descriptor: CapabilityDescriptor,
     runtime: Arc<dyn WorkspaceRuntime>,
     lane: Arc<tokio::sync::Mutex<()>>,
+    queue: Arc<ConsoleQueue>,
 }
 
 impl WorkspaceRunHandler {
+    pub fn begin_shutdown(&self) {
+        self.queue.begin_shutdown();
+        self.runtime.begin_shutdown();
+    }
+    pub fn respond_input(&self, reply: rho_contract::RespondInput) -> Result<(), String> {
+        self.runtime.respond_input(reply)
+    }
     pub fn new(runtime: Arc<dyn WorkspaceRuntime>) -> Self {
         Self::with_lane(runtime, Arc::new(tokio::sync::Mutex::new(())))
     }
@@ -208,6 +237,7 @@ impl WorkspaceRunHandler {
             },
             runtime,
             lane,
+            queue: Arc::new(ConsoleQueue::default()),
         }
     }
 
@@ -310,6 +340,21 @@ fn runtime_error(error: WorkspaceRuntimeError) -> HandlerError {
 
 #[async_trait]
 impl OperationHandler for WorkspaceRunHandler {
+    fn admitted(&self, operation: &Operation) -> Result<(), HandlerError> {
+        self.queue.admit(operation)
+    }
+    fn cancel_pending(&self, operation: &Operation) -> bool {
+        self.queue.cancel_pending(operation)
+    }
+    async fn acquire_execution(
+        &self,
+        operation: &Operation,
+        cancellation: tokio::sync::watch::Receiver<bool>,
+    ) -> Result<Box<dyn rho_operation::ExecutionLease>, HandlerError> {
+        self.queue
+            .acquire(operation, self.lane.clone(), cancellation)
+            .await
+    }
     fn idempotency_scope(&self) -> Option<String> {
         self.runtime.project_root().map(str::to_string)
     }
@@ -342,7 +387,6 @@ impl OperationHandler for WorkspaceRunHandler {
         operation: &Operation,
         cancellation: tokio::sync::watch::Receiver<bool>,
     ) -> Result<CommitPlan, HandlerError> {
-        let _lane = self.lane.lock().await;
         if *cancellation.borrow() {
             let mut plan = CommitPlan::succeeded(json!({"execution_started": false}));
             plan.outcome = OperationOutcome::Cancelled;
@@ -428,6 +472,7 @@ mod tests {
                 operation,
                 &RunRArguments {
                     code: request.action().into(),
+                    ..Default::default()
                 },
             )
             .await

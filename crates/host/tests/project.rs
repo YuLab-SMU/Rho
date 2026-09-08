@@ -684,3 +684,41 @@ async fn database_alias_does_not_expose_the_sibling_application_store() {
     assert_eq!(read.status, QueryStatus::Unavailable);
     assert!(read.data.is_none());
 }
+
+#[tokio::test]
+async fn project_search_includes_ignored_data_and_reports_result_bounds() {
+    let directory = tempfile::tempdir().unwrap();
+    let project = directory.path().join("project");
+    std::fs::create_dir_all(project.join("data/raw")).unwrap();
+    std::fs::write(project.join(".gitignore"), "data/\n").unwrap();
+    for i in 0..205 {
+        std::fs::write(
+            project.join(format!("data/raw/sample-{i:03}.csv")),
+            "x\n1\n",
+        )
+        .unwrap();
+    }
+    let host = NextHost::open_project(directory.path().join("next.sqlite"), &project)
+        .await
+        .unwrap();
+    let result = host
+        .query_snapshot(
+            &NextHost::local_context(),
+            QueryRequest {
+                capability: CapabilityRef::new("project.search_files", 1).unwrap(),
+                arguments: json!({"text":"sample-","show_hidden":false}),
+            },
+        )
+        .await
+        .unwrap();
+    let data = result.data.unwrap();
+    assert_eq!(data["entries"].as_array().unwrap().len(), 200);
+    assert_eq!(data["truncated"], true);
+    assert!(data["notices"][0].as_str().unwrap().contains("bounded"));
+    assert!(
+        host.outbox(&NextHost::local_context(), 0, 100)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}

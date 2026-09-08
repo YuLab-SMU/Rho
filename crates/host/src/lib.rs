@@ -133,12 +133,14 @@ pub struct NextHost {
 struct HostRuntime {
     gateway: Arc<OperationGateway>,
     queries: Arc<QueryGateway>,
+    workspace: Option<Arc<WorkspaceRunHandler>>,
     _project_lease: Option<ProjectLease>,
 }
 
 #[derive(Default)]
 struct HostDomains {
     workspace: Option<Arc<dyn WorkspaceRuntime>>,
+    outputs: Option<Arc<dyn rho_workspace::WorkspaceOutputs>>,
     project: Option<Arc<dyn ProjectRuntime>>,
     environment: Option<Arc<dyn EnvironmentRuntime>>,
     active_library: Option<String>,
@@ -189,6 +191,13 @@ impl NextHost {
         Self::compose(
             journal,
             HostDomains {
+                outputs: Some(Arc::new(
+                    rho_r_runtime::OutputStore::open(
+                        &database.parent().unwrap_or(Path::new(".")).join("runtime"),
+                        project.root(),
+                    )
+                    .map_err(OperationError::Storage)?,
+                )),
                 project: Some(project),
                 remote,
                 project_lease: Some(lease),
@@ -207,13 +216,49 @@ impl NextHost {
         use rho_contract::HostRequest;
         let result = match request {
             HostRequest::Invoke(invocation) => {
-                serde_json::to_value(self.invoke(context, invocation).await?)
+                serde_json::to_value(if invocation.return_after_acceptance == Some(true) {
+                    self.invoke_accepted(context, invocation.invocation).await?
+                } else {
+                    self.invoke(context, invocation.invocation).await?
+                })
             }
             HostRequest::GetOperation { operation_id } => {
                 serde_json::to_value(self.get_operation(context, &operation_id).await?)
             }
-            HostRequest::RequestCancellation { operation_id } => {
-                serde_json::to_value(self.request_cancellation(context, &operation_id).await?)
+            HostRequest::RequestCancellation {
+                operation_id,
+                only_if_pending,
+            } => serde_json::to_value(
+                self.runtime
+                    .gateway
+                    .request_cancellation_conditional(
+                        context,
+                        &operation_id,
+                        only_if_pending.unwrap_or(false),
+                    )
+                    .await?,
+            ),
+            HostRequest::RespondInput(reply) => {
+                let record = self
+                    .get_operation(context, &reply.operation_id)
+                    .await?
+                    .ok_or_else(|| {
+                        OperationError::NotFound(reply.operation_id.as_str().to_string())
+                    })?;
+                if record.operation.target.identity != reply.session_id
+                    || !context.scopes.contains("workspace.run_r")
+                {
+                    return Err(OperationError::InvalidInput(
+                        "Input request session or scope does not match".into(),
+                    ));
+                }
+                self.runtime
+                    .workspace
+                    .as_ref()
+                    .ok_or_else(|| OperationError::InvalidInput("R input is unavailable".into()))?
+                    .respond_input(reply)
+                    .map_err(OperationError::InvalidInput)?;
+                Ok(serde_json::json!({"submitted":true}))
             }
             HostRequest::QuerySnapshot(query) => {
                 serde_json::to_value(self.query_snapshot(context, query).await?)
@@ -271,6 +316,13 @@ impl NextHost {
         Self::compose(
             journal,
             HostDomains {
+                outputs: Some(Arc::new(
+                    rho_r_runtime::OutputStore::open(
+                        &database.parent().unwrap_or(Path::new(".")).join("runtime"),
+                        project.root(),
+                    )
+                    .map_err(OperationError::Storage)?,
+                )),
                 project: Some(project),
                 environment: Some(environment),
                 remote,
@@ -356,6 +408,10 @@ impl NextHost {
             GitProject::open(&config.project_root, excluded)
                 .map_err(OperationError::TargetResolution)?,
         );
+        let outputs = Arc::new(
+            rho_r_runtime::OutputStore::open(&config.data_root, project.root())
+                .map_err(OperationError::Storage)?,
+        );
         let runtime = Arc::new(
             ArkRuntime::launch(config)
                 .await
@@ -365,6 +421,7 @@ impl NextHost {
             journal,
             HostDomains {
                 workspace: Some(runtime),
+                outputs: Some(outputs),
                 project: Some(project),
                 environment: Some(environment),
                 active_library,
@@ -415,6 +472,7 @@ impl NextHost {
                     Arc::new(UuidOperationIdGenerator),
                 )),
                 queries: Arc::new(QueryGateway::new(registry)),
+                workspace: None,
                 _project_lease: None,
             }),
             recovered_on_open: Vec::new(),
@@ -458,12 +516,14 @@ impl NextHost {
     ) -> Result<Self, OperationError> {
         let HostDomains {
             workspace: runtime,
+            outputs,
             project,
             environment,
             active_library,
             remote,
             project_lease,
         } = domains;
+        let output_project = project.as_ref().map(|p| p.root().to_string());
         let mut registry = CapabilityRegistry::new();
         let lane = Arc::new(tokio::sync::Mutex::new(()));
         let records = Arc::new(JournalRecords(journal.clone()));
@@ -486,14 +546,31 @@ impl NextHost {
             Arc::new(usage::WorkspaceUsage(runtime.clone()))
                 as Arc<dyn rho_environment::EnvironmentUsage>
         });
+        let mut workspace_owner = None;
         if let Some(runtime) = runtime {
             let workspace = Arc::new(WorkspaceRunHandler::with_lane(runtime, lane.clone()));
+            workspace_owner = Some(workspace.clone());
             registry.register(workspace.clone())?;
+            for check in [false, true] {
+                registry.register_query(Arc::new(rho_workspace::ConsoleQueryHandler::new(
+                    workspace.clone(),
+                    check,
+                )))?;
+            }
+            for pause in [false, true] {
+                registry.register(Arc::new(rho_workspace::QueueControlHandler::new(
+                    workspace.clone(),
+                    pause,
+                )))?;
+            }
             for kind in [
                 rho_workspace::OutputQueryKind::Events,
                 rho_workspace::OutputQueryKind::Read,
                 rho_workspace::OutputQueryKind::Status,
             ] {
+                if outputs.is_some() && !matches!(kind, rho_workspace::OutputQueryKind::Status) {
+                    continue;
+                }
                 registry.register_query(Arc::new(rho_workspace::WorkspaceOutputHandler::new(
                     workspace.clone(),
                     records.clone(),
@@ -515,6 +592,23 @@ impl NextHost {
                 workspace,
                 WorkspaceQueryKind::InspectObject,
             )))?;
+        }
+        if let Some(outputs) = outputs {
+            for kind in [
+                rho_workspace::OutputQueryKind::Events,
+                rho_workspace::OutputQueryKind::Read,
+                rho_workspace::OutputQueryKind::List,
+            ] {
+                registry.register_query(Arc::new(
+                    rho_workspace::WorkspaceOutputHandler::with_store(
+                        workspace_owner.clone(),
+                        Some(outputs.clone()),
+                        output_project.clone(),
+                        records.clone(),
+                        kind,
+                    ),
+                ))?;
+            }
         }
         if let Some(project) = project {
             registry.register_query(Arc::new(rho_operation::RecentOperationsHandler::new(
@@ -538,6 +632,9 @@ impl NextHost {
             registry.register(Arc::new(ProjectPatchHandler::new(owner.clone())))?;
             registry.register_query(Arc::new(ProjectSnapshotHandler::new(owner.clone())))?;
             registry.register_query(Arc::new(rho_project::ProjectDirectoryHandler::new(
+                owner.clone(),
+            )))?;
+            registry.register_query(Arc::new(rho_project::ProjectSearchHandler::new(
                 owner.clone(),
             )))?;
             registry.register_query(Arc::new(ProjectReadHandler::new(owner)))?;
@@ -585,6 +682,7 @@ impl NextHost {
             runtime: Arc::new(HostRuntime {
                 gateway,
                 queries: Arc::new(QueryGateway::new(registry)),
+                workspace: workspace_owner,
                 _project_lease: project_lease,
             }),
             recovered_on_open,
@@ -610,11 +708,37 @@ impl NextHost {
         let runtime = self.runtime.clone();
         let context = context.clone();
         self.tasks
-            .spawn(async move { runtime.gateway.invoke(&context, invocation).await })
+            .spawn(async move {
+                let result = runtime.gateway.invoke(&context, invocation).await;
+                drop(runtime);
+                result
+            })
             .await
             .map_err(|error| {
                 OperationError::Storage(format!("operation task ended without a result: {error}"))
             })?
+    }
+
+    pub async fn invoke_accepted(
+        &self,
+        context: &CallContext,
+        invocation: Invocation,
+    ) -> Result<OperationRecord, OperationError> {
+        let runtime = self.runtime.clone();
+        let context = context.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let mut task = self.tasks.spawn(async move {
+            let result = runtime
+                .gateway
+                .invoke_notifying(&context, invocation, Some(tx))
+                .await;
+            drop(runtime);
+            result
+        });
+        tokio::select! {
+            record=rx=> match record {Ok(record)=>Ok(record),Err(_)=>task.await.map_err(|e|OperationError::Storage(e.to_string()))?},
+            result=&mut task=>result.map_err(|e|OperationError::Storage(e.to_string()))?,
+        }
     }
 
     pub async fn query_snapshot(
@@ -626,7 +750,11 @@ impl NextHost {
         let context = context.clone();
         // Keep the Workspace lane until the read has finished, even if an edge disconnects.
         self.tasks
-            .spawn(async move { runtime.queries.query(&context, request).await })
+            .spawn(async move {
+                let result = runtime.queries.query(&context, request).await;
+                drop(runtime);
+                result
+            })
             .await
             .map_err(|error| OperationError::Storage(format!("query task failed: {error}")))?
     }
@@ -648,6 +776,9 @@ impl NextHost {
 
     /// The caller must first stop accepting new work through every edge.
     pub async fn drain(&self) {
+        if let Some(workspace) = &self.runtime.workspace {
+            workspace.begin_shutdown();
+        }
         self.tasks.close();
         self.tasks.wait().await;
     }

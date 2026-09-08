@@ -1,7 +1,18 @@
+# Values carry their exceptional kind; JSON null is not used for every special value.
+rho_preview_values <- function(values) {
+  unname(lapply(seq_along(values), function(i) {
+    value <- .subset2(values, i)
+    if (is.double(value) && is.nan(value)) return(list(kind = "non_finite", label = "NaN", type = typeof(value)))
+    if (is.na(value)) return(list(kind = "missing", label = "NA", type = typeof(value)))
+    if (is.double(value) && is.infinite(value)) return(list(kind = "non_finite", label = if (value > 0) "Inf" else "-Inf", type = typeof(value)))
+    value
+  }))
+}
+
 rho_binding_summary <- function(name, inspect = FALSE, max_items = 20L) {
   result <- list(name = name, kind = "missing", object_type = NULL,
                  classes = list(), length = NULL, dimensions = list(),
-                 preview = NULL, truncated = FALSE, notice = NULL)
+                 preview = NULL, preview_kind = "metadata", truncated = FALSE, notice = NULL)
   if (!exists(name, envir = .GlobalEnv, inherits = FALSE)) return(result)
   if (bindingIsActive(name, .GlobalEnv)) {
     result$kind <- "active_binding"
@@ -25,8 +36,14 @@ rho_binding_summary <- function(name, inspect = FALSE, max_items = 20L) {
   if (is.character(classes) && !is.object(classes)) result$classes <- as.list(substr(.subset(classes, seq_len(min(length(classes), 16L))), 1L, 128L))
   dimensions <- attr(value, "dim", exact = TRUE)
   if (!is.object(dimensions) && (is.integer(dimensions) || is.double(dimensions))) result$dimensions <- as.list(.subset(dimensions, seq_len(min(length(dimensions), 16L))))
-  if (identical(classes, "data.frame")) {
+  if (identical(classes, "data.frame") || identical(classes, c("tbl_df", "tbl", "data.frame"))) {
+    result$preview_kind <- "table"
     column_names <- attr(value, "names", exact = TRUE)
+    if (!is.null(column_names) && (!is.character(column_names) || is.object(column_names))) {
+      result$preview_kind <- "metadata"
+      result$notice <- "Nonstandard column names: metadata only; user methods were not called."
+      return(result)
+    }
     rows <- .row_names_info(value, 2L)
     columns <- length(column_names)
     result$dimensions <- list(rows, columns)
@@ -43,10 +60,13 @@ rho_binding_summary <- function(name, inspect = FALSE, max_items = 20L) {
           truncated_cells <<- truncated_cells || any(nchar(values, type = "chars") > 512L, na.rm = TRUE)
           values <- substr(values, 1L, 512L)
         }
-        values <- unname(as.list(values))
+        values <- rho_preview_values(values)
       }
       if (nchar(column_names[[index]], type = "chars") > 128L) truncated_cells <<- TRUE
-      list(index = index, name = substr(column_names[[index]], 1L, 128L), values = values)
+      column_classes <- attr(column, "class", exact = TRUE)
+      if (!is.character(column_classes) || is.object(column_classes)) column_classes <- character()
+      list(index = index, name = substr(.subset2(column_names, index), 1L, 128L),
+           type = typeof(column), classes = unname(as.list(substr(head(column_classes, 16L), 1L, 128L))), values = values)
     }))
     result$truncated <- truncated_cells || columns > length(selected_columns) || rows > length(selected_rows)
     result$notice <- "Data-frame preview is limited to 10 columns and 20 rows; classed columns are not evaluated."
@@ -60,13 +80,14 @@ rho_binding_summary <- function(name, inspect = FALSE, max_items = 20L) {
   if (typeof(value) %in% c("integer", "double", "logical", "character")) {
     result$length <- length(value)
     if (!inspect) return(result)
-    count <- min(length(value), max_items)
+    count <- min(length(value), max_items, 20L)
     preview <- .subset(value, seq_len(count))
     if (is.character(preview)) {
       result$truncated <- any(nchar(preview, type = "chars") > 512L, na.rm = TRUE)
       preview <- substr(preview, 1L, 512L)
     }
-    result$preview <- unname(as.list(preview))
+    result$preview_kind <- "vector"
+    result$preview <- rho_preview_values(preview)
     result$truncated <- result$truncated || length(value) > count
   } else {
     result$notice <- "Opaque object: value was not serialized."

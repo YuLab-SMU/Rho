@@ -95,6 +95,9 @@ pub fn make_client_id(name: Option<&str>) -> String {
 /// `Debug` if serialization fails. Used by `log::debug!` traces of every
 /// message in and out of the kernel.
 fn fmt_msg(msg: &JupyterMessage) -> String {
+    if msg.header.msg_type == "input_reply" {
+        return "input_reply [redacted]".into();
+    }
     // `JupyterMessageContent` is `#[serde(untagged)]` over struct variants,
     // so it serializes to a JSON object. Spread its fields after our
     // identifying header fields. Relies on `serde_json/preserve_order` for

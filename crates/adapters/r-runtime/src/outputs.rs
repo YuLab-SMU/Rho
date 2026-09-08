@@ -300,6 +300,44 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+#[async_trait::async_trait]
+impl rho_workspace::WorkspaceOutputs for OutputStore {
+    async fn output_events(&self, args: &OutputEventsArguments) -> Result<OutputEvents, String> {
+        self.events(args)
+    }
+    async fn read_output(&self, args: &ReadOutputArguments) -> Result<OutputPage, String> {
+        self.read(args)
+    }
+    async fn list_outputs(
+        &self,
+        args: &OutputEventsArguments,
+    ) -> Result<rho_contract::MediaPage, String> {
+        let (events, gap) = self.log(&args.operation_id)?;
+        let mut media: Vec<_> = events
+            .into_iter()
+            .filter(|e| e.sequence > args.after_sequence)
+            .filter_map(|e| {
+                e.media.map(|reference| rho_contract::MediaSummary {
+                    reference,
+                    observed_at_ms: e.observed_at_ms,
+                })
+            })
+            .take(args.limit as usize + 1)
+            .collect();
+        let has_more = media.len() > args.limit as usize;
+        media.truncate(args.limit as usize);
+        Ok(rho_contract::MediaPage {
+            operation_id: args.operation_id.clone(),
+            next_sequence: media
+                .last()
+                .map_or(args.after_sequence, |m| m.reference.sequence),
+            media,
+            has_more,
+            gap,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
