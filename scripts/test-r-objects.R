@@ -90,3 +90,55 @@ local({
   rm(list = ls(.GlobalEnv, pattern = "^fixture_|^length.Date$|^print.hostile$"), envir = .GlobalEnv)
 })
 cat("R object progressive inspection checks passed\n")
+
+# The cached startup flag cannot authorize reading a value after the provider was unloaded.
+local({
+  bridge$rho_invalidate_objects()
+  stopifnot(isTRUE(bridge$can_inspect_bindings), !is.null(base::.Internal(getRegisteredNamespace("rlang"))))
+  scope <- list(project = "/isolated", principal = "test", session = "native")
+  payload <- function(name) list(expected_session = "native", name = name, path = list(), scope = scope)
+  dispatch <- function(action, value) bridge$rho_dispatch(list(protocol_version = 1L, request_id = "provider-test", action = action, payload = value))
+  event <- base::packageEvent("rlang", "onLoad"); previous <- base::getHook(event); loads <- 0L; effects <- 0L
+  base::assign("fixture_provider_value", 1:3, .GlobalEnv)
+  base::assign("fixture_provider_empty", NULL, .GlobalEnv)
+  base::delayedAssign("fixture_provider_promise", { effects <<- effects + 1L; stop("Promise was forced") }, assign.env = .GlobalEnv)
+  base::makeActiveBinding("fixture_provider_active", function(...) { effects <<- effects + 1L; stop("Active binding was invoked") }, .GlobalEnv)
+  empty <- bridge$rho_observe_object(payload("fixture_provider_empty")); stopifnot(empty$metadata$length == 0L)
+  on.exit({ base::setHook(event, previous, action = "replace"); base::loadNamespace("rlang"); base::rm(list = base::ls(.GlobalEnv, pattern = "^fixture_provider_"), envir = .GlobalEnv); bridge$rho_invalidate_objects() }, add = TRUE)
+  base::setHook(event, function(...) { loads <<- loads + 1L }, action = "append")
+  base::unloadNamespace("rlang")
+  before <- base::sort(base::loadedNamespaces())
+  for (name in c("fixture_provider_value", "fixture_provider_empty", "fixture_provider_promise")) {
+    response <- dispatch("observe_object", payload(name))
+    stopifnot(response$outcome == "failed", response$value$query_error$code == "unavailable", grepl("rlang is not loaded", response$error, fixed = TRUE))
+    shallow <- dispatch("inspect_object", list(name = name, max_items = 5L))
+    stopifnot(shallow$outcome == "failed", shallow$value$query_error$code == "unavailable")
+  }
+  active <- dispatch("observe_object", payload("fixture_provider_active"))
+  stopifnot(active$outcome == "succeeded", active$value$metadata$kind == "active_binding", bridge$rho_binding_summary("fixture_provider_active")$kind == "active_binding", bridge$rho_object_binding("fixture_provider_missing")$kind == "missing")
+  directory <- dispatch("list_objects", list(expected_session = "native", name_contains = "fixture_provider_absent_", object_type = NULL, directory_ref = NULL, offset = 0L, limit = 20L, scope = scope))
+  stopifnot(directory$outcome == "succeeded", directory$value$total == 0L, directory$value$complete, effects == 0L, loads == 0L, isTRUE(bridge$can_inspect_bindings), is.null(base::.Internal(getRegisteredNamespace("rlang"))), identical(before, base::sort(base::loadedNamespaces())))
+})
+
+# Exercise the production serializer gate after unloading jsonlite; no decoder or query runs.
+local({
+  event <- base::packageEvent("jsonlite", "onLoad"); previous <- base::getHook(event); loads <- 0L; masked_calls <- 0L
+  previous_bridge <- base::getOption("rho.next.bridge"); base::options(rho.next.bridge = bridge)
+  request <- base::.subset2(jsonlite::toJSON(list(protocol_version = 1L, request_id = "jsonlite-unloaded", action = "list_objects", payload = list(expected_session = "native", name_contains = "fixture_serializer_absent_", object_type = NULL, directory_ref = NULL, offset = 0L, limit = 20L, scope = list(project = "/isolated", principal = "test", session = "native"))), auto_unbox = TRUE, null = "null"), 1L)
+  unavailable <- base::.subset2(jsonlite::toJSON(list(protocol_version = 1L, request_id = "jsonlite-unloaded", outcome = "failed", error = "jsonlite unavailable", value = list(query_error = list(code = "unavailable", message = "jsonlite unavailable")), conditions = list(), conditions_truncated = FALSE), auto_unbox = TRUE, null = "null"), 1L)
+  result_path <- base::tempfile("rho-readonly-provider-")
+  names <- c("get", "getOption", "local", "loadNamespace", "requireNamespace")
+  stopifnot(!any(vapply(names, function(name) base::exists(name, .GlobalEnv, inherits = FALSE), TRUE)))
+  on.exit({ base::rm(list = names, envir = .GlobalEnv); base::setHook(event, previous, action = "replace"); base::loadNamespace("jsonlite"); base::options(rho.next.bridge = previous_bridge); base::unlink(result_path) }, add = TRUE)
+  for (name in names) base::assign(name, function(...) { masked_calls <<- masked_calls + 1L; stop("Global function mask was called") }, envir = .GlobalEnv)
+  base::getOption("rho.next.bridge")$rho_query_json(request, result_path, unavailable)
+  stopifnot(file.exists(result_path), masked_calls == 0L)
+  base::setHook(event, function(...) { loads <<- loads + 1L }, action = "append")
+  base::unloadNamespace("jsonlite")
+  before <- base::sort(base::loadedNamespaces())
+  base::getOption("rho.next.bridge")$rho_query_json(request, result_path, unavailable)
+  stopifnot(identical(base::readLines(result_path, warn = FALSE), unavailable), loads == 0L, masked_calls == 0L, is.null(base::.Internal(getRegisteredNamespace("jsonlite"))), identical(before, base::sort(base::loadedNamespaces())))
+  absent <- tryCatch(bridge$rho_readonly_binding("jsonlite", "toJSON"), error = identity)
+  stopifnot(inherits(absent, "rho_query_error"), absent$code == "unavailable", loads == 0L)
+})
+cat("R unloaded object/serializer provider checks passed\n")

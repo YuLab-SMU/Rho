@@ -1,7 +1,7 @@
 root <- getwd()
 bridge <- new.env(parent = asNamespace("utils")); bridge$can_inspect_bindings <- requireNamespace("rlang", quietly = TRUE)
 stopifnot(bridge$can_inspect_bindings, requireNamespace("jsonlite", quietly = TRUE))
-for (file in c("packages.R", "objects.R", "package-index.R", "tools.R")) sys.source(file.path(root, "r/bridge", file), bridge)
+for (file in c("packages.R", "objects.R", "package-index.R", "tools.R", "dispatch.R")) sys.source(file.path(root, "r/bridge", file), bridge)
 local({
   base <- tempfile("rho-package-index-"); dir.create(base); on.exit(unlink(base, recursive = TRUE), add = TRUE)
   libs <- file.path(base, c("lib1", "lib2")); for (lib in libs) dir.create(lib)
@@ -35,3 +35,19 @@ local({
   stopifnot(inherits(error, "error"), grepl("content_changed", conditionMessage(error), fixed = TRUE))
 })
 cat("R static package index checks passed\n")
+
+# Unloading a startup provider must not turn a static Query into namespace initialization.
+local({
+  stopifnot(!is.null(base::.Internal(getRegisteredNamespace("tools"))))
+  event <- base::packageEvent("tools", "onLoad"); previous <- base::getHook(event); loads <- 0L
+  on.exit({ base::setHook(event, previous, action = "replace"); base::loadNamespace("tools") }, add = TRUE)
+  base::setHook(event, function(...) { loads <<- loads + 1L }, action = "append")
+  base::unloadNamespace("tools")
+  before <- base::sort(base::loadedNamespaces())
+  observation <- bridge$rho_packages(list(mode = "installed", filter = "", limit = 200L, offset = 0L, grouped = FALSE, package_name = "base", observation_id = NULL))
+  copy <- observation$packages[[1L]]
+  payload <- list(expected_session = "native", observation_id = observation$observation_id, package = "base", library_path = copy$library_path, index_ref = NULL, filter = "", kind = NULL, offset = 0L, limit = 20L, scope = list(project = "/isolated", principal = "test", session = "native"))
+  response <- bridge$rho_dispatch(list(protocol_version = 1L, request_id = "tools-unloaded", action = "package_index", payload = payload))
+  stopifnot(response$outcome == "failed", response$value$query_error$code == "unavailable", grepl("tools is not loaded", response$error, fixed = TRUE), loads == 0L, is.null(base::.Internal(getRegisteredNamespace("tools"))), identical(before, base::sort(base::loadedNamespaces())))
+})
+cat("R unloaded package-index provider checks passed\n")

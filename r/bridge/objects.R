@@ -2,8 +2,38 @@
 rho_object_state <- new.env(parent = emptyenv())
 rho_object_state$handles <- list()
 rho_object_state$serial <- 0
-rho_object_length <- function(value) .Call(rlang:::ffi_length, value)
-rho_object_now <- function() floor(as.numeric(Sys.time()) * 1000)
+# Read native provider bindings without getNamespace/::, which may load missing namespaces.
+rho_readonly_binding <- function(package, name) {
+  namespace <- base::.Internal(getRegisteredNamespace(package))
+  if (base::is.null(namespace)) rho_object_error("unavailable", base::paste0(package, " is not loaded in this native session; read-only queries do not load providers."))
+  if (!base::exists(name, envir = namespace, inherits = FALSE) || base::bindingIsActive(name, namespace)) rho_object_error("unavailable", base::paste0(package, "::", name, " is not a resident ordinary provider binding."))
+  base::get(name, envir = namespace, inherits = FALSE)
+}
+# This is the same serializer gate used by the Rust read-only bridge call.
+# The unavailable reply is encoded by Host so an absent serializer is not loaded to report it.
+rho_query_json <- function(request_json, result_path, unavailable_response) {
+  namespace <- base::.Internal(getRegisteredNamespace("jsonlite"))
+  unavailable <- base::is.null(namespace)
+  if (!unavailable) unavailable <- !base::exists("fromJSON", envir = namespace, inherits = FALSE) || !base::exists("write_json", envir = namespace, inherits = FALSE) || base::bindingIsActive("fromJSON", namespace) || base::bindingIsActive("write_json", namespace)
+  if (unavailable) {
+    base::writeLines(unavailable_response, con = result_path, useBytes = TRUE)
+    return(base::invisible(NULL))
+  }
+  decode <- base::get("fromJSON", envir = namespace, inherits = FALSE)
+  encode <- base::get("write_json", envir = namespace, inherits = FALSE)
+  if (!base::is.function(decode) || !base::is.function(encode)) {
+    base::writeLines(unavailable_response, con = result_path, useBytes = TRUE)
+    return(base::invisible(NULL))
+  }
+  request <- decode(request_json, simplifyVector = FALSE)
+  response <- rho_dispatch(request)
+  encode(response, result_path, auto_unbox = TRUE, null = "null", digits = NA)
+  base::invisible(NULL)
+}
+rho_object_length <- function(value) base::.Call(rho_readonly_binding("rlang", "ffi_length"), value)
+rho_object_address <- function(value) rho_readonly_binding("rlang", "obj_address")(value)
+rho_object_metadata_bytes <- function(value) base::.subset2(rho_readonly_binding("utils", "object.size")(value), 1L)
+rho_object_now <- function() base::floor(base::.subset2(base::Sys.time(), 1L) * 1000)
 rho_invalidate_objects <- function() { rho_object_state$handles <- list(); invisible(NULL) }
 rho_object_error <- function(kind, message) stop(structure(list(message = paste0(kind, ": ", message), call = NULL, code = kind), class = c("rho_query_error", "error", "condition")))
 rho_object_scope <- function(payload) {
@@ -32,8 +62,8 @@ rho_object_store <- function(payload, kind, data) {
   if (length(same) >= if (kind == "directory") 4L else 32L) rho_object_error("budget_exhausted", "Reference quota reached; wait for expiry or narrow and reuse an existing observation.")
   now <- rho_object_now()
   h <- c(list(scope = scope, kind = kind, created = now, used = now), data)
-  size <- as.numeric(utils::object.size(h))
-  used <- sum(vapply(rho_object_state$handles, function(h) as.numeric(utils::object.size(h)), 0))
+  size <- rho_object_metadata_bytes(h)
+  used <- sum(vapply(rho_object_state$handles, function(h) rho_object_metadata_bytes(h), 0))
   if (used + size > 8 * 1024 * 1024) rho_object_error("budget_exhausted", "Object handle metadata exceeds 8 MiB; narrow the name/type filter.")
   rho_object_state$serial <- rho_object_state$serial + 1
   id <- paste0("object_", rho_object_state$serial)
@@ -43,10 +73,9 @@ rho_object_store <- function(payload, kind, data) {
 rho_object_binding <- function(name) {
   if (!exists(name, .GlobalEnv, inherits = FALSE)) return(list(kind = "missing", address = NULL))
   if (bindingIsActive(name, .GlobalEnv)) return(list(kind = "active_binding", address = NULL))
-  if (!isTRUE(can_inspect_bindings)) return(list(kind = "uninspected_binding", address = NULL))
-  if (isTRUE(rlang::env_binding_are_lazy(.GlobalEnv, name)[[1L]])) return(list(kind = "promise", address = NULL))
+  if (isTRUE(rho_readonly_binding("rlang", "env_binding_are_lazy")(.GlobalEnv, name)[[1L]])) return(list(kind = "promise", address = NULL))
   value <- get(name, .GlobalEnv, inherits = FALSE)
-  list(kind = "value", address = rlang::obj_address(value), value = value)
+  list(kind = "value", address = rho_object_address(value), value = value)
 }
 rho_object_supported <- function(value) {
   classes <- attr(value, "class", exact = TRUE)
@@ -129,7 +158,7 @@ rho_list_objects <- function(payload) {
     index <- offset + length(entries) + 1L; name <- h$names[[index]]; binding <- rho_object_binding(name)
     if (!identical(rho_object_identity(binding), h$identities[[index]])) rho_object_error("content_changed", "Binding changed; open a new directory observation.")
     entry <- list(name = name, metadata = rho_object_metadata(binding$value, binding$kind))
-    size <- nchar(jsonlite::toJSON(entry, auto_unbox = TRUE, null = "null"), type = "bytes")
+    size <- nchar(rho_readonly_binding("jsonlite", "toJSON")(entry, auto_unbox = TRUE, null = "null"), type = "bytes")
     if (bytes + size > 240000 && length(entries)) break
     if (size > 240000) rho_object_error("budget_exhausted", "One directory entry exceeds the response budget; narrow the filter.")
     entries[[length(entries) + 1L]] <- entry; bytes <- bytes + size
@@ -142,7 +171,7 @@ rho_observe_object <- function(payload) {
   if (binding$kind == "missing") rho_object_error("not_found", "Object binding does not exist.")
   if (binding$kind != "value" && length(payload$path)) rho_object_error("unsupported", "Unevaluated bindings expose only root metadata.")
   value <- if (binding$kind == "value") rho_object_resolve(binding$value, payload$path) else NULL
-  id <- rho_object_store(payload, "object", list(name = payload$name, path = payload$path, identity = rho_object_identity(binding), child_address = if (binding$kind == "value") rlang::obj_address(value) else NULL))
+  id <- rho_object_store(payload, "object", list(name = payload$name, path = payload$path, identity = rho_object_identity(binding), child_address = if (binding$kind == "value") rho_object_address(value) else NULL))
   h <- rho_object_handle(id, payload, "object")
   list(object_ref = id, name = payload$name, path = payload$path, metadata = rho_object_metadata(value, binding$kind), observed_at_ms = h$created, expires_at_ms = h$created + 60000)
 }
@@ -175,7 +204,7 @@ rho_read_object <- function(payload) {
     value <- NULL
   } else {
     value <- rho_object_resolve(binding$value, h$path)
-    if (!identical(h$child_address, rlang::obj_address(value))) rho_object_error("content_changed", "Observed child changed.")
+    if (!identical(h$child_address, rho_object_address(value))) rho_object_error("content_changed", "Observed child changed.")
     value <- rho_object_resolve(value, payload$path)
   }
   metadata <- rho_object_metadata(value, binding$kind)
@@ -218,7 +247,7 @@ rho_read_object <- function(payload) {
     if (cs + nc <= cols) result$next_column_start <- cs + nc
   }
   # Reduce an oversized page without dropping continuation. Scalar text can be read separately.
-  while (nchar(jsonlite::toJSON(result, auto_unbox = TRUE, null = "null", digits = NA), type = "bytes") > 250000) {
+  while (nchar(rho_readonly_binding("jsonlite", "toJSON")(result, auto_unbox = TRUE, null = "null", digits = NA), type = "bytes") > 250000) {
     if (length(result$values) > 1L) { result$values <- head(result$values, -1L); result$next_start <- start + length(result$values) }
     else if (length(result$children) > 1L) { result$children <- head(result$children, -1L); result$next_start <- start + length(result$children) }
     else if (length(result$columns) && length(result$columns[[1L]]$values) > 1L) { result$columns <- lapply(result$columns, function(c) { c$values <- head(c$values, -1L); c }); result$next_start <- start + length(result$columns[[1L]]$values) }

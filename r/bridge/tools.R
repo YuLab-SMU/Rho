@@ -1,5 +1,7 @@
 # Native code tools. Inputs are text, never eval'ed or written back to a project.
 rho_help <- function(payload) {
+  # Help is an explicit Operation; dispatch already revoked object observations.
+  if (base::is.null(base::.Internal(getRegisteredNamespace("tools")))) base::loadNamespace("tools")
   exact <- !is.null(payload$library_path)
   path <- NULL
   identities <- NULL

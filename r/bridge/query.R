@@ -94,7 +94,9 @@ rho_workspace_snapshot <- function(limit) {
     # by R's own library paths, not an incomplete user-library observation.
     if (identical(name, "base")) return(character())
     tryCatch({
-      path <- getNamespaceInfo(name, "path")
+      namespace <- base::.Internal(getRegisteredNamespace(name))
+      if (base::is.null(namespace)) return(NA_character_)
+      path <- base::getNamespaceInfo(namespace, "path")
       if (is.null(path)) character() else as.character(path)
     }, error = function(error) NA_character_)
   }), use.names = FALSE)

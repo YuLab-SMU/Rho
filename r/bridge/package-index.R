@@ -1,5 +1,6 @@
 # Static files only. parse() produces syntax trees; no namespace declaration is evaluated.
 rho_package_index_files <- function(path) {
+  md5sum <- rho_readonly_binding("tools", "md5sum")
   names <- c("DESCRIPTION", "NAMESPACE", "help/AnIndex", "INDEX")
   lapply(names, function(name) {
     file <- file.path(path, name)
@@ -10,7 +11,7 @@ rho_package_index_files <- function(path) {
     size <- file.info(file)$size
     if (is.na(size) || size > 4 * 1024 * 1024) rho_object_error("budget_exhausted", "Package index file exceeds 4 MiB static-read budget.")
     # Native tools::md5sum reads bytes; include resolved path to fence symlink replacements.
-    list(path = name, digest = paste0("md5:", unname(tools::md5sum(file)), ":", canonical))
+    list(path = name, digest = paste0("md5:", unname(md5sum(file)), ":", canonical))
   })
 }
 rho_package_exact_copy <- function(payload) {
@@ -95,8 +96,8 @@ rho_package_index <- function(payload) {
   n <- min(payload$limit, length(entries) - payload$offset)
   page <- if (n) entries[seq.int(payload$offset + 1L, length.out = n)] else list()
   result <- list(index_ref = id, observation_id = payload$observation_id, package = payload$package, library_path = payload$library_path, version = copy$copy$version, files = files, description = index$description, entries = page, total = length(entries), offset = payload$offset, next_offset = NULL, observed_at_ms = h$created, complete = FALSE, notices = index$notices)
-  while (nchar(jsonlite::toJSON(result, auto_unbox = TRUE, null = "null"), type = "bytes") > 250000 && length(result$entries) > 1L) result$entries <- head(result$entries, -1L)
-  if (nchar(jsonlite::toJSON(result, auto_unbox = TRUE, null = "null"), type = "bytes") > 250000) rho_object_error("budget_exhausted", "Package description or one declaration exceeds 256 KiB; content cannot fit in a page.")
+  while (nchar(rho_readonly_binding("jsonlite", "toJSON")(result, auto_unbox = TRUE, null = "null"), type = "bytes") > 250000 && length(result$entries) > 1L) result$entries <- head(result$entries, -1L)
+  if (nchar(rho_readonly_binding("jsonlite", "toJSON")(result, auto_unbox = TRUE, null = "null"), type = "bytes") > 250000) rho_object_error("budget_exhausted", "Package description or one declaration exceeds 256 KiB; content cannot fit in a page.")
   end <- payload$offset + length(result$entries)
   result$next_offset <- if (end < length(entries)) end else NULL
   result$complete <- is.null(result$next_offset) && !length(index$notices)

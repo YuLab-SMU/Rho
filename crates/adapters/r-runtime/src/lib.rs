@@ -23,7 +23,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     io::Read,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -773,11 +773,15 @@ impl ArkRuntime {
             action,
         };
         let request_json = serde_json::to_string(&bridge_request).map_err(before)?;
-        let code = format!(
-            "local({{ request <- jsonlite::fromJSON({}, simplifyVector = FALSE); response <- getOption('rho.next.bridge')$rho_dispatch(request); jsonlite::write_json(response, {}, auto_unbox = TRUE, null = 'null', digits = NA); invisible(NULL) }})",
-            quote(&request_json).map_err(before)?,
-            quote(&result_path.to_string_lossy()).map_err(before)?
-        );
+        let code = if recording.is_none() {
+            readonly_bridge_code(id, &request_json, &result_path).map_err(before)?
+        } else {
+            format!(
+                "local({{ request <- jsonlite::fromJSON({}, simplifyVector = FALSE); response <- getOption('rho.next.bridge')$rho_dispatch(request); jsonlite::write_json(response, {}, auto_unbox = TRUE, null = 'null', digits = NA); invisible(NULL) }})",
+                quote(&request_json).map_err(before)?,
+                quote(&result_path.to_string_lossy()).map_err(before)?
+            )
+        };
         let captured = self
             .evaluate(code, cancellation, recording.as_ref())
             .await?;
@@ -811,6 +815,23 @@ impl ArkRuntime {
             Some(json!({"session_id":self.session_id, "result_path":result_path, "kernel_error":captured.protocol_error}))))?;
         Ok((response, captured, result_path))
     }
+}
+
+/// The read transport must not reload its own serializer after explicit user unload.
+/// A pre-encoded response can report unavailability without needing that provider.
+fn readonly_bridge_code(
+    id: &str,
+    request_json: &str,
+    result_path: &Path,
+) -> Result<String, String> {
+    let message = "jsonlite is not loaded or its transport bindings are unavailable in this native session; read-only queries do not load providers.";
+    let unavailable=serde_json::to_string(&json!({"protocol_version":1,"request_id":id,"outcome":"failed","error":message,"value":{"query_error":{"code":"unavailable","message":message}},"conditions":[],"conditions_truncated":false})).map_err(|e|e.to_string())?;
+    Ok(format!(
+        "base::getOption('rho.next.bridge')$rho_query_json({}, {}, {})",
+        quote(request_json)?,
+        quote(&result_path.to_string_lossy())?,
+        quote(&unavailable)?
+    ))
 }
 
 fn quote(value: &str) -> Result<String, String> {
