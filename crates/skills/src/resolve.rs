@@ -98,7 +98,7 @@ impl SkillOwner {
                         None,
                     ),
                     Some(skill) => {
-                        if skill.summary.source.enablement != SkillEnablement::Enabled {
+                        if !skill.summary.available {
                             add(
                                 "host_disabled",
                                 "The originating host disabled or rejected this method; a Rho binding cannot enable it",
@@ -149,6 +149,7 @@ impl SkillOwner {
                 }
             }
             methods.push(MethodResolution {
+                binding: (*binding).clone(),
                 binding_id: binding.binding_id.clone(),
                 version: binding.version.clone(),
                 source_ref: binding.source_ref.clone(),

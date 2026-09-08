@@ -73,6 +73,8 @@ pub struct SkillSummary {
     /// Observation identity bound to principal, project, scope and all package resources.
     pub skill_ref: String,
     pub source: SkillSourceRelation,
+    pub available: bool,
+    pub unavailable_reasons: Vec<String>,
     pub metadata: SkillMetadata,
     pub skill_digest: String,
     pub manifest_digest: String,
@@ -170,6 +172,7 @@ pub struct MethodCondition {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct MethodResolution {
+    pub binding: crate::ApplicationMethodBinding,
     pub binding_id: String,
     pub version: String,
     pub source_ref: String,

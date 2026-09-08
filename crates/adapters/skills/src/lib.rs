@@ -20,6 +20,7 @@ use std::{
 pub struct FilesystemSkillSource {
     project: PathBuf,
     user_skills: Option<PathBuf>,
+    excluded_paths: Vec<PathBuf>,
 }
 impl FilesystemSkillSource {
     pub fn new(project_root: &Path, user_home: Option<&Path>) -> Result<Self, OperationError> {
@@ -27,7 +28,16 @@ impl FilesystemSkillSource {
         Ok(Self {
             project,
             user_skills: user_home.map(|p| p.join(".agents/skills")),
+            excluded_paths: vec![],
         })
+    }
+    /// Use the same Host-owned data exclusions as the Project file adapter.
+    pub fn with_excluded_paths(mut self, paths: Vec<PathBuf>) -> Result<Self, OperationError> {
+        self.excluded_paths = paths
+            .into_iter()
+            .map(|p| p.canonicalize().map_err(io_error))
+            .collect::<Result<_, _>>()?;
+        Ok(self)
     }
     fn roots(&self, scope: &SkillScope) -> Result<Vec<(String, PathBuf, bool)>, OperationError> {
         if scope.project_root != self.project.to_string_lossy() {
@@ -98,6 +108,7 @@ impl FilesystemSkillSource {
         let mut resources = vec![];
         let mut seen = BTreeSet::new();
         let mut bytes = 0usize;
+        let mut visited = 0usize;
         scan_resources(
             entry,
             entry,
@@ -105,13 +116,20 @@ impl FilesystemSkillSource {
             &mut seen,
             &mut resources,
             &mut bytes,
+            &mut visited,
+            &self.excluded_paths,
         )?;
         if !resources.iter().any(|r| r.path == "SKILL.md") {
             return Err(OperationError::InvalidInput(
                 "Skill package has no SKILL.md".into(),
             ));
         }
-        let (body, _, _) = read_checked(&entry.join("SKILL.md"), &canonical, MAX_SKILL_BYTES)?;
+        let (body, _, _) = read_checked(
+            &entry.join("SKILL.md"),
+            &canonical,
+            MAX_SKILL_BYTES,
+            &self.excluded_paths,
+        )?;
         if resources
             .iter()
             .find(|r| r.path == "SKILL.md")
@@ -122,6 +140,12 @@ impl FilesystemSkillSource {
             ));
         }
         let frontmatter = frontmatter(&body)?;
+        let metadata = rho_skills::parse_frontmatter(&frontmatter)?;
+        if entry.file_name().and_then(|s| s.to_str()) != Some(metadata.name.as_str()) {
+            return Err(OperationError::InvalidInput(
+                "Standard Skill name must match its package directory".into(),
+            ));
+        }
         resources.sort_by(|a, b| a.path.cmp(&b.path));
         if entry.canonicalize().map_err(io_error)? != canonical
             || root.canonicalize().map_err(io_error)? != canonical_root
@@ -182,7 +206,15 @@ impl SkillSource for FilesystemSkillSource {
                     continue;
                 }
             };
-            let mut entries = entries.collect::<Result<Vec<_>, _>>().map_err(io_error)?;
+            let mut entries = entries
+                .take(MAX_PACKAGES + 1)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(io_error)?;
+            if entries.len() > MAX_PACKAGES {
+                return Err(OperationError::BudgetExceeded(
+                    "Skill root exceeds 2000 entries".into(),
+                ));
+            }
             entries.sort_by_key(|e| e.file_name());
             for entry in entries {
                 scanned += 1;
@@ -253,6 +285,7 @@ impl SkillSource for FilesystemSkillSource {
             &entry.join(path),
             Path::new(&current.canonical_resource),
             MAX_SKILL_BYTES,
+            &self.excluded_paths,
         )?;
         let after = self
             .discover(scope)
@@ -278,8 +311,17 @@ fn scan_resources(
     seen: &mut BTreeSet<PathBuf>,
     resources: &mut Vec<SourceResource>,
     total_bytes: &mut usize,
+    visited: &mut usize,
+    excluded: &[PathBuf],
 ) -> Result<(), OperationError> {
+    *visited += 1;
+    if *visited > MAX_RESOURCES {
+        return Err(OperationError::BudgetExceeded(
+            "Skill package traversal exceeds 2000 paths".into(),
+        ));
+    }
     let canonical = path.canonicalize().map_err(io_error)?;
+    check_private(&canonical, excluded)?;
     if !canonical.starts_with(anchor) {
         return Err(OperationError::InvalidInput(
             "Skill resource symlink escapes its package root".into(),
@@ -298,15 +340,26 @@ fn scan_resources(
         }
         let mut entries = fs::read_dir(path)
             .map_err(io_error)?
+            .take(MAX_RESOURCES + 1)
             .collect::<Result<Vec<_>, _>>()
             .map_err(io_error)?;
+        if entries.len() > MAX_RESOURCES {
+            return Err(OperationError::BudgetExceeded(
+                "Skill package directory exceeds 2000 entries".into(),
+            ));
+        }
         entries.sort_by_key(|e| e.file_name());
         for child in entries {
-            let name = child.file_name();
-            if matches!(name.to_str(), Some(".git" | "node_modules" | "target")) {
-                continue;
-            }
-            scan_resources(entry, &child.path(), anchor, seen, resources, total_bytes)?;
+            scan_resources(
+                entry,
+                &child.path(),
+                anchor,
+                seen,
+                resources,
+                total_bytes,
+                visited,
+                excluded,
+            )?;
         }
         seen.remove(&canonical);
     } else {
@@ -324,7 +377,7 @@ fn scan_resources(
             })?
             .replace('\\', "/");
         validate_relative(&relative, false)?;
-        let (bytes, identity, _) = read_checked(path, anchor, MAX_SKILL_BYTES)?;
+        let (bytes, identity, _) = read_checked(path, anchor, MAX_SKILL_BYTES, excluded)?;
         *total_bytes += bytes.len();
         if *total_bytes > MAX_SOURCE_BYTES {
             return Err(OperationError::BudgetExceeded(
@@ -340,6 +393,20 @@ fn scan_resources(
     }
     Ok(())
 }
+fn check_private(path: &Path, excluded: &[PathBuf]) -> Result<(), OperationError> {
+    if path.components().any(|part| {
+        part.as_os_str()
+            .to_str()
+            .is_some_and(|s| s.eq_ignore_ascii_case(".git") || s.eq_ignore_ascii_case(".rho"))
+    }) || excluded.iter().any(|root| path.starts_with(root))
+    {
+        return Err(OperationError::InvalidInput(
+            "Skill resource resolves into private Host or repository data".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn fingerprint(metadata: &Metadata) -> String {
     #[cfg(unix)]
     {
@@ -369,8 +436,10 @@ fn read_checked(
     path: &Path,
     anchor: &Path,
     maximum: usize,
+    excluded: &[PathBuf],
 ) -> Result<(Vec<u8>, String, PathBuf), OperationError> {
     let canonical = path.canonicalize().map_err(io_error)?;
+    check_private(&canonical, excluded)?;
     if !canonical.starts_with(anchor) {
         return Err(OperationError::InvalidInput(
             "Skill resource escaped its approved package root".into(),

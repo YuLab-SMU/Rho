@@ -396,3 +396,97 @@ fn standard_frontmatter_supports_yaml_blocks_and_does_not_parse_the_body() {
     assert!(parse_frontmatter("name: bad--name\ndescription: test").is_err());
     assert!(frontmatter(b"name: no-frontmatter").is_err());
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn private_host_paths_and_equivalent_host_disablement_cannot_be_bypassed() {
+    use std::os::unix::fs::symlink;
+    let project = tempfile::tempdir().unwrap();
+    let ctx = context("caller");
+    let package = make_skill(
+        &project.path().join(".agents/skills"),
+        "method",
+        "Method evidence",
+    );
+    fs::create_dir(package.join("target")).unwrap();
+    fs::write(package.join("target/evidence.txt"), "permitted resource").unwrap();
+    let native = Arc::new(FilesystemSkillSource::new(project.path(), None).unwrap());
+    let scope = scope(project.path(), &ctx, ".");
+    let inventory = native.discover(&scope).await.unwrap();
+    assert!(
+        inventory.packages[0]
+            .resources
+            .iter()
+            .any(|r| r.path == "target/evidence.txt")
+    );
+    let hosted = Arc::new(
+        HostProvidedSkillSource::new(
+            "actual-host".into(),
+            scope.project_root.clone(),
+            scope.principal.clone(),
+        )
+        .unwrap(),
+    );
+    hosted
+        .replace(
+            0,
+            vec![HostProvidedPackage {
+                source_key: "same-method".into(),
+                canonical_resource: package.canonicalize().unwrap().to_string_lossy().into(),
+                location: "host-resource://same-method/SKILL.md".into(),
+                enablement: SkillEnablement::Rejected,
+                reason: Some("Rejected by the actual host".into()),
+                resources: BTreeMap::from([(
+                    "SKILL.md".into(),
+                    fs::read(package.join("SKILL.md")).unwrap(),
+                )]),
+            }],
+        )
+        .unwrap();
+    let owner = owner(
+        project.path(),
+        vec![native.clone(), hosted],
+        Arc::new(Application::default()),
+    );
+    let listed = owner.list(&ctx, &list(".")).await.unwrap();
+    assert_eq!(listed.skills.len(), 2);
+    assert!(listed.skills.iter().all(|s| !s.available));
+    let local = listed
+        .skills
+        .iter()
+        .find(|s| s.source.source_id == "local-standard")
+        .unwrap();
+    assert_eq!(local.source.enablement, SkillEnablement::Enabled);
+    assert!(!local.unavailable_reasons.is_empty());
+    assert!(
+        owner
+            .read(&ctx, &read(local, SkillReadKind::Text))
+            .await
+            .is_err()
+    );
+    let secret = package.join("secret-store");
+    fs::create_dir(&secret).unwrap();
+    fs::write(secret.join("token"), "private").unwrap();
+    let protected = FilesystemSkillSource::new(project.path(), None)
+        .unwrap()
+        .with_excluded_paths(vec![secret])
+        .unwrap();
+    assert!(
+        protected
+            .discover(&scope)
+            .await
+            .unwrap()
+            .packages
+            .is_empty()
+    );
+    let rho = project.path().join(".rho");
+    fs::create_dir(&rho).unwrap();
+    fs::write(
+        rho.join("SKILL.md"),
+        fs::read(package.join("SKILL.md")).unwrap(),
+    )
+    .unwrap();
+    fs::remove_dir_all(&package).unwrap();
+    symlink(&rho, &package).unwrap();
+    assert!(native.discover(&scope).await.unwrap().packages.is_empty());
+}

@@ -178,6 +178,14 @@ impl SkillOwner {
                 skills.push(DiscoveredSkill {
                     summary: SkillSummary {
                         skill_ref,
+                        available: relation.enablement == SkillEnablement::Enabled,
+                        unavailable_reasons: if relation.enablement == SkillEnablement::Enabled {
+                            vec![]
+                        } else {
+                            vec![relation.reason.clone().unwrap_or_else(|| {
+                                "The source disabled or rejected this Skill".into()
+                            })]
+                        },
                         source: relation,
                         metadata,
                         skill_digest: entry.sha256.clone(),
@@ -207,6 +215,25 @@ impl SkillOwner {
                 .map(|(_, s)| s.summary.source.clone())
                 .collect();
             skills[i].summary.equivalent_sources = equivalent;
+            let denied: Vec<_> = skills[i]
+                .summary
+                .equivalent_sources
+                .iter()
+                .filter(|r| {
+                    r.enablement != SkillEnablement::Enabled && r.source_id != "local-standard"
+                })
+                .map(|r| {
+                    format!(
+                        "Equivalent resource is disabled or rejected by {}: {}",
+                        r.source_id,
+                        r.reason.as_deref().unwrap_or("host source policy")
+                    )
+                })
+                .collect();
+            if !denied.is_empty() {
+                skills[i].summary.available = false;
+                skills[i].summary.unavailable_reasons.extend(denied);
+            }
         }
         let bytes = serde_json::to_vec(&skills.iter().map(|s| &s.summary).collect::<Vec<_>>())
             .map_err(invalid)?
@@ -235,7 +262,7 @@ impl SkillOwner {
         let scope = self.scope(context, &arguments.working_directory)?;
         let (skills, _) = self.discover(&scope).await?;
         let skill = skills.iter().find(|s| s.summary.skill_ref == arguments.skill_ref).ok_or_else(|| OperationError::ContentChanged("Skill observation changed or does not belong to this principal/project/workdir; list again".into()))?;
-        if skill.summary.source.enablement != SkillEnablement::Enabled {
+        if !skill.summary.available {
             return Err(OperationError::Unavailable(
                 skill
                     .summary
