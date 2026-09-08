@@ -48,6 +48,7 @@ code. Keep visual feedback tied to actual owner state.
 | Client types and embedded assets | Generate, build, then check as above |
 | Studio interaction and real local R | `npm run test:browser --prefix ui` |
 | Architecture/dependency ownership | `node scripts/check-architecture.mjs` |
+| Vendored Jet snapshot / verifier | `node scripts/vendor-jet.mjs check` and `node scripts/test-vendor-jet.mjs` |
 | Documentation/map only | `node scripts/governance.mjs check` and `node scripts/test-governance.mjs` |
 
 Broader Rust checks, run sequentially when affected:
@@ -86,3 +87,20 @@ to match every feature of a reference application or tutorial.
 `STATUS.md` is the single current progress summary. Architecture owns durable
 technical constraints, design owns proposed interaction principles, and feedback
 owns the user's reported problems. Replace obsolete explanation; Git keeps history.
+
+
+## Maintain the Jet core snapshot
+
+`vendor/jet-core` is generated third-party source, not a second Rho workspace.
+Maintain the ordered patches and checksums in `patches/jet`; the
+[patch README](../patches/jet/README.md) documents offline checking, independent
+upstream replay, rebuilding and preparing an explicit upstream commit for review.
+The original upstream license must remain intact.
+
+Run `node scripts/vendor-jet.mjs check` for offline integrity and reverse/forward
+replay, and `node scripts/vendor-jet.mjs verify` to rebuild independently from the
+checksum-pinned archive. `prepare` writes a proposal under `target/`, so a patch
+failure or changed inherited dependency cannot silently update production source.
+Verification/preparation and the script regression tests can invoke Cargo metadata;
+serialize them with other Cargo invocations. CI is configured to run offline
+integrity and regression checks on each native build platform.

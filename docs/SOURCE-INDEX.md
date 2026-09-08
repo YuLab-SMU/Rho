@@ -81,10 +81,12 @@ Documentation:
 
 Sources:
 
+- `.gitattributes`
 - `Cargo.lock`
 - `Cargo.toml`
 - `crates/**`
 - `docs/ARCHITECTURE.md`
+- `patches/jet/**`
 - `r/**`
 - `rust-toolchain.toml`
 - `scripts/check-architecture.mjs`
@@ -92,9 +94,10 @@ Sources:
 - `scripts/fixtures/**`
 - `scripts/test-*.R`
 - `scripts/test-*.mjs`
+- `scripts/vendor-jet.mjs`
 - `scripts/verify-*.mjs`
 - `ui/**`
-- `vendor/jet/**`
+- `vendor/**`
 
 Checks:
 
@@ -109,5 +112,7 @@ Checks:
 - `system.real-r`: `["node","scripts/test-real-r.mjs"]`
 - `system.remote-protocol`: `["node","scripts/test-remote-protocol.mjs"]`
 - `system.rust`: `["cargo","test","--workspace","--locked","--","--test-threads=1"]`
+- `system.vendor`: `["node","scripts/vendor-jet.mjs","check"]`
+- `system.vendor-tests`: `["node","scripts/test-vendor-jet.mjs"]`
 - `system.workbench`: `["node","scripts/test-workbench.mjs"]`
 - `system.workbench-real-r`: `["node","scripts/test-workbench.mjs","--real-r"]`

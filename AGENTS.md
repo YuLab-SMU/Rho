@@ -105,8 +105,9 @@ migration, import, archive-reader or compatibility work without a new request.
 - Pass the normalized Host/project root to R environment helpers; do not infer it
   from the process working directory.
 - In R, test name membership before indexing a named atomic vector.
-- The native R adapter uses Jet under `vendor/jet`; preserve the existing adapter
-  boundary and upstream notices when changing that integration.
+- The native R adapter uses `vendor/jet-core`. Maintain it through the ordered
+  patches in `patches/jet`; run `node scripts/vendor-jet.mjs check` after edits.
+  Preserve upstream notices and the pinned-source/update workflow in its README.
 - Rust contracts generate TypeScript DTOs through ts-rs. Keep generated bindings
   and embedded assets current; use the shared Host ports.
 - Studio starts in `ui/src/app.ts`; tokens live in `ui/src/style.css`.

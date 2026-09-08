@@ -4,6 +4,8 @@
     "system.architecture": { "command": ["node", "scripts/check-architecture.mjs"] },
     "system.rust": { "command": ["cargo", "test", "--workspace", "--locked", "--", "--test-threads=1"] },
     "system.client": { "command": ["node", "scripts/client.mjs", "check"] },
+    "system.vendor": { "command": ["node", "scripts/vendor-jet.mjs", "check"] },
+    "system.vendor-tests": { "command": ["node", "scripts/test-vendor-jet.mjs"] },
     "system.real-r": { "command": ["node", "scripts/test-real-r.mjs"] },
     "system.environment": { "command": ["node", "scripts/test-environment.mjs"] },
     "system.process-recovery": { "command": ["node", "scripts/test-process-recovery.mjs"] },
@@ -21,8 +23,8 @@
       "checks": ["docs.index", "docs.tool"]
     },
     "system": {
-      "sources": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "r/**", "ui/**", "scripts/check-architecture.mjs", "scripts/client.mjs", "scripts/test-*.mjs", "scripts/test-*.R", "scripts/fixtures/**", "scripts/verify-*.mjs", "vendor/jet/**", "docs/ARCHITECTURE.md"],
-      "checks": ["docs.index", "docs.tool", "system.architecture", "system.rust", "system.client", "system.real-r", "system.environment", "system.process-recovery", "system.remote-protocol", "system.mcp", "system.mcp-real-r", "system.workbench", "system.workbench-real-r"]
+      "sources": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "r/**", "ui/**", "scripts/check-architecture.mjs", "scripts/client.mjs", "scripts/test-*.mjs", "scripts/test-*.R", "scripts/fixtures/**", "scripts/verify-*.mjs", "vendor/**", "patches/jet/**", "scripts/vendor-jet.mjs", ".gitattributes", "docs/ARCHITECTURE.md"],
+      "checks": ["docs.index", "docs.tool", "system.architecture", "system.rust", "system.client", "system.real-r", "system.environment", "system.process-recovery", "system.remote-protocol", "system.mcp", "system.mcp-real-r", "system.workbench", "system.workbench-real-r", "system.vendor", "system.vendor-tests"]
     },
     "development-tools": {
       "sources": ["scripts/dev-lanes.mjs", "scripts/test-dev-lanes.mjs", "scripts/path-ownership.mjs"],

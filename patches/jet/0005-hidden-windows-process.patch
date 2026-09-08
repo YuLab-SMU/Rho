@@ -1,0 +1,14 @@
+Subject: Preserve console-free kernel startup on Windows
+Original-Rho-Commit: 22d1ca4fed242598823e82dc58c0ad2c3f42195b
+
+--- a/src/kernel.rs
++++ b/src/kernel.rs
+@@ -650,6 +650,8 @@
+         bail!("kernelspec argv is empty");
+     }
+     let mut cmd = Command::new(&spec.argv[0]);
++    #[cfg(windows)]
++    cmd.creation_flags(0x0800_0000);
+     cmd.stdin(Stdio::null())
+         .stdout(Stdio::null())
+         .stderr(Stdio::null());

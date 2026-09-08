@@ -19,7 +19,7 @@ members = [
   "crates/workbench",
 ]
 default-members = ["crates/cli"]
-exclude = ["vendor/jet"]
+exclude = ["vendor/jet-core"]
 
 [workspace.package]
 version = "0.1.0"

@@ -199,6 +199,15 @@ behavior must not be confused with the implemented baseline or the open issues i
 | `r/bridge`, `r/environment` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |
 
+Jet is a pinned external core-library dependency in `vendor/jet-core`, excluded
+from the production workspace's members. Only the native R adapter depends on it.
+The snapshot is generated from a checksum-pinned upstream commit plus the ordered
+patches in `patches/jet`; its license and upstream identity stay separate from
+Rho-original code. No Jet CLI, Lua frontend or second application is incorporated.
+The standalone manifest preserves the upstream core's effective dependency settings,
+while Rho's root Cargo.lock remains the production lock. See the
+[maintenance workflow](../patches/jet/README.md).
+
 Dependencies flow from edges to Host, from adapters to domains, from domains to
 Operation, and from Operation to contract. Domains do not import their concrete
 adapters; contract does not depend on native runtime or transport libraries.

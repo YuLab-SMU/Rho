@@ -5,14 +5,34 @@ results establish behavior; Git retains the implementation history.
 
 ## Current focus
 
-**The Paper-approved Packages redesign is implemented, verified and running in
-the review Workbench.** The user approved implementation of all four
-[Paper artboards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0),
-including the Source addition. The package list now shows purpose and aligned
-versions, groups copies by name, and switches between inline inspection and a
-360 px adjacent inspector. All/Loaded/Attached/Multiple copies filters and counts
-share a bounded native observation. Source details select each installed copy and
-show recorded provenance separately from repository delivery and project links.
+**Jet dependency consolidation is complete and verified.** The previous full upstream tree has been replaced by
+`vendor/jet-core`: the core Cargo manifest, twelve unchanged Rust source files,
+original license and generated provenance document. The pinned upstream revision
+remains `52ae131dd168fe2e104d306cc4bf5bbeae749200` and the root Cargo.lock is unchanged.
+
+Six ordered patches in `patches/jet` capture standalone manifest packaging and all
+previous Rho adaptations: Windows liveness/cleanup/window behavior, environment
+removal, shared-client interruption, stdin redaction and watchdog descriptor
+isolation. Offline reverse/forward replay and an independent checksum-pinned
+archive reconstruction have passed, including effective Cargo manifest comparison.
+The updater stages proposals without changing production source, and regression
+fixtures exercise corruption, missing/extra files, links, patch failure and manifest
+drift. The vendored tree decreased from 109 files / 624,623 bytes to 15 files /
+138,750 bytes, excluding the separate patch series and maintainer tooling.
+
+Executed checks passed: offline snapshot verification, independent upstream archive
+replay (both supplied archive and fetched cache), a real preparation of the current
+pin, verifier regression fixtures, Rust formatting, workspace Clippy/tests, binary
+build, generated-client/asset check, all five enabled real Ark/R tests, MCP transport
+checks and real-R Workbench checks. Architecture and documentation governance checks
+passed. Logs and the before/after source hashes are in `target/jet-vendor-review/`.
+The CI workflow is configured for the native platform matrix; only local macOS
+execution is claimed here. No upstream version or production lockfile changed.
+
+The Paper-approved Packages redesign remains implemented and verified. Its grouped
+package/purpose/version view, inline/wide inspector, cached filtering and per-copy
+Source metadata are unchanged by the dependency reorganization. The review design
+is in [Paper](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0).
 
 No package manager or installation flow was added. Unknown provenance stays
 unrecorded; the local ggplot2 case distinguishes GitHub 4.0.3.9000 from CRAN 3.5.2.
@@ -30,9 +50,9 @@ The frozen baseline remains commit `d5a970b1559c9bd85567073108d05bca21886de4`, t
 
 ## Resume in a new session
 
-The latest product implementation is commit `83b9de6` on branch `wip/rho-next`.
-The authorized Packages construction is complete; no known failing checks or
-unfinished implementation remains. Further user feedback can build on this state.
+Packages was delivered in commit `83b9de6` on branch `wip/rho-next`.
+The completed Jet reorganization follows that implementation; use Git for the exact
+latest revision. No required work remains from these two authorized tasks.
 Repository instructions are consolidated in the root `AGENTS.md`.
 
 The review project is `target/calm-precision-project`, the operation journal is

@@ -37,7 +37,7 @@ for (const pkg of metadata.packages) {
   for (const dep of pkg.dependencies) {
     if (dep.path) {
       if (pkg.name === "rho-r-runtime" && dep.name === "jet_core") {
-        assert.equal(path.resolve(dep.path), path.resolve(root, "vendor/jet/crates/core"));
+        assert.equal(path.resolve(dep.path), path.resolve(root, "vendor/jet-core"));
         continue;
       }
       const relative = path.relative(path.join(root, "crates"), dep.path);

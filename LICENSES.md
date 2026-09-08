@@ -23,7 +23,7 @@ license, and notice files remain controlling.
 
 | Component | Repository or bundle boundary | License evidence |
 | --- | --- | --- |
-| Jet | `vendor/jet/` | MIT; [`vendor/jet/LICENSE`](vendor/jet/LICENSE) |
+| Jet core | `vendor/jet-core/` | MIT; [`vendor/jet-core/LICENSE`](vendor/jet-core/LICENSE); [pinned provenance](vendor/jet-core/UPSTREAM.md) |
 | Ark runtime | external executable, pinned for optional acquisition by `runtime/ark.json` | MIT plus upstream notices; acquisition retains the archive's `LICENSE` and `NOTICE` with the executable |
 | sysinfo | native process observation in the execution adapter | MIT; exact version/features are pinned in `Cargo.toml` and `Cargo.lock` |
 

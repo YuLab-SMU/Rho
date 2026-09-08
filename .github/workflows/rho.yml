@@ -3,9 +3,9 @@ name: Rho
 on:
   push:
     branches: [main]
-    paths: ["crates/**", "r/**", "ui/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/**", "runtime/ark.json", ".github/workflows/rho.yml"]
+    paths: ["crates/**", "r/**", "ui/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/**", "patches/jet/**", ".gitattributes", "governance/**", "docs/**", "scripts/**", "runtime/ark.json", ".github/workflows/rho.yml"]
   pull_request:
-    paths: ["crates/**", "r/**", "ui/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/jet/**", "governance/**", "docs/**", "scripts/**", "runtime/ark.json", ".github/workflows/rho.yml"]
+    paths: ["crates/**", "r/**", "ui/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "vendor/**", "patches/jet/**", ".gitattributes", "governance/**", "docs/**", "scripts/**", "runtime/ark.json", ".github/workflows/rho.yml"]
   workflow_dispatch:
 
 permissions:
@@ -71,6 +71,8 @@ jobs:
         run: npm ci --ignore-scripts --prefix ui
       - name: Check production graph and source map
         run: |
+          node scripts/vendor-jet.mjs check
+          node scripts/test-vendor-jet.mjs
           node scripts/check-architecture.mjs
           node scripts/governance.mjs check
           node scripts/test-governance.mjs
