@@ -12,6 +12,8 @@ pub enum OutputQueryKind {
     List,
     Read,
     Status,
+    View,
+    ReadText,
 }
 pub struct WorkspaceOutputHandler {
     owner: Option<Arc<WorkspaceRunHandler>>,
@@ -20,6 +22,7 @@ pub struct WorkspaceOutputHandler {
     records: Arc<dyn OperationRecords>,
     kind: OutputQueryKind,
     descriptor: CapabilityDescriptor,
+    previews: Arc<std::sync::Mutex<PreviewCache>>,
 }
 impl WorkspaceOutputHandler {
     pub fn new(
@@ -54,12 +57,18 @@ impl WorkspaceOutputHandler {
                 "workspace.read_output",
                 schema_for!(ReadOutputArguments).to_value(),
             ),
+            OutputQueryKind::View => ("output.view", schema_for!(ViewOutputArguments).to_value()),
+            OutputQueryKind::ReadText => (
+                "output.read_text",
+                schema_for!(ReadOutputTextArguments).to_value(),
+            ),
             OutputQueryKind::Status => (
                 "workspace.runtime_status",
                 json!({"type":"object","properties":{},"additionalProperties":false}),
             ),
         };
         Self {
+            previews: Arc::new(std::sync::Mutex::new(PreviewCache::default())),
             owner,
             source,
             project_root,
@@ -72,7 +81,14 @@ impl WorkspaceOutputHandler {
                 recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "workspace".into(),
                 input_schema: schema,
-                output_schema: schema_for!(QuerySnapshot).to_value(),
+                output_schema: match kind {
+                    OutputQueryKind::List => schema_for!(MediaPage).to_value(),
+                    OutputQueryKind::Events => schema_for!(OutputEvents).to_value(),
+                    OutputQueryKind::Read => schema_for!(OutputPage).to_value(),
+                    OutputQueryKind::Status => schema_for!(RuntimeStatus).to_value(),
+                    OutputQueryKind::View => schema_for!(OutputView).to_value(),
+                    OutputQueryKind::ReadText => schema_for!(OutputTextPage).to_value(),
+                },
                 required_scopes: BTreeSet::from([WORKSPACE_READ_SCOPE.into()]),
                 potential_effects: BTreeSet::new(),
                 idempotency: IdempotencyClass::Pure,
@@ -80,6 +96,30 @@ impl WorkspaceOutputHandler {
                 cancellation: CancellationClass::Unsupported,
             },
         }
+    }
+    pub async fn verified_original_for(
+        &self,
+        context: &CallContext,
+        reference: &MediaReference,
+    ) -> Result<Arc<[u8]>, OperationError> {
+        context.validate()?;
+        if !context.scopes.contains(WORKSPACE_READ_SCOPE) {
+            return Err(OperationError::AccessDenied {
+                capability: "output.original".into(),
+                missing: vec![WORKSPACE_READ_SCOPE.into()],
+            });
+        }
+        OperationId::new(reference.operation_id.as_str())?;
+        if reference.sequence == 0 || reference.byte_size > 16 * 1024 * 1024 {
+            return Err(invalid("invalid original output identity/bounds"));
+        }
+        self.visible(context, &reference.operation_id).await?;
+        self.source
+            .as_ref()
+            .ok_or_else(|| OperationError::Unavailable("Output store is unavailable".into()))?
+            .verified_original(reference)
+            .await
+            .map_err(OperationError::ContentChanged)
     }
     async fn visible(&self, context: &CallContext, id: &OperationId) -> Result<(), OperationError> {
         let record = self
@@ -122,6 +162,24 @@ impl QueryHandler for WorkspaceOutputHandler {
                     || args.offset > args.reference.byte_size
                 {
                     return Err(invalid("invalid media read bounds"));
+                }
+                serde_json::to_value(args).map_err(invalid)
+            }
+            OutputQueryKind::View => {
+                let args: ViewOutputArguments =
+                    serde_json::from_value(value.clone()).map_err(invalid)?;
+                validate_view(&args)?;
+                serde_json::to_value(args).map_err(invalid)
+            }
+            OutputQueryKind::ReadText => {
+                let args: ReadOutputTextArguments =
+                    serde_json::from_value(value.clone()).map_err(invalid)?;
+                if args.reference.mime_type != "text/plain"
+                    || !(1..=65536).contains(&args.limit_bytes)
+                {
+                    return Err(invalid(
+                        "text artifact reads require text/plain and limit 1..=65536",
+                    ));
                 }
                 serde_json::to_value(args).map_err(invalid)
             }
@@ -186,6 +244,43 @@ impl QueryHandler for WorkspaceOutputHandler {
                 })
                 .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string()))
             }
+            OutputQueryKind::View => {
+                let args: ViewOutputArguments =
+                    serde_json::from_value(value.clone()).map_err(invalid)?;
+                validate_view(&args)?;
+                let bytes = self.verified_original_for(context, &args.reference).await?;
+                let cache = self.previews.clone();
+                let view = tokio::task::spawn_blocking(move || {
+                    let key = serde_json::to_string(&args).map_err(invalid)?;
+                    let mut cache = cache.lock().map_err(invalid)?;
+                    if let Some(view) = cache.entries.get(&key) {
+                        return Ok(view.clone());
+                    }
+                    let view = render_preview(&bytes, &args)?;
+                    while cache.bytes + view.preview_base64.len() > 8 * 1024 * 1024
+                        || cache.entries.len() >= 16
+                    {
+                        let Some(key) = cache.entries.keys().next().cloned() else {
+                            break;
+                        };
+                        if let Some(old) = cache.entries.remove(&key) {
+                            cache.bytes -= old.preview_base64.len();
+                        }
+                    }
+                    cache.bytes += view.preview_base64.len();
+                    cache.entries.insert(key, view.clone());
+                    Ok::<_, OperationError>(view)
+                })
+                .await
+                .map_err(invalid)??;
+                serde_json::to_value(view).map_err(|e| e.to_string())
+            }
+            OutputQueryKind::ReadText => {
+                let args: ReadOutputTextArguments =
+                    serde_json::from_value(value.clone()).map_err(invalid)?;
+                let bytes = self.verified_original_for(context, &args.reference).await?;
+                serde_json::to_value(text_page(&bytes, &args)?).map_err(|e| e.to_string())
+            }
             OutputQueryKind::Status => {
                 let owner = self.owner.as_ref().unwrap();
                 let mut status = owner.runtime.runtime_status();
@@ -236,7 +331,238 @@ fn invalid(error: impl std::fmt::Display) -> OperationError {
 
 #[async_trait]
 pub trait WorkspaceOutputs: Send + Sync {
+    async fn verified_original(&self, _reference: &MediaReference) -> Result<Arc<[u8]>, String> {
+        Err("Verified original output reads are unavailable".into())
+    }
     async fn output_events(&self, args: &OutputEventsArguments) -> Result<OutputEvents, String>;
     async fn read_output(&self, args: &ReadOutputArguments) -> Result<OutputPage, String>;
     async fn list_outputs(&self, args: &OutputEventsArguments) -> Result<MediaPage, String>;
+}
+
+#[derive(Default)]
+struct PreviewCache {
+    entries: std::collections::BTreeMap<String, OutputView>,
+    bytes: usize,
+}
+fn validate_view(args: &ViewOutputArguments) -> Result<(), OperationError> {
+    if !(1..=2400).contains(&args.max_edge) {
+        return Err(invalid("preview max_edge must be 1..=2400 pixels"));
+    }
+    if !matches!(
+        args.reference.mime_type.as_str(),
+        "image/png" | "image/jpeg" | "image/svg+xml"
+    ) {
+        return Err(invalid("view supports PNG, JPEG and static SVG originals"));
+    }
+    if args
+        .crop
+        .as_ref()
+        .is_some_and(|crop| crop.width == 0 || crop.height == 0)
+    {
+        return Err(invalid("crop dimensions must be positive"));
+    }
+    Ok(())
+}
+fn checked_crop(
+    args: &ViewOutputArguments,
+    width: u32,
+    height: u32,
+) -> Result<ImageCrop, OperationError> {
+    let crop = args.crop.clone().unwrap_or(ImageCrop {
+        x: 0,
+        y: 0,
+        width,
+        height,
+    });
+    if crop.width == 0
+        || crop.height == 0
+        || crop
+            .x
+            .checked_add(crop.width)
+            .is_none_or(|right| right > width)
+        || crop
+            .y
+            .checked_add(crop.height)
+            .is_none_or(|bottom| bottom > height)
+    {
+        return Err(invalid("crop lies outside original dimensions"));
+    }
+    Ok(crop)
+}
+fn scaled_dimensions(width: u32, height: u32, edge: u32) -> (u32, u32) {
+    let scale = (f64::from(edge) / f64::from(width.max(height))).min(1.0);
+    (
+        (f64::from(width) * scale).round().max(1.0) as u32,
+        (f64::from(height) * scale).round().max(1.0) as u32,
+    )
+}
+fn media_digest(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    format!("sha256:{:x}", sha2::Sha256::digest(bytes))
+}
+fn render_preview(bytes: &[u8], args: &ViewOutputArguments) -> Result<OutputView, OperationError> {
+    use base64::Engine;
+    use image::{DynamicImage, ImageFormat};
+    validate_view(args)?;
+    let rasterized = args.reference.mime_type == "image/svg+xml";
+    let mut transformations = Vec::new();
+    let (mut preview, original_width, original_height, crop) = if rasterized {
+        let mut options = resvg::usvg::Options::default();
+        options.resources_dir = None;
+        options.image_href_resolver.resolve_string = Box::new(|_, _| None);
+        options.fontdb_mut().load_system_fonts();
+        // usvg/resvg supports static SVG only; the string resolver cannot read files or URLs.
+        let tree = resvg::usvg::Tree::from_data(bytes, &options).map_err(invalid)?;
+        let width = tree.size().width().ceil() as u32;
+        let height = tree.size().height().ceil() as u32;
+        let crop = checked_crop(args, width, height)?;
+        let (pw, ph) = scaled_dimensions(crop.width, crop.height, args.max_edge);
+        let mut pixmap = resvg::tiny_skia::Pixmap::new(pw, ph)
+            .ok_or_else(|| invalid("preview dimensions cannot be allocated"))?;
+        let sx = pw as f32 / crop.width as f32;
+        let sy = ph as f32 / crop.height as f32;
+        let transform = resvg::tiny_skia::Transform::from_row(
+            sx,
+            0.0,
+            0.0,
+            sy,
+            -(crop.x as f32) * sx,
+            -(crop.y as f32) * sy,
+        );
+        resvg::render(&tree, transform, &mut pixmap.as_mut());
+        // tiny-skia is premultiplied RGBA; PNG serialization converts it back correctly.
+        let encoded = pixmap.encode_png().map_err(invalid)?;
+        let image =
+            image::load_from_memory_with_format(&encoded, ImageFormat::Png).map_err(invalid)?;
+        transformations.push("Static SVG rasterized to PNG; scripts and external file/network resources are disabled. Text uses installed fonts.".into());
+        (image, width, height, crop)
+    } else {
+        let format = if args.reference.mime_type == "image/png" {
+            ImageFormat::Png
+        } else {
+            ImageFormat::Jpeg
+        };
+        let mut reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), format);
+        let mut limits = image::Limits::default();
+        limits.max_image_width = Some(32768);
+        limits.max_image_height = Some(32768);
+        limits.max_alloc = Some(128 * 1024 * 1024);
+        reader.limits(limits);
+        let image = reader.decode().map_err(invalid)?;
+        let width = image.width();
+        let height = image.height();
+        let crop = checked_crop(args, width, height)?;
+        let image = image.crop_imm(crop.x, crop.y, crop.width, crop.height);
+        let (pw, ph) = scaled_dimensions(crop.width, crop.height, args.max_edge);
+        (
+            image.resize_exact(pw, ph, image::imageops::FilterType::Lanczos3),
+            width,
+            height,
+            crop,
+        )
+    };
+    if args.crop.is_some() {
+        transformations.push("Cropped using zero-based original pixel coordinates.".into());
+    }
+    let mut reduced = false;
+    let encoded = loop {
+        let mut encoded = std::io::Cursor::new(Vec::new());
+        preview
+            .write_to(&mut encoded, ImageFormat::Png)
+            .map_err(invalid)?;
+        let encoded = encoded.into_inner();
+        if encoded.len() <= 512 * 1024 {
+            break encoded;
+        }
+        if preview.width() == 1 && preview.height() == 1 {
+            return Err(OperationError::BudgetExceeded(
+                "PNG preview cannot fit the 512 KiB encoding budget".into(),
+            ));
+        }
+        let width = ((preview.width() as f64) * 0.8).floor().max(1.0) as u32;
+        let height = ((preview.height() as f64) * 0.8).floor().max(1.0) as u32;
+        preview = DynamicImage::ImageRgba8(image::imageops::resize(
+            &preview.to_rgba8(),
+            width,
+            height,
+            image::imageops::FilterType::Lanczos3,
+        ));
+        reduced = true;
+    };
+    if reduced {
+        transformations.push("Preview dimensions were reduced until lossless PNG encoding fit 512 KiB; the original is unchanged.".into());
+    }
+    if preview.width() != crop.width || preview.height() != crop.height {
+        transformations.push(
+            "Preview was resampled; use a smaller original-coordinate crop for finer detail."
+                .into(),
+        );
+    }
+    Ok(OutputView {
+        reference: args.reference.clone(),
+        original_width,
+        original_height,
+        scale_x: f64::from(preview.width()) / f64::from(crop.width),
+        scale_y: f64::from(preview.height()) / f64::from(crop.height),
+        crop,
+        preview_width: preview.width(),
+        preview_height: preview.height(),
+        preview_mime_type: "image/png".into(),
+        preview_sha256: media_digest(&encoded),
+        preview_byte_size: encoded.len() as u64,
+        preview_base64: base64::engine::general_purpose::STANDARD.encode(encoded),
+        rasterized,
+        transformations,
+    })
+}
+fn text_page(
+    bytes: &[u8],
+    args: &ReadOutputTextArguments,
+) -> Result<OutputTextPage, OperationError> {
+    if args.reference.mime_type != "text/plain" || !(1..=65536).contains(&args.limit_bytes) {
+        return Err(invalid("text/plain output and limit 1..=65536 required"));
+    }
+    let text = std::str::from_utf8(bytes).map_err(invalid)?;
+    let start = usize::try_from(args.offset).map_err(invalid)?;
+    if start > text.len() || !text.is_char_boundary(start) {
+        return Err(invalid("text offset must be a valid UTF-8 boundary"));
+    }
+    let mut end = (start + args.limit_bytes as usize).min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    if end == start && start < text.len() {
+        return Err(OperationError::BudgetExceeded(
+            "limit_bytes cannot hold the next UTF-8 character; increase it to at least 4".into(),
+        ));
+    }
+    loop {
+        let continuation = (end < text.len()).then(|| ReadOutputTextArguments {
+            reference: args.reference.clone(),
+            offset: end as u64,
+            limit_bytes: args.limit_bytes,
+        });
+        let page = OutputTextPage {
+            reference: args.reference.clone(),
+            encoding: "utf-8".into(),
+            byte_start: start as u64,
+            byte_end: end as u64,
+            text: text[start..end].into(),
+            complete: continuation.is_none(),
+            limit_reason: continuation.as_ref().map(|_| "utf8_byte_budget".into()),
+            continuation,
+        };
+        if serde_json::to_vec(&page).map_err(invalid)?.len() <= 65536 {
+            return Ok(page);
+        }
+        end = start + (end - start) / 2;
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        if end == start {
+            return Err(OperationError::BudgetExceeded(
+                "text identity exceeds the page budget".into(),
+            ));
+        }
+    }
 }

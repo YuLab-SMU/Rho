@@ -1,4 +1,6 @@
 #![forbid(unsafe_code)]
+mod resources;
+use rho_operation::OperationError;
 
 use futures::StreamExt;
 use rho_contract::{
@@ -65,6 +67,7 @@ enum Route {
     Cancel,
     Input,
     Events,
+    View,
 }
 struct Entry {
     tool: Tool,
@@ -106,21 +109,24 @@ impl McpEdge {
                 command_schema(capability.input_schema)?
             };
             let output = if query {
-                schema_for!(QuerySnapshot).to_value()
+                rho_contract::query_result_schema(capability.output_schema.clone())
             } else {
-                schema_for!(OperationRecord).to_value()
-            };
-            let description = if query {
-                format!(
-                    "Rho {}. Bounded owner observation; no Operation is created.",
-                    capability.capability.display_key()
-                )
-            } else {
-                format!(
-                    "Rho {}. Supply a stable client_request_id; repeat it only with identical arguments. Returns the real Operation result, including failures or uncertainty. Cancelling an MCP wait does not prove work stopped.",
-                    capability.capability.display_key()
+                rho_contract::operation_result_schema(
+                    capability.output_schema.clone(),
+                    capability.recovery_schema.clone(),
                 )
             };
+            let description = format!(
+                "{}\nPurpose: {}\nOwner: {}\nEffects: {}\nRetry: {}\nCancellation: {}\nLimitations: {}\nDetails and validated examples: rho.host.describe.v1 ({})",
+                capability.documentation.summary,
+                capability.documentation.purpose,
+                capability.documentation.owner,
+                capability.documentation.effects,
+                capability.documentation.retry_rule,
+                capability.documentation.cancellation_rule,
+                capability.documentation.limitations.join(" "),
+                capability.capability.display_key()
+            );
             let tool = Tool::new(name.clone(), description, object(input)?)
                 .with_raw_output_schema(Arc::new(object(result_schema(output))?))
                 .with_annotations(ToolAnnotations::new().read_only(query));
@@ -178,6 +184,31 @@ impl McpEdge {
                 return Err("MCP control tool name collision".into());
             }
         }
+        if context.scopes.contains("workspace.read")
+            && host
+                .capabilities()
+                .iter()
+                .any(|capability| capability.capability.id == "output.view")
+        {
+            let mut output =
+                rho_contract::query_result_schema(schema_for!(rho_contract::OutputView).to_value());
+            // Native images carry base64 in ImageContent rather than the JSON metadata.
+            if let Some(required) = output
+                .pointer_mut("/$defs/OutputView/required")
+                .and_then(Value::as_array_mut)
+            {
+                required.retain(|field| field != "preview_base64");
+            }
+            let tool = Tool::new("rho.output.view","View a verified original PNG/JPEG/static SVG with native image content, optional original-coordinate crop, and original resource link. Preview is not a new scientific result.",object(schema_for!(rho_contract::ViewOutputArguments).to_value())?)
+                .with_annotations(ToolAnnotations::new().read_only(true));
+            entries.insert(
+                "rho.output.view".into(),
+                Entry {
+                    tool,
+                    route: Route::View,
+                },
+            );
+        }
         Ok(Self {
             host,
             context,
@@ -196,11 +227,11 @@ impl McpEdge {
         context.connection_id = format!("mcp:{}", std::process::id());
         Self::new(host, context)
     }
-    async fn route(&self, route: &Route, args: Value) -> Result<Value, String> {
+    async fn route(&self, route: &Route, args: Value) -> Result<Value, OperationError> {
         let request = match route {
             Route::Capability(capability, CapabilityKind::Operation) => {
                 let input: CommandArguments =
-                    serde_json::from_value(args).map_err(|error| error.to_string())?;
+                    serde_json::from_value(args).map_err(invalid_operation)?;
                 HostRequest::Invoke(rho_contract::InvokeRequest {
                     return_after_acceptance: input.return_after_acceptance,
                     invocation: Invocation {
@@ -217,42 +248,47 @@ impl McpEdge {
                     arguments: args,
                 })
             }
+            Route::View => {
+                return Err(invalid_operation("native view uses the presentation route"));
+            }
+            Route::Capability(_, CapabilityKind::Control) => {
+                return Err(OperationError::Unavailable(
+                    "Application control route requires Host integration".into(),
+                ));
+            }
             Route::Get => {
                 let input: OperationArguments =
-                    serde_json::from_value(args).map_err(|e| e.to_string())?;
+                    serde_json::from_value(args).map_err(invalid_operation)?;
                 HostRequest::GetOperation {
                     operation_id: input.operation_id,
                 }
             }
             Route::Cancel => {
                 let input: rho_contract::CancelOperation =
-                    serde_json::from_value(args).map_err(|e| e.to_string())?;
+                    serde_json::from_value(args).map_err(invalid_operation)?;
                 HostRequest::RequestCancellation {
                     operation_id: input.operation_id,
                     only_if_pending: input.only_if_pending,
                 }
             }
             Route::Input => {
-                HostRequest::RespondInput(serde_json::from_value(args).map_err(|e| e.to_string())?)
+                HostRequest::RespondInput(serde_json::from_value(args).map_err(invalid_operation)?)
             }
             Route::Events => {
                 let input: EventArguments =
-                    serde_json::from_value(args).map_err(|error| error.to_string())?;
+                    serde_json::from_value(args).map_err(invalid_operation)?;
                 HostRequest::Subscribe {
                     after_sequence: input.after_sequence,
                     limit: input.limit,
                 }
             }
         };
-        self.host
-            .dispatch(&self.context, request)
-            .await
-            .map_err(|error| error.to_string())
+        self.host.dispatch(&self.context, request).await
     }
 }
 impl ServerHandler for McpEdge {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
             .with_server_info(Implementation::new("rho", env!("CARGO_PKG_VERSION")))
             .with_instructions("Rho exposes a scientific space, not an Agent loop. Commands require caller-generated stable client_request_id values; query tools do not create Operations. Use rho.events.poll to discover accepted OperationIds and rho.operation.request_cancellation to request a real cancellation. RPC cancellation or disconnect only stops waiting; accepted Host work is drained. No second user approval is created by Rho.")
     }
@@ -288,6 +324,34 @@ impl ServerHandler for McpEdge {
             .then(|| (offset + result.tools.len()).to_string());
         Ok(result)
     }
+    async fn list_resource_templates(
+        &self,
+        _: Option<PaginatedRequestParams>,
+        _: RequestContext<RoleServer>,
+    ) -> Result<rmcp::model::ListResourceTemplatesResult, ErrorData> {
+        if !self.context.scopes.contains("workspace.read") {
+            return Ok(rmcp::model::ListResourceTemplatesResult::default());
+        }
+        Ok(resources::templates())
+    }
+    async fn read_resource(
+        &self,
+        request: rmcp::model::ReadResourceRequestParams,
+        _: RequestContext<RoleServer>,
+    ) -> Result<rmcp::model::ReadResourceResult, ErrorData> {
+        let _permit = self
+            .observations
+            .try_acquire()
+            .map_err(|_| ErrorData::internal_error("Resource read quota reached", None))?;
+        self.read_output_resource(&request.uri)
+            .await
+            .map_err(|error| {
+                ErrorData::invalid_params(
+                    error.to_string(),
+                    Some(json!({"diagnostic":error.diagnostic()})),
+                )
+            })
+    }
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
@@ -298,7 +362,7 @@ impl ServerHandler for McpEdge {
         };
         let quota = match entry.route {
             Route::Capability(_, CapabilityKind::Operation) => Some(&self.in_flight),
-            Route::Capability(_, CapabilityKind::Query) => Some(&self.observations),
+            Route::Capability(_, CapabilityKind::Query) | Route::View => Some(&self.observations),
             _ => None,
         };
         let _permit = if let Some(quota) = quota {
@@ -314,6 +378,14 @@ impl ServerHandler for McpEdge {
             None
         };
         let args = Value::Object(request.arguments.unwrap_or_default());
+        if matches!(entry.route, Route::View) {
+            return Ok(match self.native_view(args).await {
+                Ok(result) => result,
+                Err(error) => CallToolResult::structured_error(
+                    json!({"error":error.to_string(),"diagnostic":error.diagnostic()}),
+                ),
+            });
+        }
         let result = match self.route(&entry.route, args).await {
             Ok(value) => {
                 let failed = matches!(entry.route, Route::Capability(_, CapabilityKind::Operation))
@@ -327,7 +399,9 @@ impl ServerHandler for McpEdge {
                     CallToolResult::structured(json!({"result":value}))
                 }
             }
-            Err(error) => CallToolResult::structured_error(json!({"error":error})),
+            Err(error) => CallToolResult::structured_error(
+                json!({"error":error.to_string(),"diagnostic":error.diagnostic()}),
+            ),
         };
         if serde_json::to_vec(&result)
             .map_err(|error| ErrorData::internal_error(error.to_string(), None))?
@@ -400,4 +474,8 @@ fn command_schema(mut arguments: Value) -> Result<Value, String> {
         schema["$defs"] = definitions;
     }
     Ok(schema)
+}
+
+fn invalid_operation(error: impl std::fmt::Display) -> OperationError {
+    OperationError::InvalidInput(error.to_string())
 }
