@@ -129,6 +129,10 @@ impl QueryHandler for ProjectSearchHandler {
             continuation: None,
         };
         let needle = args.text.to_lowercase();
+        let mut cache: Option<(
+            String,
+            std::collections::VecDeque<rho_contract::DirectoryEntry>,
+        )> = None;
         while !cursor.directories.is_empty() {
             result.continuation = Some(cursor.clone());
             if result.scanned_entries >= 10000
@@ -154,16 +158,40 @@ impl QueryHandler for ProjectSearchHandler {
             if frame.after_name.is_none() {
                 result.scanned_directories += 1;
             }
-            match self
-                .owner
-                .runtime
-                .list_directory(&ListDirectoryArguments {
-                    path: frame.path.clone(),
-                    after_name: frame.after_name.clone(),
-                    limit: 1,
-                })
-                .await
+            let page = if cache
+                .as_ref()
+                .is_some_and(|(path, entries)| path == &frame.path && !entries.is_empty())
             {
+                let (_, entries) = cache.as_mut().unwrap();
+                Ok(DirectoryPage {
+                    path: frame.path.clone(),
+                    entries: vec![entries.pop_front().unwrap()],
+                    next_name: None,
+                    truncated: false,
+                    notices: vec![],
+                })
+            } else {
+                match self
+                    .owner
+                    .runtime
+                    .list_directory(&ListDirectoryArguments {
+                        path: frame.path.clone(),
+                        after_name: frame.after_name.clone(),
+                        limit: 200,
+                    })
+                    .await
+                {
+                    Ok(mut page) => {
+                        let mut entries: std::collections::VecDeque<_> =
+                            page.entries.drain(..).collect();
+                        page.entries = entries.pop_front().into_iter().collect();
+                        cache = Some((frame.path.clone(), entries));
+                        Ok(page)
+                    }
+                    Err(error) => Err(error),
+                }
+            };
+            match page {
                 Ok(page) => {
                     if page.truncated {
                         result.notices.extend(page.notices);

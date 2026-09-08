@@ -260,15 +260,22 @@ impl ProjectRuntime for GitProject {
             } else {
                 "special"
             };
-            entries.push(rho_project::DirectoryEntry {
+            let entry = rho_project::DirectoryEntry {
                 path,
                 name,
                 kind: kind.into(),
                 byte_size: metadata.len(),
-            });
+            };
             // Keep only the next page and one lookahead; enumeration has no lossy prefix cutoff.
-            entries.sort_by(|a, b| a.name.cmp(&b.name));
-            entries.truncate(args.limit as usize + 1);
+            let index = entries
+                .binary_search_by(|candidate: &rho_project::DirectoryEntry| {
+                    candidate.name.cmp(&entry.name)
+                })
+                .unwrap_or_else(|index| index);
+            if index <= args.limit as usize {
+                entries.insert(index, entry);
+                entries.truncate(args.limit as usize + 1);
+            }
         }
         entries.sort_by(|a, b| a.name.cmp(&b.name));
         let next_name = (entries.len() > args.limit as usize)

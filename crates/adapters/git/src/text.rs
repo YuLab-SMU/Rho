@@ -367,6 +367,8 @@ impl GitProject {
         }
         let mut page = SearchTextPage { matches: vec![], skipped: vec![], scanned_entries: 0, scanned_bytes: 0, verified_bytes: 0, continuation: None, complete: false, limit_reason: None, consistency: "Each file has its own verified content version. Directory traversal is live lexical enumeration, not an atomic tree snapshot; entries added behind an already visited name require a new search.".into() };
         let mut loaded = None;
+        let mut directory_cache: Option<(String, std::collections::VecDeque<DirectoryEntry>)> =
+            None;
         loop {
             page.continuation = Some(cursor.clone());
             // Reserve room for one entry and its cursor before advancing the traversal.
@@ -466,13 +468,37 @@ impl GitProject {
                 break;
             };
             let previous_name = frame.after_name.clone();
-            let directory = self
-                .list_directory(&ListDirectoryArguments {
+            let directory = if directory_cache
+                .as_ref()
+                .is_some_and(|(path, entries)| path == &frame.path && !entries.is_empty())
+            {
+                let (_, entries) = directory_cache.as_mut().unwrap();
+                Ok(DirectoryPage {
                     path: frame.path.clone(),
-                    after_name: frame.after_name.clone(),
-                    limit: 1,
+                    entries: vec![entries.pop_front().unwrap()],
+                    next_name: None,
+                    truncated: false,
+                    notices: vec![],
                 })
-                .await;
+            } else {
+                match self
+                    .list_directory(&ListDirectoryArguments {
+                        path: frame.path.clone(),
+                        after_name: frame.after_name.clone(),
+                        limit: 200,
+                    })
+                    .await
+                {
+                    Ok(mut page) => {
+                        let mut entries: std::collections::VecDeque<_> =
+                            page.entries.drain(..).collect();
+                        page.entries = entries.pop_front().into_iter().collect();
+                        directory_cache = Some((frame.path.clone(), entries));
+                        Ok(page)
+                    }
+                    Err(error) => Err(error),
+                }
+            };
             let entry = match directory {
                 Ok(list) => {
                     if list.truncated {
