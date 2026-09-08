@@ -61,7 +61,8 @@ export class RecordingProxy {
       if(evaluated)await this.scenario.afterResponse?.(call,message,this);
       // Tool error responses are retained; they are not automatically a failed
       // task because version/expiry recovery deliberately observes such errors.
-      if(result?.structuredContent?.result?.operation)this.checkIdentity(result.structuredContent.result);
+      const record=operationRecord(rpc?.params?.name,result?.structuredContent?.result);if(record)this.checkIdentity(record);
+      if(rpc?.params?.name==='rho.workspace.read_object.v1'&&result?.structuredContent?.result?.status==='ready'){const page=result.structuredContent.result.data;if(page){assert.equal(typeof page.root_name,'string','ObjectReadPage must preserve root binding identity');assert.ok(Array.isArray(page.observed_path)&&Array.isArray(page.path),'ObjectReadPage must distinguish observed and relative paths');}}
     }
     response.writeHead(upstream.status,outHeaders);response.end(raw);
   }
@@ -84,10 +85,17 @@ export class RecordingProxy {
   hasDiagnostic(code) {return this.responses.some(response=>JSON.stringify(response).toLowerCase().includes(code.toLowerCase()));}
   assertNoDuplicateExecution() {
     const byRequest=new Map();const codeOperations=new Map();
-    for(const response of this.responses){const record=response.result?.structuredContent?.result;if(!record?.operation)continue;const op=record.operation;if(this.host.seedRecords.includes(op.operation_id))continue;const key=op.client_request_id;const previous=byRequest.get(key);if(previous&&previous!==op.operation_id)this.fail(`duplicate_request_executed:${key}`);byRequest.set(key,op.operation_id);
+    for(const response of this.responses){const record=operationRecord(response.call.rpc?.params?.name,response.result?.structuredContent?.result);if(!record)continue;const op=record.operation;if(this.host.seedRecords.includes(op.operation_id))continue;const key=op.client_request_id;const previous=byRequest.get(key);if(previous&&previous!==op.operation_id)this.fail(`duplicate_request_executed:${key}`);byRequest.set(key,op.operation_id);
       if(op.capability?.id==='workspace.run_r'){const code=op.normalized_arguments?.code;if(code){const ids=codeOperations.get(code)??new Set();ids.add(op.operation_id);codeOperations.set(code,ids);}}
     }
     for(const ids of codeOperations.values())if(ids.size>1)this.fail(`duplicate_scientific_code_execution:${[...ids].join(',')}`);
   }
   async close() {this.server?.closeAllConnections();if(this.server)await new Promise(resolve=>this.server.close(resolve));await Promise.allSettled([...this.inflight]);this.trace.end();await once(this.trace,'finish');this.assertNoDuplicateExecution();json(path.join(this.evidence,'transport.json'),{calls:this.calls.length,text_bytes:this.textBytes,discovery_bytes:this.discoveryBytes,images:this.images,violations:this.violations});}
+}
+
+export function operationRecord(tool,result) {
+  // These are distinct registered wire contracts, not shape-based fallback.
+  if(tool==='rho.operation.get.v1')return result?.data?.record??null;
+  if(tool==='rho.operation.get')return result??null;
+  return result?.operation?.operation_id?result:null;
 }

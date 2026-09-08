@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {parseRpc,digest} from './runtime.mjs';
 import {nativeReadPath} from './agent.mjs';
+import {operationRecord} from './proxy.mjs';
 import {createScenario,CORE_CASES,ADDITIONAL_CASES,FINAL_SCHEMA} from './scenarios.mjs';
 assert.deepEqual(parseRpc('data: {"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n\n'),[{jsonrpc:'2.0',id:1,result:{ok:true}}]);
 assert.deepEqual(parseRpc('{"id":2,"result":null}'),[{id:2,result:null}]);
@@ -15,4 +16,11 @@ assert.equal(CORE_CASES.length,10);assert.equal(ADDITIONAL_CASES.length,4);asser
 const directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-acceptance-selftest-')));
 try {for(const id of [...CORE_CASES,...ADDITIONAL_CASES]){const s=createScenario(id,1,directory,directory);assert.equal(typeof s.setup,'function');assert.equal(typeof s.verify,'function');assert.ok(s.requiredFacts.length>0);await assert.rejects(()=>s.checkFacts({facts:[]}));} }
 finally {fs.rmSync(directory,{recursive:true,force:true});}
+
+const record={operation:{operation_id:'op-original'},status:'succeeded'};
+assert.equal(operationRecord('rho.operation.get.v1',{data:{record,output_contract:{capability:{id:'workspace.run_r',version:1}}}}),record);
+assert.equal(operationRecord('rho.operation.get',record),record);
+assert.equal(operationRecord('rho.workspace.run_r.v1',record),record);
+assert.equal(operationRecord('rho.application.context.v1',{data:{record}}),null);
+
 console.log('Harness parser and assertion checks passed. No Agent acceptance runs executed.');

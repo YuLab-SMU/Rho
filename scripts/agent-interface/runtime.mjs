@@ -46,7 +46,7 @@ export class McpClient {
   async close() { if(this.session) await fetch(this.url,{method:'DELETE',headers:{authorization:`Bearer ${this.token}`,'mcp-session-id':this.session},signal:AbortSignal.timeout(10000)}).catch(()=>{}); }
 }
 export class FixtureHost {
-  constructor(options, directory) { this.options=options;this.directory=directory;this.pages=[];this.contexts=[];this.seedRecords=[];this.browserTraffic=[]; }
+  constructor(options, directory) { this.options=options;this.directory=directory;this.pages=[];this.contexts=[];this.seedRecords=[];this.browserTraffic=[];this.recordObservations=[]; }
   async start(project, skillsManifest=null) {
     this.project=fs.realpathSync(project);this.database=path.join(this.directory,'state','next.sqlite');
     const urlFile=path.join(this.directory,'launch.url');
@@ -64,7 +64,7 @@ export class FixtureHost {
     const response=await fetch(`${this.origin}${endpoint}`,{method:body?'POST':'GET',headers:{authorization:`Bearer ${this.token}`,'content-type':'application/json','X-Rho-Studio-Window':windowId},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(60000)});
     const value=await response.json();assert.ok(response.ok,JSON.stringify(value));return value;
   }
-  async port(method,params,windowId) {const reply=await this.api('/api/host',{project_root:this.project,frame:{id:randomUUID(),request:{method,params}}},windowId);assert.equal(reply.ok,true,JSON.stringify(reply));return reply.result;}
+  async port(method,params,windowId) {const reply=await this.api(method==='application_bridge'?'/api/application/bridge':'/api/host',{project_root:this.project,frame:{id:randomUUID(),request:{method,params}}},windowId);assert.equal(reply.ok,true,JSON.stringify(reply));return reply.result;}
   query(id,arguments_={}) {return this.port('query_snapshot',{capability:{id,version:1},arguments:arguments_});}
   async run(code,{id=`fixture-${randomUUID()}`,accepted=false,expect='succeeded'}={}) {
     const record=await this.port('invoke',{client_request_id:id,capability:{id:'workspace.run_r',version:1},arguments:{code,output_mode:'console'},preconditions:[],...(accepted?{return_after_acceptance:true}:{})});
@@ -84,13 +84,19 @@ export class FixtureHost {
     assert.equal(page.operations.length,1);const record=await this.get(page.operations[0].operation_id);assert.equal(record.status,'succeeded');this.seedRecords.push(record.operation.operation_id);
     json(path.join(this.options.evidence,'lost-acknowledgement.json'),{client_request_id:id,original_response_body_cancelled:true,recovered_operation_id:record.operation.operation_id});return record;
   }
-  get(id) {return this.port('get_operation',{operation_id:id});}
+  async get(id) {
+    const snapshot=await this.query('operation.get',{operation_id:id});assert.equal(snapshot.status,'ready','authoritative record query must be ready');
+    const result=snapshot.data;assert.ok(result&&Object.hasOwn(result,'record')&&Object.hasOwn(result,'output_contract'),'typed operation.get payload required');
+    if(result.record){assert.equal(result.record.operation.operation_id,id,'original OperationId must be preserved');assert.deepEqual(result.output_contract?.capability,result.record.operation.capability,'record must carry its exact output contract identity');}
+    else assert.equal(result.output_contract,null);
+    this.recordObservations.push({operation_id:id,source:snapshot.source,observed_at_ms:snapshot.observed_at_ms,...result});return result.record;
+  }
   async newPage(windowId=`acceptance-${randomUUID()}`) {
     if(!this.browser) {const require=createRequire(path.join(this.options.root,'ui/package.json'));const {chromium}=require('@playwright/test');this.browser=await chromium.launch({channel:this.options.chromeChannel||'chrome',headless:true});}
     const context=await this.browser.newContext({viewport:{width:1440,height:1000},deviceScaleFactor:1});this.contexts.push(context);
     await context.addInitScript(id=>sessionStorage.setItem('rho-window-id',id),windowId);
     const page=await context.newPage();this.pages.push(page);
-    page.on('response',async response=>{if(!response.url().endsWith('/api/host'))return;try{const request=response.request().postDataJSON();const reply=await response.json();this.browserTraffic.push({windowId,request: scrub(request),reply:scrub(reply)});}catch{}});
+    page.on('response',async response=>{if(!['/api/host','/api/application/bridge'].includes(new URL(response.url()).pathname))return;try{const request=response.request().postDataJSON();const reply=await response.json();this.browserTraffic.push({windowId,route:new URL(response.url()).pathname,request: scrub(request),reply:scrub(reply)});}catch{}});
     page.on('pageerror',error=>fs.appendFileSync(path.join(this.options.evidence,'browser.errors.log'),`${windowId}: ${error.stack}\n`));
     await page.goto(this.launchUrl);await page.getByRole('textbox',{name:'Console Input',exact:true}).waitFor({timeout:45000});
     await until(()=>this.query('application.windows',{limit:50}),r=>r.data?.windows?.some(w=>w.window.window_id===windowId&&w.online),'resident Studio bridge');
@@ -106,7 +112,7 @@ export class FixtureHost {
   async close() {
     await this.screenshot('final.png').catch(()=>{});await this.browser?.close().catch(()=>{});await this.mcp?.close();
     if(this.child&&this.child.exitCode===null){this.child.kill('SIGINT');const timer=setTimeout(()=>this.child.kill('SIGKILL'),10000);await this.exit;clearTimeout(timer);}
-    json(path.join(this.options.evidence,'browser.json'),this.browserTraffic);
+    json(path.join(this.options.evidence,'browser.json'),this.browserTraffic);json(path.join(this.options.evidence,'operation-observations.json'),this.recordObservations);
   }
 }
 export function scrub(value) {if(Array.isArray(value))return value.map(scrub);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,v])=>[key,/token|authorization/i.test(key)?'<redacted>':scrub(v)]));return value;}
