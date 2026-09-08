@@ -137,7 +137,8 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
         throw new Error("Local input changed while synchronized window state was being restored. Local input was retained; restoration needs explicit resolution.");
       }
       if (restored.length) this.ports.modules.restoreDocuments(restored, registration.data.context.active_document_id);
-      if (registration.data.context.views.length) this.ports.modules.restoreViews(registration.data.context);
+      if (registration.data.context.views.length) await this.ports.modules.restoreViews(registration.data.context);
+      current();
       this.session = session; this.registeredScope = scope;
       this.registeringSession = null;
       this.localContext = structuredClone(registration.data.context);

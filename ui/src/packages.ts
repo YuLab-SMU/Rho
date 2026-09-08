@@ -6,6 +6,7 @@ import type { PackageSnapshotData } from "./generated/PackageSnapshotData";
 import type { PackageQueryArguments } from "./generated/PackageQueryArguments";
 import type { PackageGroup } from "./generated/PackageGroup";
 import type { PackageEntry } from "./generated/PackageEntry";
+import type { ApplicationPackageSelection } from "./generated/ApplicationPackageSelection";
 
 export type PackageView = "installed" | "loaded" | "attached" | "multiple";
 export interface PackageDetails {
@@ -77,6 +78,7 @@ export class Packages extends Model<PackagesSnapshot> {
   private scroll = 0;
   private selectedName: string | null = null;
   private selectedCopy: string | null = null;
+  private applicationReference: ApplicationPackageSelection | null = null;
   private inspection: "overview" | "source" = "overview";
   private visibleViews = new Map<string, string>();
   private activeViewIds: ReadonlySet<string> | null = null;
@@ -120,6 +122,16 @@ export class Packages extends Model<PackagesSnapshot> {
   get scrollTop() { return this.scroll; }
   get selected() { return this.selectedName; }
   get sourceCopy() { return this.selectedCopy; }
+  get applicationSelection(): ApplicationPackageSelection | null {
+    const selection = this.applicationReference;
+    return selection && selection.package === this.selectedName && selection.copy_id === this.selectedCopy && selection.native_session_id === this.ports.context().session ? selection : null;
+  }
+  restoreSelection(selection: ApplicationPackageSelection) {
+    if (selection.native_session_id !== this.ports.context().session) throw new Error("The saved package selection belongs to an ended native session.");
+    this.applicationReference = Object.freeze({ ...selection });
+    this.selectedName = selection.package; this.selectedCopy = selection.copy_id; this.inspection = "source";
+    this.publish(); this.ports.changed();
+  }
   get inspectorMode() { return this.inspection; }
   get loading() { return !!this.flight; }
   get notice() { return this.error; }
@@ -223,6 +235,7 @@ export class Packages extends Model<PackagesSnapshot> {
     this.dirtyValue = false; this.staleValue = false; this.expiredValue = false; this.error = "";
     this.copyDetails.set(first.package_name, immutable({ copies, total: first.total_matches, next: last.next_offset, loading: false, notice: "" }));
     this.selectedName = first.package_name; this.selectedCopy = copyKey; this.inspection = "source";
+    this.applicationReference = Object.freeze({ package: first.package_name, copy_id: copyKey, observation_id: first.observation_id, native_session_id: session });
     this.publish(); this.ports.changed(); this.ports.schedule();
   }
   inspect(name: string, more = false) {

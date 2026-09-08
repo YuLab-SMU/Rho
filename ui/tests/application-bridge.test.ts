@@ -17,7 +17,7 @@ afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); });
 const reference = (d: ApplicationDocument) => ({ document_id: d.document_id, document_version: d.version, selection_version: d.selection.version });
 const draft = (text = "x <- 2\n"): ApplicationDocument => ({ document_id: "d1", version: "v1", path: "analysis.R", text, base_text: "x <- 1\n", base_hash: "base-hash",
   selection: { anchor: 0, head: 0, version: "selection-1" }, readonly_reason: null });
-const context = (): ApplicationContextState => ({ version: "remote-context-1", label: "Test", active_document_id: null, native_session_id: "native-1", views: [], selected_object: null, selected_package: null, selected_plot: null });
+const context = (): ApplicationContextState => ({ version: "remote-context-1", label: "Test", active_document_id: null, active_view_id: null, native_session_id: "native-1", views: [], selected_object: null, selected_package: null, selected_plot: null });
 
 function fixture(initial: ApplicationDocument[] = [draft()], remoteInitial: ApplicationDocument[] = []) {
   let time = 1000, local = structuredClone(initial), remote = structuredClone(remoteInitial), remoteContext = context(), localContext = context();

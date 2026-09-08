@@ -143,7 +143,7 @@ async function studioFixture() {
     applicationExecute: vi.fn(), applicationStatus: vi.fn(), applicationReadDocument: vi.fn(),
     applicationBridge: vi.fn(async (_project: string, request: ApplicationBridgeRequest): Promise<ApplicationBridgeReply> => {
       if (request.kind === "register") return { kind: "registered", data: { session: { window: { window_id: request.window_id, incarnation: request.incarnation }, bridge_token: "test-bridge" },
-        context: { version: "context-1", label: "test", active_document_id: null, native_session_id: null, views: [], selected_object: null, selected_package: null, selected_plot: null }, documents: [], heartbeat_interval_ms: 5000, offline_after_ms: 15000 } };
+        context: { version: "context-1", label: "test", active_document_id: null, active_view_id: null, native_session_id: null, views: [], selected_object: null, selected_package: null, selected_plot: null }, documents: [], heartbeat_interval_ms: 5000, offline_after_ms: 15000 } };
       if (request.kind === "sync") return { kind: "synced", data: { sync_id: request.sync_id, synced_at_ms: Date.now(), context_version: request.changes.context?.context.version ?? "context-1",
         document_versions: request.changes.documents.map(({ document: d }) => ({ document_id: d.document_id, document_version: d.version, selection_version: d.selection.version })) } };
       if (request.kind === "claim") return { kind: "claimed", data: null };

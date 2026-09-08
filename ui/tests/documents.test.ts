@@ -192,3 +192,28 @@ it("old view callbacks cannot mutate a restored draft with the same persisted id
   expect(documents.owns(oldView)).toBe(false); expect(() => documents.replace(oldView, "old edit")).toThrow("another project");
   expect(d().raw).toBe("restored"); expect(d().error).toBe(""); expect(d().draft.scrollTop).toBe(0);
 });
+
+it("application edits use resident document versions, retain BOM/CRLF and reject stale references", () => {
+  const { documents, d } = fixture("\uFEFF甲\r\n🦀乙\r\n");
+  const original = documents.applicationDocuments()[0];
+  const reference = { document_id: original.document_id, document_version: original.version, selection_version: original.selection.version };
+  documents.applicationEdit(reference, [{ from: 2, to: 4, insert: "新\n行" }]);
+  expect(d().raw).toBe("\uFEFF甲\r\n新\r\n行乙\r\n");
+  expect(d().version).not.toBe(original.version);
+  expect(() => documents.applicationEdit(reference, [{ from: 0, to: 1, insert: "stale" }])).toThrow(/changed/);
+});
+it("application selection has its own version and rejects offsets through a surrogate pair", () => {
+  const { documents, d } = fixture("🦀字");
+  const original = documents.applicationDocuments()[0];
+  const reference = { document_id: original.document_id, document_version: original.version, selection_version: original.selection.version };
+  expect(() => documents.applicationSetSelection(reference, 1, 2)).toThrow(/UTF-16/);
+  documents.applicationSetSelection(reference, 2, 3);
+  expect(d().version).toBe(original.version); expect(d().selectionVersion).not.toBe(original.selection.version);
+  expect(() => documents.applicationCheck(reference)).toThrow(/changed/);
+});
+it("an application save confirmation updates only the captured base and preserves later text", async () => {
+  const { documents, d } = fixture(); const capture = "captured\n";
+  documents.replace(d(), "later user input\n");
+  documents.applicationConfirmSave(d().id, capture, "中文 文件.R", await sha256(capture));
+  expect(d().raw).toBe("later user input\n"); expect(d().draft.baseRaw).toBe(capture); expect(d().dirty).toBe(true);
+});

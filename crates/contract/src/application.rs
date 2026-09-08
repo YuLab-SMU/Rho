@@ -123,6 +123,8 @@ pub struct ApplicationContextState {
     pub version: String,
     pub label: String,
     pub active_document_id: Option<String>,
+    #[serde(default)]
+    pub active_view_id: Option<String>,
     pub native_session_id: Option<String>,
     pub views: Vec<ApplicationView>,
     pub selected_object: Option<ApplicationObjectSelection>,

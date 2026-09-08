@@ -15,6 +15,16 @@ pub(crate) fn validate_window(window: &ApplicationWindowRef) -> Result<(), Appli
     validate_id(&window.window_id)?;
     validate_id(&window.incarnation)
 }
+fn validate_view_id(value: &str) -> Result<(), ApplicationError> {
+    // Existing object viewers use `object:<exact R name>` as their view identity.
+    // Preserve Unicode and spaces rather than turning a scientific name into a token.
+    if value.is_empty() || value.len() > 2048 || value.contains('\0') {
+        return Err(invalid(
+            "view identity must be 1..2048 UTF-8 bytes without NUL",
+        ));
+    }
+    Ok(())
+}
 pub(crate) fn validate_path(value: &str) -> Result<(), ApplicationError> {
     if value.is_empty()
         || value.len() > 1024
@@ -140,7 +150,7 @@ pub(crate) fn validate_context(
     }
     let mut ids = std::collections::BTreeSet::new();
     for view in &context.views {
-        validate_id(&view.view_id)?;
+        validate_view_id(&view.view_id)?;
         if !ids.insert(&view.view_id) {
             return Err(invalid("view ID occurs more than once"));
         }
@@ -151,6 +161,13 @@ pub(crate) fn validate_context(
         {
             return Err(invalid("view refers to a missing document"));
         }
+    }
+    if context
+        .active_view_id
+        .as_ref()
+        .is_some_and(|id| !context.views.iter().any(|v| &v.view_id == id))
+    {
+        return Err(invalid("active view does not exist"));
     }
     if let Some(session) = &context.native_session_id {
         validate_id(session)?;
@@ -246,7 +263,7 @@ pub(crate) fn validate_action(
             view_type, view_id, ..
         } => {
             if let Some(id) = view_id {
-                validate_id(id)?;
+                validate_view_id(id)?;
             }
             if matches!(
                 view_type,

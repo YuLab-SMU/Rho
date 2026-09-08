@@ -221,8 +221,31 @@ impl ApplicationOwner {
             )?;
             return Ok(result);
         }
-        let invocation = build_invocation(&command, request.step)?;
-        invocation.validate().map_err(|e| invalid(e.to_string()))?;
+        let invocation = match build_invocation(&command, request.step).and_then(|invocation| {
+            invocation.validate().map_err(|e| invalid(e.to_string()))?;
+            Ok(invocation)
+        }) {
+            Ok(invocation) => invocation,
+            Err(error) => {
+                let receipt = step_receipt_mut(&mut command.receipt, request.step)?;
+                receipt.state = ApplicationStepState::Failed;
+                receipt.error = Some(error.to_string());
+                command.receipt.state = ApplicationCommandState::Failed;
+                command.receipt.diagnostic = Some(format!(
+                    "The captured request could not be admitted: {error}. No scientific operation was submitted for this step."
+                ));
+                command.receipt.completed_at_ms = Some(now);
+                self.commit(
+                    &scope,
+                    &mut window,
+                    ApplicationStoreChanges {
+                        commands: vec![command],
+                        ..Default::default()
+                    },
+                )?;
+                return Err(error);
+            }
+        };
         let receipt = step_receipt_mut(&mut command.receipt, request.step)?;
         receipt.state = ApplicationStepState::Submitting;
         match request.step {

@@ -108,14 +108,14 @@ export class Studio {
       const packageName = this.packages.selected;
       const copy = packageName ? this.packages.details.get(packageName)?.copies.find((copy) => packageCopyKey(copy) === this.packages.sourceCopy) : null;
       return {
-        label: this.session.project?.split("/").at(-1) ?? "Rho Studio", active_document_id: this.documents.active, native_session_id: session,
+        label: this.session.project?.split("/").at(-1) ?? "Rho Studio", active_document_id: this.documents.active, active_view_id: layout.activeTabId, native_session_id: session,
         views: Object.entries(layout.knownViews).filter(([id]) => !layout.closedViews.has(id)).map(([view_id, view]) => ({ view_id,
           view_type: view.component, document_id: view.component === "document" ? (view.config as { documentId?: string } | undefined)?.documentId ?? view_id : null,
           active: layout.activeViewIds.includes(view_id),
         })),
         selected_object: this.objects.applicationSelection ?? (this.objects.selected && session ? { name: this.objects.selected, native_session_id: session, object_ref: null } : null),
-        selected_package: packageName && copy && session && this.packages.session === session && this.packages.data?.observation_id
-          ? { package: packageName, copy_id: packageCopyKey(copy), observation_id: this.packages.data.observation_id, native_session_id: session } : null,
+        selected_package: this.packages.applicationSelection ?? (packageName && copy && session && this.packages.session === session && this.packages.data?.observation_id
+          ? { package: packageName, copy_id: packageCopyKey(copy), observation_id: this.packages.data.observation_id, native_session_id: session } : null),
         selected_plot: plot ? { operation_id: plot.operation_id, sequence: plot.sequence } : null,
       };
     };
@@ -135,7 +135,7 @@ export class Studio {
       reportError: this.session.reportError.bind(this.session),
       modules: {
         context, documents: this.documents.applicationDocuments.bind(this.documents), restoreDocuments: this.documents.applicationRestore.bind(this.documents),
-        restoreViews: (saved) => {
+        restoreViews: async (saved) => {
           const current = this.layout.getSnapshot();
           for (const id of Object.keys(current.knownViews)) if (this.layout.has(id) && !saved.views.some((view) => view.view_id === id)) this.layout.close(id);
           for (const view of saved.views) {
@@ -144,7 +144,22 @@ export class Studio {
             this.layout.show(view.view_type, view.view_id, document?.name ?? known?.name,
               document ? { documentId: document.id } : known?.config);
           }
+          const session = this.session.context().session;
+          if (saved.selected_object?.native_session_id === session && saved.selected_object.object_ref) this.objects.selectObservation(saved.selected_object);
+          if (saved.selected_package?.native_session_id === session) this.packages.restoreSelection(saved.selected_package);
+          if (saved.selected_plot) {
+            const project = this.session.project!, selection = saved.selected_plot;
+            const observed = await query(project, "workspace.list_outputs", { operation_id: selection.operation_id, after_sequence: Math.max(0, selection.sequence - 1), limit: 1 });
+            const reference = (observed.data as MediaPage | null)?.media.find((item) => item.reference.sequence === selection.sequence)?.reference;
+            if (project !== this.session.project) throw new Error("The project changed while restoring the selected plot.");
+            if (observed.status !== "ready" || !reference || reference.operation_id !== selection.operation_id) {
+              this.session.reportError(observed.notices.join("\n") || "The synchronized selected plot is currently unavailable.");
+            } else {
+              this.outputs.restoreReferences([mediaKey(reference)]); this.plots.locate(reference);
+            }
+          }
           for (const view of saved.views) if (view.active) activateView(view.view_id);
+          if (saved.active_view_id) activateView(saved.active_view_id);
           if (saved.active_document_id) this.documents.activate(saved.active_document_id);
         },
         openView: (type, id) => {
