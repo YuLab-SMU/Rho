@@ -3,6 +3,13 @@ use rho_contract::{CapabilityDescriptor, NextRead};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
+#[cfg(test)]
+thread_local! { static COMPILED_SCHEMAS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+#[cfg(test)]
+pub(crate) fn compiled_schema_count() -> usize {
+    COMPILED_SCHEMAS.with(std::cell::Cell::get)
+}
+
 pub(crate) struct CapabilitySchemas {
     input: jsonschema::Validator,
     partial_input: jsonschema::Validator,
@@ -11,6 +18,8 @@ pub(crate) struct CapabilitySchemas {
     recovery: jsonschema::Validator,
 }
 fn compile(schema: &Value) -> Result<jsonschema::Validator, OperationError> {
+    #[cfg(test)]
+    COMPILED_SCHEMAS.with(|count| count.set(count.get() + 1));
     fn refs(value: &Value, root: &Value) -> Result<(), OperationError> {
         if let Value::Object(object) = value {
             for key in ["$ref", "$dynamicRef", "$recursiveRef"] {

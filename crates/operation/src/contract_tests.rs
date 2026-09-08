@@ -1038,3 +1038,58 @@ async fn original_request_lookup_uses_actor_identity_not_a_principal_summary_pag
         second.operation.operation_id
     );
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn repeated_query_navigation_uses_precompiled_input_and_payload_validators() {
+    let target = TestQuery::new("test.target");
+    let mut source = TestQuery::new("test.source");
+    source.reads = vec![NextRead::query(
+        "test.target",
+        "Read matching evidence",
+        json!({"value":1}),
+    )];
+    let mut registry = CapabilityRegistry::new();
+    registry.register_query(Arc::new(target)).unwrap();
+    registry.register_query(Arc::new(source)).unwrap();
+    let before = crate::schema::compiled_schema_count();
+    let gateway = QueryGateway::new(Arc::new(registry));
+    for _ in 0..20 {
+        let page = gateway
+            .query(&context(), query("test.source", json!({"value":1})))
+            .await
+            .unwrap();
+        assert_eq!(page.next_reads.len(), 1);
+    }
+    assert_eq!(crate::schema::compiled_schema_count(), before);
+}
+#[test]
+fn control_contract_validation_uses_the_registry_without_admitting_an_operation() {
+    let capability = CapabilityRef::new("test.control", 1).unwrap();
+    let mut registry = CapabilityRegistry::new();
+    registry
+        .register_control(descriptor("test.control", CapabilityKind::Control))
+        .unwrap();
+    assert!(
+        registry
+            .validate_control_input(&context(), &capability, &json!({"value":1}))
+            .is_ok()
+    );
+    assert!(matches!(
+        registry.validate_control_input(&context(), &capability, &json!({"value":"wrong"})),
+        Err(OperationError::InvalidInput(_))
+    ));
+    assert!(matches!(
+        registry.validate_control_output(&capability, &json!({"value":"wrong"})),
+        Err(OperationError::Contract(_))
+    ));
+    let mut denied = context();
+    denied.scopes.clear();
+    assert!(matches!(
+        registry.validate_control_input(&denied, &capability, &json!({"value":1})),
+        Err(OperationError::AccessDenied { .. })
+    ));
+    assert!(matches!(
+        registry.handler(&capability),
+        Err(OperationError::UnknownCapability(_))
+    ));
+}
