@@ -139,3 +139,13 @@ it("late task failure and cleanup cannot overwrite a restarted task or notify di
   expect(runtime.getSnapshot().tasks.events.inFlight).toBe(false);
   expect(listener).not.toHaveBeenCalled();
 });
+
+
+it.each(["workspace.list_objects", "workspace.observe_object", "workspace.read_object", "workspace.package_index"])("coalesces %s with the shared native observation lane", async (capability) => {
+  const runtime = coordinator(), first = deferred<QuerySnapshot>();
+  const read = vi.fn(async (_project: string, id: string) => id === capability ? first.promise : snapshot);
+  const query = runtime.query(read), a = query("/project", capability, { expected_session: "session" }), b = query("/project", capability, { expected_session: "session" });
+  const packages = query("/project", "workspace.packages", { expected_session: "session" }); await microtasks();
+  expect(read).toHaveBeenCalledTimes(1); expect(a).toBe(b); first.resolve(snapshot); await Promise.all([a, b, packages]);
+  expect(read.mock.calls.map(([, id]) => id)).toEqual([capability, "workspace.packages"]);
+});

@@ -883,7 +883,7 @@ fn saved_digest_is_verified_and_next_run_stays_unsubmitted_after_disconnect() {
     let d = sync(&owner, &r, document("x <- 2\n"), 1);
     control(&owner, &r, &d, "request", 2);
     let grant = claim(&owner, &r, 3);
-    complete(&owner, &r, &grant, 4);
+    assert!(complete(&owner, &r, &grant, 4).completed_at_ms.is_none());
     let request = execute_request(&r, &grant, ApplicationExecutionStep::Save);
     let ApplicationExecutionAdmission::Invoke {
         context,
@@ -893,14 +893,18 @@ fn saved_digest_is_verified_and_next_run_stays_unsubmitted_after_disconnect() {
         panic!()
     };
     let accepted = operation_record(&invocation, &context, OperationStatus::Accepted, None);
-    assert_eq!(
+    let admitted = owner
+        .record_execution(&actor(false), &request, &accepted, 6)
+        .unwrap();
+    assert_eq!(admitted.save.unwrap().state, ApplicationStepState::Accepted);
+    assert!(admitted.completed_at_ms.is_none());
+    let running = operation_record(&invocation, &context, OperationStatus::Running, None);
+    assert!(
         owner
-            .record_execution(&actor(false), &request, &accepted, 6)
+            .record_execution(&actor(false), &request, &running, 7)
             .unwrap()
-            .save
-            .unwrap()
-            .state,
-        ApplicationStepState::Accepted
+            .completed_at_ms
+            .is_none()
     );
     let succeeded = operation_record(
         &invocation,
@@ -911,6 +915,7 @@ fn saved_digest_is_verified_and_next_run_stays_unsubmitted_after_disconnect() {
     let receipt = owner
         .record_execution(&actor(false), &request, &succeeded, 30_000)
         .unwrap();
+    assert!(receipt.completed_at_ms.is_none());
     assert_eq!(receipt.save.unwrap().state, ApplicationStepState::Succeeded);
     assert_eq!(
         receipt.run.unwrap().state,
@@ -935,6 +940,74 @@ fn saved_digest_is_verified_and_next_run_stays_unsubmitted_after_disconnect() {
         .unwrap();
     assert_eq!(lookups.len(), 1);
     assert_eq!(lookups[0].1.context.caller, actor(true).caller);
+}
+
+#[test]
+fn application_completion_time_is_set_only_after_the_final_scientific_step() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let d = sync(&owner, &r, document("x <- 2\n"), 1);
+    control(&owner, &r, &d, "request", 2);
+    let grant = claim(&owner, &r, 3);
+    assert!(complete(&owner, &r, &grant, 4).completed_at_ms.is_none());
+    let save = execute_request(&r, &grant, ApplicationExecutionStep::Save);
+    let ApplicationExecutionAdmission::Invoke {
+        context,
+        invocation,
+    } = owner.begin_execution(&actor(false), &save, 5).unwrap()
+    else {
+        panic!()
+    };
+    let record = operation_record(
+        &invocation,
+        &context,
+        OperationStatus::Succeeded,
+        Some(project_output(&sha256(&d.text))),
+    );
+    assert!(
+        owner
+            .record_execution(&actor(false), &save, &record, 6)
+            .unwrap()
+            .completed_at_ms
+            .is_none()
+    );
+    let run = execute_request(&r, &grant, ApplicationExecutionStep::Run);
+    let ApplicationExecutionAdmission::Invoke {
+        context,
+        invocation,
+    } = owner.begin_execution(&actor(false), &run, 7).unwrap()
+    else {
+        panic!()
+    };
+    let accepted = operation_record(&invocation, &context, OperationStatus::Accepted, None);
+    assert!(
+        owner
+            .record_execution(&actor(false), &run, &accepted, 8)
+            .unwrap()
+            .completed_at_ms
+            .is_none()
+    );
+    let running = operation_record(&invocation, &context, OperationStatus::Running, None);
+    assert!(
+        owner
+            .record_execution(&actor(false), &run, &running, 9)
+            .unwrap()
+            .completed_at_ms
+            .is_none()
+    );
+    let succeeded = operation_record(
+        &invocation,
+        &context,
+        OperationStatus::Succeeded,
+        Some(
+            serde_json::json!({"session_id":"R-session-1","value":2,"stdout":"","stderr":"","conditions":[],"output_references":[]}),
+        ),
+    );
+    let receipt = owner
+        .record_execution(&actor(false), &run, &succeeded, 10)
+        .unwrap();
+    assert_eq!(receipt.state, ApplicationCommandState::Applied);
+    assert_eq!(receipt.completed_at_ms, Some(10));
 }
 #[test]
 fn digest_mismatch_or_actor_substitution_cannot_start_the_run() {
@@ -1169,4 +1242,145 @@ fn a_bridge_acknowledgement_cannot_claim_an_edit_that_its_resources_do_not_show(
         )
         .unwrap();
     assert_eq!(actual.current_document.unwrap().sha256, sha256(&d.text));
+}
+
+#[test]
+fn native_read_controls_require_the_original_actor_scope_before_a_bridge_command_exists() {
+    let owner = owner();
+    let r = register(&owner, "window", 0);
+    sync(&owner, &r, document("draft"), 1);
+    let actions = [
+        (
+            "project.read",
+            ApplicationAction::OpenDocument {
+                path: "another.R".into(),
+                expected_context_version: "context-v1".into(),
+            },
+        ),
+        (
+            "workspace.read",
+            ApplicationAction::SelectObject {
+                selection: ApplicationObjectSelection {
+                    name: "x".into(),
+                    object_ref: Some("object_1".into()),
+                    native_session_id: "R-session-1".into(),
+                },
+                expected_context_version: "context-v1".into(),
+            },
+        ),
+        (
+            "workspace.read",
+            ApplicationAction::SelectPackage {
+                selection: ApplicationPackageSelection {
+                    package: "stats".into(),
+                    copy_id: "/library\nstats\n4.6".into(),
+                    observation_id: "packages_1".into(),
+                    native_session_id: "R-session-1".into(),
+                },
+                expected_context_version: "context-v1".into(),
+            },
+        ),
+        (
+            "workspace.read",
+            ApplicationAction::SelectPlot {
+                selection: ApplicationPlotSelection {
+                    operation_id: OperationId::new("plot-operation").unwrap(),
+                    sequence: 1,
+                },
+                expected_context_version: "context-v1".into(),
+            },
+        ),
+    ];
+    for (index, (required, action)) in actions.into_iter().enumerate() {
+        let request = ApplicationCommandRequest {
+            window: r.session.window.clone(),
+            request_id: format!("native-read-{index}"),
+            action,
+        };
+        let mut denied = actor(true);
+        denied.scopes.insert("application.control".into());
+        assert_eq!(
+            owner.control(&denied, request.clone(), 2).unwrap_err(),
+            ApplicationError::AccessDenied {
+                missing: vec![required.into()]
+            }
+        );
+        assert!(
+            owner
+                .store
+                .command(
+                    &owner.scope(&denied).unwrap(),
+                    "window",
+                    &request.request_id
+                )
+                .unwrap()
+                .is_none()
+        );
+        let mut allowed = denied;
+        allowed.scopes.insert(required.into());
+        let receipt = owner.control(&allowed, request.clone(), 3).unwrap();
+        assert_eq!(receipt.state, ApplicationCommandState::Pending);
+        assert_eq!(receipt.actor, actor(true).caller);
+        let stored = owner
+            .store
+            .command(
+                &owner.scope(&allowed).unwrap(),
+                "window",
+                &request.request_id,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.context, allowed);
+        assert_ne!(stored.context.caller, actor(false).caller);
+    }
+}
+#[test]
+fn application_owned_edits_and_creation_do_not_require_native_read_authority() {
+    let owner = owner();
+    let r = register(&owner, "window", 0);
+    let d = sync(&owner, &r, document("draft"), 1);
+    for (index, action) in [
+        ApplicationAction::EditDocument {
+            document: document_ref(&d),
+            edits: vec![ApplicationTextEdit {
+                from: 0,
+                to: 1,
+                insert: "D".into(),
+            }],
+        },
+        ApplicationAction::SetSelection {
+            document: document_ref(&d),
+            anchor: 0,
+            head: 1,
+        },
+        ApplicationAction::CreateDocument {
+            path: None,
+            text: "new draft".into(),
+            expected_context_version: "context-v1".into(),
+        },
+        ApplicationAction::OpenView {
+            view_type: ApplicationViewType::Files,
+            view_id: None,
+            expected_context_version: "context-v1".into(),
+        },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert_eq!(
+            owner
+                .control(
+                    &actor(true),
+                    ApplicationCommandRequest {
+                        window: r.session.window.clone(),
+                        request_id: format!("application-only-{index}"),
+                        action
+                    },
+                    2
+                )
+                .unwrap()
+                .state,
+            ApplicationCommandState::Pending
+        );
+    }
 }

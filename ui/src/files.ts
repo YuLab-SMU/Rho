@@ -4,6 +4,7 @@ import type { OperationChange, DomainEvents } from "./shared/events";
 import type { ResourcePorts } from "./resource-ports";
 import type { DirectoryPage } from "./generated/DirectoryPage";
 import type { FileSearchResult } from "./generated/FileSearchResult";
+import type { SearchFilesCursor } from "./generated/SearchFilesCursor";
 
 interface FilesSnapshot {
   readonly directories: ReadonlyMap<string, DirectoryPage>;
@@ -19,9 +20,12 @@ interface FilesSnapshot {
   readonly searchMode: boolean;
   readonly selected: string;
   readonly stale: boolean;
+  readonly resultsStale: boolean;
+  readonly resultsQuery: string | null;
+  readonly canContinueSearch: boolean;
 }
 interface DirectoryRead { path: string; after: string | null; generation: number; }
-interface SearchRead { text: string; showHidden: boolean; generation: number; }
+interface SearchRead { text: string; showHidden: boolean; generation: number; continuation: SearchFilesCursor | null; }
 /** Files owns directory and search state; views register intent and never own reads. */
 export class Files extends Model<FilesSnapshot> {
   private pages = new Map<string, DirectoryPage>();
@@ -38,6 +42,9 @@ export class Files extends Model<FilesSnapshot> {
   private queued = new Map<string, DirectoryRead>();
   private searchRead: SearchRead | null = null;
   private searchGeneration = 0;
+  private resultsGeneration = -1;
+  private resultQuery: { text: string; showHidden: boolean } | null = null;
+  private searchStale = false;
   private directoryGenerations = new Map<string, number>();
   private flight: { revision: number; directory?: DirectoryRead; search?: SearchRead } | null = null;
   private revision = 0;
@@ -46,7 +53,8 @@ export class Files extends Model<FilesSnapshot> {
   protected readSnapshot(): FilesSnapshot {
     return { directories: readonlyMap(this.pages), expanded: readonlySet(this.expandedPaths), showHidden: this.hidden,
       scrollTop: this.scroll, error: this.errorValue, loading: !!this.flight, searching: !!this.searchRead || !!this.flight?.search,
-      results: this.resultsValue, filter: this.filterValue, scope: this.scopeValue, searchMode: this.mode, selected: this.selectedValue, stale: this.staleValue };
+      results: this.resultsValue, filter: this.filterValue, scope: this.scopeValue, searchMode: this.mode, selected: this.selectedValue, stale: this.staleValue,
+      resultsStale: this.searchStale, resultsQuery: this.resultQuery?.text ?? null, canContinueSearch: this.canContinueSearch };
   }
   get directories() { return this.getSnapshot().directories; }
   get expanded() { return this.getSnapshot().expanded; }
@@ -60,6 +68,7 @@ export class Files extends Model<FilesSnapshot> {
   get scope() { return this.scopeValue; }
   get searchMode() { return this.mode; }
   get selected() { return this.selectedValue; }
+  get canContinueSearch() { return !!this.resultsValue?.continuation && !this.searchRead && !this.flight?.search && !this.searchStale && this.resultsGeneration === this.searchGeneration && this.mode && this.resultQuery?.text === this.filterValue && this.resultQuery.showHidden === this.hidden; }
   get needsObservation() { const scope = this.ports.context(); return !this.stopped && !!scope.project && scope.connected && (!!this.searchRead || this.queued.size > 0); }
   serialize() {
     return { expandedDirectories: [...this.expandedPaths], filesScrollTop: this.scroll, showHiddenFiles: this.hidden,
@@ -83,19 +92,25 @@ export class Files extends Model<FilesSnapshot> {
     this.revision++; this.stopped = false; this.flight = null; this.pages.clear(); this.queued.clear();
     this.expandedPaths = new Set([""]); this.searchRead = null; this.searchGeneration++;
     this.directoryGenerations.clear(); this.resultsValue = null; this.errorValue = ""; this.staleValue = true;
+    this.resultsGeneration = -1; this.resultQuery = null; this.searchStale = false;
     this.filterValue = ""; this.scopeValue = ""; this.mode = false; this.selectedValue = ""; this.scroll = 0; this.hidden = false;
     this.publish();
   }
   stop() { this.revision++; this.stopped = true; this.flight = null; this.queued.clear(); this.searchRead = null; this.publish(); this.dispose(); }
   private changed() { this.publish(); this.ports.changed(); }
-  setFilter(value: string) { this.filterValue = value; this.changed(); }
+  setFilter(value: string) {
+    if (this.filterValue === value) return;
+    this.filterValue = value;
+    if (this.mode) { this.searchRead = null; this.searchGeneration++; this.searchStale = !!this.resultsValue; }
+    this.changed();
+  }
   setScope(value: string) { this.scopeValue = value; this.changed(); }
   select(path: string) { this.selectedValue = path; this.changed(); }
   setSearchMode(value: boolean) {
-    this.mode = value; this.resultsValue = null; this.searchRead = null; this.searchGeneration++; this.changed();
+    this.mode = value; this.resultsValue = null; this.resultQuery = null; this.searchRead = null; this.searchStale = false; this.searchGeneration++; this.changed();
   }
   setScroll(value: number) { this.scroll = value; this.publish(); this.ports.changed(); }
-  setShowHidden(value: boolean) { this.hidden = value; this.resultsValue = null; this.searchRead = null; this.searchGeneration++; this.changed(); }
+  setShowHidden(value: boolean) { this.hidden = value; this.searchRead = null; this.searchGeneration++; this.searchStale = !!this.resultsValue; this.changed(); }
   setError(error: unknown) { this.errorValue = message(error); this.publish(); }
   toggleDirectory(path: string) {
     if (this.expandedPaths.has(path)) this.expandedPaths.delete(path);
@@ -114,12 +129,19 @@ export class Files extends Model<FilesSnapshot> {
   }
   refresh() {
     this.staleValue = true;
+    if (this.resultsValue || this.searchRead || this.flight?.search) { this.searchStale = !!this.resultsValue; this.searchRead = null; this.searchGeneration++; }
     for (const path of this.expandedPaths) this.queueDirectory(path, false, true);
     this.publish();
   }
   search() {
     if (!this.mode || !this.filterValue.trim()) return;
-    this.searchRead = { text: this.filterValue, showHidden: this.hidden, generation: ++this.searchGeneration };
+    this.searchRead = { text: this.filterValue, showHidden: this.hidden, generation: ++this.searchGeneration, continuation: null };
+    this.searchStale = !!this.resultsValue;
+    this.errorValue = ""; this.publish(); this.ports.schedule();
+  }
+  continueSearch() {
+    if (!this.canContinueSearch) return;
+    this.searchRead = { text: this.resultQuery!.text, showHidden: this.resultQuery!.showHidden, generation: this.searchGeneration, continuation: this.resultsValue!.continuation };
     this.errorValue = ""; this.publish(); this.ports.schedule();
   }
   operationChanged(event: OperationChange) {
@@ -145,13 +167,21 @@ export class Files extends Model<FilesSnapshot> {
     const latest = () => current() && (search ? search.generation === this.searchGeneration : directory!.generation === this.directoryGenerations.get(directory!.path));
     try {
       const response = await this.ports.query(identity.project, search ? "project.search_files" : "project.list_directory",
-        search ? { text: search.text, show_hidden: search.showHidden } : { path: directory!.path, after_name: directory!.after, limit: 200 });
+        search ? { text: search.text, show_hidden: search.showHidden, continuation: search.continuation } : { path: directory!.path, after_name: directory!.after, limit: 200 });
       if (!latest()) return;
       if (response.status !== "ready" || !response.data) throw new Error(response.notices.join("\n") || "The file observation could not be read.");
       if (search) {
         const result = response.data as FileSearchResult;
-        if (!Array.isArray(result.entries)) throw new Error("The file search response is incomplete.");
-        this.resultsValue = immutable(result); if (this.searchRead === search) this.searchRead = null;
+        if (!Array.isArray(result.entries) || !Array.isArray(result.notices) || !Number.isSafeInteger(result.scanned_entries) || !Number.isSafeInteger(result.scanned_directories) || typeof result.truncated !== "boolean" || result.continuation === undefined) throw new Error("The file search response is incomplete.");
+        if (result.continuation && (result.continuation.project !== identity.project || result.continuation.text !== search.text || result.continuation.show_hidden !== search.showHidden || !Array.isArray(result.continuation.directories))) throw new Error("The file search continuation does not match its project and query.");
+        if (search.continuation && result.continuation && JSON.stringify(search.continuation) === JSON.stringify(result.continuation)) throw new Error("The file search continuation did not advance.");
+        const previous = search.continuation && this.resultsGeneration === search.generation ? this.resultsValue : null;
+        const entries = previous ? [...previous.entries, ...result.entries] : result.entries;
+        this.resultsValue = immutable({ ...result, entries: [...new Map(entries.map((entry) => [entry.path, entry])).values()],
+          scanned_entries: (previous?.scanned_entries ?? 0) + result.scanned_entries, scanned_directories: (previous?.scanned_directories ?? 0) + result.scanned_directories,
+          truncated: result.truncated || !!previous?.truncated, notices: [...new Set([...(previous?.notices ?? []), ...result.notices])] });
+        this.resultsGeneration = search.generation; this.resultQuery = { text: search.text, showHidden: search.showHidden }; this.searchStale = false;
+        if (this.searchRead === search) this.searchRead = null;
       } else {
         const page = response.data as DirectoryPage;
         if (page.path !== directory!.path || !Array.isArray(page.entries)) throw new Error("The directory observation identity does not match.");

@@ -350,7 +350,7 @@ impl ApplicationOwner {
             _ => ApplicationCommandState::AwaitingExecution,
         };
         command.receipt.diagnostic = error;
-        command.receipt.completed_at_ms = Some(now);
+        command.receipt.completed_at_ms = completion_time(command.receipt.state, now);
         let receipt = command.receipt.clone();
         let mut window = self
             .store
@@ -489,7 +489,7 @@ impl ApplicationOwner {
                 command.receipt.diagnostic = Some("The Project owner could not verify the unchanged file. No scientific mutation or subsequent run was submitted.".into());
             }
         }
-        command.receipt.completed_at_ms = Some(now);
+        command.receipt.completed_at_ms = completion_time(command.receipt.state, now);
         let receipt = command.receipt.clone();
         let mut window = self
             .store

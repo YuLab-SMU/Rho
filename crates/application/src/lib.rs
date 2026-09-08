@@ -41,6 +41,10 @@ pub enum ApplicationError {
     Budget(String),
     #[error("application storage failed: {0}")]
     Storage(String),
+    #[error(
+        "the original caller lacks native read scopes for this application action: {missing:?}"
+    )]
+    AccessDenied { missing: Vec<String> },
 }
 
 pub struct ApplicationOwner {
@@ -171,7 +175,10 @@ impl ApplicationOwner {
         };
         Ok(ApplicationWindows {
             total: windows.len(),
-            online_count: windows.iter().filter(|window|self.online(window,now)).count(),
+            online_count: windows
+                .iter()
+                .filter(|window| self.online(window, now))
+                .count(),
             windows: selected
                 .into_iter()
                 .map(|w| self.summary(&scope, w, now))
@@ -287,6 +294,18 @@ impl ApplicationOwner {
                 return Err(ApplicationError::RequestConflict);
             }
             return Ok(self.effective_receipt(stored.receipt, now));
+        }
+        let read_scope = match &request.action {
+            ApplicationAction::OpenDocument { .. } => Some("project.read"),
+            ApplicationAction::SelectObject { .. }
+            | ApplicationAction::SelectPackage { .. }
+            | ApplicationAction::SelectPlot { .. } => Some("workspace.read"),
+            _ => None,
+        };
+        if let Some(scope) = read_scope.filter(|scope| !context.scopes.contains(*scope)) {
+            return Err(ApplicationError::AccessDenied {
+                missing: vec![scope.into()],
+            });
         }
         let mut window = self.load_window(&scope, &request.window)?;
         self.require_online(&window, now)?;
@@ -813,7 +832,7 @@ impl ApplicationOwner {
         if command.receipt.diagnostic.is_none() {
             command.receipt.diagnostic = completion.diagnostic;
         }
-        command.receipt.completed_at_ms = Some(now);
+        command.receipt.completed_at_ms = completion_time(command.receipt.state, now);
         command.receipt.context_version = Some(window.context.version.clone());
         command.completion_digest = Some(digest);
         let receipt = command.receipt.clone();
@@ -914,6 +933,15 @@ pub fn document_summary(document: &ApplicationDocument) -> ApplicationDocumentSu
 }
 fn fresh() -> String {
     uuid::Uuid::new_v4().to_string()
+}
+fn completion_time(state: ApplicationCommandState, now: u64) -> Option<u64> {
+    (!matches!(
+        state,
+        ApplicationCommandState::Pending
+            | ApplicationCommandState::Claimed
+            | ApplicationCommandState::AwaitingExecution
+    ))
+    .then_some(now)
 }
 fn source(online: bool) -> String {
     if online {

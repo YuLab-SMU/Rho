@@ -92,3 +92,16 @@ it("propagates malformed JSON and HTTP failures with no implicit retry and relea
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it("routes full draft/base synchronization through the dedicated application bridge boundary only", async () => {
+  const fetch = vi.fn(async (_url: unknown, _options?: RequestInit) => response({ id: "frame", ok: true, result: { kind: "synced", data: {} } })); vi.stubGlobal("fetch", fetch);
+  const host = client(), text = "x".repeat(512 * 1024), window = { window_id: host.windowId, incarnation: "incarnation" };
+  await host.applicationBridge("/project", { kind: "sync", session: { window, bridge_token: "test-only-bridge-token" }, sync_id: "large-draft-sync", changes: { context: null, removed_documents: [], documents: [{ expected_version: null, expected_selection_version: null,
+    document: { document_id: "document", version: "draft-version", path: "large.R", text, base_text: text, base_hash: `sha256:${"0".repeat(64)}`, selection: { anchor: 0, head: 0, version: "selection-version" }, readonly_reason: null } }] } });
+  expect(fetch.mock.calls[0][0]).toBe("/api/application/bridge"); const options = fetch.mock.calls[0][1] as RequestInit;
+  expect(new TextEncoder().encode(String(options.body)).length).toBeGreaterThan(272 * 1024);
+  expect(JSON.parse(String(options.body))).toMatchObject({ project_root: "/project", frame: { request: { method: "application_bridge", params: { kind: "sync", sync_id: "large-draft-sync" } } } });
+  expect(options.headers).toMatchObject({ Authorization: "Bearer test-only-token", "X-Rho-Studio-Window": host.windowId });
+  await host.applicationControl("/project", { window, request_id: "ordinary-control", action: { kind: "open_view", view_type: "files", view_id: null, expected_context_version: "context" } }); expect(fetch.mock.calls[1][0]).toBe("/api/host");
+  await host.invoke("/project", invocation, true); expect(fetch.mock.calls[2][0]).toBe("/api/host");
+});

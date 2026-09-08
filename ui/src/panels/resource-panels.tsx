@@ -217,9 +217,13 @@ export function FilesPanel() {
             {results && (
               <p className="filter-notice">
                 {results.entries.length} results · {results.scanned_entries}{" "}
-                entries observed{results.truncated ? " · Search truncated" : ""}
+                entries observed{results.continuation ? " · More pages available" : results.truncated ? " · See observation limits" : ""}
               </p>
             )}
+            {f.getSnapshot().resultsStale && <p className="filter-notice">Cached results for “{f.getSnapshot().resultsQuery}”. Search again to refresh.</p>}
+            {results?.continuation && <button disabled={!f.canContinueSearch} onClick={() => f.continueSearch()}>
+              {searching ? "Searching…" : `Load More · ${results.entries.length} shown`}
+            </button>}
             {results?.notices.map((n, i) => (
               <p key={i} className="filter-notice">
                 {n}
@@ -266,7 +270,7 @@ function ObjectPreview({ name, viewId }: { name: string; viewId: string }) {
       {o.notice && <span role="alert"> {o.notice}</span>}
     </p></div>;
   const columns =
-    Array.isArray(object.preview) && object.classes.includes("data.frame")
+    Array.isArray(object.preview) && (object.preview_kind === "table" || object.classes.includes("data.frame"))
       ? (object.preview as {
           name: string;
           type?: string;
@@ -329,12 +333,13 @@ function ObjectPreview({ name, viewId }: { name: string; viewId: string }) {
         <p className="muted">Metadata only. User methods were not called.</p>
       )}
       {object.notice && <p className="muted">{object.notice}</p>}
+      {observation?.notice && observation.notice !== object.notice && <p className="muted">{observation.notice}</p>}
       {object.truncated && (
         <p className="observation-notice">Preview truncated.</p>
       )}
       <small className="muted">
         Last observed {new Date(observation!.observedAt).toLocaleTimeString()}
-        {session.runtime?.state === "busy" ? " · R busy" : observation?.stale ? " · Refresh pending" : ""}
+        {session.runtime?.state === "busy" ? " · R busy" : observation?.stale ? " · Cached preview" : ""}
       </small>
     </div>
   );
@@ -367,6 +372,12 @@ export function ObjectsPanel({ viewId = "objects" }: { viewId?: string }) {
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
+        <button
+          title="Refresh Objects"
+          aria-label="Refresh Objects"
+          disabled={session.runtime?.state !== "idle"}
+          onClick={() => o.refresh()}
+        >↻</button>
         <button
           title="Collapse All"
           aria-label="Collapse All"
@@ -417,7 +428,7 @@ export function ObjectsPanel({ viewId = "objects" }: { viewId?: string }) {
           <p className="empty-message muted">
             {o.data
               ? "No match in the observed objects."
-              : "Start R to observe objects."}
+              : session.runtime ? "Object observations are unavailable." : "Start R to observe objects."}
           </p>
         )}
         {filter && (
@@ -448,6 +459,9 @@ export function ObjectsPanel({ viewId = "objects" }: { viewId?: string }) {
             : `${o.data?.objects.length ?? 0} objects`}{" "}
           · .GlobalEnv
         </span>
+        {o.data?.truncated && <button disabled={!o.canLoadMore || session.runtime?.state !== "idle"} onClick={() => o.loadMore()}>
+          Load More · {o.data.objects.length} shown
+        </button>}
       </div>
     </section>
   );

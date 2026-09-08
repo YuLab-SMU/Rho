@@ -71,7 +71,7 @@ export class RuntimeCoordinator extends Model<{ tasks: Readonly<Record<string, T
   query(read: QueryPort): QueryPort {
     return (project, id, args = {}) => {
       if (!this.acceptingReads) return Promise.reject(new Error("Client stopped reading"));
-      if (!new Set(["workspace.snapshot", "workspace.inspect_object", "workspace.packages", "workspace.check_code", "workspace.help"]).has(id))
+      if (!new Set(["workspace.snapshot", "workspace.inspect_object", "workspace.list_objects", "workspace.observe_object", "workspace.read_object", "workspace.package_index", "workspace.packages", "workspace.check_code", "workspace.help"]).has(id))
         return read(project, id, args);
       const key = JSON.stringify([this.generation, project, id, args]);
       const existing = this.reads.get(key);
