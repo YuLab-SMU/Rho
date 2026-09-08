@@ -1127,3 +1127,44 @@ fn failed_empty_save_verification_reports_no_effect_without_replay() {
         ApplicationExecutionAdmission::Observe { .. }
     ));
 }
+#[test]
+fn a_bridge_acknowledgement_cannot_claim_an_edit_that_its_resources_do_not_show() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let d = sync(&owner, &r, document("x <- 2\n"), 1);
+    owner
+        .control(
+            &actor(true),
+            ApplicationCommandRequest {
+                window: r.session.window.clone(),
+                request_id: "missing-edit".into(),
+                action: ApplicationAction::EditDocument {
+                    document: document_ref(&d),
+                    edits: vec![ApplicationTextEdit {
+                        from: 5,
+                        to: 6,
+                        insert: "9".into(),
+                    }],
+                },
+            },
+            2,
+        )
+        .unwrap();
+    let grant = claim(&owner, &r, 3);
+    let receipt = complete(&owner, &r, &grant, 4);
+    assert_eq!(receipt.state, ApplicationCommandState::Uncertain);
+    assert!(receipt.diagnostic.unwrap().contains("could not confirm"));
+    let actual = owner
+        .context(
+            &actor(true),
+            ApplicationContextArguments {
+                window: r.session.window,
+                allow_offline: false,
+                after_document_id: None,
+                limit: None,
+            },
+            5,
+        )
+        .unwrap();
+    assert_eq!(actual.current_document.unwrap().sha256, sha256(&d.text));
+}

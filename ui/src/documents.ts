@@ -306,10 +306,7 @@ export class Documents extends Model<DocumentsSnapshot> {
     const d = this.resolve(ref); this.activate(ref); this.ports.openDocument(d.draft.id, d.name);
   }
   create() {
-    if (!this.ports.context().project) throw new Error("Open a project first");
-    const d = new DocumentState({ id: crypto.randomUUID(), path: null, raw: "", bom: false, eol: "\n", baseRaw: null,
-      baseHash: null, readonly: null, byteSize: 0, anchor: 0, head: 0, scrollTop: 0, scrollLeft: 0 });
-    this.entries.set(d.draft.id, d); this.focus(d.read()); this.changed(d); return d.read();
+    return this.applicationCreate(null, "");
   }
   applyTransactions(ref: DocumentRef, transactions: readonly Transaction[]) {
     const d = this.resolve(ref);
@@ -360,12 +357,12 @@ export class Documents extends Model<DocumentsSnapshot> {
       throw new Error("Position is not a valid zero-based UTF-16 editor boundary.");
   }
   applicationCreate(path: string | null, text: string) {
+    if (!this.ports.context().project) throw new Error("Open a project first");
     if (path) { validatePath(path); if ([...this.entries.values()].some((d) => d.draft.path === path)) throw new Error("The path is already open."); }
     if (bytes(text).length > MAX_EDIT_BYTES || text.includes("\0")) throw new Error("New document exceeds the UTF-8 editing limit.");
-    const created = this.create(), d = this.resolve(created);
-    d.draft.path = path; d.draft.bom = text.startsWith("\uFEFF"); d.draft.eol = text.match(/\r\n|\r|\n/)?.[0] ?? "\n";
-    d.replace(text.replace(/^\uFEFF/, "")); this.ports.renameDocument(d.draft.id, d.name); this.changed(d);
-    return d.read();
+    const d = new DocumentState({ id: crypto.randomUUID(), path, raw: text.replace(/^\uFEFF/, ""), bom: text.startsWith("\uFEFF"), eol: text.match(/\r\n|\r|\n/)?.[0] ?? "\n",
+      baseRaw: null, baseHash: null, readonly: null, byteSize: bytes(text).length, anchor: 0, head: 0, scrollTop: 0, scrollLeft: 0 });
+    this.entries.set(d.draft.id, d); this.focus(d.read()); this.changed(d); return d.read();
   }
   applicationRestore(documents: readonly ApplicationDocument[], active: string | null) {
     this.restore({ active, items: documents.map((d): Draft => ({ id: d.document_id, path: d.path, raw: d.text.replace(/^\uFEFF/, ""),

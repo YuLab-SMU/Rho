@@ -280,8 +280,22 @@ pub(crate) fn validate_action(
                 return Err(ApplicationError::NotFound);
             }
         }
-        ApplicationAction::OpenDocument { path, .. } => validate_path(path)?,
+        ApplicationAction::OpenDocument { path, .. } => {
+            validate_path(path)?;
+            if documents.len() >= MAX_WINDOW_DOCUMENTS
+                && !documents.iter().any(|d| d.path.as_ref() == Some(path))
+            {
+                return Err(ApplicationError::Budget(
+                    "64 retained documents per window".into(),
+                ));
+            }
+        }
         ApplicationAction::CreateDocument { path, text, .. } => {
+            if documents.len() >= MAX_WINDOW_DOCUMENTS {
+                return Err(ApplicationError::Budget(
+                    "64 retained documents per window".into(),
+                ));
+            }
             if let Some(path) = path {
                 validate_path(path)?;
                 if documents.iter().any(|d| d.path.as_ref() == Some(path)) {
@@ -387,4 +401,138 @@ pub(crate) fn validate_action(
         }
     }
     Ok(())
+}
+
+/// An acknowledgement is not proof that an application action took effect.
+/// Verify its authoritative synchronized resources before issuing Applied.
+pub(crate) fn validate_applied_state(
+    action: &ApplicationAction,
+    after: &ApplicationContextState,
+    originals: &[ApplicationDocument],
+    updates: &ApplicationStoreChanges,
+) -> Result<(), ApplicationError> {
+    let document = |id: &str| {
+        updates
+            .documents
+            .iter()
+            .find(|d| d.document_id == id)
+            .or_else(|| originals.iter().find(|d| d.document_id == id))
+    };
+    let visible = |id: &str| after.views.iter().any(|v| v.view_id == id);
+    let valid = match action {
+        ApplicationAction::OpenView {
+            view_type, view_id, ..
+        } => after.views.iter().any(|v| {
+            &v.view_type == view_type && view_id.as_ref().is_none_or(|id| &v.view_id == id)
+        }),
+        ApplicationAction::ActivateView { view_id, .. } => {
+            visible(view_id) && after.active_view_id.as_ref() == Some(view_id)
+        }
+        ApplicationAction::CloseView { view_id, .. } => !visible(view_id),
+        ApplicationAction::OpenDocument { path, .. } => after
+            .active_document_id
+            .as_ref()
+            .and_then(|id| document(id))
+            .is_some_and(|d| d.path.as_ref() == Some(path)),
+        ApplicationAction::CreateDocument { path, text, .. } => updates.documents.iter().any(|d| {
+            !originals.iter().any(|old| old.document_id == d.document_id)
+                && &d.path == path
+                && &d.text == text
+                && after.active_document_id.as_ref() == Some(&d.document_id)
+        }),
+        ApplicationAction::SetSelection {
+            document: reference,
+            anchor,
+            head,
+        } => document(&reference.document_id)
+            .is_some_and(|d| d.selection.anchor == *anchor && d.selection.head == *head),
+        ApplicationAction::EditDocument {
+            document: reference,
+            edits,
+        } => {
+            let original = originals
+                .iter()
+                .find(|d| d.document_id == reference.document_id)
+                .ok_or(ApplicationError::NotFound)?;
+            // Work in editor UTF-16 coordinates while preserving every untouched
+            // raw newline/BOM byte, exactly as the resident Documents owner does.
+            let raw = original
+                .text
+                .strip_prefix('\u{feff}')
+                .unwrap_or(&original.text);
+            let eol = raw
+                .find(['\r', '\n'])
+                .map(|index| {
+                    if raw[index..].starts_with("\r\n") {
+                        "\r\n"
+                    } else if raw[index..].starts_with('\r') {
+                        "\r"
+                    } else {
+                        "\n"
+                    }
+                })
+                .unwrap_or("\n");
+            let raw_offset = |offset: u32| -> Result<usize, ApplicationError> {
+                let mut count = 0;
+                let mut chars = raw.char_indices().peekable();
+                while let Some((position, ch)) = chars.next() {
+                    if count == offset {
+                        return Ok(position);
+                    }
+                    if ch == '\r' && chars.peek().is_some_and(|(_, next)| *next == '\n') {
+                        chars.next();
+                    }
+                    count += ch.len_utf16() as u32;
+                    if count > offset {
+                        return Err(invalid("edit position splits a surrogate pair"));
+                    }
+                }
+                if count == offset {
+                    Ok(raw.len())
+                } else {
+                    Err(invalid("edit position is outside the capture"))
+                }
+            };
+            let mut expected = String::new();
+            if original.text.starts_with('\u{feff}') {
+                expected.push('\u{feff}');
+            }
+            let mut end = 0;
+            for edit in edits {
+                let from = raw_offset(edit.from)?;
+                let to = raw_offset(edit.to)?;
+                expected.push_str(&raw[end..from]);
+                expected.push_str(
+                    &edit
+                        .insert
+                        .replace("\r\n", "\n")
+                        .replace('\r', "\n")
+                        .replace('\n', eol),
+                );
+                end = to;
+            }
+            expected.push_str(&raw[end..]);
+            document(&reference.document_id).is_some_and(|d| d.text == expected)
+        }
+        ApplicationAction::SelectObject { selection, .. } => {
+            after.selected_object.as_ref() == Some(selection)
+        }
+        ApplicationAction::SelectPackage { selection, .. } => {
+            after.selected_package.as_ref() == Some(selection)
+        }
+        ApplicationAction::SelectPlot { selection, .. } => {
+            after.selected_plot.as_ref() == Some(selection)
+        }
+        // Capture-only local stages do not claim a scientific result.
+        ApplicationAction::Save { .. }
+        | ApplicationAction::RunFile { .. }
+        | ApplicationAction::RunSelection { .. } => true,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(invalid(
+            "the synchronized resources do not confirm the requested application action",
+        ))
+    }
 }

@@ -767,10 +767,21 @@ impl ApplicationOwner {
             return Err(invalid("diagnostic exceeds 4096 UTF-8 bytes"));
         }
         let prior_window = window.clone();
+        let original_documents = self.store.documents(scope, &window.window.window_id)?;
         let mut write = ApplicationStoreChanges::default();
         command.receipt.state = match completion.outcome {
             ApplicationLocalOutcome::Applied => {
-                match self.prepare_changes(scope, window, completion.changes) {
+                match self
+                    .prepare_changes(scope, window, completion.changes)
+                    .and_then(|changes| {
+                        validate_applied_state(
+                            &command.request.action,
+                            &window.context,
+                            &original_documents,
+                            &changes,
+                        )?;
+                        Ok(changes)
+                    }) {
                     Ok(changes) => {
                         write = changes;
                         if command.capture.is_some() {
@@ -782,9 +793,13 @@ impl ApplicationOwner {
                     Err(error) => {
                         *window = prior_window;
                         command.receipt.diagnostic = Some(format!(
-                            "Local action applied, but synchronization failed: {error}. Read current resources; do not replay the local action."
+                            "The bridge reported a local action, but synchronized resources could not confirm it: {error}. Read current resources; do not replay the local action."
                         ));
-                        ApplicationCommandState::LocallyAppliedUnsynced
+                        if matches!(error, ApplicationError::InvalidInput(_)) {
+                            ApplicationCommandState::Uncertain
+                        } else {
+                            ApplicationCommandState::LocallyAppliedUnsynced
+                        }
                     }
                 }
             }

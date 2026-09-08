@@ -13,6 +13,7 @@ const initialView = immutable(newPlotView());
 /** Plot selection and transforms survive the lifetime of every mounted viewer. */
 export class Plots extends Model<PlotsSnapshot> {
   private views: Record<string, PlotView> = { plots: initialView };
+  private references = new Map<string, MediaReference>();
   private unsubscribe: () => void;
   constructor(private deps: PlotsDependencies) {
     super();
@@ -20,6 +21,19 @@ export class Plots extends Model<PlotsSnapshot> {
   }
   protected readSnapshot(): PlotsSnapshot { return { views: Object.freeze({ ...this.views }) }; }
   view(id: string): PlotView { return this.views[id] ?? initialView; }
+  /** Retain exact identities received from Outputs, including a selection whose
+   * history page is still being incorporated by the independent Outputs owner. */
+  selectedEvidence(id = "plots"): Readonly<MediaReference> | null {
+    const key = this.view(id).selected;
+    if (!key) return null;
+    const reference = this.references.get(key) ?? this.deps.outputs.getSnapshot().media.find((r) => mediaKey(r) === key);
+    return reference ? Object.freeze({ ...reference }) : null;
+  }
+  private rememberReference(reference: MediaReference) {
+    const key = mediaKey(reference);
+    this.references.delete(key); this.references.set(key, Object.freeze({ ...reference }));
+    while (this.references.size > 64) this.references.delete(this.references.keys().next().value!);
+  }
   ensureView(id: string) {
     if (!this.views[id]) {
       const media = this.deps.outputs.getSnapshot().media;
@@ -43,7 +57,7 @@ export class Plots extends Model<PlotsSnapshot> {
   }
   select(id: string, index: number) {
     const reference = this.deps.outputs.getSnapshot().media[index];
-    if (reference) this.update(id, { selected: mediaKey(reference) }, true);
+    if (reference) { this.rememberReference(reference); this.update(id, { selected: mediaKey(reference) }, true); }
   }
   latest(id: string) {
     const media = this.deps.outputs.getSnapshot().media;
@@ -70,10 +84,12 @@ export class Plots extends Model<PlotsSnapshot> {
     if (next.x !== current.x || next.y !== current.y) this.transform(id, key, next, false);
   }
   locate(reference: MediaReference) {
+    this.rememberReference(reference);
     this.update("plots", { selected: mediaKey(reference) }, true);
     this.deps.showPlots?.();
   }
   newView(reference: MediaReference) {
+    this.rememberReference(reference);
     const id = `plots:${this.deps.newId?.() ?? crypto.randomUUID()}`;
     this.views[id] = immutable({ ...newPlotView(), selected: mediaKey(reference), follow: false, pinned: true, seen: this.deps.outputs.getSnapshot().media.length });
     this.changed();
@@ -89,6 +105,7 @@ export class Plots extends Model<PlotsSnapshot> {
     return { plotViews: structuredClone(this.views), selectedPlot: main.selected, plotZoom: main.selected ? main.transforms[main.selected]?.zoom ?? null : null };
   }
   restore(data: unknown) {
+    this.references.clear();
     const value = data as { plotViews?: Record<string, PlotView>; selectedPlot?: string | null; plotZoom?: number | null } | null;
     this.views = {};
     for (const [id, saved] of Object.entries(value?.plotViews ?? {})) {

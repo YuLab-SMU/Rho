@@ -217,3 +217,9 @@ it("an application save confirmation updates only the captured base and preserve
   documents.applicationConfirmSave(d().id, capture, "中文 文件.R", await sha256(capture));
   expect(d().raw).toBe("later user input\n"); expect(d().draft.baseRaw).toBe(capture); expect(d().dirty).toBe(true);
 });
+it("creating an application document preserves exactly supplied BOM and mixed newlines", () => {
+  const { documents } = fixture(); const text = "\uFEFFa\r\nb\nc\r";
+  const created = documents.applicationCreate("mixed.R", text);
+  expect(created.raw).toBe(text); expect(created.dirty).toBe(true);
+  expect(documents.applicationDocuments().find((d) => d.document_id === created.id)?.text).toBe(text);
+});

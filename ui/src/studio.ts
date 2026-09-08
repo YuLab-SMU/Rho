@@ -21,6 +21,7 @@ import type { ApplicationBridgeSession } from "./generated/ApplicationBridgeSess
 import type { ApplicationContextState } from "./generated/ApplicationContextState";
 import type { MediaPage } from "./generated/MediaPage";
 import type { PackageSnapshotData } from "./generated/PackageSnapshotData";
+import type { ObjectReadPage } from "./generated/ObjectReadPage";
 
 /** Composition and client lifecycle only. Scientific state lives in its module. */
 export class Studio {
@@ -103,8 +104,7 @@ export class Studio {
 
     const context = (): Omit<ApplicationContextState, "version"> => {
       const layout = this.layout.getSnapshot(), session = this.session.context().session;
-      const selected = this.plots.view(layout.activeTabId && layout.knownViews[layout.activeTabId]?.component === "plots" ? layout.activeTabId : "plots").selected;
-      const plot = this.outputs.getSnapshot().media.find((reference) => mediaKey(reference) === selected);
+      const plot = this.plots.selectedEvidence(layout.activeTabId && layout.knownViews[layout.activeTabId]?.component === "plots" ? layout.activeTabId : "plots");
       const packageName = this.packages.selected;
       const copy = packageName ? this.packages.details.get(packageName)?.copies.find((copy) => packageCopyKey(copy) === this.packages.sourceCopy) : null;
       return {
@@ -176,6 +176,8 @@ export class Studio {
           if (!selection.object_ref) throw new Error("An object observation reference is required.");
           const observed = await query(this.session.project!, "workspace.read_object", { expected_session: selection.native_session_id, object_ref: selection.object_ref, kind: "structure" });
           if (observed.status !== "ready" || this.session.context().session !== selection.native_session_id) throw new Error(observed.notices.join("\n") || "The object observation is no longer valid.");
+          const page = observed.data as ObjectReadPage | null;
+          if (!page || page.root_name !== selection.name || page.observed_path.length !== 0) throw new Error("The object reference does not identify this exact root binding.");
           this.objects.selectObservation(selection); this.layout.show("objects");
         },
         selectPackage: async (selection) => {
