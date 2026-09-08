@@ -10,6 +10,11 @@ pub enum ApplicationExecutionAdmission {
     Observe {
         lookup: ApplicationOperationLookup,
     },
+    VerifySaved {
+        context: CallContext,
+        path: String,
+        sha256: String,
+    },
 }
 #[derive(Clone)]
 pub struct ApplicationOperationLookup {
@@ -48,7 +53,13 @@ impl ApplicationOwner {
                 ApplicationExecutionStep::Save => command.receipt.save.as_ref(),
                 ApplicationExecutionStep::Run => command.receipt.run.as_ref(),
             };
-            if receipt.is_some_and(|r| r.state != ApplicationStepState::NotSubmitted) {
+            let has_invocation = match step {
+                ApplicationExecutionStep::Save => command.save_invocation.is_some(),
+                ApplicationExecutionStep::Run => command.run_invocation.is_some(),
+            };
+            if has_invocation
+                && receipt.is_some_and(|r| r.state != ApplicationStepState::NotSubmitted)
+            {
                 result.push((
                     ApplicationExecuteRequest {
                         session: ApplicationBridgeSession {
@@ -98,11 +109,7 @@ impl ApplicationOwner {
                     text[a.min(b)..a.max(b)].to_owned()
                 }
             } else {
-                document
-                    .text
-                    .strip_prefix('\u{feff}')
-                    .unwrap_or(&document.text)
-                    .to_owned()
+                document.text.clone()
             };
             if code.trim().is_empty() {
                 return Err(invalid("captured code is empty"));
@@ -141,6 +148,25 @@ impl ApplicationOwner {
         let scope = self.scope(context)?;
         let mut command = self.load_execution(&scope, request)?;
         let previous_step = step_receipt(&command.receipt, request.step)?;
+        let verify_empty = request.step == ApplicationExecutionStep::Save
+            && command.capture.as_ref().is_some_and(|capture| {
+                capture.text.is_empty() && capture.base_text.as_deref() == Some("")
+            });
+        if verify_empty
+            && previous_step.state == ApplicationStepState::Submitting
+            && command.save_invocation.is_none()
+        {
+            let capture = command.capture.as_ref().unwrap();
+            return Ok(ApplicationExecutionAdmission::VerifySaved {
+                context: command.context.clone(),
+                path: capture
+                    .summary
+                    .path
+                    .clone()
+                    .ok_or_else(|| invalid("save target is absent"))?,
+                sha256: capture.summary.sha256.clone(),
+            });
+        }
         if previous_step.state != ApplicationStepState::NotSubmitted {
             return Ok(ApplicationExecutionAdmission::Observe {
                 lookup: lookup(&command, request.step)?,
@@ -171,6 +197,29 @@ impl ApplicationOwner {
             {
                 return Err(ApplicationError::Conflict);
             }
+        }
+        if verify_empty {
+            let capture = command.capture.as_ref().unwrap();
+            let result = ApplicationExecutionAdmission::VerifySaved {
+                context: command.context.clone(),
+                path: capture
+                    .summary
+                    .path
+                    .clone()
+                    .ok_or_else(|| invalid("save target is absent"))?,
+                sha256: capture.summary.sha256.clone(),
+            };
+            step_receipt_mut(&mut command.receipt, request.step)?.state =
+                ApplicationStepState::Submitting;
+            self.commit(
+                &scope,
+                &mut window,
+                ApplicationStoreChanges {
+                    commands: vec![command],
+                    ..Default::default()
+                },
+            )?;
+            return Ok(result);
         }
         let invocation = build_invocation(&command, request.step)?;
         invocation.validate().map_err(|e| invalid(e.to_string()))?;
@@ -337,6 +386,101 @@ impl ApplicationOwner {
         let _lock = self.lock()?;
         let command = self.load_execution(&self.scope(context)?, request)?;
         lookup(&command, request.step)
+    }
+    /// Records a Project owner's read-only verification of an unchanged empty
+    /// file. It records the actual source, observation time and digest, with no
+    /// OperationId because no scientific action was submitted.
+    pub fn record_saved_verification(
+        &self,
+        context: &CallContext,
+        request: &ApplicationExecuteRequest,
+        verification: &ApplicationSaveVerification,
+        now: u64,
+    ) -> Result<ApplicationCommandReceipt, ApplicationError> {
+        self.finish_saved_verification(context, request, Ok(verification), now)
+    }
+    pub fn record_saved_verification_failure(
+        &self,
+        context: &CallContext,
+        request: &ApplicationExecuteRequest,
+        diagnostic: &str,
+        now: u64,
+    ) -> Result<ApplicationCommandReceipt, ApplicationError> {
+        self.finish_saved_verification(context, request, Err(diagnostic), now)
+    }
+    fn finish_saved_verification(
+        &self,
+        context: &CallContext,
+        request: &ApplicationExecuteRequest,
+        verification: Result<&ApplicationSaveVerification, &str>,
+        now: u64,
+    ) -> Result<ApplicationCommandReceipt, ApplicationError> {
+        let _lock = self.lock()?;
+        let scope = self.scope(context)?;
+        let mut command = self.load_execution(&scope, request)?;
+        let capture = command
+            .capture
+            .as_ref()
+            .ok_or_else(|| invalid("capture is absent"))?;
+        if request.step != ApplicationExecutionStep::Save
+            || !capture.text.is_empty()
+            || capture.base_text.as_deref() != Some("")
+            || command.save_invocation.is_some()
+        {
+            return Err(invalid(
+                "this association does not represent an unchanged empty-file verification",
+            ));
+        }
+        let step = step_receipt_mut(&mut command.receipt, request.step)?;
+        if step.state == ApplicationStepState::Succeeded
+            || step.state == ApplicationStepState::Failed
+        {
+            return Ok(command.receipt);
+        }
+        if step.state != ApplicationStepState::Submitting {
+            return Err(ApplicationError::Conflict);
+        }
+        match verification {
+            Ok(verified) => {
+                if capture.summary.path.as_ref() != Some(&verified.path)
+                    || capture.summary.sha256 != verified.sha256
+                    || verified.source.is_empty()
+                    || verified.source.len() > 512
+                    || verified.observed_at_ms > now
+                {
+                    return Err(ApplicationError::Conflict);
+                }
+                step.state = ApplicationStepState::Succeeded;
+                step.verification = Some(verified.clone());
+                command.receipt.state = if command.receipt.run.is_some() {
+                    ApplicationCommandState::AwaitingExecution
+                } else {
+                    ApplicationCommandState::Applied
+                };
+                command.receipt.diagnostic = Some("The Project owner verified the already-identical empty file. No scientific mutation was submitted.".into());
+            }
+            Err(diagnostic) => {
+                step.state = ApplicationStepState::Failed;
+                step.error = Some(diagnostic.chars().take(4096).collect());
+                command.receipt.state = ApplicationCommandState::Failed;
+                command.receipt.diagnostic = Some("The Project owner could not verify the unchanged file. No scientific mutation or subsequent run was submitted.".into());
+            }
+        }
+        command.receipt.completed_at_ms = Some(now);
+        let receipt = command.receipt.clone();
+        let mut window = self
+            .store
+            .window(&scope, &request.session.window.window_id)?
+            .ok_or(ApplicationError::NotFound)?;
+        self.commit(
+            &scope,
+            &mut window,
+            ApplicationStoreChanges {
+                commands: vec![command],
+                ..Default::default()
+            },
+        )?;
+        Ok(receipt)
     }
     fn load_execution(
         &self,

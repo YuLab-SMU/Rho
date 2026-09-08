@@ -49,6 +49,7 @@ export interface ApplicationBridgePorts {
   transport: ApplicationTransport;
   modules: ApplicationModules;
   identity: { windowId: string; incarnation: string; previousSession?: ApplicationBridgeSession };
+  previousSession?(): ApplicationBridgeSession | undefined;
   registered(session: ApplicationBridgeSession): void;
   reportError(message: string): void;
   now?(): number;

@@ -321,6 +321,16 @@ pub struct ApplicationStepReceipt {
     pub client_request_id: String,
     pub operation_id: Option<OperationId>,
     pub error: Option<String>,
+    #[serde(default)]
+    pub verification: Option<ApplicationSaveVerification>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationSaveVerification {
+    pub path: String,
+    pub sha256: String,
+    pub source: String,
+    pub observed_at_ms: u64,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 pub struct ApplicationCaptureSummary {

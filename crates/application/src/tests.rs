@@ -799,3 +799,331 @@ fn host_restart_invalidates_liveness_without_discarding_drafts() {
             .is_err()
     );
 }
+
+fn operation_record(
+    invocation: &Invocation,
+    original: &CallContext,
+    status: OperationStatus,
+    output: Option<serde_json::Value>,
+) -> OperationRecord {
+    let domain = if invocation.capability.id.starts_with("project.") {
+        "project"
+    } else {
+        "workspace"
+    };
+    OperationRecord {
+        operation: Operation {
+            operation_id: OperationId::new(format!("operation-{domain}")).unwrap(),
+            client_request_id: invocation.client_request_id.clone(),
+            caller: original.caller.clone(),
+            principal: original.principal.clone(),
+            capability: invocation.capability.clone(),
+            domain: domain.into(),
+            target: TargetRef {
+                kind: domain.into(),
+                identity: if domain == "project" {
+                    "/project"
+                } else {
+                    "R-session-1"
+                }
+                .into(),
+            },
+            normalized_arguments: invocation.arguments.clone(),
+            invocation_digest: "bound-digest".into(),
+            idempotency_scope: Some("/project".into()),
+            preconditions: invocation.preconditions.clone(),
+            potential_effects: Default::default(),
+            correlation_id: "correlation".into(),
+            causation_id: None,
+            trace_parent: None,
+            accepted_at_ms: 5,
+        },
+        status,
+        outcome: OperationOutcome::from_status(status).ok(),
+        output,
+        error: None,
+        recovery: None,
+        cancellation_requested: false,
+        updated_at_ms: 6,
+    }
+}
+fn project_output(digest: &str) -> serde_json::Value {
+    let snapshot = ProjectSnapshot {
+        root: "/project".into(),
+        git: None,
+        files: vec![FileObservation {
+            path: "analysis.R".into(),
+            kind: "file".into(),
+            sha256: Some(digest.into()),
+            byte_size: 7,
+            mode: None,
+            modified_at_ns: None,
+        }],
+        entries: vec![],
+        entries_truncated: false,
+        observed_at_ms: 6,
+    };
+    serde_json::to_value(ProjectPatchResult {
+        before: snapshot.clone(),
+        after: snapshot,
+        affected_paths: vec!["analysis.R".into()],
+        changed_paths: vec!["analysis.R".into()],
+        git_exit_code: Some(0),
+        diagnostic: String::new(),
+        committed_to_git: false,
+    })
+    .unwrap()
+}
+#[test]
+fn saved_digest_is_verified_and_next_run_stays_unsubmitted_after_disconnect() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let d = sync(&owner, &r, document("x <- 2\n"), 1);
+    control(&owner, &r, &d, "request", 2);
+    let grant = claim(&owner, &r, 3);
+    complete(&owner, &r, &grant, 4);
+    let request = execute_request(&r, &grant, ApplicationExecutionStep::Save);
+    let ApplicationExecutionAdmission::Invoke {
+        context,
+        invocation,
+    } = owner.begin_execution(&actor(false), &request, 5).unwrap()
+    else {
+        panic!()
+    };
+    let accepted = operation_record(&invocation, &context, OperationStatus::Accepted, None);
+    assert_eq!(
+        owner
+            .record_execution(&actor(false), &request, &accepted, 6)
+            .unwrap()
+            .save
+            .unwrap()
+            .state,
+        ApplicationStepState::Accepted
+    );
+    let succeeded = operation_record(
+        &invocation,
+        &context,
+        OperationStatus::Succeeded,
+        Some(project_output(&sha256(&d.text))),
+    );
+    let receipt = owner
+        .record_execution(&actor(false), &request, &succeeded, 30_000)
+        .unwrap();
+    assert_eq!(receipt.save.unwrap().state, ApplicationStepState::Succeeded);
+    assert_eq!(
+        receipt.run.unwrap().state,
+        ApplicationStepState::NotSubmitted
+    );
+    assert!(matches!(
+        owner.begin_execution(
+            &actor(false),
+            &execute_request(&r, &grant, ApplicationExecutionStep::Run),
+            30_000
+        ),
+        Err(ApplicationError::Offline)
+    ));
+    let lookups = owner
+        .status_executions(
+            &actor(true),
+            &ApplicationCommandStatusArguments {
+                window: r.session.window,
+                request_id: "request".into(),
+            },
+        )
+        .unwrap();
+    assert_eq!(lookups.len(), 1);
+    assert_eq!(lookups[0].1.context.caller, actor(true).caller);
+}
+#[test]
+fn digest_mismatch_or_actor_substitution_cannot_start_the_run() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let d = sync(&owner, &r, document("x <- 2\n"), 1);
+    control(&owner, &r, &d, "request", 2);
+    let grant = claim(&owner, &r, 3);
+    complete(&owner, &r, &grant, 4);
+    let request = execute_request(&r, &grant, ApplicationExecutionStep::Save);
+    let ApplicationExecutionAdmission::Invoke {
+        context,
+        invocation,
+    } = owner.begin_execution(&actor(false), &request, 5).unwrap()
+    else {
+        panic!()
+    };
+    let substituted = operation_record(
+        &invocation,
+        &actor(false),
+        OperationStatus::Succeeded,
+        Some(project_output(&sha256(&d.text))),
+    );
+    assert_eq!(
+        owner
+            .record_execution(&actor(false), &request, &substituted, 6)
+            .unwrap_err(),
+        ApplicationError::RequestConflict
+    );
+    let mismatch = operation_record(
+        &invocation,
+        &context,
+        OperationStatus::Succeeded,
+        Some(project_output(&sha256("different actual bytes"))),
+    );
+    let receipt = owner
+        .record_execution(&actor(false), &request, &mismatch, 6)
+        .unwrap();
+    assert_eq!(receipt.state, ApplicationCommandState::Uncertain);
+    assert_eq!(
+        receipt.run.unwrap().state,
+        ApplicationStepState::NotSubmitted
+    );
+    assert!(
+        owner
+            .begin_execution(
+                &actor(false),
+                &execute_request(&r, &grant, ApplicationExecutionStep::Run),
+                7
+            )
+            .is_err()
+    );
+}
+#[test]
+fn uncertain_admission_can_be_reconciled_with_its_original_accepted_record() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let d = sync(&owner, &r, document("x <- 2\n"), 1);
+    control(&owner, &r, &d, "request", 2);
+    let grant = claim(&owner, &r, 3);
+    complete(&owner, &r, &grant, 4);
+    let request = execute_request(&r, &grant, ApplicationExecutionStep::Save);
+    let ApplicationExecutionAdmission::Invoke {
+        context,
+        invocation,
+    } = owner.begin_execution(&actor(false), &request, 5).unwrap()
+    else {
+        panic!()
+    };
+    owner
+        .record_execution_error(
+            &actor(false),
+            &request,
+            "lost admission acknowledgement".into(),
+            6,
+        )
+        .unwrap();
+    let original = operation_record(&invocation, &context, OperationStatus::Accepted, None);
+    let receipt = owner
+        .record_execution(&actor(false), &request, &original, 7)
+        .unwrap();
+    assert_eq!(receipt.save.unwrap().state, ApplicationStepState::Accepted);
+    assert!(matches!(
+        owner.begin_execution(&actor(false), &request, 8).unwrap(),
+        ApplicationExecutionAdmission::Observe { .. }
+    ));
+}
+
+#[test]
+fn an_unchanged_empty_save_uses_project_evidence_without_an_operation_id() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let mut d = document("");
+    d.base_text = Some(String::new());
+    d.base_hash = Some(sha256(""));
+    let d = sync(&owner, &r, d, 1);
+    owner
+        .control(
+            &actor(true),
+            ApplicationCommandRequest {
+                window: r.session.window.clone(),
+                request_id: "empty-save".into(),
+                action: ApplicationAction::Save {
+                    document: document_ref(&d),
+                    target_path: None,
+                },
+            },
+            2,
+        )
+        .unwrap();
+    let grant = claim(&owner, &r, 3);
+    complete(&owner, &r, &grant, 4);
+    let request = execute_request(&r, &grant, ApplicationExecutionStep::Save);
+    let ApplicationExecutionAdmission::VerifySaved {
+        context,
+        path,
+        sha256: digest,
+    } = owner.begin_execution(&actor(false), &request, 5).unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(context.caller, actor(true).caller);
+    assert_eq!(digest, sha256(""));
+    let verified = ApplicationSaveVerification {
+        path,
+        sha256: digest,
+        source: "project/filesystem".into(),
+        observed_at_ms: 6,
+    };
+    let receipt = owner
+        .record_saved_verification(&actor(false), &request, &verified, 6)
+        .unwrap();
+    let save = receipt.save.as_ref().unwrap();
+    assert_eq!(save.state, ApplicationStepState::Succeeded);
+    assert!(save.operation_id.is_none());
+    assert_eq!(save.verification.as_ref(), Some(&verified));
+    assert_eq!(
+        owner
+            .record_saved_verification(&actor(false), &request, &verified, 7)
+            .unwrap(),
+        receipt
+    );
+    assert!(
+        owner
+            .status_executions(
+                &actor(true),
+                &ApplicationCommandStatusArguments {
+                    window: r.session.window,
+                    request_id: "empty-save".into()
+                }
+            )
+            .unwrap()
+            .is_empty()
+    );
+}
+#[test]
+fn failed_empty_save_verification_reports_no_effect_without_replay() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let mut d = document("");
+    d.base_text = Some(String::new());
+    d.base_hash = Some(sha256(""));
+    let d = sync(&owner, &r, d, 1);
+    owner
+        .control(
+            &actor(true),
+            ApplicationCommandRequest {
+                window: r.session.window.clone(),
+                request_id: "empty-save".into(),
+                action: ApplicationAction::Save {
+                    document: document_ref(&d),
+                    target_path: None,
+                },
+            },
+            2,
+        )
+        .unwrap();
+    let grant = claim(&owner, &r, 3);
+    complete(&owner, &r, &grant, 4);
+    let request = execute_request(&r, &grant, ApplicationExecutionStep::Save);
+    assert!(matches!(
+        owner.begin_execution(&actor(false), &request, 5).unwrap(),
+        ApplicationExecutionAdmission::VerifySaved { .. }
+    ));
+    let receipt = owner
+        .record_saved_verification_failure(&actor(false), &request, "file content changed", 6)
+        .unwrap();
+    assert_eq!(receipt.state, ApplicationCommandState::Failed);
+    assert!(receipt.save.unwrap().operation_id.is_none());
+    assert!(matches!(
+        owner.begin_execution(&actor(false), &request, 7).unwrap(),
+        ApplicationExecutionAdmission::Observe { .. }
+    ));
+}

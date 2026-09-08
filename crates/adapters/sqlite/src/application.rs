@@ -348,6 +348,42 @@ fn validate(scope: &str, key: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rho_application::ApplicationOwner;
+    use rho_contract::*;
+    use std::sync::Arc;
+
+    fn context() -> CallContext {
+        CallContext {
+            caller: CallerIdentity {
+                kind: CallerKind::Human,
+                id: "local".into(),
+            },
+            principal: None,
+            scopes: Default::default(),
+            connection_id: "studio:one".into(),
+            correlation_id: None,
+            causation_id: None,
+            trace_parent: None,
+        }
+    }
+    fn register(owner: &ApplicationOwner, id: &str) -> ApplicationBridgeRegistration {
+        let ApplicationBridgeReply::Registered(value) = owner
+            .bridge(
+                &context(),
+                ApplicationBridgeRequest::Register {
+                    window_id: id.into(),
+                    incarnation: "life-1".into(),
+                    label: id.into(),
+                    previous_session: None,
+                },
+                1,
+            )
+            .unwrap()
+        else {
+            panic!()
+        };
+        value
+    }
     #[test]
     fn drafts_survive_reopen_and_stale_windows_cannot_overwrite() {
         let temp = tempfile::tempdir().unwrap();
@@ -368,5 +404,200 @@ mod tests {
         let store = ApplicationStore::open(&path).unwrap();
         assert_eq!(store.read("/project", "studio").unwrap().value, first.value);
         assert!(store.read("/other", "studio").unwrap().version.is_none());
+    }
+
+    #[test]
+    fn typed_window_documents_and_command_receipt_commit_or_roll_back_together() {
+        let temporary = tempfile::tempdir().unwrap();
+        let store =
+            Arc::new(ApplicationStore::open(&temporary.path().join("application.sqlite")).unwrap());
+        let owner = ApplicationOwner::new("/project".into(), store.clone());
+        let registration = register(&owner, "window");
+        let document = ApplicationDocument {
+            document_id: "doc".into(),
+            version: "v1".into(),
+            path: None,
+            text: "original".into(),
+            base_text: None,
+            base_hash: None,
+            selection: ApplicationSelection {
+                anchor: 0,
+                head: 0,
+                version: "s1".into(),
+            },
+            readonly_reason: None,
+        };
+        owner
+            .bridge(
+                &context(),
+                ApplicationBridgeRequest::Sync {
+                    session: registration.session.clone(),
+                    sync_id: "sync1".into(),
+                    changes: ApplicationChanges {
+                        documents: vec![ApplicationDocumentUpdate {
+                            expected_version: None,
+                            expected_selection_version: None,
+                            document: document.clone(),
+                        }],
+                        ..Default::default()
+                    },
+                },
+                2,
+            )
+            .unwrap();
+        let request = ApplicationCommandRequest {
+            window: registration.session.window.clone(),
+            request_id: "edit".into(),
+            action: ApplicationAction::EditDocument {
+                document: rho_application::document_ref(&document),
+                edits: vec![ApplicationTextEdit {
+                    from: 0,
+                    to: 8,
+                    insert: "changed".into(),
+                }],
+            },
+        };
+        owner.control(&context(), request.clone(), 3).unwrap();
+        let ApplicationBridgeReply::Claimed(Some(grant)) = owner
+            .bridge(
+                &context(),
+                ApplicationBridgeRequest::Claim {
+                    session: registration.session.clone(),
+                    claim_request_id: "delivery".into(),
+                },
+                4,
+            )
+            .unwrap()
+        else {
+            panic!()
+        };
+        // Force the final receipt write to fail after the window and document SQL
+        // statements ran. The transaction must roll all three back.
+        store
+            .0
+            .lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER reject_completed_receipt BEFORE UPDATE ON application_commands
+            WHEN json_extract(NEW.value,'$.receipt.state') = 'applied'
+            BEGIN SELECT RAISE(ABORT,'injected receipt write failure'); END;",
+            )
+            .unwrap();
+        let mut changed = document.clone();
+        changed.version = "v2".into();
+        changed.text = "changed".into();
+        let completion = ApplicationCommandCompletion {
+            request_id: request.request_id.clone(),
+            claim_id: grant.claim_id,
+            outcome: ApplicationLocalOutcome::Applied,
+            changes: ApplicationChanges {
+                documents: vec![ApplicationDocumentUpdate {
+                    expected_version: Some("v1".into()),
+                    expected_selection_version: Some("s1".into()),
+                    document: changed.clone(),
+                }],
+                ..Default::default()
+            },
+            diagnostic: None,
+        };
+        assert!(matches!(
+            owner.bridge(
+                &context(),
+                ApplicationBridgeRequest::Complete {
+                    session: registration.session.clone(),
+                    completion: completion.clone()
+                },
+                5
+            ),
+            Err(ApplicationError::Storage(_))
+        ));
+        let scope = owner.scope(&context()).unwrap();
+        assert_eq!(store.documents(&scope, "window").unwrap(), vec![document]);
+        assert_eq!(
+            owner
+                .command_status(
+                    &context(),
+                    ApplicationCommandStatusArguments {
+                        window: registration.session.window.clone(),
+                        request_id: request.request_id.clone()
+                    },
+                    5
+                )
+                .unwrap()
+                .state,
+            ApplicationCommandState::Claimed
+        );
+        store
+            .0
+            .lock()
+            .unwrap()
+            .execute_batch("DROP TRIGGER reject_completed_receipt")
+            .unwrap();
+        let ApplicationBridgeReply::Completed(receipt) = owner
+            .bridge(
+                &context(),
+                ApplicationBridgeRequest::Complete {
+                    session: registration.session,
+                    completion,
+                },
+                6,
+            )
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(receipt.state, ApplicationCommandState::Applied);
+        assert_eq!(store.documents(&scope, "window").unwrap(), vec![changed]);
+    }
+    #[test]
+    fn method_reads_preserve_changed_digests_and_principal_task_scope() {
+        let temporary = tempfile::tempdir().unwrap();
+        let store =
+            Arc::new(ApplicationStore::open(&temporary.path().join("application.sqlite")).unwrap());
+        let owner = ApplicationOwner::new("/project".into(), store.clone());
+        let mut receipt = ApplicationSkillReadReceipt {
+            working_directory: ".".into(),
+            skill_ref: "skill-1".into(),
+            source_ref: "project-source".into(),
+            resource_ref: "references/method.md".into(),
+            sha256: rho_application::sha256("first"),
+            external_task_ref: Some("external-task".into()),
+            observed_at_ms: 1,
+        };
+        owner.record_skill_read(&context(), &receipt).unwrap();
+        receipt.observed_at_ms = 2;
+        owner.record_skill_read(&context(), &receipt).unwrap();
+        assert_eq!(
+            owner
+                .skill_reads(&context(), Some("external-task"))
+                .unwrap()
+                .len(),
+            1
+        );
+        receipt.sha256 = rho_application::sha256("changed");
+        owner.record_skill_read(&context(), &receipt).unwrap();
+        assert_eq!(
+            owner
+                .skill_reads(&context(), Some("external-task"))
+                .unwrap()
+                .len(),
+            2
+        );
+        assert!(
+            owner
+                .skill_reads(&context(), Some("different-task"))
+                .unwrap()
+                .is_empty()
+        );
+        let mut other = context();
+        other.caller.id = "another-principal".into();
+        assert!(owner.skill_reads(&other, None).unwrap().is_empty());
+        drop(owner);
+        drop(store);
+        let reopened = ApplicationOwner::new(
+            "/project".into(),
+            Arc::new(ApplicationStore::open(&temporary.path().join("application.sqlite")).unwrap()),
+        );
+        assert_eq!(reopened.skill_reads(&context(), None).unwrap().len(), 2);
     }
 }

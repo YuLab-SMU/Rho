@@ -310,6 +310,7 @@ impl ApplicationOwner {
             client_request_id: format!("application/{}/{suffix}", fresh()),
             operation_id: None,
             error: None,
+            verification: None,
         };
         let receipt = ApplicationCommandReceipt {
             window: request.window.clone(),

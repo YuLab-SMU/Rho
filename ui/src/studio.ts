@@ -127,10 +127,9 @@ export class Studio {
     };
     const identity = options.applicationIdentity ?? {
       windowId, incarnation: client.incarnation,
-      get previousSession() { const project = clientStudio.session.project; return project ? client.previousBridgeSession(project) : undefined; },
     };
-    const clientStudio = this;
     this.application = new ApplicationBridge({ scope: this.session.context, identity,
+      previousSession: () => this.session.project ? client.previousBridgeSession(this.session.project) : undefined,
       transport: { bridge: client.applicationBridge.bind(client), execute: client.applicationExecute.bind(client), status: client.applicationStatus.bind(client), readDocument: client.applicationReadDocument.bind(client) },
       registered: (session) => { if (this.session.project) client.rememberBridgeSession(this.session.project, session); },
       reportError: this.session.reportError.bind(this.session),

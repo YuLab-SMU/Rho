@@ -104,7 +104,7 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
       const contextBefore = structuredClone(this.ports.modules.context());
       const registration = await transport.bridge(project, { kind: "register", window_id: this.ports.identity.windowId,
         incarnation: this.ports.identity.incarnation, label: this.ports.modules.context().label,
-        previous_session: this.ports.identity.previousSession ?? null });
+        previous_session: this.ports.previousSession?.() ?? this.ports.identity.previousSession ?? null });
       current();
       if (registration.kind !== "registered") throw new Error("Host did not return a bridge registration.");
       const session = registration.data.session;
