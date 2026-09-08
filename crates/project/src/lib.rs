@@ -7,7 +7,7 @@ pub use rho_contract::{DirectoryEntry, DirectoryPage, ListDirectoryArguments};
 pub use rho_contract::{
     FileObservation, FilePage, GitObservation, GitStatusEntry, ProjectPatchResult, ProjectSnapshot,
 };
-pub use text::{ProjectReadTextHandler, ProjectSearchTextHandler};
+pub use text::{ProjectReadTextHandler, ProjectSearchTextHandler, ProjectTextError};
 
 use async_trait::async_trait;
 use rho_contract::{
@@ -96,11 +96,18 @@ pub trait ProjectRuntime: Send + Sync {
     ) -> Result<rho_contract::DirectoryPage, String> {
         Err("directory listing unavailable".into())
     }
-    async fn read_text(&self, _args: &ReadTextArguments) -> Result<TextPage, String> {
-        Err("text reads are unavailable in this provider".into())
+    async fn read_text(&self, _args: &ReadTextArguments) -> Result<TextPage, ProjectTextError> {
+        Err(ProjectTextError::Unavailable(
+            "text reads are unavailable in this provider".into(),
+        ))
     }
-    async fn search_text(&self, _args: &SearchTextArguments) -> Result<SearchTextPage, String> {
-        Err("text search is unavailable in this provider".into())
+    async fn search_text(
+        &self,
+        _args: &SearchTextArguments,
+    ) -> Result<SearchTextPage, ProjectTextError> {
+        Err(ProjectTextError::Unavailable(
+            "text search is unavailable in this provider".into(),
+        ))
     }
     fn root(&self) -> &str;
     async fn snapshot(&self, paths: &[String], limit: usize) -> Result<ProjectSnapshot, String>;

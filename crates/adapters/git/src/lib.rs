@@ -325,13 +325,13 @@ impl ProjectRuntime for GitProject {
     async fn read_text(
         &self,
         args: &rho_project::ReadTextArguments,
-    ) -> Result<rho_project::TextPage, String> {
+    ) -> Result<rho_project::TextPage, rho_project::ProjectTextError> {
         self.read_text_page(args).await
     }
     async fn search_text(
         &self,
         args: &rho_project::SearchTextArguments,
-    ) -> Result<rho_project::SearchTextPage, String> {
+    ) -> Result<rho_project::SearchTextPage, rho_project::ProjectTextError> {
         self.search_text_page(args).await
     }
     async fn read_file(&self, args: &ReadFileArguments) -> Result<FilePage, String> {

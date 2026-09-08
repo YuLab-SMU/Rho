@@ -1,5 +1,40 @@
 use super::*;
 
+/// Owner-level progressive-read failures. Adapters classify native facts where observed;
+/// message text is never parsed to infer a diagnostic code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectTextError {
+    InvalidInput(String),
+    ObservationExpired(String),
+    ContentChanged(String),
+    BudgetExceeded(String),
+    Unavailable(String),
+}
+impl std::fmt::Display for ProjectTextError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (kind, message) = match self {
+            Self::InvalidInput(message) => ("invalid text request", message),
+            Self::ObservationExpired(message) => ("text observation expired", message),
+            Self::ContentChanged(message) => ("text content changed", message),
+            Self::BudgetExceeded(message) => ("text budget exceeded", message),
+            Self::Unavailable(message) => ("text unavailable", message),
+        };
+        write!(f, "{kind}: {message}")
+    }
+}
+impl std::error::Error for ProjectTextError {}
+impl From<ProjectTextError> for OperationError {
+    fn from(error: ProjectTextError) -> Self {
+        match error {
+            ProjectTextError::InvalidInput(message) => Self::InvalidInput(message),
+            ProjectTextError::ObservationExpired(message) => Self::ObservationExpired(message),
+            ProjectTextError::ContentChanged(message) => Self::ContentChanged(message),
+            ProjectTextError::BudgetExceeded(message) => Self::BudgetExceeded(message),
+            ProjectTextError::Unavailable(message) => Self::Unavailable(message),
+        }
+    }
+}
+
 fn validate_cursor(cursor: &TextCursor) -> Result<(), OperationError> {
     validate_path(&cursor.file.path).map_err(invalid)?;
     if cursor.line == 0 || cursor.byte_offset > cursor.file.byte_size {
@@ -136,10 +171,7 @@ macro_rules! handler {
                             ));
                         }
                     }
-                    Err(error) => {
-                        reply.status = QueryStatus::Unavailable;
-                        reply.notices.push(error);
-                    }
+                    Err(error) => return Err(error.into()),
                 }
                 Ok(reply)
             }
@@ -162,3 +194,107 @@ handler!(
     search_text,
     validate_search
 );
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+    use rho_contract::{CallContext, CallerIdentity, CallerKind, DiagnosticCode, QueryRequest};
+    use rho_operation::{CapabilityRegistry, QueryGateway};
+    struct FailureRuntime(ProjectTextError);
+    #[async_trait]
+    impl ProjectRuntime for FailureRuntime {
+        fn root(&self) -> &str {
+            "/project"
+        }
+        async fn snapshot(&self, _: &[String], _: usize) -> Result<ProjectSnapshot, String> {
+            Err("not called".into())
+        }
+        async fn patch_paths(&self, _: &str) -> Result<Vec<String>, String> {
+            Err("not called".into())
+        }
+        async fn check_patch(&self, _: &str) -> Result<(), String> {
+            Err("not called".into())
+        }
+        async fn apply_patch(&self, _: &str) -> GitApplyReport {
+            panic!("text diagnostics must never apply a patch")
+        }
+        async fn read_text(&self, _: &ReadTextArguments) -> Result<TextPage, ProjectTextError> {
+            Err(self.0.clone())
+        }
+        async fn search_text(
+            &self,
+            _: &SearchTextArguments,
+        ) -> Result<SearchTextPage, ProjectTextError> {
+            Err(self.0.clone())
+        }
+    }
+    #[tokio::test]
+    async fn typed_native_failures_reach_the_shared_gateway_without_message_inference() {
+        let context = CallContext {
+            caller: CallerIdentity {
+                kind: CallerKind::Agent,
+                id: "text-reader".into(),
+            },
+            principal: None,
+            scopes: BTreeSet::from([PROJECT_READ_SCOPE.into()]),
+            connection_id: "test".into(),
+            correlation_id: None,
+            causation_id: None,
+            trace_parent: None,
+        };
+        for (failure, code) in [
+            (
+                ProjectTextError::ContentChanged("Observed bytes differ".into()),
+                DiagnosticCode::ContentChanged,
+            ),
+            (
+                ProjectTextError::ObservationExpired("Native project identity ended".into()),
+                DiagnosticCode::ObservationExpired,
+            ),
+            (
+                ProjectTextError::BudgetExceeded("Cursor cannot fit".into()),
+                DiagnosticCode::BudgetExceeded,
+            ),
+            (
+                ProjectTextError::InvalidInput("Cursor does not match the request".into()),
+                DiagnosticCode::InvalidInput,
+            ),
+            // This text intentionally contains another code; only the typed variant decides the diagnostic.
+            (
+                ProjectTextError::Unavailable(
+                    "content_changed appears in an OS error message".into(),
+                ),
+                DiagnosticCode::Unavailable,
+            ),
+        ] {
+            let owner = Arc::new(ProjectOwner::new(
+                Arc::new(FailureRuntime(failure)),
+                Arc::new(Mutex::new(())),
+            ));
+            let mut registry = CapabilityRegistry::new();
+            registry
+                .register_query(Arc::new(ProjectReadTextHandler::new(owner.clone())))
+                .unwrap();
+            registry
+                .register_query(Arc::new(ProjectSearchTextHandler::new(owner)))
+                .unwrap();
+            let gateway = QueryGateway::new(Arc::new(registry));
+            for (capability, arguments) in [
+                ("project.read_text", json!({"path":"analysis.R"})),
+                ("project.search_text", json!({"text":"literal"})),
+            ] {
+                let error = gateway
+                    .query(
+                        &context,
+                        QueryRequest {
+                            capability: CapabilityRef::new(capability, 1).unwrap(),
+                            arguments,
+                        },
+                    )
+                    .await
+                    .unwrap_err();
+                assert_eq!(error.diagnostic().code, code, "{capability}: {error}");
+            }
+        }
+    }
+}

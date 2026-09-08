@@ -6,6 +6,7 @@ const MATCH_SCAN_BYTES: usize = 1024 * 1024;
 const VERIFY_BYTES: u64 = 64 * 1024 * 1024;
 const SCAN_ENTRIES: u32 = 200;
 
+#[derive(Debug)]
 struct TextData {
     identity: TextIdentity,
     text: String,
@@ -18,6 +19,52 @@ fn skip(path: &str, reason: TextSkipReason, detail: impl Into<String>) -> TextSk
         detail: detail.into(),
     }
 }
+#[derive(Debug)]
+enum TextLoadError {
+    Skipped {
+        record: TextSkip,
+        pinned: ProjectTextError,
+    },
+    Failure(ProjectTextError),
+}
+impl TextLoadError {
+    fn into_pinned(self) -> ProjectTextError {
+        match self {
+            Self::Skipped { pinned, .. } | Self::Failure(pinned) => pinned,
+        }
+    }
+}
+impl From<ProjectTextError> for TextLoadError {
+    fn from(error: ProjectTextError) -> Self {
+        Self::Failure(error)
+    }
+}
+fn skipped(path: &str, reason: TextSkipReason, detail: impl Into<String>) -> TextLoadError {
+    let detail = detail.into();
+    let pinned = if matches!(reason, TextSkipReason::Unreadable) {
+        ProjectTextError::Unavailable(format!("Pinned file {path} cannot be read: {detail}"))
+    } else {
+        ProjectTextError::ContentChanged(format!(
+            "Pinned file {path} no longer has its observed readable representation: {detail}"
+        ))
+    };
+    TextLoadError::Skipped {
+        record: skip(path, reason, detail),
+        pinned,
+    }
+}
+fn skipped_io(path: &str, error: std::io::Error) -> TextLoadError {
+    let pinned = if error.kind() == std::io::ErrorKind::NotFound {
+        ProjectTextError::ContentChanged(format!("Pinned file {path} no longer exists"))
+    } else {
+        ProjectTextError::Unavailable(format!("Cannot read {path}: {error}"))
+    };
+    TextLoadError::Skipped {
+        record: skip(path, TextSkipReason::Unreadable, error.to_string()),
+        pinned,
+    }
+}
+
 fn native_identity(metadata: &std::fs::Metadata) -> String {
     #[cfg(unix)]
     {
@@ -48,28 +95,112 @@ fn json_size(value: &impl serde::Serialize) -> usize {
 }
 
 impl GitProject {
-    async fn load_text(&self, path: &str) -> Result<TextData, TextSkip> {
-        let resolved = self
-            .checked_path(path)
-            .map_err(|e| skip(path, TextSkipReason::InvalidPath, e))?;
-        let before = std::fs::symlink_metadata(&resolved)
-            .map_err(|e| skip(path, TextSkipReason::Unreadable, e.to_string()))?;
+    fn check_text_root(&self) -> Result<(), ProjectTextError> {
+        let observed = std::fs::symlink_metadata(&self.root).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                ProjectTextError::ObservationExpired(
+                    "The selected project root no longer exists".into(),
+                )
+            } else {
+                ProjectTextError::Unavailable(format!(
+                    "Cannot inspect the selected project root: {error}"
+                ))
+            }
+        })?;
+        if !observed.is_dir() || observed.file_type().is_symlink() {
+            return Err(ProjectTextError::ObservationExpired(
+                "The selected project root changed or became a symbolic link".into(),
+            ));
+        }
+        let canonical = self.root.canonicalize().map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                ProjectTextError::ObservationExpired(
+                    "The selected project root changed during validation".into(),
+                )
+            } else {
+                ProjectTextError::Unavailable(format!(
+                    "Cannot resolve the selected project root: {error}"
+                ))
+            }
+        })?;
+        if canonical != self.root {
+            return Err(ProjectTextError::ObservationExpired(
+                "The selected project root identity changed".into(),
+            ));
+        }
+        Ok(())
+    }
+    /// Preserve native classifications while applying the same containment rules as checked_path.
+    fn checked_text_path(&self, path: &str) -> Result<PathBuf, TextLoadError> {
+        self.check_text_root()?;
+        rho_project::validate_path(path).map_err(ProjectTextError::InvalidInput)?;
+        let result = self.root.join(path);
+        if self
+            .excluded
+            .iter()
+            .any(|excluded| result == *excluded || result.starts_with(excluded))
+        {
+            return Err(skipped(
+                path,
+                TextSkipReason::InvalidPath,
+                "Path refers to Host-owned application data",
+            ));
+        }
+        let mut current = self.root.clone();
+        let components = path.split('/').collect::<Vec<_>>();
+        for (index, component) in components.iter().enumerate() {
+            current.push(component);
+            match std::fs::symlink_metadata(&current) {
+                Ok(metadata)
+                    if index + 1 < components.len() && metadata.file_type().is_symlink() =>
+                {
+                    return Err(skipped(
+                        path,
+                        TextSkipReason::Symlink,
+                        "Project paths must not traverse symbolic links",
+                    ));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(skipped_io(path, error)),
+            }
+        }
+        Ok(result)
+    }
+    async fn load_text(
+        &self,
+        path: &str,
+        expected: Option<&TextIdentity>,
+        expected_digest: Option<&str>,
+    ) -> Result<TextData, TextLoadError> {
+        let resolved = self.checked_text_path(path)?;
+        let before =
+            std::fs::symlink_metadata(&resolved).map_err(|error| skipped_io(path, error))?;
+        if expected.is_some_and(|identity| {
+            identity.native_identity != native_identity(&before)
+                || identity.byte_size != before.len()
+        }) {
+            return Err(ProjectTextError::ContentChanged(
+                "Pinned file identity changed before reading".into(),
+            )
+            .into());
+        }
         if before.file_type().is_symlink() {
-            return Err(skip(
+            return Err(skipped(
                 path,
                 TextSkipReason::Symlink,
                 "Text reads do not follow symbolic links",
             ));
         }
         if !before.is_file() {
-            return Err(skip(
+            return Err(skipped(
                 path,
                 TextSkipReason::Unsupported,
                 "Text requires a regular file",
             ));
         }
         if before.len() > MAX_FILE_BYTES {
-            return Err(skip(
+            return Err(skipped(
                 path,
                 TextSkipReason::Oversize,
                 "Text identity verification is limited to 64 MiB per file",
@@ -77,58 +208,63 @@ impl GitProject {
         }
         let mut file = tokio::fs::File::open(&resolved)
             .await
-            .map_err(|e| skip(path, TextSkipReason::Unreadable, e.to_string()))?;
+            .map_err(|error| skipped_io(path, error))?;
         let opened = file
             .metadata()
             .await
-            .map_err(|e| skip(path, TextSkipReason::Unreadable, e.to_string()))?;
+            .map_err(|error| skipped_io(path, error))?;
         if native_identity(&opened) != native_identity(&before) {
-            return Err(skip(
-                path,
-                TextSkipReason::Unreadable,
-                "content_changed: file replaced during open",
-            ));
+            return Err(
+                ProjectTextError::ContentChanged("File was replaced during open".into()).into(),
+            );
         }
         let mut bytes = Vec::with_capacity(before.len() as usize);
         (&mut file)
             .take(MAX_FILE_BYTES + 1)
             .read_to_end(&mut bytes)
             .await
-            .map_err(|e| skip(path, TextSkipReason::Unreadable, e.to_string()))?;
-        self.checked_path(path)
-            .map_err(|e| skip(path, TextSkipReason::InvalidPath, e))?;
+            .map_err(|error| TextLoadError::Failure(skipped_io(path, error).into_pinned()))?;
+        self.checked_text_path(path)
+            .map_err(|error| TextLoadError::Failure(error.into_pinned()))?;
         let after = std::fs::symlink_metadata(&resolved)
-            .map_err(|e| skip(path, TextSkipReason::Unreadable, e.to_string()))?;
+            .map_err(|error| TextLoadError::Failure(skipped_io(path, error).into_pinned()))?;
         let after_open = file
             .metadata()
             .await
-            .map_err(|e| skip(path, TextSkipReason::Unreadable, e.to_string()))?;
+            .map_err(|error| TextLoadError::Failure(skipped_io(path, error).into_pinned()))?;
         if native_identity(&before) != native_identity(&after)
             || native_identity(&before) != native_identity(&after_open)
             || after.file_type().is_symlink()
             || bytes.len() as u64 != before.len()
         {
-            return Err(skip(
-                path,
-                TextSkipReason::Unreadable,
-                "content_changed: file changed during identity verification",
-            ));
+            return Err(ProjectTextError::ContentChanged(
+                "File changed during identity verification".into(),
+            )
+            .into());
+        }
+        let sha256 = hash(&bytes);
+        if expected_digest.is_some_and(|digest| digest != sha256)
+            || expected.is_some_and(|identity| identity.sha256 != sha256)
+        {
+            return Err(ProjectTextError::ContentChanged(
+                "Expected file digest does not match the verified bytes".into(),
+            )
+            .into());
         }
         if bytes.contains(&0) {
-            return Err(skip(
+            return Err(skipped(
                 path,
                 TextSkipReason::Binary,
                 "NUL bytes indicate binary or unsupported non-UTF-8 text",
             ));
         }
-        let sha256 = hash(&bytes);
         let bom = if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
             3
         } else {
             0
         };
         let text = String::from_utf8(bytes).map_err(|_| {
-            skip(
+            skipped(
                 path,
                 TextSkipReason::InvalidEncoding,
                 "Only valid UTF-8 and UTF-8 BOM text are supported",
@@ -154,11 +290,21 @@ impl GitProject {
             line,
         }
     }
-    fn verify_cursor(&self, data: &TextData, cursor: &TextCursor) -> Result<(usize, u64), String> {
-        if cursor.project != self.identity || cursor.file != data.identity {
-            return Err("content_changed: continuation does not identify the current project/file version; restart the read".into());
+    fn verify_cursor(
+        &self,
+        data: &TextData,
+        cursor: &TextCursor,
+    ) -> Result<(usize, u64), ProjectTextError> {
+        if cursor.project != self.identity {
+            return Err(ProjectTextError::ObservationExpired(
+                "Text continuation belongs to a different project".into(),
+            ));
         }
-        let byte = usize::try_from(cursor.byte_offset).map_err(display)?;
+        if cursor.file != data.identity {
+            return Err(ProjectTextError::ContentChanged("Text continuation no longer identifies the observed file version; restart the read".into()));
+        }
+        let byte = usize::try_from(cursor.byte_offset)
+            .map_err(|error| ProjectTextError::InvalidInput(error.to_string()))?;
         if byte < data.bom
             || byte > data.text.len()
             || !data.text.is_char_boundary(byte)
@@ -168,26 +314,65 @@ impl GitProject {
                     .filter(|&&b| b == b'\n')
                     .count() as u64
         {
-            return Err("invalid text continuation position".into());
+            return Err(ProjectTextError::InvalidInput(
+                "Invalid text continuation position".into(),
+            ));
         }
         Ok((byte, cursor.line))
     }
     pub(super) async fn read_text_page(
         &self,
         args: &ReadTextArguments,
-    ) -> Result<TextPage, String> {
+    ) -> Result<TextPage, ProjectTextError> {
         if args.start_line == 0 || !(1..=200).contains(&args.limit_lines) {
-            return Err("invalid text line bounds".into());
+            return Err(ProjectTextError::InvalidInput(
+                "Invalid text line bounds".into(),
+            ));
         }
-        let data = match self.load_text(&args.path).await {
-            Ok(data) => data,
-            Err(skipped) if args.continuation.is_some() => {
-                return Err(format!(
-                    "content_changed: pinned file is no longer readable: {}",
-                    skipped.detail
+        if let Some(cursor) = &args.continuation {
+            if cursor.file.path != args.path {
+                return Err(ProjectTextError::InvalidInput(
+                    "Text continuation path mismatch".into(),
                 ));
             }
-            Err(skipped) => {
+            if cursor.project != self.identity {
+                return Err(ProjectTextError::ObservationExpired(
+                    "Text continuation belongs to a different project".into(),
+                ));
+            }
+        }
+        let data = match self
+            .load_text(
+                &args.path,
+                args.continuation.as_ref().map(|cursor| &cursor.file),
+                args.expected_sha256.as_deref(),
+            )
+            .await
+        {
+            Ok(data) => data,
+            Err(error)
+                if args.continuation.is_some()
+                    || (args.expected_sha256.is_some()
+                        && !matches!(
+                            &error,
+                            TextLoadError::Skipped {
+                                record: TextSkip {
+                                    reason: TextSkipReason::Binary
+                                        | TextSkipReason::InvalidEncoding,
+                                    ..
+                                },
+                                ..
+                            }
+                        )) =>
+            {
+                // Binary/encoding skips occur after expected digest verification; matching
+                // unsupported bytes remain explicit skipped data rather than a false change.
+                return Err(error.into_pinned());
+            }
+            Err(TextLoadError::Failure(error)) => return Err(error),
+            Err(TextLoadError::Skipped {
+                record: skipped, ..
+            }) => {
                 return Ok(TextPage {
                     file: None,
                     fragments: vec![],
@@ -203,11 +388,15 @@ impl GitProject {
             .as_ref()
             .is_some_and(|digest| digest != &data.identity.sha256)
         {
-            return Err("content_changed: expected file digest does not match".into());
+            return Err(ProjectTextError::ContentChanged(
+                "Expected file digest does not match".into(),
+            ));
         }
         let (mut offset, mut line) = if let Some(cursor) = &args.continuation {
             if cursor.file.path != args.path {
-                return Err("text continuation path mismatch".into());
+                return Err(ProjectTextError::InvalidInput(
+                    "Text continuation path mismatch".into(),
+                ));
             }
             self.verify_cursor(&data, cursor)?
         } else {
@@ -326,19 +515,36 @@ impl GitProject {
     pub(super) async fn search_text_page(
         &self,
         args: &SearchTextArguments,
-    ) -> Result<SearchTextPage, String> {
+    ) -> Result<SearchTextPage, ProjectTextError> {
         if args.text.is_empty()
             || args.text.len() > 1024
             || !(1..=100).contains(&args.limit_matches)
         {
-            return Err("invalid literal search bounds".into());
+            return Err(ProjectTextError::InvalidInput(
+                "Invalid literal search bounds".into(),
+            ));
         }
+        self.check_text_root()?;
         if !args.directory.is_empty() {
-            self.checked_path(&args.directory)?;
+            self.checked_text_path(&args.directory)
+                .map_err(|error| match error {
+                    TextLoadError::Skipped { record, .. }
+                        if matches!(
+                            record.reason,
+                            TextSkipReason::InvalidPath | TextSkipReason::Symlink
+                        ) =>
+                    {
+                        ProjectTextError::InvalidInput(record.detail)
+                    }
+                    other => other.into_pinned(),
+                })?;
         }
         let mut identity_args = args.clone();
         identity_args.continuation = None;
-        let query_sha256 = hash(&serde_json::to_vec(&identity_args).map_err(display)?);
+        let query_sha256 = hash(
+            &serde_json::to_vec(&identity_args)
+                .map_err(|error| ProjectTextError::InvalidInput(error.to_string()))?,
+        );
         let mut cursor = args
             .continuation
             .clone()
@@ -351,18 +557,24 @@ impl GitProject {
                 }],
                 active_file: None,
             });
-        if cursor.project != self.identity
-            || cursor.query_sha256 != query_sha256
-            || cursor.directories.len() > 64
-        {
-            return Err("search continuation project/query mismatch".into());
+        if cursor.project != self.identity {
+            return Err(ProjectTextError::ObservationExpired(
+                "Search continuation belongs to a different project".into(),
+            ));
+        }
+        if cursor.query_sha256 != query_sha256 || cursor.directories.len() > 64 {
+            return Err(ProjectTextError::InvalidInput(
+                "Search continuation query or directory-depth mismatch".into(),
+            ));
         }
         for frame in &cursor.directories {
             if !args.directory.is_empty()
                 && frame.path != args.directory
                 && !frame.path.starts_with(&format!("{}/", args.directory))
             {
-                return Err("search continuation outside requested directory".into());
+                return Err(ProjectTextError::InvalidInput(
+                    "Search continuation outside requested directory".into(),
+                ));
             }
         }
         let mut page = SearchTextPage { matches: vec![], skipped: vec![], scanned_entries: 0, scanned_bytes: 0, verified_bytes: 0, continuation: None, complete: false, limit_reason: None, consistency: "Each file has its own verified content version. Directory traversal is live lexical enumeration, not an atomic tree snapshot; entries added behind an already visited name require a new search.".into() };
@@ -395,18 +607,17 @@ impl GitProject {
                         .path
                         .starts_with(&format!("{}/", args.directory))
                 {
-                    return Err("active search file outside requested directory".into());
+                    return Err(ProjectTextError::InvalidInput(
+                        "Active search file outside requested directory".into(),
+                    ));
                 }
                 let cached = loaded.is_some();
                 let data = if let Some(data) = loaded.take() {
                     data
                 } else {
-                    self.load_text(&active.file.path).await.map_err(|e| {
-                        format!(
-                            "content_changed: pinned search file cannot be read: {}",
-                            e.detail
-                        )
-                    })?
+                    self.load_text(&active.file.path, Some(&active.file), None)
+                        .await
+                        .map_err(TextLoadError::into_pinned)?
                 };
                 if !cached {
                     page.verified_bytes += data.identity.byte_size;
@@ -521,6 +732,7 @@ impl GitProject {
                     entry
                 }
                 Err(error) => {
+                    self.check_text_root()?;
                     page.skipped
                         .push(skip(&frame.path, TextSkipReason::Unreadable, error));
                     cursor.directories.pop();
@@ -558,7 +770,7 @@ impl GitProject {
                 page.limit_reason = Some("identity_verification_budget".into());
                 break;
             }
-            match self.load_text(&entry.path).await {
+            match self.load_text(&entry.path, None, None).await {
                 Ok(data) => {
                     // Search immediately in the active-file branch. Validation is accounted there.
                     page.verified_bytes += data.identity.byte_size;
@@ -566,10 +778,13 @@ impl GitProject {
                     cursor.active_file = Some(self.cursor(&data, data.bom, 1));
                     loaded = Some(data);
                 }
-                Err(skipped) => {
+                Err(TextLoadError::Skipped {
+                    record: skipped, ..
+                }) => {
                     verification_budget_used += entry.byte_size.min(MAX_FILE_BYTES);
                     page.skipped.push(skipped);
                 }
+                Err(TextLoadError::Failure(error)) => return Err(error),
             }
         }
         page.complete = cursor.active_file.is_none() && cursor.directories.is_empty();
@@ -578,9 +793,9 @@ impl GitProject {
             page.limit_reason = None;
         }
         if json_size(&page) > PAGE_BYTES {
-            return Err(
-                "budget_exhausted: search continuation exceeds 64 KiB; narrow the directory".into(),
-            );
+            return Err(ProjectTextError::BudgetExceeded(
+                "Search continuation exceeds 64 KiB; narrow the directory".into(),
+            ));
         }
         Ok(page)
     }
@@ -646,24 +861,18 @@ mod tests {
         args.limit_lines = 1;
         args.continuation = project.read_text_page(&args).await.unwrap().continuation;
         std::fs::write(&path, "a\nc\n").unwrap();
-        assert!(
-            project
-                .read_text_page(&args)
-                .await
-                .unwrap_err()
-                .contains("content_changed")
-        );
+        assert!(matches!(
+            project.read_text_page(&args).await,
+            Err(ProjectTextError::ContentChanged(_))
+        ));
         #[cfg(unix)]
         {
             std::fs::remove_file(&path).unwrap();
             std::os::unix::fs::symlink("other", &path).unwrap();
-            assert!(
-                project
-                    .read_text_page(&args)
-                    .await
-                    .unwrap_err()
-                    .contains("content_changed")
-            );
+            assert!(matches!(
+                project.read_text_page(&args).await,
+                Err(ProjectTextError::ContentChanged(_))
+            ));
             assert!(matches!(
                 project
                     .read_text_page(&read_args("text"))
@@ -766,13 +975,10 @@ mod tests {
         args.continuation = page.continuation;
         let mut changed = args.clone();
         changed.text = "other".into();
-        assert!(
-            project
-                .search_text_page(&changed)
-                .await
-                .unwrap_err()
-                .contains("mismatch")
-        );
+        assert!(matches!(
+            project.search_text_page(&changed).await,
+            Err(ProjectTextError::InvalidInput(_))
+        ));
         let second = project.search_text_page(&args).await.unwrap();
         assert!(!second.matches.is_empty() && second.matches.len() <= 100);
         assert_eq!(second.matches[0].line, first_count as u64 + 1);
@@ -792,13 +998,10 @@ mod tests {
         assert_eq!(lines, (1..=250).collect());
         args = pinned_args;
         std::fs::write(&path, "Needle\n".repeat(250)).unwrap();
-        assert!(
-            project
-                .search_text_page(&args)
-                .await
-                .unwrap_err()
-                .contains("content_changed")
-        );
+        assert!(matches!(
+            project.search_text_page(&args).await,
+            Err(ProjectTextError::ContentChanged(_))
+        ));
     }
     #[tokio::test]
     async fn private_paths_and_linked_directories_never_enter_search() {
@@ -905,5 +1108,181 @@ mod continuation_tests {
             assert!(pages < 20);
         }
         assert_eq!(positions.len(), 6);
+    }
+}
+
+#[cfg(test)]
+mod typed_error_tests {
+    use super::*;
+    fn read(path: &str) -> ReadTextArguments {
+        ReadTextArguments {
+            path: path.into(),
+            expected_sha256: None,
+            start_line: 1,
+            limit_lines: 1,
+            continuation: None,
+        }
+    }
+    fn search() -> SearchTextArguments {
+        SearchTextArguments {
+            text: "hit".into(),
+            case_sensitive: true,
+            directory: String::new(),
+            filename_contains: None,
+            show_hidden: false,
+            limit_matches: 1,
+            continuation: None,
+        }
+    }
+    #[tokio::test]
+    async fn pinned_removal_project_scope_and_invalid_positions_have_distinct_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("text"), "界\nnext\n").unwrap();
+        let project = GitProject::open(dir.path(), vec![]).unwrap();
+        let first = project.read_text_page(&read("text")).await.unwrap();
+        let mut args = read("text");
+        args.continuation = first.continuation;
+        let original = args.clone();
+        args.continuation.as_mut().unwrap().project = "/different-project".into();
+        assert!(matches!(
+            project.read_text_page(&args).await,
+            Err(ProjectTextError::ObservationExpired(_))
+        ));
+        args = original.clone();
+        args.continuation.as_mut().unwrap().byte_offset = 1;
+        args.continuation.as_mut().unwrap().line = 1;
+        assert!(matches!(
+            project.read_text_page(&args).await,
+            Err(ProjectTextError::InvalidInput(_))
+        ));
+        args = original.clone();
+        args.path = "another".into();
+        assert!(matches!(
+            project.read_text_page(&args).await,
+            Err(ProjectTextError::InvalidInput(_))
+        ));
+        std::fs::remove_file(dir.path().join("text")).unwrap();
+        assert!(matches!(
+            project.read_text_page(&original).await,
+            Err(ProjectTextError::ContentChanged(_))
+        ));
+        let missing = project.read_text_page(&read("text")).await.unwrap();
+        assert!(matches!(
+            missing.skipped.unwrap().reason,
+            TextSkipReason::Unreadable
+        ));
+    }
+    #[tokio::test]
+    async fn pinned_search_and_oversized_cursor_preserve_typed_diagnostics() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("text"), "hit\nhit\n").unwrap();
+        let project = GitProject::open(dir.path(), vec![]).unwrap();
+        let mut args = search();
+        args.continuation = project.search_text_page(&args).await.unwrap().continuation;
+        let original = args.clone();
+        args.continuation.as_mut().unwrap().project = "/other".into();
+        assert!(matches!(
+            project.search_text_page(&args).await,
+            Err(ProjectTextError::ObservationExpired(_))
+        ));
+        args = original.clone();
+        args.text = "different".into();
+        assert!(matches!(
+            project.search_text_page(&args).await,
+            Err(ProjectTextError::InvalidInput(_))
+        ));
+        args = original.clone();
+        args.continuation.as_mut().unwrap().directories = vec![
+            DirectoryScanFrame {
+                path: "x".repeat(1024),
+                after_name: None
+            };
+            64
+        ];
+        assert!(matches!(
+            project.search_text_page(&args).await,
+            Err(ProjectTextError::BudgetExceeded(_))
+        ));
+        std::fs::write(dir.path().join("text"), "HIT\nHIT\n").unwrap();
+        assert!(matches!(
+            project.search_text_page(&original).await,
+            Err(ProjectTextError::ContentChanged(_))
+        ));
+    }
+    #[tokio::test]
+    async fn expected_hash_does_not_convert_a_replaced_binary_file_into_an_unpinned_skip() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("text"), "plain\n").unwrap();
+        let project = GitProject::open(dir.path(), vec![]).unwrap();
+        let first = project.read_text_page(&read("text")).await.unwrap();
+        let mut args = read("text");
+        args.expected_sha256 = Some(first.file.unwrap().sha256);
+        std::fs::write(dir.path().join("text"), [0, 1, 2]).unwrap();
+        assert!(matches!(
+            project.read_text_page(&args).await,
+            Err(ProjectTextError::ContentChanged(_))
+        ));
+        assert!(matches!(
+            project
+                .read_text_page(&read("text"))
+                .await
+                .unwrap()
+                .skipped
+                .unwrap()
+                .reason,
+            TextSkipReason::Binary
+        ));
+        args.expected_sha256 = Some(hash(&[0, 1, 2]));
+        assert!(matches!(
+            project
+                .read_text_page(&args)
+                .await
+                .unwrap()
+                .skipped
+                .unwrap()
+                .reason,
+            TextSkipReason::Binary
+        ));
+    }
+    #[test]
+    fn io_error_kind_not_message_text_classifies_pinned_unavailability() {
+        assert!(matches!(
+            skipped_io(
+                "text",
+                std::io::Error::new(std::io::ErrorKind::PermissionDenied, "content_changed")
+            )
+            .into_pinned(),
+            ProjectTextError::Unavailable(_)
+        ));
+        assert!(matches!(
+            skipped_io(
+                "text",
+                std::io::Error::new(std::io::ErrorKind::NotFound, "unavailable")
+            )
+            .into_pinned(),
+            ProjectTextError::ContentChanged(_)
+        ));
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn replaced_project_root_expires_both_read_and_search_observations() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("project");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("text"), "hit\nhit\n").unwrap();
+        let project = GitProject::open(&root, vec![]).unwrap();
+        let mut args = read("text");
+        args.continuation = project.read_text_page(&args).await.unwrap().continuation;
+        let moved = dir.path().join("moved");
+        std::fs::rename(&root, &moved).unwrap();
+        std::os::unix::fs::symlink(&moved, &root).unwrap();
+        assert!(matches!(
+            project.read_text_page(&args).await,
+            Err(ProjectTextError::ObservationExpired(_))
+        ));
+        assert!(matches!(
+            project.search_text_page(&search()).await,
+            Err(ProjectTextError::ObservationExpired(_))
+        ));
     }
 }
