@@ -106,6 +106,13 @@ its library search order, loaded namespaces and attached packages. The bounded
 `workspace.packages` query reads DESCRIPTION text and existing namespace metadata
 through the same idle-only lane, without loading packages or recording an Operation.
 It does not substitute a separate R process's inventory for the live session.
+Grouped indexes and copy details share a bounded observation identity and original
+timestamp. Continuation requests require the expected native session; the private
+bridge retains only its last two observations, and expiry cannot silently resample
+under an old identity. The flat query remains the default for existing callers.
+Source/provenance belongs to an installed copy; repository and Remote metadata are
+kept distinct from project URLs and currently configured repositories. Secret URL
+components are removed before transport, and the UI validates navigation separately.
 Environment retains management/realization ownership; Studio package viewing adds
 no installation or environment-selection path.
 

@@ -591,6 +591,8 @@ mod tests {
             json!({"mode":"install"}),
             json!({"library":"/tmp"}),
             json!({"install":true}),
+            json!({"package_name":"../escape"}),
+            json!({"observation_id":"session/mismatch"}),
         ] {
             assert!(handler.normalize_arguments(&args).is_err(), "{args:?}");
         }

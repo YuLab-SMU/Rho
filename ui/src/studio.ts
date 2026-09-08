@@ -232,6 +232,7 @@ export class Studio {
   closedViews = new Set<string>();
   viewCloseVersion = 0;
   openFile?: () => void;
+  openSettings?: () => void;
   renameView?: (id: string, name: string) => void;
   openPanels?: () => void;
   state: ApplicationState = { key: "studio", version: null, value: null };
@@ -1135,7 +1136,7 @@ export class Studio {
         } else this.objectsNotice = objects.notices.join("\n");
       }
     }
-    if (this.packages.visible && this.packages.dirty)
+    if (this.packages.visible && this.packages.needsObservation)
       await this.packages.refresh();
     for (const pending of [...this.pending]) {
       if (pending.operationId) {

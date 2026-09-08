@@ -32,6 +32,7 @@ use uuid::Uuid;
 
 const BRIDGE: &str = include_str!("../../../../r/bridge/dispatch.R");
 const QUERIES: &str = include_str!("../../../../r/bridge/query.R");
+const PACKAGES: &str = include_str!("../../../../r/bridge/packages.R");
 const TOOLS: &str = include_str!("../../../../r/bridge/tools.R");
 const OUTPUT_LIMIT: usize = 1024 * 1024;
 
@@ -159,7 +160,7 @@ impl ArkRuntime {
         };
         let bootstrap = format!(
             "local({{ requireNamespace('jsonlite'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); {library_setup} invisible(TRUE) }})",
-            quote(&format!("{BRIDGE}\n{QUERIES}\n{TOOLS}"))?,
+            quote(&format!("{BRIDGE}\n{QUERIES}\n{PACKAGES}\n{TOOLS}"))?,
             quote(&project.to_string_lossy())?
         );
         let bootstrap_output = runtime
@@ -566,10 +567,15 @@ impl WorkspaceRuntime for ArkRuntime {
                 serde_json::to_value(data).map_err(before)?
             }
         };
+        let observed_at_ms = data
+            .get("observed_at_ms")
+            .and_then(Value::as_i64)
+            .filter(|ms| *ms > 0)
+            .unwrap_or_else(now_ms);
         Ok(WorkspaceObservation {
             session_id: self.session_id.clone(),
             source: "ark/rho.bridge".into(),
-            observed_at_ms: now_ms(),
+            observed_at_ms,
             data,
             completeness: ObservationCompleteness::Partial,
             notices: if matches!(query, WorkspaceQuery::Packages(_)) {

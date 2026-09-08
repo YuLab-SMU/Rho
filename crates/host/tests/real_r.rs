@@ -406,6 +406,43 @@ async fn real_workspace_queries_are_bounded_and_do_not_force_bindings_or_record_
     assert!(stats.attached);
     assert!(stats.library_path.is_some());
     assert!(!data.library_paths.is_empty());
+    let grouped = host
+        .query_snapshot(
+            &context,
+            query("workspace.packages", json!({"grouped":true,"limit":1})),
+        )
+        .await
+        .unwrap();
+    assert_eq!(grouped.status, QueryStatus::Ready, "{grouped:?}");
+    let index: rho_contract::PackageSnapshotData =
+        serde_json::from_value(grouped.data.unwrap()).unwrap();
+    assert_eq!(index.groups.len(), 1);
+    assert!(index.counts.all > 1);
+    let observed = host.query_snapshot(&context, query("workspace.packages", json!({
+        "expected_session":snapshot.target.identity,"grouped":true,"observation_id":index.observation_id,"package_name":"stats"}))).await.unwrap();
+    assert_eq!(observed.status, QueryStatus::Ready, "{observed:?}");
+    assert_eq!(observed.observed_at_ms, grouped.observed_at_ms);
+    let details: rho_contract::PackageSnapshotData =
+        serde_json::from_value(observed.data.unwrap()).unwrap();
+    assert_eq!(details.observation_id, index.observation_id);
+    assert!(details.packages.iter().any(|p| {
+        p.name == "stats"
+            && p.source
+                .as_ref()
+                .is_some_and(|s| s.kind == "R distribution")
+    }));
+    assert!(
+        host.query_snapshot(
+            &context,
+            query(
+                "workspace.packages",
+                json!({"observation_id":index.observation_id})
+            )
+        )
+        .await
+        .is_err()
+    );
+
     assert!(
         host.query_snapshot(
             &context,

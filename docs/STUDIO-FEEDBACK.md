@@ -198,6 +198,11 @@ show package source, including GitHub, CRAN, Bioconductor and Posit Package Mana
 Source must accommodate other repositories and local/remote archives, and distinguish
 an installed copy's recorded origin from its distribution channel and environment.
 
+**Implementation authorization:** The user approved the revised Paper design,
+including Source, and asked to begin implementation on 2026-09-08. Functional and
+visual evidence belongs in STATUS.md; the earlier rejected screenshot remains the
+problem reference.
+
 
 ## Workflow reference: a country development analysis
 

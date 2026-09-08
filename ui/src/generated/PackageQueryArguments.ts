@@ -4,4 +4,4 @@ import type { PackageQueryMode } from "./PackageQueryMode";
 /**
  * Bounded observation of the libraries and namespaces of the existing R session.
  */
-export type PackageQueryArguments = { expected_session: string | null, filter: string, mode: PackageQueryMode, offset: number, limit: number, };
+export type PackageQueryArguments = { expected_session: string | null, filter: string, mode: PackageQueryMode, grouped: boolean, observation_id: string | null, package_name: string | null, offset: number, limit: number, };

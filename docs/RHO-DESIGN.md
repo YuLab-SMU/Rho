@@ -601,13 +601,14 @@ The user scoped this view on 2026-09-08. Existing scientific Environment capabil
 remain available through their owner; this view adds no installation workflow.
 
 
-### Visual refinement under review
+### Paper-approved visual refinement
 
 The [Paper Packages proposal](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0)
 responds to the user's rejection of the first implementation's visual hierarchy.
-It is a review artifact, not an approved implementation specification.
+The user approved this direction and its Source addition for implementation on
+2026-09-08. Runtime verification is recorded in STATUS.md.
 
-The proposal puts package purpose under the name and aligns version/session/copy
+The interface puts package purpose under the name and aligns version/session/copy
 information in stable columns. It groups a package's installations behind an
 explicit copy count, uses inline disclosure in narrow panels and an adjacent
 inspector in wide panels, and keeps full paths in details or the R/library summary.
@@ -620,8 +621,8 @@ The design introduces no install, update, load, detach or runtime-switch action.
 
 ### Package source presentation
 
-The user endorsed the Paper direction and requested a Source location. The proposal
-now includes a Source column in wide lists, a scoped Source row in compact details,
+The user endorsed the Paper direction and requested a Source location. The design
+includes a Source column in wide lists, a scoped Source row in compact details,
 and a source inspector for each installed copy. The fourth Paper artboard shows
 actual local ggplot2 GitHub/CRAN metadata alongside clearly marked example states.
 
@@ -652,3 +653,23 @@ Documentation basis: [renv package sources](https://rstudio.github.io/renv/artic
 [R-universe repositories](https://docs.r-universe.dev/install/dependencies.html),
 [Posit repositories and sources](https://docs.posit.co/rspm/admin/repositories/),
 and [Conda channels](https://docs.conda.io/projects/conda/en/stable/user-guide/concepts/channels.html).
+
+
+The implementation uses a 360 px inspector when a panel is at least 1000 px wide;
+otherwise selection expands in place. Wide rows are 44 px and compact rows 54 px,
+with fixed version/source/status/copy columns in the wide view and a one-line
+purpose below each package name. Tiny panels move the mode selector into the
+search toolbar; at low heights the row keeps name/version while purpose is hidden.
+All, Loaded, Attached and Multiple copies filters operate on the same observed
+index. Counts include the whole bounded observation, not just loaded UI rows.
+The client labels partially cached results and remains searchable while R is busy.
+
+The owner returns a paginated grouped index or the copies of an exact package.
+Continuation requests bind both observation identity and native session. The bridge
+retains its last two observations; expired reads require an explicit Refresh.
+Each native observation is limited to 10,000 scanned library entries and 8 MiB of
+scanned metadata, plus at most 512 loaded namespace observations. Source reads use
+installed DESCRIPTION fields, not current repository options or package-manager
+execution. Explicit repository URLs can identify a known provider/snapshot; absent
+delivery records stay unrecorded. No new conda database or renv lockfile attribution
+is inferred. Scope remains read-only.

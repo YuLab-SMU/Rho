@@ -149,6 +149,17 @@ pub struct PackageQueryArguments {
     pub filter: String,
     #[serde(default)]
     pub mode: PackageQueryMode,
+    // Group installed copies by package name. Omission retains the flat query.
+    #[serde(default)]
+    pub grouped: bool,
+    // Continue reading one bounded observation without resampling R or disk.
+    #[serde(default)]
+    #[schemars(length(max = 64))]
+    pub observation_id: Option<String>,
+    // Read the copies of an exact package within the observation.
+    #[serde(default)]
+    #[schemars(length(min = 1, max = 128))]
+    pub package_name: Option<String>,
     #[serde(default)]
     #[schemars(range(max = 10000))]
     pub offset: u32,
@@ -181,6 +192,8 @@ pub struct PackageEntry {
     pub loaded_path: Option<String>,
     pub loaded_from_library: bool,
     pub attached: bool,
+    #[serde(default)]
+    pub source: Option<PackageSource>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
@@ -194,8 +207,83 @@ pub struct PackageSnapshotData {
     pub offset: u32,
     pub next_offset: Option<u32>,
     pub packages: Vec<PackageEntry>,
+    #[serde(default)]
+    pub groups: Vec<PackageGroup>,
+    #[serde(default)]
+    pub counts: PackageCounts,
+    #[serde(default)]
+    pub libraries: Vec<PackageLibrary>,
+    #[serde(default)]
+    pub observation_id: String,
+    #[serde(default)]
+    pub observed_at_ms: i64,
+    #[serde(default)]
+    pub package_name: Option<String>,
     pub total_matches: u32,
     pub scanned: u32,
     pub scan_complete: bool,
     pub notices: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackageSourceField {
+    pub field: String,
+    pub value: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackageProjectLink {
+    pub label: String,
+    pub url: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackageSource {
+    pub kind: String,
+    pub repository: Option<String>,
+    pub repository_url: Option<String>,
+    pub remote_host: Option<String>,
+    pub remote_ref: Option<String>,
+    pub remote_sha: Option<String>,
+    pub delivery_url: Option<String>,
+    pub provider: Option<String>,
+    pub snapshot: Option<String>,
+    pub evidence: Vec<PackageSourceField>,
+    pub links: Vec<PackageProjectLink>,
+    pub notice: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackageCounts {
+    pub all: u32,
+    pub installed: u32,
+    pub installations: u32,
+    pub loaded: u32,
+    pub attached: u32,
+    pub multiple: u32,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackageLibrary {
+    pub index: u32,
+    pub path: String,
+    pub status: String,
+    pub notice: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackageGroup {
+    pub name: String,
+    pub title: Option<String>,
+    pub version: String,
+    pub first_version: Option<String>,
+    pub primary_library_path: Option<String>,
+    pub copy_count: u32,
+    pub loaded_version: Option<String>,
+    pub loaded_path: Option<String>,
+    pub loaded_copy_observed: bool,
+    pub attached: bool,
+    pub source_kind: String,
+    pub source_count: u32,
 }

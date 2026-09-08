@@ -1,266 +1,534 @@
 import { useEffect, useRef, useState } from "react";
 import { useStudio } from "../context";
-import type { PackageQueryMode } from "../generated/PackageQueryMode";
-import type { PackageEntry } from "../generated/PackageEntry";
+import { Icon } from "../icons";
+import { Modal } from "../primitives";
+import type { PackageView } from "../packages";
+import { PackageInspector, packageState } from "./package-inspector";
 
 export function PackagesPanel() {
   const s = useStudio("packages", "runtime"),
     p = s.packages;
   const root = useRef<HTMLDivElement>(null),
-    body = useRef<HTMLDivElement>(null);
-  const [filter, setFilter] = useState(p.filter);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const busy = s.runtime?.state === "busy";
+    body = useRef<HTMLDivElement>(null),
+    search = useRef<HTMLInputElement>(null);
+  const rows = useRef(new Map<string, HTMLButtonElement>());
+  const [wide, setWide] = useState(false),
+    [librariesOpen, setLibrariesOpen] = useState(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const busy = s.runtime?.state === "busy",
+    unavailable = !s.runtime || s.runtime.state === "unavailable",
+    data = p.data;
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
       p.visible = entry.isIntersecting;
-      if (p.visible && p.dirty) void p.refresh();
+      if (p.visible && p.needsObservation) void p.refresh();
     });
-    if (root.current) observer.observe(root.current);
+    const resize = new ResizeObserver(([entry]) =>
+      setWide(entry.contentRect.width >= 1000),
+    );
+    if (root.current) {
+      observer.observe(root.current);
+      resize.observe(root.current);
+    }
     return () => {
       observer.disconnect();
+      resize.disconnect();
       p.visible = false;
     };
   }, [p]);
   useEffect(() => {
-    if (filter === p.filter) return;
-    const timer = setTimeout(() => {
-      p.select(filter);
-      void p.refresh();
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [filter, p]);
-  useEffect(() => {
     if (body.current) body.current.scrollTop = p.scrollTop;
-  }, [p, p.data]);
-  const select = (mode: PackageQueryMode, offset = 0) => {
-    p.select(filter, mode, offset);
-    setExpanded(null);
-    void p.refresh();
-  };
-  const data = p.data;
-  function details(row: PackageEntry) {
-    return (
-      <dl className="package-details">
-        {row.title && (
-          <>
-            <dt>Title</dt>
-            <dd>{row.title}</dd>
-          </>
-        )}
-        <dt>Library</dt>
-        <dd>{row.library_path ?? "Unknown"}</dd>
-        <dt>Library order</dt>
-        <dd>
-          {row.library_index === null
-            ? "Outside current library paths"
-            : `#${row.library_index}`}
-        </dd>
-        {p.mode === "installed" && (
-          <>
-            <dt>Lookup</dt>
-            <dd>
-              {row.first_in_library_path
-                ? "First installed copy in library order"
-                : "An earlier library contains this package"}
-            </dd>
-          </>
-        )}
-        {row.built && (
-          <>
-            <dt>Built</dt>
-            <dd>{row.built}</dd>
-          </>
-        )}
-        <dt>Loaded version</dt>
-        <dd>{row.loaded_version ?? "Not loaded"}</dd>
-        {row.loaded_path && (
-          <>
-            <dt>Loaded from</dt>
-            <dd>{row.loaded_path}</dd>
-          </>
-        )}
-        <dt>Attached</dt>
-        <dd>{row.attached ? "Yes — on the R search path" : "No"}</dd>
-        {p.mode === "installed" && (
-          <p className="muted">
-            Installed metadata does not confirm that a package can load. An
-            already loaded namespace may use a different copy.
-          </p>
-        )}
-      </dl>
-    );
+  }, [p, p.offset, p.filter, p.mode]);
+  const filtered = p.filtered,
+    groups = p.page,
+    selected = p.selected ? p.groups.get(p.selected) : undefined;
+  const select = (mode: PackageView) => p.select(p.filter, mode);
+  function openLibraries(target: HTMLElement) {
+    returnFocus.current = target;
+    setLibrariesOpen(true);
   }
+  const count = (n?: number) =>
+    n === undefined ? "" : `${n}${data?.scan_complete ? "" : "+"}`;
+  const tabs: [PackageView, string, number | undefined][] = [
+    ["installed", "All", data?.counts.all],
+    ["loaded", "Loaded", data?.counts.loaded],
+    ["attached", "Attached", data?.counts.attached],
+  ];
+  const modeSelector = (
+    <select
+      className="package-view-select"
+      aria-label="Package View"
+      value={p.mode}
+      onChange={(event) => select(event.target.value as PackageView)}
+    >
+      {[
+        ...tabs,
+        [
+          "multiple",
+          "Multiple copies",
+          data?.counts.multiple,
+        ] as (typeof tabs)[number],
+      ].map(([mode, label, value]) => (
+        <option key={mode} value={mode}>
+          {label} {count(value)}
+        </option>
+      ))}
+    </select>
+  );
   return (
-    <div className="panel packages-panel" ref={root}>
-      <div className="panel-toolbar">
-        <input
-          aria-label="Search Packages"
-          placeholder="Search packages…"
-          value={filter}
-          maxLength={128}
-          onChange={(e) => setFilter(e.target.value)}
-        />
+    <div
+      className={`panel packages-panel ${wide ? "packages-wide" : "packages-compact"}`}
+      ref={root}
+      onKeyDown={(event) => {
+        if (
+          (event.metaKey || event.ctrlKey) &&
+          event.key.toLowerCase() === "f"
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          search.current?.focus();
+          search.current?.select();
+        }
+        if (
+          event.key === "Escape" &&
+          p.selected &&
+          !(event.target as HTMLElement).closest("input,select,[role=dialog]")
+        ) {
+          event.preventDefault();
+          const name = p.selected;
+          p.pick(name, true);
+          rows.current.get(name)?.focus();
+        }
+      }}
+    >
+      <div className="package-toolbar">
+        <div className="package-search">
+          <Icon name="search" />
+          <input
+            ref={search}
+            aria-label="Search Packages"
+            placeholder={
+              wide ? "Find a package or search its purpose…" : "Find packages…"
+            }
+            value={p.filter}
+            maxLength={128}
+            onChange={(event) => p.select(event.target.value)}
+          />
+          <span className="package-search-shortcut" aria-hidden="true">
+            ⌘ F
+          </span>
+        </div>
+        {modeSelector}
+        <div className="package-toolbar-spacer" />
+        {wide && (
+          <button
+            className="package-runtime-button"
+            disabled={!data}
+            onClick={(event) => openLibraries(event.currentTarget)}
+          >
+            R {data?.r_version ?? "—"} · {data?.library_paths.length ?? 0}{" "}
+            libraries <span aria-hidden="true">⌄</span>
+          </button>
+        )}
         <button
-          disabled={p.loading || busy || !s.runtime}
+          className="package-refresh"
+          aria-label="Refresh Packages"
+          title={
+            busy ? "R busy; showing the last observation" : "Refresh Packages"
+          }
+          disabled={p.loading || busy || unavailable}
           onClick={() => {
             p.invalidate();
             void p.refresh();
           }}
-          title="Refresh Packages"
         >
-          {p.loading ? "Reading…" : "Refresh"}
+          <Icon name="reset" />
+          <span>{p.loading ? "Reading…" : "Refresh"}</span>
         </button>
       </div>
-      <div className="package-controls">
-        <select
-          aria-label="Package View"
-          value={p.mode}
-          onChange={(e) => select(e.target.value as PackageQueryMode)}
+      <div className="package-filter-bar">
+        <div className="package-tabs" role="group" aria-label="Package views">
+          {tabs.map(([mode, label, value]) => (
+            <button
+              key={mode}
+              aria-label={`${label} ${count(value)}`}
+              aria-pressed={p.mode === mode}
+              onClick={() => select(mode)}
+            >
+              {label} <span>{count(value)}</span>
+            </button>
+          ))}
+        </div>
+        <button
+          className={`package-multiple ${p.mode === "multiple" ? "selected" : ""}`}
+          aria-pressed={p.mode === "multiple"}
+          onClick={() =>
+            select(p.mode === "multiple" ? "installed" : "multiple")
+          }
         >
-          <option value="installed">Installed in library paths</option>
-          <option value="loaded">Loaded namespaces</option>
-          <option value="attached">Attached packages</option>
-        </select>
-        <span className="muted">Read only</span>
+          Multiple copies <span>{count(data?.counts.multiple)}</span>
+        </button>
+        <label className="package-sort">
+          <select
+            aria-label="Package Order"
+            value={p.descending ? "desc" : "asc"}
+            onChange={(event) => {
+              p.descending = event.target.value === "desc";
+              p.select(p.filter);
+            }}
+          >
+            <option value="asc">Name A–Z</option>
+            <option value="desc">Name Z–A</option>
+          </select>
+        </label>
       </div>
-      <div
-        className="package-scroll"
-        ref={body}
-        onScroll={(e) => {
-          p.scrollTop = e.currentTarget.scrollTop;
-        }}
-      >
-        {data && (
-          <details className="package-runtime">
-            <summary>
-              R {data.r_version} · {data.library_paths.length} library paths
-            </summary>
-            <dl>
-              <dt>R home</dt>
-              <dd>{data.r_home}</dd>
-              <dt>Platform</dt>
-              <dd>{data.platform}</dd>
-            </dl>
-            <p className="muted">Current session library search order</p>
-            <ol>
-              {data.library_paths.map((path, i) => (
-                <li key={`${i}:${path}`}>{path}</li>
-              ))}
-            </ol>
-            <p className="muted">
-              Paths reflect the active R session. Environment management is not
-              inferred from directory names.
-            </p>
-          </details>
-        )}
-        {p.notice && <p className="notice">{p.notice}</p>}
-        {!s.runtime && (
-          <p className="empty">Connect an R session to inspect its packages.</p>
-        )}
-        {data && (
-          <>
-            {data.notices.map((text) => (
-              <p className="notice" key={text}>
-                {text}
-              </p>
+      {busy && (
+        <div className="package-busy">
+          <span className="package-busy-dot" />
+          <strong>R busy</strong>
+          <span>
+            {p.observedAt
+              ? `Showing the ${new Date(p.observedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} observation`
+              : "Package observation will resume when idle."}
+          </span>
+        </div>
+      )}
+      {unavailable && data && (
+        <div className="package-notice">
+          R unavailable · Showing the last observation
+        </div>
+      )}
+      {p.notice && (
+        <div className="package-notice" role="alert">
+          {p.notice}
+        </div>
+      )}
+      {data && !data.scan_complete && (
+        <div className="package-notice package-warning">
+          <strong>Incomplete library observation</strong>
+          <details>
+            <summary>Review library status</summary>
+            {data.notices.map((notice) => (
+              <p key={notice}>{notice}</p>
             ))}
-            {!data.packages.length && (
-              <p className="package-count muted">
-                No matches in the observed metadata
-              </p>
-            )}
-            {!data.scan_complete && <p className="notice">Incomplete scan</p>}
-            <div className="package-list" aria-label="Package list">
-              {data.packages.map((row) => {
-                const id = `${row.library_path}:${row.name}`;
-                const loadedCopy =
-                  p.mode !== "installed" ||
-                  (row.loaded_from_library &&
-                    row.loaded_version === row.version);
-                return (
-                  <div className="package-item" key={id}>
+            <button
+              className="text-button"
+              onClick={(event) => openLibraries(event.currentTarget)}
+            >
+              View library paths
+            </button>
+          </details>
+        </div>
+      )}
+      {data && !p.completeIndex && (
+        <div className="package-index-status">
+          {p.loading ? "Reading package index" : "Searching cached packages"} ·{" "}
+          {p.groups.size} of {data.counts.all}
+          {busy ? " · Results cover cached rows only" : ""}
+        </div>
+      )}
+      <div className="package-workspace">
+        <div className="package-directory">
+          {wide && (
+            <div className="package-columns" aria-hidden="true">
+              <span>Package / purpose</span>
+              <span>Version</span>
+              <span>Source</span>
+              <span>Session</span>
+              <span>Copies</span>
+              <span />
+            </div>
+          )}
+          <div
+            className="package-scroll"
+            ref={body}
+            onScroll={(event) => {
+              p.scrollTop = event.currentTarget.scrollTop;
+            }}
+          >
+            {!s.runtime ? (
+              <div className="package-empty">
+                <h3>No R session</h3>
+                <p>Connect an R session to inspect its packages.</p>
+                <button onClick={() => s.openSettings?.()}>Configure R</button>
+              </div>
+            ) : !data ? (
+              <div className="package-empty">
+                <h3>
+                  {p.loading
+                    ? "Reading package metadata…"
+                    : "Packages not observed"}
+                </h3>
+                <p>
+                  The current session's library paths and loaded namespaces will
+                  appear here.
+                </p>
+              </div>
+            ) : !filtered.length ? (
+              <div className="package-empty">
+                <h3>
+                  {p.filter
+                    ? `No matches for “${p.filter}”`
+                    : p.mode === "multiple"
+                      ? "No multiple installations observed"
+                      : "No packages match this view"}
+                </h3>
+                <p>
+                  {!p.completeIndex
+                    ? `Only ${p.groups.size} of ${data.counts.all} package rows are cached.`
+                    : !data.scan_complete
+                      ? "Some libraries could not be read. A package may exist outside this observation."
+                      : p.mode === "installed"
+                        ? `Not found in the ${data.library_paths.length} library paths visible to this R session. Other R environments were not checked.`
+                        : `No matching ${p.mode === "loaded" ? "loaded namespaces" : p.mode === "attached" ? "attached packages" : "multiple installations"} in this observation.`}
+                </p>
+                {p.mode !== "installed" && (
+                  <button
+                    className="text-button"
+                    onClick={() => select("installed")}
+                  >
+                    Search all packages
+                  </button>
+                )}
+                <button
+                  className="text-button"
+                  onClick={(event) => openLibraries(event.currentTarget)}
+                >
+                  View library paths ›
+                </button>
+              </div>
+            ) : (
+              <div
+                className="package-list"
+                role="list"
+                aria-label="Package list"
+              >
+                {groups.map((group, index) => (
+                  <div
+                    className="package-item"
+                    role="listitem"
+                    key={group.name}
+                  >
                     <button
-                      className="package-row"
-                      aria-expanded={expanded === id}
-                      onClick={() => setExpanded(expanded === id ? null : id)}
+                      ref={(element) => {
+                        if (element) rows.current.set(group.name, element);
+                        else rows.current.delete(group.name);
+                      }}
+                      className={`package-row ${p.selected === group.name ? "selected" : ""}`}
+                      aria-label={`${group.name}, ${group.version}, ${packageState(group)}, ${group.copy_count} installed ${group.copy_count === 1 ? "copy" : "copies"}`}
+                      aria-expanded={p.selected === group.name}
+                      onClick={() => p.pick(group.name, !wide)}
+                      onKeyDown={(event) => {
+                        if (
+                          ["ArrowDown", "ArrowUp", "Home", "End"].includes(
+                            event.key,
+                          )
+                        ) {
+                          event.preventDefault();
+                          const next =
+                            event.key === "Home"
+                              ? 0
+                              : event.key === "End"
+                                ? groups.length - 1
+                                : Math.max(
+                                    0,
+                                    Math.min(
+                                      groups.length - 1,
+                                      index +
+                                        (event.key === "ArrowDown" ? 1 : -1),
+                                    ),
+                                  );
+                          rows.current.get(groups[next].name)?.focus();
+                        }
+                        if (event.key === "ArrowRight") {
+                          event.preventDefault();
+                          p.pick(group.name);
+                        }
+                        if (
+                          event.key === "ArrowLeft" &&
+                          p.selected === group.name
+                        ) {
+                          event.preventDefault();
+                          p.pick(group.name, true);
+                        }
+                      }}
                     >
-                      <span className="package-name">
-                        <span aria-hidden="true">
-                          {expanded === id ? "▾" : "▸"}
-                        </span>{" "}
-                        {row.name}
-                      </span>
-                      <span className="package-version">{row.version}</span>
-                      <span className="package-state">
-                        {loadedCopy
-                          ? row.attached
-                            ? "Attached"
-                            : "Loaded"
-                          : row.loaded_from_library
-                            ? `Loaded ${row.loaded_version ?? "version unknown"}`
-                            : p.mode === "installed" &&
-                                !row.first_in_library_path
-                              ? "Later copy"
-                              : "Installed"}
+                      <span
+                        className={`package-dot ${group.attached ? "attached" : group.loaded_version ? "loaded" : ""}`}
+                        aria-hidden="true"
+                      />
+                      <span className="package-description">
+                        <span className="package-name-line">
+                          <strong>{group.name}</strong>
+                          {group.copy_count > 1 && (
+                            <span className="package-inline-copies">
+                              {group.copy_count} copies
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className="package-row-purpose"
+                          title={group.title ?? "Purpose not recorded"}
+                        >
+                          {group.title ?? "Purpose not recorded"}
+                        </span>
                       </span>
                       <span
-                        className="package-library"
-                        title={row.library_path ?? "Unknown"}
+                        className="package-version"
+                        title={
+                          group.loaded_version
+                            ? "Loaded version"
+                            : "Version first in library order"
+                        }
                       >
-                        {row.library_index === null
-                          ? "Outside paths"
-                          : `Library ${row.library_index}`}{" "}
-                        · {row.library_path ?? "Unknown path"}
+                        {group.version}
+                      </span>
+                      <span
+                        className="package-row-source"
+                        title={
+                          group.source_count > 1
+                            ? "Sources differ across observed copies"
+                            : "Source from the identified loaded copy, otherwise the first installed copy"
+                        }
+                      >
+                        {group.source_kind}
+                        {group.source_count > 1
+                          ? ` +${group.source_count - 1}`
+                          : ""}
+                      </span>
+                      <span
+                        className={`package-session-label ${group.attached ? "attached" : group.loaded_version ? "loaded" : ""}`}
+                      >
+                        {group.attached
+                          ? "Attached"
+                          : group.loaded_version
+                            ? "Loaded"
+                            : "—"}
+                      </span>
+                      <span className="package-row-copies">
+                        {group.copy_count > 1
+                          ? `${group.copy_count} copies`
+                          : group.copy_count || "Outside paths"}
+                      </span>
+                      <span className="package-row-arrow" aria-hidden="true">
+                        ›
                       </span>
                     </button>
-                    {expanded === id && details(row)}
+                    {!wide && p.selected === group.name && (
+                      <PackageInspector group={group} inline />
+                    )}
                   </div>
-                );
-              })}
-            </div>
-            {(data.offset > 0 || data.next_offset !== null) && (
-              <div className="package-pagination">
+                ))}
+              </div>
+            )}
+            {filtered.length > 100 && (
+              <nav className="package-pagination" aria-label="Package pages">
+                <span>
+                  {p.offset + 1}–{Math.min(p.offset + 100, filtered.length)} of{" "}
+                  {filtered.length} matches
+                </span>
                 <button
-                  disabled={p.loading || busy || !data.offset}
-                  onClick={() => select(p.mode, Math.max(0, data.offset - 100))}
+                  disabled={p.offset === 0}
+                  onClick={() => p.select(p.filter, p.mode, p.offset - 100)}
                 >
                   Previous
                 </button>
                 <button
-                  disabled={p.loading || busy || data.next_offset === null}
-                  onClick={() => select(p.mode, data.next_offset!)}
+                  disabled={p.offset + 100 >= filtered.length}
+                  onClick={() => p.select(p.filter, p.mode, p.offset + 100)}
                 >
                   Next
                 </button>
+              </nav>
+            )}
+          </div>
+        </div>
+        {wide && (
+          <aside className="package-inspector-scroll">
+            {selected ? (
+              <PackageInspector group={selected} />
+            ) : (
+              <div className="package-empty package-inspector-empty">
+                <h3>Inspect a package</h3>
+                <p>
+                  Select a row to compare installed copies, the loaded version
+                  and recorded source.
+                </p>
               </div>
             )}
-          </>
+          </aside>
         )}
       </div>
-      <div className="package-footer muted" role="status">
+      <footer className="package-footer" role="status">
+        {wide ? (
+          <span>
+            {data
+              ? `${count(data.counts.all)} packages · ${count(data.counts.installations)} installations`
+              : "No package observation"}
+          </span>
+        ) : (
+          <button
+            className="package-runtime-button"
+            disabled={!data}
+            onClick={(event) => openLibraries(event.currentTarget)}
+          >
+            R {data?.r_version ?? "—"} · {data?.library_paths.length ?? 0}{" "}
+            libraries <span aria-hidden="true">⌄</span>
+          </button>
+        )}
         <span
           title={
             p.observedAt ? new Date(p.observedAt).toLocaleString() : undefined
           }
         >
           {p.observedAt
-            ? `Last observed ${new Date(p.observedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-            : "No package observation yet"}
-          {busy ? " · R busy" : p.loading ? " · Reading…" : ""}
+            ? `Observed ${new Date(p.observedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+            : "Not observed"}
+          {wide ? (busy ? " · R busy" : " · R idle") : ""}
         </span>
-        {data && (
-          <span
-            title={`Showing ${data.packages.length} of ${data.total_matches} matches${data.scan_complete ? "" : " in an incomplete scan"}`}
-          >
-            {data.packages.length
-              ? `${data.offset + 1}–${data.offset + data.packages.length}`
-              : "0"}{" "}
-            / {data.total_matches}
-            {!data.scan_complete ? "+" : ""}
-          </span>
-        )}
-      </div>
+      </footer>
+      {librariesOpen && data && (
+        <Modal
+          title="R & libraries"
+          description="The active session's R installation and library search order."
+          onClose={() => {
+            setLibrariesOpen(false);
+            requestAnimationFrame(() => returnFocus.current?.focus());
+          }}
+        >
+          <div className="package-library-details">
+            <div className="package-detail-line">
+              <h3>R {data.r_version}</h3>
+              <span className="muted">{data.platform}</span>
+            </div>
+            <dl className="package-facts">
+              <dt>R home</dt>
+              <dd>{data.r_home}</dd>
+            </dl>
+            <h4>Library search order</h4>
+            {data.libraries.map((lib) => (
+              <div className="package-library-info" key={lib.index}>
+                <span className="package-library-index">{lib.index}</span>
+                <div>
+                  <p>{lib.path}</p>
+                  {lib.status !== "readable" && (
+                    <p className="package-warning">
+                      {lib.notice ?? lib.status}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+            <p className="muted">
+              Read from the active R session at{" "}
+              {new Date(p.observedAt!).toLocaleTimeString()}.
+              {busy
+                ? " R is now busy; these paths are the last observation."
+                : ""}
+            </p>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

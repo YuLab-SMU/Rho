@@ -5,25 +5,20 @@ results establish behavior; Git retains the implementation history.
 
 ## Current focus
 
-**Review the Packages visual redesign in Paper before further frontend changes.**
-The user rejected the current package panel's appearance and information density:
-repeated full paths dominate the list, while purpose, version and session state
-are difficult to scan together. Functional checks of the read-only capability
-remain valid; they do not establish visual or usability acceptance.
+**The Paper-approved Packages redesign is implemented, verified and running in
+the review Workbench.** The user approved implementation of all four
+[Paper artboards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0),
+including the Source addition. The package list now shows purpose and aligned
+versions, groups copies by name, and switches between inline inspection and a
+360 px adjacent inspector. All/Loaded/Attached/Multiple copies filters and counts
+share a bounded native observation. Source details select each installed copy and
+show recorded provenance separately from repository delivery and project links.
 
-Four editable artboards are in [Paper: Packages design review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0):
-a wide list with an adjacent inspector; 360 px inline inspection and a 320 × 280 px
-compact view; multiple-copy, missing-result, library and busy states; and per-copy
-Source metadata. The user responded positively to the first three and requested
-the Source addition. They use
-purpose descriptions in rows, aligned versions, grouped package names and explicit
-copy counts, with full paths in details. The Source draft distinguishes recorded
-origin, delivery repository/provider and revision evidence, including Not recorded.
-The local ggplot2 example has GitHub metadata for 4.0.3.9000 and CRAN metadata for
-3.5.2; the Posit delivery example is illustrative, not an observed installation.
-Grouping/global counts, source presentation and the revised
-interaction are proposed, not implemented or approved. The current frontend was
-left unchanged during this design review.
+No package manager or installation flow was added. Unknown provenance stays
+unrecorded; the local ggplot2 case distinguishes GitHub 4.0.3.9000 from CRAN 3.5.2.
+Repository/provider/snapshot fields rely on recorded installed metadata. External
+conda databases, arbitrary private servers and renv lockfiles are not used as
+unverified substitutes for the installed copy's identity.
 
 Installation and environment-management decisions remain reserved for a future
 separate plugin. See [Design section 11](RHO-DESIGN.md#11-read-only-package-inspection)
@@ -45,7 +40,7 @@ The frozen baseline remains commit `d5a970b1559c9bd85567073108d05bca21886de4`, t
 | Execution | Workspace-owned FIFO queue, at most 32 pending runs, optional acceptance reply, guarded pending cancellation, pause/resume and final-commit fencing |
 | Input | Jupyter stdin control bound to session/operation/native request; separate answer field, transient password handling, timeout suspension and single-answer validation |
 | Objects | Multiple inline previews, explicit new viewer, bounded standard data frame/tibble/vector values and special-value metadata; no forced active/lazy bindings or user methods |
-| Packages | Read-only current-session metadata; installed/loaded/attached modes, search and bounded pages, duplicate versions/library precedence, physical-path matching for linked copies, stale/session guards |
+| Packages | Paper layout, grouped names/purposes/versions, global observed counts and cached search; inline/wide inspection, per-copy Source and recorded metadata, consistent observation/session guards |
 | Plots | Fit/100%/1–800% manual zoom, anchored zoom and bounded pan, per-output transforms, follow/history, pinned comparison, original export and shared byte-budgeted cache |
 | Historical output | Independent stored-media queries, including a project-only Host without live R |
 | Recovery | Current drafts/layout/view state in SQLite with optimistic concurrency; accepted requests are observed rather than replayed; native session identities isolate observations |
@@ -59,25 +54,32 @@ so one Host cannot retain another project's ownership lock.
 
 ## Evidence and limits
 
-Package inspection checks cover temporary double-library DESCRIPTION fixtures,
-Unicode and literal HTML-like text, pagination, incomplete metadata, changed
-`.libPaths()`, base and linked package paths, and disk/loaded-version disagreement.
-The query preserves loaded namespaces and the search path, produces no Operation,
-returns immediately when R is busy and rejects stale session identities. Browser
-checks cover the visible view, busy observations, refresh and close/reopen state.
-Verification passed Rust formatting, workspace Clippy and workspace tests;
-contract generation, client build and embedded-asset checks; 43 frontend tests;
-23 isolated Chrome scenarios; the five explicitly enabled real Ark/R tests and
-native package metadata fixture; and MCP/HTTP Workbench checks both with and
-without real R. Architecture and documentation governance checks also passed.
-The final command logs are in `target/package-checks/`; package screenshots are
-`target/studio-browser/packages-panel.png` and `packages-runtime.png`.
-The Chrome suite now waits for Console readiness before the Enter/history test;
-its first full run exposed a startup timing assumption in that existing test.
+Package checks cover grouping/counts, pinned pagination/detail identity, observation
+expiry, current versus first-library copies, linked/outside-path namespaces,
+GitHub/CRAN/R-universe metadata, repository provider/snapshot records, unknown source,
+credential removal, safe links and unchanged R namespaces/search path. The new
+Chrome scenario exercises grouped copies, Source switching, full commit evidence,
+busy cached search, library dialog focus, 1280 px compact and 1440 px wide layouts,
+and close/reopen continuity. Verification passed Rust formatting, workspace Clippy
+and workspace tests; contract generation, client build and asset checks; 48 frontend
+tests; all 23 isolated Chrome scenarios; five real Ark/R tests and the package
+fixture; and MCP/Workbench checks both with and without real R. Architecture and
+documentation governance checks passed. Logs are in `target/packages-paper-checks/`;
+compact and wide screenshots are in `target/studio-browser/packages-paper-compact.png`
+and `packages-paper-wide.png`.
 
-Current binaries/assets are built. An already running older Host requires an
-explicit restart to acquire the new query; the user's active R session was not
-restarted as part of this change.
+The existing review Host was idle with zero user bindings and no queued work or
+stdin request before replacing it with the current binary. Native Chrome now shows
+the new Packages view with 602 package names / 736 installations. The real ggplot2
+Source inspector shows tidyverse/ggplot2, ref HEAD and commit 6870419aa6e1 for the
+GitHub copy, alongside the separately recorded CRAN copy. Synchronized documents,
+layout and historical output remain in the same application store.
+
+Sources were read from local installed metadata for inspection, and test-only
+DESCRIPTION fixtures were written to temporary directories. Package viewing does
+not install or load those fixtures. The implementation uses generated Rust contracts
+and current embedded assets; older running Hosts need the newly built binary for
+the observation protocol.
 
 Calm Precision's broader acceptance included Rust workspace checks, frontend and
 Chrome scenarios, native R, MCP/HTTP, environment isolation, process recovery and

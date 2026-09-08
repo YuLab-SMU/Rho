@@ -256,6 +256,7 @@ export function AppShell() {
     [commandFilter, setCommandFilter] = useState("");
   const commands = useRef(new Commands()).current;
   s.openFile = () => setDialog("open-file");
+  s.openSettings = () => setDialog("settings");
   s.openPanels = () => setDialog("commands");
   const active = () => s.documents.current;
   const dispatchDocument = (action: string) => {

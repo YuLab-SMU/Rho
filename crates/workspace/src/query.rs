@@ -127,8 +127,23 @@ impl WorkspaceQueryHandler {
                     || args.offset > 10000
                     || args.filter.chars().count() > 128
                     || args.filter.contains('\0')
+                    || args.observation_id.as_ref().is_some_and(|id| {
+                        id.len() > 64
+                            || id.is_empty()
+                            || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                    })
+                    || args.package_name.as_ref().is_some_and(|name| {
+                        name.is_empty()
+                            || name.len() > 128
+                            || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.')
+                    })
                 {
                     return Err(OperationError::InvalidInput("Packages requires limit 1..=200, offset <= 10000 and a filter of at most 128 characters".into()));
+                }
+                if args.observation_id.is_some() && args.expected_session.is_none() {
+                    return Err(OperationError::InvalidInput(
+                        "Cached package reads require expected_session".into(),
+                    ));
                 }
                 Ok(WorkspaceQuery::Packages(args))
             }

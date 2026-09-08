@@ -307,11 +307,18 @@ for the actual tested scope and [Development](DEVELOPMENT.md) for local fixtures
 
 Open **Panels → Packages** in a current Workbench build. The view joins Objects
 when that group exists; it can be moved, closed and reopened normally.
-Use the view selector for installed metadata, loaded namespaces or attached
-packages, and search by name (or installed title). Expand a package to inspect its
-library, lookup order and loaded version/path. Expand the R summary for R home,
-platform and the session's ordered library paths. **Refresh** rereads the current
-session when idle; busy observations retain their last-observed time.
+The list groups installed copies by package name and shows purpose and version.
+Use All, Loaded, Attached or Multiple copies; search names/purposes and page results.
+Select a row for inline details in a narrow panel, or the adjacent inspector in a
+wide panel. Source details can select each installed copy and show recorded
+repository, ref/commit, provider/URL and evidence. Unrecorded source remains explicit.
+The R/library button shows the active R installation and ordered library paths.
+
+**Refresh** captures a new observation while idle. Index pages and copy details
+continue the same captured observation; during R execution the cached index remains
+searchable and is labeled with its scope and original time. A source observation
+can expire after other refreshes; use Refresh instead of combining different views
+of native state. Viewing never starts R.
 
 The view has no installation, update, removal, loading or library-configuration
 controls. It reports bounded observations and does not infer an environment
