@@ -18,6 +18,8 @@ impl RecentOperationsHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Query,
                 capability: CapabilityRef::new("operation.list_recent", 1).unwrap(),
+                documentation: rho_contract::builtin_documentation("operation.list_recent"),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "operation".into(),
                 input_schema: schema_for!(RecentOperationsArguments).to_value(),
                 output_schema: schema_for!(RecentOperations).to_value(),
@@ -55,6 +57,8 @@ impl QueryHandler for RecentOperationsHandler {
             .list_recent(&self.project, context.principal(), &args)
             .await?;
         Ok(QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: TargetRef {
                 kind: "project".into(),
                 identity: self.project.clone(),

@@ -51,6 +51,8 @@ impl RemoteRunHandler {
             runtime,
             descriptor: CapabilityDescriptor {
                 capability: CapabilityRef::new("process.run_remote", 1).unwrap(),
+                documentation: rho_contract::builtin_documentation("process.run_remote"),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 kind: CapabilityKind::Operation,
                 domain: "execution".into(),
                 input_schema: schema_for!(RunLocalArguments).to_value(),

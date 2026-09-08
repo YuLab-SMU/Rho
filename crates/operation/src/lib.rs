@@ -5,6 +5,7 @@ pub use recent::{RecentOperationsHandler, validate_recent_arguments};
 mod checkpoint;
 pub use checkpoint::OperationEventsCheckpointHandler;
 mod query;
+mod schema;
 pub use query::{QueryGateway, QueryHandler};
 
 use std::collections::BTreeMap;
@@ -64,6 +65,40 @@ pub enum OperationError {
         "another Rho Next host already owns project {0}; connect to that Host instead of starting another database/runtime"
     )]
     ProjectBusy(String),
+    #[error("native session is stale: {0}")]
+    StaleSession(String),
+    #[error("observation has expired: {0}")]
+    ObservationExpired(String),
+    #[error("observed content changed: {0}")]
+    ContentChanged(String),
+    #[error("observation budget exhausted: {0}")]
+    BudgetExceeded(String),
+    #[error("capability is unavailable: {0}")]
+    Unavailable(String),
+}
+
+impl OperationError {
+    pub fn diagnostic(&self) -> rho_contract::Diagnostic {
+        use rho_contract::{DiagnosticCode as Code, DiagnosticContinuation as Continue, NextRead};
+        let (code, continuation) = match self {
+            Self::HostBusy | Self::ProjectBusy(_) => (Code::Busy, Continue::ReadAgain),
+            Self::StaleSession(_) => (Code::StaleSession, Continue::RefreshObservation),
+            Self::ObservationExpired(_) => (Code::ObservationExpired, Continue::RefreshObservation),
+            Self::ContentChanged(_) => (Code::ContentChanged, Continue::RefreshObservation),
+            Self::BudgetExceeded(_) => (Code::BudgetExceeded, Continue::CorrectInput),
+            Self::Unavailable(_) | Self::UnknownCapability(_) | Self::TargetResolution(_) => (Code::Unavailable, Continue::None),
+            Self::AccessDenied {..} => (Code::AccessDenied, Continue::None),
+            Self::IdempotencyConflict => (Code::IdempotencyConflict, Continue::InspectOriginal),
+            Self::NotFound(_) => (Code::NotFound, Continue::CorrectInput),
+            Self::InvalidInput(_) | Self::CancellationUnsupported(_) => (Code::InvalidInput, Continue::CorrectInput),
+            Self::Contract(_) | Self::DuplicateCapability(_) => (Code::ContractViolation, Continue::None),
+            Self::CommitPending {..} | Self::Storage(_) | Self::LifecycleConflict(_) => (Code::OutcomeUncertain, Continue::InspectOriginal),
+        };
+        let next_reads = if let Self::CommitPending {operation_id,..} = self {
+            vec![NextRead::query("operation.list_recent", "Inspect the original operation; do not replay uncertain effects", json!({"operation_id":operation_id,"limit":1}))]
+        } else {vec![]};
+        rho_contract::Diagnostic {code, message:self.to_string(), continuation, next_reads}
+    }
 }
 
 impl From<ContractError> for OperationError {
@@ -391,6 +426,7 @@ impl OperationIdGenerator for UuidOperationIdGenerator {
 pub struct CapabilityRegistry {
     handlers: BTreeMap<CapabilityRef, Arc<dyn OperationHandler>>,
     queries: BTreeMap<CapabilityRef, Arc<dyn QueryHandler>>,
+    schemas: BTreeMap<CapabilityRef, schema::CapabilitySchemas>,
 }
 
 impl CapabilityRegistry {
@@ -411,6 +447,8 @@ impl CapabilityRegistry {
                 capability.display_key(),
             ));
         }
+        let schemas = schema::CapabilitySchemas::new(handler.descriptor())?;
+        self.schemas.insert(capability.clone(), schemas);
         self.handlers.insert(capability, handler);
         Ok(())
     }
@@ -429,6 +467,8 @@ impl CapabilityRegistry {
                 capability.display_key(),
             ));
         }
+        let schemas = schema::CapabilitySchemas::new(handler.descriptor())?;
+        self.schemas.insert(capability.clone(), schemas);
         self.queries.insert(capability, handler);
         Ok(())
     }
@@ -463,6 +503,25 @@ impl CapabilityRegistry {
                     .map(|handler| handler.descriptor().clone()),
             )
             .collect()
+    }
+
+    pub fn validate_links(&self) -> Result<(), OperationError> {
+        let descriptors: BTreeMap<_, _> = self.descriptors().into_iter().map(|d|(d.capability.clone(),d)).collect();
+        for descriptor in descriptors.values() {
+            for related in &descriptor.documentation.related_capabilities {
+                if !descriptors.contains_key(related) { return Err(OperationError::Contract(format!("{} links to unregistered {}", descriptor.capability.display_key(), related.display_key()))); }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn validate_query_result(&self, capability: &CapabilityRef, snapshot: &rho_contract::QuerySnapshot) -> Result<(), OperationError> {
+        let schemas = self.schemas.get(capability).ok_or_else(||OperationError::UnknownCapability(capability.display_key()))?;
+        if let Some(data) = &snapshot.data { schemas.output(data)?; }
+        let descriptors = self.descriptors().into_iter().map(|d|(d.capability.clone(),d)).collect();
+        schema::validate_reads(&snapshot.next_reads, &descriptors)?;
+        for diagnostic in &snapshot.diagnostics { schema::validate_reads(&diagnostic.next_reads, &descriptors)?; }
+        Ok(())
     }
 }
 
@@ -871,6 +930,8 @@ mod tests {
         let descriptor = CapabilityDescriptor {
             kind: CapabilityKind::Operation,
             capability: CapabilityRef::new("test.noop", 1).unwrap(),
+            documentation: rho_contract::builtin_documentation("host.overview"),
+            recovery_schema: serde_json::json!({"type":"null"}),
             domain: "test".to_string(),
             input_schema: json!({}),
             output_schema: json!({}),

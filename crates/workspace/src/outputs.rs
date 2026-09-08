@@ -68,6 +68,8 @@ impl WorkspaceOutputHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Query,
                 capability: CapabilityRef::new(id, 1).unwrap(),
+                documentation: rho_contract::builtin_documentation(id),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "workspace".into(),
                 input_schema: schema,
                 output_schema: schema_for!(QuerySnapshot).to_value(),
@@ -198,6 +200,8 @@ impl QueryHandler for WorkspaceOutputHandler {
             Err(error) => (QueryStatus::Unavailable, None, vec![error]),
         };
         Ok(QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: TargetRef {
                 kind: if self.owner.is_some() {
                     "workspace"

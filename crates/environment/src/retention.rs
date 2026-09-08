@@ -255,6 +255,8 @@ impl RetentionQuery {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Query,
                 capability: CapabilityRef::new(id, 1).unwrap(),
+                documentation: rho_contract::builtin_documentation(id),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "environment".into(),
                 input_schema: if trash {
                     schema_for!(TrashArguments).to_value()
@@ -291,6 +293,8 @@ impl QueryHandler for RetentionQuery {
     }
     async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
         let mut reply = QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: self.owner.target(),
             source: "environment/materials".into(),
             observed_at_ms: SystemClock.now_ms()?,
@@ -354,6 +358,8 @@ impl RetentionHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Operation,
                 capability: CapabilityRef::new(id, 1).unwrap(),
+                documentation: rho_contract::builtin_documentation(id),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "environment".into(),
                 input_schema: if matches!(action, MaterialAction::Quarantine) {
                     schema_for!(CleanupArguments).to_value()

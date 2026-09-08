@@ -121,6 +121,8 @@ impl ReconcileProcessHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Operation,
                 capability: CapabilityRef::new("process.reconcile", 1).unwrap(),
+                documentation: rho_contract::builtin_documentation("process.reconcile"),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "execution".into(),
                 input_schema: schema_for!(ReconcileProcessArguments).to_value(),
                 output_schema: schema_for!(ProcessReconciliation).to_value(),
@@ -226,6 +228,8 @@ impl RunLocalHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Operation,
                 capability: CapabilityRef::new("process.run_local", 1).unwrap(),
+                documentation: rho_contract::builtin_documentation("process.run_local"),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "execution".into(),
                 input_schema: schema_for!(RunLocalArguments).to_value(),
                 output_schema: schema_for!(ProcessReport).to_value(),

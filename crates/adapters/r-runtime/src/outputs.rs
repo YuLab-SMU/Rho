@@ -9,9 +9,11 @@ use rho_contract::{
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeMap,
     fs::{File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 const MAX_LOG: usize = 1024 * 1024;
@@ -20,6 +22,30 @@ const MAX_RUN_MEDIA: usize = 32 * 1024 * 1024;
 
 pub struct OutputStore {
     root: PathBuf,
+    verified: Mutex<VerifiedCache>,
+}
+
+const VERIFIED_CACHE_BYTES: usize = 64 * 1024 * 1024;
+#[derive(Default)]
+struct VerifiedCache { entries: BTreeMap<String, VerifiedEntry>, bytes: usize, tick: u64 }
+struct VerifiedEntry { identity: FileIdentity, bytes: Arc<[u8]>, used: u64 }
+#[derive(PartialEq, Eq)]
+struct FileIdentity {
+    size: u64,
+    modified: Option<std::time::SystemTime>,
+    created: Option<std::time::SystemTime>,
+    #[cfg(unix)] device: u64,
+    #[cfg(unix)] inode: u64,
+    #[cfg(unix)] changed: (i64, i64),
+}
+fn identity(metadata: &std::fs::Metadata) -> FileIdentity {
+    #[cfg(unix)] use std::os::unix::fs::MetadataExt;
+    FileIdentity {
+        size: metadata.len(), modified: metadata.modified().ok(), created: metadata.created().ok(),
+        #[cfg(unix)] device: metadata.dev(),
+        #[cfg(unix)] inode: metadata.ino(),
+        #[cfg(unix)] changed: (metadata.ctime(), metadata.ctime_nsec()),
+    }
 }
 pub struct OutputWriter {
     directory: PathBuf,
@@ -39,6 +65,7 @@ impl OutputStore {
         std::fs::create_dir_all(&root).map_err(err)?;
         Ok(Self {
             root: root.canonicalize().map_err(err)?,
+            verified: Mutex::new(VerifiedCache::default()),
         })
     }
     fn directory(&self, id: &OperationId) -> PathBuf {
@@ -135,30 +162,53 @@ impl OutputStore {
             },
         })
     }
-    pub fn read(&self, args: &ReadOutputArguments) -> Result<OutputPage, String> {
-        let (events, _) = self.log(&args.reference.operation_id)?;
+    /// Verify original identity once, then share immutable bytes across pages and
+    /// presentation adapters. A storage mutation invalidates the cached identity.
+    /// The lock coalesces concurrent validation of the same original.
+    pub fn verified_original(&self, reference: &MediaReference) -> Result<Arc<[u8]>, String> {
+        let path = self.checked(&self.directory(&reference.operation_id), &format!("{}.bin", reference.sequence))?;
+        let current = identity(&std::fs::metadata(&path).map_err(err)?);
+        let key = serde_json::to_string(reference).map_err(err)?;
+        let mut cache = self.verified.lock().map_err(err)?;
+        cache.tick += 1;
+        let tick = cache.tick;
+        if let Some(entry) = cache.entries.get_mut(&key) {
+            if entry.identity == current { entry.used = tick; return Ok(entry.bytes.clone()); }
+        }
+        if let Some(entry) = cache.entries.remove(&key) { cache.bytes -= entry.bytes.len(); }
+        let (events, _) = self.log(&reference.operation_id)?;
         if !events
             .iter()
-            .any(|e| e.media.as_ref() == Some(&args.reference))
+            .any(|e| e.media.as_ref() == Some(reference))
         {
             return Err("media reference does not match the original observation".into());
         }
-        let path = self.checked(
-            &self.directory(&args.reference.operation_id),
-            &format!("{}.bin", args.reference.sequence),
-        )?;
         let mut bytes = Vec::new();
-        File::open(path)
-            .map_err(err)?
+        let file = File::open(&path).map_err(err)?;
+        if identity(&file.metadata().map_err(err)?) != current { return Err("output storage changed while opening the original".into()); }
+        file
             .take((MAX_MEDIA + 1) as u64)
             .read_to_end(&mut bytes)
             .map_err(err)?;
         if bytes.len() > MAX_MEDIA
-            || bytes.len() as u64 != args.reference.byte_size
-            || digest(&bytes) != args.reference.sha256
+            || bytes.len() as u64 != reference.byte_size
+            || digest(&bytes) != reference.sha256
+            || identity(&std::fs::metadata(&path).map_err(err)?) != current
         {
             return Err("original media bytes no longer match the output reference".into());
         }
+        while cache.bytes + bytes.len() > VERIFIED_CACHE_BYTES || cache.entries.len() >= 32 {
+            let Some(oldest) = cache.entries.iter().min_by_key(|(_,entry)|entry.used).map(|(key,_)|key.clone()) else {break};
+            if let Some(entry) = cache.entries.remove(&oldest) {cache.bytes -= entry.bytes.len();}
+        }
+        let bytes: Arc<[u8]> = bytes.into();
+        cache.bytes += bytes.len();
+        cache.entries.insert(key, VerifiedEntry{identity:current,bytes:bytes.clone(),used:tick});
+        Ok(bytes)
+    }
+    pub fn read(&self, args: &ReadOutputArguments) -> Result<OutputPage, String> {
+        if !(1..=65536).contains(&args.limit_bytes) { return Err("output page limit must be 1..=65536 bytes".into()); }
+        let bytes = self.verified_original(&args.reference)?;
         let start = usize::try_from(args.offset).map_err(err)?;
         if start > bytes.len() {
             return Err("output offset exceeds original byte size".into());
@@ -170,6 +220,35 @@ impl OutputStore {
             bytes: bytes[start..end].to_vec(),
             has_more: end < bytes.len(),
         })
+    }
+
+    /// Append a rendered help document exactly once after its observation writer
+    /// has finished. It is a text artifact and cannot become a plot.
+    pub fn append_text(&self, id: &OperationId, text: &str) -> Result<MediaReference, String> {
+        if text.len() > MAX_MEDIA { return Err("help text exceeds the 16 MiB artifact bound".into()); }
+        let (events, gap) = self.log(id)?;
+        if gap { return Err("cannot append help to an incomplete output log".into()); }
+        let sha256 = digest(text.as_bytes());
+        if let Some(reference) = events.iter().filter(|event|event.kind == "text_artifact").find_map(|event|event.media.as_ref()) {
+            if reference.sha256 == sha256 && reference.byte_size == text.len() as u64 { return Ok(reference.clone()); }
+            return Err("help artifact already exists with different content".into());
+        }
+        let directory = self.directory(id);
+        let log = self.checked(&directory,"events.jsonl")?;
+        let log_size = std::fs::metadata(&log).map_err(err)?.len();
+        let media_bytes: u64 = events.iter().filter_map(|event|event.media.as_ref()).map(|reference|reference.byte_size).sum();
+        if log_size as usize >= MAX_LOG || events.len() >= 4095 || media_bytes + text.len() as u64 > MAX_RUN_MEDIA as u64 {
+            return Err("output budget cannot retain complete help text".into());
+        }
+        let sequence = events.last().map_or(1,|event|event.sequence+1);
+        let reference = MediaReference {operation_id:id.clone(),sequence,mime_type:"text/plain".into(),byte_size:text.len() as u64,sha256,display_id:None};
+        let mut file = OpenOptions::new().write(true).create_new(true).open(directory.join(format!("{sequence}.bin"))).map_err(err)?;
+        file.write_all(text.as_bytes()).map_err(err)?;
+        file.sync_all().map_err(err)?;
+        let mut writer = OutputWriter {directory,file:OpenOptions::new().append(true).open(log).map_err(err)?,id:id.clone(),sequence:sequence-1,bytes:log_size as usize,media_bytes:media_bytes as usize,truncated:false};
+        writer.event("text_artifact",None,Some(reference.clone()))?;
+        writer.finish()?;
+        Ok(reference)
     }
 }
 impl OutputWriter {

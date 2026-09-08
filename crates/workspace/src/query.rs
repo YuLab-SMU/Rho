@@ -102,6 +102,8 @@ impl WorkspaceQueryHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Query,
                 capability: CapabilityRef::new(id, 1).unwrap(),
+                documentation: rho_contract::builtin_documentation(id),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "workspace".into(),
                 input_schema,
                 output_schema: schema_for!(QuerySnapshot).to_value(),
@@ -208,6 +210,8 @@ impl QueryHandler for WorkspaceQueryHandler {
             ));
         }
         let mut snapshot = QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target,
             source: "workspace".into(),
             observed_at_ms: SystemClock.now_ms()?,

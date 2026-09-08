@@ -12,6 +12,12 @@ mod observations;
 pub use observations::*;
 mod studio;
 pub use studio::*;
+mod discovery;
+pub use discovery::*;
+mod capability_docs;
+pub use capability_docs::builtin_documentation;
+pub mod text;
+pub use text::*;
 
 use std::collections::BTreeSet;
 
@@ -261,7 +267,7 @@ pub enum EffectHint {
     ProducesArtifact,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 pub enum IdempotencyClass {
@@ -269,7 +275,7 @@ pub enum IdempotencyClass {
     CallerScoped,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 pub enum RetryClass {
@@ -278,7 +284,7 @@ pub enum RetryClass {
     ReconcileFirst,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 pub enum CancellationClass {
@@ -287,7 +293,7 @@ pub enum CancellationClass {
     ExternalReconciliation,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
 pub struct CapabilityDescriptor {
@@ -296,6 +302,8 @@ pub struct CapabilityDescriptor {
     pub domain: String,
     pub input_schema: Value,
     pub output_schema: Value,
+    pub recovery_schema: Value,
+    pub documentation: CapabilityDocumentation,
     #[serde(default)]
     pub required_scopes: BTreeSet<String>,
     #[serde(default)]
@@ -305,17 +313,19 @@ pub struct CapabilityDescriptor {
     pub cancellation: CancellationClass,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 pub enum CapabilityKind {
     Operation,
     Query,
+    Control,
 }
 
 impl CapabilityDescriptor {
     pub fn validate(&self) -> Result<(), ContractError> {
         self.capability.validate()?;
+        self.documentation.validate()?;
         validate_token(&self.domain, "capability.domain")?;
         if self.required_scopes.len() > MAX_SCOPE_COUNT {
             return Err(ContractError::TooManyScopes);

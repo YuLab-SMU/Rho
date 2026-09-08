@@ -133,6 +133,8 @@ fn descriptor(id: &str, kind: CapabilityKind, input: Value, output: Value) -> Ca
     CapabilityDescriptor {
         kind,
         capability: CapabilityRef::new(id, 1).unwrap(),
+        documentation: rho_contract::builtin_documentation(id),
+        recovery_schema: serde_json::json!({"type":"null"}),
         domain: "project".into(),
         input_schema: input,
         output_schema: output,
@@ -204,6 +206,8 @@ impl QueryHandler for ProjectSnapshotHandler {
     async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
         let args = self.parse(value)?;
         let mut reply = QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: self.owner.target(),
             source: "git/filesystem".into(),
             observed_at_ms: SystemClock.now_ms()?,
@@ -272,6 +276,8 @@ impl QueryHandler for ProjectReadHandler {
     async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
         let args = self.parse(value)?;
         let mut reply = QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: self.owner.target(),
             source: "filesystem".into(),
             observed_at_ms: SystemClock.now_ms()?,

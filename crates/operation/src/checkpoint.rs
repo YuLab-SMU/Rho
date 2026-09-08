@@ -19,6 +19,8 @@ impl OperationEventsCheckpointHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Query,
                 capability: CapabilityRef::new("operation.events_checkpoint", 1).unwrap(),
+                documentation: rho_contract::builtin_documentation("operation.events_checkpoint"),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "operation".into(),
                 input_schema: schema_for!(OperationEventsCheckpointArguments).to_value(),
                 output_schema: schema_for!(OperationEventsCheckpoint).to_value(),
@@ -60,6 +62,8 @@ impl QueryHandler for OperationEventsCheckpointHandler {
             .events_checkpoint(&self.project, context.principal())
             .await?;
         Ok(QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: TargetRef {
                 kind: "project".into(),
                 identity: self.project.clone(),

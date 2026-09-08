@@ -48,3 +48,4 @@ rmcp = { version = "1.8", default-features = false, features = ["server", "trans
 futures = "0.3"
 ts-rs = { version = "=12.0.1", features = ["serde-json-impl", "no-serde-warnings"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+jsonschema = { version = "0.52", default-features = false }

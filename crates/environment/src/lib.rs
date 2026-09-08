@@ -294,6 +294,8 @@ impl EnvironmentHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Operation,
                 capability: CapabilityRef::new(id, 1).unwrap(),
+                documentation: rho_contract::builtin_documentation(id),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "environment".into(),
                 input_schema: input,
                 output_schema: output,
@@ -506,6 +508,8 @@ impl EnvironmentObserveHandler {
             descriptor: CapabilityDescriptor {
                 kind: CapabilityKind::Query,
                 capability: CapabilityRef::new("environment.observe", 1).unwrap(),
+                documentation: rho_contract::builtin_documentation("environment.observe"),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 domain: "environment".into(),
                 input_schema: schema_for!(ObserveArguments).to_value(),
                 output_schema: schema_for!(QuerySnapshot).to_value(),
@@ -533,6 +537,8 @@ impl QueryHandler for EnvironmentObserveHandler {
     async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
         let args: ObserveArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
         let mut reply = QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: self.owner.target(),
             source: "R/environment".into(),
             observed_at_ms: SystemClock.now_ms()?,

@@ -55,6 +55,8 @@ impl QueryHandler for ProjectDirectoryHandler {
             Err(error) => (QueryStatus::Unavailable, None, vec![error]),
         };
         Ok(QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: self.owner.target(),
             source: "filesystem".into(),
             observed_at_ms: SystemClock.now_ms()?,
@@ -205,6 +207,8 @@ impl QueryHandler for ProjectSearchHandler {
             ));
         }
         Ok(QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: self.owner.target(),
             source: "filesystem/search".into(),
             observed_at_ms: SystemClock.now_ms()?,

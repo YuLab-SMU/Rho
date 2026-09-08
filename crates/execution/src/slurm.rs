@@ -184,6 +184,8 @@ impl SlurmHandler {
             action,
             descriptor: CapabilityDescriptor {
                 capability: CapabilityRef::new(name, 1).unwrap(),
+                documentation: rho_contract::builtin_documentation(name),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 kind: CapabilityKind::Operation,
                 domain: "execution".into(),
                 input_schema: input,
@@ -321,6 +323,8 @@ impl SlurmQueryHandler {
             owner,
             descriptor: CapabilityDescriptor {
                 capability: CapabilityRef::new("slurm.snapshot", 1).unwrap(),
+                documentation: rho_contract::builtin_documentation("slurm.snapshot"),
+                recovery_schema: serde_json::json!({"type":"null"}),
                 kind: CapabilityKind::Query,
                 domain: "execution".into(),
                 input_schema: schema_for!(SlurmSourceArguments).to_value(),
@@ -350,6 +354,8 @@ impl QueryHandler for SlurmQueryHandler {
             .await
             .map_err(|error| invalid(error.message))?;
         let mut snapshot = QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: self.owner.runtime.target(),
             source: "slurm".into(),
             observed_at_ms: SystemClock.now_ms()?,

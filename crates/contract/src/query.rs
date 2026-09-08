@@ -45,4 +45,8 @@ pub struct QuerySnapshot {
     pub completeness: ObservationCompleteness,
     pub data: Option<Value>,
     pub notices: Vec<String>,
+    #[serde(default)]
+    pub next_reads: Vec<crate::NextRead>,
+    #[serde(default)]
+    pub diagnostics: Vec<crate::Diagnostic>,
 }

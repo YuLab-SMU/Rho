@@ -46,6 +46,8 @@ impl QueryGateway {
                 missing,
             });
         }
+        self.registry.schemas.get(&request.capability).expect("registered schema").input(&request.arguments)?;
+        let capability = request.capability.clone();
         let arguments = handler.normalize_arguments(&request.arguments)?;
         QueryRequest {
             arguments: arguments.clone(),
@@ -53,6 +55,7 @@ impl QueryGateway {
         }
         .validate()?;
         let snapshot = handler.query_for(context, &arguments).await?;
+        self.registry.validate_query_result(&capability, &snapshot)?;
         snapshot.target.validate()?;
         if serde_json::to_vec(&snapshot).map_or(true, |bytes| bytes.len() > 1024 * 1024) {
             return Err(OperationError::InvalidInput(

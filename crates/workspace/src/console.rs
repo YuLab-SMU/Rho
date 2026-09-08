@@ -422,6 +422,8 @@ impl rho_operation::QueryHandler for ConsoleQueryHandler {
             }
         };
         Ok(rho_contract::QuerySnapshot {
+            next_reads: Vec::new(),
+            diagnostics: Vec::new(),
             target: TargetRef {
                 kind: "workspace".into(),
                 identity: self.owner.runtime.session_id().into(),

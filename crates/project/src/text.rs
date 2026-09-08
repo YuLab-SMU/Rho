@@ -90,6 +90,8 @@ macro_rules! handler {
                 let args: $args = serde_json::from_value(value.clone()).map_err(invalid)?;
                 $validate(&args)?;
                 let mut reply = QuerySnapshot {
+                    next_reads: Vec::new(),
+                    diagnostics: Vec::new(),
                     target: self.owner.target(),
                     source: "filesystem/text".into(),
                     observed_at_ms: SystemClock.now_ms()?,
