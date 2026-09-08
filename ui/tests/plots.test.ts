@@ -30,3 +30,14 @@ it("exposes immutable snapshots and does not create state simply by reading a cl
   f.plots.ensureView("plots:closed");
   expect(f.plots.getSnapshot().views["plots:closed"]).toBeDefined();
 });
+it("retains the exact selected evidence while its Outputs history page is still arriving", () => {
+  const f = fixture(), observed = reference("queried-original");
+  f.plots.locate(observed);
+  expect(f.plots.selectedEvidence()).toEqual(observed);
+  expect(() => { (f.plots.selectedEvidence() as MediaReference).operation_id = "substitute"; }).toThrow();
+  expect(f.plots.selectedEvidence()?.operation_id).toBe("queried-original");
+  f.media([observed]);
+  expect(f.plots.selectedEvidence()).toEqual(observed);
+  f.plots.reset();
+  expect(f.plots.selectedEvidence()).toBeNull();
+});
