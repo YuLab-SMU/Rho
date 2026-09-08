@@ -103,13 +103,16 @@ impl McpEdge {
                 ));
             }
             let query = capability.kind == CapabilityKind::Query;
-            let input = if query {
+            let control = capability.kind == CapabilityKind::Control;
+            let input = if query || control {
                 capability.input_schema
             } else {
                 command_schema(capability.input_schema)?
             };
             let output = if query {
                 rho_contract::query_result_schema(capability.output_schema.clone())
+            } else if control {
+                capability.output_schema.clone()
             } else {
                 rho_contract::operation_result_schema(
                     capability.output_schema.clone(),
@@ -190,16 +193,16 @@ impl McpEdge {
                 .iter()
                 .any(|capability| capability.capability.id == "output.view")
         {
-            let mut output =
-                rho_contract::query_result_schema(schema_for!(rho_contract::OutputView).to_value());
-            // Native images carry base64 in ImageContent rather than the JSON metadata.
-            if let Some(required) = output
-                .pointer_mut("/$defs/OutputView/required")
-                .and_then(Value::as_array_mut)
-            {
+            let mut payload = schema_for!(rho_contract::OutputView).to_value();
+            if let Some(properties) = payload.get_mut("properties").and_then(Value::as_object_mut) {
+                properties.remove("preview_base64");
+            }
+            if let Some(required) = payload.get_mut("required").and_then(Value::as_array_mut) {
                 required.retain(|field| field != "preview_base64");
             }
+            let output = rho_contract::query_result_schema(payload);
             let tool = Tool::new("rho.output.view","View a verified original PNG/JPEG/static SVG with native image content, optional original-coordinate crop, and original resource link. Preview is not a new scientific result.",object(schema_for!(rho_contract::ViewOutputArguments).to_value())?)
+                .with_raw_output_schema(Arc::new(object(result_schema(output))?))
                 .with_annotations(ToolAnnotations::new().read_only(true));
             entries.insert(
                 "rho.output.view".into(),
@@ -251,11 +254,9 @@ impl McpEdge {
             Route::View => {
                 return Err(invalid_operation("native view uses the presentation route"));
             }
-            Route::Capability(_, CapabilityKind::Control) => {
-                return Err(OperationError::Unavailable(
-                    "Application control route requires Host integration".into(),
-                ));
-            }
+            Route::Capability(_, CapabilityKind::Control) => HostRequest::ApplicationControl(
+                serde_json::from_value(args).map_err(invalid_operation)?,
+            ),
             Route::Get => {
                 let input: OperationArguments =
                     serde_json::from_value(args).map_err(invalid_operation)?;
