@@ -458,7 +458,7 @@ pub enum ApplicationBridgeReply {
     Renewed(ApplicationWindowSummary),
     Synced(ApplicationSyncReceipt),
     Claimed(Option<ApplicationCommandGrant>),
-    Completed(ApplicationCommandReceipt),
+    Completed(Box<ApplicationCommandReceipt>),
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]

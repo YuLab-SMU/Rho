@@ -167,15 +167,14 @@ impl QueryHandler for ApplicationHandler {
                             )
                             .await?
                     };
-                    if let Some(record) = record {
-                        if record.operation.principal() == lookup.context.principal()
-                            && record.operation.idempotency_scope.as_deref()
-                                == Some(self.project.as_str())
-                        {
-                            self.owner
-                                .record_execution(context, &request, &record, time)
-                                .map_err(error)?;
-                        }
+                    if let Some(record) = record
+                        && record.operation.principal() == lookup.context.principal()
+                        && record.operation.idempotency_scope.as_deref()
+                            == Some(self.project.as_str())
+                    {
+                        self.owner
+                            .record_execution(context, &request, &record, time)
+                            .map_err(error)?;
                     }
                 }
                 serde_json::to_value(

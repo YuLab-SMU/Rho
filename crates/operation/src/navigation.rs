@@ -63,12 +63,16 @@ impl CapabilityRegistry {
             .recovery
             .as_ref()
             .and_then(|value| serde_json::from_value::<ContractFailureRecovery>(value.clone()).ok())
+            && let UncommittedCandidate::Evidence { reference } = fault.candidate
+            && reference.operation_id == *id
+            && let Some(read) = self.read_link(
+                context,
+                "operation.read_evidence",
+                "Read the exact uncommitted owner candidate retained by this original operation",
+                json!({"reference":reference,"offset":0,"limit_bytes":65536}),
+            )?
         {
-            if let UncommittedCandidate::Evidence { reference } = fault.candidate {
-                if reference.operation_id == *id {
-                    if let Some(read) = self.read_link(context, "operation.read_evidence", "Read the exact uncommitted owner candidate retained by this original operation", json!({"reference":reference,"offset":0,"limit_bytes":65536}))? { reads.push(read); }
-                }
-            }
+            reads.push(read);
         }
         let uncertain = record.status == OperationStatus::Uncertain;
         if record.operation.domain == "workspace" {
@@ -93,29 +97,28 @@ impl CapabilityRegistry {
             }
         }
         if !uncertain {
-            if record.operation.capability.id == "slurm.submit" {
-                if let Some(read) = self.read_link(
+            if record.operation.capability.id == "slurm.submit"
+                && let Some(read) = self.read_link(
                     context,
                     "slurm.snapshot",
                     "Observe the native job linked to this original submission",
                     json!({"submission_operation_id":id}),
-                )? {
-                    reads.push(read);
-                }
+                )?
+            {
+                reads.push(read);
             }
             if matches!(
                 record.operation.capability.id.as_str(),
                 "environment.plan" | "environment.realize"
             ) && record.status.is_terminal()
-            {
-                if let Some(read) = self.read_link(
+                && let Some(read) = self.read_link(
                     context,
                     "environment.retention",
                     "Inspect the retained environment material and its native identities",
                     json!({"operation_id":id}),
-                )? {
-                    reads.push(read);
-                }
+                )?
+            {
+                reads.push(read);
             }
             if record.status == OperationStatus::Succeeded {
                 match record.operation.capability.id.as_str() {

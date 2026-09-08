@@ -214,7 +214,7 @@ impl DiscoveryOwner {
                     .find(|m| m.module == module)
                     .ok_or_else(|| OperationError::NotFound("module is not visible".into()))?;
                 Ok(HostDescription::Module {
-                    module: available,
+                    module: Box::new(available),
                     capabilities: visible
                         .iter()
                         .filter(|d| belongs_to(&d.capability.id, &module))
@@ -284,8 +284,8 @@ impl DiscoveryOwner {
                     let mut observation:Observed<ConsoleOverview>=Observed{source:snapshot.source,observed_at_ms:snapshot.observed_at_ms,status:snapshot.status,completeness:snapshot.completeness,data:None,notices:snapshot.notices};
                     if let Some(data)=snapshot.data {
                         let mut console:ConsoleState=serde_json::from_value(data).map_err(invalid)?;
-                        if let Some(input)=console.input.as_mut(){if truncate(&mut input.prompt,1024){observation.completeness=ObservationCompleteness::Partial;observation.notices.push("Input prompt is shortened; read workspace.console_state for its complete bounded observation.".into());}}
-                        if let Some(pause)=console.pause.as_mut(){if truncate(&mut pause.reason,1024){observation.completeness=ObservationCompleteness::Partial;observation.notices.push("Pause reason is shortened; read workspace.console_state.".into());}}
+                        if let Some(input)=console.input.as_mut()&& truncate(&mut input.prompt,1024){observation.completeness=ObservationCompleteness::Partial;observation.notices.push("Input prompt is shortened; read workspace.console_state for its complete bounded observation.".into());}
+                        if let Some(pause)=console.pause.as_mut()&& truncate(&mut pause.reason,1024){observation.completeness=ObservationCompleteness::Partial;observation.notices.push("Pause reason is shortened; read workspace.console_state.".into());}
                         observation.data=Some(ConsoleOverview{session_id:console.session_id,current_operation:console.current.map(|c|c.operation_id),queued_count:console.pending.len() as u32,pause:console.pause,input:console.input});
                     }
                     OverviewObservation::Console(observation)
@@ -370,10 +370,10 @@ impl rho_skills::SkillCapabilityPort for DiscoveryOwner {
         context: &CallContext,
         target: Option<&TargetRef>,
     ) -> Result<Vec<CapabilityRef>, String> {
-        if let Some(target) = target {
-            if !self.target_is_current(context, target).await? {
-                return Ok(vec![]);
-            }
+        if let Some(target) = target
+            && !self.target_is_current(context, target).await?
+        {
+            return Ok(vec![]);
         }
         self.visible(context)
             .map(|descriptors| descriptors.into_iter().map(|d| d.capability).collect())

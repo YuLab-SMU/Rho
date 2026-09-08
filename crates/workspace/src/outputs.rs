@@ -481,8 +481,10 @@ fn render_preview(bytes: &[u8], args: &ViewOutputArguments) -> Result<OutputView
     let rasterized = args.reference.mime_type == "image/svg+xml";
     let mut transformations = Vec::new();
     let (mut preview, original_width, original_height, crop) = if rasterized {
-        let mut options = resvg::usvg::Options::default();
-        options.resources_dir = None;
+        let mut options = resvg::usvg::Options {
+            resources_dir: None,
+            ..Default::default()
+        };
         options.image_href_resolver.resolve_string = Box::new(|_, _| None);
         options.fontdb_mut().load_system_fonts();
         // usvg/resvg supports static SVG only; the string resolver cannot read files or URLs.

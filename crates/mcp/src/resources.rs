@@ -158,7 +158,7 @@ fn resource_content(
                     "Use the original manifest and its 64 KiB chunks".into(),
                 ));
             }
-            ResourceContents::blob(STANDARD.encode(&bytes), uri)
+            ResourceContents::blob(STANDARD.encode(bytes), uri)
                 .with_mime_type(reference.mime_type.clone())
         }
         "manifest" => {
@@ -178,7 +178,7 @@ fn resource_content(
             .with_mime_type("application/json")
         }
         _ => {
-            if offset % 65536 != 0 || offset >= bytes.len() {
+            if !offset.is_multiple_of(65536) || offset >= bytes.len() {
                 return Err(invalid_operation(
                     "chunk offset must be an existing aligned manifest position",
                 ));

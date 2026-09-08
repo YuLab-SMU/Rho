@@ -254,7 +254,7 @@ impl ApplicationOwner {
             return Err(ApplicationError::Conflict);
         }
         let limit = args.limit_bytes.unwrap_or(64 * 1024);
-        if limit < 4 || limit > 64 * 1024 {
+        if !(4..=64 * 1024).contains(&limit) {
             return Err(invalid("document page limit must be 4..65536 UTF-8 bytes"));
         }
         if args.offset_utf8 > text.len() || !text.is_char_boundary(args.offset_utf8) {
@@ -459,7 +459,7 @@ impl ApplicationOwner {
             } => {
                 let (scope, mut window) = self.bridge_window(context, &session, now)?;
                 self.complete(&scope, &mut window, completion, now)
-                    .map(ApplicationBridgeReply::Completed)
+                    .map(|receipt| ApplicationBridgeReply::Completed(Box::new(receipt)))
             }
         }
     }
@@ -652,14 +652,14 @@ impl ApplicationOwner {
     ) -> Result<ApplicationSyncReceipt, ApplicationError> {
         validate_id(&sync_id)?;
         let digest = encoded_digest(&changes)?;
-        if let Some(previous) = &window.last_sync {
-            if previous.receipt.sync_id == sync_id {
-                return if previous.digest == digest {
-                    Ok(previous.receipt.clone())
-                } else {
-                    Err(ApplicationError::RequestConflict)
-                };
-            }
+        if let Some(previous) = &window.last_sync
+            && previous.receipt.sync_id == sync_id
+        {
+            return if previous.digest == digest {
+                Ok(previous.receipt.clone())
+            } else {
+                Err(ApplicationError::RequestConflict)
+            };
         }
         let write = self.prepare_changes(scope, window, changes)?;
         let receipt = ApplicationSyncReceipt {

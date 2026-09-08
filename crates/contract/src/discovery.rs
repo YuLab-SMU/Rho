@@ -219,7 +219,7 @@ pub enum HostDescription {
         descriptor: Box<CapabilityDescriptor>,
     },
     Module {
-        module: ModuleAvailability,
+        module: Box<ModuleAvailability>,
         capabilities: Vec<CapabilitySummary>,
     },
 }

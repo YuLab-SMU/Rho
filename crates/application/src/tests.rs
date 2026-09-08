@@ -349,7 +349,7 @@ fn complete(
     else {
         panic!()
     };
-    receipt
+    *receipt
 }
 fn execute_request(
     r: &ApplicationBridgeRegistration,

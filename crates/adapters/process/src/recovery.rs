@@ -86,12 +86,12 @@ fn snapshot_with_owner(
                 .is_none_or(|since| process.start_time() == 0 || process.start_time() >= since)
             && (process.start_time() == 0 || process.environ().is_empty())
     });
-    if let Some(owner) = owner {
-        if system.processes().values().any(|process| {
+    if let Some(owner) = owner
+        && system.processes().values().any(|process| {
             tagged(process, marker, user) && !process.environ().iter().any(|entry| entry == owner)
-        }) {
-            return Err("native process marker belongs to a different Operation".into());
-        }
+        })
+    {
+        return Err("native process marker belongs to a different Operation".into());
     }
     let mut matches = system
         .processes()

@@ -192,11 +192,11 @@ impl OutputStore {
         let mut cache = self.verified.lock().map_err(err)?;
         cache.tick += 1;
         let tick = cache.tick;
-        if let Some(entry) = cache.entries.get_mut(&key) {
-            if entry.identity == current {
-                entry.used = tick;
-                return Ok(entry.bytes.clone());
-            }
+        if let Some(entry) = cache.entries.get_mut(&key)
+            && entry.identity == current
+        {
+            entry.used = tick;
+            return Ok(entry.bytes.clone());
         }
         if let Some(entry) = cache.entries.remove(&key) {
             cache.bytes -= entry.bytes.len();

@@ -125,10 +125,10 @@ fn fields(schema: &Value) -> BTreeSet<String> {
         if depth > 32 {
             return;
         }
-        if let Some(reference) = node.get("$ref").and_then(Value::as_str) {
-            if let Some(target) = reference.strip_prefix('#').and_then(|p| root.pointer(p)) {
-                walk(target, root, prefix, depth + 1, found);
-            }
+        if let Some(reference) = node.get("$ref").and_then(Value::as_str)
+            && let Some(target) = reference.strip_prefix('#').and_then(|p| root.pointer(p))
+        {
+            walk(target, root, prefix, depth + 1, found);
         }
         if let Some(properties) = node.get("properties").and_then(Value::as_object) {
             for (name, child) in properties {

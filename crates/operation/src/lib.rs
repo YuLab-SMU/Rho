@@ -743,37 +743,44 @@ impl CapabilityRegistry {
         capability: &CapabilityRef,
         snapshot: &mut rho_contract::QuerySnapshot,
     ) -> Result<(), OperationError> {
-        if capability.id == "operation.get" {
-            if let Some(data) = snapshot.data.as_ref() {
-                let mut result: rho_contract::OperationGetResult =
-                    serde_json::from_value(data.clone())
-                        .map_err(|e| OperationError::Contract(e.to_string()))?;
-                if let Some(record) = &mut result.record {
-                    self.decorate_record(context, record)?;
-                }
-                if let Some(contract) = &mut result.output_contract {
-                    if result
-                        .record
-                        .as_ref()
-                        .is_none_or(|record| record.operation.capability != contract.capability)
-                    {
-                        return Err(OperationError::Contract("record query schema association does not match the original capability".into()));
-                    }
-                    let visible = self.descriptors.get(&contract.capability).is_some_and(|d| {
-                        d.kind == CapabilityKind::Operation
-                            && d.required_scopes.is_subset(&context.scopes)
-                    });
-                    contract.describe = if visible {
-                        self.read_link(context, "host.describe", "Read the exact capability contract associated with this original result", json!({"capability":contract.capability}))?
-                    } else {
-                        None
-                    };
-                }
-                snapshot.data = Some(
-                    serde_json::to_value(result)
-                        .map_err(|e| OperationError::Contract(e.to_string()))?,
-                );
+        if capability.id == "operation.get"
+            && let Some(data) = snapshot.data.as_ref()
+        {
+            let mut result: rho_contract::OperationGetResult = serde_json::from_value(data.clone())
+                .map_err(|e| OperationError::Contract(e.to_string()))?;
+            if let Some(record) = &mut result.record {
+                self.decorate_record(context, record)?;
             }
+            if let Some(contract) = &mut result.output_contract {
+                if result
+                    .record
+                    .as_ref()
+                    .is_none_or(|record| record.operation.capability != contract.capability)
+                {
+                    return Err(OperationError::Contract(
+                        "record query schema association does not match the original capability"
+                            .into(),
+                    ));
+                }
+                let visible = self.descriptors.get(&contract.capability).is_some_and(|d| {
+                    d.kind == CapabilityKind::Operation
+                        && d.required_scopes.is_subset(&context.scopes)
+                });
+                contract.describe = if visible {
+                    self.read_link(
+                        context,
+                        "host.describe",
+                        "Read the exact capability contract associated with this original result",
+                        json!({"capability":contract.capability}),
+                    )?
+                } else {
+                    None
+                };
+            }
+            snapshot.data = Some(
+                serde_json::to_value(result)
+                    .map_err(|e| OperationError::Contract(e.to_string()))?,
+            );
         }
         self.filter_reads(context, &mut snapshot.next_reads);
         for diagnostic in &mut snapshot.diagnostics {
@@ -1016,15 +1023,15 @@ impl OperationGateway {
         error: &OperationError,
     ) -> rho_contract::Diagnostic {
         let mut diagnostic = error.diagnostic();
-        if let OperationError::CommitPending { operation_id, .. } = error {
-            if let Ok(Some(read)) = self.registry.read_link(
+        if let OperationError::CommitPending { operation_id, .. } = error
+            && let Ok(Some(read)) = self.registry.read_link(
                 context,
                 "operation.get",
                 "Inspect the original operation and retained evidence without replaying it",
                 json!({"operation_id":operation_id}),
-            ) {
-                diagnostic.next_reads.push(read);
-            }
+            )
+        {
+            diagnostic.next_reads.push(read);
         }
         diagnostic
     }
