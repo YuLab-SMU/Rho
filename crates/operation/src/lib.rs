@@ -705,6 +705,8 @@ impl CapabilityRegistry {
             .ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))?;
         if let Some(data) = &snapshot.data {
             schemas.output(data)?;
+        } else if snapshot.status == rho_contract::QueryStatus::Ready {
+            schemas.output(&Value::Null)?;
         }
         self.validate_reads(&snapshot.next_reads)?;
         for diagnostic in &snapshot.diagnostics {
