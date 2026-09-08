@@ -193,3 +193,29 @@ pub struct ResolvedSkillContext {
     pub dependencies: String,
     pub notices: Vec<String>,
 }
+
+/// Host launch metadata referencing actual packages; never a new SKILL.md format.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct HostDiscoveredSkills {
+    pub provider_id: String,
+    pub skills: Vec<HostDiscoveredSkill>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum HostSkillSourceKind {
+    Project,
+    User,
+    Plugin,
+    Managed,
+    Builtin,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct HostDiscoveredSkill {
+    pub source_key: String,
+    pub root_path: String,
+    pub source_kind: HostSkillSourceKind,
+    pub enablement: SkillEnablement,
+    pub reason: Option<String>,
+}

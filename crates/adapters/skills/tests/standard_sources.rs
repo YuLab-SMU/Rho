@@ -33,6 +33,9 @@ impl MethodBindingPort for Application {
 struct Capabilities;
 #[async_trait]
 impl SkillCapabilityPort for Capabilities {
+    async fn target_is_current(&self, _: &CallContext, target: &TargetRef) -> Result<bool, String> {
+        Ok(target.identity == "current")
+    }
     async fn available_capabilities(
         &self,
         _: &CallContext,
@@ -489,4 +492,119 @@ async fn private_host_paths_and_equivalent_host_disablement_cannot_be_bypassed()
     fs::remove_dir_all(&package).unwrap();
     symlink(&rho, &package).unwrap();
     assert!(native.discover(&scope).await.unwrap().packages.is_empty());
+}
+
+#[tokio::test]
+async fn native_host_manifest_reads_exact_original_roots_and_observes_live_changes() {
+    let project = tempfile::tempdir().unwrap();
+    let external = tempfile::tempdir().unwrap();
+    let ctx = context("caller");
+    let scope = scope(project.path(), &ctx, ".");
+    let declared = make_skill(external.path(), "declared-method", "Native host method");
+    make_skill(
+        external.path(),
+        "undiscovered-method",
+        "Must not be scanned by the manifest adapter",
+    );
+    let manifest_path = project.path().join("host-skills.json");
+    let mut manifest = HostDiscoveredSkills {
+        provider_id: "native-codex".into(),
+        skills: vec![HostDiscoveredSkill {
+            source_key: "plugin/reference".into(),
+            root_path: declared.to_string_lossy().into(),
+            source_kind: HostSkillSourceKind::Plugin,
+            enablement: SkillEnablement::Enabled,
+            reason: None,
+        }],
+    };
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let source = Arc::new(
+        HostDiscoveredSkillSource::from_manifest(
+            project.path(),
+            scope.principal.clone(),
+            &manifest_path,
+            vec![],
+        )
+        .unwrap(),
+    );
+    let inventory = source.discover(&scope).await.unwrap();
+    assert_eq!(inventory.packages.len(), 1);
+    assert_eq!(inventory.packages[0].key, "plugin/reference");
+    assert_eq!(
+        source
+            .read(&scope, &inventory.packages[0], "SKILL.md")
+            .await
+            .unwrap(),
+        fs::read(declared.join("SKILL.md")).unwrap()
+    );
+    let owner = owner(
+        project.path(),
+        vec![source.clone()],
+        Arc::new(Application::default()),
+    );
+    let listed = owner.list(&ctx, &list(".")).await.unwrap();
+    let skill = &listed.skills[0];
+    fs::write(declared.join("scripts/run.R"), "changed script\n").unwrap();
+    assert!(
+        owner
+            .read(&ctx, &read(skill, SkillReadKind::Text))
+            .await
+            .is_err()
+    );
+    let current = owner.list(&ctx, &list(".")).await.unwrap();
+    manifest.skills[0].enablement = SkillEnablement::Disabled;
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    assert!(
+        owner
+            .read(&ctx, &read(&current.skills[0], SkillReadKind::Text))
+            .await
+            .is_err()
+    );
+    manifest.skills[0].source_kind = HostSkillSourceKind::Project;
+    manifest.skills[0].enablement = SkillEnablement::Enabled;
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let refused = source.discover(&scope).await.unwrap();
+    assert!(refused.packages.is_empty());
+    assert!(!refused.notices.is_empty());
+}
+
+#[tokio::test]
+async fn binding_validation_requires_current_resources_target_and_explicit_unexclude() {
+    let project = tempfile::tempdir().unwrap();
+    let ctx = context("caller");
+    let path = make_skill(
+        &project.path().join(".agents/skills"),
+        "method",
+        "Method binding",
+    );
+    fs::create_dir(project.path().join("analysis")).unwrap();
+    let app = Arc::new(Application::default());
+    let owner = owner(
+        project.path(),
+        vec![Arc::new(
+            FilesystemSkillSource::new(project.path(), None).unwrap(),
+        )],
+        app.clone(),
+    );
+    let listed = owner.list(&ctx, &list(".")).await.unwrap();
+    let skill = &listed.skills[0];
+    let mut binding:ApplicationMethodBinding=serde_json::from_value(serde_json::json!({"binding_id":"selection","version":"v1","working_directory":".","external_goal_ref":null,"external_task_ref":null,"external_actor_ref":null,"skill_ref":skill.skill_ref,"source_ref":skill.source.source_ref,"resources":[],"modules":[],"capabilities":[],"required_capabilities":[],"target":null,"excluded":false})).unwrap();
+    owner.validate_binding(&ctx, &binding).await.unwrap();
+    binding.target = Some(TargetRef {
+        kind: "workspace".into(),
+        identity: "old-session".into(),
+    });
+    assert!(owner.validate_binding(&ctx, &binding).await.is_err());
+    binding.target = None;
+    let mut exclusion = binding.clone();
+    exclusion.excluded = true;
+    app.bindings.lock().unwrap().push(exclusion.clone());
+    owner.validate_binding(&ctx, &binding).await.unwrap();
+    binding.binding_id = "child-selection".into();
+    binding.working_directory = "analysis".into();
+    assert!(owner.validate_binding(&ctx, &binding).await.is_err());
+    app.bindings.lock().unwrap().clear();
+    owner.validate_binding(&ctx, &binding).await.unwrap();
+    fs::write(path.join("scripts/run.R"), "different content\n").unwrap();
+    assert!(owner.validate_binding(&ctx, &binding).await.is_err());
 }

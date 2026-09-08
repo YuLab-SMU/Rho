@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
+mod host_manifest;
 mod provided;
 use async_trait::async_trait;
+pub use host_manifest::HostDiscoveredSkillSource;
 pub use provided::{HostProvidedPackage, HostProvidedSkillSource, HostProvidedSnapshot};
 use rho_contract::{SkillEnablement, SkillSourceNotice};
 use rho_operation::OperationError;
@@ -17,6 +19,7 @@ use std::{
 };
 
 /// Only the two standard local sources. The Host provides the canonical project/user roots.
+#[derive(Clone)]
 pub struct FilesystemSkillSource {
     project: PathBuf,
     user_skills: Option<PathBuf>,
@@ -105,20 +108,9 @@ impl FilesystemSkillSource {
                 "Skill entry is not a directory".into(),
             ));
         }
-        let mut resources = vec![];
-        let mut seen = BTreeSet::new();
-        let mut bytes = 0usize;
-        let mut visited = 0usize;
-        scan_resources(
-            entry,
-            entry,
-            &canonical,
-            &mut seen,
-            &mut resources,
-            &mut bytes,
-            &mut visited,
-            &self.excluded_paths,
-        )?;
+        let mut scan = ResourceScan::default();
+        scan_resources(entry, entry, &canonical, &self.excluded_paths, &mut scan)?;
+        let mut resources = scan.resources;
         if !resources.iter().any(|r| r.path == "SKILL.md") {
             return Err(OperationError::InvalidInput(
                 "Skill package has no SKILL.md".into(),
@@ -166,12 +158,8 @@ impl FilesystemSkillSource {
         })
     }
 }
-#[async_trait]
-impl SkillSource for FilesystemSkillSource {
-    fn source_id(&self) -> &str {
-        "local-standard"
-    }
-    async fn discover(&self, scope: &SkillScope) -> Result<SkillSourceInventory, OperationError> {
+impl FilesystemSkillSource {
+    fn discover_sync(&self, scope: &SkillScope) -> Result<SkillSourceInventory, OperationError> {
         let mut result = SkillSourceInventory::default();
         let mut scanned = 0usize;
         let mut source_bytes = 0u64;
@@ -258,7 +246,7 @@ impl SkillSource for FilesystemSkillSource {
         }
         Ok(result)
     }
-    async fn read(
+    fn read_sync(
         &self,
         scope: &SkillScope,
         package: &SourcePackage,
@@ -267,8 +255,7 @@ impl SkillSource for FilesystemSkillSource {
         validate_relative(path, false)?;
         // Rediscover through configured roots, never accept the locator as arbitrary filesystem authority.
         let current = self
-            .discover(scope)
-            .await?
+            .discover_sync(scope)?
             .packages
             .into_iter()
             .find(|p| p.key == package.key)
@@ -288,8 +275,7 @@ impl SkillSource for FilesystemSkillSource {
             &self.excluded_paths,
         )?;
         let after = self
-            .discover(scope)
-            .await?
+            .discover_sync(scope)?
             .packages
             .into_iter()
             .find(|p| p.key == package.key)
@@ -304,18 +290,50 @@ impl SkillSource for FilesystemSkillSource {
         Ok(bytes)
     }
 }
+#[async_trait]
+impl SkillSource for FilesystemSkillSource {
+    fn source_id(&self) -> &str {
+        "local-standard"
+    }
+    async fn discover(&self, scope: &SkillScope) -> Result<SkillSourceInventory, OperationError> {
+        let adapter = self.clone();
+        let scope = scope.clone();
+        tokio::task::spawn_blocking(move || adapter.discover_sync(&scope))
+            .await
+            .map_err(io_error)?
+    }
+    async fn read(
+        &self,
+        scope: &SkillScope,
+        package: &SourcePackage,
+        path: &str,
+    ) -> Result<Vec<u8>, OperationError> {
+        let adapter = self.clone();
+        let scope = scope.clone();
+        let package = package.clone();
+        let path = path.to_owned();
+        tokio::task::spawn_blocking(move || adapter.read_sync(&scope, &package, &path))
+            .await
+            .map_err(io_error)?
+    }
+}
+
+#[derive(Default)]
+struct ResourceScan {
+    seen: BTreeSet<PathBuf>,
+    resources: Vec<SourceResource>,
+    total_bytes: usize,
+    visited: usize,
+}
 fn scan_resources(
     entry: &Path,
     path: &Path,
     anchor: &Path,
-    seen: &mut BTreeSet<PathBuf>,
-    resources: &mut Vec<SourceResource>,
-    total_bytes: &mut usize,
-    visited: &mut usize,
     excluded: &[PathBuf],
+    scan: &mut ResourceScan,
 ) -> Result<(), OperationError> {
-    *visited += 1;
-    if *visited > MAX_RESOURCES {
+    scan.visited += 1;
+    if scan.visited > MAX_RESOURCES {
         return Err(OperationError::BudgetExceeded(
             "Skill package traversal exceeds 2000 paths".into(),
         ));
@@ -328,12 +346,12 @@ fn scan_resources(
         ));
     }
     if canonical.is_dir() {
-        if !seen.insert(canonical.clone()) {
+        if !scan.seen.insert(canonical.clone()) {
             return Err(OperationError::InvalidInput(
                 "Skill resource graph contains a directory cycle".into(),
             ));
         }
-        if seen.len() > 64 || resources.len() > MAX_RESOURCES {
+        if scan.seen.len() > 64 || scan.resources.len() > MAX_RESOURCES {
             return Err(OperationError::BudgetExceeded(
                 "Skill package traversal exceeds 2000 paths".into(),
             ));
@@ -350,20 +368,11 @@ fn scan_resources(
         }
         entries.sort_by_key(|e| e.file_name());
         for child in entries {
-            scan_resources(
-                entry,
-                &child.path(),
-                anchor,
-                seen,
-                resources,
-                total_bytes,
-                visited,
-                excluded,
-            )?;
+            scan_resources(entry, &child.path(), anchor, excluded, scan)?;
         }
-        seen.remove(&canonical);
+        scan.seen.remove(&canonical);
     } else {
-        if resources.len() >= MAX_RESOURCES {
+        if scan.resources.len() >= MAX_RESOURCES {
             return Err(OperationError::BudgetExceeded(
                 "Skill package exceeds 2000 resources".into(),
             ));
@@ -378,13 +387,13 @@ fn scan_resources(
             .replace('\\', "/");
         validate_relative(&relative, false)?;
         let (bytes, identity, _) = read_checked(path, anchor, MAX_SKILL_BYTES, excluded)?;
-        *total_bytes += bytes.len();
-        if *total_bytes > MAX_SOURCE_BYTES {
+        scan.total_bytes += bytes.len();
+        if scan.total_bytes > MAX_SOURCE_BYTES {
             return Err(OperationError::BudgetExceeded(
                 "Skill package content exceeds 64 MiB".into(),
             ));
         }
-        resources.push(SourceResource {
+        scan.resources.push(SourceResource {
             path: relative,
             sha256: hash(&bytes),
             byte_size: bytes.len() as u64,
