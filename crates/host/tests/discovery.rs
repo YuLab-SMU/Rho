@@ -202,3 +202,93 @@ async fn every_composed_capability_has_a_bounded_exact_description_and_read_navi
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn native_control_visibility_is_shared_and_executor_only_context_keeps_console_module() {
+    let dir = tempfile::tempdir().unwrap();
+    let host = NextHost::open_demo(dir.path().join("state.sqlite"))
+        .await
+        .unwrap();
+    for (scopes, cancel, input, events) in [
+        (vec![], false, false, false),
+        (vec!["workspace.read"], false, false, false),
+        (vec!["operation.read"], false, false, true),
+        (vec!["workspace.run_r"], true, true, false),
+    ] {
+        let mut context = NextHost::local_context();
+        context.scopes = scopes.iter().map(|scope| (*scope).to_string()).collect();
+        let mut arguments = json!({"limit":2});
+        let mut ids = BTreeSet::new();
+        loop {
+            let page: HostCatalog = serde_json::from_value(
+                query(&host, &context, "host.catalog", arguments.clone())
+                    .await
+                    .unwrap()
+                    .data
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(page.total as usize, host.capabilities_for(&context).len());
+            ids.extend(page.entries.into_iter().map(|entry| entry.capability.id));
+            if let Some(cursor) = page.next_cursor {
+                arguments["cursor"] = json!(cursor);
+            } else {
+                break;
+            }
+        }
+        for (id, visible) in [
+            ("operation.request_cancellation", cancel),
+            ("workspace.respond_input", input),
+            ("operation.events", events),
+        ] {
+            assert_eq!(ids.contains(id), visible, "{scopes:?} {id}");
+            let described = query(
+                &host,
+                &context,
+                "host.describe",
+                json!({"capability":{"id":id,"version":1}}),
+            )
+            .await;
+            assert_eq!(described.is_ok(), visible);
+            if !visible {
+                assert!(matches!(described, Err(OperationError::NotFound(_))));
+            }
+        }
+        let overview: HostOverview = serde_json::from_value(
+            query(&host, &context, "host.overview", json!({}))
+                .await
+                .unwrap()
+                .data
+                .unwrap(),
+        )
+        .unwrap();
+        if scopes == vec!["workspace.run_r"] {
+            assert!(
+                overview
+                    .modules
+                    .iter()
+                    .any(|module| module.module == "console" && module.available)
+            );
+            assert!(
+                overview
+                    .modules
+                    .iter()
+                    .any(|module| module.module == "operations" && module.available)
+            );
+            assert!(
+                !overview.modules.iter().any(
+                    |module| ["objects", "packages", "files"].contains(&module.module.as_str())
+                )
+            );
+            assert!(
+                overview.observations.is_empty(),
+                "write authority must not expose read-only scientific observations"
+            );
+        }
+        if scopes.is_empty() {
+            assert!(overview.modules.is_empty());
+            assert!(overview.targets.is_empty());
+            assert!(overview.observations.is_empty());
+        }
+    }
+}

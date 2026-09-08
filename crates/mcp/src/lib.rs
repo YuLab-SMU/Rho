@@ -502,3 +502,279 @@ fn control_request(id: &str, args: Value) -> Result<HostRequest, OperationError>
 fn invalid_operation(error: impl std::fmt::Display) -> OperationError {
     OperationError::InvalidInput(error.to_string())
 }
+
+#[cfg(test)]
+mod port_contract_tests {
+    use super::*;
+
+    async fn host() -> (tempfile::TempDir, Arc<NextHost>) {
+        let directory = tempfile::tempdir().unwrap();
+        let host = Arc::new(
+            NextHost::open_demo(directory.path().join("state.sqlite"))
+                .await
+                .unwrap(),
+        );
+        (directory, host)
+    }
+    async fn call(edge: &McpEdge, name: &str, arguments: Value) -> Result<Value, OperationError> {
+        edge.route(
+            &edge.entries.get(name).expect("visible tool").route,
+            arguments,
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn fixed_tools_derive_their_descriptions_and_schemas_from_discovery() {
+        let (_directory, host) = host().await;
+        let context = NextHost::local_context();
+        let edge = McpEdge::new(host.clone(), context.clone()).unwrap();
+        for (alias, id, field) in [
+            ("rho.operation.get", "operation.get", Some("record")),
+            ("rho.events.poll", "operation.events", Some("events")),
+            (
+                "rho.operation.request_cancellation",
+                "operation.request_cancellation",
+                None,
+            ),
+            (
+                "rho.workspace.respond_input",
+                "workspace.respond_input",
+                None,
+            ),
+        ] {
+            let versioned = edge.get_tool(&format!("rho.{id}.v1")).unwrap();
+            let alias = edge.get_tool(alias).unwrap();
+            assert_eq!(alias.input_schema, versioned.input_schema);
+            assert!(
+                alias
+                    .description
+                    .as_ref()
+                    .unwrap()
+                    .starts_with(versioned.description.as_ref().unwrap().as_ref())
+            );
+            let described = call(
+                &edge,
+                "rho.host.describe.v1",
+                json!({"capability":{"id":id,"version":1}}),
+            )
+            .await
+            .unwrap();
+            let descriptor = &described["data"]["descriptor"];
+            assert_eq!(
+                serde_json::to_value(&alias).unwrap()["inputSchema"],
+                descriptor["input_schema"]
+            );
+            let expected_payload = if let Some(field) = field {
+                rho_contract::project_payload_schema(&descriptor["output_schema"], field).unwrap()
+            } else {
+                descriptor["output_schema"].clone()
+            };
+            let actual = serde_json::to_value(&alias).unwrap()["outputSchema"].clone();
+            assert_eq!(actual, result_schema(expected_payload));
+            if field.is_none() {
+                assert_eq!(alias.output_schema, versioned.output_schema);
+            }
+            // Resolve the exposed MCP schema references, including the
+            // concrete operation payload union rebased by envelope projection.
+            fn refs(node: &Value, root: &Value) {
+                match node {
+                    Value::Object(fields) => {
+                        if let Some(reference) = fields.get("$ref").and_then(Value::as_str) {
+                            assert!(reference.starts_with('#'));
+                            assert!(root.pointer(&reference[1..]).is_some(), "{reference}");
+                        }
+                        for (key, value) in fields {
+                            if !["const", "enum", "examples"].contains(&key.as_str()) {
+                                refs(value, root);
+                            }
+                        }
+                    }
+                    Value::Array(values) => {
+                        for value in values {
+                            refs(value, root);
+                        }
+                    }
+                    _ => (),
+                }
+            }
+            refs(&actual, &actual);
+        }
+        let get = serde_json::to_value(edge.get_tool("rho.operation.get").unwrap()).unwrap();
+        let branches = get["outputSchema"]["properties"]["result"]["anyOf"]
+            .as_array()
+            .unwrap();
+        assert!(
+            branches.iter().any(
+                |branch| branch["allOf"][1]["properties"]["operation"]["properties"]["capability"]
+                    ["const"]["id"]
+                    == "workspace.run_r"
+            )
+        );
+        assert!(
+            host.outbox(&context, 0, 100).await.unwrap().is_empty(),
+            "listing and describing must not admit work"
+        );
+    }
+
+    #[tokio::test]
+    async fn fixed_aliases_and_versioned_routes_share_validated_owner_results() {
+        let (_directory, host) = host().await;
+        let context = NextHost::local_context();
+        let edge = McpEdge::new(host.clone(), context.clone()).unwrap();
+        let record = call(
+            &edge,
+            "rho.workspace.run_r.v1",
+            json!({"client_request_id":"one-run","arguments":{"code":"1 + 1"}}),
+        )
+        .await
+        .unwrap();
+        let arguments = json!({"operation_id":record["operation"]["operation_id"]});
+        let bare = call(&edge, "rho.operation.get", arguments.clone())
+            .await
+            .unwrap();
+        let wrapped = call(&edge, "rho.operation.get.v1", arguments.clone())
+            .await
+            .unwrap();
+        assert_eq!(bare, wrapped["data"]["record"]);
+        assert_eq!(bare, record);
+        let events = call(
+            &edge,
+            "rho.events.poll",
+            json!({"after_sequence":0,"limit":2}),
+        )
+        .await
+        .unwrap();
+        let page = call(
+            &edge,
+            "rho.operation.events.v1",
+            json!({"after_sequence":0,"limit":2}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(events, page["data"]["events"]);
+        assert_eq!(page["data"]["has_more"], true);
+        let cancelled = call(
+            &edge,
+            "rho.operation.request_cancellation",
+            arguments.clone(),
+        )
+        .await
+        .unwrap();
+        let repeated = call(
+            &edge,
+            "rho.operation.request_cancellation.v1",
+            arguments.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(cancelled, repeated);
+        assert_eq!(cancelled["accepted"], false);
+        assert_eq!(cancelled["operation"]["status"], "succeeded");
+        for name in ["rho.events.poll", "rho.operation.events.v1"] {
+            assert!(matches!(
+                call(&edge, name, json!({"limit":1001})).await,
+                Err(OperationError::InvalidInput(_))
+            ));
+        }
+        let input = json!({"session_id":"wrong-session","operation_id":record["operation"]["operation_id"],"request_id":"input","reply_id":"reply","value":"secret"});
+        for name in [
+            "rho.workspace.respond_input",
+            "rho.workspace.respond_input.v1",
+        ] {
+            assert!(matches!(
+                call(&edge, name, input.clone()).await,
+                Err(OperationError::InvalidInput(_))
+            ));
+        }
+        let retained = host.outbox(&context, 0, 100).await.unwrap();
+        assert_eq!(
+            retained
+                .iter()
+                .filter(|event| event.topic == "operation.accepted")
+                .count(),
+            1
+        );
+        assert!(!serde_json::to_string(&retained).unwrap().contains("secret"));
+    }
+
+    #[tokio::test]
+    async fn permissions_filter_both_aliases_before_tool_enumeration_and_unavailable_runtime_stays_absent()
+     {
+        let (directory, host) = host().await;
+        for (scopes, cancel, input, events, get) in [
+            (vec![], false, false, false, false),
+            (vec!["workspace.read"], false, false, false, false),
+            (vec!["operation.read"], false, false, true, true),
+            (vec!["workspace.run_r"], true, true, false, false),
+        ] {
+            let mut context = NextHost::local_context();
+            context.scopes = scopes.iter().map(|scope| (*scope).into()).collect();
+            let edge = McpEdge::new(host.clone(), context.clone()).unwrap();
+            for (alias, id, visible) in [
+                ("rho.operation.get", "operation.get", get),
+                ("rho.events.poll", "operation.events", events),
+                (
+                    "rho.operation.request_cancellation",
+                    "operation.request_cancellation",
+                    cancel,
+                ),
+                (
+                    "rho.workspace.respond_input",
+                    "workspace.respond_input",
+                    input,
+                ),
+            ] {
+                assert_eq!(
+                    edge.get_tool(alias).is_some(),
+                    visible,
+                    "{scopes:?}: {alias}"
+                );
+                assert_eq!(edge.get_tool(&format!("rho.{id}.v1")).is_some(), visible);
+                assert_eq!(
+                    host.capabilities_for(&context)
+                        .iter()
+                        .any(|descriptor| descriptor.capability.id == id),
+                    visible
+                );
+            }
+            let mut cursor = None;
+            let mut catalog = vec![];
+            loop {
+                let page = call(
+                    &edge,
+                    "rho.host.catalog.v1",
+                    json!({"limit":2,"cursor":cursor}),
+                )
+                .await
+                .unwrap();
+                catalog.extend(
+                    page["data"]["entries"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|entry| entry["capability"]["id"].as_str().unwrap().to_string()),
+                );
+                cursor = page["data"]["next_cursor"].as_str().map(String::from);
+                if cursor.is_none() {
+                    break;
+                }
+            }
+            assert_eq!(
+                catalog.contains(&"operation.request_cancellation".to_string()),
+                cancel
+            );
+        }
+        let reader =
+            Arc::new(NextHost::open_read_only(directory.path().join("state.sqlite")).unwrap());
+        let edge = McpEdge::new(reader, NextHost::local_context()).unwrap();
+        assert!(edge.get_tool("rho.workspace.respond_input").is_none());
+        assert!(edge.get_tool("rho.workspace.respond_input.v1").is_none());
+        assert!(
+            edge.get_tool("rho.operation.request_cancellation")
+                .is_none()
+        );
+        assert!(edge.get_tool("rho.operation.events.v1").is_some());
+        assert!(edge.get_tool("rho.events.poll").is_some());
+    }
+}
