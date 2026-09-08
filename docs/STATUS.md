@@ -16,7 +16,8 @@ static package indexes and retained help text; shared verified originals and MCP
 native image/resources; an Application owner, SQLite CAS receipts and a resident
 Studio bridge; standard/local and launcher-attested Skill sources and explicit
 method bindings. Operation result/recovery validation and original-record reads
-are being hardened before final verification. Source presence is not acceptance.
+retain contract-fault evidence atomically in the scientific journal. Oversized
+uncommitted candidates have digest-bound chunk reads. Source presence is not acceptance.
 
 Application commands retain explicit window/incarnation/resource identities.
 Scientific captures preserve original Agent identity through the existing gateway.
@@ -32,17 +33,22 @@ reads native process markers without starting R or signalling processes.
 - Integrated Rust contracts/application/SQLite/Skills checks passed: Application
   16, SQLite 13, shared contract 4 and Skills source 8 tests at that integration
   point. Host Skills integration subsequently passed all three tests.
-- Operation registry/gateway hardening passed 14 tests before the latest journal
-  evidence extension; that extension still requires its own integration run.
+- Operation registry/gateway hardening and atomic evidence retention passed all
+  19 Operation and 15 SQLite tests, including oversized candidates and rollback.
 - Direct native R object, static package-index and code-tool scripts passed,
   including 10,001 object bindings and hostile/lazy/active-binding fixtures.
-- Frontend lane tests reached 239 passing tests, with frontend boundaries and
-  24 boundary fixtures passing. Integration TypeScript checking passed before
-  the latest generated-contract changes.
-- PNG/JPEG/SVG/crop/text preview content tests passed. The combined media authority
-  run exposed a missing output capability description, since corrected; rerun is
-  pending. A new native process-marker inspection fixture failed to observe its
-  child immediately; diagnosis is pending and it is not counted as passed.
+- The client now uses progressive object observations and explicit directory/search
+  continuation. Frontend lane tests reached 254 passing tests, with frontend
+  boundaries and 24 boundary fixtures passing. Integration generation and the
+  current client build passed; final client checking remains required.
+- All ten Workspace tests, including media authority and PNG/JPEG/SVG/crop/text,
+  passed. The full Rust run had 166 passes, two failures and seven explicit external
+  checks left to run. The obsolete path-search test now verifies all 205 unique
+  paths across pages and all 14 Project integration tests pass. The native absence
+  fixture now uses a real marked child without relaxing production uncertainty;
+  that rerun remains pending.
+- Shared discovery tests passed permission-before-pagination, stale visibility
+  cursors, unavailable modules, exact descriptor identity and reply byte bounds.
 - Rust whole-workspace type checking and one client generate/build cycle passed
   at intermediate integration points. The following client check correctly
   rejected stale ObjectReadPage bindings after root identity fields were added.

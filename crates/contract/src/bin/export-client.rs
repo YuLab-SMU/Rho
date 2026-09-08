@@ -247,5 +247,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     QueuePause::export_all(&config)?;
     InputRequest::export_all(&config)?;
     RespondInput::export_all(&config)?;
+    CancellationRequestOutcome::export_all(&config)?;
+    BindMethodRequest::export_all(&config)?;
+    OperationGetArguments::export_all(&config)?;
+    OperationGetResult::export_all(&config)?;
+    OperationReadEvidenceArguments::export_all(&config)?;
+    OperationEvidencePage::export_all(&config)?;
+    ObserveOwnerRecovery::export_all(&config)?;
+    HostRestartRecovery::export_all(&config)?;
+    ContractFailureRecovery::export_all(&config)?;
+    WorkspaceRecovery::export_all(&config)?;
+    ProjectPatchRecovery::export_all(&config)?;
     Ok(())
 }

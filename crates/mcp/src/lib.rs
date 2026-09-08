@@ -1,12 +1,11 @@
 #![forbid(unsafe_code)]
 mod resources;
-use rho_operation::OperationError;
+use rho_host::OperationError;
 
 use futures::StreamExt;
 use rho_contract::{
     CallContext, CallerIdentity, CallerKind, CapabilityKind, CapabilityRef, HostRequest,
     Invocation, OperationId, OperationRecord, OutboxRecord, Precondition, QueryRequest,
-    QuerySnapshot,
 };
 use rho_host::NextHost;
 use rmcp::{
@@ -159,7 +158,7 @@ impl McpEdge {
                 "rho.operation.request_cancellation",
                 "Request cancellation by OperationId. Acceptance is not confirmation of a stopped runtime.",
                 schema_for!(rho_contract::CancelOperation).to_value(),
-                json!({"type":"object"}),
+                schema_for!(rho_contract::CancellationRequestOutcome).to_value(),
                 Route::Cancel,
                 false,
             ),
@@ -180,6 +179,23 @@ impl McpEdge {
                 true,
             ),
         ] {
+            if matches!(route, Route::Get | Route::Events)
+                && !context.scopes.contains("operation.read")
+            {
+                continue;
+            }
+            if matches!(route, Route::Input) && !context.scopes.contains("workspace.run_r") {
+                continue;
+            }
+            if matches!(route, Route::Cancel)
+                && !host.capabilities().iter().any(|capability| {
+                    capability.kind == CapabilityKind::Operation
+                        && capability.cancellation != rho_contract::CancellationClass::Unsupported
+                        && capability.required_scopes.is_subset(&context.scopes)
+                })
+            {
+                continue;
+            }
             let tool = Tool::new(name, description, object(input)?)
                 .with_raw_output_schema(Arc::new(object(result_schema(output))?))
                 .with_annotations(ToolAnnotations::new().read_only(read_only));
@@ -254,11 +270,21 @@ impl McpEdge {
             Route::View => {
                 return Err(invalid_operation("native view uses the presentation route"));
             }
-            Route::Capability(capability, CapabilityKind::Control) => match capability.id.as_str() {
-                "application.control"=>HostRequest::ApplicationControl(serde_json::from_value(args).map_err(invalid_operation)?),
-                "application.bind_method"=>HostRequest::BindMethod(serde_json::from_value(args).map_err(invalid_operation)?),
-                _=>return Err(rho_operation::OperationError::UnknownCapability(capability.display_key())),
-            },
+            Route::Capability(capability, CapabilityKind::Control) => {
+                match capability.id.as_str() {
+                    "application.control" => HostRequest::ApplicationControl(
+                        serde_json::from_value(args).map_err(invalid_operation)?,
+                    ),
+                    "application.bind_method" => HostRequest::BindMethod(
+                        serde_json::from_value(args).map_err(invalid_operation)?,
+                    ),
+                    _ => {
+                        return Err(rho_host::OperationError::UnknownCapability(
+                            capability.display_key(),
+                        ));
+                    }
+                }
+            }
             Route::Get => {
                 let input: OperationArguments =
                     serde_json::from_value(args).map_err(invalid_operation)?;

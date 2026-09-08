@@ -692,9 +692,7 @@ impl ArkRuntime {
             let reference = self.outputs.append_text(&operation.operation_id, text)
                 .map_err(|error| WorkspaceRuntimeError::after_possible_effect(error,
                     Some(json!({"operation_id":operation.operation_id, "session_id":self.session_id, "result_path":result_path, "next_read":"workspace.output_events"}))))?;
-            captured
-                .displays
-                .push(reference.clone());
+            captured.displays.push(reference.clone());
             let preview = response
                 .value
                 .get("preview")
@@ -718,7 +716,10 @@ impl ArkRuntime {
             conditions: {
                 let mut conditions = response.conditions;
                 if let Some(error) = &captured.observation_error {
-                    conditions.push(rho_contract::WorkspaceCondition {kind:"output_observation".into(),message:format!("Output observation is incomplete: {error}")});
+                    conditions.push(rho_contract::WorkspaceCondition {
+                        kind: "output_observation".into(),
+                        message: format!("Output observation is incomplete: {error}"),
+                    });
                 }
                 conditions
             },

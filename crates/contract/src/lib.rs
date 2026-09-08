@@ -36,6 +36,8 @@ pub mod recovery;
 pub use recovery::*;
 pub mod record_query;
 pub use record_query::*;
+pub mod operation_evidence;
+pub use operation_evidence::*;
 
 use std::collections::BTreeSet;
 

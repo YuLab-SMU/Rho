@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import { request as httpRequest } from "node:http";
@@ -262,6 +263,51 @@ try {
   });
   assert.equal(snapshot.status, "ready");
   assert.deepEqual(await history(), before);
+  const bridgeHeaders = { ...headers, "X-Rho-Studio-Window": "http-document-fixture" };
+  const bridgeFrame = (method, params) => ({
+    project_root: selectedRoot,
+    frame: { id: String(++sequence), request: { method, params } },
+  });
+  const bridge = async (params) => {
+    const response = await fetch(new URL("/api/application/bridge", url), {
+      method: "POST", headers: bridgeHeaders,
+      body: JSON.stringify(bridgeFrame("application_bridge", params)),
+    });
+    const reply = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(reply));
+    assert.equal(reply.ok, true, JSON.stringify(reply));
+    return reply.result;
+  };
+  const registration = await bridge({ kind: "register", window_id: "http-document-fixture", incarnation: "first", label: "HTTP large draft fixture", previous_session: null });
+  assert.equal(registration.kind, "registered");
+  const draftText = "界\n".repeat(131072); // Exactly 512 KiB UTF-8 per draft/base.
+  const draftHash = "sha256:" + createHash("sha256").update(draftText).digest("hex");
+  const largeSync = { kind: "sync", session: registration.data.session, sync_id: "large-draft", changes: {
+    context: null, removed_documents: [], documents: [{ expected_version: null, expected_selection_version: null, document: {
+      document_id: "large-document", version: "v1", path: "large.R", text: draftText,
+      base_text: draftText, base_hash: draftHash,
+      selection: { anchor: 0, head: 1, version: "s1" }, readonly_reason: null,
+    } }],
+  } };
+  assert.ok(Buffer.byteLength(JSON.stringify(largeSync)) > 272 * 1024);
+  assert.equal((await bridge(largeSync)).kind, "synced");
+  const draftPage = await host("query_snapshot", { capability: { id: "application.read_document", version: 1 }, arguments: {
+    window: registration.data.session.window,
+    document: { document_id: "large-document", document_version: "v1", selection_version: "s1" },
+    expected_sha256: draftHash, offset_utf8: 0, limit_bytes: 16384,
+  } });
+  assert.equal(draftPage.data.content_sha256, draftHash);
+  assert.ok(draftPage.data.next_offset_utf8 > 0);
+  assert.equal(await fetch(new URL("/api/host", url), {
+    method: "POST", headers: bridgeHeaders, body: JSON.stringify(bridgeFrame("application_bridge", largeSync)),
+  }).then(r => r.status), 413);
+  assert.equal(await fetch(new URL("/api/application/bridge", url), {
+    method: "POST", headers: bridgeHeaders, body: JSON.stringify(bridgeFrame("query_snapshot", { capability: { id: "project.snapshot", version: 1 }, arguments: {} })),
+  }).then(r => r.status), 400);
+  assert.equal(await fetch(new URL("/api/application/bridge", url), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(bridgeFrame("application_bridge", { kind: "renew", session: registration.data.session })),
+  }).then(r => r.status), 401);
+  assert.deepEqual(await history(), before, "Application draft synchronization must not write scientific history");
   const hello = await mcp("initialize", {
     protocolVersion: "2025-11-25",
     capabilities: {},

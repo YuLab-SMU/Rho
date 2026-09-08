@@ -8,7 +8,6 @@ repository.workspace = true
 
 [dependencies]
 base64 = "0.22"
-rho-operation = { path = "../operation" }
 rho-contract = { path = "../contract" }
 rho-host = { path = "../host" }
 rmcp.workspace = true

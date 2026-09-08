@@ -1,47 +1,270 @@
 {
   "schema_version": 1,
   "checks": {
-    "system.architecture": { "command": ["node", "scripts/check-architecture.mjs"] },
-    "system.rust": { "command": ["cargo", "test", "--workspace", "--locked", "--", "--test-threads=1"] },
-    "system.client": { "command": ["node", "scripts/client.mjs", "check"] },
-    "system.vendor": { "command": ["node", "scripts/vendor-jet.mjs", "check"] },
-    "system.vendor-tests": { "command": ["node", "scripts/test-vendor-jet.mjs"] },
-    "system.real-r": { "command": ["node", "scripts/test-real-r.mjs"] },
-    "system.environment": { "command": ["node", "scripts/test-environment.mjs"] },
-    "system.process-recovery": { "command": ["node", "scripts/test-process-recovery.mjs"] },
-    "system.remote-protocol": { "command": ["node", "scripts/test-remote-protocol.mjs"] },
-    "system.mcp": { "command": ["node", "scripts/test-mcp.mjs"] },
-    "system.mcp-real-r": { "command": ["node", "scripts/test-mcp.mjs", "--real-r"] },
-    "system.workbench": { "command": ["node", "scripts/test-workbench.mjs"] },
-    "system.workbench-real-r": { "command": ["node", "scripts/test-workbench.mjs", "--real-r"] },
-    "docs.index": { "command": ["node", "scripts/governance.mjs", "check"] },
-    "docs.tool": { "command": ["node", "scripts/test-governance.mjs"] },
-    "studio.types": { "command": ["npm", "run", "typecheck", "--prefix", "ui"] },
-    "studio.unit": { "command": ["npm", "run", "test", "--prefix", "ui"] },
-    "studio.boundaries": { "command": ["node", "scripts/check-frontend-boundaries.mjs"] },
-    "studio.boundary-tests": { "command": ["node", "scripts/test-frontend-boundaries.mjs"] },
-    "studio.browser": { "command": ["npm", "run", "test:browser", "--prefix", "ui"] }
+    "system.architecture": {
+      "command": [
+        "node",
+        "scripts/check-architecture.mjs"
+      ]
+    },
+    "system.rust": {
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--locked",
+        "--",
+        "--test-threads=1"
+      ]
+    },
+    "system.client": {
+      "command": [
+        "node",
+        "scripts/client.mjs",
+        "check"
+      ]
+    },
+    "system.vendor": {
+      "command": [
+        "node",
+        "scripts/vendor-jet.mjs",
+        "check"
+      ]
+    },
+    "system.vendor-tests": {
+      "command": [
+        "node",
+        "scripts/test-vendor-jet.mjs"
+      ]
+    },
+    "system.real-r": {
+      "command": [
+        "node",
+        "scripts/test-real-r.mjs"
+      ]
+    },
+    "system.environment": {
+      "command": [
+        "node",
+        "scripts/test-environment.mjs"
+      ]
+    },
+    "system.process-recovery": {
+      "command": [
+        "node",
+        "scripts/test-process-recovery.mjs"
+      ]
+    },
+    "system.remote-protocol": {
+      "command": [
+        "node",
+        "scripts/test-remote-protocol.mjs"
+      ]
+    },
+    "system.mcp": {
+      "command": [
+        "node",
+        "scripts/test-mcp.mjs"
+      ]
+    },
+    "system.mcp-real-r": {
+      "command": [
+        "node",
+        "scripts/test-mcp.mjs",
+        "--real-r"
+      ]
+    },
+    "system.workbench": {
+      "command": [
+        "node",
+        "scripts/test-workbench.mjs"
+      ]
+    },
+    "system.workbench-real-r": {
+      "command": [
+        "node",
+        "scripts/test-workbench.mjs",
+        "--real-r"
+      ]
+    },
+    "docs.index": {
+      "command": [
+        "node",
+        "scripts/governance.mjs",
+        "check"
+      ]
+    },
+    "docs.tool": {
+      "command": [
+        "node",
+        "scripts/test-governance.mjs"
+      ]
+    },
+    "studio.types": {
+      "command": [
+        "npm",
+        "run",
+        "typecheck",
+        "--prefix",
+        "ui"
+      ]
+    },
+    "studio.unit": {
+      "command": [
+        "npm",
+        "run",
+        "test",
+        "--prefix",
+        "ui"
+      ]
+    },
+    "studio.boundaries": {
+      "command": [
+        "node",
+        "scripts/check-frontend-boundaries.mjs"
+      ]
+    },
+    "studio.boundary-tests": {
+      "command": [
+        "node",
+        "scripts/test-frontend-boundaries.mjs"
+      ]
+    },
+    "studio.browser": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui"
+      ]
+    },
+    "system.agent-harness": {
+      "command": [
+        "node",
+        "scripts/test-agent-interface.mjs",
+        "--self-test"
+      ]
+    },
+    "system.output-media": {
+      "command": [
+        "node",
+        "scripts/test-output-media.mjs"
+      ]
+    }
   },
   "areas": {
     "documentation": {
-      "sources": [".git*", "AGENTS.md", "README.md", "CONTRIBUTING.md", "docs/**", "governance/**", "scripts/governance.mjs", "scripts/test-governance.mjs"],
-      "checks": ["docs.index", "docs.tool"]
+      "sources": [
+        ".git*",
+        "AGENTS.md",
+        "README.md",
+        "CONTRIBUTING.md",
+        "docs/**",
+        "governance/**",
+        "scripts/governance.mjs",
+        "scripts/test-governance.mjs"
+      ],
+      "checks": [
+        "docs.index",
+        "docs.tool"
+      ]
     },
     "system": {
-      "sources": ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "r/**", "scripts/check-architecture.mjs", "scripts/client.mjs", "scripts/test-*.mjs", "scripts/test-*.R", "scripts/fixtures/**", "scripts/verify-*.mjs", "vendor/**", "patches/jet/**", "scripts/vendor-jet.mjs", ".gitattributes", "docs/ARCHITECTURE.md"],
-      "checks": ["docs.index", "docs.tool", "system.architecture", "system.rust", "system.client", "system.real-r", "system.environment", "system.process-recovery", "system.remote-protocol", "system.mcp", "system.mcp-real-r", "system.workbench", "system.workbench-real-r", "system.vendor", "system.vendor-tests"]
+      "sources": [
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain.toml",
+        "crates/**",
+        "r/**",
+        "scripts/check-architecture.mjs",
+        "scripts/client.mjs",
+        "scripts/test-*.mjs",
+        "scripts/test-*.R",
+        "scripts/fixtures/**",
+        "scripts/verify-*.mjs",
+        "vendor/**",
+        "patches/jet/**",
+        "scripts/vendor-jet.mjs",
+        ".gitattributes",
+        "docs/ARCHITECTURE.md",
+        "scripts/agent-interface/**",
+        ".agents/skills/**"
+      ],
+      "checks": [
+        "docs.index",
+        "docs.tool",
+        "system.architecture",
+        "system.rust",
+        "system.client",
+        "system.real-r",
+        "system.environment",
+        "system.process-recovery",
+        "system.remote-protocol",
+        "system.mcp",
+        "system.mcp-real-r",
+        "system.workbench",
+        "system.workbench-real-r",
+        "system.vendor",
+        "system.vendor-tests",
+        "system.agent-harness",
+        "system.output-media"
+      ]
     },
     "development-tools": {
-      "sources": ["scripts/dev-lanes.mjs", "scripts/test-dev-lanes.mjs", "scripts/path-ownership.mjs"],
-      "checks": ["docs.index", "docs.tool"]
+      "sources": [
+        "scripts/dev-lanes.mjs",
+        "scripts/test-dev-lanes.mjs",
+        "scripts/path-ownership.mjs"
+      ],
+      "checks": [
+        "docs.index",
+        "docs.tool"
+      ]
     },
     "delivery": {
-      "sources": [".github/**", "runtime/**", "LICENSE", "LICENSES.md", "PRIVACY.md", "SECURITY.md", "CODE_SIGNING_POLICY.md", "scripts/bootstrap-ark-*.sh", "scripts/bootstrap-ark-*.ps1", "scripts/test-bootstrap-ark-*.sh"],
-      "checks": ["docs.index", "system.architecture"]
+      "sources": [
+        ".github/**",
+        "runtime/**",
+        "LICENSE",
+        "LICENSES.md",
+        "PRIVACY.md",
+        "SECURITY.md",
+        "CODE_SIGNING_POLICY.md",
+        "scripts/bootstrap-ark-*.sh",
+        "scripts/bootstrap-ark-*.ps1",
+        "scripts/test-bootstrap-ark-*.sh"
+      ],
+      "checks": [
+        "docs.index",
+        "system.architecture"
+      ]
     },
     "studio": {
-      "sources": ["ui/**", "crates/workbench/assets/**", "crates/contract/**", "scripts/client.mjs", "scripts/check-frontend-boundaries.mjs", "scripts/test-frontend-boundaries.mjs", "scripts/fixtures/frontend-boundaries/**", ".github/workflows/rho.yml"],
-      "checks": ["docs.index", "docs.tool", "studio.types", "studio.unit", "studio.boundaries", "studio.boundary-tests", "studio.browser", "system.client", "system.workbench", "system.workbench-real-r", "system.mcp", "system.mcp-real-r"]
+      "sources": [
+        "ui/**",
+        "crates/workbench/assets/**",
+        "crates/contract/**",
+        "scripts/client.mjs",
+        "scripts/check-frontend-boundaries.mjs",
+        "scripts/test-frontend-boundaries.mjs",
+        "scripts/fixtures/frontend-boundaries/**",
+        ".github/workflows/rho.yml"
+      ],
+      "checks": [
+        "docs.index",
+        "docs.tool",
+        "studio.types",
+        "studio.unit",
+        "studio.boundaries",
+        "studio.boundary-tests",
+        "studio.browser",
+        "system.client",
+        "system.workbench",
+        "system.workbench-real-r",
+        "system.mcp",
+        "system.mcp-real-r"
+      ]
     }
   }
 }

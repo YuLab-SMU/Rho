@@ -98,11 +98,15 @@ impl WorkspaceToolHandler {
         descriptor.capability = CapabilityRef::new(id, 1).unwrap();
         descriptor.documentation = rho_contract::builtin_documentation(id);
         descriptor.input_schema = schema;
-        descriptor.output_schema = rho_contract::payload_envelope(schema_for!(RunROutput).to_value(), "value", match kind {
-            WorkspaceToolKind::Help => schema_for!(rho_contract::HelpResult).to_value(),
-            WorkspaceToolKind::Lint => schema_for!(rho_contract::LintResult).to_value(),
-            WorkspaceToolKind::Format => schema_for!(rho_contract::FormatResult).to_value(),
-        });
+        descriptor.output_schema = rho_contract::payload_envelope(
+            schema_for!(RunROutput).to_value(),
+            "value",
+            match kind {
+                WorkspaceToolKind::Help => schema_for!(rho_contract::HelpResult).to_value(),
+                WorkspaceToolKind::Lint => schema_for!(rho_contract::LintResult).to_value(),
+                WorkspaceToolKind::Format => schema_for!(rho_contract::FormatResult).to_value(),
+            },
+        );
         Self {
             owner,
             descriptor,

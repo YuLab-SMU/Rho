@@ -359,17 +359,31 @@ async fn second_host_cannot_recover_live_writer_and_reader_does_not_mutate() {
     let reader = NextHost::open_read_only(&path).unwrap();
     assert!(reader.recovered_on_open().is_empty());
     let context = NextHost::local_context();
-    let record = writer
+    let mut record = writer
         .invoke(&context, invocation("persisted"))
         .await
         .unwrap();
+    let mut observed = reader
+        .get_operation(&context, &record.operation.operation_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let reads = observed.next_reads.take().unwrap();
+    assert_eq!(reads.len(), 1);
+    assert_eq!(reads[0].capability.id, "operation.get");
     assert_eq!(
-        reader
-            .get_operation(&context, &record.operation.operation_id)
-            .await
-            .unwrap(),
-        Some(record)
+        reads[0].arguments["operation_id"],
+        record.operation.operation_id.as_str()
     );
+    assert!(
+        record
+            .next_reads
+            .take()
+            .unwrap()
+            .iter()
+            .any(|read| read.capability.id == "workspace.output_events")
+    );
+    assert_eq!(observed, record);
 }
 
 async fn console_state(host: &NextHost) -> rho_contract::ConsoleState {

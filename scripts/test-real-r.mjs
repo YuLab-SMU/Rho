@@ -19,6 +19,7 @@ const rHome = process.env.RHO_R_HOME || run("Rscript", ["--vanilla", "-e", "cat(
 const env = { ...process.env, RHO_ARK: ark, RHO_R_HOME: rHome };
 run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-r-tools.R"], { env, stdio: "inherit" });
 run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-r-packages.R"], { env, stdio: "inherit" });
+for (const script of ["scripts/test-r-objects.R", "scripts/test-r-package-index.R"]) run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", script], { env, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
   "--locked", "--no-run"], { env, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
@@ -38,7 +39,13 @@ try {
   const id = output.operation.operation.operation_id;
   const before = fs.readFileSync(database);
   const query = JSON.parse(run(binary, ["--database", database, "get-operation", id]));
-  assert.deepEqual(query.operation, output.operation);
+  const { next_reads: originalReads, ...originalRecord } = output.operation;
+  const { next_reads: queriedReads, ...queriedRecord } = query.operation;
+  assert.deepEqual(queriedRecord, originalRecord);
+  assert.equal(queriedReads.length, 1);
+  assert.equal(queriedReads[0].capability.id, "operation.get");
+  assert.equal(queriedReads[0].arguments.operation_id, id);
+  assert.ok(originalReads.some(read => read.capability.id === "workspace.output_events"));
   assert.deepEqual(fs.readFileSync(database), before);
   await verifySession(binary, ["--database", path.join(project, "session.sqlite"),
     "--ark", ark, "--r-home", rHome, "--project", project]);

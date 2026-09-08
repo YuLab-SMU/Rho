@@ -278,11 +278,7 @@ pub enum Admission {
     Existing(OperationRecord),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct CancellationRequestOutcome {
-    pub accepted: bool,
-    pub operation: OperationRecord,
-}
+pub use rho_contract::CancellationRequestOutcome;
 
 /// A closed request channel is not a cancellation request.
 pub async fn wait_cancellation(receiver: &mut tokio::sync::watch::Receiver<bool>) {

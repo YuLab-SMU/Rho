@@ -140,7 +140,10 @@ pub struct RunROutput {
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
-pub struct WorkspaceCondition { pub kind: String, pub message: String }
+pub struct WorkspaceCondition {
+    pub kind: String,
+    pub message: String,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct HelpResult {
@@ -156,29 +159,64 @@ pub struct HelpResult {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct LintDiagnostic {
-    pub line: u32, pub column: u32,
-    #[serde(rename = "type")] pub kind: String,
-    pub message: String, pub linter: String,
+    pub line: u32,
+    pub column: u32,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub message: String,
+    pub linter: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
-pub struct LintResult { pub tool_version: String, pub diagnostics: Vec<LintDiagnostic>, pub truncated: bool }
+pub struct LintResult {
+    pub tool_version: String,
+    pub diagnostics: Vec<LintDiagnostic>,
+    pub truncated: bool,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum WorkspaceRecovery {
-    SessionChanged { expected_session_id: String, observed_session_id: String },
-    InterruptedProtocol { session_id: String, request_id: String, action: String },
-    MissingReport { session_id: String, result_path: String, kernel_error: Option<String> },
-    ProtocolError { session_id: String, result_path: String, action: String },
-    HelpStorage { operation_id: crate::OperationId, session_id: String, result_path: String, next_read: String },
+    SessionChanged {
+        expected_session_id: String,
+        observed_session_id: String,
+    },
+    InterruptedProtocol {
+        session_id: String,
+        request_id: String,
+        action: String,
+    },
+    MissingReport {
+        session_id: String,
+        result_path: String,
+        kernel_error: Option<String>,
+    },
+    ProtocolError {
+        session_id: String,
+        result_path: String,
+        action: String,
+    },
+    HelpStorage {
+        operation_id: crate::OperationId,
+        session_id: String,
+        result_path: String,
+        next_read: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum ProjectPatchRecovery {
-    ReadFailed { project_root: String, before: ProjectSnapshot, affected_paths: Vec<String> },
-    UncertainPatch { action: String, root: String, affected_paths: Vec<String> },
+    ReadFailed {
+        project_root: String,
+        before: ProjectSnapshot,
+        affected_paths: Vec<String>,
+    },
+    UncertainPatch {
+        action: String,
+        root: String,
+        affected_paths: Vec<String>,
+    },
 }
 
 /// Bounded observation of the libraries and namespaces of the existing R session.

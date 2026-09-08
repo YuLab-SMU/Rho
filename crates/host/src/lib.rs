@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
-mod discovery;
 mod application;
+mod discovery;
 mod skills;
 
 mod config;
@@ -38,10 +38,10 @@ use rho_execution::slurm::{
 };
 use rho_execution::{RUN_LOCAL_SCOPE, ReconcileProcessHandler, RunLocalHandler};
 use rho_git::GitProject;
+pub use rho_operation::OperationError;
 use rho_operation::{
-    CancellationRequestOutcome, CapabilityRegistry, Clock, OperationError, OperationGateway,
-    OperationIdGenerator, OperationJournal, QueryGateway, StoredDomainFact, SystemClock,
-    UuidOperationIdGenerator,
+    CancellationRequestOutcome, CapabilityRegistry, Clock, OperationGateway, OperationIdGenerator,
+    OperationJournal, QueryGateway, StoredDomainFact, SystemClock, UuidOperationIdGenerator,
 };
 use rho_process::LocalProcessExecutor;
 use rho_project::{
@@ -195,9 +195,16 @@ impl NextHost {
     ) -> Result<Self, OperationError> {
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
         let mut excluded = protected_project_paths(database)?;
+        if let Some(manifest) = host_skills {
+            excluded.push(manifest.to_path_buf());
+            if let Ok(actual) = manifest.canonicalize() {
+                excluded.push(actual);
+            }
+        }
         excluded.push(lease.path().to_owned());
         let project = Arc::new(
-            GitProject::open(lease.root(), excluded.clone()).map_err(OperationError::TargetResolution)?,
+            GitProject::open(lease.root(), excluded.clone())
+                .map_err(OperationError::TargetResolution)?,
         );
         let remote = remote_components(Path::new(project.root()), remote)?;
         Self::compose(
@@ -205,7 +212,10 @@ impl NextHost {
             HostDomains {
                 host_skills: host_skills.map(Path::to_path_buf),
                 skill_exclusions: excluded,
-                application_store: Some(Arc::new(ApplicationStore::open(&database.with_extension("studio.sqlite")).map_err(OperationError::Storage)?)),
+                application_store: Some(Arc::new(
+                    ApplicationStore::open(&database.with_extension("studio.sqlite"))
+                        .map_err(OperationError::Storage)?,
+                )),
                 outputs: Some(Arc::new(
                     rho_r_runtime::OutputStore::open(
                         &database.parent().unwrap_or(Path::new(".")).join("runtime"),
@@ -255,7 +265,9 @@ impl NextHost {
             ),
             HostRequest::RespondInput(reply) => {
                 let record = self
-                    .get_operation(context, &reply.operation_id)
+                    .runtime
+                    .gateway
+                    .owner_record(context, &reply.operation_id)
                     .await?
                     .ok_or_else(|| {
                         OperationError::NotFound(reply.operation_id.as_str().to_string())
@@ -279,29 +291,62 @@ impl NextHost {
                 serde_json::to_value(self.query_snapshot(context, query).await?)
             }
             HostRequest::ApplicationControl(request) => {
-                application::scope(context,"application.control","application.control")?;
-                let capability=rho_contract::CapabilityRef::new("application.control",1)?;
-                let arguments=serde_json::to_value(&request).map_err(|e|OperationError::Contract(e.to_string()))?;
-                self.runtime.registry.validate_control_input(context,&capability,&arguments)?;
-                let result=serde_json::to_value(self.application_owner()?.control(context,request,application::now()?).map_err(application::error)?).map_err(|e|OperationError::Contract(e.to_string()))?;
-                self.runtime.registry.validate_control_output(&capability,&result)?;
+                application::scope(context, "application.control", "application.control")?;
+                let capability = rho_contract::CapabilityRef::new("application.control", 1)?;
+                let arguments = serde_json::to_value(&request)
+                    .map_err(|e| OperationError::Contract(e.to_string()))?;
+                self.runtime
+                    .registry
+                    .validate_control_input(context, &capability, &arguments)?;
+                let result = serde_json::to_value(
+                    self.application_owner()?
+                        .control(context, request, application::now()?)
+                        .map_err(application::error)?,
+                )
+                .map_err(|e| OperationError::Contract(e.to_string()))?;
+                self.runtime
+                    .registry
+                    .validate_control_output(&capability, &result)?;
                 Ok(result)
             }
             HostRequest::ApplicationBridge(request) => {
                 application::studio(context)?;
-                serde_json::to_value(self.application_owner()?.bridge(context,request,application::now()?).map_err(application::error)?)
+                serde_json::to_value(
+                    self.application_owner()?
+                        .bridge(context, request, application::now()?)
+                        .map_err(application::error)?,
+                )
             }
             HostRequest::ApplicationExecute(request) => {
                 application::studio(context)?;
-                serde_json::to_value(self.application_execute(context,request).await?)
+                serde_json::to_value(self.application_execute(context, request).await?)
             }
             HostRequest::BindMethod(request) => {
-                let _gate=self.runtime.method_binding_gate.lock().await;
-                let capability=rho_contract::CapabilityRef::new("application.bind_method",1)?;
-                self.runtime.registry.validate_control_input(context,&capability,&serde_json::to_value(&request).map_err(|e|OperationError::Contract(e.to_string()))?)?;
-                let owner=self.runtime.skills.as_ref().ok_or_else(||OperationError::Unavailable("Skills owner is unavailable".into()))?;
-                let result=serde_json::to_value(skills::bind_method(owner,self.application_owner()?,context,request.expected_version.as_deref(),&request.binding).await?).map_err(|e|OperationError::Contract(e.to_string()))?;
-                self.runtime.registry.validate_control_output(&capability,&result)?;
+                let _gate = self.runtime.method_binding_gate.lock().await;
+                let capability = rho_contract::CapabilityRef::new("application.bind_method", 1)?;
+                self.runtime.registry.validate_control_input(
+                    context,
+                    &capability,
+                    &serde_json::to_value(&request)
+                        .map_err(|e| OperationError::Contract(e.to_string()))?,
+                )?;
+                let owner = self.runtime.skills.as_ref().ok_or_else(|| {
+                    OperationError::Unavailable("Skills owner is unavailable".into())
+                })?;
+                let result = serde_json::to_value(
+                    skills::bind_method(
+                        owner,
+                        self.application_owner()?,
+                        context,
+                        request.expected_version.as_deref(),
+                        &request.binding,
+                    )
+                    .await?,
+                )
+                .map_err(|e| OperationError::Contract(e.to_string()))?;
+                self.runtime
+                    .registry
+                    .validate_control_output(&capability, &result)?;
                 Ok(result)
             }
             HostRequest::Subscribe {
@@ -351,19 +396,29 @@ impl NextHost {
         // later Environment queries never launch a helper to fill this cache.
         let _ = environment.initialize_observation().await;
         let mut excluded = protected_project_paths(database)?;
+        if let Some(manifest) = host_skills {
+            excluded.push(manifest.to_path_buf());
+            if let Ok(actual) = manifest.canonicalize() {
+                excluded.push(actual);
+            }
+        }
         excluded.push(lease.path().to_owned());
         excluded.push(
             data.canonicalize()
                 .map_err(|e| OperationError::Storage(e.to_string()))?,
         );
-        let project =
-            Arc::new(GitProject::open(root, excluded.clone()).map_err(OperationError::TargetResolution)?);
+        let project = Arc::new(
+            GitProject::open(root, excluded.clone()).map_err(OperationError::TargetResolution)?,
+        );
         Self::compose(
             journal,
             HostDomains {
                 host_skills: host_skills.map(Path::to_path_buf),
                 skill_exclusions: excluded,
-                application_store: Some(Arc::new(ApplicationStore::open(&database.with_extension("studio.sqlite")).map_err(OperationError::Storage)?)),
+                application_store: Some(Arc::new(
+                    ApplicationStore::open(&database.with_extension("studio.sqlite"))
+                        .map_err(OperationError::Storage)?,
+                )),
                 outputs: Some(Arc::new(
                     rho_r_runtime::OutputStore::open(
                         &database.parent().unwrap_or(Path::new(".")).join("runtime"),
@@ -398,7 +453,15 @@ impl NextHost {
     ) -> Result<Self, OperationError> {
         // Acquire project ownership before journal creation, recovery or R launch.
         let lease = ProjectLease::acquire(&config.project_root)?;
-        Self::open_ark_reserved(database.as_ref(), config, realization_id, remote, lease, None).await
+        Self::open_ark_reserved(
+            database.as_ref(),
+            config,
+            realization_id,
+            remote,
+            lease,
+            None,
+        )
+        .await
     }
 
     async fn open_ark_reserved(
@@ -415,6 +478,12 @@ impl NextHost {
         std::fs::create_dir_all(&config.data_root)
             .map_err(|error| OperationError::Storage(error.to_string()))?;
         let mut excluded = protected_project_paths(database)?;
+        if let Some(manifest) = host_skills {
+            excluded.push(manifest.to_path_buf());
+            if let Ok(actual) = manifest.canonicalize() {
+                excluded.push(actual);
+            }
+        }
         excluded.push(lease.path().to_owned());
         excluded.push(
             config
@@ -472,7 +541,10 @@ impl NextHost {
             HostDomains {
                 host_skills: host_skills.map(Path::to_path_buf),
                 skill_exclusions: excluded,
-                application_store: Some(Arc::new(ApplicationStore::open(&database.with_extension("studio.sqlite")).map_err(OperationError::Storage)?)),
+                application_store: Some(Arc::new(
+                    ApplicationStore::open(&database.with_extension("studio.sqlite"))
+                        .map_err(OperationError::Storage)?,
+                )),
                 workspace: Some(runtime),
                 outputs: Some(outputs),
                 project: Some(project),
@@ -518,11 +590,24 @@ impl NextHost {
     }
 
     pub fn open_read_only(database: impl AsRef<Path>) -> Result<Self, OperationError> {
-        let journal=Arc::new(SqliteOperationJournal::open_read_only(database)?);
-        let mut registry=CapabilityRegistry::new();
-        let discovery=discovery::DiscoveryOwner::new(None,vec![],None);
-        for id in ["host.overview","host.catalog","host.describe"]{registry.register_query(Arc::new(discovery::DiscoveryHandler::new(discovery.clone(),id)))?;}
-        registry.register_query(Arc::new(rho_operation::OperationGetHandler::new(journal.clone(),None,&registry.descriptors())?))?;
+        let journal = Arc::new(SqliteOperationJournal::open_read_only(database)?);
+        let mut registry = CapabilityRegistry::new();
+        let discovery = discovery::DiscoveryOwner::new(None, vec![], None);
+        for id in ["host.overview", "host.catalog", "host.describe"] {
+            registry.register_query(Arc::new(discovery::DiscoveryHandler::new(
+                discovery.clone(),
+                id,
+            )))?;
+        }
+        registry.register_query(Arc::new(rho_operation::OperationGetHandler::new(
+            journal.clone(),
+            None,
+            &registry.descriptors(),
+        )?))?;
+        registry.register_query(Arc::new(rho_operation::OperationEvidenceHandler::new(
+            journal.clone(),
+            None,
+        )))?;
         registry.validate_links()?;
         let registry = Arc::new(registry);
         discovery.bind(&registry);
@@ -595,26 +680,87 @@ impl NextHost {
             project_lease,
         } = domains;
         let output_project = project.as_ref().map(|p| p.root().to_string());
-        let application_owner = application_store.zip(output_project.clone()).map(|(store,project)|Arc::new(rho_application::ApplicationOwner::new(project,store)));
+        let application_owner =
+            application_store
+                .zip(output_project.clone())
+                .map(|(store, project)| {
+                    Arc::new(rho_application::ApplicationOwner::new(project, store))
+                });
         let mut registry = CapabilityRegistry::new();
-        let mut targets=Vec::new();
-        if let Some(project)=&project {targets.push(rho_contract::TargetRef{kind:"project".into(),identity:project.root().into()});targets.push(rho_contract::TargetRef{kind:"local_process".into(),identity:project.root().into()});}
-        if let Some(runtime)=&runtime {targets.push(rho_contract::TargetRef{kind:"workspace".into(),identity:runtime.session_id().into()});}
-        if let Some(environment)=&environment {targets.push(rho_contract::TargetRef{kind:"environment".into(),identity:environment.root().into()});}
-        if let Some(remote)=&remote {targets.push(rho_execution::remote::RemoteExecutor::target(remote.as_ref()));}
-        let discovery = discovery::DiscoveryOwner::new(output_project.clone(),targets,runtime.clone());
-        let skill_owner=if let Some(app)=&application_owner {Some(skills::compose(output_project.as_deref().unwrap(),app.clone(),discovery.clone(),host_skills.as_deref(),skill_exclusions)?)}else{None};
+        let mut targets = Vec::new();
+        if let Some(project) = &project {
+            targets.push(rho_contract::TargetRef {
+                kind: "project".into(),
+                identity: project.root().into(),
+            });
+            targets.push(rho_contract::TargetRef {
+                kind: "local_process".into(),
+                identity: project.root().into(),
+            });
+        }
+        if let Some(runtime) = &runtime {
+            targets.push(rho_contract::TargetRef {
+                kind: "workspace".into(),
+                identity: runtime.session_id().into(),
+            });
+        }
+        if let Some(environment) = &environment {
+            targets.push(rho_contract::TargetRef {
+                kind: "environment".into(),
+                identity: environment.root().into(),
+            });
+        }
+        if let Some(remote) = &remote {
+            targets.push(rho_execution::remote::RemoteExecutor::target(
+                remote.as_ref(),
+            ));
+        }
+        let discovery =
+            discovery::DiscoveryOwner::new(output_project.clone(), targets, runtime.clone());
+        let skill_owner = if let Some(app) = &application_owner {
+            Some(skills::compose(
+                output_project.as_deref().unwrap(),
+                app.clone(),
+                discovery.clone(),
+                host_skills.as_deref(),
+                skill_exclusions,
+            )?)
+        } else {
+            None
+        };
         for id in ["host.overview", "host.catalog", "host.describe"] {
-            registry.register_query(Arc::new(discovery::DiscoveryHandler::new(discovery.clone(), id)))?;
+            registry.register_query(Arc::new(discovery::DiscoveryHandler::new(
+                discovery.clone(),
+                id,
+            )))?;
         }
         if let Some(owner) = &application_owner {
-            for id in ["application.windows", "application.context", "application.read_document", "application.command_status"] {
-                registry.register_query(Arc::new(application::ApplicationHandler::new(owner.clone(),journal.clone(),output_project.clone().unwrap(),id)))?;
+            for id in [
+                "application.windows",
+                "application.context",
+                "application.read_document",
+                "application.command_status",
+            ] {
+                registry.register_query(Arc::new(application::ApplicationHandler::new(
+                    owner.clone(),
+                    journal.clone(),
+                    output_project.clone().unwrap(),
+                    id,
+                )))?;
             }
             registry.register_control(application::descriptor("application.control"))?;
         }
-        if let Some(owner)=&skill_owner{
-            for kind in [rho_skills::SkillQueryKind::List,rho_skills::SkillQueryKind::Read,rho_skills::SkillQueryKind::ResolveContext]{registry.register_query(Arc::new(rho_skills::SkillQueryHandler::new(owner.clone(),kind)))?;}
+        if let Some(owner) = &skill_owner {
+            for kind in [
+                rho_skills::SkillQueryKind::List,
+                rho_skills::SkillQueryKind::Read,
+                rho_skills::SkillQueryKind::ResolveContext,
+            ] {
+                registry.register_query(Arc::new(rho_skills::SkillQueryHandler::new(
+                    owner.clone(),
+                    kind,
+                )))?;
+            }
             registry.register_control(skills::bind_method_descriptor())?;
         }
         let lane = Arc::new(tokio::sync::Mutex::new(()));
@@ -688,13 +834,27 @@ impl NextHost {
                 workspace.clone(),
                 WorkspaceQueryKind::InspectObject,
             )))?;
-            for kind in [WorkspaceQueryKind::ListObjects, WorkspaceQueryKind::ObserveObject, WorkspaceQueryKind::ReadObject, WorkspaceQueryKind::PackageIndex] {
-                registry.register_query(Arc::new(WorkspaceQueryHandler::new(workspace.clone(), kind)))?;
+            for kind in [
+                WorkspaceQueryKind::ListObjects,
+                WorkspaceQueryKind::ObserveObject,
+                WorkspaceQueryKind::ReadObject,
+                WorkspaceQueryKind::PackageIndex,
+            ] {
+                registry.register_query(Arc::new(WorkspaceQueryHandler::new(
+                    workspace.clone(),
+                    kind,
+                )))?;
             }
         }
         let mut output_owner = None;
         if let Some(outputs) = outputs {
-            output_owner = Some(Arc::new(rho_workspace::WorkspaceOutputHandler::with_store(workspace_owner.clone(),Some(outputs.clone()),output_project.clone(),records.clone(),rho_workspace::OutputQueryKind::Read)));
+            output_owner = Some(Arc::new(rho_workspace::WorkspaceOutputHandler::with_store(
+                workspace_owner.clone(),
+                Some(outputs.clone()),
+                output_project.clone(),
+                records.clone(),
+                rho_workspace::OutputQueryKind::Read,
+            )));
             for kind in [
                 rho_workspace::OutputQueryKind::Events,
                 rho_workspace::OutputQueryKind::Read,
@@ -746,8 +906,12 @@ impl NextHost {
             registry.register_query(Arc::new(rho_project::ProjectSearchHandler::new(
                 owner.clone(),
             )))?;
-            registry.register_query(Arc::new(rho_project::ProjectReadTextHandler::new(owner.clone())))?;
-            registry.register_query(Arc::new(rho_project::ProjectSearchTextHandler::new(owner.clone())))?;
+            registry.register_query(Arc::new(rho_project::ProjectReadTextHandler::new(
+                owner.clone(),
+            )))?;
+            registry.register_query(Arc::new(rho_project::ProjectSearchTextHandler::new(
+                owner.clone(),
+            )))?;
             registry.register_query(Arc::new(ProjectReadHandler::new(owner)))?;
         }
         if let Some(environment) = environment {
@@ -781,7 +945,15 @@ impl NextHost {
                 )))?;
             }
         }
-        registry.register_query(Arc::new(rho_operation::OperationGetHandler::new(journal.clone(),output_project.clone(),&registry.descriptors())?))?;
+        registry.register_query(Arc::new(rho_operation::OperationEvidenceHandler::new(
+            journal.clone(),
+            output_project.clone(),
+        )))?;
+        registry.register_query(Arc::new(rho_operation::OperationGetHandler::new(
+            journal.clone(),
+            output_project.clone(),
+            &registry.descriptors(),
+        )?))?;
         registry.validate_links()?;
         let registry = Arc::new(registry);
         discovery.bind(&registry);
@@ -811,14 +983,32 @@ impl NextHost {
         self.runtime.gateway.registry_descriptors()
     }
 
-    fn application_owner(&self)->Result<&Arc<rho_application::ApplicationOwner>,OperationError>{self.runtime.application.as_ref().ok_or_else(||OperationError::Unavailable("No project Application owner is composed".into()))}
-
-    pub async fn verified_output(&self,context:&CallContext,reference:&rho_contract::MediaReference)->Result<Arc<[u8]>,OperationError>{
-        self.runtime.output_owner.as_ref().ok_or_else(||OperationError::Unavailable("Output owner is unavailable".into()))?.verified_original_for(context,reference).await
+    fn application_owner(&self) -> Result<&Arc<rho_application::ApplicationOwner>, OperationError> {
+        self.runtime.application.as_ref().ok_or_else(|| {
+            OperationError::Unavailable("No project Application owner is composed".into())
+        })
     }
 
-    async fn application_execute(&self,context:&CallContext,request:rho_contract::ApplicationExecuteRequest)->Result<rho_contract::ApplicationExecuteReply,OperationError>{
-        let runtime=self.runtime.clone();let context=context.clone();
+    pub async fn verified_output(
+        &self,
+        context: &CallContext,
+        reference: &rho_contract::MediaReference,
+    ) -> Result<Arc<[u8]>, OperationError> {
+        self.runtime
+            .output_owner
+            .as_ref()
+            .ok_or_else(|| OperationError::Unavailable("Output owner is unavailable".into()))?
+            .verified_original_for(context, reference)
+            .await
+    }
+
+    async fn application_execute(
+        &self,
+        context: &CallContext,
+        request: rho_contract::ApplicationExecuteRequest,
+    ) -> Result<rho_contract::ApplicationExecuteReply, OperationError> {
+        let runtime = self.runtime.clone();
+        let context = context.clone();
         // Own admission, scientific execution and receipt persistence independently
         // of the browser wait. There is no automatic submission of a later step.
         self.tasks.spawn(async move {
@@ -841,7 +1031,7 @@ impl NextHost {
                 },
                 rho_application::ApplicationExecutionAdmission::Invoke{context:original,invocation}=>runtime.gateway.invoke(&original,invocation).await.map(Some),
                 rho_application::ApplicationExecutionAdmission::Observe{lookup}=>{
-                    if let Some(id)=lookup.operation_id {runtime.gateway.get_operation(&lookup.context,&id).await}else{runtime.gateway.get_request_operation(&lookup.context,&lookup.client_request_id).await}
+                    if let Some(id)=lookup.operation_id {runtime.gateway.owner_record(&lookup.context,&id).await}else{runtime.gateway.owner_request_record(&lookup.context,&lookup.client_request_id).await}
                 }
             };
             match result {

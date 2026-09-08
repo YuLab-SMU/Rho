@@ -7,7 +7,7 @@ use base64::{
 use rho_contract::{
     MediaReference, OutputResourceChunk, OutputResourceManifest, OutputView, ViewOutputArguments,
 };
-use rho_operation::OperationError;
+use rho_host::OperationError;
 use rmcp::model::{
     AnnotateAble, Content, ListResourceTemplatesResult, RawResource, RawResourceTemplate,
     ReadResourceResult, ResourceContents,

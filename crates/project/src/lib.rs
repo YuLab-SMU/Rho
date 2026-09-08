@@ -134,7 +134,11 @@ fn descriptor(id: &str, kind: CapabilityKind, input: Value, output: Value) -> Ca
         kind,
         capability: CapabilityRef::new(id, 1).unwrap(),
         documentation: rho_contract::builtin_documentation(id),
-        recovery_schema: if writes { schema_for!(rho_contract::ProjectPatchRecovery).to_value() } else { serde_json::json!({"type":"null"}) },
+        recovery_schema: if writes {
+            schema_for!(rho_contract::ProjectPatchRecovery).to_value()
+        } else {
+            serde_json::json!({"type":"null"})
+        },
         domain: "project".into(),
         input_schema: input,
         output_schema: output,

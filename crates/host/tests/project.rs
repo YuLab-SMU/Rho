@@ -957,7 +957,34 @@ async fn project_search_includes_ignored_data_and_reports_result_bounds() {
     let data = result.data.unwrap();
     assert_eq!(data["entries"].as_array().unwrap().len(), 200);
     assert_eq!(data["truncated"], true);
-    assert!(data["notices"][0].as_str().unwrap().contains("bounded"));
+    assert!(data["notices"][0].as_str().unwrap().contains("Page budget"));
+    assert_eq!(result.next_reads.len(), 1);
+    let continuation = &result.next_reads[0];
+    assert_eq!(continuation.capability.id, "project.search_files");
+    assert_eq!(continuation.arguments["continuation"], data["continuation"]);
+    let rest = host
+        .query_snapshot(
+            &NextHost::local_context(),
+            QueryRequest {
+                capability: continuation.capability.clone(),
+                arguments: continuation.arguments.clone(),
+            },
+        )
+        .await
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(rest["entries"].as_array().unwrap().len(), 5);
+    assert_eq!(rest["continuation"], serde_json::Value::Null);
+    assert_eq!(rest["truncated"], false);
+    let paths: std::collections::BTreeSet<_> = data["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(rest["entries"].as_array().unwrap())
+        .map(|entry| entry["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(paths.len(), 205);
     assert!(
         host.outbox(&NextHost::local_context(), 0, 100)
             .await

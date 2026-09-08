@@ -1,5 +1,5 @@
 use super::*;
-use rho_contract::ListDirectoryArguments;
+use rho_contract::{ListDirectoryArguments, NextRead};
 
 pub struct ProjectDirectoryHandler {
     owner: Arc<ProjectOwner>,
@@ -54,8 +54,22 @@ impl QueryHandler for ProjectDirectoryHandler {
             ),
             Err(error) => (QueryStatus::Unavailable, None, vec![error]),
         };
+        let mut next_reads = Vec::new();
+        if let Some(next_name) = data
+            .as_ref()
+            .and_then(|page| page.get("next_name"))
+            .filter(|name| !name.is_null())
+        {
+            let mut next = serde_json::to_value(&args).map_err(invalid)?;
+            next["after_name"] = next_name.clone();
+            next_reads.push(NextRead::query(
+                "project.list_directory",
+                "Continue directory enumeration after the last returned name",
+                next,
+            ));
+        }
         Ok(QuerySnapshot {
-            next_reads: Vec::new(),
+            next_reads,
             diagnostics: Vec::new(),
             target: self.owner.target(),
             source: "filesystem".into(),
@@ -234,8 +248,18 @@ impl QueryHandler for ProjectSearchHandler {
                 "path search continuation exceeds 64 KiB; browse a narrower directory",
             ));
         }
+        let mut next_reads = Vec::new();
+        if let Some(cursor) = &result.continuation {
+            let mut next = serde_json::to_value(&args).map_err(invalid)?;
+            next["continuation"] = serde_json::to_value(cursor).map_err(invalid)?;
+            next_reads.push(NextRead::query(
+                "project.search_files",
+                "Continue the same path search from its bounded scan position",
+                next,
+            ));
+        }
         Ok(QuerySnapshot {
-            next_reads: Vec::new(),
+            next_reads,
             diagnostics: Vec::new(),
             target: self.owner.target(),
             source: "filesystem/search".into(),

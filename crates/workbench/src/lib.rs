@@ -10,7 +10,7 @@ use std::{
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Request, State},
-    http::{StatusCode, header, HeaderMap},
+    http::{HeaderMap, StatusCode, header},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -209,7 +209,11 @@ async fn select_project(
     }
 }
 
-async fn dispatch(State(state): State<AppState>, headers:HeaderMap, Json(request): Json<WorkbenchFrame>) -> Response {
+async fn dispatch(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<WorkbenchFrame>,
+) -> Response {
     if request.frame.id.is_empty() || request.frame.id.len() > 160 {
         return failure(StatusCode::BAD_REQUEST, "invalid transport request id");
     }
@@ -236,10 +240,23 @@ async fn dispatch(State(state): State<AppState>, headers:HeaderMap, Json(request
             "project changed; refresh before making another request",
         );
     }
-    let mut context=NextHost::local_context();
-    if let Some(window)=headers.get("x-rho-studio-window").and_then(|v|v.to_str().ok()) {
-        if window.is_empty() || window.len()>128 || !window.bytes().all(|c|c.is_ascii_alphanumeric() || matches!(c,b'-'|b'_')) {return failure(StatusCode::BAD_REQUEST,"invalid Studio window transport identity");}
-        context.connection_id=format!("studio:{window}");
+    let mut context = NextHost::local_context();
+    if let Some(window) = headers
+        .get("x-rho-studio-window")
+        .and_then(|v| v.to_str().ok())
+    {
+        if window.is_empty()
+            || window.len() > 128
+            || !window
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
+        {
+            return failure(
+                StatusCode::BAD_REQUEST,
+                "invalid Studio window transport identity",
+            );
+        }
+        context.connection_id = format!("studio:{window}");
     }
     let result = selected
         .host
@@ -273,9 +290,18 @@ async fn dispatch(State(state): State<AppState>, headers:HeaderMap, Json(request
     }
 }
 
-async fn dispatch_bridge(State(state): State<AppState>,headers:HeaderMap,Json(request):Json<WorkbenchFrame>)->Response{
-    if !matches!(request.frame.request,HostRequest::ApplicationBridge(_)){return failure(StatusCode::BAD_REQUEST,"this endpoint accepts only the resident Studio bridge protocol");}
-    dispatch(State(state),headers,Json(request)).await
+async fn dispatch_bridge(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<WorkbenchFrame>,
+) -> Response {
+    if !matches!(request.frame.request, HostRequest::ApplicationBridge(_)) {
+        return failure(
+            StatusCode::BAD_REQUEST,
+            "this endpoint accepts only the resident Studio bridge protocol",
+        );
+    }
+    dispatch(State(state), headers, Json(request)).await
 }
 
 async fn shell(State(state): State<AppState>) -> Html<String> {
@@ -380,9 +406,14 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .nest_service("/mcp", mcp)
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024 + 8192))
         .layer(RequestBodyLimitLayer::new(2 * 1024 * 1024 + 8192))
-        .merge(Router::new().route("/api/application/bridge",post(dispatch_bridge)
-            .layer::<_,std::convert::Infallible>(DefaultBodyLimit::max(MAX_BRIDGE_BODY))
-            .layer(RequestBodyLimitLayer::new(MAX_BRIDGE_BODY))))
+        .merge(
+            Router::new().route(
+                "/api/application/bridge",
+                post(dispatch_bridge)
+                    .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(MAX_BRIDGE_BODY))
+                    .layer(RequestBodyLimitLayer::new(MAX_BRIDGE_BODY)),
+            ),
+        )
         .layer(middleware::from_fn_with_state(state.clone(), boundary))
         .with_state(state)
 }

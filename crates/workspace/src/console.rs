@@ -333,7 +333,11 @@ impl ConsoleQueryHandler {
     pub fn new(owner: Arc<WorkspaceRunHandler>, check: bool) -> Self {
         let mut descriptor = owner.descriptor.clone();
         descriptor.kind = rho_contract::CapabilityKind::Query;
-        descriptor.output_schema = if check { schema_for!(rho_contract::CodeCompleteness).to_value() } else { schema_for!(rho_contract::ConsoleState).to_value() };
+        descriptor.output_schema = if check {
+            schema_for!(rho_contract::CodeCompleteness).to_value()
+        } else {
+            schema_for!(rho_contract::ConsoleState).to_value()
+        };
         descriptor.capability = CapabilityRef::new(
             if check {
                 "workspace.check_code"

@@ -2028,7 +2028,6 @@ dependencies = [
  "futures",
  "rho-contract",
  "rho-host",
- "rho-operation",
  "rmcp",
  "schemars",
  "serde",

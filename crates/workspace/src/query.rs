@@ -454,10 +454,11 @@ impl WorkspaceQueryHandler {
                 });
             }
         }
-        if snapshot.status==QueryStatus::Ready {
-            let id=self.descriptor.capability.id.as_str();
-            let mut bound=arguments.clone();bound["expected_session"]=serde_json::json!(snapshot.target.identity);
-            if let Some(data)=&snapshot.data {
+        if snapshot.status == QueryStatus::Ready {
+            let id = self.descriptor.capability.id.as_str();
+            let mut bound = arguments.clone();
+            bound["expected_session"] = serde_json::json!(snapshot.target.identity);
+            if let Some(data) = &snapshot.data {
                 match self.kind {
                     WorkspaceQueryKind::Snapshot=>snapshot.next_reads.push(rho_contract::NextRead::query("workspace.list_objects","Browse a stable complete binding directory",serde_json::json!({"expected_session":snapshot.target.identity,"limit":100}))),
                     WorkspaceQueryKind::InspectObject=>snapshot.next_reads.push(rho_contract::NextRead::query("workspace.observe_object","Open an observation that supports continued investigation",serde_json::json!({"expected_session":snapshot.target.identity,"name":arguments["name"]}))),

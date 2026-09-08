@@ -52,15 +52,21 @@ impl CapabilityDocumentation {
             ("documentation.cancellation_rule", &self.cancellation_rule),
         ] {
             if value.trim().is_empty() || value.len() > 16 * 1024 {
-                return Err(ContractError::InvalidText { field, maximum: 16 * 1024 });
+                return Err(ContractError::InvalidText {
+                    field,
+                    maximum: 16 * 1024,
+                });
             }
         }
         if self.examples.is_empty() || self.when_to_use.is_empty() || self.limitations.is_empty() {
             return Err(ContractError::InvalidText {
-                field: "documentation.examples/when_to_use/limitations", maximum: DESCRIPTION_BYTES,
+                field: "documentation.examples/when_to_use/limitations",
+                maximum: DESCRIPTION_BYTES,
             });
         }
-        for reference in &self.related_capabilities { reference.validate()?; }
+        for reference in &self.related_capabilities {
+            reference.validate()?;
+        }
         Ok(())
     }
 }
@@ -75,20 +81,42 @@ pub struct NextRead {
 }
 impl NextRead {
     pub fn query(id: &str, purpose: impl Into<String>, arguments: Value) -> Self {
-        Self { purpose: purpose.into(), capability: CapabilityRef::new(id, 1).expect("static capability"), arguments, missing_identity_fields: vec![] }
+        Self {
+            purpose: purpose.into(),
+            capability: CapabilityRef::new(id, 1).expect("static capability"),
+            arguments,
+            missing_identity_fields: vec![],
+        }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticCode {
-    Busy, StaleSession, ObservationExpired, ContentChanged, BudgetExceeded,
-    Unavailable, InvalidInput, AccessDenied, IdempotencyConflict, NotFound,
-    ExecutionFailed, Cancelled, OutcomeUncertain, ContractViolation,
+    Busy,
+    StaleSession,
+    ObservationExpired,
+    ContentChanged,
+    BudgetExceeded,
+    Unavailable,
+    InvalidInput,
+    AccessDenied,
+    IdempotencyConflict,
+    NotFound,
+    ExecutionFailed,
+    Cancelled,
+    OutcomeUncertain,
+    ContractViolation,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
-pub enum DiagnosticContinuation { ReadAgain, RefreshObservation, InspectOriginal, CorrectInput, None }
+pub enum DiagnosticContinuation {
+    ReadAgain,
+    RefreshObservation,
+    InspectOriginal,
+    CorrectInput,
+    None,
+}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct Diagnostic {
@@ -101,19 +129,26 @@ pub struct Diagnostic {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct HostCatalogArguments {
-    #[serde(default)] pub module: Option<String>,
-    #[serde(default)] pub keyword: Option<String>,
-    #[serde(default)] pub cursor: Option<String>,
+    #[serde(default)]
+    pub module: Option<String>,
+    #[serde(default)]
+    pub keyword: Option<String>,
+    #[serde(default)]
+    pub cursor: Option<String>,
     #[serde(default = "catalog_limit")]
     #[schemars(range(min = 1, max = 50))]
     pub limit: u32,
 }
-fn catalog_limit() -> u32 { 20 }
+fn catalog_limit() -> u32 {
+    20
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct HostDescribeArguments {
-    #[serde(default)] pub capability: Option<CapabilityRef>,
-    #[serde(default)] pub module: Option<String>,
+    #[serde(default)]
+    pub capability: Option<CapabilityRef>,
+    #[serde(default)]
+    pub module: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
@@ -180,24 +215,46 @@ pub struct ConsoleOverview {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum HostDescription {
-    Capability { descriptor: Box<CapabilityDescriptor> },
-    Module { module: ModuleAvailability, capabilities: Vec<CapabilitySummary> },
+    Capability {
+        descriptor: Box<CapabilityDescriptor>,
+    },
+    Module {
+        module: ModuleAvailability,
+        capabilities: Vec<CapabilitySummary>,
+    },
 }
 
 /// Embed payload definitions at the envelope root, preserving local schema refs.
 pub fn payload_envelope(mut envelope: Value, field: &str, mut payload: Value) -> Value {
     if let Some(definitions) = payload.as_object_mut().and_then(|v| v.remove("$defs")) {
-        let target = envelope.as_object_mut().expect("schema object")
-            .entry("$defs").or_insert_with(|| json!({})).as_object_mut().expect("definitions");
+        let target = envelope
+            .as_object_mut()
+            .expect("schema object")
+            .entry("$defs")
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .expect("definitions");
         for (name, definition) in definitions.as_object().expect("definitions") {
-            if let Some(previous) = target.get(name) { assert_eq!(previous, definition, "schema definition collision: {name}"); }
+            if let Some(previous) = target.get(name) {
+                assert_eq!(previous, definition, "schema definition collision: {name}");
+            }
             target.insert(name.clone(), definition.clone());
         }
     }
     envelope["properties"][field] = json!({"anyOf":[payload,{"type":"null"}]});
     envelope
 }
-pub fn query_result_schema(payload: Value) -> Value { payload_envelope(schema_for!(QuerySnapshot).to_value(), "data", payload) }
+pub fn query_result_schema(payload: Value) -> Value {
+    payload_envelope(schema_for!(QuerySnapshot).to_value(), "data", payload)
+}
 pub fn operation_result_schema(payload: Value, recovery: Value) -> Value {
-    payload_envelope(payload_envelope(schema_for!(crate::OperationRecord).to_value(), "output", payload), "recovery", recovery)
+    payload_envelope(
+        payload_envelope(
+            schema_for!(crate::OperationRecord).to_value(),
+            "output",
+            payload,
+        ),
+        "recovery",
+        recovery,
+    )
 }

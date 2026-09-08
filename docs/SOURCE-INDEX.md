@@ -113,6 +113,7 @@ Documentation:
 
 Sources:
 
+- `.agents/skills/**`
 - `.gitattributes`
 - `Cargo.lock`
 - `Cargo.toml`
@@ -121,6 +122,7 @@ Sources:
 - `patches/jet/**`
 - `r/**`
 - `rust-toolchain.toml`
+- `scripts/agent-interface/**`
 - `scripts/check-architecture.mjs`
 - `scripts/client.mjs`
 - `scripts/fixtures/**`
@@ -134,11 +136,13 @@ Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
+- `system.agent-harness`: `["node","scripts/test-agent-interface.mjs","--self-test"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`
 - `system.client`: `["node","scripts/client.mjs","check"]`
 - `system.environment`: `["node","scripts/test-environment.mjs"]`
 - `system.mcp`: `["node","scripts/test-mcp.mjs"]`
 - `system.mcp-real-r`: `["node","scripts/test-mcp.mjs","--real-r"]`
+- `system.output-media`: `["node","scripts/test-output-media.mjs"]`
 - `system.process-recovery`: `["node","scripts/test-process-recovery.mjs"]`
 - `system.real-r`: `["node","scripts/test-real-r.mjs"]`
 - `system.remote-protocol`: `["node","scripts/test-remote-protocol.mjs"]`

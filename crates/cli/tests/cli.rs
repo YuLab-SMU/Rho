@@ -42,6 +42,33 @@ fn independent_cli_processes_reuse_durable_operation_and_query_without_writes() 
         .unwrap();
     assert!(query.status.success());
     let queried: Value = serde_json::from_slice(&query.stdout).unwrap();
-    assert_eq!(queried["operation"], value["operation"]);
+    // Scientific truth is identical. Read navigation is filtered against this
+    // read-only Host's available owners, which deliberately do not start R.
+    let mut original_record = value["operation"].clone();
+    let mut queried_record = queried["operation"].clone();
+    let original_reads = original_record
+        .as_object_mut()
+        .unwrap()
+        .remove("next_reads")
+        .unwrap();
+    let queried_reads = queried_record
+        .as_object_mut()
+        .unwrap()
+        .remove("next_reads")
+        .unwrap();
+    assert_eq!(queried_record, original_record);
+    assert_eq!(queried_reads.as_array().unwrap().len(), 1);
+    assert_eq!(queried_reads[0]["capability"]["id"], "operation.get");
+    assert_eq!(
+        queried_reads[0]["arguments"]["operation_id"],
+        original_record["operation"]["operation_id"]
+    );
+    assert!(
+        original_reads
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|read| read["capability"]["id"] == "workspace.output_events")
+    );
     assert_eq!(before, std::fs::read(&db).unwrap());
 }

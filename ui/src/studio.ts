@@ -178,7 +178,7 @@ export class Studio {
           if (observed.status !== "ready" || this.session.context().session !== selection.native_session_id) throw new Error(observed.notices.join("\n") || "The object observation is no longer valid.");
           const page = observed.data as ObjectReadPage | null;
           if (!page || page.root_name !== selection.name || page.observed_path.length !== 0) throw new Error("The object reference does not identify this exact root binding.");
-          this.objects.selectObservation(selection); this.layout.show("objects");
+          this.objects.selectObservation(selection, page); this.layout.show("objects");
         },
         selectPackage: async (selection) => {
           const project = this.session.project!, pages: PackageSnapshotData[] = [];

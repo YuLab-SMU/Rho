@@ -106,3 +106,11 @@ pub struct CancelOperation {
     #[ts(optional)]
     pub only_if_pending: Option<bool>,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct CancellationRequestOutcome {
+    /// Acceptance of the request is not confirmation that native work stopped.
+    pub accepted: bool,
+    pub operation: crate::OperationRecord,
+}

@@ -12,7 +12,9 @@ fn one() -> u64 {
 fn column_limit() -> u32 {
     50
 }
-fn first_column() -> u32 { 1 }
+fn first_column() -> u32 {
+    1
+}
 fn text_limit() -> u32 {
     16384
 }
@@ -36,8 +38,13 @@ pub struct ListObjectsArguments {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ObjectPathElement {
-    Index { #[schemars(range(min = 1))] index: u64 },
-    Name { name: String },
+    Index {
+        #[schemars(range(min = 1))]
+        index: u64,
+    },
+    Name {
+        name: String,
+    },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]

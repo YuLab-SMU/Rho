@@ -157,7 +157,8 @@ async fn main() {
             "{}",
             serde_json::to_string_pretty(&json!({
                 "ok": false,
-                "error": error,
+                "error": error.message,
+                "diagnostic": error.diagnostic,
             }))
             .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encoding failure\"}".to_string())
         );
@@ -165,7 +166,33 @@ async fn main() {
     }
 }
 
-async fn run() -> Result<(), String> {
+struct CliFailure {
+    message: String,
+    diagnostic: Option<rho_contract::Diagnostic>,
+}
+impl From<String> for CliFailure {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            diagnostic: None,
+        }
+    }
+}
+impl From<&str> for CliFailure {
+    fn from(message: &str) -> Self {
+        message.to_owned().into()
+    }
+}
+impl From<rho_host::OperationError> for CliFailure {
+    fn from(error: rho_host::OperationError) -> Self {
+        Self {
+            message: error.to_string(),
+            diagnostic: Some(error.diagnostic()),
+        }
+    }
+}
+
+async fn run() -> Result<(), CliFailure> {
     let cli = Cli::parse();
     let context = NextHost::local_context();
     if let Command::Workbench {
@@ -189,15 +216,20 @@ async fn run() -> Result<(), String> {
             url_file.as_deref(),
             dev_assets.as_deref(),
         )
-        .await;
+        .await
+        .map_err(Into::into);
     }
     if matches!(cli.command, Command::Mcp) {
         let host = Arc::new(cli.open_host().await?);
-        return rho_mcp::serve(host, tokio::io::stdin(), tokio::io::stdout()).await;
+        return rho_mcp::serve(host, tokio::io::stdin(), tokio::io::stdout())
+            .await
+            .map_err(Into::into);
     }
     if matches!(cli.command, Command::Session) {
         let host = Arc::new(cli.open_host().await?);
-        return session::serve(host, tokio::io::stdin(), tokio::io::stdout()).await;
+        return session::serve(host, tokio::io::stdin(), tokio::io::stdout())
+            .await
+            .map_err(Into::into);
     }
     let active_host = if matches!(
         cli.command,
@@ -207,7 +239,7 @@ async fn run() -> Result<(), String> {
     } else {
         None
     };
-    match cli.command {
+    let result = match cli.command {
         Command::Session | Command::Mcp | Command::Workbench { .. } => unreachable!(),
         Command::Invoke {
             client_request_id,
@@ -240,10 +272,7 @@ async fn run() -> Result<(), String> {
                 arguments,
                 preconditions,
             };
-            let record = host
-                .invoke(&context, invocation)
-                .await
-                .map_err(|error| error.to_string())?;
+            let record = host.invoke(&context, invocation).await?;
             print_json(&json!({
                 "ok": true,
                 "runtime": if cli.demo { "deterministic_fake" } else if cli.ark.is_some() { "ark" } else if cli.rscript.is_some() { "environment" } else { "project" },
@@ -265,8 +294,7 @@ async fn run() -> Result<(), String> {
                         arguments: serde_json::from_str(&arguments).map_err(|e| e.to_string())?,
                     },
                 )
-                .await
-                .map_err(|e| e.to_string())?;
+                .await?;
             print_json(&json!({"ok":true,"observation":observation}))
         }
         Command::BindMethod {
@@ -283,24 +311,20 @@ async fn run() -> Result<(), String> {
                         binding,
                     }),
                 )
-                .await
-                .map_err(|e| e.to_string())?;
+                .await?;
             print_json(&json!({"ok":true,"binding":binding}))
         }
         Command::GetOperation { operation_id } => {
-            let host =
-                NextHost::open_read_only(&cli.database).map_err(|error| error.to_string())?;
+            let host = NextHost::open_read_only(&cli.database)?;
             let operation_id = OperationId::new(operation_id).map_err(|error| error.to_string())?;
-            let record = host
-                .get_operation(&context, &operation_id)
-                .await
-                .map_err(|error| error.to_string())?;
+            let record = host.get_operation(&context, &operation_id).await?;
             print_json(&json!({
                 "ok": true,
                 "operation": record,
             }))
         }
-    }
+    };
+    result.map_err(Into::into)
 }
 
 fn print_json(value: &serde_json::Value) -> Result<(), String> {

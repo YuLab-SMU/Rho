@@ -57,7 +57,17 @@ local({
   makeActiveBinding("fixture_active", function(...) stop("ACTIVE BINDING CALLED"), .GlobalEnv)
   assign("fixture_custom", structure(1:5, class = "hostile"), .GlobalEnv)
   assign("print.hostile", function(...) stop("USER METHOD CALLED"), .GlobalEnv)
-  stopifnot(observe("fixture_promise")$metadata$kind == "promise", observe("fixture_active")$metadata$kind == "active_binding", length(observe("fixture_custom")$metadata$supported_reads) == 0)
+  stopifnot(observe("fixture_promise")$metadata$kind == "promise", observe("fixture_active")$metadata$kind == "active_binding", identical(observe("fixture_custom")$metadata$supported_reads, list("structure")))
+  for (name in c("fixture_promise", "fixture_active", "fixture_custom")) {
+    safe <- observe(name)
+    structure <- read(safe$object_ref, "structure")
+    stopifnot(structure$root_name == name, identical(structure$observed_path, list()), structure$metadata$kind == safe$metadata$kind)
+    fails(read(safe$object_ref, "values"), "unsupported")
+  }
+  nested_path <- list(list(kind = "index", index = 1L), list(kind = "index", index = 1L))
+  nested <- observe("fixture_list", nested_path)
+  nested_page <- read(nested$object_ref, "values", start = 301L)
+  stopifnot(nested_page$root_name == "fixture_list", identical(nested_page$observed_path, nested_path), nested_page$values[[1L]]$number == 301L)
   object <- observe("fixture_date")
   fails(read(object$object_ref, scope = modifyList(scope, list(principal = "other"))), "observation_invalid")
   bridge$rho_object_state$handles[[object$object_ref]]$used <- bridge$rho_object_now() - 60001
