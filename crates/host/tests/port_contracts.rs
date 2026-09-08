@@ -541,3 +541,109 @@ async fn event_byte_limits_resume_without_omissions_and_invalid_lifecycle_data_i
         Err(OperationError::Contract(_))
     ));
 }
+
+struct ComposedSchemaQuery {
+    descriptor: CapabilityDescriptor,
+    data: Value,
+}
+#[async_trait]
+impl rho_operation::QueryHandler for ComposedSchemaQuery {
+    fn descriptor(&self) -> &CapabilityDescriptor {
+        &self.descriptor
+    }
+    fn normalize_arguments(&self, arguments: &Value) -> Result<Value, OperationError> {
+        Ok(arguments.clone())
+    }
+    async fn query(&self, _: &Value) -> Result<QuerySnapshot, OperationError> {
+        Ok(QuerySnapshot {
+            target: TargetRef {
+                kind: "test".into(),
+                identity: "composed-contract".into(),
+            },
+            source: "deterministic-schema-fixture".into(),
+            observed_at_ms: 1,
+            status: QueryStatus::Ready,
+            completeness: ObservationCompleteness::Complete,
+            data: Some(self.data.clone()),
+            notices: vec![],
+            next_reads: vec![],
+            diagnostics: vec![],
+        })
+    }
+}
+
+#[tokio::test]
+async fn composed_payload_namespaces_preserve_conflicting_shapes_and_literal_reference_data() {
+    let host = demo(Arc::new(DeterministicWorkspaceRuntime::default())).await;
+    let mut descriptor = host
+        .capabilities()
+        .into_iter()
+        .find(|descriptor| descriptor.capability.id == "operation.events")
+        .unwrap();
+    descriptor.capability = CapabilityRef::new("test.schema_envelope", 1).unwrap();
+    descriptor.input_schema = json!({"type":"object","additionalProperties":false});
+    descriptor.documentation.examples[0].arguments = json!({});
+    descriptor.documentation.related_capabilities.clear();
+    descriptor.documentation.preconditions.clear();
+    descriptor.required_scopes.clear();
+    let envelope = json!({"type":"object","properties":{
+        "metadata":{"$ref":"#/$defs/Shared"},"retained":{"$ref":"#/$defs/rho_payload_0"},"data":{}
+    },"required":["metadata","retained","data"],"additionalProperties":false,
+    "$defs":{"Shared":{"type":"integer"},"rho_payload_0":{"const":"original"}}});
+    let literal = json!({"$ref":"#/$defs/Shared","$id":"untrusted-data"});
+    let payload = json!({"type":"object","properties":{
+        "value":{"$ref":"#/$defs/Shared"},"literal":{"const":literal}
+    },"required":["value","literal"],"additionalProperties":false,
+    "$defs":{"Shared":{"type":"string"}}});
+    descriptor.output_schema = payload_envelope(envelope, "data", payload);
+    // A second payload receives a third namespace and cannot reuse the first.
+    descriptor.output_schema = payload_envelope(
+        descriptor.output_schema,
+        "extra",
+        json!({"$ref":"#/$defs/Shared","$defs":{"Shared":{"type":"boolean"}}}),
+    );
+    descriptor.output_schema["required"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("extra"));
+    let valid = json!({"metadata":7,"retained":"original","data":{"value":"payload","literal":literal},"extra":true});
+    let mut bad_metadata = valid.clone();
+    bad_metadata["metadata"] = json!("wrong outer type");
+    let mut bad_data = valid.clone();
+    bad_data["data"]["value"] = json!(7);
+    let mut bad_extra = valid.clone();
+    bad_extra["extra"] = json!("wrong second payload type");
+    let mut bad_literal = valid.clone();
+    bad_literal["data"]["literal"]["$ref"] = json!("#/$defs/rho_payload_1/$defs/Shared");
+    for (data, expected_success) in [
+        (valid, true),
+        (bad_metadata, false),
+        (bad_data, false),
+        (bad_extra, false),
+        (bad_literal, false),
+    ] {
+        let mut registry = rho_operation::CapabilityRegistry::new();
+        registry
+            .register_query(Arc::new(ComposedSchemaQuery {
+                descriptor: descriptor.clone(),
+                data,
+            }))
+            .unwrap();
+        registry.validate_links().unwrap();
+        let gateway = rho_operation::QueryGateway::new(Arc::new(registry));
+        let result = gateway
+            .query(
+                &NextHost::local_context(),
+                QueryRequest {
+                    capability: descriptor.capability.clone(),
+                    arguments: json!({}),
+                },
+            )
+            .await;
+        if expected_success {
+            result.unwrap();
+        } else {
+            assert!(matches!(result, Err(OperationError::Contract(_))));
+        }
+    }
+}

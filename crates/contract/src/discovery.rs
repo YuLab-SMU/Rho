@@ -224,24 +224,29 @@ pub enum HostDescription {
     },
 }
 
-/// Embed payload definitions at the envelope root, preserving local schema refs.
-pub fn payload_envelope(mut envelope: Value, field: &str, mut payload: Value) -> Value {
-    if let Some(definitions) = payload.as_object_mut().and_then(|v| v.remove("$defs")) {
-        let target = envelope
-            .as_object_mut()
-            .expect("schema object")
-            .entry("$defs")
-            .or_insert_with(|| json!({}))
-            .as_object_mut()
-            .expect("definitions");
-        for (name, definition) in definitions.as_object().expect("definitions") {
-            if let Some(previous) = target.get(name) {
-                assert_eq!(previous, definition, "schema definition collision: {name}");
-            }
-            target.insert(name.clone(), definition.clone());
+/// Embed a complete payload in its own local schema namespace. Envelope and
+/// payload definitions may have the same names with different shapes; neither
+/// may override the other or acquire the other's local references.
+pub fn payload_envelope(mut envelope: Value, field: &str, payload: Value) -> Value {
+    let definitions = envelope
+        .as_object_mut()
+        .expect("schema object")
+        .entry("$defs")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .expect("definitions");
+    let mut index = 0;
+    let namespace = loop {
+        let name = format!("rho_payload_{index}");
+        if !definitions.contains_key(&name) {
+            break name;
         }
-    }
-    envelope["properties"][field] = json!({"anyOf":[payload,{"type":"null"}]});
+        index += 1;
+    };
+    let pointer = format!("/$defs/{namespace}");
+    definitions.insert(namespace, crate::rebase_local_schema(payload, &pointer));
+    envelope["properties"][field] =
+        json!({"anyOf":[{"$ref":format!("#{pointer}")},{"type":"null"}]});
     envelope
 }
 pub fn query_result_schema(payload: Value) -> Value {
