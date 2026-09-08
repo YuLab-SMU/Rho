@@ -201,3 +201,52 @@ pub(super) fn reconcile_tagged(operation_id: &str) -> Result<ProcessReconciliati
         notices,
     })
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::process::{Child, Command, Stdio};
+
+    struct ChildGuard(Child);
+    impl Drop for ChildGuard {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    #[test]
+    fn marker_inspection_keeps_native_child_alive_and_rejects_wrong_operation() {
+        let marker = format!("PSreadonlyfixture{}_1700000000", std::process::id());
+        let mut child = ChildGuard(
+            Command::new("sleep")
+                .arg("30")
+                .env(&marker, "YES")
+                .env("RHO_OPERATION_ID", "op_native_read_fixture")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let found = inspect_process_marker(&marker, "op_native_read_fixture").unwrap();
+        assert!(
+            found
+                .iter()
+                .any(|identity| identity.pid == child.0.id() && identity.started_at_seconds > 0)
+        );
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "a read must not signal the process"
+        );
+        assert!(
+            inspect_process_marker(&marker, "op_wrong_owner")
+                .unwrap_err()
+                .contains("different Operation")
+        );
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "an identity mismatch must not signal the process"
+        );
+    }
+}

@@ -585,6 +585,15 @@ fn documentation(id: &str) -> rho_contract::CapabilityDocumentation {
             example.arguments["expected_fingerprint"] = json!(format!("sha256:{}", "0".repeat(64)));
         }
     }
+    if matches!(
+        id,
+        RECONCILE_CAPABILITY
+            | "environment.cleanup"
+            | "environment.restore_cleanup"
+            | "environment.purge_cleanup"
+    ) {
+        documentation.cancellation_rule = "This operation does not support cancellation. Cancelling a transport wait neither undoes filesystem changes nor stops native reconciliation; inspect the original operation until its owner reports an outcome.".into();
+    }
     documentation.related_capabilities = match id {
         PLAN_CAPABILITY => vec!["operation.list_recent", REALIZE_CAPABILITY],
         REALIZE_CAPABILITY => vec![

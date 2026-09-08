@@ -244,3 +244,22 @@ pub enum EnvironmentMaterialRecovery {
         cleanup_operation_id: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn staged_recovery_preserves_nested_process_evidence() {
+        let stage = json!({"stage":"/data/realizations/native-id","plan_operation_id":"op_plan","action":"inspect_staged_library_before_retry","runtime":{"process":{"pid":42,"exit_code":null,"exit_signal":null,"termination":"uncertain","stdout":{"bytes":[65],"total_bytes":1,"truncated":false,"eof":false},"stderr":{"bytes":[],"total_bytes":0,"truncated":false,"eof":false},"elapsed_ms":100,"supervision":"native_group","stdin_error":null,"cleanup_requested":true,"cleanup_error":"descendant remains"},"process_tree_marker":"PSnative_1700000000","tree_cleanup_confirmed":false,"action":"inspect_staged_effects_before_retry"}});
+        let recovery: EnvironmentRealizeRecovery = serde_json::from_value(stage.clone()).unwrap();
+        assert_eq!(serde_json::to_value(recovery).unwrap(), stage);
+        let mut malformed = stage;
+        malformed["runtime"]
+            .as_object_mut()
+            .unwrap()
+            .remove("process_tree_marker");
+        assert!(serde_json::from_value::<EnvironmentRealizeRecovery>(malformed).is_err());
+    }
+}

@@ -164,7 +164,7 @@ fn inventory(
                 bounded = true;
                 break 'libraries;
             }
-            let fields = std::str::from_utf8(&text).ok().and_then(package_fields);
+            let fields = package_fields(&text);
             if let Some((name, version)) = fields {
                 packages
                     .entry(name.clone())
@@ -175,7 +175,7 @@ fn inventory(
                     });
             } else if notices.len() < 16 {
                 notices.push(format!(
-                    "Package metadata {} has no valid UTF-8 Package/Version record.",
+                    "Package metadata {} has no valid Package/Version record.",
                     description.display()
                 ));
             }
@@ -206,21 +206,27 @@ fn inventory(
     })
 }
 
-fn package_fields(text: &str) -> Option<(String, String)> {
+fn package_fields(text: &[u8]) -> Option<(String, String)> {
     let mut name = None;
     let mut version = None;
-    for line in text.lines() {
+    for line in text.split(|byte| *byte == b'\n') {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
         if line.is_empty() {
             break;
         }
-        if line.starts_with(char::is_whitespace) {
+        if line.first().is_some_and(u8::is_ascii_whitespace) {
             continue;
         }
-        let (field, value) = line.split_once(':')?;
+        let colon = line.iter().position(|byte| *byte == b':')?;
+        let (field, value) = (&line[..colon], &line[colon + 1..]);
         match field {
-            "Package" if name.is_none() => name = Some(value.trim().to_string()),
-            "Version" if version.is_none() => version = Some(value.trim().to_string()),
-            "Package" | "Version" => return None,
+            b"Package" if name.is_none() => {
+                name = Some(std::str::from_utf8(value).ok()?.trim().to_string())
+            }
+            b"Version" if version.is_none() => {
+                version = Some(std::str::from_utf8(value).ok()?.trim().to_string())
+            }
+            b"Package" | b"Version" => return None,
             _ => {}
         }
     }
@@ -279,9 +285,13 @@ mod tests {
     #[test]
     fn description_parser_preserves_native_version_and_rejects_duplicate_identity() {
         assert_eq!(
-            package_fields("Package: example\nVersion: 1.2-3\nDescription: hello\n continued\n"),
+            package_fields(b"Package: example\nVersion: 1.2-3\nDescription: hello\n continued\n"),
             Some(("example".into(), "1.2-3".into()))
         );
-        assert!(package_fields("Package: a\nPackage: b\nVersion: 1\n").is_none());
+        assert!(package_fields(b"Package: a\nPackage: b\nVersion: 1\n").is_none());
+        assert_eq!(
+            package_fields(b"Package: example\nVersion: 1.0\nDescription: latin1 caf\xe9\n"),
+            Some(("example".into(), "1.0".into()))
+        );
     }
 }

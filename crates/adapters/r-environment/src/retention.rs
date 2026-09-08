@@ -300,3 +300,31 @@ fn inspect_tree(root: &Path) -> Result<Option<MaterialObject>, String> {
         entries,
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn retention_observation_never_runs_r_or_recovers_processes() {
+        let (_dir, runtime) = crate::recovery_tests::environment();
+        let temporary = tempfile::NamedTempFile::new_in(&runtime.config.data_root).unwrap();
+        runtime
+            .persist_marker(temporary, "op_retention_read", "PSreadfixture_1700000000")
+            .unwrap();
+        let stage = runtime.stage("plans", "op_retention_read").unwrap();
+        fs::write(stage.join("retained.txt"), "retain these bytes").unwrap();
+        let before = fs::read(stage.join("retained.txt")).unwrap();
+        let state = runtime
+            .inspect_material("op_retention_read", MaterialKind::Plan, None)
+            .await
+            .unwrap();
+        assert!(state.native_marker_present);
+        assert!(state.live_processes.is_empty());
+        assert!(state.stage.unwrap().fingerprint.starts_with("sha256:"));
+        assert_eq!(fs::read(stage.join("retained.txt")).unwrap(), before);
+        // The configured executable is the test binary, so starting any former
+        // R/ps helper would fail instead of providing this material observation.
+        assert!(runtime.read_marker("op_retention_read").unwrap().is_some());
+    }
+}

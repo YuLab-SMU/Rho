@@ -333,6 +333,12 @@ fn documentation(id: &str) -> rho_contract::CapabilityDocumentation {
     if id == "process.run_remote" {
         documentation.limitations.push("SSH transport termination is not proof that the remote process ended. Recovery retains the original operation and configured target; no automatic remote replay is available.".into());
     }
+    if matches!(
+        id,
+        "process.reconcile" | "slurm.submit" | "slurm.reconcile" | "slurm.request_cancel"
+    ) {
+        documentation.cancellation_rule = "This operation does not support Operation cancellation. Cancelling a transport wait does not stop the native action. Scheduler job cancellation is a separate slurm.request_cancel operation, whose receipt must be followed by a native job observation.".into();
+    }
     documentation.related_capabilities = if id.starts_with("slurm.") {
         vec!["operation.list_recent", "slurm.snapshot"]
     } else {

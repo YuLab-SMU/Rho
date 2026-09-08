@@ -216,3 +216,27 @@ pub enum SlurmCancelRecovery {
         job: SlurmJobRef,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn recovery_requires_original_and_native_identities() {
+        let source_only = json!({"source_operation_id":"op_original"});
+        assert!(serde_json::from_value::<LocalProcessRecovery>(source_only.clone()).is_err());
+        assert!(serde_json::from_value::<RemoteProcessRecovery>(source_only.clone()).is_err());
+        assert!(serde_json::from_value::<SlurmSubmissionRecovery>(source_only.clone()).is_err());
+        assert!(serde_json::from_value::<SlurmCancelRecovery>(source_only).is_err());
+        let cancelled = json!({"source_operation_id":"op_original","job":{"host_alias":"configured","cluster":"cluster_a","job_id":"42","operation_marker":"rho-original","project_root":"/scratch/project","stdout_path":"/scratch/project/rho-original-42.out","stderr_path":"/scratch/project/rho-original-42.err"}});
+        let recovery: SlurmCancelRecovery = serde_json::from_value(cancelled.clone()).unwrap();
+        assert_eq!(serde_json::to_value(recovery).unwrap(), cancelled);
+        let mut malformed = cancelled;
+        malformed["job"]
+            .as_object_mut()
+            .unwrap()
+            .remove("operation_marker");
+        assert!(serde_json::from_value::<SlurmCancelRecovery>(malformed).is_err());
+    }
+}
