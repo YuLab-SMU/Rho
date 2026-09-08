@@ -1,5 +1,8 @@
 # Native library contract checks; Host/Operation acceptance lives in real_r.rs.
 bridge <- new.env(parent = asNamespace("utils"))
+sys.source("r/bridge/objects.R", bridge)
+sys.source("r/bridge/packages.R", bridge)
+sys.source("r/bridge/package-index.R", bridge)
 sys.source("r/bridge/dispatch.R", bridge)
 sys.source("r/bridge/tools.R", bridge)
 dispatch <- function(action, payload) {
@@ -11,7 +14,7 @@ stopifnot(requireNamespace("lintr", quietly = TRUE),
 
 help <- dispatch("help", list(topic = "mean", package = "base", max_chars = 32L))
 stopifnot(identical(help$outcome, "succeeded"), help$value$found,
-          help$value$truncated, nchar(help$value$text) == 32L)
+          !help$value$truncated, help$value$preview_truncated, nchar(help$value$preview) == 32L, nchar(help$value$text) > 32L)
 missing <- dispatch("help", list(topic = "rho_nonexistent_help_topic", package = "base", max_chars = 32L))
 stopifnot(identical(missing$outcome, "succeeded"), !missing$value$found)
 

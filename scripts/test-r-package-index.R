@@ -1,0 +1,34 @@
+root <- getwd()
+bridge <- new.env(parent = asNamespace("utils")); bridge$can_inspect_bindings <- requireNamespace("rlang", quietly = TRUE)
+stopifnot(bridge$can_inspect_bindings, requireNamespace("jsonlite", quietly = TRUE))
+for (file in c("packages.R", "objects.R", "package-index.R", "tools.R")) sys.source(file.path(root, "r/bridge", file), bridge)
+local({
+  base <- tempfile("rho-package-index-"); dir.create(base); on.exit(unlink(base, recursive = TRUE), add = TRUE)
+  libs <- file.path(base, c("lib1", "lib2")); for (lib in libs) dir.create(lib)
+  old_libs <- .libPaths(); on.exit(.libPaths(old_libs), add = TRUE)
+  for (i in seq_along(libs)) {
+    path <- file.path(libs[[i]], "fixturepkg"); dir.create(path); dir.create(file.path(path, "help"))
+    writeLines(c("Package: fixturepkg", paste0("Version: ", i, ".0"), "Title: Static package fixture", "Description: Purpose for testing."), file.path(path, "DESCRIPTION"))
+    writeLines(c('export(alpha, "beta")', 'exportPattern("^dyn")', 'if (FALSE) export(conditional)', 'importFrom(stats, lm)', 'stop("NAMESPACE MUST NEVER EXECUTE")'), file.path(path, "NAMESPACE"))
+    writeLines(c("alpha\talpha", "alias_a\talpha", "beta\tbeta"), file.path(path, "help/AnIndex"))
+    writeLines(c("alpha                  Alpha title", "beta                   Beta title"), file.path(path, "INDEX"))
+  }
+  libs <- normalizePath(libs, winslash = "/")
+  .libPaths(c(libs, old_libs))
+  stopifnot(requireNamespace("tools", quietly = TRUE))
+  native <- loadedNamespaces()
+  observation <- bridge$rho_packages(list(mode = "installed", filter = "fixturepkg", limit = 200L, offset = 0L, grouped = FALSE, package_name = NULL, observation_id = NULL))
+  stopifnot(length(observation$packages) == 2)
+  scope <- list(project = base, principal = "test", session = "native")
+  arguments <- list(expected_session = "native", observation_id = observation$observation_id, package = "fixturepkg", library_path = libs[[1L]], index_ref = NULL, filter = "", kind = NULL, offset = 0L, limit = 2L, scope = scope)
+  page <- bridge$rho_package_index(arguments); rows <- page$entries; id <- page$index_ref
+  stopifnot(page$version == "1.0", !page$complete, length(page$notices) > 0)
+  while (!is.null(page$next_offset)) { arguments$index_ref <- id; arguments$offset <- page$next_offset; page <- bridge$rho_package_index(arguments); rows <- c(rows, page$entries) }
+  stopifnot(any(vapply(rows, function(x) x$name == "alpha" && x$kind == "export", TRUE)), any(vapply(rows, function(x) x$name == "alias_a" && x$topic == "alpha", TRUE)), any(vapply(rows, function(x) !x$resolved, TRUE)), identical(native, loadedNamespaces()))
+  writeLines(c('export(omega, "zeta")', 'exportPattern("^dyn")', 'if (FALSE) export(conditional)', 'importFrom(stats, lm)', 'stop("NAMESPACE MUST NEVER EXECUTE")'), file.path(libs[[1L]], "fixturepkg/NAMESPACE"))
+  error <- tryCatch(bridge$rho_package_index(arguments), error = identity)
+  stopifnot(inherits(error, "error"), grepl("content_changed", conditionMessage(error), fixed = TRUE))
+  arguments$index_ref <- NULL; arguments$offset <- 0L; arguments$library_path <- libs[[2L]]
+  page <- bridge$rho_package_index(arguments); stopifnot(page$version == "2.0")
+})
+cat("R static package index checks passed\n")

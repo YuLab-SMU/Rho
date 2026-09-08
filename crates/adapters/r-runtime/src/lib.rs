@@ -33,6 +33,8 @@ use uuid::Uuid;
 const BRIDGE: &str = include_str!("../../../../r/bridge/dispatch.R");
 const QUERIES: &str = include_str!("../../../../r/bridge/query.R");
 const PACKAGES: &str = include_str!("../../../../r/bridge/packages.R");
+const OBJECTS: &str = include_str!("../../../../r/bridge/objects.R");
+const PACKAGE_INDEX: &str = include_str!("../../../../r/bridge/package-index.R");
 const TOOLS: &str = include_str!("../../../../r/bridge/tools.R");
 const OUTPUT_LIMIT: usize = 1024 * 1024;
 
@@ -159,8 +161,10 @@ impl ArkRuntime {
             None => String::new(),
         };
         let bootstrap = format!(
-            "local({{ requireNamespace('jsonlite'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); {library_setup} invisible(TRUE) }})",
-            quote(&format!("{BRIDGE}\n{QUERIES}\n{PACKAGES}\n{TOOLS}"))?,
+            "local({{ requireNamespace('jsonlite'); requireNamespace('tools'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); {library_setup} invisible(TRUE) }})",
+            quote(&format!(
+                "{BRIDGE}\n{QUERIES}\n{PACKAGES}\n{OBJECTS}\n{PACKAGE_INDEX}\n{TOOLS}"
+            ))?,
             quote(&project.to_string_lossy())?
         );
         let bootstrap_output = runtime
@@ -391,6 +395,12 @@ enum BridgeAction<'a> {
     Snapshot(&'a SnapshotArguments),
     Packages(&'a rho_contract::PackageQueryArguments),
     InspectObject(&'a InspectArguments),
+    ListObjects(&'a rho_workspace::ScopedWorkspaceArguments<rho_contract::ListObjectsArguments>),
+    ObserveObject(
+        &'a rho_workspace::ScopedWorkspaceArguments<rho_contract::ObserveObjectArguments>,
+    ),
+    ReadObject(&'a rho_workspace::ScopedWorkspaceArguments<rho_contract::ReadObjectArguments>),
+    PackageIndex(&'a rho_workspace::ScopedWorkspaceArguments<rho_contract::PackageIndexArguments>),
     Help(&'a HelpArguments),
     Lint(&'a LintArguments),
     Format(&'a FormatArguments),
@@ -543,13 +553,46 @@ impl WorkspaceRuntime for ArkRuntime {
             WorkspaceQuery::Snapshot(args) => BridgeAction::Snapshot(args),
             WorkspaceQuery::Packages(args) => BridgeAction::Packages(args),
             WorkspaceQuery::InspectObject(args) => BridgeAction::InspectObject(args),
+            WorkspaceQuery::ListObjects(args) => BridgeAction::ListObjects(args),
+            WorkspaceQuery::ObserveObject(args) => BridgeAction::ObserveObject(args),
+            WorkspaceQuery::ReadObject(args) => BridgeAction::ReadObject(args),
+            WorkspaceQuery::PackageIndex(args) => BridgeAction::PackageIndex(args),
         };
         let (response, _, result_path) = self
             .bridge_call(&id, action, watch::channel(false).1)
             .await?;
         // Query transport files are temporary; no Operation or retained query history.
         let _ = std::fs::remove_file(result_path);
+        if response.outcome != OperationOutcome::Succeeded {
+            let failure = &response.value["query_error"];
+            return Err(WorkspaceRuntimeError::query_error(
+                failure["code"].as_str().unwrap_or("unavailable"),
+                failure["message"]
+                    .as_str()
+                    .unwrap_or("Native Workspace query failed"),
+            ));
+        }
         let data = match query {
+            WorkspaceQuery::ListObjects(_) => serde_json::to_value(
+                serde_json::from_value::<rho_contract::ObjectDirectoryPage>(response.value)
+                    .map_err(before)?,
+            )
+            .map_err(before)?,
+            WorkspaceQuery::ObserveObject(_) => serde_json::to_value(
+                serde_json::from_value::<rho_contract::ObjectObservation>(response.value)
+                    .map_err(before)?,
+            )
+            .map_err(before)?,
+            WorkspaceQuery::ReadObject(_) => serde_json::to_value(
+                serde_json::from_value::<rho_contract::ObjectReadPage>(response.value)
+                    .map_err(before)?,
+            )
+            .map_err(before)?,
+            WorkspaceQuery::PackageIndex(_) => serde_json::to_value(
+                serde_json::from_value::<rho_contract::PackageIndexPage>(response.value)
+                    .map_err(before)?,
+            )
+            .map_err(before)?,
             WorkspaceQuery::Packages(_) => {
                 let data: rho_contract::PackageSnapshotData =
                     serde_json::from_value(response.value).map_err(before)?;
@@ -576,8 +619,12 @@ impl WorkspaceRuntime for ArkRuntime {
             session_id: self.session_id.clone(),
             source: "ark/rho.bridge".into(),
             observed_at_ms,
+            completeness: if data.get("complete").and_then(Value::as_bool) == Some(true) {
+                ObservationCompleteness::Complete
+            } else {
+                ObservationCompleteness::Partial
+            },
             data,
-            completeness: ObservationCompleteness::Partial,
             notices: if matches!(query, WorkspaceQuery::Packages(_)) {
                 vec!["Read-only package metadata from the current session; loadability was not tested.".into()]
             } else {
@@ -634,9 +681,34 @@ impl ArkRuntime {
         action_name: &str,
         cancellation: watch::Receiver<bool>,
     ) -> Result<WorkspaceRuntimeReport, WorkspaceRuntimeError> {
-        let (response, captured, result_path) = self
+        let (mut response, mut captured, result_path) = self
             .bridge_call(operation.operation_id.as_str(), action, cancellation)
             .await?;
+        if action_name == "help"
+            && response.outcome == OperationOutcome::Succeeded
+            && let Some(text) = response.value.get("text").and_then(Value::as_str)
+            && response.value.get("found").and_then(Value::as_bool) == Some(true)
+        {
+            let reference = self.outputs.append_text(&operation.operation_id, text)
+                .map_err(|error| WorkspaceRuntimeError::after_possible_effect(error,
+                    Some(json!({"operation_id":operation.operation_id, "session_id":self.session_id, "result_path":result_path, "next_read":"workspace.output_events"}))))?;
+            captured
+                .displays
+                .push(serde_json::to_value(&reference).map_err(before)?);
+            let preview = response
+                .value
+                .get("preview")
+                .cloned()
+                .unwrap_or(Value::String(String::new()));
+            if let Some(value) = response.value.as_object_mut() {
+                value.insert("text".into(), preview);
+                value.remove("preview");
+                value.insert(
+                    "text_reference".into(),
+                    serde_json::to_value(reference).map_err(before)?,
+                );
+            }
+        }
         let observed_at_ms = now_ms();
         Ok(WorkspaceRuntimeReport {
             session_id: self.session_id.clone(),
@@ -678,10 +750,20 @@ impl ArkRuntime {
         let result_path = self
             .data_root
             .join(format!("{:x}.json", Sha256::digest(id.as_bytes())));
+        // Help is rendered once into a bounded artifact; its internal JSON can escape UTF-8 bytes.
+        let response_limit = if matches!(&action, BridgeAction::Help(_)) {
+            128 * 1024 * 1024
+        } else {
+            OUTPUT_LIMIT
+        };
         let recording = match &action {
             BridgeAction::Snapshot(_)
             | BridgeAction::InspectObject(_)
-            | BridgeAction::Packages(_) => None,
+            | BridgeAction::Packages(_)
+            | BridgeAction::ListObjects(_)
+            | BridgeAction::ObserveObject(_)
+            | BridgeAction::ReadObject(_)
+            | BridgeAction::PackageIndex(_) => None,
             _ => Some(rho_contract::OperationId::new(id).map_err(before)?),
         };
         let bridge_request = BridgeRequest {
@@ -711,10 +793,10 @@ impl ArkRuntime {
             let mut bytes = Vec::new();
             std::fs::File::open(&result_path)
                 .map_err(|e| e.to_string())?
-                .take((OUTPUT_LIMIT + 1) as u64)
+                .take((response_limit + 1) as u64)
                 .read_to_end(&mut bytes)
                 .map_err(|e| e.to_string())?;
-            if bytes.len() > OUTPUT_LIMIT {
+            if bytes.len() > response_limit {
                 return Err("R bridge response exceeded byte limit".into());
             }
             let response: BridgeResponse =

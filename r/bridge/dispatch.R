@@ -1,17 +1,25 @@
 # Loaded into a private environment by the Ark adapter. No Operation or Store policy here.
 rho_dispatch <- function(request) {
   stopifnot(identical(request$protocol_version, 1L),
-            request$action %in% c("execute", "snapshot", "packages", "inspect_object", "help", "lint", "format"),
+            request$action %in% c("execute", "snapshot", "packages", "inspect_object", "list_objects", "observe_object", "read_object", "package_index", "help", "lint", "format"),
             is.character(request$request_id), length(request$request_id) == 1L)
-  if (request$action %in% c("snapshot", "packages", "inspect_object")) {
-    value <- switch(request$action,
+  if (request$action %in% c("snapshot", "packages", "inspect_object", "list_objects", "observe_object", "read_object", "package_index")) {
+    failure <- NULL
+    value <- tryCatch(switch(request$action,
+                    list_objects = rho_list_objects(request$payload),
+                    observe_object = rho_observe_object(request$payload),
+                    read_object = rho_read_object(request$payload),
+                    package_index = rho_package_index(request$payload),
                     snapshot = rho_workspace_snapshot(request$payload$limit),
                     packages = rho_packages(request$payload),
-                    inspect_object = rho_inspect_object(request$payload$name, request$payload$max_items))
+                    inspect_object = rho_inspect_object(request$payload$name, request$payload$max_items)),
+                    error = function(error) { failure <<- list(code = if (inherits(error, "rho_query_error")) error$code else "unavailable", message = conditionMessage(error)); NULL })
     return(list(protocol_version = 1L, request_id = request$request_id,
-                outcome = "succeeded", error = NULL, value = value,
+                outcome = if (is.null(failure)) "succeeded" else "failed", error = if (is.null(failure)) NULL else failure$message, value = if (is.null(failure)) value else list(query_error = failure),
                 conditions = list(), conditions_truncated = FALSE))
   }
+  # Invalidate before parsing, loading tools or executing; failures and cancellation never restore old handles.
+  rho_invalidate_objects()
   if (!identical(request$action, "help")) {
     stopifnot(is.character(request$payload$code), length(request$payload$code) == 1L)
   }

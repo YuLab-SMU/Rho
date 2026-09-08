@@ -13,29 +13,17 @@ rho_binding_summary <- function(name, inspect = FALSE, max_items = 20L) {
   result <- list(name = name, kind = "missing", object_type = NULL,
                  classes = list(), length = NULL, dimensions = list(),
                  preview = NULL, preview_kind = "metadata", truncated = FALSE, notice = NULL)
-  if (!exists(name, envir = .GlobalEnv, inherits = FALSE)) return(result)
-  if (bindingIsActive(name, .GlobalEnv)) {
-    result$kind <- "active_binding"
-    result$notice <- "Active binding was not invoked."
-    return(result)
-  }
-  if (!isTRUE(can_inspect_bindings)) {
-    result$kind <- "uninspected_binding"
-    result$notice <- "rlang is unavailable; value was not read because it may be a promise."
-    return(result)
-  }
-  if (isTRUE(rlang::env_binding_are_lazy(.GlobalEnv, name)[[1L]])) {
-    result$kind <- "promise"
-    result$notice <- "Unevaluated promise was not forced."
-    return(result)
-  }
-  result$kind <- "value"
-  value <- get(name, envir = .GlobalEnv, inherits = FALSE)
-  result$object_type <- typeof(value)
+  binding <- rho_object_binding(name)
+  metadata <- rho_object_metadata(binding$value, binding$kind)
+  result$kind <- metadata$kind
+  result$object_type <- metadata$object_type
+  result$classes <- metadata$classes
+  result$length <- metadata$length
+  result$dimensions <- metadata$dimensions
+  result$notice <- metadata$notice
+  if (binding$kind != "value") return(result)
+  value <- binding$value
   classes <- attr(value, "class", exact = TRUE)
-  if (is.character(classes) && !is.object(classes)) result$classes <- as.list(substr(.subset(classes, seq_len(min(length(classes), 16L))), 1L, 128L))
-  dimensions <- attr(value, "dim", exact = TRUE)
-  if (!is.object(dimensions) && (is.integer(dimensions) || is.double(dimensions))) result$dimensions <- as.list(.subset(dimensions, seq_len(min(length(dimensions), 16L))))
   if (identical(classes, "data.frame") || identical(classes, c("tbl_df", "tbl", "data.frame"))) {
     result$preview_kind <- "table"
     column_names <- attr(value, "names", exact = TRUE)

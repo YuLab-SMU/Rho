@@ -95,14 +95,24 @@ pub struct WorkspaceRuntimeError {
     pub message: String,
     pub effect_may_have_occurred: bool,
     pub recovery: Option<Value>,
+    pub query_code: Option<String>,
 }
 
 impl WorkspaceRuntimeError {
+    pub fn query_error(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            effect_may_have_occurred: false,
+            recovery: None,
+            query_code: Some(code.into()),
+        }
+    }
     pub fn before_effect(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
             effect_may_have_occurred: false,
             recovery: None,
+            query_code: None,
         }
     }
 
@@ -111,6 +121,7 @@ impl WorkspaceRuntimeError {
             message: message.into(),
             effect_may_have_occurred: true,
             recovery,
+            query_code: None,
         }
     }
 }

@@ -26,6 +26,14 @@ pub struct HelpArguments {
     #[serde(default = "default_package")]
     #[schemars(length(min = 1, max = 128))]
     pub package: String,
+    /// Exact installed copy from workspace.packages/package_index.
+    #[serde(default)]
+    pub library_path: Option<String>,
+    #[serde(default)]
+    pub observation_id: Option<String>,
+    /// Static file identities returned by workspace.package_index.
+    #[serde(default)]
+    pub expected_index_files: Option<Vec<rho_contract::PackageFileIdentity>>,
     #[serde(default = "default_help_limit")]
     #[schemars(range(min = 1, max = 32768))]
     pub max_chars: u32,
@@ -108,7 +116,24 @@ impl WorkspaceToolHandler {
                         .package
                         .chars()
                         .all(|c| c.is_ascii_alphanumeric() || c == '.');
-                if !package_ok
+                if args.library_path.is_some() != args.observation_id.is_some()
+                    || args
+                        .library_path
+                        .as_ref()
+                        .is_some_and(|p| p.is_empty() || p.len() > 16384 || p.contains('\0'))
+                    || args.observation_id.as_ref().is_some_and(|id| {
+                        id.is_empty()
+                            || id.len() > 64
+                            || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                    })
+                    || args.expected_index_files.as_ref().is_some_and(|files| {
+                        args.library_path.is_none()
+                            || files.len() != 4
+                            || files
+                                .iter()
+                                .any(|f| f.path.len() > 128 || f.digest.len() > 32768)
+                    })
+                    || !package_ok
                     || args.topic.trim().is_empty()
                     || args.topic.len() > 128
                     || args.topic.chars().any(char::is_control)

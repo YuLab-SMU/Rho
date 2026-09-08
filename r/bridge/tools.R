@@ -1,19 +1,33 @@
 # Native code tools. Inputs are text, never eval'ed or written back to a project.
 rho_help <- function(payload) {
+  exact <- !is.null(payload$library_path)
+  path <- NULL
+  identities <- NULL
+  if (exact) {
+    copy <- rho_package_exact_copy(payload)
+    path <- copy$path
+    identities <- rho_package_index_files(path)
+    if (!is.null(payload$expected_index_files) && !identical(identities, payload$expected_index_files)) rho_object_error("content_changed", "Package index files changed before help rendering.")
+  }
   entry <- utils::help(payload$topic, package = payload$package,
+                       lib.loc = if (exact) payload$library_path else NULL,
                        help_type = "text", try.all.packages = FALSE)
   if (!length(entry)) {
-    return(list(topic = payload$topic, package = payload$package,
+    return(list(topic = payload$topic, package = payload$package, library_path = payload$library_path,
                 found = FALSE, text = "", truncated = FALSE))
   }
-  # Use R's help database reader; do not render dynamic Rd expressions or examples.
+  if (length(entry) != 1L) stop("Help topic is ambiguous; select an exact installed copy and help alias.")
+  if (exact && !startsWith(normalizePath(dirname(entry[[1L]]), winslash = "/", mustWork = TRUE), paste0(normalizePath(path, winslash = "/", mustWork = TRUE), "/"))) stop("Help topic resolved outside the selected package copy.")
+  # Read/render exactly once. No dynamic Rd stages or examples are executed.
   rd <- utils:::.getHelpFile(entry[[1L]])
   text <- paste(utils::capture.output(tools::Rd2txt(
     rd, stages = character(), options = list(underline_titles = FALSE)
   )), collapse = "\n")
-  list(topic = payload$topic, package = payload$package, found = TRUE,
-       text = substr(text, 1L, payload$max_chars),
-       truncated = nchar(text) > payload$max_chars)
+  if (exact && !identical(identities, rho_package_index_files(path))) rho_object_error("content_changed", "Package index files changed during help rendering.")
+  if (nchar(text, type = "bytes") > 16 * 1024 * 1024) rho_object_error("budget_exhausted", "Rendered help exceeds the 16 MiB text artifact limit; no partial document was stored.")
+  list(topic = payload$topic, package = payload$package, library_path = payload$library_path,
+       found = TRUE, text = text, preview = substr(text, 1L, payload$max_chars),
+       preview_truncated = nchar(text) > payload$max_chars, truncated = FALSE)
 }
 
 rho_lint <- function(payload) {
