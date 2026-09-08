@@ -544,6 +544,13 @@ boundaries. Caller/principal visibility and project scope follow each port's con
 
 Native R, package scripts and commands run with the user's OS privileges. Process
 supervision and recovery markers are not an adversarial filesystem/network sandbox.
+Environment recovery records the original native session identity of its managed
+helper family. On Darwin, protected processes may hide their environments even
+when the native request succeeds. An original non-init session can exclude
+rechecked init-session services from the owned fork/exec family; missing original
+evidence, same-family uncertainty and positive ownership conflicts remain explicit
+failures. This proof covers managed helpers, not independently delegated service
+manager jobs or rollback of external effects.
 Credentials remain with their existing provider; Rho does not create an Agent
 credential or approval store. See [PRIVACY.md](../PRIVACY.md) and
 [SECURITY.md](../SECURITY.md) for data handling and reporting.
