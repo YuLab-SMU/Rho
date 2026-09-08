@@ -1,0 +1,18 @@
+// Parser and acceptance-assertion checks only. No model, Rho, R, or mock Agent run.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {parseRpc,digest} from './runtime.mjs';
+import {nativeReadPath} from './agent.mjs';
+import {createScenario,CORE_CASES,ADDITIONAL_CASES,FINAL_SCHEMA} from './scenarios.mjs';
+assert.deepEqual(parseRpc('data: {"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n\n'),[{jsonrpc:'2.0',id:1,result:{ok:true}}]);
+assert.deepEqual(parseRpc('{"id":2,"result":null}'),[{id:2,result:null}]);
+assert.equal(digest('α🙂'),digest(Buffer.from('α🙂','utf8')));
+const file='/private/skill folder/SKILL.md';assert.equal(nativeReadPath(`cat '${file}'`,[file]),file);assert.equal(nativeReadPath(`/bin/zsh -lc "cat '${file}'"`,[file]),file);
+for(const command of [`cat '${file}'; cat /tmp/answers`,`cat '${file}' | head`,`cat /tmp/answers`,`python -c "print('answer')"`,`cat '${file}' > /tmp/a`,`cat $(find /tmp -name SKILL.md)`])assert.equal(nativeReadPath(command,[file]),null,command);
+assert.equal(CORE_CASES.length,10);assert.equal(ADDITIONAL_CASES.length,4);assert.ok(FINAL_SCHEMA.required.includes('facts'));
+const directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-acceptance-selftest-')));
+try {for(const id of [...CORE_CASES,...ADDITIONAL_CASES]){const s=createScenario(id,1,directory,directory);assert.equal(typeof s.setup,'function');assert.equal(typeof s.verify,'function');assert.ok(s.requiredFacts.length>0);await assert.rejects(()=>s.checkFacts({facts:[]}));} }
+finally {fs.rmSync(directory,{recursive:true,force:true});}
+console.log('Harness parser and assertion checks passed. No Agent acceptance runs executed.');
