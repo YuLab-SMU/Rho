@@ -599,3 +599,20 @@ session observes, rather than selecting an installation strategy.
 
 The user scoped this view on 2026-09-08. Existing scientific Environment capabilities
 remain available through their owner; this view adds no installation workflow.
+
+
+### Visual refinement under review
+
+The [Paper Packages proposal](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0)
+responds to the user's rejection of the first implementation's visual hierarchy.
+It is a review artifact, not an approved implementation specification.
+
+The proposal puts package purpose under the name and aligns version/session/copy
+information in stable columns. It groups a package's installations behind an
+explicit copy count, uses inline disclosure in narrow panels and an adjacent
+inspector in wide panels, and keeps full paths in details or the R/library summary.
+Observation scope, loaded-versus-first-copy differences, missing results and busy
+state remain visible. Complete unique counts and grouping require an appropriate
+bounded observation from the owner; they cannot be inferred from a partially
+loaded text page. Busy filtering must identify the cached observation it covers.
+The design introduces no install, update, load, detach or runtime-switch action.

@@ -5,11 +5,23 @@ results establish behavior; Git retains the implementation history.
 
 ## Current focus
 
-**Read-only R package inspection is implemented and verified.** Open **Panels → Packages** to inspect the active session's installed
-metadata, loaded namespaces, attached packages and library paths. Installation and
-environment-management decisions are reserved for a future separate plugin.
-The interaction contract is in [Design section 11](RHO-DESIGN.md#11-read-only-package-inspection),
-with the user requirement in [F08](STUDIO-FEEDBACK.md#f08--package-inspection-without-installation-decisions).
+**Review the Packages visual redesign in Paper before further frontend changes.**
+The user rejected the current package panel's appearance and information density:
+repeated full paths dominate the list, while purpose, version and session state
+are difficult to scan together. Functional checks of the read-only capability
+remain valid; they do not establish visual or usability acceptance.
+
+Three editable proposals are in [Paper: Packages design review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0):
+a wide list with an adjacent inspector; 360 px inline inspection and a 320 × 280 px
+compact view; and multiple-copy, missing-result, library and busy states. They use
+purpose descriptions in rows, aligned versions, grouped package names and explicit
+copy counts, with full paths in details. Grouping/global counts and the revised
+interaction are proposed, not implemented or approved. The current frontend was
+left unchanged during this design review.
+
+Installation and environment-management decisions remain reserved for a future
+separate plugin. See [Design section 11](RHO-DESIGN.md#11-read-only-package-inspection)
+and [F08](STUDIO-FEEDBACK.md#f08--package-inspection-without-installation-decisions).
 Calm Precision's prior acceptance, including the user's macOS Chinese IME check,
 remains established.
 The frozen baseline remains commit `d5a970b1559c9bd85567073108d05bca21886de4`, tagged

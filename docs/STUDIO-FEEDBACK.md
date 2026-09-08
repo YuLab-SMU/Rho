@@ -185,6 +185,15 @@ understand duplicate copies without making installation decisions. Preserve the
 current runtime, library configuration and loaded/attached state while viewing.
 The interaction contract is in [Design section 11](RHO-DESIGN.md#11-read-only-package-inspection).
 
+**Follow-up review (2026-09-08):** The user finds the implemented panel unattractive
+and uninformative, with little practical value, and requests frontend design in
+Paper first. Their screenshot shows full library paths repeated under every row,
+large horizontal separation between package names and versions, and no purpose
+text in the list. Rework information hierarchy and density before treating the
+package component as accepted. Functional regression results do not close this
+usability feedback.
+
+
 ## Workflow reference: a country development analysis
 
 The supplied tutorial follows a complete project using gapminder: import, clean,
