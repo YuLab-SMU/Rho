@@ -58,6 +58,7 @@ pub struct TextPage {
     pub fragments: Vec<TextFragment>,
     pub skipped: Option<TextSkip>,
     pub continuation: Option<TextCursor>,
+    /// Pagination is exhausted. Skipped content remains unavailable and is not claimed as read.
     pub complete: bool,
     pub limit_reason: Option<String>,
 }
@@ -135,6 +136,7 @@ pub struct SearchTextPage {
     /// Bytes of successfully loaded files verified on this page, including cached reads.
     pub verified_bytes: u64,
     pub continuation: Option<SearchTextCursor>,
+    /// Pagination is exhausted. Skipped content remains unavailable and is not claimed as read.
     pub complete: bool,
     pub limit_reason: Option<String>,
     pub consistency: String,

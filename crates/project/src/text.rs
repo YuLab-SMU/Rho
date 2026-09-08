@@ -57,6 +57,21 @@ pub fn validate_search(args: &SearchTextArguments) -> Result<(), OperationError>
     }
     Ok(())
 }
+
+trait InvestigationCompleteness {
+    fn no_skipped_content(&self) -> bool;
+}
+impl InvestigationCompleteness for TextPage {
+    fn no_skipped_content(&self) -> bool {
+        self.skipped.is_none()
+    }
+}
+impl InvestigationCompleteness for SearchTextPage {
+    fn no_skipped_content(&self) -> bool {
+        self.skipped.is_empty()
+    }
+}
+
 macro_rules! handler {
     ($name:ident, $args:ty, $result:ty, $cap:literal, $method:ident, $validate:ident) => {
         pub struct $name {
@@ -102,7 +117,7 @@ macro_rules! handler {
                 };
                 match self.owner.runtime.$method(&args).await {
                     Ok(page) => {
-                        if page.complete {
+                        if page.complete && page.no_skipped_content() {
                             reply.completeness = ObservationCompleteness::Complete;
                         }
                         reply.data = Some(serde_json::to_value(page).map_err(invalid)?);
