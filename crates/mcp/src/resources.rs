@@ -199,7 +199,7 @@ mod tests {
     use super::*;
     fn reference(size: usize) -> MediaReference {
         MediaReference {
-            operation_id: OperationId::new("op-resource").unwrap(),
+            operation_id: rho_contract::OperationId::new("op-resource").unwrap(),
             sequence: 2,
             mime_type: "image/png".into(),
             byte_size: size as u64,

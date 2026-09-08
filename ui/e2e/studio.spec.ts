@@ -1255,7 +1255,13 @@ test("Chrome native IME composition never submits code on the commit key", async
   expect(runs).toBe(0);
   await session.send("Input.insertText", { text: "中文" });
   await expect(input).toContainText("中文");
+  // The native composition can emit a second commit key after compositionend.
+  // Wait through its rendering turn before asserting absence of submission.
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   expect(runs).toBe(0);
+  await input.press("Enter");
+  await expect.poll(() => runs).toBe(1);
+  await expect(input).toHaveText("");
   await session.detach();
 });
 

@@ -46,16 +46,34 @@ reads native process markers without starting R or signalling processes.
   checks left to run. The obsolete path-search test now verifies all 205 unique
   paths across pages and all 14 Project integration tests pass. The native absence
   fixture now uses a real marked child without relaxing production uncertainty;
-  that rerun remains pending.
+  its six native-environment tests and all 20 Application tests subsequently passed.
 - Shared discovery tests passed permission-before-pagination, stale visibility
   cursors, unavailable modules, exact descriptor identity and reply byte bounds.
+- Registered cancellation/stdin/event ports and their existing projections passed
+  seven Host and three MCP checks. A schema-definition collision was fixed by
+  isolating payload namespaces, preserving conflicting shapes and literal data.
+  Typed Project text diagnostics and native text checks passed integration tests.
+- Real Ark/R verification passed all five explicitly enabled tests and persistent
+  CLI/session checks. Native MCP image/crop/original-digest/help-text verification
+  passed on the bare image tool; the new equivalent versioned route still needs
+  its expanded transport rerun. Basic Workbench HTTP checks passed, including an
+  exact 512 KiB draft plus base on the dedicated bridge endpoint and its limits.
+- Integration frontend tests now pass 255 tests. Chrome's first full run passed
+  22/26; explicit window resume, per-window draft expectations and current object
+  read routes passed focused rechecks. A native IME commit-key replay was observed
+  in repeated Chrome runs and fixed; five consecutive checks now verify both no
+  accidental execution and a successful subsequent intentional Enter. Full Chrome
+  and final visual review still remain.
 - Rust whole-workspace type checking and one client generate/build cycle passed
   at intermediate integration points. The following client check correctly
   rejected stale ObjectReadPage bindings after root identity fields were added.
   Final generate/build/check and whole-tree checks remain required.
 - Exact local Codex `/Users/xiayh/.npm-global/bin/codex` 0.153.4 preflight with
   gpt-6-astra/high succeeded. The independent-Agent harness self-tests and native
-  Skill discovery checks passed; no model task acceptance is claimed yet.
+  Skill discovery checks passed. Two real discovery debug runs returned supported
+  facts with zero channel/identity violations, but failed stale harness assumptions
+  about module names/tool sequence and then separately timed availability. Those
+  oracles were corrected; both failed traces remain and no final acceptance is claimed.
 
 Logs and the detailed local working plan are under `target/agent-interface/`.
 The acceptance runner retains all attempts, counters, actual token usage and

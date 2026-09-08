@@ -258,5 +258,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ContractFailureRecovery::export_all(&config)?;
     WorkspaceRecovery::export_all(&config)?;
     ProjectPatchRecovery::export_all(&config)?;
+    PollOperationEventsArguments::export_all(&config)?;
+    OperationEventsPage::export_all(&config)?;
+    RespondInputResult::export_all(&config)?;
     Ok(())
 }

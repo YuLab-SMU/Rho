@@ -99,7 +99,8 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     [answerHere, setAnswerHere] = useState(false),
     responseField = useRef<HTMLInputElement>(null);
   const composition = useRef(false),
-    composingKey = useRef(false);
+    composingKey = useRef(false),
+    compositionEndedAt = useRef(-Infinity);
   const historyIndex = useRef(-1),
     historyDraft = useRef(""),
     lastScroll = useRef(draft.scrollTop);
@@ -395,13 +396,21 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     input.current = v;
     const beginComposition = () => {
       composition.current = true;
+      compositionEndedAt.current = -Infinity;
     };
     const endComposition = () => {
       composition.current = false;
+      compositionEndedAt.current = performance.now();
     };
     const captureKey = (event: KeyboardEvent) => {
-      composingKey.current =
-        event.isComposing || event.keyCode === 229 || composition.current;
+      const nativeComposition = event.isComposing || event.keyCode === 229 || composition.current;
+      // Chrome can deliver the IME's Enter again immediately after compositionend,
+      // with isComposing=false. Consume only that first commit key. A subsequent
+      // deliberate keypress is independent, including a second Enter.
+      const endingEnter = !nativeComposition && event.key === "Enter" && performance.now() - compositionEndedAt.current < 100;
+      composingKey.current = nativeComposition || endingEnter;
+      if (!nativeComposition) compositionEndedAt.current = -Infinity;
+      if (endingEnter) event.preventDefault();
     };
     v.contentDOM.addEventListener("compositionstart", beginComposition, true);
     v.contentDOM.addEventListener("compositionend", endComposition, true);

@@ -167,9 +167,12 @@ Scientific operation tools accept:
 Successful results use `structuredContent.result` and an accompanying text encoding.
 Errors include typed diagnostics; failed/uncertain operations retain their identity
 and outcome. `rho.output.view` additionally returns native image content and an
-original/manifest resource link, without duplicating image bytes in text metadata. `rho.operation.get`,
-`rho.operation.request_cancellation` and `rho.events.poll` expose the remaining
-ports. Events are cursor pages, not a push-delivery guarantee.
+original/manifest resource link, without duplicating image bytes in text metadata.
+The shared descriptors include `operation.get`, `operation.request_cancellation`,
+`workspace.respond_input` and `operation.events`. Existing bare MCP aliases use
+the same contracts and owners. `operation.events` returns an explicit continuation
+page; the legacy `rho.events.poll` projects that page to its original event list.
+Events are cursor pages, not a push-delivery guarantee.
 
 The local MCP actor and human caller share the OS user's principal while retaining
 separate actor identity. Tool arguments and client initialization names do not
