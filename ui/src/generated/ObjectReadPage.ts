@@ -6,7 +6,7 @@ import type { ObjectPathElement } from "./ObjectPathElement";
 import type { ObjectReadKind } from "./ObjectReadKind";
 import type { ObjectScalar } from "./ObjectScalar";
 
-export type ObjectReadPage = { object_ref: string, root_name: string, 
+export type ObjectReadPage = { object_ref: string, root_name: string,
 /**
  * Path fixed when the observation opened, separate from this read's relative path.
  */

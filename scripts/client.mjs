@@ -45,6 +45,12 @@ try {
     );
     const committed = path.join(root, "ui/src/generated");
     const names = files(generated);
+    // ts-rs places whitespace before multiline documentation. Normalize only
+    // generated source formatting so checks and committed DTOs stay identical.
+    for (const name of names) {
+      const generatedFile = path.join(generated, name);
+      fs.writeFileSync(generatedFile, fs.readFileSync(generatedFile, "utf8").replace(/[ \t]+$/gm, ""));
+    }
     if (mode === "check")
       assert.deepEqual(
         files(committed),

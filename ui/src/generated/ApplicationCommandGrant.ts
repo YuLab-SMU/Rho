@@ -2,7 +2,7 @@
 import type { ApplicationCaptureSummary } from "./ApplicationCaptureSummary";
 import type { ApplicationCommandRequest } from "./ApplicationCommandRequest";
 
-export type ApplicationCommandGrant = { request: ApplicationCommandRequest, claim_id: string, capture: ApplicationCaptureSummary | null, 
+export type ApplicationCommandGrant = { request: ApplicationCommandRequest, claim_id: string, capture: ApplicationCaptureSummary | null,
 /**
  * Bound to this exact request, window incarnation, capture and original actor.
  */

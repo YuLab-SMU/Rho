@@ -2,7 +2,7 @@
 import type { ObjectPathElement } from "./ObjectPathElement";
 import type { ObjectReadKind } from "./ObjectReadKind";
 
-export type ReadObjectArguments = { expected_session: string, object_ref: string, kind: ObjectReadKind, path: Array<ObjectPathElement>, start: number, limit: number, column_start: number, column_limit: number, 
+export type ReadObjectArguments = { expected_session: string, object_ref: string, kind: ObjectReadKind, path: Array<ObjectPathElement>, start: number, limit: number, column_start: number, column_limit: number,
 /**
  * For kind=text, select "names" or "levels" instead of character values.
  */

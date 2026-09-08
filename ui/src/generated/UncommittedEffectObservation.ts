@@ -2,7 +2,7 @@
 import type { ObservationCompleteness } from "./ObservationCompleteness";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type UncommittedEffectObservation = { kind: string, source: string, 
+export type UncommittedEffectObservation = { kind: string, source: string,
 /**
  * Unvalidated original owner observation, retained solely for investigation.
  */

@@ -2,7 +2,7 @@
 import type { OperationRecord } from "./OperationRecord";
 import type { RecordedOperationContract } from "./RecordedOperationContract";
 
-export type OperationGetResult = { 
+export type OperationGetResult = {
 /**
  * Output/recovery are polymorphic according to this record's exact capability.
  */

@@ -2,7 +2,7 @@
 import type { SkillReadKind } from "./SkillReadKind";
 import type { SkillResourceSummary } from "./SkillResourceSummary";
 
-export type SkillReadPage = { skill_ref: string, source_ref: string, skill_digest: string, manifest_digest: string, kind: SkillReadKind, resource: SkillResourceSummary | null, resources: Array<SkillResourceSummary>, text: string | null, bytes: Array<number> | null, 
+export type SkillReadPage = { skill_ref: string, source_ref: string, skill_digest: string, manifest_digest: string, kind: SkillReadKind, resource: SkillResourceSummary | null, resources: Array<SkillResourceSummary>, text: string | null, bytes: Array<number> | null,
 /**
  * UTF-8 byte offset for text, original byte offset for binary, entry offset for manifests.
  */

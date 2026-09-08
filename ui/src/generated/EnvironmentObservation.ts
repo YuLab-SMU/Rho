@@ -5,11 +5,11 @@ import type { InstalledEnvironmentPackage } from "./InstalledEnvironmentPackage"
  * Native configuration is established during explicit Host startup or an
  * Environment operation. Reading it never starts R or tests namespace loading.
  */
-export type EnvironmentObservation = { r_version: string, platform: string, r_home: string, library_paths: Array<string>, packages: Array<InstalledEnvironmentPackage>, truncated: boolean, jsonlite_library: string, 
+export type EnvironmentObservation = { r_version: string, platform: string, r_home: string, library_paths: Array<string>, packages: Array<InstalledEnvironmentPackage>, truncated: boolean, jsonlite_library: string,
 /**
  * Cached startup/operation probe, not a current loadability guarantee.
  */
-renv_available: boolean, 
+renv_available: boolean,
 /**
  * Cached startup/operation probe, not a current loadability guarantee.
  */

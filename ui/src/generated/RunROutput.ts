@@ -3,7 +3,7 @@ import type { MediaReference } from "./MediaReference";
 import type { WorkspaceCondition } from "./WorkspaceCondition";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type RunROutput = { session_id: string, 
+export type RunROutput = { session_id: string,
 /**
  * Intentionally open: bounded native R scalar values or safe metadata vary by executed code.
  */

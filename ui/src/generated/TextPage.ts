@@ -4,7 +4,7 @@ import type { TextFragment } from "./TextFragment";
 import type { TextIdentity } from "./TextIdentity";
 import type { TextSkip } from "./TextSkip";
 
-export type TextPage = { file: TextIdentity | null, fragments: Array<TextFragment>, skipped: TextSkip | null, continuation: TextCursor | null, 
+export type TextPage = { file: TextIdentity | null, fragments: Array<TextFragment>, skipped: TextSkip | null, continuation: TextCursor | null,
 /**
  * Pagination is exhausted. Skipped content remains unavailable and is not claimed as read.
  */

@@ -2,7 +2,7 @@
 import type { SkillMetadata } from "./SkillMetadata";
 import type { SkillSourceRelation } from "./SkillSourceRelation";
 
-export type SkillSummary = { 
+export type SkillSummary = {
 /**
  * Observation identity bound to principal, project, scope and all package resources.
  */

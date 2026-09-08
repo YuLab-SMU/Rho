@@ -3,7 +3,7 @@ import type { ApplicationContextState } from "./ApplicationContextState";
 import type { ApplicationDocumentSummary } from "./ApplicationDocumentSummary";
 import type { ApplicationWindowSummary } from "./ApplicationWindowSummary";
 
-export type ApplicationContext = { window: ApplicationWindowSummary, 
+export type ApplicationContext = { window: ApplicationWindowSummary,
 /**
  * "live_bridge" or "synced_history"; neither is a scientific snapshot.
  */

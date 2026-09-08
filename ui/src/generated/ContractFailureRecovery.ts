@@ -4,7 +4,7 @@ import type { ContractFailureKind } from "./ContractFailureKind";
 import type { OwnerContractViolation } from "./OwnerContractViolation";
 import type { UncommittedCandidate } from "./UncommittedCandidate";
 
-export type ContractFailureRecovery = { kind: ContractFailureKind, capability: CapabilityRef, automatic_reexecution: boolean, execution_started: boolean, violations: Array<OwnerContractViolation>, 
+export type ContractFailureRecovery = { kind: ContractFailureKind, capability: CapabilityRef, automatic_reexecution: boolean, execution_started: boolean, violations: Array<OwnerContractViolation>,
 /**
  * Original uncommitted values. These are unvalidated evidence, not domain facts.
  */

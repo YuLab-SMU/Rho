@@ -6,7 +6,7 @@ import type { OperationOutcome } from "./OperationOutcome";
 import type { OperationStatus } from "./OperationStatus";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type OperationRecord = { operation: Operation, status: OperationStatus, outcome: OperationOutcome | null, output: JsonValue | null, error: string | null, recovery: JsonValue | null, cancellation_requested: boolean, updated_at_ms: number, 
+export type OperationRecord = { operation: Operation, status: OperationStatus, outcome: OperationOutcome | null, output: JsonValue | null, error: string | null, recovery: JsonValue | null, cancellation_requested: boolean, updated_at_ms: number,
 /**
  * Read-only navigation derived from this record and visible registered capabilities.
  */

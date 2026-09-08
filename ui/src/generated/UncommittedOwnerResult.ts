@@ -5,11 +5,11 @@ import type { UncommittedEvent } from "./UncommittedEvent";
 import type { UncommittedFact } from "./UncommittedFact";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type UncommittedOwnerResult = { outcome: OperationOutcome, 
+export type UncommittedOwnerResult = { outcome: OperationOutcome,
 /**
  * Exact original owner output, which failed its recorded capability contract.
  */
-output: JsonValue | null, error: string | null, 
+output: JsonValue | null, error: string | null,
 /**
  * Exact original recovery material, retained even when malformed.
  */
