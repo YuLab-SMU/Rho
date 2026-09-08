@@ -80,9 +80,8 @@ async fn project_discovery_is_bounded_permission_filtered_and_does_not_create_sc
     let mut reader = context.clone();
     reader.scopes = BTreeSet::from(["project.read".into()]);
     let expected: BTreeSet<_> = host
-        .capabilities()
+        .capabilities_for(&reader)
         .iter()
-        .filter(|d| d.required_scopes.is_subset(&reader.scopes))
         .map(|d| d.capability.clone())
         .collect();
     let mut actual = BTreeSet::new();

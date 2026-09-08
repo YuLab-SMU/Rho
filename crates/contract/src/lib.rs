@@ -38,6 +38,8 @@ pub mod record_query;
 pub use record_query::*;
 pub mod operation_evidence;
 pub use operation_evidence::*;
+pub mod port_controls;
+pub use port_controls::*;
 
 use std::collections::BTreeSet;
 

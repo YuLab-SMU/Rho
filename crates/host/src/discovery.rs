@@ -42,12 +42,8 @@ impl DiscoveryOwner {
             .ok_or_else(|| OperationError::Unavailable("Host registry is not composed".into()))
     }
     fn visible(&self, context: &CallContext) -> Result<Vec<CapabilityDescriptor>, OperationError> {
-        let mut descriptors = self
-            .registry()?
-            .descriptors()
-            .into_iter()
-            .filter(|d| d.required_scopes.is_subset(&context.scopes))
-            .collect::<Vec<_>>();
+        let mut descriptors =
+            crate::port_contracts::visible(self.registry()?.descriptors(), context);
         descriptors.sort_by(|a, b| a.capability.cmp(&b.capability));
         Ok(descriptors)
     }
@@ -87,7 +83,12 @@ impl DiscoveryOwner {
             ("skills", "skill.read", "Skill sources are not configured"),
         ]
         .into_iter()
-        .filter(|(_, scope, _)| context.scopes.contains(*scope))
+        .filter(|(module, scope, _)| {
+            context.scopes.contains(*scope)
+                || descriptors
+                    .iter()
+                    .any(|descriptor| belongs_to(&descriptor.capability.id, module))
+        })
         .map(|(module, _, reason)| {
             let available = descriptors
                 .iter()

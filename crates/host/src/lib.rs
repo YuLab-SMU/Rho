@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 mod application;
 mod discovery;
+mod port_contracts;
 mod skills;
 
 mod config;
@@ -254,16 +255,35 @@ impl NextHost {
                 operation_id,
                 only_if_pending,
             } => serde_json::to_value(
-                self.runtime
-                    .gateway
-                    .request_cancellation_conditional(
-                        context,
-                        &operation_id,
-                        only_if_pending.unwrap_or(false),
-                    )
-                    .await?,
+                self.request_cancellation_conditional(
+                    context,
+                    &operation_id,
+                    only_if_pending.unwrap_or(false),
+                )
+                .await?,
             ),
             HostRequest::RespondInput(reply) => {
+                let capability = rho_contract::CapabilityRef::new(port_contracts::INPUT, 1)?;
+                // Values exist only for transient schema validation. Never put
+                // stdin content into a diagnostic, operation, receipt or journal.
+                let arguments = json!({"session_id":reply.session_id,"operation_id":reply.operation_id,
+                    "request_id":reply.request_id,"reply_id":reply.reply_id,"value":reply.value});
+                self.runtime
+                    .registry
+                    .validate_control_input(context, &capability, &arguments)
+                    .map_err(|error| match error {
+                        OperationError::InvalidInput(_) => OperationError::InvalidInput(
+                            "Input response violates its contract (answer redacted)".into(),
+                        ),
+                        other => other,
+                    })?;
+                drop(arguments);
+                OperationId::new(reply.operation_id.as_str())?;
+                if reply.value.len() > 65536 || reply.value.contains('\0') {
+                    return Err(OperationError::InvalidInput(
+                        "Invalid input response byte bounds or NUL (answer redacted)".into(),
+                    ));
+                }
                 let record = self
                     .runtime
                     .gateway
@@ -272,8 +292,8 @@ impl NextHost {
                     .ok_or_else(|| {
                         OperationError::NotFound(reply.operation_id.as_str().to_string())
                     })?;
-                if record.operation.target.identity != reply.session_id
-                    || !context.scopes.contains("workspace.run_r")
+                if record.operation.target.kind != "workspace"
+                    || record.operation.target.identity != reply.session_id
                 {
                     return Err(OperationError::InvalidInput(
                         "Input request session or scope does not match".into(),
@@ -285,7 +305,13 @@ impl NextHost {
                     .ok_or_else(|| OperationError::InvalidInput("R input is unavailable".into()))?
                     .respond_input(reply)
                     .map_err(OperationError::InvalidInput)?;
-                Ok(serde_json::json!({"submitted":true}))
+                let result =
+                    serde_json::to_value(rho_contract::RespondInputResult { submitted: true })
+                        .map_err(|e| OperationError::Contract(e.to_string()))?;
+                self.runtime
+                    .registry
+                    .validate_control_output(&capability, &result)?;
+                Ok(result)
             }
             HostRequest::QuerySnapshot(query) => {
                 serde_json::to_value(self.query_snapshot(context, query).await?)
@@ -608,17 +634,20 @@ impl NextHost {
             journal.clone(),
             None,
         )))?;
+        let event_port = port_contracts::register(&mut registry, None, false)?;
         registry.validate_links()?;
         let registry = Arc::new(registry);
         discovery.bind(&registry);
+        let gateway = Arc::new(OperationGateway::new(
+            registry.clone(),
+            journal,
+            Arc::new(SystemClock),
+            Arc::new(UuidOperationIdGenerator),
+        ));
+        event_port.bind(&gateway);
         Ok(Self {
             runtime: Arc::new(HostRuntime {
-                gateway: Arc::new(OperationGateway::new(
-                    registry.clone(),
-                    journal,
-                    Arc::new(SystemClock),
-                    Arc::new(UuidOperationIdGenerator),
-                )),
+                gateway,
                 queries: Arc::new(QueryGateway::new(registry.clone())),
                 registry,
                 workspace: None,
@@ -954,6 +983,8 @@ impl NextHost {
             output_project.clone(),
             &registry.descriptors(),
         )?))?;
+        let event_port =
+            port_contracts::register(&mut registry, output_project.clone(), has_workspace)?;
         registry.validate_links()?;
         let registry = Arc::new(registry);
         discovery.bind(&registry);
@@ -961,6 +992,7 @@ impl NextHost {
             OperationGateway::new(registry.clone(), journal, clock, id_generator)
                 .with_project_scope(output_project),
         );
+        event_port.bind(&gateway);
         let recovered_on_open = gateway.recover_incomplete().await?;
         Ok(Self {
             runtime: Arc::new(HostRuntime {
@@ -981,6 +1013,12 @@ impl NextHost {
 
     pub fn capabilities(&self) -> Vec<CapabilityDescriptor> {
         self.runtime.gateway.registry_descriptors()
+    }
+
+    /// Shared discovery/tool visibility; target-specific authority is checked
+    /// again by its owner when a control is admitted.
+    pub fn capabilities_for(&self, context: &CallContext) -> Vec<CapabilityDescriptor> {
+        port_contracts::visible(self.capabilities(), context)
     }
 
     fn application_owner(&self) -> Result<&Arc<rho_application::ApplicationOwner>, OperationError> {
@@ -1121,10 +1159,21 @@ impl NextHost {
         context: &CallContext,
         operation_id: &OperationId,
     ) -> Result<Option<OperationRecord>, OperationError> {
-        self.runtime
-            .gateway
-            .get_operation(context, operation_id)
-            .await
+        let snapshot = self
+            .query_snapshot(
+                context,
+                QueryRequest {
+                    capability: rho_contract::CapabilityRef::new("operation.get", 1)?,
+                    arguments: json!({"operation_id":operation_id}),
+                },
+            )
+            .await?;
+        let result: rho_contract::OperationGetResult =
+            serde_json::from_value(snapshot.data.ok_or_else(|| {
+                OperationError::Contract("operation.get returned no payload".into())
+            })?)
+            .map_err(|e| OperationError::Contract(e.to_string()))?;
+        Ok(result.record)
     }
     /// Hosting lifecycle only: keep accepted work alive after an edge disconnects.
     pub fn is_idle(&self) -> bool {
@@ -1145,10 +1194,33 @@ impl NextHost {
         context: &CallContext,
         operation_id: &OperationId,
     ) -> Result<CancellationRequestOutcome, OperationError> {
-        self.runtime
-            .gateway
-            .request_cancellation(context, operation_id)
+        self.request_cancellation_conditional(context, operation_id, false)
             .await
+    }
+
+    async fn request_cancellation_conditional(
+        &self,
+        context: &CallContext,
+        operation_id: &OperationId,
+        only_if_pending: bool,
+    ) -> Result<CancellationRequestOutcome, OperationError> {
+        let capability = rho_contract::CapabilityRef::new(port_contracts::CANCEL, 1)?;
+        self.runtime.registry.validate_control_input(
+            context,
+            &capability,
+            &json!({"operation_id":operation_id,"only_if_pending":only_if_pending}),
+        )?;
+        OperationId::new(operation_id.as_str())?;
+        let result = self
+            .runtime
+            .gateway
+            .request_cancellation_conditional(context, operation_id, only_if_pending)
+            .await?;
+        self.runtime.registry.validate_control_output(
+            &capability,
+            &serde_json::to_value(&result).map_err(|e| OperationError::Contract(e.to_string()))?,
+        )?;
+        Ok(result)
     }
 
     pub async fn events(
@@ -1165,10 +1237,21 @@ impl NextHost {
         after_sequence: u64,
         limit: usize,
     ) -> Result<Vec<OutboxRecord>, OperationError> {
-        self.runtime
-            .gateway
-            .outbox(context, after_sequence, limit)
-            .await
+        let snapshot = self
+            .query_snapshot(
+                context,
+                QueryRequest {
+                    capability: rho_contract::CapabilityRef::new(port_contracts::EVENTS, 1)?,
+                    arguments: json!({"after_sequence":after_sequence,"limit":limit}),
+                },
+            )
+            .await?;
+        let page: rho_contract::OperationEventsPage =
+            serde_json::from_value(snapshot.data.ok_or_else(|| {
+                OperationError::Contract("operation.events returned no payload".into())
+            })?)
+            .map_err(|e| OperationError::Contract(e.to_string()))?;
+        Ok(page.events)
     }
 
     pub async fn facts_for_operation(

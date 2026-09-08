@@ -5,7 +5,7 @@ use rho_host::OperationError;
 use futures::StreamExt;
 use rho_contract::{
     CallContext, CallerIdentity, CallerKind, CapabilityKind, CapabilityRef, HostRequest,
-    Invocation, OperationId, OperationRecord, OutboxRecord, Precondition, QueryRequest,
+    Invocation, OperationGetArguments, PollOperationEventsArguments, Precondition, QueryRequest,
 };
 use rho_host::NextHost;
 use rmcp::{
@@ -18,7 +18,7 @@ use rmcp::{
     service::RequestContext,
     transport::async_rw::JsonRpcMessageCodec,
 };
-use schemars::{JsonSchema, schema_for};
+use schemars::schema_for;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use std::{collections::BTreeMap, sync::Arc};
@@ -41,23 +41,6 @@ struct CommandArguments {
     preconditions: Vec<Precondition>,
     #[serde(default)]
     return_after_acceptance: Option<bool>,
-}
-#[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct OperationArguments {
-    operation_id: OperationId,
-}
-#[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct EventArguments {
-    #[serde(default)]
-    after_sequence: u64,
-    #[serde(default = "event_limit")]
-    #[schemars(range(min = 1, max = 1000))]
-    limit: usize,
-}
-fn event_limit() -> usize {
-    100
 }
 
 enum Route {
@@ -83,10 +66,8 @@ impl McpEdge {
     pub fn new(host: Arc<NextHost>, context: CallContext) -> Result<Self, String> {
         context.validate().map_err(|error| error.to_string())?;
         let mut entries = BTreeMap::new();
-        for capability in host.capabilities() {
-            if !capability.required_scopes.is_subset(&context.scopes) {
-                continue;
-            }
+        let capabilities = host.capabilities_for(&context);
+        for capability in &capabilities {
             let name = format!(
                 "rho.{}.v{}",
                 capability.capability.id, capability.capability.version
@@ -104,9 +85,9 @@ impl McpEdge {
             let query = capability.kind == CapabilityKind::Query;
             let control = capability.kind == CapabilityKind::Control;
             let input = if query || control {
-                capability.input_schema
+                capability.input_schema.clone()
             } else {
-                command_schema(capability.input_schema)?
+                command_schema(capability.input_schema.clone())?
             };
             let output = if query {
                 rho_contract::query_result_schema(capability.output_schema.clone())
@@ -118,17 +99,7 @@ impl McpEdge {
                     capability.recovery_schema.clone(),
                 )
             };
-            let description = format!(
-                "{}\nPurpose: {}\nOwner: {}\nEffects: {}\nRetry: {}\nCancellation: {}\nLimitations: {}\nDetails and validated examples: rho.host.describe.v1 ({})",
-                capability.documentation.summary,
-                capability.documentation.purpose,
-                capability.documentation.owner,
-                capability.documentation.effects,
-                capability.documentation.retry_rule,
-                capability.documentation.cancellation_rule,
-                capability.documentation.limitations.join(" "),
-                capability.capability.display_key()
-            );
+            let description = capability_description(capability);
             let tool = Tool::new(name.clone(), description, object(input)?)
                 .with_raw_output_schema(Arc::new(object(result_schema(output))?))
                 .with_annotations(ToolAnnotations::new().read_only(query));
@@ -137,7 +108,7 @@ impl McpEdge {
                     name,
                     Entry {
                         tool,
-                        route: Route::Capability(capability.capability, capability.kind),
+                        route: Route::Capability(capability.capability.clone(), capability.kind),
                     },
                 )
                 .is_some()
@@ -145,60 +116,55 @@ impl McpEdge {
                 return Err("MCP tool name collision".into());
             }
         }
-        for (name, description, input, output, route, read_only) in [
+        for (name, capability_id, route, projection) in [
             (
                 "rho.operation.get",
-                "Read a visible Operation without executing or recovering it.",
-                schema_for!(OperationArguments).to_value(),
-                schema_for!(Option<OperationRecord>).to_value(),
+                "operation.get",
                 Route::Get,
-                true,
+                Some("record"),
             ),
             (
                 "rho.operation.request_cancellation",
-                "Request cancellation by OperationId. Acceptance is not confirmation of a stopped runtime.",
-                schema_for!(rho_contract::CancelOperation).to_value(),
-                schema_for!(rho_contract::CancellationRequestOutcome).to_value(),
+                "operation.request_cancellation",
                 Route::Cancel,
-                false,
+                None,
             ),
             (
                 "rho.workspace.respond_input",
-                "Reply once to the identified R stdin request. This does not submit code or start R. Password answers are transient and are not journaled.",
-                schema_for!(rho_contract::RespondInput).to_value(),
-                json!({"type":"object","properties":{"submitted":{"type":"boolean"}},"required":["submitted"]}),
+                "workspace.respond_input",
                 Route::Input,
-                false,
+                None,
             ),
             (
                 "rho.events.poll",
-                "Read a bounded durable event cursor page. This does not start an Operation; it is not live push.",
-                schema_for!(EventArguments).to_value(),
-                schema_for!(Vec<OutboxRecord>).to_value(),
+                "operation.events",
                 Route::Events,
-                true,
+                Some("events"),
             ),
         ] {
-            if matches!(route, Route::Get | Route::Events)
-                && !context.scopes.contains("operation.read")
-            {
+            let Some(capability) = capabilities
+                .iter()
+                .find(|descriptor| descriptor.capability.id == capability_id)
+            else {
                 continue;
+            };
+            let output = if let Some(field) = projection {
+                rho_contract::project_payload_schema(&capability.output_schema, field)?
+            } else {
+                capability.output_schema.clone()
+            };
+            let mut description = capability_description(capability);
+            if let Some(field) = projection {
+                description.push_str(&format!("\nCompatibility projection: returns only {field} from the same Host-validated {} query. Use rho.{}.v{} for observation metadata and continuation.", capability_id, capability_id, capability.capability.version));
+                if field == "events" {
+                    description.push_str(" This array never asserts journal completeness; resume with the last returned sequence, including when fewer items than the requested limit are returned.");
+                }
             }
-            if matches!(route, Route::Input) && !context.scopes.contains("workspace.run_r") {
-                continue;
-            }
-            if matches!(route, Route::Cancel)
-                && !host.capabilities().iter().any(|capability| {
-                    capability.kind == CapabilityKind::Operation
-                        && capability.cancellation != rho_contract::CancellationClass::Unsupported
-                        && capability.required_scopes.is_subset(&context.scopes)
-                })
-            {
-                continue;
-            }
-            let tool = Tool::new(name, description, object(input)?)
+            let tool = Tool::new(name, description, object(capability.input_schema.clone())?)
                 .with_raw_output_schema(Arc::new(object(result_schema(output))?))
-                .with_annotations(ToolAnnotations::new().read_only(read_only));
+                .with_annotations(
+                    ToolAnnotations::new().read_only(capability.kind == CapabilityKind::Query),
+                );
             if entries.insert(name.into(), Entry { tool, route }).is_some() {
                 return Err("MCP control tool name collision".into());
             }
@@ -271,40 +237,19 @@ impl McpEdge {
                 return Err(invalid_operation("native view uses the presentation route"));
             }
             Route::Capability(capability, CapabilityKind::Control) => {
-                match capability.id.as_str() {
-                    "application.control" => HostRequest::ApplicationControl(
-                        serde_json::from_value(args).map_err(invalid_operation)?,
-                    ),
-                    "application.bind_method" => HostRequest::BindMethod(
-                        serde_json::from_value(args).map_err(invalid_operation)?,
-                    ),
-                    _ => {
-                        return Err(rho_host::OperationError::UnknownCapability(
-                            capability.display_key(),
-                        ));
-                    }
-                }
+                control_request(&capability.id, args)?
             }
             Route::Get => {
-                let input: OperationArguments =
+                let input: OperationGetArguments =
                     serde_json::from_value(args).map_err(invalid_operation)?;
                 HostRequest::GetOperation {
                     operation_id: input.operation_id,
                 }
             }
-            Route::Cancel => {
-                let input: rho_contract::CancelOperation =
-                    serde_json::from_value(args).map_err(invalid_operation)?;
-                HostRequest::RequestCancellation {
-                    operation_id: input.operation_id,
-                    only_if_pending: input.only_if_pending,
-                }
-            }
-            Route::Input => {
-                HostRequest::RespondInput(serde_json::from_value(args).map_err(invalid_operation)?)
-            }
+            Route::Cancel => control_request("operation.request_cancellation", args)?,
+            Route::Input => control_request("workspace.respond_input", args)?,
             Route::Events => {
-                let input: EventArguments =
+                let input: PollOperationEventsArguments =
                     serde_json::from_value(args).map_err(invalid_operation)?;
                 HostRequest::Subscribe {
                     after_sequence: input.after_sequence,
@@ -401,7 +346,10 @@ impl ServerHandler for McpEdge {
         };
         let quota = match entry.route {
             Route::Capability(_, CapabilityKind::Operation) => Some(&self.in_flight),
-            Route::Capability(_, CapabilityKind::Query) | Route::View => Some(&self.observations),
+            Route::Capability(_, CapabilityKind::Query)
+            | Route::View
+            | Route::Get
+            | Route::Events => Some(&self.observations),
             _ => None,
         };
         let _permit = if let Some(quota) = quota {
@@ -513,6 +461,42 @@ fn command_schema(mut arguments: Value) -> Result<Value, String> {
         schema["$defs"] = definitions;
     }
     Ok(schema)
+}
+
+fn capability_description(capability: &rho_contract::CapabilityDescriptor) -> String {
+    format!(
+        "{}\nPurpose: {}\nOwner: {}\nEffects: {}\nRetry: {}\nCancellation: {}\nLimitations: {}\nDetails and validated examples: rho.host.describe.v1 ({})",
+        capability.documentation.summary,
+        capability.documentation.purpose,
+        capability.documentation.owner,
+        capability.documentation.effects,
+        capability.documentation.retry_rule,
+        capability.documentation.cancellation_rule,
+        capability.documentation.limitations.join(" "),
+        capability.capability.display_key()
+    )
+}
+fn control_request(id: &str, args: Value) -> Result<HostRequest, OperationError> {
+    Ok(match id {
+        "application.control" => HostRequest::ApplicationControl(
+            serde_json::from_value(args).map_err(invalid_operation)?,
+        ),
+        "application.bind_method" => {
+            HostRequest::BindMethod(serde_json::from_value(args).map_err(invalid_operation)?)
+        }
+        "operation.request_cancellation" => {
+            let input: rho_contract::CancelOperation =
+                serde_json::from_value(args).map_err(invalid_operation)?;
+            HostRequest::RequestCancellation {
+                operation_id: input.operation_id,
+                only_if_pending: input.only_if_pending,
+            }
+        }
+        "workspace.respond_input" => {
+            HostRequest::RespondInput(serde_json::from_value(args).map_err(invalid_operation)?)
+        }
+        _ => return Err(OperationError::UnknownCapability(format!("{id}@1"))),
+    })
 }
 
 fn invalid_operation(error: impl std::fmt::Display) -> OperationError {
