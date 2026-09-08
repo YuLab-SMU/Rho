@@ -304,6 +304,79 @@ fn inspect_tree(root: &Path) -> Result<Option<MaterialObject>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Child, Command, Stdio};
+
+    struct RetainedChild(Child);
+    impl Drop for RetainedChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    fn retained_child(marker: &str) -> RetainedChild {
+        let mut child = RetainedChild(
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "retention::tests::retained_native_child_fixture",
+                    "--nocapture",
+                ])
+                .env_clear()
+                .env(marker, "YES")
+                .env("RHO_RETENTION_TEST_MARKER", marker)
+                .env("RHO_OPERATION_ID", "op_retention_read")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let stdout = child.0.stdout.take().unwrap();
+        let (send, receive) = std::sync::mpsc::sync_channel(1);
+        std::thread::spawn(move || {
+            let mut reader = BufReader::new(stdout);
+            let ready = (|| -> std::io::Result<bool> {
+                for _ in 0..16 {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line)? == 0 {
+                        return Ok(false);
+                    }
+                    if line.contains("RHO_RETENTION_NATIVE_READY") {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            })();
+            let _ = send.send(ready);
+            let _ = std::io::copy(&mut reader, &mut std::io::sink());
+        });
+        assert!(
+            receive
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap()
+                .unwrap(),
+            "the marked child must reach its own readiness handshake"
+        );
+        child
+    }
+
+    #[test]
+    fn retained_native_child_fixture() {
+        let Ok(marker) = std::env::var("RHO_RETENTION_TEST_MARKER") else {
+            return;
+        };
+        assert_eq!(std::env::var(&marker).as_deref(), Ok("YES"));
+        assert_eq!(
+            std::env::var("RHO_OPERATION_ID").as_deref(),
+            Ok("op_retention_read")
+        );
+        println!("RHO_RETENTION_NATIVE_READY");
+        let mut reply = String::new();
+        std::io::stdin().read_line(&mut reply).unwrap();
+        assert_eq!(reply, "finish\n");
+    }
 
     #[tokio::test]
     async fn retention_observation_never_runs_r_or_recovers_processes() {
@@ -334,6 +407,10 @@ mod tests {
         runtime
             .persist_marker(temporary, "op_retention_read", &marker)
             .unwrap();
+        // Positive native evidence is deterministic even while an unrelated
+        // protected process prevents proving global marker absence. The query
+        // must retain this exact child, not recover it or execute an R helper.
+        let mut child = retained_child(&marker);
         let stage = runtime.stage("plans", "op_retention_read").unwrap();
         fs::write(stage.join("retained.txt"), "retain these bytes").unwrap();
         let before = fs::read(stage.join("retained.txt")).unwrap();
@@ -342,7 +419,11 @@ mod tests {
             .await
             .unwrap();
         assert!(state.native_marker_present);
-        assert!(state.live_processes.is_empty());
+        assert!(state.live_processes.contains(&child.0.id()));
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "retention observation must not signal the marked process"
+        );
         assert!(state.stage.unwrap().fingerprint.starts_with("sha256:"));
         assert_eq!(fs::read(stage.join("retained.txt")).unwrap(), before);
         // The durable marker and retained bytes must survive the observation;
@@ -352,5 +433,13 @@ mod tests {
             !forbidden_launch.exists(),
             "retention observation must not launch an R or ps helper, even if its error is swallowed"
         );
+        child
+            .0
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(b"finish\n")
+            .unwrap();
+        assert!(child.0.wait().unwrap().success());
     }
 }
