@@ -2,7 +2,8 @@
 
 **Rho owns the operable scientific workspace. External Agents own conversation
 and behavior.** Human and Agent requests reach the same domain owners and return
-the same underlying facts.
+the same underlying facts. Current delivery and verification progress are recorded
+in [Status](STATUS.md); protocol descriptions here are not acceptance results.
 
 ## Authority and ownership
 
@@ -12,6 +13,8 @@ the same underlying facts.
 | Host | Compose domains and adapters, own runtime lifetime, bind trusted local context and expose shared ports |
 | Operation foundation | Capability registration, schema/scope validation, idempotency, state transitions and atomic commit discipline |
 | Scientific domains | Interpret observations, validate domain preconditions and describe results and effects |
+| Application | Window/context identities, synchronized documents, application commands, captures, method bindings and receipts |
+| Skills | Discover methods through declared sources, preserve resource identities and resolve explicit application bindings |
 | Native adapters | Interact with R, files, Git, package tools, OS processes, SSH and Slurm |
 | Studio | Present state and user controls; retain documents and layout independently of panel mounts |
 
@@ -25,27 +28,62 @@ the shared Host, with no Agent-specific handler bypass.
 
 ## Request paths
 
-```text
-CLI / session / browser / official MCP
-                  |
-                 Host
-          /                  \
- Operation Gateway        Query Gateway
-          |                  |
-      registered scientific domain handlers
-          |
-      domain ports -> native adapters
-          |
-      actual result -> CommitPlan -> SQLite transaction
+```mermaid
+flowchart TD
+    Edges[CLI / session / browser / MCP] --> Host
+    Host --> Operations[Operation Gateway]
+    Host --> Queries[Query Gateway]
+    Host --> Application[Application owner]
+    Operations --> Owners[Scientific owners]
+    Queries --> Reads[Bounded owner observations]
+    Owners <--> Native[Native adapters]
+    Owners --> Commit[CommitPlan / journal transaction]
+    Application <--> Studio[Resident Studio bridge / module commands]
+    Application --> Store[ApplicationStore CAS]
+    Studio --> Capture[Host validates captured execution association]
+    Capture --> Operations
 ```
 
 The five shared scientific ports are `invoke`, `getOperation`, `requestCancellation`,
 `querySnapshot` and cursor-based `subscribe`. A sibling `respond_input` control
 replies only to an identified pending stdin request; it neither creates an
 Operation nor acquires the ordinary execution lane. JSON session names use snake_case.
-The browser's `/api/host` forwards them. HTTP hosting endpoints separately manage
-project/R selection and application state; they do not create another scientific
-operation flow. CLI/session and official MCP use the same composition root.
+The browser's `/api/host` forwards them. Shared application control, bridge,
+captured-execution and method-binding requests reach the Application owner through
+Host dispatch. Browser-only bridge credentials do not become Agent authority.
+HTTP hosting endpoints still manage project/R selection; they do not create
+another scientific operation flow. CLI/session and official MCP use the same
+composition root.
+
+### Discovery and contracts
+
+`host.overview`, `host.catalog` and `host.describe` use the shared registry.
+Overview composes bounded owner observations; their individual sources, times and
+completeness remain visible. It is not an atomic scientific snapshot. Catalog
+filters caller scopes before pagination and reports module availability from known
+Host/native configuration. Discovery does not start R, enumerate every binding,
+load packages or recover incomplete work.
+
+Each `CapabilityDescriptor` owns its purpose, native preconditions, effects,
+idempotency, cancellation/retry rules, examples and related reads. Its input schema
+and concrete domain output/recovery schemas feed gateway validation, MCP tool
+schemas and generated TypeScript DTOs. Query payload schemas describe `data`;
+operation payload schemas describe `output`, with shared helpers constructing
+transport envelopes. Dynamic R values and uninterpreted host Skill metadata are
+explicitly open; known records retain typed structures. Registry checks validate
+schema references, examples and registered relationships.
+
+`next_reads` contains only bounded reads, details, records or original evidence,
+with known arguments and missing identity fields. It does not prescribe a research
+workflow. Typed diagnostics distinguish busy, stale session, expired observation,
+changed content, exhausted budget, unavailable capability, failed execution and
+uncertain outcome. Uncertainty points to original receipts/records, not replay.
+File, object and help contents cannot register capabilities or change scopes.
+
+Overview payloads are bounded to 16 KiB, catalog pages to 64 KiB (20 entries by
+default, at most 50), and descriptions to 256 KiB. Query and MCP replies retain
+1 MiB and 8 MiB bounds. Counts measure UTF-8 bytes, entries or cells, not tokens.
+Continuation or an explicit unavailable/limit reason accompanies incomplete data.
 
 ### Commands and results
 
@@ -97,9 +135,27 @@ recorded results. Read-only access to existing operation records is distinct fro
 opening a writer and recovering incomplete work.
 
 Live Workspace queries respect the execution lane. A busy response leaves R alone;
-the UI can retain the previous observation with its timestamp. Object inspection
-avoids forcing promises/active bindings or invoking user-defined print, format and
-subset methods. Unsupported classed objects remain metadata-only.
+the UI can retain the previous observation with its timestamp. Objects expose a
+filtered directory, an observation and progressive reads through
+`workspace.list_objects`, `workspace.observe_object` and `workspace.read_object`.
+The shallow interfaces use the same binding/metadata implementation.
+
+Object references bind project, principal, native session and observed paths;
+directory references also bind filters and binding identities. Native requests
+resolve bindings again without retaining large R object roots. Before scientific
+code or tooling can execute, the bridge revokes the session's references. Failed,
+cancelled and uncertain execution cannot restore them. Idle expiry is 60 seconds,
+absolute expiry five minutes; metadata is bounded to 8 MiB, with at most four
+directories and 32 object references per principal/session.
+
+Ordinary vectors, atomic matrices, standard data frames/tibbles and lists support
+bounded reads. Known base classes expose underlying values and attributes; other
+classed/opaque values remain safe metadata. Queries do not force promises or active
+bindings, or call user print, format, length, subset or conversion methods. Paths
+contain exact names or one-based indices; duplicate names require indices. Pages
+contain at most 200 entries/values, or 200 rows, 50 columns and 2,000 cells within
+256 KiB. Long values and attributes retain text continuations. Object text positions
+count one-based Unicode characters; byte budgets count UTF-8 bytes.
 
 Live package inspection belongs to Workspace because the active R session owns
 its library search order, loaded namespaces and attached packages. The bounded
@@ -116,12 +172,33 @@ components are removed before transport, and the UI validates navigation separat
 Environment retains management/realization ownership; Studio package viewing adds
 no installation or environment-selection path.
 
+`workspace.package_index` reads DESCRIPTION, static NAMESPACE declarations and help
+indexes for an exact observed installation. Its file identities fence continuation;
+conditional exports remain unresolved. `workspace.help` stays an explicit operation.
+It locates a selected copy/topic, renders without dynamic Rd stages/examples once,
+and stores a text artifact. Later pages use `output.read_text`; help documents do
+not enter Plots.
+
+Project text observations bind content hashes and native file identity. Line and
+long-line fragments from `project.read_text` cannot silently combine replacements.
+`project.search_text` separates scanned bytes/entries from result budgets and
+retains a cursor even when a scan page finds no matches. Directory/path searches
+also continue explicitly. Search results describe individual file versions, not
+one atomic directory-tree snapshot; binary, encoding, size and access skips remain
+visible. Filesystem text cannot stand in for an unsaved Studio draft.
+
 Paginated summaries come from the journal. Runtime output logs contain ordered,
 bounded observations and media references; they do not determine execution outcome.
 A missing output event is not itself execution failure. Output storage has an
 independent owner port, so historical media queries also work in a project-only
 Host. Media is addressed by
 OperationId and output sequence, with original bytes checked against the reference.
+The Output owner supplies a bounded verified-original cache and shared read port;
+page, preview and transport adapters never open scientific storage paths themselves.
+Concurrent reads of the same original coalesce while caller/project checks still
+precede access. Native MCP image content and original resource links derive from
+`output.view`; previews/crops never create scientific results. Static SVG rendering
+disables scripts and external resource reads. Original images remain unchanged.
 
 ## Native identities and concurrency
 
@@ -162,6 +239,76 @@ uncertain, active or unobservable materials are protected; quarantine and restor
 are separate from permanent purge. Native process reconciliation checks current
 ownership observations instead of trusting an old PID. Scheduler reconciliation
 uses native job identity and never treats a lost connection as proof of job failure.
+
+## Application context and captured actions
+
+Each Studio window has a resident bridge using existing module commands, independent
+of panel mounts. `application.windows`, `application.context`,
+`application.read_document` and `application.command_status` expose bounded summaries,
+versioned text and original receipts. Commands bind window ID/incarnation, request
+ID and relevant context/document/selection versions. Multiwindow discovery never
+chooses an implicit current window; activation selects a view inside Studio, not
+an operating-system foreground window.
+
+The bridge renews every five seconds; a 15-second lapse makes live observations and
+new commands unavailable. Offline reads require explicit synchronized-history access
+and retain that source label. Commands unclaimed after 30 seconds expire. A new
+window incarnation cannot pick up old pending commands. SQLite persists resource
+changes and command completion in one CAS transaction. Locally applied but unsynced
+and uncertain receipts remain distinct from confirmed application state.
+
+Save/run capture exact document/selection versions, original text, base hash, path
+and native session. Host retains the original Agent `CallContext` and signs an
+execution association bound to the command, incarnation, capture and step. The
+browser submits that association; it cannot substitute code, path or actor. Project
+and Workspace work enters the existing OperationGateway.
+
+Run File submits its captured code only after a successful save has the capture's
+hash. An unchanged file, including an empty file, can use a Project hash-verification
+receipt without inventing an OperationId. Input typed during save remains dirty.
+After disconnection, accepted scientific work stays Host-owned; an unsubmitted next
+step does not resume automatically. Reconnection inspects receipts and operation
+records. Repeated associations return the original step result without duplicate
+execution. Draft text stays outside scientific history until explicitly saved/run.
+
+## Skills and effective method context
+
+Standard local discovery reads `.agents/skills` from an explicit project-relative
+working directory through its ancestors to the project root, plus
+`~/.agents/skills`. It does not scan arbitrary product directories or introduce a
+Rho-specific Skill package/root. Local packages use standard Agent Skills
+frontmatter; scripts/resources are data during discovery and reads.
+
+External launchers can supply `--host-skills` metadata listing exact resources they
+actually discovered. The native adapter reads those packages in place, preserving
+host names, directory differences, optional metadata and enabled/disabled/rejected
+state. A separate trusted byte-source port supports non-filesystem hosts. Attested
+host sources use their native discovery semantics while enforcing bounded YAML and
+resource reads; they are not repaired, renamed or converted to local standards.
+The launcher manifest is Host-private and cannot be modified through project or
+Skill access to change enablement.
+
+Every source-qualified identity remains distinct, including same-name methods.
+Equivalent physical resources retain source relationships; an explicit host denial
+cannot be bypassed through a local alias. Project links stay within the project;
+resources stay within their declared canonical package root and outside private
+data. SHA-256 identities cover the body and each resource. Body/script and source
+identity/enablement changes invalidate affected observations. `skill.list` and `skill.read` disclose
+metadata, manifests and exact byte/text pages progressively. They do not execute
+scripts, install dependencies or grant scopes through `allowed-tools`.
+
+Application metadata holds explicit method choices/exclusions, resource pins,
+module/capability mappings, external Goal/Task/Actor references and native targets.
+It does not copy external scheduling state or modify Skill files. Shared
+`application.bind_method` validates known source/digest/target conditions and
+ancestor exclusions before Application CAS; Host serializes validation with binding
+writes. Actual resource-read receipts remain in the Application store.
+
+`host.resolve_context` reports discoverable methods, explicit bindings, provenance,
+missing capabilities and conflicts. Dependencies absent from machine-readable
+application declarations remain undeclared; prose is not treated as proof of an
+available environment. Method suitability and task continuation belong to the user
+and external Agent. Binding changes cannot rewrite accepted scientific requests.
 
 ## Studio modules and information flow
 
@@ -359,11 +506,13 @@ and runtime acquisition remain separate from read-only package inspection.
 | `crates/contract` | Wire identities and DTOs, including generated TypeScript sources |
 | `crates/operation` | Operation and Query gateways, handler/journal ports and commit discipline |
 | `crates/workspace`, `project`, `environment`, `execution` | Scientific owners and native port definitions |
+| `crates/application`, `skills` | Application context/control and method/source ports, separate from scientific execution |
 | `crates/adapters/` | SQLite, Git, R, package, process and SSH/Slurm implementations |
 | `crates/host` | Concrete composition and runtime configuration |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
 | `r/bridge`, `r/environment` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |
+| `.agents/skills/` | Standard method packages, read by native clients or the shared Skills owner |
 
 Jet is a pinned external core-library dependency in `vendor/jet-core`, excluded
 from the production workspace's members. Only the native R adapter depends on it.
@@ -379,6 +528,12 @@ Operation, and from Operation to contract. Domains do not import their concrete
 adapters; contract does not depend on native runtime or transport libraries.
 [The architecture check](../scripts/check-architecture.mjs) enforces the allowed
 production dependencies. Exact public schemas come from the live capability registry.
+
+The independent Codex runner under `scripts/agent-interface/` is acceptance tooling.
+It creates isolated projects, records actual tool traffic and checks factual and
+behavioral assertions. It is not imported by the Host, an application task scheduler
+or a product Agent harness. Current verification and remaining acceptance work are
+reported only in [Status](STATUS.md).
 
 ## Execution boundary
 

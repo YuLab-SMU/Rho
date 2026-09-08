@@ -45,6 +45,9 @@ to actual owner state. Studio only composes and manages the client lifecycle.
 | Change or verification need | Closest entry point |
 | --- | --- |
 | Rust behavior | `cargo test -p <crate> <filter> --locked` |
+| Shared capability contracts and result validation | `cargo test -p rho-contract --locked`, then `cargo test -p rho-operation --locked` |
+| Application windows, captures and CAS receipts | `cargo test -p rho-application --locked`, SQLite tests and `ui/tests/application-bridge.test.ts` |
+| Skill sources, resource identity and method binding | `cargo test -p rho-adapter-skills --locked`, then `cargo test -p rho-host --test skills --locked` |
 | Frontend model/component behavior | `npm run test --prefix ui` |
 | Client types and embedded assets | Generate, build, then check as above |
 | Studio interaction and real local R | `npm run test:browser --prefix ui` |
@@ -65,18 +68,81 @@ Native/transport verification:
 
 | Script | Scope and prerequisites |
 | --- | --- |
-| `test-real-r.mjs` | Installed Ark and R with jsonlite, rlang, lintr and styler; real R, queries, cancellation and code tools |
+| `test-real-r.mjs` | Installed Ark and R with jsonlite, rlang, lintr and styler; real R, progressive object/package queries, non-forcing inspections, cancellation and code tools |
 | `test-workbench.mjs`, `test-mcp.mjs` | Real local transports; add `--real-r` for Ark/R and Environment observations |
 | `test-environment.mjs` | R/Ark with pak, renv, ps and jsonlite; installs small local fixtures into temporary libraries, checks user-library preservation and recovery |
 | `test-process-recovery.mjs` | R-free native process crash/reconciliation |
 | `test-remote-protocol.mjs` | Local SSH/Slurm transcript fixtures; does not validate a remote cluster |
 | `test-remote-live.mjs` | Opt-in real jobs on an explicitly selected host/scratch directory; see Operations |
+| `test-agent-interface.mjs` | Independent local Codex sessions with prebuilt Rho/Ark, installed R, Chrome, UI dependencies and authenticated pinned Codex; self-test/debug modes are not acceptance |
 
 These scripts live in `scripts/`. R tests accept `RHO_ARK` and `RHO_R_HOME` where
 applicable. Ignored or unavailable external-runtime checks are not passes.
 Playwright uses isolated Chrome and disposable projects; build the current client
 and `rho` binary before running it. Keep real interactive workbench sessions in
 the integration checkout, separate from disposable test projects.
+
+## Contract and source changes
+
+Add capabilities to their owner and register them through Host. Keep input,
+concrete payload/recovery schemas, documentation, examples and related read paths
+in the same descriptor. Query schemas describe `QuerySnapshot.data`; operation
+schemas describe `OperationRecord.output`. Shared helpers generate envelopes.
+Validate actual results as well as requests; do not disguise a known result shape
+as generic JSON. Dynamic native values and host-owned metadata must be explicitly
+identified as such.
+
+Continuation tests must cover identity changes and exhausted work budgets, including
+zero-result search pages and Unicode/long-value boundaries. Source tests distinguish
+strict local standard Skills from host-attested native discovery semantics. Fixtures
+must not rewrite, rename, execute or install a host's method package. Application
+checks must retain window/incarnation/resource identity and original Agent actor
+through capture, save verification, execution and lost-acknowledgement recovery.
+Add affected paths/checks to governance and dependency maps, then regenerate DTOs
+and assets before verifying the current binary.
+
+## Independent Agent acceptance
+
+[`test-agent-interface.mjs`](../scripts/test-agent-interface.mjs) and
+[`scripts/agent-interface/`](../scripts/agent-interface/) are development tests,
+not a product Agent harness. They run isolated Codex sessions via `codex exec --json`
+and temporary MCP configuration. Scientific fixtures and answers are outside the
+Agent working directory; scientific reads/actions must use Rho. Only the native
+Skill-equivalence case grants access to its explicitly listed method resources.
+The runner does not install prerequisites or restart existing user Hosts.
+
+Inspect available categories and validate the deterministic harness separately:
+
+```sh
+node scripts/test-agent-interface.mjs --list
+node scripts/test-agent-interface.mjs --self-test
+```
+
+After committing a clean tree and building matching DTOs/assets/binaries, run:
+
+```sh
+node scripts/test-agent-interface.mjs --final \
+  --binary /absolute/path/to/Rho/target/debug/rho \
+  --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
+  --codex /absolute/path/to/pinned/codex
+```
+
+`--final` requires ten core categories repeated three times, native/Rho Skill
+resource equivalence and two adaptation cases: 34 runs. Model/reasoning, Codex
+version and binary digests are fixed by the runner and recorded with the source
+tree. Each task has an 80-call, 1 MiB UTF-8 text and ten-minute budget; native image
+bytes and actual token usage are counted separately. Read-only investigation cases
+cannot use `run_r` to bypass query interfaces. Programming/analysis cases can use
+the scientific execution capabilities their task permits.
+
+`--filter` and `--runs` are debugging options; their results do not establish final
+acceptance. Preserve every attempt, JSONL/tool/resource trajectory, original
+operation record, assertion, screenshot and artifact hash. Missing prerequisites,
+exceeded budgets, identity mixing, repeated execution, silent overwrites or false
+completeness are failures. Fix the interface/implementation and rerun on a new
+fixed version; do not encode an answer or mandatory tool sequence into the task
+prompt. Evidence defaults to `target/agent-interface/acceptance/`; summaries and
+outstanding verification belong in [Status](STATUS.md).
 
 ## Review quality
 

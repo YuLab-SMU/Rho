@@ -61,7 +61,7 @@ is not accepted by the workbench.
 | Run selection/current line | Execute selected text, or the current line when selection is empty; no automatic save |
 | Run File | Capture the text, save and verify it, then execute that snapshot; later edits remain dirty |
 | Format | Invoke native R tooling; apply only if the document still matches, otherwise offer comparison |
-| Inspect objects | Retrieve read-only metadata/bounded previews; unsupported classed objects remain metadata-only |
+| Inspect objects through Host | Filter/page binding observations, open exact object references and continue values, rows/columns, lists or text; unsupported values remain metadata-only |
 | View/export a plot | Use the original operation/output reference; viewing does not execute R |
 
 Cmd/Ctrl-S saves, Cmd/Ctrl-Enter runs a selection/current line, and
@@ -94,7 +94,8 @@ it. The application store is its sibling with the extension `.studio.sqlite`
 materials live in the configured data area beside the journal.
 
 The application store contains project layouts, drafts, view positions, recent
-projects, preferences and unconfirmed request IDs. Browser session storage retains
+projects, preferences, window command/capture receipts, method bindings, Skill-read
+receipts and unconfirmed request IDs. Browser session storage retains
 the current local access token. Draft synchronization is separate from saving a
 project file. Restart restores synchronized UI state across ports, not R memory
 or the previous in-memory undo stack.
@@ -156,20 +157,129 @@ target/debug/rho --database /absolute/path/to/state.sqlite \
 ```
 
 Capability tools are derived from the registry as `rho.<capability>.v<version>`.
-Query tools accept capability arguments directly. Command tools accept:
+Query and application-control tools accept their capability arguments directly.
+Scientific operation tools accept:
 
 ```json
 {"client_request_id":"unique-action-id","arguments":{"code":"x <- 21; x * 2"},"preconditions":[]}
 ```
 
-Results use `structuredContent.result` with a text fallback. Failed/uncertain
-operations retain their identity and outcome. `rho.operation.get`,
+Successful results use `structuredContent.result` and an accompanying text encoding.
+Errors include typed diagnostics; failed/uncertain operations retain their identity
+and outcome. `rho.output.view` additionally returns native image content and an
+original/manifest resource link, without duplicating image bytes in text metadata. `rho.operation.get`,
 `rho.operation.request_cancellation` and `rho.events.poll` expose the remaining
 ports. Events are cursor pages, not a push-delivery guarantee.
 
 The local MCP actor and human caller share the OS user's principal while retaining
 separate actor identity. Tool arguments and client initialization names do not
 grant authority. The Agent platform owns conversation and permission behavior.
+
+## Discover and investigate through the shared Host
+
+Use `host.overview` for project, session, execution and window summaries;
+`host.catalog` filters modules/keywords with pagination; `host.describe` explains a
+capability's arguments, result structure, prerequisites and related reads. In MCP
+these are `rho.host.overview.v1`, `rho.host.catalog.v1` and
+`rho.host.describe.v1`. Unavailable modules retain a reason. Overview components
+have independent timestamps and completeness.
+
+For a new Project-only Host, a one-shot query does not start R:
+
+```sh
+target/debug/rho --database /absolute/path/to/state.sqlite \
+  --project /absolute/path/to/project query --capability host.overview
+```
+
+Use the existing Workbench MCP/session connection for an already running Host.
+Starting another CLI Host cannot take over its project lease. Keep returned native
+identities, content hashes and continuation arguments together. `next_reads` points
+to additional evidence, not commands to execute automatically. On expired/changed
+observations, reopen deliberately; do not join pages from different versions.
+
+| Investigation | Entry and continuation |
+| --- | --- |
+| Live objects | `workspace.list_objects` → `observe_object` / `read_object`; bind `expected_session`, retain directory/object reference and structured path |
+| Saved project text | `project.read_text`, `project.search_text`; retain file identity/hash and returned continuation, including long-line fragments and scan pages with zero matches |
+| Installed package copy | `workspace.packages`, then `workspace.package_index` with observation, native session, package and exact library path |
+| Help evidence | Explicit `workspace.help`, then `output.read_text` using its `text_reference`; later pages do not render help again |
+| Image evidence | MCP `rho.output.view` or shared `output.view`; crop in original pixel coordinates and keep the original reference |
+| Execution/recovery | Original operation record, output events and owner-specific status/retention reads; accepted or cancellation-requested does not mean completed/stopped |
+
+## Read and control a Studio window
+
+`application.windows` lists explicit `{window_id, incarnation}` identities.
+`application.context` returns document/selection versions, dirty state and current
+object/package/plot selections; `application.read_document` reads versioned draft
+or base text with its expected SHA-256. Disk files do not reveal unsaved drafts.
+`allow_offline: true` opts into labeled synchronized history; it does not make an
+offline window controllable.
+
+`application.control` accepts a window, stable `request_id` and a typed action:
+view activation/open/close, document open/create/edit/selection, scientific-item
+selection, save, run selection or Run File. Obtain resource versions from context
+and inspect `application.command_status` using the original request identity.
+Pending, claimed, locally-applied-unsynced, awaiting-execution and scientific step
+states have different meanings. Bridge registration/synchronization and captured
+execution submission are Studio-internal requests, not credentials for Agent use.
+
+Each window renews every five seconds and becomes offline after 15 seconds without
+renewal. Unclaimed commands expire after 30 seconds. Edits use zero-based UTF-16
+positions in normalized editor text; draft pages use UTF-8 byte offsets. Activation
+selects a Studio view without promising OS foreground focus.
+
+Save/run use immutable captured text and the original Agent identity. Run File
+requires the saved hash to match the capture before submitting R. A verified
+unchanged save can have no OperationId. Later typing remains dirty. After a lost
+connection, inspect the receipt and accepted operation; an unsubmitted run step
+will not automatically resume.
+
+## Standard and native-host Skills
+
+Local discovery uses `.agents/skills` between the explicit project-relative working
+directory and project root, plus `~/.agents/skills`. `skill.list` returns metadata,
+source-qualified references and digests; `skill.read` reads `SKILL.md`, a resource
+manifest or exact text/byte pages. Non-body resources require their expected digest
+from the manifest. Body/script changes invalidate the affected observation.
+
+The supplied methods live in `.agents/skills/rho-*`. Projects can add standard
+methods there without editing Rho core. There is no `.rho/skills` compatibility
+reader, copying step or package conversion. Local standard packages use standard
+frontmatter validation. Host-attested packages retain the originating platform's
+names, directory conventions, optional metadata and enabled/disabled/rejected state.
+`allowed-tools` remains host data and cannot grant Rho scopes.
+
+An external platform launcher may provide its actual discovered roots using a
+bounded JSON manifest. This is launch metadata, not a new Skill package format:
+
+```json
+{"provider_id":"native-client","skills":[{"source_key":"plugin/method-reference","root_path":"/absolute/original/skill-directory","source_kind":"plugin","enablement":"enabled","reason":null}]}
+```
+
+`source_kind` is `project`, `user`, `plugin`, `managed` or `builtin`. Only the listed
+roots are read; Rho does not search all product directories. Project sources must
+stay within the selected project, and resources within their package root. The
+manifest itself is Host-private. Agent tools and method bindings cannot change
+its source enablement.
+
+```sh
+target/debug/rho --database /absolute/path/to/state.sqlite \
+  --project /absolute/path/to/project \
+  --host-skills /absolute/path/to/native-skills.json mcp
+```
+
+Manifest syntax and declared resources are checked before replacing a Host. Invalid
+sources are reported without renaming, repairing or substituting a method. Existing
+Skills remain in their original location and later reads verify their current bytes.
+
+Use `application.bind_method` for an explicit choice/exclusion, with a binding ID,
+new version and the expected previous version (null for creation). The CLI
+`bind-method --binding JSON [--expected-version VERSION]` reaches the same control.
+`host.resolve_context` reports current bindings, their resource pins, external work
+references, targets and unmet conditions. Clear an ancestor exclusion at its own
+scope before selecting that method below it. Host-disabled sources cannot be
+re-enabled through an alias. A binding declares method use; it does not certify
+scientific correctness or schedule another Agent.
 
 ## CLI and JSON sessions
 
@@ -190,42 +300,46 @@ target/debug/rho --database /absolute/path/to/state.sqlite get-operation OPERATI
 
 Use `session` with the same startup flags for a persistent Host/R session. It emits
 a ready frame containing capability descriptors and accepts one JSON frame per
-line. Send these in sequence, waiting for the run reply before reading its object:
+line. After the run reply, replace `SESSION_ID` below with its actual output session
+identity before listing bindings:
 
 ```json
 {"id":"run","request":{"method":"invoke","params":{"client_request_id":"example-1","capability":{"id":"workspace.run_r","version":1},"arguments":{"code":"x <- 21; x * 2"},"preconditions":[]}}}
-{"id":"inspect","request":{"method":"query_snapshot","params":{"capability":{"id":"workspace.inspect_object","version":1},"arguments":{"name":"x","max_items":5}}}}
+{"id":"objects","request":{"method":"query_snapshot","params":{"capability":{"id":"workspace.list_objects","version":1},"arguments":{"expected_session":"SESSION_ID","name_contains":"x","limit":20}}}}
 ```
 
 Replies carry the transport ID and may arrive out of order. The methods are
 `invoke`, `get_operation`, `request_cancellation`, `query_snapshot` and `subscribe`.
 Get/cancel use `operation_id`; subscribe uses `after_sequence` and `limit`.
+Shared `respond_input`, `application_control` and `bind_method` requests use their
+own typed schemas. Studio uses `application_bridge` and `application_execute`.
 End stdin to drain accepted work and close the session. Exact schemas are in the
 ready frame/MCP discovery and [Rust contract](../crates/contract/src/lib.rs).
 
 ## Domain capabilities
 
-Availability depends on the selected Host configuration. These are scientific
-capabilities, not a promise of dedicated Studio controls for each one.
-
-| Family | Main operations and queries | Important behavior |
-| --- | --- | --- |
-| Workspace | `run_r`, `snapshot`, `inspect_object`, `help`, `lint`, `format` | One live session; pure queries do not force active/lazy bindings; native code tools are explicit Operations |
-| Outputs | `operation.events_checkpoint`, `operation.list_recent`, `workspace.output_events`, `workspace.read_output`, `workspace.runtime_status` | Project/principal-visible event position and bounded summaries/observations; original references rather than filename lookup |
-| Project | `snapshot`, `list_directory`, `read_file`, `apply_patch` | Real filesystem/Git observations; patch preserves unrelated work and does not commit |
-| Environment | `observe`, `plan`, `realize`, `verify`, `reconcile` | Native pak/renv, isolated libraries, explicit verification and activation |
-| Environment material | `retention`, `cleanup`, `cleanup_status`, `restore_cleanup`, `purge_cleanup` | Preview/fingerprint checks, quarantine, restore and explicit permanent purge |
-| Local process | `process.run_local`, `process.reconcile` | Program/argument vector, exact bounded streams, cancellation and tagged-process recovery; works without R |
-| Configured remote | `process.run_remote`, `slurm.submit`, `slurm.snapshot`, `slurm.reconcile`, `slurm.request_cancel` | Native remote/job identities; connection loss is not proof of job termination |
+Availability depends on the selected Host configuration. Use `host.catalog` and
+`host.describe` for the current registered interfaces and schemas; a capability
+does not imply a dedicated Studio control. The following bounds and native
+preconditions apply across clients.
 
 ### Workspace and file bounds
 
-Workspace snapshots list at most 200 bindings. Vector previews support at most
-100 items; ordinary data frames at most 20 rows and 10 columns. Classed objects
-may expose only metadata. Busy/unavailable observations carry source, time and
-completeness rather than fabricated values.
+Object directory/value pages contain at most 200 items. Tables contain at most
+200 rows, 50 columns and 2,000 cells within 256 KiB. Ordinary lists, atomic matrices,
+data frames/tibbles and supported base classes expose progressive reads. Other
+classes remain metadata. References expire after 60 idle seconds or five minutes,
+and scientific/tool execution invalidates them before it runs. The original
+`snapshot`/`inspect_object` interfaces remain bounded shallow views.
 
-`workspace.help` accepts `topic`, optional `package` and bounded `max_chars`.
+File lines and R indices start at one. Object `text_start` counts one-based Unicode
+characters; file/output/Skill text cursors count UTF-8 bytes. Do not substitute token
+counts or editor UTF-16 positions for these units. Busy/unavailable observations
+retain their source, time and completeness.
+
+`workspace.help` accepts `topic`, optional `package` and bounded preview `max_chars`.
+`library_path` plus `observation_id` selects an exact copy; `expected_index_files`
+checks the index evidence. Full text is retained once as a separate text artifact.
 Lint/format accept up to 64 KiB of code; lintr/styler must already be installed.
 They do not evaluate the supplied program or edit files. Help avoids dynamic Rd
 execution; lint avoids project `.lintr` configuration. Format output over 128 KiB
@@ -234,7 +348,12 @@ fails instead of returning a truncated program.
 File pages contain exact byte arrays, at most 64 KiB per page, with optional
 `expected_sha256`. Hashed file observations are bounded to 64 MiB. Snapshot requests
 allow up to 64 paths and 200 entries. `project.list_directory` lists actual files
-including ignored data and reports when its bounded scan is incomplete.
+including ignored data and returns continuation for remaining entries. Text reads
+return at most 200 lines/64 KiB, splitting long lines. Literal searches return at
+most 100 matches/64 KiB and separate scan progress from result counts. Continue even
+when a bounded scan page has no matches. Skip records identify binary, invalid
+encoding, unreadable, oversized or disallowed inputs; they do not mean that content
+was read.
 
 Use `project.apply_patch` with a unified `patch` and native preconditions:
 
@@ -246,9 +365,13 @@ A null digest requires absence. `git.head` can name the expected project commit.
 Host-owned data and disallowed/symlink-traversing paths are excluded. External
 editors are not locked; partial or unconfirmed writes retain recovery observations.
 
-Output logs are bounded to 1 MiB/4096 events per run; originals to 16 MiB per image
-and 32 MiB of images per run. Read original content with the returned reference,
-offset and bounded page size. Missing or changed originals produce explicit errors.
+Output logs are bounded to 1 MiB/4096 events per run; originals to 16 MiB per artifact
+and 32 MiB per run. Native image previews default to a 1,600-pixel long edge, at most
+2,400 pixels and 512 KiB encoded. Static SVG previews disclose rasterization/scaling
+and cannot load external resources. MCP returns originals up to 4 MiB directly;
+larger originals use a manifest with 64 KiB chunks. Verify the reassembled original
+SHA-256. Reads and previews share verified originals; missing or changed content
+produces explicit errors.
 
 ### Environments and cleanup
 
