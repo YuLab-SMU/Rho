@@ -1,7 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { useStudio } from "../context";
-import { message } from "../host-client";
-import type { FileSearchResult } from "../generated/FileSearchResult";
+import { useEffect, useId, useRef, useState } from "react";
+import { useFiles, useObjects, useSession, useNavigation } from "../context";
 import type { BindingSummary } from "../generated/BindingSummary";
 import type { JsonValue } from "../generated/serde_json/JsonValue";
 const summary = (o: BindingSummary) =>
@@ -15,43 +13,22 @@ const summary = (o: BindingSummary) =>
           ? "Unevaluated"
           : "Metadata";
 export function FilesPanel() {
-  const s = useStudio("files"),
-    [filter, setFilter] = useState(""),
-    [selected, setSelected] = useState(""),
+  const f = useFiles(), navigation = useNavigation(),
     body = useRef<HTMLDivElement>(null);
-  const [searchMode, setSearchMode] = useState(false),
-    [scope, setScope] = useState(""),
-    [results, setResults] = useState<FileSearchResult | null>(null),
-    [searching, setSearching] = useState(false);
+  const { filter, selected, searchMode, scope, results, searching } = f.getSnapshot();
   useEffect(() => {
-    for (const path of s.expandedDirectories)
-      if (!s.directories.has(path)) void s.listDirectory(path);
-  }, [s, s.project]);
-  useEffect(() => {
-    if (body.current) body.current.scrollTop = s.filesScrollTop;
-  }, []);
-  const open = (path: string, size?: number) =>
-    void s.documents.open(path, size).catch((e) => {
-      s.directoryError = message(e);
-      s.emit("files");
-    });
-  function toggle(path: string) {
-    if (s.expandedDirectories.has(path)) s.expandedDirectories.delete(path);
-    else {
-      s.expandedDirectories.add(path);
-      if (!s.directories.has(path)) void s.listDirectory(path);
-    }
-    s.persist();
-    s.emit("files");
-  }
+    if (body.current) body.current.scrollTop = f.scrollTop;
+  }, [f]);
+  const open = (path: string, size?: number) => navigation.openDocument(path, size);
+  const toggle = (path: string) => f.toggleDirectory(path);
   function tree(path: string, depth = 0): React.ReactNode {
-    const page = s.directories.get(path);
+    const page = f.directories.get(path);
     return (
       <div role="group">
         {page?.entries
           .filter(
             (e) =>
-              (s.showHiddenFiles || !e.name.startsWith(".")) &&
+              (f.showHidden || !e.name.startsWith(".")) &&
               (path !== scope ||
                 !filter ||
                 e.name
@@ -64,7 +41,7 @@ export function FilesPanel() {
               role="treeitem"
               aria-expanded={
                 e.kind === "directory"
-                  ? s.expandedDirectories.has(e.path)
+                  ? f.expanded.has(e.path)
                   : undefined
               }
               aria-selected={selected === e.path}
@@ -74,7 +51,7 @@ export function FilesPanel() {
                 style={{ paddingLeft: 8 + depth * 14 }}
                 title={e.path}
                 onClick={() => {
-                  setSelected(e.path);
+                  f.select(e.path);
                   if (e.kind === "directory") toggle(e.path);
                 }}
                 onDoubleClick={() => {
@@ -88,14 +65,14 @@ export function FilesPanel() {
                   if (
                     event.key === "ArrowRight" &&
                     e.kind === "directory" &&
-                    !s.expandedDirectories.has(e.path)
+                    !f.expanded.has(e.path)
                   ) {
                     event.preventDefault();
                     toggle(e.path);
                   }
                   if (
                     event.key === "ArrowLeft" &&
-                    s.expandedDirectories.has(e.path)
+                    f.expanded.has(e.path)
                   ) {
                     event.preventDefault();
                     toggle(e.path);
@@ -104,7 +81,7 @@ export function FilesPanel() {
               >
                 <span className="file-icon">
                   {e.kind === "directory"
-                    ? s.expandedDirectories.has(e.path)
+                    ? f.expanded.has(e.path)
                       ? "⌄"
                       : "›"
                     : /\.r$/i.test(e.name)
@@ -114,13 +91,13 @@ export function FilesPanel() {
                 <span className="file-name">{e.name}</span>
               </button>
               {e.kind === "directory" &&
-                s.expandedDirectories.has(e.path) &&
+                f.expanded.has(e.path) &&
                 tree(e.path, depth + 1)}
             </div>
           ))}
         {!page && <p className="muted">Loading directory…</p>}
         {page?.next_name && (
-          <button onClick={() => void s.listDirectory(path, true)}>
+          <button onClick={() => void f.listDirectory(path, true)}>
             Load More · {page.entries.length} shown
           </button>
         )}
@@ -138,7 +115,7 @@ export function FilesPanel() {
         <button
           title="New File"
           aria-label="New File"
-          onClick={() => s.documents.create()}
+          onClick={() => navigation.createDocument()}
         >
           ＋
         </button>
@@ -146,42 +123,25 @@ export function FilesPanel() {
           aria-label="Refresh Files"
           title="Refresh Files"
           onClick={() => {
-            for (const p of s.expandedDirectories) void s.listDirectory(p);
+            f.refresh();
           }}
         >
           ↻
         </button>
-        <button onClick={() => s.openFile?.()}>Open…</button>
+        <button onClick={() => navigation.openFile()}>Open…</button>
       </div>
       <form
         className="resource-search file-search"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!searchMode || !s.project || !filter.trim()) return;
-          setSearching(true);
-          void s.client
-            .query(s.project, "project.search_files", {
-              text: filter,
-              show_hidden: s.showHiddenFiles,
-            })
-            .then((result) => {
-              if (result.status !== "ready")
-                throw new Error(result.notices.join("\n"));
-              setResults(result.data as FileSearchResult);
-            })
-            .catch((e) => {
-              s.directoryError = message(e);
-              s.emit("files");
-            })
-            .finally(() => setSearching(false));
+          f.search();
         }}
       >
         <select
           aria-label="File Search Scope"
           value={searchMode ? "project" : "directory"}
           onChange={(e) => {
-            setSearchMode(e.target.value === "project");
-            setResults(null);
+            f.setSearchMode(e.target.value === "project");
           }}
         >
           <option value="directory">Filter Directory</option>
@@ -191,9 +151,9 @@ export function FilesPanel() {
           <select
             aria-label="Filter Directory"
             value={scope}
-            onChange={(e) => setScope(e.target.value)}
+            onChange={(e) => f.setScope(e.target.value)}
           >
-            {[...s.expandedDirectories].map((path) => (
+            {[...f.expanded].map((path) => (
               <option key={path} value={path}>
                 {path || "Project root"}
               </option>
@@ -208,7 +168,7 @@ export function FilesPanel() {
             searchMode ? "Find a name or path…" : "Filter loaded entries…"
           }
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => f.setFilter(e.target.value)}
         />
         {searchMode && (
           <button disabled={searching || !filter.trim()}>
@@ -221,9 +181,9 @@ export function FilesPanel() {
           Filters loaded entries in /{scope}. Folder contents are retained.
         </p>
       )}
-      {s.directoryError && (
+      {f.error && (
         <div role="alert" className="document-error">
-          {s.directoryError}
+          {f.error}
         </div>
       )}
       <div
@@ -232,8 +192,7 @@ export function FilesPanel() {
         aria-label="Project Files"
         ref={body}
         onScroll={(e) => {
-          s.filesScrollTop = e.currentTarget.scrollTop;
-          s.persist();
+          f.setScroll(e.currentTarget.scrollTop);
         }}
       >
         {searchMode ? (
@@ -246,7 +205,7 @@ export function FilesPanel() {
                   if (entry.kind === "regular")
                     open(entry.path, entry.byte_size);
                 }}
-                onClick={() => setSelected(entry.path)}
+                onClick={() => f.select(entry.path)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && entry.kind === "regular")
                     open(entry.path, entry.byte_size);
@@ -275,17 +234,15 @@ export function FilesPanel() {
         <label>
           <input
             type="checkbox"
-            checked={s.showHiddenFiles}
+            checked={f.showHidden}
             onChange={(e) => {
-              s.showHiddenFiles = e.target.checked;
-              s.persist();
-              s.emit("files");
+              f.setShowHidden(e.target.checked);
             }}
           />{" "}
           Hidden files
         </label>
         <button
-          disabled={!selected || s.directories.has(selected)}
+          disabled={!selected || f.directories.has(selected)}
           onClick={() => open(selected)}
         >
           Open
@@ -294,32 +251,20 @@ export function FilesPanel() {
     </section>
   );
 }
-function ObjectPreview({ name }: { name: string }) {
-  const s = useStudio("objects", "runtime"),
-    observation = s.inspectors.get(name),
-    object = observation?.binding,
-    visible = useRef<HTMLDivElement>(null);
+function ObjectPreview({ name, viewId }: { name: string; viewId: string }) {
+  const o = useObjects(), session = useSession(),
+    observation = o.inspectors.get(name), object = observation?.binding,
+    instance = useId();
   useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      for (const e of entries) {
-        if (e.isIntersecting) s.visibleObjects.add(name);
-        else s.visibleObjects.delete(name);
-      }
-    });
-    if (visible.current) observer.observe(visible.current);
-    return () => {
-      observer.disconnect();
-      s.visibleObjects.delete(name);
-    };
-  }, [s, name, !!object]);
+    // Expanding a row requests its bounded content even below the scroll viewport.
+    // The Layout view identity gates background reads while retained tabs are hidden.
+    return o.registerDemand(`${viewId}:${instance}:${name}`, name, viewId);
+  }, [o, name, viewId, instance]);
   if (!object)
-    return (
-      <p className="muted">
-        {s.runtime?.state === "busy"
-          ? "R busy. No previous preview."
-          : "Loading bounded preview…"}
-      </p>
-    );
+    return <div><p className="muted">
+      {session.runtime?.state === "busy" ? "R busy. No previous preview." : "Loading bounded preview…"}
+      {o.notice && <span role="alert"> {o.notice}</span>}
+    </p></div>;
   const columns =
     Array.isArray(object.preview) && object.classes.includes("data.frame")
       ? (object.preview as {
@@ -330,7 +275,7 @@ function ObjectPreview({ name }: { name: string }) {
         }[])
       : null;
   return (
-    <div className="object-preview" ref={visible}>
+    <div className="object-preview">
       <div className="object-metadata">
         <span>
           {object.classes.join(", ") || object.object_type || object.kind}
@@ -389,7 +334,7 @@ function ObjectPreview({ name }: { name: string }) {
       )}
       <small className="muted">
         Last observed {new Date(observation!.observedAt).toLocaleTimeString()}
-        {s.runtime?.state === "busy" ? " · R busy" : ""}
+        {session.runtime?.state === "busy" ? " · R busy" : observation?.stale ? " · Refresh pending" : ""}
       </small>
     </div>
   );
@@ -408,19 +353,11 @@ function display(value: JsonValue | undefined): string {
     return String(value.label);
   return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
-export function ObjectsPanel() {
-  const s = useStudio("objects", "runtime"),
+export function ObjectsPanel({ viewId = "objects" }: { viewId?: string }) {
+  const o = useObjects(), session = useSession(), navigation = useNavigation(),
     [filter, setFilter] = useState("");
-  const objects =
-    s.objects?.objects.filter((o) =>
-      o.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase()),
-    ) ?? [];
-  function inspect(name: string) {
-    void s.inspectObject(name).catch((e) => {
-      s.objectsNotice = message(e);
-      s.emit("objects");
-    });
-  }
+  const objects = o.data?.objects.filter((object) =>
+    object.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase())) ?? [];
   return (
     <section className="panel objects-panel">
       <div className="resource-search object-search">
@@ -434,8 +371,7 @@ export function ObjectsPanel() {
           title="Collapse All"
           aria-label="Collapse All"
           onClick={() => {
-            s.expandedObjects.clear();
-            s.emit("objects");
+            o.collapseAll();
           }}
         >
           −
@@ -445,22 +381,16 @@ export function ObjectsPanel() {
         {objects.map((object) => (
           <div key={object.name} className="object-entry">
             <div
-              className={`object-row ${s.expandedObjects.has(object.name) ? "selected" : ""}`}
+              className={`object-row ${o.expanded.has(object.name) ? "selected" : ""}`}
             >
               <button
                 className="object-name"
-                aria-expanded={s.expandedObjects.has(object.name)}
+                aria-expanded={o.expanded.has(object.name)}
                 onClick={() => {
-                  if (s.expandedObjects.has(object.name))
-                    s.expandedObjects.delete(object.name);
-                  else {
-                    s.expandedObjects.add(object.name);
-                    inspect(object.name);
-                  }
-                  s.emit("objects");
+                  o.toggleExpanded(object.name);
                 }}
               >
-                <span>{s.expandedObjects.has(object.name) ? "⌄" : "›"}</span>
+                <span>{o.expanded.has(object.name) ? "⌄" : "›"}</span>
                 <code>{object.name}</code>
               </button>
               <span className="object-type">
@@ -472,26 +402,20 @@ export function ObjectsPanel() {
                 aria-label={`Open ${object.name} in New Tab`}
                 title="Open in New Tab"
                 onClick={() => {
-                  s.showPanel?.(
-                    "viewer",
-                    `object:${object.name}`,
-                    object.name,
-                    { name: object.name },
-                  );
-                  inspect(object.name);
+                  navigation.openObject(object.name);
                 }}
               >
                 ↗
               </button>
             </div>
-            {s.expandedObjects.has(object.name) && (
-              <ObjectPreview name={object.name} />
+            {o.expanded.has(object.name) && (
+              <ObjectPreview name={object.name} viewId={viewId} />
             )}
           </div>
         ))}
         {!objects.length && (
           <p className="empty-message muted">
-            {s.objects
+            {o.data
               ? "No match in the observed objects."
               : "Start R to observe objects."}
           </p>
@@ -499,51 +423,50 @@ export function ObjectsPanel() {
         {filter && (
           <button
             onClick={() => {
-              s.expandedObjects.add(filter);
-              inspect(filter);
+              o.setExpanded(filter, true);
             }}
           >
             Inspect Exact Name: {filter}
           </button>
         )}
         {filter &&
-          s.expandedObjects.has(filter) &&
+          o.expanded.has(filter) &&
           !objects.some((o) => o.name === filter) && (
-            <ObjectPreview name={filter} />
+            <ObjectPreview name={filter} viewId={viewId} />
           )}
       </div>
-      {s.objectsNotice && (
+      {(o.notice || (o.data && (o.stale || session.runtime?.state === "busy"))) && (
         <div className="object-notice">
           Last observation retained ·{" "}
-          {s.runtime?.state === "busy" ? "R busy" : s.objectsNotice}
+          {session.runtime?.state === "busy" ? "R busy" : o.notice || "Refresh pending"}
         </div>
       )}
       <div className="panel-footer">
         <span>
-          {s.objects?.truncated
-            ? `Showing ${s.objects.objects.length} of ${s.objects.total_bindings}`
-            : `${s.objects?.objects.length ?? 0} objects`}{" "}
+          {o.data?.truncated
+            ? `Showing ${o.data.objects.length} of ${o.data.total_bindings}`
+            : `${o.data?.objects.length ?? 0} objects`}{" "}
           · .GlobalEnv
         </span>
       </div>
     </section>
   );
 }
-export function ObjectViewer({ name }: { name: string }) {
-  const s = useStudio("objects", "runtime");
+export function ObjectViewer({ name, viewId = `object:${name}` }: { name: string; viewId?: string }) {
+  const o = useObjects(), session = useSession();
   return (
     <section className="panel object-viewer">
       <div className="resource-toolbar">
         <span>{name}</span>
         <div className="spacer" />
         <button
-          disabled={s.runtime?.state !== "idle"}
-          onClick={() => void s.inspectObject(name)}
+          disabled={session.runtime?.state !== "idle"}
+          onClick={() => o.inspect(name)}
         >
           Refresh Preview
         </button>
       </div>
-      <ObjectPreview name={name} />
+      <ObjectPreview name={name} viewId={viewId} />
       <div className="panel-footer">Read only · Up to 20 rows × 10 columns</div>
     </section>
   );

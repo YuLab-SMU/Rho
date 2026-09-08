@@ -163,28 +163,120 @@ are separate from permanent purge. Native process reconciliation checks current
 ownership observations instead of trusting an old PID. Scheduler reconciliation
 uses native job identity and never treats a lost connection as proof of job failure.
 
-## Studio model
+## Studio modules and information flow
 
-AppShell handles project entry, navigation, commands, settings and runtime status.
-LayoutHost manages panel instances and geometry through FlexLayout. Panels consume
-a shared Studio model; HostClient owns network requests and event consumption.
-Documents retain CodeMirror state outside component lifetime. Layout changes cannot
-trigger execution or discard drafts. A panel rendering failure stays within that panel.
+Studio is the client composition root: it constructs owners, connects declared
+ports and typed notifications, and starts, switches and stops their lifecycle.
+It has no scientific state getters/setters or parallel refresh implementation.
+Each owner publishes a memoized read-only snapshot through `getSnapshot/subscribe`
+and exposes explicit commands. Panels use individual owner hooks; they do not
+receive Studio, mutate snapshots, call HostClient or poll scientific queries.
+
+| Client owner | Exclusive state and commands |
+| --- | --- |
+| Session | Canonical project, R configuration, native session, readiness and transport health |
+| Operations | Persisted request identities, authoritative records and summary cursors, event position, cancellation and reconciliation |
+| Console | Shared queue/stdin observation, independent view drafts, history, selection and scroll |
+| Objects | Binding observations, timestamps, stale state, expansion and view-token preview demand |
+| Packages | Session/observation-bound grouped index, installed-copy details, source, filters and cached pages |
+| Files / Documents | Directory/search observations; independently retained editor state, captured save/run text, digests and comparisons |
+| Outputs / MediaCache | Ordered stream/history observations; validated original bytes, bounded cache and injected browser URL lifetime |
+| Plots | Per-view selection, following, pinning, transforms and protected-media identities |
+| Layout | Built-in view instances, placement, active visibility, close/reopen and layout undo |
+
+The built-in registry defines names, renderer keys, instance rules, menu entries
+and restoration validation. Its UI renderer mapping is exhaustive. FlexLayout
+is confined to the layout owner and its UI adapter; MediaCache receives protected
+keys calculated by Plots from Layout's active view IDs. Visibility demand belongs
+to a view token, so closing one preview cannot cancel another view of the same
+binding. Closing, moving or maximizing a panel changes views, not documents,
+observations, pending requests or accepted Host work.
+
+### Establishing and consuming operation history
+
+`operation.events_checkpoint` returns the highest journal event sequence visible
+to the Host's canonical project and trusted principal, or zero. The SQLite query
+and `subscribe` use the same visibility predicate before aggregation/pagination.
+Project-bound operation lookup and recent summaries use the same visibility.
+`operation.list_recent` supports an exact `operation_id`; that selector,
+`client_request_id` and `before_cursor` are mutually exclusive. All edges reach
+the Operation owner through Host registration. A checkpoint is an event position,
+not a scientific state version.
+
+Cold startup obtains a checkpoint before restoring application fragments, loading
+recent records and queue/unconfirmed/pinned references, and observing native R.
+Startup retries the failed stage; it cannot bypass draft or request restoration.
+Only after initialization does the event lane consume sequences above that
+checkpoint. An existing client reconnects from its completed page cursor; a cold
+client ignores the obsolete persisted cursor and establishes a fresh baseline.
+Historical browsing has its own `before_cursor` and remains available beyond the
+initial 30 records.
+
+The event lane consumes at most two pages of 100 per scheduling turn. Unknown
+operation IDs are resolved through authoritative records and exact summary
+queries; stable summary cursor and output sequence order all visible output.
+Duplicate pages merge by identity. A confirmed null record is unreadable and
+creates no display fact; failed network/parse reads retain the page cursor for
+retry. Recovery never resubmits original code. Terminal output is complete only
+after a ready, exhausted page whose read began after terminal was observed; an
+older response cannot finish the final output drain. Temporary failures retry, while unavailable,
+gap and truncation notices retain an explicit retry path.
+
+### Scheduling, invalidation and persistence
+
+One runtime coordinator gives control/events a 250 ms cadence and native status
+observations an approximately two-second cadence. Tasks have independent in-flight
+and failure state. Native Workspace observations use one serialized, coalesced
+read lane; package and output pages yield between slices. Read requests time out
+at ten seconds. Transient reads use 0.5, 1, 2 and then five-second retry delays;
+view demand cannot erase backoff. Scientific writes have no automatic retry.
+Connection status comes from Host health observations, not a Packages or media
+failure. Busy responses retain cached content, original time and stale state.
+Package retries retain their exact observation and request; expiry requires an
+explicit Refresh to create a new observation.
+
+Project and necessary native-session identities plus a client epoch and request
+generation fence asynchronous success, error and cleanup. Epochs discard obsolete
+client work; they are not sent as global scientific revisions. Project round trips,
+R restarts and stop invalidate old callbacks. Stopping releases subscriptions,
+read tasks, timers and Blob URLs; accepted Host operations continue independently.
+
+Typed project/session/operation/output/file-save/visibility notifications carry
+correlated identities. Recipients invalidate or query their own state. Every
+Workspace terminal outcome, including failure, cancellation and uncertainty,
+invalidates affected Objects, Packages and file observations. Repaint subscriptions
+are separate and batched; editor/view subscriptions retain local update scope.
+
+One application persistence coordinator combines owner fragments into the existing
+SQLite `studio` record using version preconditions and 400 ms coalescing. It
+retains current drafts, view/layout fields, unconfirmed request IDs and later edits
+made during a write. Lost acknowledgements are reconciled with the stored state;
+window conflicts preserve local content for explicit resolution. A write whose
+acknowledgement was fenced by an R restart retains its original capture for this
+reconciliation. Another window changing the Host's project does not replace local
+drafts: the client reports the mismatch and withholds native availability until
+its project matches again. A request identity
+must be durably synchronized before Invoke. Stdin reply content, including
+passwords, never enters these fragments, command history or logs. No migration
+reader or abandoned implementation format is introduced.
 
 Save uses `project.apply_patch` and the original file digest. Only a returned
-filesystem digest matching the captured content confirms the save; edits made
-while saving remain dirty. Run File saves and verifies its captured text before
-submitting that exact text. Formatting applies automatically only if the document
-still matches the request; otherwise it offers comparison.
+filesystem digest matching captured content confirms the save; edits made while
+saving remain dirty. Run File saves/verifies its captured text and submits that
+text. Formatting applies only if the document still matches its request, otherwise
+it offers comparison. CodeMirror state survives view changes within the document
+owner; its DOM adapter remains in the panel.
 
-Frontend DTOs are generated from Rust contracts. Vite produces the embedded assets
-from `ui/`; the browser does not load a frontend CDN. Dynamic editor/component
-styles use a CSP nonce. SVG is loaded as an image; HTML/widgets are not injected
-into the Studio document. Resource indicators use known native process observations.
+Frontend DTOs are generated from Rust contracts. Vite produces embedded assets
+from `ui/`, without a frontend CDN. Dynamic editor/component styles use a CSP nonce.
+SVG is loaded as an image; HTML/widgets are not injected into the Studio document.
+Resource indicators use observed native processes.
 
-Product interaction proposals are in [RHO-DESIGN.md](RHO-DESIGN.md). Their desired
-behavior must not be confused with the implemented baseline or the open issues in
-[STUDIO-FEEDBACK.md](STUDIO-FEEDBACK.md).
+The [frontend boundary checker](../scripts/check-frontend-boundaries.mjs) validates
+imports, transitive domain isolation, cycles, transport/mutation access and
+FlexLayout containment with allow/reject fixtures. CI runs it with frontend units.
+Visual approval and scientific/interactive evidence remain separate from these
+structural checks; see [Design](RHO-DESIGN.md) and [Status](STATUS.md).
 
 ## Source map and dependency direction
 

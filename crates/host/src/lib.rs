@@ -615,6 +615,12 @@ impl NextHost {
             }
         }
         if let Some(project) = project {
+            registry.register_query(Arc::new(
+                rho_operation::OperationEventsCheckpointHandler::new(
+                    journal.clone(),
+                    project.root().into(),
+                ),
+            ))?;
             registry.register_query(Arc::new(rho_operation::RecentOperationsHandler::new(
                 journal.clone(),
                 project.root().into(),
@@ -675,12 +681,10 @@ impl NextHost {
             }
         }
         let registry = Arc::new(registry);
-        let gateway = Arc::new(OperationGateway::new(
-            registry.clone(),
-            journal,
-            clock,
-            id_generator,
-        ));
+        let gateway = Arc::new(
+            OperationGateway::new(registry.clone(), journal, clock, id_generator)
+                .with_project_scope(output_project),
+        );
         let recovered_on_open = gateway.recover_incomplete().await?;
         Ok(Self {
             runtime: Arc::new(HostRuntime {

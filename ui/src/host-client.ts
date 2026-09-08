@@ -18,8 +18,9 @@ export function json(value: unknown): JsonValue {
 export const message = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-/** The only transport owner. Panels consume the shared Studio model. */
+/** The only transport owner. Domain owners receive narrow injected ports. */
 export class HostClient {
+  private reads = new Set<AbortController>();
   constructor(private token: string) {}
   static fromLocation() {
     const token = new URLSearchParams(location.hash.slice(1)).get("token");
@@ -30,6 +31,13 @@ export class HostClient {
     return new HostClient(token ?? sessionStorage.getItem("rho-token") ?? "");
   }
   async request<T>(path: string, body?: unknown): Promise<T> {
+    const method = (body as WorkbenchFrame | undefined)?.frame?.request?.method;
+    const reading = body === undefined || path === "/api/state/read" || path === "/api/r/probe" ||
+      (path === "/api/host" && ["query_snapshot", "get_operation", "subscribe"].includes(method ?? ""));
+    const controller = reading ? new AbortController() : undefined;
+    if (controller) this.reads.add(controller);
+    const timer = controller ? setTimeout(() => controller.abort(new Error("Host read timed out after 10 seconds")), 10000) : undefined;
+    try {
     const response = await fetch(path, {
       method: body === undefined ? "GET" : "POST",
       headers: {
@@ -37,8 +45,9 @@ export class HostClient {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller?.signal,
     });
-    const value: unknown = await response.json().catch(() => null);
+    const value: unknown = await response.json();
     if (!response.ok) {
       const detail = value as { error?: string; diagnostics?: string[] } | null;
       throw new Error(
@@ -48,6 +57,14 @@ export class HostClient {
       );
     }
     return value as T;
+    } finally {
+      clearTimeout(timer);
+      if (controller) this.reads.delete(controller);
+    }
+  }
+  stopReads() {
+    for (const controller of this.reads) controller.abort(new Error("Client stopped reading"));
+    this.reads.clear();
   }
   info() {
     return this.request<WorkbenchInfo>("/api/info");
@@ -82,6 +99,8 @@ export class HostClient {
       frame: { id: crypto.randomUUID(), request },
     };
     const reply = await this.request<SessionReply>("/api/host", frame);
+    if (!reply || typeof reply.ok !== "boolean" || !("result" in reply))
+      throw new Error("Invalid Host reply");
     if (!reply.ok) throw new Error(reply.error ?? "Host result is unconfirmed");
     return reply.result as T;
   }

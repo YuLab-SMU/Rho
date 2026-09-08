@@ -14,8 +14,3 @@ export class Commands {
     if (command?.enabled()) command.run();
   }
 }
-export function documentCommand(id: string, action: string) {
-  window.dispatchEvent(
-    new CustomEvent("rho-document-command", { detail: { id, action } }),
-  );
-}

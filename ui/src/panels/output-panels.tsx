@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useStudio } from "../context";
+import { useMediaCache } from "../context";
+import { mediaKey } from "../output-ports";
 import type { MediaReference } from "../generated/MediaReference";
-export { ConsolePanel } from "./console-panel";
-export { PlotPanel } from "./plot-panel";
 export function MediaImage({
   reference,
   className,
@@ -14,8 +13,9 @@ export function MediaImage({
   onLoad?: (image: HTMLImageElement) => void;
   priority?: boolean;
 }) {
-  const s = useStudio("media"),
-    key = s.mediaKey(reference),
+  const cache = useMediaCache(),
+    snapshot = cache.getSnapshot(),
+    key = mediaKey(reference),
     parent = useRef<HTMLSpanElement>(null),
     [visible, setVisible] = useState(priority);
   useEffect(() => {
@@ -33,36 +33,28 @@ export function MediaImage({
     return () => observer.disconnect();
   }, [key, priority]);
   useEffect(() => {
-    if (visible) void s.loadMedia(reference);
-  }, [key, visible, s]);
-  const url = s.mediaUrls.get(key),
-    error = s.mediaErrors.get(key);
+    if (visible) cache.load(reference);
+  }, [key, visible, cache]);
+  const url = snapshot.urls.get(key),
+    error = snapshot.errors.get(key);
   return (
     <span ref={parent} className={`media-image ${className ?? ""}`}>
       {url && !error ? (
         <img
           src={url}
+          data-operation-id={reference.operation_id}
+          data-output-sequence={reference.sequence}
           alt={`R Plot ${reference.sequence}`}
           draggable={false}
           onLoad={(e) => onLoad?.(e.currentTarget)}
-          onError={() => {
-            s.mediaErrors.set(
-              key,
-              "The browser could not decode this original. Export Original is still available.",
-            );
-            s.emit("media");
-          }}
+          onError={(event) => cache.reportDecodeError(reference, event.currentTarget.src)}
         />
       ) : (
         <span className={error ? "error" : "muted"}>
           {error ?? "Loading original plot…"}
           {error && (
             <button
-              onClick={() => {
-                s.mediaErrors.delete(key);
-                void s.loadMedia(reference);
-                s.emit("media");
-              }}
+              onClick={() => cache.retry(reference)}
             >
               Retry
             </button>

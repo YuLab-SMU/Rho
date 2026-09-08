@@ -580,6 +580,43 @@ async fn recent_summaries_are_project_and_principal_scoped_and_paginated() {
         .data
         .unwrap();
     assert_eq!(found["operations"].as_array().unwrap().len(), 1);
+    let operation_id: rho_contract::OperationId =
+        serde_json::from_value(found["operations"][0]["operation_id"].clone()).unwrap();
+    let exact = host
+        .query_snapshot(&context, query(json!({"operation_id":operation_id})))
+        .await
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(
+        exact, found,
+        "exact lookups retain the stable summary cursor"
+    );
+    assert_eq!(
+        host.query_snapshot(&stranger, query(json!({"operation_id":operation_id})))
+            .await
+            .unwrap()
+            .data
+            .unwrap()["operations"],
+        json!([])
+    );
+    assert_eq!(
+        host.query_snapshot(&context, query(json!({"operation_id":"missing-operation"})))
+            .await
+            .unwrap()
+            .data
+            .unwrap()["operations"],
+        json!([])
+    );
+    for invalid in [
+        json!({"operation_id":operation_id,"client_request_id":"summary-1"}),
+        json!({"operation_id":operation_id,"before_cursor":100}),
+        json!({"client_request_id":"summary-1","before_cursor":100}),
+        json!({"operation_id":""}),
+        json!({"operation_id":"invalid id"}),
+    ] {
+        assert!(host.query_snapshot(&context, query(invalid)).await.is_err());
+    }
     assert!(
         host.query_snapshot(&context, query(json!({"limit":101})))
             .await
@@ -598,6 +635,212 @@ async fn recent_summaries_are_project_and_principal_scoped_and_paginated() {
             .unwrap()["operations"],
         json!([])
     );
+    assert_eq!(
+        host.query_snapshot(&context, query(json!({"operation_id":operation_id})))
+            .await
+            .unwrap()
+            .data
+            .unwrap()["operations"],
+        json!([])
+    );
+    assert!(
+        host.get_operation(&context, &operation_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(host.outbox(&context, 0, 1).await.unwrap().is_empty());
+    assert_eq!(
+        host.query_snapshot(
+            &context,
+            QueryRequest {
+                capability: CapabilityRef::new("operation.events_checkpoint", 1).unwrap(),
+                arguments: json!({}),
+            }
+        )
+        .await
+        .unwrap()
+        .data
+        .unwrap(),
+        json!({"sequence":0})
+    );
+    // Explicitly unbound CLI journal reads still resolve records across projects.
+    let reader = NextHost::open_read_only(&db).unwrap();
+    assert!(
+        reader
+            .get_operation(&context, &operation_id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn checkpoint_closes_initialization_race_with_bounded_events_and_full_history() {
+    use rho_contract::{CallerIdentity, CallerKind, HostRequest, ObservationCompleteness};
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("project");
+    repository(&root);
+    let host = NextHost::open_project(directory.path().join("state/next.sqlite"), &root)
+        .await
+        .unwrap();
+    let context = NextHost::local_context();
+    let checkpoint_query = || QueryRequest {
+        capability: CapabilityRef::new("operation.events_checkpoint", 1).unwrap(),
+        arguments: json!({}),
+    };
+    let initial = host
+        .query_snapshot(&context, checkpoint_query())
+        .await
+        .unwrap();
+    assert_eq!(initial.status, QueryStatus::Ready);
+    assert_eq!(initial.completeness, ObservationCompleteness::Complete);
+    assert_eq!(initial.data.unwrap(), json!({"sequence":0}));
+    assert_eq!(
+        initial.target.identity,
+        root.canonicalize().unwrap().to_str().unwrap()
+    );
+    assert!(
+        !host
+            .capabilities()
+            .iter()
+            .any(|item| item.capability.id == "workspace.run_r")
+    );
+    let mut restricted = context.clone();
+    restricted.scopes.remove("operation.read");
+    assert!(
+        host.query_snapshot(&restricted, checkpoint_query())
+            .await
+            .is_err()
+    );
+    let mut invalid = checkpoint_query();
+    invalid.arguments = json!({"project":"/other"});
+    assert!(host.query_snapshot(&context, invalid).await.is_err());
+    assert!(host.outbox(&context, 0, 100).await.unwrap().is_empty());
+
+    host.invoke(
+        &context,
+        invoke(
+            "before-checkpoint",
+            patch("analysis.R", "x <- 1", "x <- 2"),
+            vec![],
+        ),
+    )
+    .await
+    .unwrap();
+    let baseline = host
+        .dispatch(&context, HostRequest::QuerySnapshot(checkpoint_query()))
+        .await
+        .unwrap()["data"]["sequence"]
+        .as_u64()
+        .unwrap();
+    let mut agent = context.clone();
+    agent.principal = Some(context.caller.clone());
+    agent.caller = CallerIdentity {
+        kind: CallerKind::Agent,
+        id: "mcp-client".into(),
+    };
+    let mut inserted = std::collections::BTreeSet::new();
+    // These arrive from another entry point after C and before recent history.
+    for index in 0..40 {
+        let record = host
+            .invoke(
+                &agent,
+                invoke(
+                    &format!("startup-{index}"),
+                    patch("analysis.R", "x <- 1", "x <- 2"),
+                    vec![],
+                ),
+            )
+            .await
+            .unwrap();
+        inserted.insert(record.operation.operation_id);
+    }
+    let recent_query = |arguments| QueryRequest {
+        capability: CapabilityRef::new("operation.list_recent", 1).unwrap(),
+        arguments,
+    };
+    let recent = host
+        .query_snapshot(&context, recent_query(json!({})))
+        .await
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(recent["operations"].as_array().unwrap().len(), 30);
+    let page = host.outbox(&context, baseline, 100).await.unwrap();
+    assert_eq!(page.len(), 100);
+    assert_eq!(host.outbox(&context, baseline, 100).await.unwrap(), page);
+    let mut events = page.clone();
+    let mut cursor = page.last().unwrap().sequence;
+    loop {
+        let page = host.outbox(&context, cursor, 100).await.unwrap();
+        if page.is_empty() {
+            break;
+        }
+        cursor = page.last().unwrap().sequence;
+        events.extend(page);
+    }
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.operation_id.clone())
+            .collect::<std::collections::BTreeSet<_>>(),
+        inserted
+    );
+    assert!(
+        events
+            .windows(2)
+            .all(|pair| pair[0].sequence < pair[1].sequence)
+    );
+    assert_eq!(
+        host.query_snapshot(&context, checkpoint_query())
+            .await
+            .unwrap()
+            .data
+            .unwrap()["sequence"],
+        cursor
+    );
+    assert_eq!(
+        host.query_snapshot(&agent, checkpoint_query())
+            .await
+            .unwrap()
+            .data
+            .unwrap()["sequence"],
+        cursor
+    );
+
+    let mut history = recent["operations"].as_array().unwrap().clone();
+    let mut next = recent["next_cursor"].clone();
+    while !next.is_null() {
+        let page = host
+            .query_snapshot(&context, recent_query(json!({"before_cursor":next})))
+            .await
+            .unwrap()
+            .data
+            .unwrap();
+        history.extend(page["operations"].as_array().unwrap().iter().cloned());
+        next = page["next_cursor"].clone();
+    }
+    assert_eq!(history.len(), 41);
+    assert!(
+        history
+            .windows(2)
+            .all(|pair| pair[0]["cursor"].as_u64().unwrap() > pair[1]["cursor"].as_u64().unwrap())
+    );
+    let mut outsider = agent.clone();
+    outsider.principal = Some(CallerIdentity {
+        kind: CallerKind::Human,
+        id: "stranger".into(),
+    });
+    assert_eq!(
+        host.query_snapshot(&outsider, checkpoint_query())
+            .await
+            .unwrap()
+            .data
+            .unwrap(),
+        json!({"sequence":0})
+    );
+    assert!(host.outbox(&outsider, 0, 100).await.unwrap().is_empty());
 }
 
 #[tokio::test]

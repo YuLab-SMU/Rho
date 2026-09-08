@@ -26,29 +26,28 @@ import {
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { rSupport, isR } from "../r-language";
-import { useStudio } from "../context";
+import { useDocuments, useObjectCompletions, useOperations, usePreferences, useSession, useNavigation } from "../context";
 import { Modal } from "../primitives";
-import { message } from "../host-client";
-import type { DocumentModel } from "../documents";
+import type { DocumentSnapshot } from "../documents";
 
 export function EditorHub() {
-  const s = useStudio("documents", "runtime", "console", "preferences");
+  const documents = useDocuments(), navigation = useNavigation();
   return (
     <section className="panel editor-hub">
       <div className="editor-toolbar">
-        <button className="primary" onClick={() => s.documents.create()}>
+        <button className="primary" onClick={() => documents.create()}>
           ＋ New R File
         </button>
-        <button onClick={() => s.showPanel?.("files")}>Open File</button>
+        <button onClick={() => navigation.showPanel("files")}>Open File</button>
       </div>
       <div className="empty">
         <h2>Start with a script</h2>
         <p>⌘ S Save · ⌘ Enter Run Selection / Line</p>
         <p>⌘ ⇧ Enter Save and Run File</p>
-        {!!s.documents.items.size && (
+        {!!documents.items.size && (
           <div className="document-list">
-            {[...s.documents.items.values()].map((d) => (
-              <button key={d.id} onClick={() => s.documents.focus(d)}>
+            {[...documents.items.values()].map((d) => (
+              <button key={d.id} onClick={() => documents.focus(d)}>
                 {d.name}
                 {d.dirty && !d.draft.readonly ? " · Unsaved" : ""}
               </button>
@@ -65,11 +64,11 @@ function CodeEditor({
   onSave,
   onRunFile,
 }: {
-  document: DocumentModel;
+  document: DocumentSnapshot;
   onSave: () => void;
   onRunFile: () => void;
 }) {
-  const s = useStudio("documents", "runtime", "console", "preferences"),
+  const documents = useDocuments(document.id), objectNames = useObjectCompletions(), preferences = usePreferences(), navigation = useNavigation(),
     parent = useRef<HTMLDivElement>(null),
     view = useRef<EditorView | null>(null),
     actions = useRef({ onSave, onRunFile }),
@@ -81,13 +80,13 @@ function CodeEditor({
       EditorView.contentAttributes.of({
         "aria-label": `Code Editor ${document.name}`,
       }),
-      EditorState.tabSize.of(s.preferences.indentWidth),
-      indentUnit.of(" ".repeat(s.preferences.indentWidth)),
+      EditorState.tabSize.of(preferences.indentWidth),
+      indentUnit.of(" ".repeat(preferences.indentWidth)),
       EditorView.theme({
-        "&.cm-editor": { fontSize: `${s.preferences.editorFontSize}px` },
+        "&.cm-editor": { fontSize: `${preferences.editorFontSize}px` },
       }),
       ...(isR(document.path)
-        ? rSupport(() => s.objects?.objects.map((o) => o.name) ?? [])
+        ? rSupport(() => [...objectNames()])
         : []),
     ];
   }
@@ -132,10 +131,7 @@ function CodeEditor({
         {
           key: "Mod-Enter",
           run: () => {
-            void s.documents.runSelection(document).catch((e) => {
-              document.error = message(e);
-              s.emit();
-            });
+            void documents.attempt(document, () => documents.runSelection(document));
             return true;
           },
         },
@@ -147,68 +143,60 @@ function CodeEditor({
       ]),
       EditorView.domEventHandlers({
         focus: () => {
-          s.documents.active = document.id;
-          s.emit();
+          documents.activate(document);
         },
         scroll: (_event, v) => {
-          document.draft.scrollTop = v.scrollDOM.scrollTop;
-          document.draft.scrollLeft = v.scrollDOM.scrollLeft;
-          s.persist();
+          documents.setScroll(document, v.scrollDOM.scrollTop, v.scrollDOM.scrollLeft);
         },
       }),
     ];
-    document.state = document.state.update({
+    const current = documents.getDocumentSnapshot(document.id)!;
+    const configured = documents.applyTransactions(document, [current.state.update({
       effects: StateEffect.reconfigure.of(extensions),
-    }).state;
+    })]);
     const editor = new EditorView({
       parent: parent.current!,
-      state: document.state,
+      state: configured.state,
       dispatchTransactions(transactions, v) {
-        for (const transaction of transactions) document.update(transaction);
+        documents.applyTransactions(document, transactions);
         v.update(transactions);
-        if (transactions.some((t) => t.docChanged || t.selection))
-          s.documents.changed();
       },
     });
     view.current = editor;
-    const command = (event: Event) => {
-      const { id, action } = (
-        event as CustomEvent<{ id: string; action: string }>
-      ).detail;
-      if (id !== document.id) return;
+    const unsubscribeCommand = navigation.onDocumentCommand(document.id, (action) => {
       if (action === "save") actions.current.onSave();
       else if (action === "runFile") actions.current.onRunFile();
       else if (action === "undo") undo(editor);
-      else void s.documents.runSelection(document);
-    };
-    window.addEventListener("rho-document-command", command);
+      else void documents.attempt(document, () => documents.runSelection(document));
+    });
     const frame = requestAnimationFrame(() => {
       editor.scrollDOM.scrollTop = document.draft.scrollTop;
       editor.scrollDOM.scrollLeft = document.draft.scrollLeft;
     });
     return () => {
-      window.removeEventListener("rho-document-command", command);
+      unsubscribeCommand();
       cancelAnimationFrame(frame);
-      document.draft.scrollTop = editor.scrollDOM.scrollTop;
-      document.draft.scrollLeft = editor.scrollDOM.scrollLeft;
+      if (documents.owns(document)) documents.setScroll(document, editor.scrollDOM.scrollTop, editor.scrollDOM.scrollLeft);
       editor.destroy();
       view.current = null;
     };
-  }, [s, document.id]);
+  }, [documents, navigation, document.id]);
   useEffect(() => {
     view.current?.dispatch({
       effects: configuration.current.reconfigure(configure()),
     });
-  }, [s.preferences.editorFontSize, s.preferences.indentWidth, document.path]);
+  }, [preferences.editorFontSize, preferences.indentWidth, document.path]);
   useEffect(() => {
-    if (view.current && view.current.state !== document.state)
-      view.current.setState(document.state);
+    const current = documents.getDocumentSnapshot(document.id);
+    if (view.current && current && view.current.state !== current.state)
+      view.current.setState(current.state);
   });
   return <div className="code-editor" ref={parent} />;
 }
 export function DocumentPanel({ documentId }: { documentId: string }) {
-  const s = useStudio("documents", "runtime", "console", "preferences"),
-    document = s.documents.items.get(documentId);
+  const documents = useDocuments(documentId), operations = useOperations(), preferences = usePreferences(), navigation = useNavigation();
+  useSession();
+  const document = documents.getDocumentSnapshot(documentId);
   const [saveAs, setSaveAs] = useState<{
       captured: string;
       run: boolean;
@@ -220,31 +208,27 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
     return (
       <div className="empty">
         <p>This draft was discarded or could not be restored.</p>
-        <button onClick={() => s.showPanel?.("editor")}>Show Editor</button>
+        <button onClick={() => navigation.showPanel("editor")}>Show Editor</button>
       </div>
     );
   const d = document;
   function attempt(work: () => Promise<unknown>) {
-    d.error = "";
-    void work().catch((e) => {
-      d.error = message(e);
-      s.emit();
-    });
+    void documents.attempt(d, work);
   }
   function save() {
-    if (!s.documents.canSave(d)) return;
+    if (!documents.canSave(d)) return;
     if (!d.path) {
       setPath(d.name);
       setSaveAs({ captured: d.raw, run: false });
-    } else attempt(() => s.documents.save(d));
+    } else attempt(() => documents.save(d));
   }
   function runFile() {
-    if (!s.documents.canRunFile(d)) return;
+    if (!documents.canRunFile(d)) return;
     const captured = d.raw;
     if (!d.path) {
       setPath(d.name);
       setSaveAs({ captured, run: true });
-    } else attempt(() => s.documents.runFile(d, captured));
+    } else attempt(() => documents.runFile(d, captured));
   }
   const selection = d.state.selection.main,
     line = d.state.doc.lineAt(selection.head);
@@ -254,7 +238,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
         <button
           className="primary"
           aria-label={
-            s.queueing
+            operations.queueing
               ? selection.empty
                 ? "Queue Line"
                 : "Queue Selection"
@@ -263,12 +247,12 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
                 : "Run Selection"
           }
           title={selection.empty ? "Run Line ⌘ Enter" : "Run Selection ⌘ Enter"}
-          disabled={!s.documents.canRunSelection(d)}
-          onClick={() => attempt(() => s.documents.runSelection(d))}
+          disabled={!documents.canRunSelection(d)}
+          onClick={() => attempt(() => documents.runSelection(d))}
         >
           <Icon name="play" size={14} />{" "}
           <span className="run-label">
-            {s.queueing
+            {operations.queueing
               ? selection.empty
                 ? "Queue Line"
                 : "Queue Selection"
@@ -278,16 +262,16 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
           </span>
         </button>
         <kbd className="editor-shortcut">⌘ Enter</kbd>
-        <button disabled={!s.documents.canRunFile(d)} onClick={runFile}>
+        <button disabled={!documents.canRunFile(d)} onClick={runFile}>
           {d.runningFile && d.saving
             ? "Saving before run…"
-            : s.queueing
+            : operations.queueing
               ? "Queue File"
               : "Run File"}
         </button>
         <button
           className="editor-save"
-          disabled={!s.documents.canSave(d)}
+          disabled={!documents.canSave(d)}
           onClick={save}
         >
           Save
@@ -308,11 +292,11 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content className="menu" align="end" sideOffset={4}>
-              <Menu.Item disabled={!s.documents.canSave(d)} onSelect={save}>
+              <Menu.Item disabled={!documents.canSave(d)} onSelect={save}>
                 Save ⌘ S
               </Menu.Item>
               <Menu.Item
-                disabled={!s.documents.canSave(d)}
+                disabled={!documents.canSave(d)}
                 onSelect={() => {
                   setPath(d.path ?? d.name);
                   setOverwrite(false);
@@ -322,14 +306,14 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
                 Save As…
               </Menu.Item>
               <Menu.Item
-                disabled={!s.documents.canRun(d)}
-                onSelect={() => attempt(() => s.documents.format(d))}
+                disabled={!documents.canRun(d)}
+                onSelect={() => attempt(() => documents.format(d))}
               >
                 Format
               </Menu.Item>
               <Menu.Item
                 disabled={!d.path || d.saving}
-                onSelect={() => attempt(() => s.documents.compareDisk(d))}
+                onSelect={() => attempt(() => documents.compareDisk(d))}
               >
                 Compare Disk / Reload…
               </Menu.Item>
@@ -344,7 +328,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
         <div className="document-error" role="alert">
           {d.error}
           {d.path && (
-            <button onClick={() => attempt(() => s.documents.compareDisk(d))}>
+            <button onClick={() => attempt(() => documents.compareDisk(d))}>
               Compare Disk
             </button>
           )}
@@ -365,7 +349,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
         <span>
           {isR(d.path) ? "R" : "Plain Text"}　UTF-8{d.draft.bom ? " BOM" : ""}　
           {d.draft.eol === "\r\n" ? "CRLF" : d.draft.eol === "\r" ? "CR" : "LF"}
-          　{s.preferences.indentWidth} spaces
+          　{preferences.indentWidth} spaces
         </span>
       </div>
       {saveAs && (
@@ -380,16 +364,16 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
               const snapshot = saveAs;
               attempt(async () => {
                 if (snapshot.run)
-                  await s.documents.runFile(
+                  await documents.runFile(
                     d,
                     snapshot.captured,
                     path,
                     overwrite,
                   );
                 else
-                  await s.documents.save(d, snapshot.captured, path, overwrite);
+                  await documents.save(d, snapshot.captured, path, overwrite);
                 setSaveAs(null);
-                if (!s.closedViews.has(d.id)) s.documents.focus(d);
+                // Saving changes the existing view title through the navigation port.
               });
             }}
           >
@@ -440,7 +424,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
             className="danger"
             disabled={d.saving}
             onClick={() => {
-              s.documents.discard(d);
+              documents.discard(d);
               setConfirmDiscard(false);
             }}
           >
@@ -453,8 +437,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
           title="Compare Draft and Disk"
           description="Compare the changes. Keeping your draft uses this disk version as the next save base."
           onClose={() => {
-            d.diskComparison = null;
-            s.emit();
+            documents.closeComparison(d, "disk");
           }}
         >
           <div className="comparison">
@@ -465,10 +448,10 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
               Disk File<pre>{d.diskComparison.raw}</pre>
             </div>
           </div>
-          <button onClick={() => s.documents.acceptDiskBase(d, true)}>
+          <button onClick={() => documents.acceptDiskBase(d, true)}>
             Load Disk Content
           </button>
-          <button onClick={() => s.documents.acceptDiskBase(d, false)}>
+          <button onClick={() => documents.acceptDiskBase(d, false)}>
             Keep Draft with This Disk Base
           </button>
         </Modal>
@@ -478,8 +461,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
           title="Document Changed during Formatting"
           description="Your edits are retained. Compare the original request with the formatted result."
           onClose={() => {
-            d.comparison = null;
-            s.emit();
+            documents.closeComparison(d, "format");
           }}
         >
           <div className="comparison">
@@ -488,9 +470,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
           </div>
           <button
             onClick={() => {
-              d.replace(d.comparison!.formatted);
-              d.comparison = null;
-              s.documents.changed();
+              documents.acceptFormatted(d);
             }}
           >
             Apply Formatted Text (Undo Available)

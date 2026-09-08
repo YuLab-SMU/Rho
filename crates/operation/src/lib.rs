@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 
 mod recent;
-pub use recent::RecentOperationsHandler;
+pub use recent::{RecentOperationsHandler, validate_recent_arguments};
+mod checkpoint;
+pub use checkpoint::OperationEventsCheckpointHandler;
 mod query;
 pub use query::{QueryGateway, QueryHandler};
 
@@ -265,6 +267,12 @@ impl ExecutionLease for () {}
 
 #[async_trait]
 pub trait OperationJournal: Send + Sync {
+    async fn events_checkpoint(
+        &self,
+        scope: &str,
+        principal: &CallerIdentity,
+    ) -> Result<rho_contract::OperationEventsCheckpoint, OperationError>;
+
     async fn list_recent(
         &self,
         _scope: &str,
@@ -310,6 +318,7 @@ pub trait OperationJournal: Send + Sync {
 
     async fn outbox(
         &self,
+        scope: Option<&str>,
         caller: &CallerIdentity,
         after_sequence: u64,
         limit: usize,
@@ -464,6 +473,7 @@ pub struct OperationGateway {
     clock: Arc<dyn Clock>,
     id_generator: Arc<dyn OperationIdGenerator>,
     active: Arc<Mutex<BTreeMap<OperationId, tokio::sync::watch::Sender<bool>>>>,
+    project_scope: Option<String>,
 }
 
 struct ActiveOperation {
@@ -494,7 +504,14 @@ impl OperationGateway {
             id_generator,
             admission: tokio::sync::Mutex::new(()),
             active: Arc::new(Mutex::new(BTreeMap::new())),
+            project_scope: None,
         }
+    }
+
+    /// Bind project visibility at composition time, never from caller arguments.
+    pub fn with_project_scope(mut self, project: Option<String>) -> Self {
+        self.project_scope = project;
+        self
     }
 
     pub async fn invoke(
@@ -678,11 +695,13 @@ impl OperationGateway {
         operation_id: &OperationId,
     ) -> Result<Option<OperationRecord>, OperationError> {
         context.validate()?;
-        Ok(self
-            .journal
-            .get(operation_id)
-            .await?
-            .filter(|record| record.operation.principal() == context.principal()))
+        Ok(self.journal.get(operation_id).await?.filter(|record| {
+            record.operation.principal() == context.principal()
+                && self
+                    .project_scope
+                    .as_ref()
+                    .is_none_or(|scope| record.operation.idempotency_scope.as_ref() == Some(scope))
+        }))
     }
 
     pub async fn request_cancellation(
@@ -762,7 +781,12 @@ impl OperationGateway {
     ) -> Result<Vec<OutboxRecord>, OperationError> {
         context.validate()?;
         self.journal
-            .outbox(context.principal(), after_sequence, limit)
+            .outbox(
+                self.project_scope.as_deref(),
+                context.principal(),
+                after_sequence,
+                limit,
+            )
             .await
     }
 

@@ -24,11 +24,22 @@ pub struct RecentOperations {
 pub struct RecentOperationsArguments {
     pub before_cursor: Option<u64>,
     pub client_request_id: Option<String>,
+    pub operation_id: Option<OperationId>,
     #[serde(default = "recent_limit")]
     pub limit: u32,
 }
 fn recent_limit() -> u32 {
     30
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct OperationEventsCheckpointArguments {}
+
+/// An event position within the visible journal, not a scientific state version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+pub struct OperationEventsCheckpoint {
+    pub sequence: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]

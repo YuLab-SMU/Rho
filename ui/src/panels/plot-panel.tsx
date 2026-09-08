@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { useStudio } from "../context";
+import { useMediaCache, useOutputs, usePlots } from "../context";
 import { MediaImage } from "./output-panels";
 import { Modal } from "../primitives";
-import { constrain, fitScale, zoomAt } from "../plot-viewport";
+import { fitScale } from "../plot-viewport";
 import type { Size } from "../plot-viewport";
+import { mediaKey } from "../output-ports";
 export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
-  const s = useStudio("plots", "media", `view:${viewId}`),
-    view = s.plotView(viewId),
-    images = s.media,
-    selected = images.find((r) => s.mediaKey(r) === view.selected),
-    key = selected ? s.mediaKey(selected) : "",
+  const plots = usePlots(), outputs = useOutputs(), cache = useMediaCache(),
+    snapshot = outputs.getSnapshot(),
+    view = plots.view(viewId),
+    images = snapshot.media,
+    selected = images.find((r) => mediaKey(r) === view.selected),
+    key = selected ? mediaKey(selected) : "",
     index = selected ? images.indexOf(selected) : -1;
   const canvas = useRef<HTMLDivElement>(null),
     [size, setSize] = useState<Size>({ width: 300, height: 250 }),
@@ -24,35 +26,21 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
   const image = natural?.key === key ? natural.size : null,
     p = view.transforms[key] ?? { zoom: null, x: 0, y: 0 },
     scale = image ? (p.zoom ?? fitScale(image, size)) : 1,
-    url = key ? s.mediaUrls.get(key) : null;
-  function changed() {
-    view.follow = false;
-    view.seen = images.length;
-    s.persist();
-    s.emit(`view:${viewId}`);
-  }
+    url = key ? cache.getSnapshot().urls.get(key) : null;
   function select(i: number) {
-    if (images[i]) {
-      view.selected = s.mediaKey(images[i]);
-      changed();
-    }
+    plots.select(viewId, i);
   }
   function latest() {
-    view.follow = true;
-    view.selected = images.length ? s.mediaKey(images.at(-1)!) : null;
-    view.seen = images.length;
-    s.persist();
-    s.emit(`view:${viewId}`);
+    plots.latest(viewId);
   }
   function zoom(next: number, point = { x: 0, y: 0 }) {
     if (!image) return;
-    view.transforms[key] = zoomAt(p, next, point, image, size);
-    changed();
+    plots.zoom(viewId, key, next, point, image, size);
   }
   function fit() {
-    view.transforms[key] = { zoom: null, x: 0, y: 0 };
-    changed();
+    plots.fit(viewId, key);
   }
+  useEffect(() => { plots.ensureView(viewId); }, [plots, viewId]);
   useEffect(() => {
     if (!canvas.current) return;
     const observer = new ResizeObserver((entries) => {
@@ -68,11 +56,7 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
   }, []);
   useEffect(() => {
     if (image && p.zoom !== null) {
-      const next = constrain(p, image, size);
-      if (next.x !== p.x || next.y !== p.y) {
-        view.transforms[key] = next;
-        s.emit(`view:${viewId}`);
-      }
+      plots.constrain(viewId, key, image, size);
     }
   }, [size.width, size.height, key]);
   useEffect(() => {
@@ -91,7 +75,7 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
     return () => el.removeEventListener("wheel", wheel);
   }, [key, scale, p.x, p.y, size, image]);
   useEffect(() => {
-    if (details && selected) void s.loadPlotDetails(selected);
+    if (details && selected) void outputs.loadPlotDetails(selected);
   }, [details, key]);
   const small = compact;
   const extension =
@@ -169,7 +153,7 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
               </Menu.Item>
               <Menu.Item
                 disabled={!selected}
-                onSelect={() => s.newPlotView(selected!)}
+                onSelect={() => plots.newView(selected!)}
               >
                 Open Plot in New View
               </Menu.Item>
@@ -177,15 +161,11 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
                 Go to Latest
               </Menu.Item>
               <Menu.Item
-                onSelect={() => {
-                  view.history = !view.history;
-                  s.persist();
-                  s.emit(`view:${viewId}`);
-                }}
+                onSelect={() => plots.toggleHistory(viewId)}
               >
                 {view.history ? "Hide" : "Show"} Plot History
               </Menu.Item>
-              <Menu.Item onSelect={() => void s.loadEarlierPlots()}>
+              <Menu.Item onSelect={() => void outputs.loadEarlierPlots()}>
                 Load Earlier Plots
               </Menu.Item>
               <Menu.Item disabled={!selected} onSelect={() => setDetails(true)}>
@@ -205,6 +185,12 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
           </Menu.Portal>
         </Menu.Root>
       </div>
+      {(snapshot.historyError || (selected && (snapshot.errors.get(selected.operation_id) || snapshot.notices.get(selected.operation_id)))) && (
+        <div className="observation-notice" role="status">
+          {snapshot.historyError || snapshot.errors.get(selected!.operation_id) || snapshot.notices.get(selected!.operation_id)}
+          <button onClick={() => snapshot.historyError ? outputs.retryHistory() : outputs.retry(selected!.operation_id)}>Retry Output</button>
+        </div>
+      )}
       {!view.follow && !view.pinned && (
         <div className="plot-follow">
           <span>
@@ -254,16 +240,14 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
         }}
         onPointerMove={(e) => {
           if (!drag.current || !image) return;
-          view.transforms[key] = constrain(
+          plots.pan(viewId, key,
             {
-              ...p,
               x: drag.current.px + e.clientX - drag.current.x,
               y: drag.current.py + e.clientY - drag.current.y,
             },
             image,
             size,
           );
-          changed();
         }}
         onPointerUp={() => {
           drag.current = null;
@@ -309,7 +293,7 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
                 : "Your plots appear here."}
             </p>
             {view.selected && (
-              <button onClick={() => void s.loadEarlierPlots()}>
+              <button onClick={() => void outputs.loadEarlierPlots()}>
                 Load Earlier Plots
               </button>
             )}
@@ -320,17 +304,17 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
         <div className="plot-history" aria-label="Plot History">
           {images.map((reference, i) => (
             <button
-              key={s.mediaKey(reference)}
-              className={s.mediaKey(reference) === key ? "selected" : ""}
+              key={mediaKey(reference)}
+              className={mediaKey(reference) === key ? "selected" : ""}
               aria-label={`Select Plot ${i + 1}`}
-              aria-pressed={s.mediaKey(reference) === key}
+              aria-pressed={mediaKey(reference) === key}
               onClick={() => select(i)}
             >
               <MediaImage reference={reference} />
               <small>{i + 1}</small>
             </button>
           ))}
-          <button onClick={() => void s.loadEarlierPlots()}>Earlier…</button>
+          <button onClick={() => void outputs.loadEarlierPlots()}>Earlier…</button>
         </div>
       )}
       <div className="panel-footer">
@@ -362,8 +346,7 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
               {String(
                 (
                   (
-                    s.records.get(selected.operation_id) ??
-                    s.plotRecords.get(selected.operation_id)
+                    snapshot.records.get(selected.operation_id)
                   )?.operation.normalized_arguments as {
                     source?: { label: string };
                   }
@@ -372,8 +355,8 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
             </dd>
             <dt>Observed</dt>
             <dd>
-              {s.plotTimes.has(key)
-                ? new Date(s.plotTimes.get(key)!).toLocaleString()
+              {snapshot.times.has(key)
+                ? new Date(snapshot.times.get(key)!).toLocaleString()
                 : "Unknown"}
             </dd>
             <dt>Format</dt>

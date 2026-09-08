@@ -25,6 +25,13 @@ const MAX_PLAN_BYTES: usize = 4 * 1024 * 1024;
 const APPLICATION_ID: i64 = 0x52484f4e;
 const SCHEMA_VERSION: i64 = 1;
 
+// Checkpoints and event pages must select the same visible set before pagination.
+// An unbound read-only/demo Host passes NULL; project Hosts bind their canonical root.
+const OPERATION_VISIBILITY: &str = "
+    (?1 IS NULL OR json_extract(op.operation_json, '$.idempotency_scope') = ?1)
+    AND COALESCE(json_extract(op.operation_json, '$.principal.kind'), op.caller_kind) = ?2
+    AND COALESCE(json_extract(op.operation_json, '$.principal.id'), op.caller_id) = ?3";
+
 pub struct SqliteOperationJournal {
     connection: Mutex<Connection>,
     // The OS releases this lock if the host exits or crashes. Readers never hold it.
@@ -192,26 +199,46 @@ impl SqliteOperationJournal {
 
 #[async_trait]
 impl OperationJournal for SqliteOperationJournal {
+    async fn events_checkpoint(
+        &self,
+        scope: &str,
+        principal: &CallerIdentity,
+    ) -> Result<rho_contract::OperationEventsCheckpoint, OperationError> {
+        let connection = self.connection()?;
+        let sequence = connection
+            .query_row(
+                &format!(
+                    "SELECT COALESCE(MAX(o.sequence), 0)
+                     FROM outbox o JOIN operations op ON op.operation_id = o.operation_id
+                     WHERE {OPERATION_VISIBILITY}"
+                ),
+                params![scope, caller_kind(principal.kind), principal.id],
+                |row| row.get(0),
+            )
+            .map_err(storage)?;
+        Ok(rho_contract::OperationEventsCheckpoint { sequence })
+    }
+
     async fn list_recent(
         &self,
         scope: &str,
         caller: &CallerIdentity,
         args: &rho_contract::RecentOperationsArguments,
     ) -> Result<rho_contract::RecentOperations, OperationError> {
-        if !(1..=100).contains(&args.limit)
-            || args.before_cursor.is_some_and(|c| c > i64::MAX as u64)
-        {
-            return Err(OperationError::InvalidInput(
-                "invalid operation page bounds".into(),
-            ));
-        }
+        rho_operation::validate_recent_arguments(args)?;
         let connection = self.connection()?;
-        let mut statement=connection.prepare("SELECT rowid,operation_id,client_request_id,capability_id,capability_version,status,
-            json_extract(operation_json,'$.accepted_at_ms'),updated_at_ms,substr(error,1,2048)
-            FROM operations WHERE json_extract(operation_json,'$.idempotency_scope')=?1
-            AND COALESCE(json_extract(operation_json,'$.principal.kind'),caller_kind)=?2
-            AND COALESCE(json_extract(operation_json,'$.principal.id'),caller_id)=?3
-            AND rowid < ?4 AND (?5 IS NULL OR client_request_id=?5) ORDER BY rowid DESC LIMIT ?6").map_err(storage)?;
+        let mut statement = connection
+            .prepare(&format!(
+                "SELECT op.rowid, op.operation_id, op.client_request_id,
+                        op.capability_id, op.capability_version, op.status,
+                        op.accepted_at_ms, op.updated_at_ms, substr(op.error, 1, 2048)
+                 FROM operations op WHERE {OPERATION_VISIBILITY}
+                   AND op.rowid < ?4
+                   AND (?5 IS NULL OR op.client_request_id = ?5)
+                   AND (?6 IS NULL OR op.operation_id = ?6)
+                 ORDER BY op.rowid DESC LIMIT ?7"
+            ))
+            .map_err(storage)?;
         let mut rows = statement
             .query(params![
                 scope,
@@ -219,6 +246,7 @@ impl OperationJournal for SqliteOperationJournal {
                 caller.id,
                 args.before_cursor.unwrap_or(i64::MAX as u64) as i64,
                 args.client_request_id,
+                args.operation_id.as_ref().map(OperationId::as_str),
                 args.limit + 1
             ])
             .map_err(storage)?;
@@ -641,6 +669,7 @@ impl OperationJournal for SqliteOperationJournal {
 
     async fn outbox(
         &self,
+        scope: Option<&str>,
         caller: &CallerIdentity,
         after_sequence: u64,
         limit: usize,
@@ -654,20 +683,24 @@ impl OperationJournal for SqliteOperationJournal {
             .map_err(|_| OperationError::Storage("outbox cursor exceeds INT64".to_string()))?;
         let connection = self.connection()?;
         let mut statement = connection
-            .prepare(
+            .prepare(&format!(
                 "SELECT o.sequence, o.message_id, o.operation_id, o.topic,
                         o.payload_json, o.created_at_ms, o.delivered_at_ms
                  FROM outbox o JOIN operations op ON op.operation_id = o.operation_id
-                 WHERE o.sequence > ?1
-                   AND COALESCE(json_extract(op.operation_json, '$.principal.kind'), op.caller_kind) = ?2
-                   AND COALESCE(json_extract(op.operation_json, '$.principal.id'), op.caller_id) = ?3
+                 WHERE {OPERATION_VISIBILITY} AND o.sequence > ?4
                  ORDER BY o.sequence
-                 LIMIT ?4",
-            )
+                 LIMIT ?5"
+            ))
             .map_err(storage)?;
         let rows = statement
             .query_map(
-                params![after, caller_kind(caller.kind), caller.id, limit as i64],
+                params![
+                    scope,
+                    caller_kind(caller.kind),
+                    caller.id,
+                    after,
+                    limit as i64
+                ],
                 raw_outbox,
             )
             .map_err(storage)?
@@ -1179,6 +1212,156 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn event_visibility_is_identical_for_checkpoints_and_pages_before_the_limit() {
+        let journal = SqliteOperationJournal::open_in_memory().unwrap();
+        let principal = operation("unused", "unused", "unused").caller;
+        assert_eq!(
+            journal
+                .events_checkpoint("/project", &principal)
+                .await
+                .unwrap()
+                .sequence,
+            0
+        );
+        // Invisible rows occupy more than a whole client page, including another
+        // project, another principal and the same principal ID with a different kind.
+        for index in 0..105 {
+            let id = format!("hidden-{index}");
+            let mut op = operation(&id, &id, &id);
+            op.idempotency_scope = Some("/project".into());
+            match index % 3 {
+                0 => op.idempotency_scope = Some("/other".into()),
+                1 => {
+                    op.principal = Some(CallerIdentity {
+                        kind: CallerKind::Human,
+                        id: "other-person".into(),
+                    })
+                }
+                _ => {
+                    op.principal = Some(CallerIdentity {
+                        kind: CallerKind::Agent,
+                        id: principal.id.clone(),
+                    })
+                }
+            }
+            journal.admit(&op).await.unwrap();
+        }
+        assert_eq!(
+            journal
+                .events_checkpoint("/project", &principal)
+                .await
+                .unwrap()
+                .sequence,
+            0
+        );
+        let mut own = operation("own", "own", "own");
+        own.idempotency_scope = Some("/project".into());
+        journal.admit(&own).await.unwrap();
+        let checkpoint = journal
+            .events_checkpoint("/project", &principal)
+            .await
+            .unwrap();
+
+        let mut delegated = operation("delegated", "delegated", "delegated");
+        delegated.idempotency_scope = Some("/project".into());
+        delegated.caller = CallerIdentity {
+            kind: CallerKind::Agent,
+            id: "mcp-connection".into(),
+        };
+        delegated.principal = Some(principal.clone());
+        journal.admit(&delegated).await.unwrap();
+        let mut final_hidden = operation("final-hidden", "final-hidden", "final-hidden");
+        final_hidden.idempotency_scope = Some("/other".into());
+        journal.admit(&final_hidden).await.unwrap();
+
+        let changes: u64 = journal
+            .connection()
+            .unwrap()
+            .query_row("SELECT total_changes()", [], |row| row.get(0))
+            .unwrap();
+        let first = journal
+            .outbox(Some("/project"), &principal, 0, 1)
+            .await
+            .unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].operation_id, own.operation_id);
+        assert_eq!(first[0].sequence, checkpoint.sequence);
+        let second = journal
+            .outbox(Some("/project"), &principal, checkpoint.sequence, 1)
+            .await
+            .unwrap();
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].operation_id, delegated.operation_id);
+        assert_eq!(
+            journal
+                .events_checkpoint("/project", &principal)
+                .await
+                .unwrap()
+                .sequence,
+            second[0].sequence
+        );
+        assert!(
+            journal
+                .outbox(Some("/project"), &principal, second[0].sequence, 100)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let after: u64 = journal
+            .connection()
+            .unwrap()
+            .query_row("SELECT total_changes()", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            changes, after,
+            "event observation must not write or recover work"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn read_only_checkpoint_and_exact_summary_do_not_recover_an_accepted_operation() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("journal.sqlite");
+        let writer = SqliteOperationJournal::open(&path).unwrap();
+        let mut op = operation("accepted", "accepted", "accepted");
+        op.idempotency_scope = Some("/project".into());
+        writer.admit(&op).await.unwrap();
+        let reader = SqliteOperationJournal::open_read_only(&path).unwrap();
+        let checkpoint = reader
+            .events_checkpoint("/project", &op.caller)
+            .await
+            .unwrap();
+        assert_eq!(checkpoint.sequence, 1);
+        let page = reader
+            .list_recent(
+                "/project",
+                &op.caller,
+                &rho_contract::RecentOperationsArguments {
+                    operation_id: Some(op.operation_id.clone()),
+                    client_request_id: None,
+                    before_cursor: None,
+                    limit: 30,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(page.operations.len(), 1);
+        assert_eq!(page.operations[0].status, OperationStatus::Accepted);
+        assert_eq!(page.operations[0].cursor, 1);
+        assert_eq!(
+            writer.get(&op.operation_id).await.unwrap().unwrap().status,
+            OperationStatus::Accepted
+        );
+        assert_eq!(
+            writer
+                .events_checkpoint("/project", &op.caller)
+                .await
+                .unwrap(),
+            checkpoint
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn successful_output_pages_preserve_scope_and_cursor_without_writes() {
         let journal = SqliteOperationJournal::open_in_memory().unwrap();
         let cap = CapabilityRef::new("environment.plan", 1).unwrap();
@@ -1201,7 +1384,7 @@ mod tests {
             journal.commit(&op.operation_id, &plan, 3).await.unwrap();
         }
         let caller = operation("unused", "unused", "unused").caller;
-        let history = journal.outbox(&caller, 0, 100).await.unwrap();
+        let history = journal.outbox(None, &caller, 0, 100).await.unwrap();
         let first = journal
             .successful_outputs("/project", &cap, None, 1)
             .await
@@ -1220,7 +1403,10 @@ mod tests {
                 .await
                 .is_err()
         );
-        assert_eq!(journal.outbox(&caller, 0, 100).await.unwrap(), history);
+        assert_eq!(
+            journal.outbox(None, &caller, 0, 100).await.unwrap(),
+            history
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -1350,7 +1536,10 @@ mod tests {
             .await
             .unwrap();
         let events_before = journal.events(&operation.operation_id).await.unwrap();
-        let messages_before = journal.outbox(&operation.caller, 0, 100).await.unwrap();
+        let messages_before = journal
+            .outbox(None, &operation.caller, 0, 100)
+            .await
+            .unwrap();
         journal
             .connection()
             .unwrap()
@@ -1394,7 +1583,10 @@ mod tests {
             events_before
         );
         assert_eq!(
-            journal.outbox(&operation.caller, 0, 100).await.unwrap(),
+            journal
+                .outbox(None, &operation.caller, 0, 100)
+                .await
+                .unwrap(),
             messages_before
         );
         journal

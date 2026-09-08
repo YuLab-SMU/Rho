@@ -1,186 +1,108 @@
 # Rho: current state and focus
 
-Updated: 2026-09-08. This is the single current status page. Code and reproducible
-results establish behavior; Git retains the implementation history.
+Updated: 2026-09-08. This is the single current status summary. Code and executed
+checks establish behavior; Git retains implementation history.
 
 ## Current focus
 
-**Jet dependency consolidation is complete and verified.** The previous full upstream tree has been replaced by
-`vendor/jet-core`: the core Cargo manifest, twelve unchanged Rust source files,
-original license and generated provenance document. The pinned upstream revision
-remains `52ae131dd168fe2e104d306cc4bf5bbeae749200` and the root Cargo.lock is unchanged.
+**The modular Studio and reliable information-flow delivery is implemented and
+locally verified.** The integration baseline was `8b4f1e4ed1b242dbc9714436ccddf8be949c6c19`
+with a clean worktree, 48 passing frontend tests and passing type checks.
 
-Six ordered patches in `patches/jet` capture standalone manifest packaging and all
-previous Rho adaptations: Windows liveness/cleanup/window behavior, environment
-removal, shared-client interruption, stdin redaction and watchdog descriptor
-isolation. Offline reverse/forward replay and an independent checksum-pinned
-archive reconstruction have passed, including effective Cargo manifest comparison.
-The updater stages proposals without changing production source, and regression
-fixtures exercise corruption, missing/extra files, links, patch failure and manifest
-drift. The vendored tree decreased from 109 files / 624,623 bytes to 15 files /
-138,750 bytes, excluding the separate patch series and maintainer tooling.
+Session, Operations, Console, Objects, Packages, Files, Documents, Outputs,
+MediaCache, Plots and Layout now own their state behind read-only snapshots,
+subscriptions and explicit commands. Studio only composes modules and coordinates
+startup/switch/stop. Generic `useStudio`, global string commands, mutable callback
+slots, the old polling implementation and scientific state forwarding are removed.
+The built-in registry owns panel metadata, render keys, menus and restore validation.
+Frontend dependency/mutation checks and their allow/reject fixtures run in CI.
 
-Executed checks passed: offline snapshot verification, independent upstream archive
-replay (both supplied archive and fetched cache), a real preparation of the current
-pin, verifier regression fixtures, Rust formatting, workspace Clippy/tests, binary
-build, generated-client/asset check, all five enabled real Ark/R tests, MCP transport
-checks and real-R Workbench checks. Architecture and documentation governance checks
-passed. Logs and the before/after source hashes are in `target/jet-vendor-review/`.
-The CI workflow is configured for the native platform matrix; only local macOS
-execution is claimed here. No upstream version or production lockfile changed.
+The Operation owner provides `operation.events_checkpoint` and exact operation-ID
+summary lookup. Project/principal filtering precedes checkpoint aggregation and
+subscription pagination. Startup establishes an event baseline before restoring
+state and observing recent/current/pending/pinned work; it retries failed stages
+without skipping drafts or request identities. Existing clients resume completed
+page cursors; cold clients do not restore the obsolete persisted event cursor.
 
-The Paper-approved Packages redesign remains implemented and verified. Its grouped
-package/purpose/version view, inline/wide inspector, cached filtering and per-copy
-Source metadata are unchanged by the dependency reorganization. The review design
-is in [Paper](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0).
+The runtime coordinator serializes/coalesces native observation demand, isolates
+failures and retains control/event cadence. A ready, exhausted output read can
+finish only if it began after terminal was already observed. Packages retries
+retain observation identity; expiry needs explicit Refresh. View tokens preserve
+same-name preview demand, including expanded rows below the scroll viewport,
+while inactive panels suspend reads. Console and Plots share validated originals.
 
-No package manager or installation flow was added. Unknown provenance stays
-unrecorded; the local ggplot2 case distinguishes GitHub 4.0.3.9000 from CRAN 3.5.2.
-Repository/provider/snapshot fields rely on recorded installed metadata. External
-conda databases, arbitrary private servers and renv lockfiles are not used as
-unverified substitutes for the installed copy's identity.
+One optimistic SQLite application-state write combines module fragments. Captured
+save/run text, dirty edits during writes, formatting comparisons, acknowledgement
+loss and multiwindow conflicts retain their semantics. A native-session change
+cannot turn the client's own unacknowledged save into a false window conflict.
+If another window changes the Host's project, local drafts stay editable and the
+client reports the mismatch while withholding native availability.
 
-Installation and environment-management decisions remain reserved for a future
-separate plugin. See [Design section 11](RHO-DESIGN.md#11-read-only-package-inspection)
-and [F08](STUDIO-FEEDBACK.md#f08--package-inspection-without-installation-decisions).
-Calm Precision's prior acceptance, including the user's macOS Chinese IME check,
-remains established.
-The frozen baseline remains commit `d5a970b1559c9bd85567073108d05bca21886de4`, tagged
-`studio-round1-baseline-2026-09-07`.
+Durable boundaries and protocol details are in [Architecture](ARCHITECTURE.md).
 
-## Resume in a new session
+## Executed verification
 
-Packages was delivered in commit `83b9de6` on branch `wip/rho-next`.
-The completed Jet reorganization follows that implementation; use Git for the exact
-latest revision. No required work remains from these two authorized tasks.
-Repository instructions are consolidated in the root `AGENTS.md`.
-
-The review project is `target/calm-precision-project`, the operation journal is
-`target/calm-precision-run/next.sqlite`, and its application store is the sibling
-`next.studio.sqlite`. The built executable is `target/debug/rho`. At handoff,
-Chrome has the new Packages view open on the real ggplot2 Source inspector.
-The preview was restarted only after confirming an idle session with zero user
-bindings, no queue and no input request. R memory is not a recovery artifact.
-
-Inspect live Host ownership before launching another process. If the review Host
-has stopped, run this from the repository root and open its newly printed private
-URL (ports and tokens are ephemeral):
-
-```sh
-target/debug/rho --database "$PWD/target/calm-precision-run/next.sqlite" \
-  --project "$PWD/target/calm-precision-project" \
-  workbench --dev-assets "$PWD/crates/workbench/assets"
-```
-
-The review material under `target/` is local and untracked. If it has been cleaned,
-use the tracked gapminder fixture and the operator guide to prepare a new review
-project; do not treat a missing fixture as a migration or recovery requirement.
-
-## Implemented
-
-| Area | Current behavior |
+| Check | Result |
 | --- | --- |
-| Studio shell | English product UI, local Inter, three-column defaults, common menus/commands, accurate session/queue/draft status |
-| Views | Close View/Group, space recovery, empty workspace, remembered reopening, 38 px collapse, maximize/restore and twenty committed layout undo steps |
-| Placement | Native FlexLayout dragging plus named parent/workspace targets; separate-model preview and keyboard Move To |
-| Files / Editor | Lazy directory tree, hidden-file option, bounded project search; pinned R grammar, stable CodeMirror state/Compartments, plain text mode, captured digest-verified save/run |
-| Console | Continuous selectable transcript, ordered text/ANSI interpretation, compact plot links/thumbnails, independent drafts/history/scroll for multiple views |
-| Execution | Workspace-owned FIFO queue, at most 32 pending runs, optional acceptance reply, guarded pending cancellation, pause/resume and final-commit fencing |
-| Input | Jupyter stdin control bound to session/operation/native request; separate answer field, transient password handling, timeout suspension and single-answer validation |
-| Objects | Multiple inline previews, explicit new viewer, bounded standard data frame/tibble/vector values and special-value metadata; no forced active/lazy bindings or user methods |
-| Packages | Paper layout, grouped names/purposes/versions, global observed counts and cached search; inline/wide inspection, per-copy Source and recorded metadata, consistent observation/session guards |
-| Plots | Fit/100%/1–800% manual zoom, anchored zoom and bounded pan, per-output transforms, follow/history, pinned comparison, original export and shared byte-budgeted cache |
-| Historical output | Independent stored-media queries, including a project-only Host without live R |
-| Recovery | Current drafts/layout/view state in SQLite with optimistic concurrency; accepted requests are observed rather than replayed; native session identities isolate observations |
-| Other scientific owners | Project/Git, isolated environments, local processes and configured SSH/Slurm continue through the same Host ports |
+| Frontend typecheck and all units | Passed; 226 tests across 17 files |
+| Frontend boundaries and allow/reject fixtures | Passed; 24 fixtures |
+| Client generate → build → check | Passed; generated DTOs and embedded assets current |
+| Rust fmt / workspace Clippy / workspace tests | Passed; 84 default tests |
+| Real Ark/R tests and native code/package queries | Passed; all five real-R tests executed, including package read-only invariants |
+| Real environment tests and CLI recovery | Passed; both opt-in environment tests executed in temporary libraries |
+| Workbench and MCP, ordinary and real R | Passed; actual local transports and shared principal/session paths |
+| Process recovery and local SSH/Slurm protocol fixtures | Passed; no live remote-cluster claim |
+| All Chrome scenarios | Passed; original 23 plus three new scenarios, 26 total |
+| Governance, Rust dependency graph and Jet integrity/fixtures | Passed |
 
-Console views share one local R session. They do not create parallel R evaluation
-or another Agent loop. The five scientific ports retain their defaults; stdin is
-a sibling control to the same running operation. Read/control capacity is separate
-from waiting execution calls. The native R watchdog closes inherited descriptors,
-so one Host cannot retain another project's ownership lock.
+The seven tests ignored by the ordinary Cargo invocation were executed separately:
+five real-R tests and two environment tests. They are not counted as passes merely
+because the default workspace invocation skipped them. All Cargo invocations,
+including client generation and script-internal builds, were serialized.
 
-## Evidence and limits
+The Chrome run uses the pinned gapminder dataset (1,704 rows), existing analysis
+script and installed R/packages. The performance workload retains eleven historical
+plots, a 4,000-line file and 200 streamed lines with 25 ms pauses. It collects 120
+input samples on Apple M4 Pro / 24 GiB, Chrome 152, 1440 × 900 at device scale 1.
+Input P95 passed `<50 ms`; frame-interval P95 passed `<33 ms` during typing, zoom
+and splitter movement. Equal four-second windows each invalidate the same R state;
+adding a second visible Console and Plot view does not multiply observation/control
+requests and makes no duplicate read of the selected original. Exact measurements
+and request counts are in the performance JSON, separate from native R latency.
 
-Package checks cover grouping/counts, pinned pagination/detail identity, observation
-expiry, current versus first-library copies, linked/outside-path namespaces,
-GitHub/CRAN/R-universe metadata, repository provider/snapshot records, unknown source,
-credential removal, safe links and unchanged R namespaces/search path. The new
-Chrome scenario exercises grouped copies, Source switching, full commit evidence,
-busy cached search, library dialog focus, 1280 px compact and 1440 px wide layouts,
-and close/reopen continuity. Verification passed Rust formatting, workspace Clippy
-and workspace tests; contract generation, client build and asset checks; 48 frontend
-tests; all 23 isolated Chrome scenarios; five real Ark/R tests and the package
-fixture; and MCP/Workbench checks both with and without real R. Architecture and
-documentation governance checks passed. Logs are in `target/packages-paper-checks/`;
-compact and wide screenshots are in `target/studio-browser/packages-paper-compact.png`
-and `packages-paper-wide.png`.
+Visual inspection covers 1280 × 800, 1440 × 900, maximized and constrained panels.
+Gapminder screenshots wait for the exact producing operation's last plot to decode.
+Package compact/wide inspection preserves the approved Paper interaction and styles,
+including purpose/version priority and installed-copy Source details. The previous
+macOS IME approval remains the established manual evidence; native Chrome CDP
+composition and the Console composition regression are also exercised here.
 
-The existing review Host was idle with zero user bindings and no queued work or
-stdin request before replacing it with the current binary. Native Chrome now shows
-the new Packages view with 602 package names / 736 installations. The real ggplot2
-Source inspector shows tidyverse/ggplot2, ref HEAD and commit 6870419aa6e1 for the
-GitHub copy, alongside the separately recorded CRAN copy. Synchronized documents,
-layout and historical output remain in the same application store.
+Local evidence lives in `target/modularization-review/` and `target/studio-browser/`.
+The final committed-tree verification writes command logs, commit/tree identity,
+screenshot/performance copies and artifact hashes to
+`target/modularization-review/final/manifest.json`. Earlier failed regression runs
+are retained only as local test evidence; they are not current acceptance results.
+CI is configured for the existing platform matrix; local macOS execution is the
+verified platform here.
 
-Sources were read from local installed metadata for inspection, and test-only
-DESCRIPTION fixtures were written to temporary directories. Package viewing does
-not install or load those fixtures. The implementation uses generated Rust contracts
-and current embedded assets; older running Hosts need the newly built binary for
-the observation protocol.
+## Resume and scope
 
-Calm Precision's broader acceptance included Rust workspace checks, frontend and
-Chrome scenarios, native R, MCP/HTTP, environment isolation, process recovery and
-local remote-protocol fixtures. Those original logs remain in
-`target/calm-precision-run/checks/`. Skipped external tests are not passes; remote
-protocol fixtures do not establish live SSH/Slurm behavior.
+The built executable is `target/debug/rho`. The acceptance harness uses disposable,
+isolated projects and closes its Hosts. Existing user Hosts and R memory were not
+restarted or replaced. Inspect live ownership, current work, queue and stdin before
+restarting an existing review Host; new query capabilities require the current
+binary and cannot be added by a client refresh.
 
-The fixed gapminder CSV is pinned to upstream version 1.0.1, commit
-`5864ccaf4d4d59ca578c098a1400d2fed20584c0`; source and converted CSV checksums are in
-`ui/e2e/fixtures/gapminder/source.json`. The same scenario imports 1,704 rows,
-transforms/summarizes them, fits an `lm`, and prints scatter/facet/trend plots.
-It uses installed R 4.5.2, dplyr 1.2.1, tibble 3.3.1 and ggplot2 4.0.3.9000.
-The analysis does not install dependencies.
+The earlier user review paths remain `target/calm-precision-project` and
+`target/calm-precision-run/next.sqlite`, with the sibling application store
+`next.studio.sqlite`. They were not used as destructive test fixtures. Ports, PIDs
+and launch tokens are transient and must be observed again. See
+[Operations](OPERATIONS.md) for launching and [Development](DEVELOPMENT.md) for checks.
 
-The Calm Precision acceptance performance run on Apple M4 Pro / 24 GiB, isolated Chrome 152 at
-1440 × 900 and device scale 1, used a 4,000-line file, 200 streamed lines with
-25 ms pauses and eleven existing plots. It recorded 120 input samples: P95 32.9 ms
-from keydown capture to the second animation frame; 192 frame samples had P95
-16.8 ms during typing, wheel zoom and splitter movement. This is a browser
-measurement under the stated workload, separate from native R execution latency.
-Final metrics and 1440 × 900 / 1280 × 800 screenshots are in
-`target/studio-browser/`.
-
-The same native Chrome analysis project was used across a review window exceeding
-30 minutes for import/model/plots, independent Console drafts, cross-view stdin,
-failure pause/resume, inline objects, historical plots and refresh. This is not a
-claim of uninterrupted input or measured performance throughout that window.
-Restarting the review Host with the current binary retained the application store.
-After a saved-file digest check, explicitly running the script in the new R session
-changed its binding count from zero to eight and produced three new plot originals;
-six historical operations remained available. The recovery observation is in
-`target/calm-precision-run/recovery-verification.json`.
-
-Chrome's native IME composition path is exercised through CDP, in addition to
-composition-event regression tests. Native macOS keyboard/menu use and the same
-analysis project have also been inspected through Chrome. On 2026-09-08, after
-reviewing the expected candidate selection, Enter-to-confirm without Console
-submission, and stable Chinese text/cursor behavior, the user reported the manual
-test successful and accepted it. This closes the native OS candidate-window check;
-its evidence is user confirmation, separate from the automated browser composition
-tests. Acceptance applies to the stated scope, not every input method or platform.
-
-## Scope
-
-This round targets macOS Chrome, one local project and one R session. It preserves
-current application data and the existing scientific owner boundaries. Independent
-R sessions, LSP/DAP, full data/package management, Quarto, plugins, a desktop shell
-and distribution remain outside this work. No abandoned implementation data is
-supported. [Scenario plugins](SCENARIO-PLUGINS.md) remain research.
-
-Read-only package inspection is now included; package installation and environment
-management UI remain outside this work.
-
-Current check entry points and prerequisites are in [Development](DEVELOPMENT.md).
-The native capability registry owns exact schemas. Keep new evidence and unresolved
-focus here; do not append another progress ledger or completed-work archive.
+The approved Packages design remains in
+[Paper](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0).
+One local R session, current project data and the existing scientific owners remain
+supported. Core Packages is read-only; viewing does not install, attach or load
+packages or alter library paths. Third-party plugin loading, independent R sessions,
+package management, abandoned-data migrations, installation and publication were
+not added. The pinned Jet core and ordered patches remain intact.

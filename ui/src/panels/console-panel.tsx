@@ -15,12 +15,12 @@ import {
   completionStatus,
 } from "@codemirror/autocomplete";
 import { searchKeymap } from "@codemirror/search";
-import { useStudio } from "../context";
+import { useConsole, useOperations, useSession, useOutputs, useMediaCache, useObjects, usePreferences, useNavigation } from "../context";
+import { mediaKey } from "../output-ports";
 import { Modal } from "../primitives";
-import { message } from "../host-client";
+import { message, sameScope } from "../shared/ports";
 import { locallyIncomplete, rSupport } from "../r-language";
 import { observedText } from "../console-text";
-import type { CodeCompleteness } from "../generated/CodeCompleteness";
 import type { RunROutput } from "../generated/RunROutput";
 const statuses: Record<string, string> = {
   accepted: "Queued",
@@ -32,54 +32,44 @@ const statuses: Record<string, string> = {
   reconciling: "Reconciling",
 };
 class PlotThumbnail extends WidgetType {
+  private mounts = new Map<HTMLElement, () => void>();
   constructor(
-    readonly studio: import("../studio").Studio,
+    readonly cache: ReturnType<typeof useMediaCache>,
+    readonly navigation: ReturnType<typeof useNavigation>,
     readonly reference: import("../generated/MediaReference").MediaReference,
-  ) {
-    super();
-  }
-  eq(other: PlotThumbnail) {
-    return (
-      this.studio.mediaKey(this.reference) ===
-      this.studio.mediaKey(other.reference)
-    );
-  }
+  ) { super(); }
+  eq(other: PlotThumbnail) { return mediaKey(this.reference) === mediaKey(other.reference); }
   toDOM() {
     const button = document.createElement("button");
     button.className = "console-thumbnail";
     button.type = "button";
     button.title = "Show in Plots";
-    button.setAttribute(
-      "aria-label",
-      `Show Plot ${this.reference.sequence} in Plots`,
-    );
-    button.onclick = () => this.studio.locatePlot(this.reference);
+    button.setAttribute("aria-label", `Show Plot ${this.reference.sequence} in Plots`);
+    button.onclick = () => this.navigation.locatePlot(this.reference);
     const img = document.createElement("img");
     img.alt = `R Plot ${this.reference.sequence}`;
     button.append(img);
     const label = document.createElement("span");
     label.textContent = "Show in Plots";
     button.append(label);
-    void this.studio.loadMedia(this.reference).then(() => {
-      const url = this.studio.mediaUrls.get(
-        this.studio.mediaKey(this.reference),
-      );
-      if (url) img.src = url;
-      else
-        label.textContent =
-          this.studio.mediaErrors.get(this.studio.mediaKey(this.reference)) ??
-          "Original unavailable";
-    });
+    const update = () => {
+      const snapshot = this.cache.getSnapshot(), key = mediaKey(this.reference), url = snapshot.urls.get(key);
+      if (url && img.getAttribute("src") !== url) img.src = url;
+      label.textContent = snapshot.errors.get(key) ?? (url ? "Show in Plots" : "Loading original plot…");
+    };
+    this.mounts.set(button, this.cache.subscribe(update));
+    this.cache.load(this.reference);
+    update();
     return button;
   }
-  ignoreEvent() {
-    return true;
-  }
+  destroy(dom: HTMLElement) { this.mounts.get(dom)?.(); this.mounts.delete(dom); }
+  ignoreEvent() { return true; }
 }
 const inputStates = new WeakMap<object, EditorState>();
 export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
-  const s = useStudio("console", "outputs", "preferences", `view:${viewId}`),
-    draft = s.consoleView(viewId),
+  const consoleModel = useConsole(viewId), operations = useOperations(), session = useSession(),
+    outputs = useOutputs(), cache = useMediaCache(), objects = useObjects(), preferences = usePreferences(), navigation = useNavigation(),
+    output = outputs.getSnapshot(), draft = consoleModel.view(viewId), identity = consoleModel.viewIdentity(viewId),
     inputParent = useRef<HTMLDivElement>(null),
     transcriptParent = useRef<HTMLDivElement>(null),
     input = useRef<EditorView | null>(null),
@@ -93,11 +83,16 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     [search, setSearch] = useState(""),
     [newOutput, setNewOutput] = useState(false);
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
+  const renderScope = session.context();
+  const reportError = (error: unknown) => {
+    if (input.current && consoleModel.viewIdentity(viewId) === identity && sameScope(renderScope, session.context(), true)) setError(message(error));
+  };
+  useEffect(() => { setSubmitting(false); setError(""); setAnswer(""); }, [session.epoch, identity]);
   const displayStatus = (
     r: import("../generated/OperationRecord").OperationRecord,
   ) =>
     !r.outcome &&
-    s.consoleState?.pause?.operation_id === r.operation.operation_id
+    consoleModel.consoleState?.pause?.operation_id === r.operation.operation_id
       ? "Unconfirmed"
       : (statuses[r.status] ?? r.status);
   const [answer, setAnswer] = useState(""),
@@ -108,9 +103,9 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
   const historyIndex = useRef(-1),
     historyDraft = useRef(""),
     lastScroll = useRef(draft.scrollTop);
-  const records = [...s.records.values()]
-    .filter((r) => r.operation.capability.id === "workspace.run_r")
-    .sort((a, b) => a.operation.accepted_at_ms - b.operation.accepted_at_ms);
+  const records = [...operations.records.values()]
+    .filter((r) => r.operation.capability.id === "workspace.run_r" && operations.getSummary(r.operation.operation_id))
+    .sort((a, b) => operations.getSummary(a.operation.operation_id)!.cursor - operations.getSummary(b.operation.operation_id)!.cursor);
   let text = "";
   const marks: { from: number; to: number; class: string }[] = [],
     plots: {
@@ -120,7 +115,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     }[] = [];
   for (const record of records) {
     const cleared = record.operation.accepted_at_ms < draft.hiddenBefore;
-    const allEvents = s.outputEvents.get(record.operation.operation_id) ?? [],
+    const allEvents = output.events.get(record.operation.operation_id) ?? [],
       events = cleared
         ? allEvents.filter((e) => e.observed_at_ms >= draft.hiddenBefore)
         : allEvents;
@@ -177,7 +172,8 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
       text += `Error: ${record.error}\n`;
       marks.push({ from, to: text.length, class: "console-error" });
     }
-    if (s.outputNotices.has(id)) text += s.outputNotices.get(id) + "\n";
+    if (output.notices.has(id)) text += output.notices.get(id) + "\n";
+    if (output.errors.has(id)) text += output.errors.get(id) + "\n";
     if (
       !["succeeded", "failed", "cancelled", "uncertain"].includes(record.status)
     )
@@ -206,18 +202,16 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
           keymap.of(searchKeymap),
           EditorView.domEventHandlers({
             scroll: () => {
-              draft.scrollTop = v.scrollDOM.scrollTop;
+              const scrollTop = v.scrollDOM.scrollTop;
               const bottom =
                 v.scrollDOM.scrollHeight -
                   v.scrollDOM.scrollTop -
                   v.scrollDOM.clientHeight <
                 36;
-              if (bottom) draft.follow = true;
-              else if (draft.scrollTop < lastScroll.current - 2)
-                draft.follow = false;
-              lastScroll.current = draft.scrollTop;
-              if (draft.follow) setNewOutput(false);
-              s.persist();
+              const follow = bottom || (scrollTop >= lastScroll.current - 2 && consoleModel.view(viewId).follow);
+              lastScroll.current = scrollTop;
+              consoleModel.updateView(viewId, { scrollTop, follow });
+              if (follow) setNewOutput(false);
             },
             click: (e) => {
               const pos = v.posAtCoords({ x: e.clientX, y: e.clientY });
@@ -225,7 +219,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
                 (p) => pos !== null && pos >= p.from && pos < p.to,
               );
               if (plot) {
-                s.locatePlot(plot.reference);
+                navigation.locatePlot(plot.reference);
                 return true;
               }
               return false;
@@ -237,11 +231,11 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     transcript.current = v;
     v.scrollDOM.scrollTop = draft.scrollTop;
     return () => {
-      draft.scrollTop = v.scrollDOM.scrollTop;
+      consoleModel.updateView(viewId, { scrollTop: v.scrollDOM.scrollTop });
       v.destroy();
       transcript.current = null;
     };
-  }, [draft, s, viewId]);
+  }, [identity, consoleModel, navigation, viewId]);
   useEffect(() => {
     const v = transcript.current;
     if (!v) return;
@@ -266,7 +260,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
         .concat(
           plots.map((p) =>
             Decoration.widget({
-              widget: new PlotThumbnail(s, p.reference),
+              widget: new PlotThumbnail(cache, navigation, p.reference),
               side: 1,
             }).range(p.to - 1),
           ),
@@ -283,18 +277,18 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
       ],
     });
     if (follow) {
-      draft.follow = true;
+      consoleModel.updateView(viewId, { follow: true });
       v.requestMeasure({
         read: () => v.scrollDOM.scrollHeight,
         write: (height) => {
-          if (draft.follow) {
+          if (consoleModel.view(viewId).follow) {
             v.scrollDOM.scrollTop = height;
             lastScroll.current = v.scrollDOM.scrollTop;
           }
         },
       });
     } else setNewOutput(true);
-  }, [text, draft]);
+  }, [text, identity]);
   useEffect(() => {
     const nonce =
       document.querySelector<HTMLMetaElement>('meta[name="rho-csp-nonce"]')
@@ -305,19 +299,19 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
       const at = v.coordsAtPos(range.head),
         boundary = v.coordsAtPos(direction < 0 ? 0 : v.state.doc.length);
       if (at && boundary && Math.abs(at.top - boundary.top) > 2) return false;
-      if (!s.commandHistory.length) return false;
+      if (!consoleModel.commandHistory.length) return false;
       if (historyIndex.current === -1) {
         historyDraft.current = v.state.doc.toString();
-        historyIndex.current = s.commandHistory.length;
+        historyIndex.current = consoleModel.commandHistory.length;
       }
       historyIndex.current = Math.max(
         0,
-        Math.min(s.commandHistory.length, historyIndex.current + direction),
+        Math.min(consoleModel.commandHistory.length, historyIndex.current + direction),
       );
       const code =
-        historyIndex.current === s.commandHistory.length
+        historyIndex.current === consoleModel.commandHistory.length
           ? historyDraft.current
-          : s.commandHistory[historyIndex.current];
+          : consoleModel.commandHistory[historyIndex.current];
       v.dispatch({
         changes: { from: 0, to: v.state.doc.length, insert: code },
         selection: { anchor: direction < 0 ? 0 : code.length },
@@ -326,7 +320,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     };
     const extensions = [
       history(),
-      ...rSupport(() => s.objects?.objects.map((o) => o.name) ?? []),
+      ...rSupport(() => objects.data?.objects.map((o) => o.name) ?? []),
       EditorView.lineWrapping,
       EditorView.cspNonce.of(nonce),
       EditorView.contentAttributes.of({
@@ -367,8 +361,8 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
               });
               return true;
             }
-            if (s.consoleState?.current) {
-              void s.cancel();
+            if (consoleModel.consoleState?.current) {
+              void operations.cancel();
               return true;
             }
             return false;
@@ -384,7 +378,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
       extensions,
       selection: { anchor: draft.anchor ?? 0, head: draft.head ?? 0 },
     });
-    const prior = inputStates.get(draft);
+    const prior = inputStates.get(identity);
     const state = prior
       ? prior.update({ effects: StateEffect.reconfigure.of(extensions) }).state
       : configured;
@@ -393,12 +387,9 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
       state,
       dispatchTransactions(transactions, view) {
         view.update(transactions);
-        inputStates.set(draft, view.state);
-        draft.input = view.state.doc.toString();
-        draft.anchor = view.state.selection.main.anchor;
-        draft.head = view.state.selection.main.head;
-        s.persist();
-        if (transactions.some((t) => t.docChanged)) s.emit(`view:${viewId}`);
+        inputStates.set(identity, view.state);
+        consoleModel.updateView(viewId, { input: view.state.doc.toString(),
+          anchor: view.state.selection.main.anchor, head: view.state.selection.main.head });
       },
     });
     input.current = v;
@@ -423,11 +414,11 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
       );
       v.contentDOM.removeEventListener("compositionend", endComposition, true);
       v.contentDOM.removeEventListener("keydown", captureKey, true);
-      inputStates.set(draft, v.state);
+      inputStates.set(identity, v.state);
       v.destroy();
       input.current = null;
     };
-  }, [s, draft, viewId]);
+  }, [consoleModel, identity, viewId]);
   const replaceInput = (code: string, focus = true) => {
     const v = input.current;
     if (v) {
@@ -446,19 +437,15 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     const v = input.current,
       code = v?.state.doc.toString() ?? "";
     if (!v || v.composing || submitting || !code.trim()) return;
+    const scope = session.context();
     setError("");
     if (!force) {
       let incomplete = locallyIncomplete(code),
         indent = "";
-      if (s.runtime?.state === "idle" && s.project) {
+      if (session.runtime?.state === "idle" && session.project) {
         try {
-          const check = await s.client.query(
-            s.project,
-            "workspace.check_code",
-            { code },
-          );
-          if (check.status === "ready") {
-            const result = check.data as CodeCompleteness;
+          const result = await consoleModel.checkCode(code);
+          if (result) {
             incomplete = result.status === "incomplete";
             indent = result.indent;
           }
@@ -466,7 +453,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
           /* Native execution remains the parser authority. */
         }
       }
-      if (v.state.doc.toString() !== code) return;
+      if (input.current !== v || !sameScope(scope, session.context(), true) || v.state.doc.toString() !== code) return;
       if (incomplete) {
         v.dispatch(v.state.replaceSelection("\n" + indent));
         return;
@@ -474,40 +461,31 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     }
     setSubmitting(true);
     try {
-      await s.run(code, {
-        view_id: viewId,
-        label:
-          viewId === "console"
-            ? "Console"
-            : `Console ${Object.keys(s.consoleViews).indexOf(viewId) + 1}`,
-        kind: "console",
-      });
+      await consoleModel.run(code, viewId);
+      if (input.current !== v || !sameScope(scope, session.context(), true)) return;
       if (v.state.doc.toString() === code) replaceInput("", v.hasFocus);
-      if (v.hasFocus && s.consoleState?.input && !draft.input) {
+      if (v.hasFocus && consoleModel.consoleState?.input && !draft.input) {
         setAnswerHere(true);
         requestAnimationFrame(() => responseField.current?.focus());
       }
-      if (s.commandHistory.at(-1) !== code)
-        s.commandHistory = [...s.commandHistory.slice(-499), code];
       historyIndex.current = -1;
-      s.persist();
     } catch (e) {
-      setError(message(e));
+      if (input.current === v && sameScope(scope, session.context(), true)) setError(message(e));
     } finally {
-      setSubmitting(false);
+      if (input.current === v && sameScope(scope, session.context(), true)) setSubmitting(false);
     }
   }
   submit.current = (force) => {
     void run(force);
   };
-  const pendingInput = s.consoleState?.input;
+  const pendingInput = consoleModel.consoleState?.input;
   useEffect(() => {
     setAnswer("");
     setAnswerHere(false);
     if (
       pendingInput &&
       !pendingInput.submitted &&
-      s.consoleState?.current?.source?.view_id === viewId &&
+      consoleModel.consoleState?.current?.source?.view_id === viewId &&
       input.current?.hasFocus &&
       !draft.input
     ) {
@@ -516,21 +494,14 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     }
   }, [pendingInput?.request_id]);
   async function respond() {
-    if (!pendingInput || !s.project) return;
+    if (!pendingInput || !session.project) return;
+    const scope = session.context(), requestId = pendingInput.request_id;
+    const current = () => input.current && sameScope(scope, session.context(), true) && consoleModel.consoleState?.input?.request_id === requestId;
     try {
-      await s.client.respondInput(s.project, {
-        session_id: pendingInput.session_id,
-        operation_id: pendingInput.operation_id,
-        request_id: pendingInput.request_id,
-        reply_id: crypto.randomUUID(),
-        value: answer,
-      });
-      setAnswer("");
-      await s.refreshConsole();
+      await consoleModel.respond(answer);
+      if (current()) setAnswer("");
     } catch (e) {
-      setAnswer("");
-      setError(message(e));
-      await s.refreshConsole();
+      if (current()) { setAnswer(""); setError(message(e)); }
     }
   }
   return (
@@ -539,7 +510,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
       data-console-view={viewId}
       style={
         {
-          "--console-font-size": `${s.preferences.editorFontSize}px`,
+          "--console-font-size": `${preferences.editorFontSize}px`,
         } as CSSProperties
       }
     >
@@ -551,19 +522,19 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
               ? pendingInput.submitted
                 ? "Answer submitted · Waiting for R"
                 : "R needs input"
-              : s.consoleState?.current
+              : consoleModel.consoleState?.current
                 ? "Running"
-                : s.consoleState?.pause
+                : consoleModel.consoleState?.pause
                   ? "Queue paused"
-                  : s.runtime?.state === "idle"
+                  : session.runtime?.state === "idle"
                     ? "Ready"
-                    : s.runtime?.state === "busy"
+                    : session.runtime?.state === "busy"
                       ? "R busy"
                       : "R unavailable"}
         </span>
         <div className="spacer" />
         <button onClick={() => setDialog("queue")}>
-          Queue {s.consoleState?.pending.length ?? 0}
+          Queue {consoleModel.consoleState?.pending.length ?? 0}
         </button>
         <button
           aria-label="Command History"
@@ -575,8 +546,8 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
           Details
         </button>
         <button
-          disabled={!s.consoleState?.current}
-          onClick={() => void s.cancel()}
+          disabled={!consoleModel.consoleState?.current}
+          onClick={() => void operations.cancel()}
         >
           Interrupt
         </button>
@@ -586,7 +557,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
         <button
           className="new-output"
           onClick={() => {
-            draft.follow = true;
+            consoleModel.updateView(viewId, { follow: true });
             setNewOutput(false);
             const v = transcript.current;
             if (v) v.scrollDOM.scrollTop = v.scrollDOM.scrollHeight;
@@ -595,16 +566,16 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
           New Output ↓
         </button>
       )}
-      {s.consoleState?.pause && (
+      {consoleModel.consoleState?.pause && (
         <div className="queue-notice">
-          {s.consoleState.pause.reason}
-          {s.consoleState.pause.operation_id && (
+          {consoleModel.consoleState.pause.reason}
+          {consoleModel.consoleState.pause.operation_id && (
             <button
               onClick={() => {
-                const id = s.consoleState!.pause!.operation_id!;
+                const id = consoleModel.consoleState!.pause!.operation_id!;
                 setDetailsFor(id);
                 setDialog("details");
-                void s.reviewOperation(id);
+                void operations.reviewOperation(id);
               }}
             >
               Inspect Stopped Run
@@ -612,7 +583,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
           )}
           <button
             onClick={() =>
-              void s.queueControl(false).catch((e) => setError(message(e)))
+              void consoleModel.queueControl(false).catch(reportError)
             }
           >
             Resume Queue
@@ -655,12 +626,12 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
           )}
         </div>
       )}
-      {error && (
+      {(error || consoleModel.getSnapshot().error || operations.getSnapshot().error) && (
         <div className="document-error" role="alert">
-          {error}
+          {error || consoleModel.getSnapshot().error || operations.getSnapshot().error}
         </div>
       )}
-      {s.pending.some((p) => p.error) && (
+      {operations.pending.some((p) => p.error) && (
         <div className="queue-notice">
           Some requests are unconfirmed.
           <button onClick={() => setDialog("details")}>Review Requests</button>
@@ -671,19 +642,17 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
         <div className="console-input" ref={inputParent} />
         <button
           className="primary"
-          disabled={submitting || !s.canRun || !draft.input.trim()}
+          disabled={submitting || !operations.canRun || !draft.input.trim()}
           onClick={() => void run(true)}
         >
-          {s.queueing ? "Queue" : "Run"}
+          {operations.queueing ? "Queue" : "Run"}
         </button>
       </div>
       <div className="panel-footer">
         <span>Shared R session</span>
         <button
           onClick={() => {
-            draft.hiddenBefore = Date.now();
-            s.persist();
-            s.emit("console");
+            consoleModel.clearView(viewId);
           }}
         >
           Clear View
@@ -715,7 +684,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
                 onChange={(e) => setSearch(e.target.value)}
               />
               <div className="command-list">
-                {[...s.commandHistory]
+                {[...consoleModel.commandHistory]
                   .reverse()
                   .filter((code) =>
                     code.toLowerCase().includes(search.toLowerCase()),
@@ -726,7 +695,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
                       onClick={() => {
                         historyDraft.current = draft.input;
                         historyIndex.current =
-                          s.commandHistory.lastIndexOf(code);
+                          consoleModel.commandHistory.lastIndexOf(code);
                         replaceInput(code);
                         setDialog(null);
                       }}
@@ -740,21 +709,21 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
             <>
               <button
                 onClick={() =>
-                  void s
-                    .queueControl(!s.consoleState?.pause)
-                    .catch((e) => setError(message(e)))
+                  void consoleModel
+                    .queueControl(!consoleModel.consoleState?.pause)
+                    .catch(reportError)
                 }
               >
-                {s.consoleState?.pause ? "Resume Queue" : "Pause Queue"}
+                {consoleModel.consoleState?.pause ? "Resume Queue" : "Pause Queue"}
               </button>
               <button
                 onClick={() =>
-                  void s.cancelPending().catch((e) => setError(message(e)))
+                  void consoleModel.cancelPending().catch(reportError)
                 }
               >
                 Cancel Pending Runs
               </button>
-              {s.consoleState?.pending.map((run, i) => (
+              {consoleModel.consoleState?.pending.map((run, i) => (
                 <div className="queue-row" key={run.operation_id}>
                   <span>
                     {i + 1}. {run.source?.label ?? "R request"}
@@ -762,19 +731,19 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
                   <pre>{run.summary}</pre>
                   <button
                     onClick={() =>
-                      void s
+                      void consoleModel
                         .cancelPending(run.operation_id)
-                        .catch((e) => setError(message(e)))
+                        .catch(reportError)
                     }
                   >
                     Cancel Pending
                   </button>
                   <button
                     onClick={() => {
-                      void s
+                      void operations
                         .reviewOperation(run.operation_id)
                         .then(() => {
-                          const args = s.records.get(run.operation_id)
+                          const args = operations.records.get(run.operation_id)
                             ?.operation.normalized_arguments as
                             | { code?: string }
                             | undefined;
@@ -785,7 +754,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
                           replaceInput(args.code);
                           setDialog(null);
                         })
-                        .catch((error) => setError(message(error)));
+                        .catch(reportError);
                     }}
                   >
                     Copy to Console
@@ -795,26 +764,25 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
             </>
           ) : (
             <>
-              <button onClick={() => void s.loadRecent(true)}>
+              <button onClick={() => void operations.loadRecent(true).catch(reportError)}>
                 Load Earlier Runs
               </button>
               <button
                 onClick={() => {
-                  draft.hiddenBefore = 0;
-                  s.emit("console");
+                  consoleModel.showHistory(viewId);
                 }}
               >
                 Show Cleared History
               </button>
-              {s.pending
+              {operations.pending
                 .filter((p) => p.error)
                 .map((p) => (
                   <div key={p.invocation.client_request_id}>
                     <p>{p.error}</p>
-                    <button onClick={() => void s.observe()}>
+                    <button onClick={() => void operations.reconcilePending().catch(reportError)}>
                       Check Original Request
                     </button>
-                    <button onClick={() => void s.retryPending(p)}>
+                    <button onClick={() => void operations.retryPending(p).catch(reportError)}>
                       Retry Original Request (Same ID)
                     </button>
                   </div>
@@ -829,6 +797,12 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
                     {new Date(r.operation.accepted_at_ms).toLocaleString()}
                   </summary>
                   <pre>{JSON.stringify(r, null, 2)}</pre>
+                  {(output.notices.has(r.operation.operation_id) || output.errors.has(r.operation.operation_id)) && (
+                    <div className="queue-notice">
+                      {output.errors.get(r.operation.operation_id) || output.notices.get(r.operation.operation_id)}
+                      <button onClick={() => outputs.retry(r.operation.operation_id)}>Retry Output</button>
+                    </div>
+                  )}
                   <button
                     onClick={() => {
                       replaceInput(

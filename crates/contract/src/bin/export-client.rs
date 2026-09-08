@@ -36,6 +36,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ProjectPatchResult::export_all(&config)?;
     RecentOperations::export_all(&config)?;
     RecentOperationsArguments::export_all(&config)?;
+    OperationEventsCheckpoint::export_all(&config)?;
+    OperationEventsCheckpointArguments::export_all(&config)?;
     OutputEvents::export_all(&config)?;
     OutputEventsArguments::export_all(&config)?;
     ReadOutputArguments::export_all(&config)?;

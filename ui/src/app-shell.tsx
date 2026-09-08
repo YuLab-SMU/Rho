@@ -1,36 +1,39 @@
 import { useEffect, useRef, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Icon } from "./icons";
-import { Actions } from "flexlayout-react";
-import { Commands, documentCommand } from "./commands";
-import { message } from "./host-client";
+import { Commands } from "./commands";
+import { message, sameScope } from "./shared/ports";
 import { Modal } from "./primitives";
-import { DocumentPanel, EditorHub } from "./panels/editor-panel";
 import {
-  FilesPanel,
-  ObjectsPanel,
-  ObjectViewer,
-} from "./panels/resource-panels";
-import { useStudio } from "./context";
-import { PackagesPanel } from "./panels/packages-panel";
-import { ConsolePanel, PlotPanel } from "./panels/output-panels";
-import { LayoutHost, PanelLayout, panelNames } from "./layout-host";
+  useSession, useOperations, useConsole, useDocuments, usePreferences,
+  usePersistence, useLayout, useNavigation, startStudio, stopStudio,
+} from "./context";
+import { LayoutHost } from "./layout-host";
+import { panelNames } from "./builtin-panels";
+import type { DocumentAction, Dialog } from "./navigation";
 import type { RProbe } from "./generated/RProbe";
 
 function ProjectDialog({ onClose }: { onClose: () => void }) {
-  const s = useStudio(),
-    [path, setPath] = useState(s.project ?? ""),
+  const session = useSession(),
+    [path, setPath] = useState(session.project ?? ""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const mounted = useRef(true), request = useRef(0);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; request.current++; };
+  }, []);
   async function open(value: string) {
-    setBusy(true);
+    const generation = ++request.current, epoch = session.epoch;
+    const current = () => mounted.current && generation === request.current && session.epoch >= epoch && session.epoch <= epoch + 1;
+    setBusy(true); setError("");
     try {
-      await s.selectProject(value);
-      onClose();
-    } catch (e) {
-      setError(message(e));
+      await session.selectProject(value);
+      if (current()) onClose();
+    } catch (error) {
+      if (current()) setError(message(error));
     } finally {
-      setBusy(false);
+      if (current()) setBusy(false);
     }
   }
   return (
@@ -63,11 +66,11 @@ function ProjectDialog({ onClose }: { onClose: () => void }) {
           {error}
         </p>
       )}
-      {!!s.recent.length && (
+      {!!session.recent.length && (
         <>
           <h3>Recent Projects</h3>
           <div className="recent">
-            {s.recent.map((p) => (
+            {session.recent.map((p) => (
               <button key={p} disabled={busy} onClick={() => void open(p)}>
                 {p}
               </button>
@@ -79,38 +82,53 @@ function ProjectDialog({ onClose }: { onClose: () => void }) {
   );
 }
 function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const s = useStudio(),
+  const session = useSession(), preferences = usePreferences(),
     [selection, setSelection] = useState(
-      s.r?.current?.selection ??
-        s.r?.candidates[0] ?? { executable: "", ark: "" },
+      session.r?.current?.selection ??
+        session.r?.candidates[0] ?? { executable: "", ark: "" },
     );
-  const [probe, setProbe] = useState<RProbe | null>(s.r?.current ?? null),
+  const [probe, setProbe] = useState<RProbe | null>(session.r?.current ?? null),
     [confirmed, setConfirmed] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const mounted = useRef(true), request = useRef(0);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; request.current++; };
+  }, []);
+  function updateSelection(value: typeof selection) {
+    request.current++; setBusy(false); setSelection(value); setProbe(null);
+  }
   async function check() {
-    setBusy(true);
-    setError("");
+    const generation = ++request.current, scope = session.context();
+    const current = () => mounted.current && generation === request.current && sameScope(scope, session.context());
+    setBusy(true); setError("");
     try {
-      setProbe(await s.client.probeR(selection));
-    } catch (e) {
-      setError(message(e));
+      const result = await session.probeR(selection);
+      if (current()) setProbe(result);
+    } catch (error) {
+      if (current()) setError(message(error));
     } finally {
-      setBusy(false);
+      if (current()) setBusy(false);
     }
   }
   async function apply() {
-    setBusy(true);
-    setError("");
+    const generation = ++request.current, scope = session.context();
+    const current = () => mounted.current && generation === request.current && session.project === scope.project && session.epoch >= scope.epoch && session.epoch <= scope.epoch + 1;
+    setBusy(true); setError("");
     try {
-      s.r = await s.client.applyR(selection, confirmed);
-      await s.refreshInfo();
-      setError(s.r?.error ?? "");
-    } catch (e) {
-      setError(message(e));
+      await session.applyR(selection, confirmed);
+      if (current()) setError(session.r?.error ?? "");
+    } catch (error) {
+      if (current()) setError(message(error));
     } finally {
-      setBusy(false);
+      if (current()) setBusy(false);
     }
+  }
+  async function savePreferences(change: { editorFontSize?: number; indentWidth?: number }) {
+    const scope = session.context();
+    try { await preferences.setPreferences(change); }
+    catch (error) { if (mounted.current && sameScope(scope, session.context())) setError(message(error)); }
   }
   return (
     <Modal
@@ -123,13 +141,9 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           Code Font Size
           <select
             aria-label="Code Font Size"
-            value={s.preferences.editorFontSize}
+            value={preferences.editorFontSize}
             onChange={(e) =>
-              void s
-                .setPreferences({
-                  editorFontSize: Number(e.target.value),
-                })
-                .catch((e) => setError(message(e)))
+              void savePreferences({ editorFontSize: Number(e.target.value) })
             }
           >
             {[12, 14, 16, 18].map((size) => (
@@ -143,13 +157,9 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           Indent Width
           <select
             aria-label="Indent Width"
-            value={s.preferences.indentWidth}
+            value={preferences.indentWidth}
             onChange={(e) =>
-              void s
-                .setPreferences({
-                  indentWidth: Number(e.target.value),
-                })
-                .catch((e) => setError(message(e)))
+              void savePreferences({ indentWidth: Number(e.target.value) })
             }
           >
             {[2, 4, 8].map((size) => (
@@ -160,22 +170,21 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           </select>
         </label>
       </div>
-      {!!s.r?.candidates.length && (
+      {!!session.r?.candidates.length && (
         <label>
           Discovered R Installations
           <select
             value={selection.executable}
             onChange={(e) => {
-              const next = s.r!.candidates.find(
+              const next = session.r!.candidates.find(
                 (c) => c.executable === e.target.value,
               );
               if (next) {
-                setSelection(next);
-                setProbe(null);
+                updateSelection(next);
               }
             }}
           >
-            {s.r.candidates.map((c) => (
+            {session.r.candidates.map((c) => (
               <option key={c.executable}>{c.executable}</option>
             ))}
           </select>
@@ -186,8 +195,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
         <input
           value={selection.executable}
           onChange={(e) => {
-            setSelection({ ...selection, executable: e.target.value });
-            setProbe(null);
+            updateSelection({ ...selection, executable: e.target.value });
           }}
         />
       </label>
@@ -196,8 +204,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
         <input
           value={selection.ark}
           onChange={(e) => {
-            setSelection({ ...selection, ark: e.target.value });
-            setProbe(null);
+            updateSelection({ ...selection, ark: e.target.value });
           }}
         />
       </label>
@@ -220,7 +227,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       )}
-      {s.project && (
+      {session.project && (
         <label className="checkbox">
           <input
             type="checkbox"
@@ -232,7 +239,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
       )}
       <button
         className="primary"
-        disabled={busy || !probe?.usable || (!!s.project && !confirmed)}
+        disabled={busy || !probe?.usable || (!!session.project && !confirmed)}
         onClick={() => void apply()}
       >
         Apply and Start R
@@ -246,24 +253,30 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
   );
 }
 export function AppShell() {
-  const s = useStudio(),
-    [dialog, setDialog] = useState<
-      "project" | "settings" | "commands" | "conflict" | "open-file" | null
-    >(null),
-    layout = useRef<PanelLayout | null>(null);
+  const session = useSession(), operations = useOperations(), consoleModel = useConsole(),
+    documents = useDocuments(), persistence = usePersistence(), layout = useLayout(), navigation = useNavigation();
+  const dialog = navigation.getSnapshot().dialog;
+  const setDialog = (value: Dialog) => navigation.setDialog(value);
+  const layoutState = layout.getSnapshot();
   const [filePath, setFilePath] = useState(""),
     [fileError, setFileError] = useState(""),
     [commandFilter, setCommandFilter] = useState("");
   const commands = useRef(new Commands()).current;
-  s.openFile = () => setDialog("open-file");
-  s.openSettings = () => setDialog("settings");
-  s.openPanels = () => setDialog("commands");
-  const active = () => s.documents.current;
-  const dispatchDocument = (action: string) => {
+  const mounted = useRef(true), request = useRef(0);
+  useEffect(() => {
+    request.current++; setFileError("");
+    return () => { request.current++; };
+  }, [dialog, session.epoch]);
+  const guard = () => {
+    const generation = ++request.current, scope = session.context();
+    return () => mounted.current && generation === request.current && sameScope(scope, session.context());
+  };
+  const active = () => documents.current;
+  const dispatchDocument = (action: DocumentAction) => {
     const d = active();
     if (d) {
-      s.documents.focus(d);
-      requestAnimationFrame(() => documentCommand(d.id, action));
+      documents.focus(d);
+      navigation.documentCommand(d.id, action);
     }
   };
   commands.entries = [
@@ -271,16 +284,16 @@ export function AppShell() {
       id: "file.new",
       label: "New R File",
       group: "File",
-      enabled: () => !!s.project,
+      enabled: () => session.ready && !!session.project,
       run: () => {
-        s.documents.create();
+        documents.create();
       },
     },
     {
       id: "file.open",
       label: "Open File…",
       group: "File",
-      enabled: () => !!s.project,
+      enabled: () => session.ready && !!session.project,
       run: () => setDialog("open-file"),
     },
     {
@@ -288,57 +301,57 @@ export function AppShell() {
       label: "Save",
       group: "File",
       shortcut: "⌘ S",
-      enabled: () => !!active() && s.documents.canSave(active()!),
+      enabled: () => session.ready && !!active() && documents.canSave(active()!),
       run: () => dispatchDocument("save"),
     },
     {
       id: "file.project",
       label: "Open Project…",
       group: "File",
-      enabled: () => !s.busy,
+      enabled: () => !operations.busy,
       run: () => setDialog("project"),
     },
     {
       id: "edit.undo",
       label: "Undo Code Edit",
       group: "Edit",
-      enabled: () => !!active(),
+      enabled: () => session.ready && !!active(),
       run: () => dispatchDocument("undo"),
     },
     {
       id: "view.undo",
       label: "Undo Layout Change",
       group: "View",
-      enabled: () => !!layout.current?.history.length,
-      run: () => layout.current?.undo(),
+      enabled: () => layoutState.canUndo,
+      run: () => layout.undo(),
     },
     {
       id: "view.reset",
       label: "Reset Layout",
       group: "View",
-      enabled: () => !!s.project,
-      run: () => layout.current?.reset(),
+      enabled: () => session.ready && !!session.project,
+      run: () => layout.reset(),
     },
     {
       id: "view.close",
       label: "Close View",
       group: "View",
-      enabled: () => !!layout.current?.activeTab,
-      run: () => layout.current?.close(layout.current.activeTab!.getId()),
+      enabled: () => !!layoutState.activeTabId,
+      run: () => layout.closeActive(),
     },
     {
       id: "view.console",
       label: "New Console View",
       group: "View",
-      enabled: () => !!s.project,
-      run: () => s.newConsole(),
+      enabled: () => session.ready && !!session.project,
+      run: () => consoleModel.newConsole(),
     },
     {
       id: "session.selection",
       label: "Run Line / Selection",
       group: "Session",
       shortcut: "⌘ Enter",
-      enabled: () => !!active() && s.documents.canRunSelection(active()!),
+      enabled: () => session.ready && !!active() && documents.canRunSelection(active()!),
       run: () => dispatchDocument("runSelection"),
     },
     {
@@ -346,16 +359,16 @@ export function AppShell() {
       label: "Run File",
       group: "Session",
       shortcut: "⌘ ⇧ Enter",
-      enabled: () => !!active() && s.documents.canRunFile(active()!),
+      enabled: () => session.ready && !!active() && documents.canRunFile(active()!),
       run: () => dispatchDocument("runFile"),
     },
     {
       id: "session.interrupt",
       label: "Interrupt",
       group: "Session",
-      enabled: () => s.busy,
+      enabled: () => operations.busy,
       run: () => {
-        void s.cancel();
+        void operations.cancel();
       },
     },
     {
@@ -367,19 +380,20 @@ export function AppShell() {
     },
   ];
   useEffect(() => {
-    void s.start();
+    mounted.current = true;
+    void startStudio();
     const leave = (e: BeforeUnloadEvent) => {
-      if (s.unsynced) {
+      if (persistence.unsynced) {
         e.preventDefault();
         e.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", leave);
     return () => {
-      s.stop();
+      mounted.current = false; request.current++; stopStudio();
       window.removeEventListener("beforeunload", leave);
     };
-  }, [s]);
+  }, [persistence]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (
@@ -399,7 +413,7 @@ export function AppShell() {
         !document.activeElement?.closest(".document-panel")
       )
         return;
-      if (dialog || !s.documents.current || !["s", "Enter"].includes(e.key))
+      if (dialog || !documents.current || !["s", "Enter"].includes(e.key))
         return;
       e.preventDefault();
       commands.execute(
@@ -412,7 +426,7 @@ export function AppShell() {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [dialog, s]);
+  }, [dialog, documents, commands]);
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -420,7 +434,7 @@ export function AppShell() {
         <span className="divider" />
         <button className="project-button" onClick={() => setDialog("project")}>
           <Icon name="folder" />{" "}
-          <span>{s.project?.split("/").at(-1) ?? "Open Project"}</span>
+          <span>{session.project?.split("/").at(-1) ?? "Open Project"}</span>
           <small>⌄</small>
         </button>
         {(["File", "Edit", "View", "Session"] as const).map((group) => (
@@ -451,7 +465,7 @@ export function AppShell() {
           <Menu.Portal>
             <Menu.Content className="menu" sideOffset={6}>
               {Object.entries(panelNames).map(([id, name]) => (
-                <Menu.Item key={id} onSelect={() => layout.current?.show(id)}>
+                <Menu.Item key={id} onSelect={() => layout.show(id)}>
                   {name}
                 </Menu.Item>
               ))}
@@ -467,51 +481,14 @@ export function AppShell() {
         </button>
       </header>
       <div className="work-area">
-        {s.project ? (
+        {session.project && !session.ready ? (
+          <main className="welcome"><p className="muted" role="status">Opening project…</p></main>
+        ) : session.project ? (
           <LayoutHost
-            key={s.project}
-            studio={s}
-            onLayout={(l) => {
-              layout.current = l;
-              s.renameView = (id, name) => {
-                if (l.model.getNodeById(id))
-                  l.model.doAction(Actions.renameTab(id, name));
-                if (s.knownViews[id]) s.knownViews[id].name = name;
-              };
-              s.showPanel = (component, id, name, config) => {
-                l.show(component, id, name, config);
-                requestAnimationFrame(() =>
-                  document
-                    .querySelector<HTMLElement>(
-                      `[data-rho-view="${CSS.escape(id ?? component)}"]`,
-                    )
-                    ?.closest(".flexlayout__tabset")
-                    ?.scrollIntoView({ block: "nearest", inline: "nearest" }),
-                );
-              };
-            }}
-            registry={(node) => {
-              switch (node.getComponent()) {
-                case "console":
-                  return <ConsolePanel viewId={node.getId()} />;
-                case "plots":
-                  return <PlotPanel viewId={node.getId()} />;
-                case "editor":
-                  return <EditorHub />;
-                case "document":
-                  return <DocumentPanel documentId={node.getId()} />;
-                case "files":
-                  return <FilesPanel />;
-                case "packages":
-                  return <PackagesPanel />;
-                case "objects":
-                  return <ObjectsPanel />;
-                case "viewer":
-                  return <ObjectViewer name={node.getConfig()?.name ?? ""} />;
-                default:
-                  return <div className="empty">View unavailable</div>;
-              }
-            }}
+            key={session.project}
+            layout={layout}
+            documentTabs={new Map([...documents.items].map(([id, d]) => [id, { name: d.name, dirty: d.dirty, readonly: !!d.draft.readonly }]))}
+            navigation={navigation}
           />
         ) : (
           <main className="welcome">
@@ -522,14 +499,11 @@ export function AppShell() {
               Open Project
             </button>
             <button onClick={() => setDialog("settings")}>Configure R</button>
-            {s.recent.map((p) => (
+            {session.recent.map((p) => (
               <button
                 key={p}
                 onClick={() =>
-                  void s.selectProject(p).catch((e) => {
-                    s.error = message(e);
-                    s.emit();
-                  })
+                  void session.selectProject(p).catch(() => {})
                 }
               >
                 {p}
@@ -538,13 +512,13 @@ export function AppShell() {
           </main>
         )}
       </div>
-      {(s.error || s.syncError) && (
+      {(session.error || persistence.syncError || layoutState.error) && (
         <div className="notice" role="alert">
-          <span>{s.syncError || s.error}</span>
-          {s.syncError && (
-            <button onClick={() => void s.flush()}>Retry Draft Sync</button>
+          <span>{persistence.syncError || session.error || layoutState.error}</span>
+          {persistence.syncError && (
+            <button onClick={() => void persistence.flush()}>Retry Draft Sync</button>
           )}
-          {s.stateConflict && (
+          {persistence.stateConflict && (
             <button onClick={() => setDialog("conflict")}>
               Resolve Window Conflict
             </button>
@@ -552,8 +526,8 @@ export function AppShell() {
           <button
             aria-label="Dismiss Notice"
             onClick={() => {
-              s.error = "";
-              s.emit();
+              session.dismissError();
+              layout.dismissError();
             }}
           >
             ×
@@ -562,55 +536,55 @@ export function AppShell() {
       )}
       <footer className="statusbar">
         <button onClick={() => setDialog("settings")}>
-          <i className={s.connected ? "dot" : "dot offline"} />
-          Local R {s.r?.current?.version ?? "Not configured"}
+          <i className={session.connected ? "dot" : "dot offline"} />
+          Local R {session.r?.current?.version ?? "Not configured"}
         </button>
         <span>
-          {s.connected
-            ? s.consoleState?.input
+          {session.connected
+            ? consoleModel.consoleState?.input
               ? "Waiting for input"
-              : s.consoleState?.pause
+              : consoleModel.consoleState?.pause
                 ? "Queue paused"
-                : s.consoleState?.current
-                  ? s.records.get(s.consoleState.current.operation_id)
+                : consoleModel.consoleState?.current
+                  ? operations.records.get(consoleModel.consoleState.current.operation_id)
                       ?.status === "running"
                     ? "Running"
                     : "Queued"
-                  : s.runtime?.state === "idle"
+                  : session.runtime?.state === "idle"
                     ? "Idle"
-                    : s.runtime?.state === "busy"
+                    : session.runtime?.state === "busy"
                       ? "Running"
                       : "Unavailable"
             : "Disconnected"}
         </span>
         <button
           onClick={() => {
-            const source = s.consoleState?.current?.source;
-            s.showPanel?.(
+            const source = consoleModel.consoleState?.current?.source;
+            navigation.showPanel(
               "console",
               source?.kind === "console" ? source.view_id : "console",
               source?.kind === "console" ? source.label : "Console",
             );
           }}
         >
-          {s.consoleState?.input
+          {consoleModel.consoleState?.input
             ? "Answer R Input"
-            : `${s.consoleState?.pending.length ?? 0} queued`}
-          {s.consoleState?.pause ? " · Paused" : ""}
+            : `${consoleModel.consoleState?.pending.length ?? 0} queued`}
+          {consoleModel.consoleState?.pause ? " · Paused" : ""}
         </button>
-        <span className="secondary" title={s.runtime?.notices.join("\n")}>
+        <span className="secondary" title={session.runtime?.notices.join("\n")}>
           Memory{" "}
-          {s.runtime?.processes[0]?.memory_bytes == null
+          {session.runtime?.processes[0]?.memory_bytes == null
             ? "Unknown"
-            : `${(s.runtime.processes[0].memory_bytes / 1048576).toFixed(0)} MiB`}
+            : `${(session.runtime.processes[0].memory_bytes / 1048576).toFixed(0)} MiB`}
           　CPU{" "}
-          {s.runtime?.processes[0]?.cpu_percent == null
+          {session.runtime?.processes[0]?.cpu_percent == null
             ? "Unknown"
-            : `${s.runtime.processes[0].cpu_percent.toFixed(1)}%`}
+            : `${session.runtime.processes[0].cpu_percent.toFixed(1)}%`}
         </span>
         <div className="spacer" />
-        <span className="project-path">{s.project}</span>
-        <span>{s.unsynced ? "Draft sync pending" : "Draft synced"}</span>
+        <span className="project-path">{session.project}</span>
+        <span>{persistence.unsynced ? "Draft sync pending" : "Draft synced"}</span>
         <button onClick={() => setDialog("settings")}>Environment</button>
       </footer>
       {dialog === "open-file" && (
@@ -623,10 +597,10 @@ export function AppShell() {
             onSubmit={(e) => {
               e.preventDefault();
               setFileError("");
-              void s.documents
-                .open(filePath)
-                .then(() => setDialog(null))
-                .catch((e) => setFileError(message(e)));
+              const current = guard();
+              void documents.open(filePath)
+                .then(() => { if (current()) setDialog(null); })
+                .catch((error) => { if (current()) setFileError(message(error)); });
             }}
           >
             <label>
@@ -655,7 +629,7 @@ export function AppShell() {
       {dialog === "settings" && (
         <SettingsDialog onClose={() => setDialog(null)} />
       )}
-      {dialog === "conflict" && s.stateConflict && (
+      {dialog === "conflict" && persistence.stateConflict && (
         <Modal
           title="Shared drafts changed in another window"
           description="Your edits are retained. Compare both states before replacing shared drafts. Project files are unaffected."
@@ -665,7 +639,7 @@ export function AppShell() {
             <div>
               This Window
               <pre>
-                {JSON.stringify(s.documents.serialize(), null, 2).slice(
+                {JSON.stringify(documents.serialize(), null, 2).slice(
                   0,
                   12000,
                 )}
@@ -674,16 +648,16 @@ export function AppShell() {
             <div>
               Synced State
               <pre>
-                {JSON.stringify(s.stateConflict.value, null, 2).slice(0, 12000)}
+                {JSON.stringify(persistence.stateConflict.value, null, 2).slice(0, 12000)}
               </pre>
             </div>
           </div>
           <button
             className="primary"
             onClick={() => {
-              void s
-                .replaceSharedDrafts(s.stateConflict!)
-                .then(() => setDialog(null));
+              const current = guard();
+              void persistence.replaceSharedDrafts(persistence.stateConflict!)
+                .then(() => { if (current()) setDialog(null); });
             }}
           >
             Use this window’s drafts and layout
@@ -730,18 +704,18 @@ export function AppShell() {
                 <button
                   key={id}
                   onClick={() => {
-                    layout.current?.show(id);
+                    layout.show(id);
                     setDialog(null);
                   }}
                 >
                   Show {name}
                 </button>
               ))}
-            {[...s.documents.items.values()].map((d) => (
+            {[...documents.items.values()].map((d) => (
               <button
                 key={d.id}
                 onClick={() => {
-                  s.documents.focus(d);
+                  documents.focus(d);
                   setDialog(null);
                 }}
               >
@@ -749,7 +723,7 @@ export function AppShell() {
                 {d.dirty ? " · Unsaved" : ""}
               </button>
             ))}
-            {Object.entries(s.knownViews)
+            {Object.entries(layoutState.knownViews)
               .filter(
                 ([id, v]) =>
                   ["console", "plots", "viewer"].includes(v.component) &&
@@ -759,7 +733,7 @@ export function AppShell() {
                 <button
                   key={id}
                   onClick={() => {
-                    layout.current?.show(v.component, id, v.name, v.config);
+                    layout.show(v.component, id, v.name, v.config);
                     setDialog(null);
                   }}
                 >

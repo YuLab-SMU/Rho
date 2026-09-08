@@ -1,21 +1,16 @@
 import {
   Actions,
   DockLocation,
-  Model,
+  Model as FlexModel,
   RowNode,
   TabNode,
   TabSetNode,
 } from "flexlayout-react";
 import type { Action, IJsonModel, Node } from "flexlayout-react";
-import type { Studio } from "./studio";
-export const panelNames: Record<string, string> = {
-  files: "Files",
-  editor: "Editor",
-  console: "Console",
-  objects: "Objects",
-  packages: "Packages",
-  plots: "Plots",
-};
+import { immutable, Model, readonlySet } from "./shared/model";
+import { builtinPanels, isBuiltinPanel, panelNames } from "./builtin-panels";
+import type { PanelInstance } from "./builtin-panels";
+export { panelNames } from "./builtin-panels";
 export const directions = {
   Left: DockLocation.LEFT,
   Right: DockLocation.RIGHT,
@@ -28,9 +23,7 @@ export interface Placement {
   group?: string;
   neighbors: string[];
 }
-export function defaultLayout(
-  width = typeof window === "undefined" ? 1440 : window.innerWidth,
-): IJsonModel {
+export function defaultLayout(width = 1440): IJsonModel {
   const files = width < 1360 ? 200 : 220,
     right = width < 1360 ? 320 : 360;
   const group = (id: string, weight: number, minWidth = 200) => ({
@@ -86,17 +79,84 @@ export function regionName(node: Node): string {
     ? node.getName()
     : node.getChildren().map(regionName).filter(Boolean).join(" + ");
 }
-export class PanelLayout {
-  model: Model;
-  history: IJsonModel[] = [];
+export interface LayoutSnapshot {
+  readonly knownViews: Readonly<Record<string, Omit<PanelInstance, "id">>>;
+  readonly closedViews: ReadonlySet<string>;
+  readonly closeVersion: number;
+  readonly activeViewIds: readonly string[];
+  readonly activeViews: readonly PanelInstance[];
+  readonly activeTabId: string | null;
+  readonly empty: boolean;
+  readonly canUndo: boolean;
+  readonly error: string;
+}
+
+export class PanelLayout extends Model<LayoutSnapshot> {
+  private currentModel: FlexModel;
+  private history: IJsonModel[] = [];
+  private placements: Record<string, Placement> = {};
+  private knownViews: Record<string, Omit<PanelInstance, "id">> = {};
+  private closedViews = new Set<string>();
+  private closeVersion = 0;
+  private error = "";
+  private stopped = false;
   private before?: IJsonModel;
   private resizeBefore?: IJsonModel;
-  constructor(private studio: Studio) {
+  constructor(private options: { changed?: () => void; width?: number } = {}) {
+    super();
+    this.currentModel = FlexModel.fromJson(defaultLayout(options.width));
+    this.currentModel.setSplitterSize(6);
+    this.listen();
+    this.rememberOpenViews();
+  }
+  /** FlexLayout is exposed only to its UI adapter; other modules use commands. */
+  get model() { return this.currentModel; }
+  protected readSnapshot(): LayoutSnapshot {
+    const activeViews: PanelInstance[] = [];
+    const maximized = this.model.getMaximizedTabset();
+    this.model.visitNodes((node) => {
+      if (!(node instanceof TabSetNode) || (maximized && maximized !== node) || node.getConfig()?.collapsed) return;
+      const tab = node.getSelectedNode();
+      if (tab instanceof TabNode && isBuiltinPanel(tab.getComponent() ?? ""))
+        activeViews.push(this.instance(tab)!);
+    });
+    return {
+      knownViews: immutable(structuredClone(this.knownViews)),
+      closedViews: readonlySet(this.closedViews),
+      closeVersion: this.closeVersion,
+      activeViewIds: Object.freeze(activeViews.map((view) => view.id)),
+      activeViews: Object.freeze(activeViews),
+      activeTabId: this.activeTab?.getId() ?? null,
+      empty: this.empty,
+      canUndo: this.history.length > 0,
+      error: this.error,
+    };
+  }
+  instance(node: TabNode): PanelInstance | null {
+    const component = node.getComponent() ?? "";
+    return isBuiltinPanel(component) ? immutable({ id: node.getId(), component, name: node.getName(), config: structuredClone(node.getConfig()) }) : null;
+  }
+  has(id: string) { return this.model.getNodeById(id) instanceof TabNode; }
+  isClosed(id: string) { return this.closedViews.has(id); }
+  dismissError() { this.error = ""; this.publish(); }
+  restore(data: unknown) {
+    const value = data as { layout?: IJsonModel; layoutHistory?: IJsonModel[]; viewPlacements?: Record<string, Placement>; knownViews?: Record<string, Omit<PanelInstance, "id">> } | null;
+    this.error = "";
+    this.stopped = false;
+    this.before = this.resizeBefore = undefined;
+    this.placements = {};
+    for (const [id, place] of Object.entries(value?.viewPlacements ?? {}))
+      if (place && Array.isArray(place.neighbors))
+        this.placements[id] = { group: typeof place.group === "string" ? place.group : undefined, neighbors: place.neighbors.filter((neighbor) => typeof neighbor === "string") };
+    this.knownViews = {};
+    for (const [id, view] of Object.entries(value?.knownViews ?? {}))
+      if (view && typeof view.name === "string" && isBuiltinPanel(view.component))
+        this.knownViews[id] = Object.freeze({ component: view.component, name: view.name, config: view.config });
     try {
-      const saved = studio.layout as IJsonModel | null;
+      const saved = value?.layout;
       if (saved && (!saved.layout || JSON.stringify(saved).length > 100000))
         throw new Error("invalid layout");
-      this.model = Model.fromJson(saved ?? defaultLayout());
+      this.currentModel = FlexModel.fromJson(saved ?? defaultLayout(this.options.width));
       this.model.doAction(
         Actions.updateModelAttributes({
           tabMinHeight: 0,
@@ -108,11 +168,10 @@ export class PanelLayout {
       this.model.visitNodes((n) => {
         if (!(n instanceof TabNode)) return;
         if (
-          !panelNames[n.getComponent() ?? ""] &&
-          !["document", "viewer"].includes(n.getComponent() ?? "")
+          !isBuiltinPanel(n.getComponent() ?? "")
         ) {
           this.model.doAction(Actions.deleteTab(n.getId()));
-          studio.error =
+          this.error =
             "An unavailable view was closed. Other views and drafts were retained.";
           return;
         }
@@ -126,17 +185,29 @@ export class PanelLayout {
         );
       });
     } catch {
-      this.model = Model.fromJson(defaultLayout());
-      studio.error =
+      this.currentModel = FlexModel.fromJson(defaultLayout(this.options.width));
+      this.error =
         "Layout could not be restored. Default layout loaded; drafts are retained.";
     }
-    this.history = studio.layoutHistory;
+    this.history = (value?.layoutHistory ?? []).filter((item) => item && typeof item === "object" && item.layout && JSON.stringify(item).length <= 100000).slice(-20);
+    this.closedViews = new Set(Object.keys(this.knownViews).filter((id) => !this.has(id)));
+    this.closeVersion++;
     this.model.setSplitterSize(6);
     this.listen();
+    this.rememberOpenViews();
+    this.publish();
+  }
+  serialize() {
+    return { layout: this.model.toJson(), layoutHistory: this.history.map((item) => structuredClone(item)), viewPlacements: structuredClone(this.placements), knownViews: structuredClone(this.knownViews) };
+  }
+  resetState() {
+    this.restore(null);
   }
   private listen() {
+    const watched = this.model;
     this.model.addChangeListener({
       onBeforeAction: (action) => {
+        if (watched !== this.model || this.stopped) return;
         this.before = this.model.toJson();
         if (action.type === Actions.DELETE_TAB) this.remember(action.data.node);
         if (action.type === Actions.DELETE_TABSET)
@@ -146,6 +217,7 @@ export class PanelLayout {
             .forEach((n) => this.remember(n.getId()));
       },
       onAfterAction: (action) => {
+        if (watched !== this.model || this.stopped) return;
         const geometry = ![
           Actions.SELECT_TAB,
           Actions.SET_ACTIVE_TABSET,
@@ -167,7 +239,7 @@ export class PanelLayout {
     const node = this.model.getNodeById(id),
       parent = node?.getParent();
     if (node instanceof TabNode) {
-      this.studio.viewPlacements[id] = {
+      this.placements[id] = {
         group: parent?.getId(),
         neighbors:
           parent
@@ -175,23 +247,29 @@ export class PanelLayout {
             .filter((n) => n !== node)
             .map((n) => n.getId()) ?? [],
       };
-      this.studio.closedViews.add(id);
-      this.studio.viewCloseVersion++;
+      this.closedViews.add(id);
+      this.closeVersion++;
     }
   }
-  changed = () => {
-    this.studio.layoutHistory = this.history;
+  private rememberOpenViews() {
     this.model.visitNodes((n) => {
       if (n instanceof TabNode)
-        this.studio.knownViews[n.getId()] = {
-          component: n.getComponent()!,
-          name: n.getName(),
-          config: n.getConfig(),
-        };
+        if (isBuiltinPanel(n.getComponent() ?? "")) {
+          this.knownViews[n.getId()] = Object.freeze({
+            component: n.getComponent()! as PanelInstance["component"],
+            name: n.getName(),
+            config: n.getConfig(),
+          });
+          this.closedViews.delete(n.getId());
+        }
     });
-    this.studio.layout = this.model.toJson();
-    this.studio.persist();
-    this.studio.emit("layout", "shell");
+    for (const id of Object.keys(this.knownViews))
+      if (!this.has(id) && !this.closedViews.has(id)) { this.closedViews.add(id); this.closeVersion++; }
+  }
+  private changed = () => {
+    this.rememberOpenViews();
+    this.publish();
+    this.options.changed?.();
   };
   get empty() {
     let count = 0;
@@ -200,20 +278,20 @@ export class PanelLayout {
     });
     return count === 0;
   }
-  get activeTab() {
+  private get activeTab() {
     return this.model.getActiveTabset()?.getSelectedNode();
   }
   undo() {
     const json = this.history.pop();
     if (json) {
-      this.model = Model.fromJson(json, this.model);
+      this.currentModel = FlexModel.fromJson(json, this.model);
       this.listen();
       this.changed();
     }
   }
   reset() {
     const before = this.model.toJson();
-    this.model = Model.fromJson(defaultLayout(), this.model);
+    this.currentModel = FlexModel.fromJson(defaultLayout(this.options.width), this.model);
     this.pushHistory(before);
     this.listen();
     this.changed();
@@ -221,17 +299,37 @@ export class PanelLayout {
   close(id: string) {
     this.model.doAction(Actions.deleteTab(id));
   }
+  closeActive() {
+    const id = this.activeTab?.getId();
+    if (id) this.close(id);
+  }
+  closeGroup(id: string) { this.model.doAction(Actions.deleteTabset(id)); }
+  maximizeGroup(id: string) { this.model.doAction(this.prepareAction(Actions.maximizeToggle(id))); }
+  maximizeActive() {
+    const id = this.model.getActiveTabset()?.getId();
+    if (id) this.maximizeGroup(id);
+  }
+  rename(id: string, name: string) {
+    const saved = this.knownViews[id];
+    if (saved) this.knownViews[id] = Object.freeze({ ...saved, name });
+    if (this.has(id)) this.model.doAction(Actions.renameTab(id, name));
+    else this.changed();
+  }
   show(
     component: string,
     id = component,
     name = panelNames[component],
     config?: unknown,
   ) {
-    this.studio.closedViews.delete(id);
-    this.studio.knownViews[id] = { component, name, config };
+    if (!isBuiltinPanel(component)) return;
+    const definition = builtinPanels[component];
+    if (definition.instances === "single") id = component;
+    name ??= definition.name;
+    this.closedViews.delete(id);
+    this.knownViews[id] = Object.freeze({ component, name, config });
     if (this.model.getNodeById(id)) this.model.doAction(Actions.selectTab(id));
     else {
-      const place = this.studio.viewPlacements[id];
+      const place = this.placements[id];
       const remembered = place?.group
         ? this.model.getNodeById(place.group)
         : undefined;
@@ -239,11 +337,7 @@ export class PanelLayout {
         .map((key) => this.model.getNodeById(key)?.getParent())
         .find((n) => n instanceof TabSetNode);
       const preferred = this.model.getNodeById(
-        component === "document"
-          ? "editor-group"
-          : component === "viewer" || component === "packages"
-            ? "objects-group"
-            : `${component}-group`,
+        definition.preferredGroup,
       );
       const comparison =
         component === "plots" && id !== "plots" && !remembered && !neighbor;
@@ -263,11 +357,7 @@ export class PanelLayout {
           name,
           component,
           config,
-          minWidth: ["editor", "document", "console"].includes(component)
-            ? 240
-            : component === "files"
-              ? 180
-              : 200,
+          minWidth: definition.minWidth,
         },
         target.getId(),
         comparison ? DockLocation.RIGHT : DockLocation.CENTER,
@@ -359,7 +449,7 @@ export class PanelLayout {
     });
     return targets.filter((t) => t.id !== from && t.name);
   }
-  preview(from: string, to: string, direction: Direction): Model | null {
+  preview(from: string, to: string, direction: Direction): FlexModel | null {
     const source = this.model.getNodeById(from),
       target = this.model.getNodeById(to);
     if (
@@ -380,7 +470,7 @@ export class PanelLayout {
     )
       return null;
     try {
-      const preview = Model.fromJson(this.model.toJson());
+      const preview = FlexModel.fromJson(this.model.toJson());
       preview.doAction(
         Actions.moveNode(from, to, directions[direction], -1, true),
       );
@@ -396,4 +486,5 @@ export class PanelLayout {
     );
     return true;
   }
+  stop() { this.stopped = true; this.dispose(); }
 }

@@ -96,12 +96,12 @@ export class TerminalText {
 const cache = new Map<
   string,
   {
-    events: OutputEvent[];
+    events: readonly OutputEvent[];
     terminal: TerminalText;
     rendered?: ReturnType<TerminalText["result"]>;
   }
 >();
-export function observedText(id: string, events: OutputEvent[]) {
+export function observedText(id: string, events: readonly OutputEvent[]) {
   let entry = cache.get(id);
   if (!entry || entry.events.length > events.length) {
     entry = { events: [], terminal: new TerminalText() };

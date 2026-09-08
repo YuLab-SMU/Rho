@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { useStudio } from "../context";
+import { useEffect, useId, useRef, useState } from "react";
+import { usePackages, useSession, useNavigation } from "../context";
 import { Icon } from "../icons";
 import { Modal } from "../primitives";
 import type { PackageView } from "../packages";
 import { PackageInspector, packageState } from "./package-inspector";
 
-export function PackagesPanel() {
-  const s = useStudio("packages", "runtime"),
-    p = s.packages;
+export function PackagesPanel({ viewId = "packages" }: { viewId?: string }) {
+  const p = usePackages(), session = useSession(), navigation = useNavigation(), instance = useId();
   const root = useRef<HTMLDivElement>(null),
     body = useRef<HTMLDivElement>(null),
     search = useRef<HTMLInputElement>(null);
@@ -15,13 +14,12 @@ export function PackagesPanel() {
   const [wide, setWide] = useState(false),
     [librariesOpen, setLibrariesOpen] = useState(false);
   const returnFocus = useRef<HTMLElement | null>(null);
-  const busy = s.runtime?.state === "busy",
-    unavailable = !s.runtime || s.runtime.state === "unavailable",
+  const busy = session.runtime?.state === "busy",
+    unavailable = !session.runtime || session.runtime.state === "unavailable",
     data = p.data;
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
-      p.visible = entry.isIntersecting;
-      if (p.visible && p.needsObservation) void p.refresh();
+      p.setVisible(`${viewId}:${instance}`, entry.isIntersecting, viewId);
     });
     const resize = new ResizeObserver(([entry]) =>
       setWide(entry.contentRect.width >= 1000),
@@ -33,9 +31,9 @@ export function PackagesPanel() {
     return () => {
       observer.disconnect();
       resize.disconnect();
-      p.visible = false;
+      p.setVisible(`${viewId}:${instance}`, false, viewId);
     };
-  }, [p]);
+  }, [p, viewId, instance]);
   useEffect(() => {
     if (body.current) body.current.scrollTop = p.scrollTop;
   }, [p, p.offset, p.filter, p.mode]);
@@ -138,8 +136,7 @@ export function PackagesPanel() {
           }
           disabled={p.loading || busy || unavailable}
           onClick={() => {
-            p.invalidate();
-            void p.refresh();
+            p.requestRefresh();
           }}
         >
           <Icon name="reset" />
@@ -173,8 +170,7 @@ export function PackagesPanel() {
             aria-label="Package Order"
             value={p.descending ? "desc" : "asc"}
             onChange={(event) => {
-              p.descending = event.target.value === "desc";
-              p.select(p.filter);
+              p.setDescending(event.target.value === "desc");
             }}
           >
             <option value="asc">Name A–Z</option>
@@ -201,6 +197,7 @@ export function PackagesPanel() {
       {p.notice && (
         <div className="package-notice" role="alert">
           {p.notice}
+          {!p.expired && <button onClick={() => p.retry()} disabled={p.loading || busy}>Retry</button>}
         </div>
       )}
       {data && !data.scan_complete && (
@@ -243,14 +240,14 @@ export function PackagesPanel() {
             className="package-scroll"
             ref={body}
             onScroll={(event) => {
-              p.scrollTop = event.currentTarget.scrollTop;
+              p.setScroll(event.currentTarget.scrollTop);
             }}
           >
-            {!s.runtime ? (
+            {!session.runtime ? (
               <div className="package-empty">
                 <h3>No R session</h3>
                 <p>Connect an R session to inspect its packages.</p>
-                <button onClick={() => s.openSettings?.()}>Configure R</button>
+                <button onClick={() => navigation.openSettings()}>Configure R</button>
               </div>
             ) : !data ? (
               <div className="package-empty">
@@ -484,7 +481,7 @@ export function PackagesPanel() {
           {p.observedAt
             ? `Observed ${new Date(p.observedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
             : "Not observed"}
-          {wide ? (busy ? " · R busy" : " · R idle") : ""}
+          {p.stale && data && !busy ? " · Refresh pending" : wide ? (busy ? " · R busy" : " · R idle") : ""}
         </span>
       </footer>
       {librariesOpen && data && (

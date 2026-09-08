@@ -912,6 +912,45 @@ async function runConsole(page: import("@playwright/test").Page, code: string) {
   await expect(panel.locator(".console-input .cm-content")).toHaveText("");
 }
 
+async function moveVisibleView(page: import("@playwright/test").Page, tabName: string, target: string, placement: string) {
+  const group = page.locator(".flexlayout__tabset").filter({ has: page.getByRole("tab", { name: tabName, exact: true }) });
+  await group.getByRole("button", { name: /^Group Actions:/ }).click();
+  await page.getByRole("menuitem", { name: "Move To…", exact: true }).click();
+  await page.getByRole("combobox", { name: "Target Region" }).selectOption(target);
+  await page.getByRole("combobox", { name: "Placement" }).selectOption(placement);
+  await page.getByRole("button", { name: "Move View", exact: true }).click();
+}
+
+async function countViewRequests(page: import("@playwright/test").Page) {
+  const counts: Record<string, number> = {}, started = Date.now();
+  const count = (request: import("@playwright/test").Request) => {
+    if (!request.url().endsWith("/api/host")) return;
+    const call = request.postDataJSON()?.frame?.request;
+    const key = call?.method === "query_snapshot" ? call.params.capability.id : call?.method;
+    if (key) counts[key] = (counts[key] ?? 0) + 1;
+  };
+  page.on("request", count);
+  // A fixed observation window and one identical invalidation make request cost comparable.
+  await Promise.all([invokeNative("invisible(NULL)"), page.waitForTimeout(4000)]);
+  page.off("request", count);
+  return { durationMs: Date.now() - started, counts };
+}
+
+async function settleSelectedPlot(page: import("@playwright/test").Page, reference: { operation_id: string; sequence: number }) {
+  const image = page.locator('[data-plot-view="plots"] .plot-original img');
+  await expect(image).toBeVisible();
+  await expect(image).toHaveAttribute("data-operation-id", reference.operation_id);
+  await expect(image).toHaveAttribute("data-output-sequence", String(reference.sequence));
+  await expect.poll(() => image.evaluate((node) => {
+    const original = node as HTMLImageElement;
+    return original.complete && original.naturalWidth > 0 && original.naturalHeight > 0;
+  })).toBe(true);
+  // Let image dimensions and ResizeObserver updates reach the painted canvas.
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+}
+
 test("multiple Console drafts, continuation, history and IME events retain their scope", async ({
   page,
 }) => {
@@ -1252,10 +1291,20 @@ test("fixed gapminder analysis, in-place previews and input/frame latency under 
     .getByRole("dialog")
     .getByLabel("File Path")
     .fill("scripts/国家发展分析.R");
+  const analysisResponse = page.waitForResponse((response) => {
+    if (!response.url().endsWith("/api/host")) return false;
+    const call = response.request().postDataJSON()?.frame?.request;
+    return call?.method === "invoke" && call.params.capability.id === "workspace.run_r" &&
+      call.params.arguments?.code?.includes("Analysis complete:");
+  });
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Save and Run", exact: true })
     .click();
+  const analysisReply = await (await analysisResponse).json();
+  expect(analysisReply.ok, analysisReply.error).toBe(true);
+  const analysisOperationId = analysisReply.result.operation.operation_id as string;
+  await page.locator(".console-transcript:visible .cm-scroller").evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
   await expect(page.locator(".console-transcript:visible")).toContainText(
     "Analysis complete: 1704 rows",
   );
@@ -1274,10 +1323,23 @@ test("fixed gapminder analysis, in-place previews and input/frame latency under 
       })
     ).data.preview,
   ).toBeNull();
+  let analysisMedia: { reference: { operation_id: string; sequence: number } }[] = [];
+  await expect.poll(async () => {
+    const observation = await queryNative("workspace.list_outputs", { operation_id: analysisOperationId, after_sequence: 0, limit: 100 });
+    analysisMedia = observation.status === "ready" ? observation.data.media : [];
+    return analysisMedia.length;
+  }).toBe(3);
+  const selectedAnalysisPlot = analysisMedia.at(-1)!.reference;
+  await page.locator('[data-plot-view="plots"]').getByRole("button", { name: "Plot Actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Go to Latest", exact: true }).click();
+  await page.locator(".console-transcript:visible .cm-scroller").evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await settleSelectedPlot(page, selectedAnalysisPlot);
   await page.screenshot({
     path: "../target/studio-browser/calm-gapminder-1440.png",
   });
   await page.setViewportSize({ width: 1280, height: 800 });
+  await page.locator(".console-transcript:visible .cm-scroller").evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await settleSelectedPlot(page, selectedAnalysisPlot);
   await page.screenshot({
     path: "../target/studio-browser/calm-gapminder-1280.png",
   });
@@ -1292,6 +1354,8 @@ test("fixed gapminder analysis, in-place previews and input/frame latency under 
     page.getByRole("tab", { name: "large-analysis.R", exact: true }),
   ).toBeVisible();
   await editor.press("Meta+End");
+  const plotHistory = Number((await page.locator('[data-plot-view="plots"] .plot-toolbar > span').innerText()).split("/")[1]);
+  expect(plotHistory).toBeGreaterThanOrEqual(analysisMedia.length);
   await runConsole(
     page,
     'for (i in 1:200) {cat("load-observation",i,"\\n"); Sys.sleep(0.025)}',
@@ -1362,6 +1426,45 @@ test("fixed gapminder analysis, in-place previews and input/frame latency under 
     [...values].sort((a, b) => a - b)[
       Math.min(values.length - 1, Math.floor(values.length * p))
     ];
+  await expect.poll(async () => (await queryNative("workspace.console_state")).data.current).toBeNull();
+  const singleViewRequests = await countViewRequests(page);
+  const originalImage = page.locator('[data-plot-view="plots"] .plot-original img'),
+    original = await originalImage.getAttribute("src"),
+    originalOperation = await originalImage.getAttribute("data-operation-id"),
+    originalSequence = Number(await originalImage.getAttribute("data-output-sequence"));
+  const mediaReadsAfterAddingViews: { operation: string; sequence: number; offset: number }[] = [];
+  const mediaReads = (request: import("@playwright/test").Request) => {
+    if (!request.url().endsWith("/api/host")) return;
+    const call = request.postDataJSON()?.frame?.request;
+    if (call?.method === "query_snapshot" && call.params.capability.id === "workspace.read_output") {
+      const args = call.params.arguments;
+      mediaReadsAfterAddingViews.push({ operation: args.reference.operation_id, sequence: args.reference.sequence, offset: args.offset });
+    }
+  };
+  page.on("request", mediaReads);
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: "New Console View", exact: true }).click();
+  const additionalConsoleId = await page.locator(".console-panel:visible").getAttribute("data-console-view");
+  const additionalConsoleName = await page.locator(`[role="tab"] [data-rho-view="${additionalConsoleId}"]`).innerText();
+  await moveVisibleView(page, additionalConsoleName, "workspace", "Below");
+  await expect(page.locator(".console-panel:visible")).toHaveCount(2);
+  await page.locator('[data-plot-view="plots"]').getByRole("button", { name: "Plot Actions" }).click();
+  await page.getByRole("menuitem", { name: "Open Plot in New View", exact: true }).click();
+  await expect(page.locator(".plot-panel:visible")).toHaveCount(2);
+  await expect(page.locator(".plot-panel:visible .plot-original img")).toHaveCount(2);
+  expect(await page.locator(".plot-panel:visible .plot-original img").evaluateAll((images) => images.map((image) => image.getAttribute("src")))).toEqual([original, original]);
+  const additionalViewRequests = await countViewRequests(page);
+  page.off("request", mediaReads);
+  for (const capability of ["workspace.snapshot", "workspace.inspect_object", "workspace.packages"])
+    expect(additionalViewRequests.counts[capability] ?? 0, capability).toBeLessThanOrEqual(singleViewRequests.counts[capability] ?? 0);
+  for (const capability of ["workspace.runtime_status", "workspace.console_state"])
+    expect(additionalViewRequests.counts[capability] ?? 0, capability).toBeLessThanOrEqual((singleViewRequests.counts[capability] ?? 0) + 2);
+  expect(mediaReadsAfterAddingViews.filter((read) => read.operation === originalOperation && read.sequence === originalSequence)).toHaveLength(0);
+  expect(new Set(mediaReadsAfterAddingViews.map((read) => `${read.operation}:${read.sequence}:${read.offset}`)).size).toBe(mediaReadsAfterAddingViews.length);
+  const comparisonGroup = page.locator(".flexlayout__tabset").filter({ has: page.getByRole("tab", { name: /^Comparison / }) });
+  await comparisonGroup.getByRole("button", { name: "Maximize tab set" }).click();
+  await page.screenshot({ path: "../target/studio-browser/modular-plots-maximized.png" });
+  await comparisonGroup.getByRole("button", { name: "Restore tab set" }).click();
   const os = await import("node:os");
   const metrics = {
     recordedAt: new Date().toISOString(),
@@ -1369,9 +1472,10 @@ test("fixed gapminder analysis, in-place previews and input/frame latency under 
     scriptLines: 4000,
     streamLines: 200,
     streamDelayMs: 25,
-    plotHistory: await page
-      .locator('.plot-history button[aria-label^="Select Plot"]')
-      .count(),
+    plotHistory,
+    analysisOperationId,
+    analysisPlots: analysisMedia.length,
+    selectedAnalysisPlot,
     inputSamples: measured.input.length,
     inputP95Ms: percentile(measured.input, 0.95),
     frameSamples: measured.frames.length,
@@ -1382,6 +1486,7 @@ test("fixed gapminder analysis, in-place previews and input/frame latency under 
     dpr: measured.dpr,
     cpu: os.cpus()[0]?.model,
     memoryGiB: Math.round(os.totalmem() / 2 ** 30),
+    requestCost: { singleViewRequests, additionalViewRequests, mediaReadsAfterAddingViews, consoleViews: 2, plotViews: 2 },
   };
   await writeFile(
     testInfo.outputPath("performance.json"),
@@ -1572,4 +1677,182 @@ test("Packages follows the Paper design with grouped copies, sources and busy ca
       ".libPaths(.rho_packages_original); unlink(.rho_packages_dir, recursive = TRUE); rm(.rho_packages_original, .rho_packages_dir, .rho_packages_libs)",
     );
   }
+});
+
+test("checkpoint startup and reconnect consume an external burst beyond recent history and event pages", async ({ page, context }, testInfo) => {
+  test.setTimeout(180000);
+  const recordReads = new Set<string>(), eventPages: number[] = [], checkpoints: number[] = [];
+  let browserInvokes = 0, inserted: any = null, injected = false;
+  page.on("request", (request) => {
+    if (!request.url().endsWith("/api/host")) return;
+    const call = request.postDataJSON()?.frame?.request;
+    if (call?.method === "get_operation") recordReads.add(call.params.operation_id);
+    if (call?.method === "invoke") browserInvokes++;
+  });
+  page.on("response", async (response) => {
+    if (!response.url().endsWith("/api/host") || response.request().postDataJSON()?.frame?.request?.method !== "subscribe") return;
+    try { const reply = await response.json(); if (Array.isArray(reply.result)) eventPages.push(reply.result.length); } catch { /* The deliberate disconnect can cancel a response body. */ }
+  });
+  await page.route("**/api/host", async (route) => {
+    const call = route.request().postDataJSON()?.frame?.request, capability = call?.params?.capability?.id;
+    if (capability === "operation.events_checkpoint") {
+      const response = await route.fetch(), reply = await response.json();
+      checkpoints.push(reply.result.data.sequence);
+      await route.fulfill({ response, json: reply });
+    } else if (!injected && capability === "operation.list_recent" && call.params.arguments?.before_cursor == null && !call.params.arguments?.operation_id && !call.params.arguments?.client_request_id) {
+      injected = true;
+      const response = await route.fetch(), reply = await response.json();
+      expect(checkpoints).toHaveLength(1);
+      inserted = await invokeNative('cat("rho_checkpoint_inserted\\n")');
+      expect(reply.result.data.operations.some((summary: any) => summary.operation_id === inserted.operation.operation_id)).toBe(false);
+      await route.fulfill({ response, json: reply });
+    } else await route.continue();
+  });
+  await page.goto(url);
+  await expect.poll(() => inserted && recordReads.has(inserted.operation.operation_id)).toBe(true);
+  await resetLayout(page);
+  // A prior scenario may have retained a scrolled-back Console. Deliberately
+  // follow the live end before asserting text in CodeMirror's visible viewport.
+  await page.locator(".console-transcript:visible .cm-scroller").evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect(page.locator(".console-transcript:visible")).toContainText("rho_checkpoint_inserted");
+  await invokeNative("rho_burst_count <- 0L");
+  const ids: string[] = [];
+  await context.setOffline(true);
+  try {
+    for (let index = 0; index < 105; index++) {
+      const record = await invokeNative(`rho_burst_count <- rho_burst_count + 1L; cat("rho_event_burst_${String(index).padStart(3, "0")}\\n")`);
+      expect(record.status).toBe("succeeded"); ids.push(record.operation.operation_id);
+    }
+  } finally { await context.setOffline(false); }
+  await expect.poll(() => ids.every((id) => recordReads.has(id)), { timeout: 60000 }).toBe(true);
+  await expect.poll(() => eventPages.includes(100), { timeout: 60000 }).toBe(true);
+  await page.locator(".console-panel:visible").getByRole("button", { name: "Run Details", exact: true }).click();
+  const details = page.getByRole("dialog");
+  await expect.poll(async () => {
+    const text = (await details.locator("summary").allTextContents()).join("\n");
+    return ids.every((id) => text.includes(id));
+  }, { timeout: 60000 }).toBe(true);
+  await details.getByRole("button", { name: "Close", exact: true }).click();
+  expect((await queryNative("workspace.inspect_object", { name: "rho_burst_count", max_items: 1 })).data.preview).toEqual([105]);
+  expect(browserInvokes).toBe(0);
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  recordReads.clear();
+  await page.reload();
+  await expect.poll(() => checkpoints.length).toBe(2);
+  await page.locator(".console-panel:visible").getByRole("button", { name: "Run Details", exact: true }).click();
+  await expect.poll(async () => details.locator("summary").count()).toBeGreaterThanOrEqual(30);
+  expect((await details.locator("summary").allTextContents()).some((text) => text.includes(ids[0]))).toBe(false);
+  let historicalPages = 0;
+  const historicalSummaryIds = new Set<string>();
+  while (!(await details.locator("summary").allTextContents()).some((text) => text.includes(ids[0])) && historicalPages < 5) {
+    const response = page.waitForResponse((response) => {
+      if (!response.url().endsWith("/api/host")) return false;
+      const call = response.request().postDataJSON()?.frame?.request;
+      return call?.method === "query_snapshot" && call.params.capability.id === "operation.list_recent" && call.params.arguments?.before_cursor != null;
+    });
+    await details.getByRole("button", { name: "Load Earlier Runs", exact: true }).click();
+    const summaries = (await (await response).json()).result.data.operations as { operation_id: string; capability: { id: string } }[];
+    await expect.poll(() => summaries.every((summary) => recordReads.has(summary.operation_id))).toBe(true);
+    for (const summary of summaries) historicalSummaryIds.add(summary.operation_id);
+    await expect.poll(async () => {
+      const text = (await details.locator("summary").allTextContents()).join("\n");
+      return summaries.filter((summary) => summary.capability.id === "workspace.run_r")
+        .every((summary) => text.includes(summary.operation_id));
+    }).toBe(true);
+    historicalPages++;
+  }
+  expect((await details.locator("summary").allTextContents()).some((text) => text.includes(ids[0]))).toBe(true);
+  expect(browserInvokes).toBe(0);
+  await testInfo.attach("event-reliability", { body: JSON.stringify({ externalOperations: ids.length, eventPages, checkpoints, historicalPages, historicalOperationsRead: historicalSummaryIds.size, browserInvokes, counter: 105 }, null, 2), contentType: "application/json" });
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("terminal output transport failures recover while failed execution refreshes Objects Packages and Plots", async ({ page }, testInfo) => {
+  test.setTimeout(90000);
+  await page.goto(url); await resetLayout(page);
+  await invokeNative('rho_terminal_effect <- 0L; if ("package:ggplot2" %in% search()) detach("package:ggplot2", unload=FALSE)');
+  await page.getByRole("button", { name: "Panels", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Packages", exact: true }).click();
+  const packages = page.locator(".packages-panel:visible");
+  await packages.getByRole("button", { name: /^All \d/ }).click();
+  await packages.getByLabel("Search Packages").fill("ggplot2");
+  const ggplot2 = packages.getByRole("button", { name: /^ggplot2, / });
+  await expect(ggplot2).toHaveCount(1);
+  await expect(ggplot2).not.toHaveAttribute("aria-label", /Attached/);
+  await page.getByRole("button", { name: "Plot Actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Go to Latest", exact: true }).click();
+  let operationId = "", terminalSeen = false, terminalFailures = 0, browserInvokes = 0;
+  page.on("request", (request) => { if (request.url().endsWith("/api/host") && request.postDataJSON()?.frame?.request?.method === "invoke") browserInvokes++; });
+  await page.route("**/api/host", async (route) => {
+    const call = route.request().postDataJSON()?.frame?.request;
+    if (call?.method === "query_snapshot" && call.params.capability.id === "workspace.output_events" && call.params.arguments.operation_id === operationId && (!terminalSeen || terminalFailures < 2)) {
+      if (terminalSeen) terminalFailures++;
+      await route.abort("connectionreset");
+    } else await route.continue();
+  });
+  const record = await invokeNative('Sys.sleep(0.4); rho_terminal_effect <- rho_terminal_effect + 1L; rho_recovery_object <- data.frame(value=41L); library(ggplot2); plot(1:3); cat("rho_terminal_recovery\\n"); stop("rho_recovery_expected")', true);
+  operationId = record.operation.operation_id;
+  await expect.poll(async () => (await queryNative("operation.list_recent", { operation_id: operationId, limit: 1 })).data.operations[0].status).toBe("failed");
+  terminalSeen = true;
+  await expect.poll(() => terminalFailures).toBe(2);
+  const newOutput = page.locator(".console-panel:visible").getByRole("button", { name: "New Output ↓", exact: true });
+  if (await newOutput.isVisible()) await newOutput.click();
+  await expect(page.locator(".console-transcript:visible")).toContainText("rho_terminal_recovery", { timeout: 20000 });
+  await expect(page.locator('[data-plot-view="plots"] .plot-original img')).toHaveAttribute("data-operation-id", operationId, { timeout: 20000 });
+  await expect(ggplot2).toHaveAttribute("aria-label", /Attached/);
+  await page.getByRole("tab", { name: "Objects", exact: true }).click();
+  await page.getByLabel("Filter Objects").fill("rho_recovery_object");
+  await page.getByRole("button", { name: /^› rho_recovery_object$/ }).click();
+  await expect(page.locator(".objects-panel table")).toContainText("41");
+  expect((await queryNative("workspace.inspect_object", { name: "rho_terminal_effect", max_items: 1 })).data.preview).toEqual([1]);
+  expect(browserInvokes).toBe(0);
+  await testInfo.attach("terminal-output-recovery", { body: JSON.stringify({ operationId, terminalFailures, browserInvokes, counter: 1 }, null, 2), contentType: "application/json" });
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("same-name previews retain independent demand and closed Packages restores after a cold refresh", async ({ page }, testInfo) => {
+  await page.goto(url); await resetLayout(page);
+  await invokeNative("rho_dual_preview <- data.frame(value=11L)");
+  await page.getByLabel("Filter Objects").fill("rho_dual_preview");
+  await page.getByRole("button", { name: /^› rho_dual_preview$/ }).click();
+  await expect(page.locator(".objects-panel table")).toContainText("11");
+  await page.getByRole("button", { name: "Open rho_dual_preview in New Tab", exact: true }).click();
+  await moveVisibleView(page, "rho_dual_preview", "workspace", "Left");
+  await expect(page.locator(".objects-panel:visible table")).toContainText("11");
+  await expect(page.locator(".object-viewer:visible table")).toContainText("11");
+  let inspections = 0;
+  page.on("request", (request) => {
+    if (!request.url().endsWith("/api/host")) return;
+    const call = request.postDataJSON()?.frame?.request;
+    if (call?.method === "query_snapshot" && call.params.capability.id === "workspace.inspect_object" && call.params.arguments.name === "rho_dual_preview") inspections++;
+  });
+  await invokeNative("rho_dual_preview$value <- 22L");
+  await expect(page.locator(".objects-panel:visible table")).toContainText("22");
+  await expect(page.locator(".object-viewer:visible table")).toContainText("22");
+  expect(inspections).toBe(1);
+  await page.getByRole("tab", { name: "rho_dual_preview", exact: true }).locator(".flexlayout__tab_button_trailing").click();
+  await invokeNative("rho_dual_preview$value <- 33L");
+  await expect(page.locator(".objects-panel:visible table")).toContainText("33");
+  expect(inspections).toBe(2);
+  await page.getByRole("button", { name: "Panels", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Packages", exact: true }).click();
+  await page.locator(".packages-panel:visible").getByLabel("Search Packages").fill("stats");
+  await page.getByRole("tab", { name: "Packages", exact: true }).locator(".flexlayout__tab_button_trailing").click();
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Commands", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Show Packages", exact: true }).click();
+  await expect(page.locator(".packages-panel:visible").getByLabel("Search Packages")).toHaveValue("stats");
+  await page.getByRole("tab", { name: "Objects", exact: true }).click();
+  await page.getByLabel("Filter Objects").fill("rho_dual_preview");
+  await expect(page.locator(".objects-panel:visible table")).toContainText("33");
+  const cancellation = await invokeNative('rho_dual_preview$value <- 44L; cat("rho_cancel_ready\\n"); Sys.sleep(8)', true);
+  await expect.poll(async () => (await queryNative("workspace.console_state")).data.current?.operation_id).toBe(cancellation.operation.operation_id);
+  await expect.poll(async () => (await queryNative("workspace.output_events", { operation_id: cancellation.operation.operation_id, after_sequence: 0, limit: 100 })).data.events.some((event: { text?: string }) => event.text?.includes("rho_cancel_ready"))).toBe(true);
+  const info = await (await api("/api/info")).json();
+  const reply = await (await api("/api/host", { project_root: info.project_root, frame: { id: crypto.randomUUID(), request: { method: "request_cancellation", params: { operation_id: cancellation.operation.operation_id, only_if_pending: false } } } })).json();
+  expect(reply.ok, reply.error).toBe(true);
+  await expect.poll(async () => (await queryNative("operation.list_recent", { operation_id: cancellation.operation.operation_id, limit: 1 })).data.operations[0].status).toBe("cancelled");
+  await expect(page.locator(".objects-panel:visible table")).toContainText("44");
+  await testInfo.attach("view-demand", { body: JSON.stringify({ queriesForTwoViews: 1, queriesAfterClosingViewer: 1, cancelledOperation: cancellation.operation.operation_id, closedPackagesRestored: true }, null, 2), contentType: "application/json" });
 });

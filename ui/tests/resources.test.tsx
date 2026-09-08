@@ -6,13 +6,14 @@ import { ObjectViewer } from "../src/panels/resource-panels";
 const { state } = vi.hoisted(() => ({
   state: {
     inspectors: new Map(),
-    visibleObjects: new Set(),
+    registerDemand: vi.fn(),
+    releaseDemand: vi.fn(),
     runtime: { state: "busy" },
-    inspectObject: vi.fn(),
+    inspect: vi.fn(),
   },
 }));
 vi.stubGlobal("IntersectionObserver",class { observe(){} disconnect(){} });
-vi.mock("../src/context", () => ({ useStudio: () => state }));
+vi.mock("../src/context", () => ({ useObjects: () => state, useSession: () => state }));
 afterEach(() => {
   cleanup();
   state.inspectors.clear();
@@ -45,6 +46,6 @@ it("renders hostile object text literally and keeps native queries disabled whil
   await userEvent.click(
     screen.getByRole("button", { name: "Refresh Preview" }),
   );
-  expect(state.inspectObject).not.toHaveBeenCalled();
+  expect(state.inspect).not.toHaveBeenCalled();
   expect(screen.getByText("Preview truncated.")).toBeTruthy();
 });

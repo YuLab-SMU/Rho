@@ -38,15 +38,7 @@ impl QueryHandler for RecentOperationsHandler {
     fn normalize_arguments(&self, value: &Value) -> Result<Value, OperationError> {
         let args: RecentOperationsArguments =
             serde_json::from_value(value.clone()).map_err(invalid)?;
-        if !(1..=100).contains(&args.limit)
-            || args.before_cursor.is_some_and(|c| c > i64::MAX as u64)
-            || args
-                .client_request_id
-                .as_ref()
-                .is_some_and(|id| id.is_empty() || id.len() > 160)
-        {
-            return Err(invalid("invalid operation page bounds"));
-        }
+        validate_recent_arguments(&args)?;
         serde_json::to_value(args).map_err(invalid)
     }
     async fn query(&self, _value: &Value) -> Result<QuerySnapshot, OperationError> {
@@ -76,6 +68,37 @@ impl QueryHandler for RecentOperationsHandler {
         })
     }
 }
+
+pub fn validate_recent_arguments(args: &RecentOperationsArguments) -> Result<(), OperationError> {
+    if !(1..=100).contains(&args.limit)
+        || args.before_cursor.is_some_and(|c| c > i64::MAX as u64)
+        || args
+            .client_request_id
+            .as_ref()
+            .is_some_and(|id| id.is_empty() || id.len() > MAX_IDENTIFIER_BYTES)
+    {
+        return Err(invalid("invalid operation page bounds"));
+    }
+    if [
+        args.before_cursor.is_some(),
+        args.client_request_id.is_some(),
+        args.operation_id.is_some(),
+    ]
+    .into_iter()
+    .filter(|present| *present)
+    .count()
+        > 1
+    {
+        return Err(invalid(
+            "before_cursor, client_request_id and operation_id are mutually exclusive",
+        ));
+    }
+    if let Some(id) = &args.operation_id {
+        OperationId::new(id.as_str())?;
+    }
+    Ok(())
+}
+
 fn invalid(error: impl std::fmt::Display) -> OperationError {
     OperationError::InvalidInput(error.to_string())
 }

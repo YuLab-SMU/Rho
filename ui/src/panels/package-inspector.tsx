@@ -1,4 +1,4 @@
-import { useStudio } from "../context";
+import { usePackages, useSession } from "../context";
 import { packageCopyKey, packageLink } from "../packages";
 import type { PackageEntry } from "../generated/PackageEntry";
 import type { PackageGroup } from "../generated/PackageGroup";
@@ -136,8 +136,7 @@ export function PackageInspector({
   group: PackageGroup;
   inline?: boolean;
 }) {
-  const s = useStudio("packages", "runtime"),
-    p = s.packages;
+  const p = usePackages(), session = useSession();
   const detail = p.details.get(group.name);
   const copies = detail?.copies ?? [];
   const primary =
@@ -151,11 +150,9 @@ export function PackageInspector({
   const sourceMode = p.inspectorMode === "source";
   const source = selectedCopy?.source ?? null;
   function showSource(copy?: PackageEntry) {
-    p.sourceCopy = copy ? packageCopyKey(copy) : null;
-    p.inspectorMode = "source";
-    s.emit("packages");
+    p.showSource(copy ? packageCopyKey(copy) : null);
   }
-  const waiting = !detail && s.runtime?.state === "busy";
+  const waiting = !detail && session.runtime?.state === "busy";
   return (
     <section
       className={`package-inspector ${inline ? "package-inspector-inline" : "package-inspector-wide"}`}
@@ -165,8 +162,7 @@ export function PackageInspector({
         <button
           className="package-back"
           onClick={() => {
-            p.inspectorMode = "overview";
-            s.emit("packages");
+            p.showOverview();
           }}
         >
           ‹ Overview
@@ -190,6 +186,7 @@ export function PackageInspector({
       {detail?.notice && (
         <p className="package-notice" role="alert">
           {detail.notice}
+          {!p.expired && <button onClick={() => p.retry()} disabled={detail.loading || session.runtime?.state === "busy"}>Retry</button>}
         </p>
       )}
       {(detail?.loading || waiting) && (
@@ -208,8 +205,7 @@ export function PackageInspector({
                 aria-label="Source Copy"
                 value={selectedCopy ? packageCopyKey(selectedCopy) : ""}
                 onChange={(event) => {
-                  p.sourceCopy = event.target.value;
-                  s.emit("packages");
+                  p.showSource(event.target.value);
                 }}
               >
                 {copies.map((copy) => (
@@ -400,7 +396,7 @@ export function PackageInspector({
       {detail?.next !== null && detail?.next !== undefined && (
         <button
           className="package-more-copies"
-          disabled={detail.loading || s.runtime?.state === "busy"}
+          disabled={detail.loading || session.runtime?.state === "busy"}
           onClick={() => void p.inspect(group.name, true)}
         >
           Show more copies ({copies.length} of {detail.total})

@@ -211,7 +211,7 @@ capabilities, not a promise of dedicated Studio controls for each one.
 | Family | Main operations and queries | Important behavior |
 | --- | --- | --- |
 | Workspace | `run_r`, `snapshot`, `inspect_object`, `help`, `lint`, `format` | One live session; pure queries do not force active/lazy bindings; native code tools are explicit Operations |
-| Outputs | `operation.list_recent`, `workspace.output_events`, `workspace.read_output`, `workspace.runtime_status` | Bounded summaries/observations; original references rather than filename lookup |
+| Outputs | `operation.events_checkpoint`, `operation.list_recent`, `workspace.output_events`, `workspace.read_output`, `workspace.runtime_status` | Project/principal-visible event position and bounded summaries/observations; original references rather than filename lookup |
 | Project | `snapshot`, `list_directory`, `read_file`, `apply_patch` | Real filesystem/Git observations; patch preserves unrelated work and does not commit |
 | Environment | `observe`, `plan`, `realize`, `verify`, `reconcile` | Native pak/renv, isolated libraries, explicit verification and activation |
 | Environment material | `retention`, `cleanup`, `cleanup_status`, `restore_cleanup`, `purge_cleanup` | Preview/fingerprint checks, quarantine, restore and explicit permanent purge |

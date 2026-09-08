@@ -48,12 +48,12 @@ export function zoomAt(
   );
 }
 export interface PlotView {
-  selected: string | null;
-  follow: boolean;
-  history: boolean;
-  transforms: Record<string, PlotTransform>;
-  seen: number;
-  pinned?: boolean;
+  readonly selected: string | null;
+  readonly follow: boolean;
+  readonly history: boolean;
+  readonly transforms: Readonly<Record<string, Readonly<PlotTransform>>>;
+  readonly seen: number;
+  readonly pinned?: boolean;
 }
 export const newPlotView = (): PlotView => ({
   selected: null,

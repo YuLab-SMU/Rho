@@ -9,7 +9,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "vite build --watch --outDir ../target/studio-assets",
     "test": "vitest run",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "check:boundaries": "node ../scripts/check-frontend-boundaries.mjs",
+    "test:boundaries": "node ../scripts/test-frontend-boundaries.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

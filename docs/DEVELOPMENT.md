@@ -35,9 +35,10 @@ writes watched assets to `target/studio-assets`. Start the workbench with
 `--dev-assets /absolute/path/to/target/studio-assets` after the `workbench`
 subcommand. Reload the browser after a rebuild. Production uses embedded assets.
 
-Panels consume the shared Studio model; HostClient owns transport. Document and
-undo state must survive panel lifecycle changes. Layout changes must not execute
-code. Keep visual feedback tied to actual owner state.
+Panels consume module-specific hooks and commands; HostClient owns transport behind
+narrow ports. Domain snapshots are read-only. Document and undo state survive panel
+lifecycle changes. Layout changes must not execute code. Keep visual feedback tied
+to actual owner state. Studio only composes and manages the client lifecycle.
 
 ## Checks
 
@@ -47,7 +48,8 @@ code. Keep visual feedback tied to actual owner state.
 | Frontend model/component behavior | `npm run test --prefix ui` |
 | Client types and embedded assets | Generate, build, then check as above |
 | Studio interaction and real local R | `npm run test:browser --prefix ui` |
-| Architecture/dependency ownership | `node scripts/check-architecture.mjs` |
+| Rust architecture/dependency ownership | `node scripts/check-architecture.mjs` |
+| Frontend ownership and dependency boundaries | `npm run check:boundaries --prefix ui` and `npm run test:boundaries --prefix ui` |
 | Vendored Jet snapshot / verifier | `node scripts/vendor-jet.mjs check` and `node scripts/test-vendor-jet.mjs` |
 | Documentation/map only | `node scripts/governance.mjs check` and `node scripts/test-governance.mjs` |
 

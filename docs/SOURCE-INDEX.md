@@ -71,6 +71,38 @@ Checks:
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
 
+## `studio`
+
+Documentation:
+
+- None.
+
+Sources:
+
+- `.github/workflows/rho.yml`
+- `crates/contract/**`
+- `crates/workbench/assets/**`
+- `scripts/check-frontend-boundaries.mjs`
+- `scripts/client.mjs`
+- `scripts/fixtures/frontend-boundaries/**`
+- `scripts/test-frontend-boundaries.mjs`
+- `ui/**`
+
+Checks:
+
+- `docs.index`: `["node","scripts/governance.mjs","check"]`
+- `docs.tool`: `["node","scripts/test-governance.mjs"]`
+- `studio.boundaries`: `["node","scripts/check-frontend-boundaries.mjs"]`
+- `studio.boundary-tests`: `["node","scripts/test-frontend-boundaries.mjs"]`
+- `studio.browser`: `["npm","run","test:browser","--prefix","ui"]`
+- `studio.types`: `["npm","run","typecheck","--prefix","ui"]`
+- `studio.unit`: `["npm","run","test","--prefix","ui"]`
+- `system.client`: `["node","scripts/client.mjs","check"]`
+- `system.mcp`: `["node","scripts/test-mcp.mjs"]`
+- `system.mcp-real-r`: `["node","scripts/test-mcp.mjs","--real-r"]`
+- `system.workbench`: `["node","scripts/test-workbench.mjs"]`
+- `system.workbench-real-r`: `["node","scripts/test-workbench.mjs","--real-r"]`
+
 ## `system`
 
 Documentation:
@@ -96,7 +128,6 @@ Sources:
 - `scripts/test-*.mjs`
 - `scripts/vendor-jet.mjs`
 - `scripts/verify-*.mjs`
-- `ui/**`
 - `vendor/**`
 
 Checks:

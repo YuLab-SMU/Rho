@@ -8,12 +8,12 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { ReactNode } from "react";
-import { Actions, Layout, Model, TabNode, TabSetNode } from "flexlayout-react";
+import { Layout, Model, TabSetNode } from "flexlayout-react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Modal } from "./primitives";
 import { directions, PanelLayout, regionName } from "./layout-model";
 import type { Direction } from "./layout-model";
-import type { Studio } from "./studio";
+import { renderBuiltinPanel } from "./builtin-panel-renderers";
 export { PanelLayout, panelNames, defaultLayout } from "./layout-model";
 class PanelBoundary extends Component<
   { children: ReactNode },
@@ -61,27 +61,19 @@ function DockPreview({ model, source }: { model: Model; source: string }) {
   );
 }
 export function LayoutHost({
-  studio,
-  registry,
-  onLayout,
+  layout,
+  documentTabs,
+  navigation,
 }: {
-  studio: Studio;
-  registry: (node: TabNode) => ReactNode;
-  onLayout: (layout: PanelLayout) => void;
+  layout: PanelLayout;
+  documentTabs: ReadonlyMap<string, { readonly name: string; readonly dirty: boolean; readonly readonly: boolean }>;
+  navigation: { openFile(): void; createDocument(): void; openPanels(): void };
 }) {
-  useSyncExternalStore(
-    (fn) => studio.subscribeChannels(["layout", "documents"], fn),
-    () => studio.channelSnapshot(["layout", "documents"]),
-  );
-  const layout = useMemo(
-    () => new PanelLayout(studio),
-    [studio, studio.project],
-  );
+  useSyncExternalStore(layout.subscribe, layout.getSnapshot);
   const [moving, setMoving] = useState<string | null>(null),
     [dragging, setDragging] = useState<string | null>(null);
   const [target, setTarget] = useState(""),
     [direction, setDirection] = useState<Direction>("Left");
-  onLayout(layout);
   const dragChoice = useRef<{ target: string; direction: Direction } | null>(
     null,
   );
@@ -132,27 +124,30 @@ export function LayoutHost({
       {layout.empty ? (
         <div className="empty workspace-empty">
           <h2>Make room for your work</h2>
-          <button onClick={() => studio.openFile?.()}>Open File…</button>
-          <button className="primary" onClick={() => studio.documents.create()}>
+          <button onClick={() => navigation.openFile()}>Open File…</button>
+          <button className="primary" onClick={() => navigation.createDocument()}>
             New R File
           </button>
-          <button onClick={() => studio.openPanels?.()}>Show Panels</button>
+          <button onClick={() => navigation.openPanels()}>Show Panels</button>
         </div>
       ) : (
         <Layout
           model={layout.model}
-          factory={(node) => <PanelBoundary>{registry(node)}</PanelBoundary>}
+          factory={(node) => {
+            const view = layout.instance(node);
+            return <PanelBoundary>{view ? renderBuiltinPanel(view) : <div className="empty">View unavailable</div>}</PanelBoundary>;
+          }}
           realtimeResize
           tabDragSpeed={0}
           keyMap={{ closeTab: undefined }}
           invalidateTabContentOnParentRender={false}
           onAction={layout.prepareAction}
           onRenderTab={(node, values) => {
-            const document = studio.documents.items.get(node.getId());
+            const document = documentTabs.get(node.getId());
             values.content = (
               <span data-rho-view={node.getId()}>
                 {document?.name ?? node.getName()}
-                {document?.dirty && !document.draft.readonly ? " •" : ""}
+                {document?.dirty && !document.readonly ? " •" : ""}
               </span>
             );
           }}
@@ -198,13 +193,7 @@ export function LayoutHost({
                       Move To…
                     </Menu.Item>
                     <Menu.Item
-                      onSelect={() =>
-                        layout.model.doAction(
-                          layout.prepareAction(
-                            Actions.maximizeToggle(node.getId()),
-                          ),
-                        )
-                      }
+                      onSelect={() => layout.maximizeGroup(node.getId())}
                     >
                       Maximize / Restore Group
                     </Menu.Item>
@@ -216,16 +205,12 @@ export function LayoutHost({
                       Close View
                     </Menu.Item>
                     <Menu.Item
-                      onSelect={() =>
-                        layout.model.doAction(
-                          Actions.deleteTabset(node.getId()),
-                        )
-                      }
+                      onSelect={() => layout.closeGroup(node.getId())}
                     >
                       Close Group ({node.getChildren().length} views)
                     </Menu.Item>
                     <Menu.Item
-                      disabled={!layout.history.length}
+                      disabled={!layout.getSnapshot().canUndo}
                       onSelect={() => layout.undo()}
                     >
                       Undo Layout Change
