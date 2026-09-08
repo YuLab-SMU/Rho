@@ -57,7 +57,12 @@ reads. Read-only tasks cannot execute R. Native Skill equivalence permits only e
 literal reads of the supplied standard Skill resources; scientific data/actions still
 use Rho. All other discovered Skills are disabled with process-local config overrides.
 The native manifest is built from actual `codex app-server` `skills/list` output,
-including its actual enablement state. No product directories are scanned for methods.
+including its actual enablement state. Fixture method resources stay inside the
+scientific project's `methods/` directory. The isolated Agent cwd exposes only those
+standard packages through `.agents/skills` symlinks; Codex returns their canonical
+resource paths. This preserves Rho's project containment and native source identity
+without granting the Agent filesystem access to scientific data. No product
+directories are scanned for methods.
 
 Launch and bridge tokens are never put in tracked files. Temporary launch URL files
 have private permissions; browser traces scrub bridge credentials, and MCP recordings
