@@ -616,3 +616,39 @@ state remain visible. Complete unique counts and grouping require an appropriate
 bounded observation from the owner; they cannot be inferred from a partially
 loaded text page. Busy filtering must identify the cached observation it covers.
 The design introduces no install, update, load, detach or runtime-switch action.
+
+
+### Package source presentation
+
+The user endorsed the Paper direction and requested a Source location. The proposal
+now includes a Source column in wide lists, a scoped Source row in compact details,
+and a source inspector for each installed copy. The fourth Paper artboard shows
+actual local ggplot2 GitHub/CRAN metadata alongside clearly marked example states.
+
+Keep the recorded source (CRAN, Bioconductor, R-universe, GitHub/GitLab/Bitbucket,
+Git/SVN, R-Forge, another repository, URL, local file/directory, or known R-provided
+base package) separate from the distribution provider/repository and environment
+manager. A CRAN package may be delivered by Posit Package Manager; an R-universe
+package can also have a Git upstream. Conda channels or a system package manager
+are distribution evidence when known; renv is environment/project context.
+
+Source belongs to an installed copy. A grouped row uses the loaded copy's recorded
+source when identified, otherwise the first observed copy in library order, and
+indicates additional sources when copies differ. Details identify the library,
+repository, remote ref/commit or repository snapshot when recorded, and the basis
+for each statement. A full commit remains available behind its shortened display.
+
+`Repository` and `Remote*` installed metadata provide recorded clues; they do not
+establish every historical download fact. Current `repos`, a project homepage or
+GitHub URL, a package name, or a library directory cannot by themselves prove where
+that copy was obtained. A project lockfile is a separate record, not automatic proof
+of the current installed copy; attribution needs an explicit matching basis.
+Unrecorded provenance displays **Not recorded**. Project links stay separate from
+installation provenance. Repository URLs must omit embedded credentials. Inspection
+does not load packages, invoke a package manager, change repositories or install.
+
+Documentation basis: [renv package sources](https://rstudio.github.io/renv/articles/package-sources.html),
+[remotes source types](https://remotes.r-lib.org/),
+[R-universe repositories](https://docs.r-universe.dev/install/dependencies.html),
+[Posit repositories and sources](https://docs.posit.co/rspm/admin/repositories/),
+and [Conda channels](https://docs.conda.io/projects/conda/en/stable/user-guide/concepts/channels.html).

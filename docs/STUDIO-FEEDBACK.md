@@ -193,6 +193,11 @@ text in the list. Rework information hierarchy and density before treating the
 package component as accepted. Functional regression results do not close this
 usability feedback.
 
+**Source follow-up:** The user likes the Paper direction and asks for a place to
+show package source, including GitHub, CRAN, Bioconductor and Posit Package Manager.
+Source must accommodate other repositories and local/remote archives, and distinguish
+an installed copy's recorded origin from its distribution channel and environment.
+
 
 ## Workflow reference: a country development analysis
 

@@ -11,11 +11,17 @@ repeated full paths dominate the list, while purpose, version and session state
 are difficult to scan together. Functional checks of the read-only capability
 remain valid; they do not establish visual or usability acceptance.
 
-Three editable proposals are in [Paper: Packages design review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0):
+Four editable artboards are in [Paper: Packages design review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0):
 a wide list with an adjacent inspector; 360 px inline inspection and a 320 × 280 px
-compact view; and multiple-copy, missing-result, library and busy states. They use
+compact view; multiple-copy, missing-result, library and busy states; and per-copy
+Source metadata. The user responded positively to the first three and requested
+the Source addition. They use
 purpose descriptions in rows, aligned versions, grouped package names and explicit
-copy counts, with full paths in details. Grouping/global counts and the revised
+copy counts, with full paths in details. The Source draft distinguishes recorded
+origin, delivery repository/provider and revision evidence, including Not recorded.
+The local ggplot2 example has GitHub metadata for 4.0.3.9000 and CRAN metadata for
+3.5.2; the Posit delivery example is illustrative, not an observed installation.
+Grouping/global counts, source presentation and the revised
 interaction are proposed, not implemented or approved. The current frontend was
 left unchanged during this design review.
 
