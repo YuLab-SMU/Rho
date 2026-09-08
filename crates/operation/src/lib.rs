@@ -1048,14 +1048,13 @@ impl OperationGateway {
         context: &CallContext,
         operation_id: &OperationId,
     ) -> Result<Option<OperationRecord>, OperationError> {
-        context.validate()?;
-        let record = self.journal.get(operation_id).await?.filter(|record| {
-            record.operation.principal() == context.principal()
-                && self
-                    .project_scope
-                    .as_ref()
-                    .is_none_or(|scope| record.operation.idempotency_scope.as_ref() == Some(scope))
-        });
+        let record = record::visible_record(
+            self.journal.as_ref(),
+            context,
+            operation_id,
+            self.project_scope.as_deref(),
+        )
+        .await?;
         Ok(record.map(|record| self.registry.public_record(context, record)))
     }
 

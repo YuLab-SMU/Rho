@@ -5,6 +5,20 @@ use schemars::schema_for;
 use serde_json::{Value, json};
 use std::{collections::BTreeSet, sync::Arc};
 
+pub(crate) async fn visible_record(
+    journal: &dyn OperationJournal,
+    context: &CallContext,
+    id: &OperationId,
+    project: Option<&str>,
+) -> Result<Option<OperationRecord>, OperationError> {
+    context.validate()?;
+    Ok(journal.get(id).await?.filter(|record| {
+        record.operation.principal() == context.principal()
+            && project
+                .is_none_or(|scope| record.operation.idempotency_scope.as_deref() == Some(scope))
+    }))
+}
+
 pub struct OperationGetHandler {
     journal: Arc<dyn OperationJournal>,
     project: Option<String>,
@@ -76,13 +90,13 @@ impl QueryHandler for OperationGetHandler {
     ) -> Result<QuerySnapshot, OperationError> {
         let args: OperationGetArguments = serde_json::from_value(value.clone())
             .map_err(|e| OperationError::InvalidInput(e.to_string()))?;
-        let record = self.journal.get(&args.operation_id).await?.filter(|r| {
-            r.operation.principal() == context.principal()
-                && self
-                    .project
-                    .as_ref()
-                    .is_none_or(|project| r.operation.idempotency_scope.as_ref() == Some(project))
-        });
+        let record = visible_record(
+            self.journal.as_ref(),
+            context,
+            &args.operation_id,
+            self.project.as_deref(),
+        )
+        .await?;
         let output_contract = record.as_ref().map(|r| RecordedOperationContract {
             capability: r.operation.capability.clone(),
             availability: if self.known.contains(&r.operation.capability) {

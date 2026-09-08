@@ -83,18 +83,14 @@ impl QueryHandler for OperationEvidenceHandler {
     ) -> Result<QuerySnapshot, OperationError> {
         let args: OperationReadEvidenceArguments = serde_json::from_value(value.clone())
             .map_err(|e| OperationError::InvalidInput(e.to_string()))?;
-        let record = self
-            .journal
-            .get(&args.reference.operation_id)
-            .await?
-            .filter(|r| {
-                r.operation.principal() == context.principal()
-                    && self
-                        .project
-                        .as_ref()
-                        .is_none_or(|p| r.operation.idempotency_scope.as_ref() == Some(p))
-            })
-            .ok_or_else(|| OperationError::NotFound(args.reference.operation_id.as_str().into()))?;
+        let record = crate::record::visible_record(
+            self.journal.as_ref(),
+            context,
+            &args.reference.operation_id,
+            self.project.as_deref(),
+        )
+        .await?
+        .ok_or_else(|| OperationError::NotFound(args.reference.operation_id.as_str().into()))?;
         let fault: ContractFailureRecovery =
             serde_json::from_value(record.recovery.unwrap_or_default()).map_err(|_| {
                 OperationError::NotFound(
