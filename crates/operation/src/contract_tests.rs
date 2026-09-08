@@ -86,6 +86,25 @@ impl OperationJournal for TestJournal {
     async fn get(&self, id: &OperationId) -> Result<Option<OperationRecord>, OperationError> {
         Ok(self.0.lock().unwrap().records.get(id).cloned())
     }
+    async fn read_evidence(
+        &self,
+        args: &OperationReadEvidenceArguments,
+    ) -> Result<OperationEvidencePage, OperationError> {
+        let state = self.0.lock().unwrap();
+        let evidence = state
+            .plans
+            .iter()
+            .filter_map(|p| p.uncommitted_evidence.as_ref())
+            .find(|e| e.reference == args.reference)
+            .ok_or_else(|| OperationError::NotFound("evidence".into()))?;
+        let end = (args.offset + args.limit_bytes as u64).min(args.reference.byte_size);
+        Ok(OperationEvidencePage {
+            reference: args.reference.clone(),
+            offset: args.offset,
+            bytes: evidence.bytes[args.offset as usize..end as usize].to_vec(),
+            next_offset: (end < args.reference.byte_size).then_some(end),
+        })
+    }
     async fn request_cancellation(
         &self,
         id: &OperationId,
@@ -399,15 +418,15 @@ async fn a_malformed_owner_result_retains_every_candidate_value_without_committi
     assert!(result.output.is_none());
     let recovery: ContractFailureRecovery =
         serde_json::from_value(result.recovery.clone().unwrap()).unwrap();
-    assert_eq!(recovery.candidate.output, candidate.output);
-    assert_eq!(recovery.candidate.recovery, candidate.recovery);
-    assert_eq!(recovery.candidate.facts[0].value, candidate.facts[0].value);
+    let UncommittedCandidate::Inline { result: original } = &recovery.candidate else {
+        panic!()
+    };
+    assert_eq!(original.output, candidate.output);
+    assert_eq!(original.recovery, candidate.recovery);
+    assert_eq!(original.facts[0].value, candidate.facts[0].value);
+    assert_eq!(original.events[0].payload, candidate.events[0].payload);
     assert_eq!(
-        recovery.candidate.events[0].payload,
-        candidate.events[0].payload
-    );
-    assert_eq!(
-        recovery.candidate.effect_observations[0].detail,
+        original.effect_observations[0].detail,
         candidate.effect_observations[0].detail
     );
     assert!(!recovery.automatic_reexecution);

@@ -54,7 +54,17 @@ pub struct ContractFailureRecovery {
     pub execution_started: bool,
     pub violations: Vec<OwnerContractViolation>,
     /// Original uncommitted values. These are unvalidated evidence, not domain facts.
-    pub candidate: UncommittedOwnerResult,
+    pub candidate: UncommittedCandidate,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum UncommittedCandidate {
+    Inline {
+        result: UncommittedOwnerResult,
+    },
+    Evidence {
+        reference: crate::OperationEvidenceReference,
+    },
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]

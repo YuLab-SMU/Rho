@@ -5,6 +5,8 @@ pub use recent::{RecentOperationsHandler, validate_recent_arguments};
 mod checkpoint;
 pub use checkpoint::OperationEventsCheckpointHandler;
 mod commit_contract;
+mod evidence;
+pub use evidence::{OperationEvidenceHandler, evidence_sha256};
 mod navigation;
 mod query;
 mod record;
@@ -186,9 +188,27 @@ pub struct CommitPlan {
     pub facts: Vec<DomainFactMutation>,
     pub effect_observations: Vec<EffectObservation>,
     pub events: Vec<PlannedEvent>,
+    /// Raw fault evidence is written atomically with this terminal commit in the
+    /// same journal. Normal domain outputs are never duplicated here.
+    pub uncommitted_evidence: Option<UncommittedEvidence>,
+}
+#[derive(Clone)]
+pub struct UncommittedEvidence {
+    pub reference: rho_contract::OperationEvidenceReference,
+    pub bytes: Arc<[u8]>,
+}
+impl std::fmt::Debug for UncommittedEvidence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UncommittedEvidence")
+            .field("reference", &self.reference)
+            .finish_non_exhaustive()
+    }
 }
 
 impl CommitPlan {
+    pub fn inline_document(&self) -> Value {
+        json!({"outcome":self.outcome,"output":self.output,"error":self.error,"recovery":self.recovery,"facts":self.facts,"effect_observations":self.effect_observations,"events":self.events})
+    }
     pub fn cancelled_before_start() -> Self {
         let mut plan = Self::succeeded(Value::Null);
         plan.outcome = OperationOutcome::Cancelled;
@@ -205,6 +225,7 @@ impl CommitPlan {
             facts: Vec::new(),
             effect_observations: Vec::new(),
             events: Vec::new(),
+            uncommitted_evidence: None,
         }
     }
 
@@ -230,6 +251,7 @@ impl CommitPlan {
             facts: Vec::new(),
             effect_observations: Vec::new(),
             events: Vec::new(),
+            uncommitted_evidence: None,
         }
     }
 }
@@ -352,6 +374,10 @@ pub trait OperationJournal: Send + Sync {
         &self,
         operation_id: &OperationId,
     ) -> Result<Option<OperationRecord>, OperationError>;
+    async fn read_evidence(
+        &self,
+        arguments: &rho_contract::OperationReadEvidenceArguments,
+    ) -> Result<rho_contract::OperationEvidencePage, OperationError>;
 
     async fn request_cancellation(
         &self,

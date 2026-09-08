@@ -8,8 +8,10 @@ use std::sync::{Mutex, MutexGuard};
 
 use async_trait::async_trait;
 use rho_contract::{
-    CallerIdentity, CallerKind, Operation, OperationEventRecord, OperationId, OperationOutcome,
-    OperationRecord, OperationStatus, OutboxRecord,
+    CallerIdentity, CallerKind, ContractFailureRecovery, MAX_OPERATION_COMMIT_BYTES,
+    OPERATION_EVIDENCE_CHUNK_BYTES, Operation, OperationEventRecord, OperationEvidencePage,
+    OperationId, OperationOutcome, OperationReadEvidenceArguments, OperationRecord,
+    OperationStatus, OutboxRecord, UncommittedCandidate,
 };
 use rho_operation::{
     Admission, CancellationRequestOutcome, CommitPlan, OperationError, OperationJournal,
@@ -21,7 +23,7 @@ use rusqlite::{
 use serde_json::{Value, json};
 
 const MAX_OUTBOX_PAGE: usize = 1_000;
-const MAX_PLAN_BYTES: usize = 4 * 1024 * 1024;
+const MAX_PLAN_BYTES: usize = MAX_OPERATION_COMMIT_BYTES;
 const APPLICATION_ID: i64 = 0x52484f4e;
 const SCHEMA_VERSION: i64 = 1;
 
@@ -170,6 +172,19 @@ impl SqliteOperationJournal {
                     payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
                     created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
                     delivered_at_ms INTEGER
+                );
+
+                CREATE TABLE IF NOT EXISTS operation_uncommitted_evidence (
+                    operation_id TEXT PRIMARY KEY NOT NULL REFERENCES operations(operation_id),
+                    sha256 TEXT NOT NULL,
+                    byte_size INTEGER NOT NULL CHECK(byte_size >= 0)
+                );
+                CREATE TABLE IF NOT EXISTS operation_uncommitted_evidence_chunks (
+                    operation_id TEXT NOT NULL REFERENCES operation_uncommitted_evidence(operation_id),
+                    chunk_index INTEGER NOT NULL CHECK(chunk_index >= 0),
+                    sha256 TEXT NOT NULL,
+                    bytes BLOB NOT NULL CHECK(length(bytes) <= 65536),
+                    PRIMARY KEY(operation_id,chunk_index)
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_operation_events_operation
@@ -412,6 +427,36 @@ impl OperationJournal for SqliteOperationJournal {
                 operation_id.as_str(),
                 current.status
             )));
+        }
+
+        if let Some(evidence) = &plan.uncommitted_evidence {
+            let fault: ContractFailureRecovery =
+                serde_json::from_value(plan.recovery.clone().unwrap_or_default())
+                    .map_err(storage)?;
+            if evidence.reference.operation_id != *operation_id
+                || fault.capability != current.operation.capability
+                || !matches!(fault.candidate, UncommittedCandidate::Evidence { reference } if reference == evidence.reference)
+                || !matches!(
+                    plan.outcome,
+                    OperationOutcome::Uncertain | OperationOutcome::Failed
+                )
+                || plan.output.is_some()
+                || !plan.facts.is_empty()
+                || !plan.effect_observations.is_empty()
+                || !plan.events.is_empty()
+            {
+                return Err(OperationError::LifecycleConflict("uncommitted evidence must belong to this exact contract-failure terminal result".into()));
+            }
+            transaction.execute("INSERT INTO operation_uncommitted_evidence(operation_id,sha256,byte_size) VALUES(?1,?2,?3)",
+                params![operation_id.as_str(), evidence.reference.sha256, evidence.reference.byte_size]).map_err(storage)?;
+            for (index, bytes) in evidence
+                .bytes
+                .chunks(OPERATION_EVIDENCE_CHUNK_BYTES)
+                .enumerate()
+            {
+                transaction.execute("INSERT INTO operation_uncommitted_evidence_chunks(operation_id,chunk_index,sha256,bytes) VALUES(?1,?2,?3,?4)",
+                    params![operation_id.as_str(), index as i64, rho_operation::evidence_sha256(bytes), bytes]).map_err(storage)?;
+            }
         }
 
         for fact in &plan.facts {
@@ -793,23 +838,108 @@ impl OperationJournal for SqliteOperationJournal {
             next_id,
         })
     }
+    async fn read_evidence(
+        &self,
+        args: &OperationReadEvidenceArguments,
+    ) -> Result<OperationEvidencePage, OperationError> {
+        if args.limit_bytes == 0
+            || args.limit_bytes as usize > OPERATION_EVIDENCE_CHUNK_BYTES
+            || args.offset > args.reference.byte_size
+        {
+            return Err(OperationError::InvalidInput(
+                "evidence page exceeds its reference or 64 KiB byte bound".into(),
+            ));
+        }
+        let connection = self.connection()?;
+        let header: Option<(String, u64)> = connection
+            .query_row(
+                "SELECT sha256,byte_size FROM operation_uncommitted_evidence WHERE operation_id=?1",
+                [args.reference.operation_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(storage)?;
+        let (digest, size) = header.ok_or_else(|| {
+            OperationError::NotFound("original uncommitted evidence is unavailable".into())
+        })?;
+        if digest != args.reference.sha256 || size != args.reference.byte_size {
+            return Err(OperationError::ContentChanged(
+                "evidence header does not match its original reference".into(),
+            ));
+        }
+        let end = args
+            .offset
+            .saturating_add(args.limit_bytes as u64)
+            .min(size);
+        let mut bytes = Vec::with_capacity((end - args.offset) as usize);
+        if end > args.offset {
+            let first = args.offset / OPERATION_EVIDENCE_CHUNK_BYTES as u64;
+            let last = (end - 1) / OPERATION_EVIDENCE_CHUNK_BYTES as u64;
+            let mut statement = connection.prepare("SELECT chunk_index,sha256,bytes FROM operation_uncommitted_evidence_chunks WHERE operation_id=?1 AND chunk_index BETWEEN ?2 AND ?3 ORDER BY chunk_index").map_err(storage)?;
+            let rows = statement
+                .query_map(
+                    params![args.reference.operation_id.as_str(), first, last],
+                    |row| {
+                        Ok((
+                            row.get::<_, u64>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, Vec<u8>>(2)?,
+                        ))
+                    },
+                )
+                .map_err(storage)?;
+            let mut expected_index = first;
+            for row in rows {
+                let (index, digest, chunk) = row.map_err(storage)?;
+                let chunk_start = index * OPERATION_EVIDENCE_CHUNK_BYTES as u64;
+                let expected_length =
+                    (size - chunk_start).min(OPERATION_EVIDENCE_CHUNK_BYTES as u64) as usize;
+                if index != expected_index
+                    || chunk.len() != expected_length
+                    || rho_operation::evidence_sha256(&chunk) != digest
+                {
+                    return Err(OperationError::ContentChanged(
+                        "an original evidence chunk is missing or corrupt".into(),
+                    ));
+                }
+                let from = args.offset.saturating_sub(chunk_start) as usize;
+                let to = (end - chunk_start).min(chunk.len() as u64) as usize;
+                bytes.extend_from_slice(&chunk[from..to]);
+                expected_index += 1;
+            }
+            if expected_index != last + 1 || bytes.len() != (end - args.offset) as usize {
+                return Err(OperationError::ContentChanged(
+                    "original evidence has a missing byte range".into(),
+                ));
+            }
+        }
+        Ok(OperationEvidencePage {
+            reference: args.reference.clone(),
+            offset: args.offset,
+            bytes,
+            next_offset: (end < size).then_some(end),
+        })
+    }
 }
 
 fn validate_plan(plan: &CommitPlan) -> Result<(), OperationError> {
-    let encoded = serde_json::to_vec(&json!({
-        "outcome": plan.outcome,
-        "output": plan.output,
-        "error": plan.error,
-        "recovery": plan.recovery,
-        "facts": plan.facts,
-        "effect_observations": plan.effect_observations,
-        "events": plan.events,
-    }))
-    .map_err(storage)?;
+    let encoded = serde_json::to_vec(&plan.inline_document()).map_err(storage)?;
     if encoded.len() > MAX_PLAN_BYTES {
         return Err(OperationError::Storage(format!(
             "commit plan exceeds {MAX_PLAN_BYTES} bytes"
         )));
+    }
+    if let Some(evidence) = &plan.uncommitted_evidence {
+        if evidence.reference.byte_size > i64::MAX as u64 {
+            return Err(OperationError::BudgetExceeded("evidence exceeds SQLite's representable byte-offset limit; no truncated evidence was stored".into()));
+        }
+        if evidence.reference.byte_size != evidence.bytes.len() as u64
+            || evidence.reference.sha256 != rho_operation::evidence_sha256(&evidence.bytes)
+        {
+            return Err(OperationError::LifecycleConflict(
+                "uncommitted evidence bytes do not match their original reference".into(),
+            ));
+        }
     }
     if plan.outcome == OperationOutcome::Succeeded && plan.error.is_some() {
         return Err(OperationError::LifecycleConflict(
@@ -1175,6 +1305,321 @@ fn check_schema(connection: &Connection) -> Result<(), OperationError> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod evidence_tests {
+    use super::*;
+    use rho_contract::*;
+    use rho_operation::{
+        CapabilityRegistry, DomainFactMutation, HandlerError, OperationEvidenceHandler,
+        OperationGateway, OperationGetHandler, OperationHandler, PlannedEvent, QueryGateway,
+        SystemClock, UuidOperationIdGenerator,
+    };
+    use std::{
+        collections::BTreeSet,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+
+    struct FaultOwner {
+        descriptor: CapabilityDescriptor,
+        output: Value,
+        executed: AtomicUsize,
+    }
+    impl FaultOwner {
+        fn new() -> Self {
+            let documentation = rho_contract::builtin_documentation("host.overview");
+            Self {
+                descriptor: CapabilityDescriptor {
+                    kind: CapabilityKind::Operation,
+                    capability: CapabilityRef::new("fixture.native", 1).unwrap(),
+                    domain: "fixture".into(),
+                    input_schema: json!({"type":"object","properties":{},"additionalProperties":false}),
+                    output_schema: json!({"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false}),
+                    recovery_schema: json!({"type":"object","properties":{"native_marker":{"type":"string"}},"required":["native_marker"],"additionalProperties":false}),
+                    documentation,
+                    required_scopes: BTreeSet::from(["fixture.run".into()]),
+                    potential_effects: BTreeSet::from([EffectHint::MayMutateRuntime]),
+                    idempotency: IdempotencyClass::CallerScoped,
+                    retry: RetryClass::Never,
+                    cancellation: CancellationClass::Unsupported,
+                },
+                output: json!({"native_result":"字".repeat(MAX_OPERATION_COMMIT_BYTES / 3 + 31),"$ref":"data, never a capability"}),
+                executed: AtomicUsize::new(0),
+            }
+        }
+    }
+    #[async_trait]
+    impl OperationHandler for FaultOwner {
+        fn descriptor(&self) -> &CapabilityDescriptor {
+            &self.descriptor
+        }
+        fn idempotency_scope(&self) -> Option<String> {
+            Some("/evidence-project".into())
+        }
+        fn normalize_arguments(&self, arguments: &Value) -> Result<Value, OperationError> {
+            Ok(arguments.clone())
+        }
+        fn resolve_target(&self, _: &Value) -> Result<TargetRef, OperationError> {
+            Ok(TargetRef {
+                kind: "workspace".into(),
+                identity: "native-fixture".into(),
+            })
+        }
+        async fn execute(&self, _: &Operation) -> Result<CommitPlan, HandlerError> {
+            self.executed.fetch_add(1, Ordering::SeqCst);
+            let mut plan = CommitPlan::succeeded(self.output.clone());
+            plan.recovery = Some(json!({"native_marker":"original-stage-marker"}));
+            plan.facts.push(DomainFactMutation {
+                domain: "fixture".into(),
+                schema: "fixture.uncommitted".into(),
+                key: "candidate".into(),
+                value: json!({"value":37}),
+            });
+            plan.events.push(PlannedEvent {
+                kind: "fixture.uncommitted-event".into(),
+                payload: json!({"original":true}),
+            });
+            plan.effect_observations
+                .push(rho_contract::EffectObservation {
+                    kind: "native".into(),
+                    source: "fixture".into(),
+                    detail: json!({"native_id":42}),
+                    observed_at_ms: 1,
+                    completeness: ObservationCompleteness::Partial,
+                });
+            Ok(plan)
+        }
+    }
+    fn context() -> CallContext {
+        CallContext {
+            caller: CallerIdentity {
+                kind: CallerKind::Agent,
+                id: "external-agent".into(),
+            },
+            principal: Some(CallerIdentity {
+                kind: CallerKind::Human,
+                id: "local-account".into(),
+            }),
+            scopes: BTreeSet::from(["operation.read".into(), "fixture.run".into()]),
+            connection_id: "fixture-connection".into(),
+            correlation_id: None,
+            causation_id: None,
+            trace_parent: None,
+        }
+    }
+    fn request() -> Invocation {
+        Invocation {
+            client_request_id: "original-request".into(),
+            capability: CapabilityRef::new("fixture.native", 1).unwrap(),
+            arguments: json!({}),
+            preconditions: vec![],
+        }
+    }
+    fn fixture(
+        journal: Arc<SqliteOperationJournal>,
+    ) -> (OperationGateway, QueryGateway, Arc<FaultOwner>) {
+        let owner = Arc::new(FaultOwner::new());
+        let mut registry = CapabilityRegistry::new();
+        registry.register(owner.clone()).unwrap();
+        registry
+            .register_query(Arc::new(OperationEvidenceHandler::new(
+                journal.clone(),
+                Some("/evidence-project".into()),
+            )))
+            .unwrap();
+        registry
+            .register_query(Arc::new(
+                OperationGetHandler::new(
+                    journal.clone(),
+                    Some("/evidence-project".into()),
+                    &registry.descriptors(),
+                )
+                .unwrap(),
+            ))
+            .unwrap();
+        registry.validate_links().unwrap();
+        let registry = Arc::new(registry);
+        (
+            OperationGateway::new(
+                registry.clone(),
+                journal,
+                Arc::new(SystemClock),
+                Arc::new(UuidOperationIdGenerator),
+            )
+            .with_project_scope(Some("/evidence-project".into())),
+            QueryGateway::new(registry),
+            owner,
+        )
+    }
+    fn read(reference: &OperationEvidenceReference, offset: u64) -> QueryRequest {
+        QueryRequest {
+            capability: CapabilityRef::new("operation.read_evidence", 1).unwrap(),
+            arguments: json!({"reference":reference,"offset":offset,"limit_bytes":65536}),
+        }
+    }
+    #[tokio::test]
+    async fn oversized_fault_is_atomic_paged_exact_evidence_without_domain_facts_or_replay() {
+        let temporary = tempfile::tempdir().unwrap();
+        let journal = Arc::new(
+            SqliteOperationJournal::open(temporary.path().join("journal.sqlite")).unwrap(),
+        );
+        let (gateway, queries, owner) = fixture(journal.clone());
+        let record = gateway.invoke(&context(), request()).await.unwrap();
+        assert_eq!(record.status, OperationStatus::Uncertain);
+        assert!(record.output.is_none());
+        let fault: ContractFailureRecovery =
+            serde_json::from_value(record.recovery.clone().unwrap()).unwrap();
+        let UncommittedCandidate::Evidence { reference } = fault.candidate else {
+            panic!("large original candidate was not retained as evidence")
+        };
+        assert!(reference.byte_size > MAX_OPERATION_COMMIT_BYTES as u64);
+        assert!(serde_json::to_vec(&record).unwrap().len() < 65536);
+        let mut original = vec![];
+        let mut offset = 0;
+        loop {
+            let snapshot = queries
+                .query(&context(), read(&reference, offset))
+                .await
+                .unwrap();
+            let page: OperationEvidencePage =
+                serde_json::from_value(snapshot.data.unwrap()).unwrap();
+            assert_eq!(page.offset, offset);
+            assert!(page.bytes.len() <= OPERATION_EVIDENCE_CHUNK_BYTES);
+            original.extend_from_slice(&page.bytes);
+            if let Some(next) = page.next_offset {
+                assert!(next > offset);
+                assert_eq!(snapshot.next_reads[0].arguments["offset"], json!(next));
+                offset = next;
+            } else {
+                break;
+            }
+        }
+        assert_eq!(original.len() as u64, reference.byte_size);
+        assert_eq!(rho_operation::evidence_sha256(&original), reference.sha256);
+        let candidate: UncommittedOwnerResult = serde_json::from_slice(&original).unwrap();
+        assert_eq!(candidate.output, Some(owner.output.clone()));
+        assert_eq!(
+            candidate.recovery,
+            Some(json!({"native_marker":"original-stage-marker"}))
+        );
+        assert_eq!(candidate.facts[0].value, json!({"value":37}));
+        assert_eq!(candidate.events[0].payload, json!({"original":true}));
+        assert_eq!(
+            candidate.effect_observations[0].detail,
+            json!({"native_id":42})
+        );
+        assert_eq!(serde_json::to_vec(&candidate).unwrap(), original);
+        assert!(
+            journal
+                .facts_for_operation(&record.operation.operation_id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            journal
+                .events(&record.operation.operation_id)
+                .await
+                .unwrap()
+                .iter()
+                .all(|e| e.kind != "fixture.uncommitted-event")
+        );
+        let repeated = gateway.invoke(&context(), request()).await.unwrap();
+        assert_eq!(
+            repeated.operation.operation_id,
+            record.operation.operation_id
+        );
+        assert_eq!(owner.executed.load(Ordering::SeqCst), 1);
+        let get = queries
+            .query(
+                &context(),
+                QueryRequest {
+                    capability: CapabilityRef::new("operation.get", 1).unwrap(),
+                    arguments: json!({"operation_id":record.operation.operation_id}),
+                },
+            )
+            .await
+            .unwrap();
+        let inspected: OperationGetResult = serde_json::from_value(get.data.unwrap()).unwrap();
+        assert!(
+            inspected
+                .record
+                .unwrap()
+                .next_reads
+                .unwrap()
+                .iter()
+                .any(|r| r.capability.id == "operation.read_evidence")
+        );
+        let mut other = context();
+        other.principal.as_mut().unwrap().id = "another-account".into();
+        assert!(matches!(
+            queries.query(&other, read(&reference, 0)).await,
+            Err(OperationError::NotFound(_))
+        ));
+        let mut wrong_project = CapabilityRegistry::new();
+        wrong_project
+            .register_query(Arc::new(OperationEvidenceHandler::new(
+                journal.clone(),
+                Some("/other-project".into()),
+            )))
+            .unwrap();
+        assert!(matches!(
+            QueryGateway::new(Arc::new(wrong_project))
+                .query(&context(), read(&reference, 0))
+                .await,
+            Err(OperationError::NotFound(_))
+        ));
+        journal.connection().unwrap().execute("UPDATE operation_uncommitted_evidence_chunks SET bytes=zeroblob(length(bytes)) WHERE operation_id=?1 AND chunk_index=1", [record.operation.operation_id.as_str()]).unwrap();
+        assert!(matches!(
+            queries
+                .query(
+                    &context(),
+                    read(&reference, OPERATION_EVIDENCE_CHUNK_BYTES as u64)
+                )
+                .await,
+            Err(OperationError::ContentChanged(_))
+        ));
+    }
+    #[tokio::test]
+    async fn forced_terminal_write_failure_rolls_back_evidence_and_never_claims_persistence() {
+        let journal = Arc::new(SqliteOperationJournal::open_in_memory().unwrap());
+        let (gateway, _, owner) = fixture(journal.clone());
+        journal.connection().unwrap().execute_batch("CREATE TRIGGER fail_contract_terminal BEFORE UPDATE OF status ON operations WHEN NEW.status='uncertain' BEGIN SELECT RAISE(ABORT,'injected terminal write failure'); END;").unwrap();
+        let error = gateway.invoke(&context(), request()).await.unwrap_err();
+        let OperationError::CommitPending {
+            operation_id,
+            detail,
+        } = error
+        else {
+            panic!("storage failure must remain explicitly uncommitted")
+        };
+        assert!(detail.contains("injected terminal write failure"));
+        let record = journal.get(&operation_id).await.unwrap().unwrap();
+        assert_eq!(record.status, OperationStatus::Running);
+        assert!(record.recovery.is_none());
+        {
+            let connection = journal.connection().unwrap();
+            for table in [
+                "operation_uncommitted_evidence",
+                "operation_uncommitted_evidence_chunks",
+                "domain_facts",
+            ] {
+                let count: u64 = connection
+                    .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                        row.get(0)
+                    })
+                    .unwrap();
+                assert_eq!(count, 0);
+            }
+        }
+        let repeated = gateway.invoke(&context(), request()).await.unwrap();
+        assert_eq!(repeated.status, OperationStatus::Running);
+        assert_eq!(owner.executed.load(Ordering::SeqCst), 1);
+    }
 }
 
 #[cfg(test)]

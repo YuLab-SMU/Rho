@@ -59,6 +59,17 @@ impl CapabilityRegistry {
         )? {
             reads.push(read);
         }
+        if let Some(fault) = record
+            .recovery
+            .as_ref()
+            .and_then(|value| serde_json::from_value::<ContractFailureRecovery>(value.clone()).ok())
+        {
+            if let UncommittedCandidate::Evidence { reference } = fault.candidate {
+                if reference.operation_id == *id {
+                    if let Some(read) = self.read_link(context, "operation.read_evidence", "Read the exact uncommitted owner candidate retained by this original operation", json!({"reference":reference,"offset":0,"limit_bytes":65536}))? { reads.push(read); }
+                }
+            }
+        }
         let uncertain = record.status == OperationStatus::Uncertain;
         if record.operation.domain == "workspace" {
             for (capability, purpose) in [
@@ -166,8 +177,8 @@ impl CapabilityRegistry {
         }
         let mut diagnostics = vec![];
         let (code, continuation, message) = match record.status {
-            OperationStatus::Accepted => (DiagnosticCode::Busy, DiagnosticContinuation::ReadAgain, "Accepted; the owner has not completed execution.".into()),
-            OperationStatus::Running => (DiagnosticCode::Busy, DiagnosticContinuation::ReadAgain, "The owner is executing this original operation.".into()),
+            OperationStatus::Accepted => (DiagnosticCode::Busy, DiagnosticContinuation::ReadAgain, "Recorded lifecycle status is accepted; no terminal result has been committed.".into()),
+            OperationStatus::Running => (DiagnosticCode::Busy, DiagnosticContinuation::ReadAgain, "Recorded lifecycle status is running; no terminal result has been committed.".into()),
             OperationStatus::Reconciling => (DiagnosticCode::Busy, DiagnosticContinuation::ReadAgain, "The owner is checking native evidence for this operation.".into()),
             OperationStatus::Failed => (DiagnosticCode::ExecutionFailed, DiagnosticContinuation::InspectOriginal, record.error.clone().unwrap_or_else(|| "The owner reported execution failure; inspect original evidence before deciding on another action.".into())),
             OperationStatus::Cancelled => (DiagnosticCode::Cancelled, DiagnosticContinuation::InspectOriginal, "The owner confirmed cancellation. Cancellation does not establish rollback of earlier effects.".into()),

@@ -1,4 +1,4 @@
-use crate::{CapabilityRegistry, CommitPlan, OperationError};
+use crate::{CapabilityRegistry, CommitPlan, OperationError, UncommittedEvidence, evidence_sha256};
 use rho_contract::*;
 use serde_json::Value;
 
@@ -15,6 +15,7 @@ impl CapabilityRegistry {
             .schemas
             .get(&operation.capability)
             .ok_or_else(|| OperationError::UnknownCapability(operation.capability.display_key()))?;
+        let original_recovery = plan.recovery.clone();
         if plan.outcome == OperationOutcome::Uncertain && plan.recovery.is_none() {
             plan.recovery = Some(
                 serde_json::to_value(ObserveOwnerRecovery::default())
@@ -58,56 +59,90 @@ impl CapabilityRegistry {
                 break;
             }
         }
+        let inline_bytes = serde_json::to_vec(&plan.inline_document())
+            .map_err(|e| OperationError::Contract(e.to_string()))?
+            .len();
+        if inline_bytes > MAX_OPERATION_COMMIT_BYTES {
+            violation(
+                "result_budget",
+                format!(
+                    "The owner candidate contains {inline_bytes} encoded UTF-8 bytes and exceeds the {MAX_OPERATION_COMMIT_BYTES}-byte inline journal limit."
+                ),
+            );
+        }
         if violations.is_empty() {
             return Ok(plan);
         }
+        let candidate = UncommittedOwnerResult {
+            outcome: plan.outcome,
+            output: plan.output,
+            error: plan.error,
+            recovery: original_recovery,
+            facts: plan
+                .facts
+                .into_iter()
+                .map(|f| UncommittedFact {
+                    domain: f.domain,
+                    schema: f.schema,
+                    key: f.key,
+                    value: f.value,
+                })
+                .collect(),
+            effect_observations: plan
+                .effect_observations
+                .into_iter()
+                .map(|e| UncommittedEffectObservation {
+                    kind: e.kind,
+                    source: e.source,
+                    detail: e.detail,
+                    observed_at_ms: e.observed_at_ms,
+                    completeness: e.completeness,
+                })
+                .collect(),
+            events: plan
+                .events
+                .into_iter()
+                .map(|e| UncommittedEvent {
+                    kind: e.kind,
+                    payload: e.payload,
+                })
+                .collect(),
+        };
+        let encoded =
+            serde_json::to_vec(&candidate).map_err(|e| OperationError::Contract(e.to_string()))?;
+        let (candidate, uncommitted_evidence) =
+            if encoded.len() > MAX_INLINE_CONTRACT_CANDIDATE_BYTES {
+                let reference = OperationEvidenceReference {
+                    operation_id: operation.operation_id.clone(),
+                    kind: OperationEvidenceKind::UncommittedOwnerResult,
+                    sha256: evidence_sha256(&encoded),
+                    byte_size: encoded.len() as u64,
+                };
+                (
+                    UncommittedCandidate::Evidence {
+                        reference: reference.clone(),
+                    },
+                    Some(UncommittedEvidence {
+                        reference,
+                        bytes: encoded.into(),
+                    }),
+                )
+            } else {
+                (UncommittedCandidate::Inline { result: candidate }, None)
+            };
         let recovery = ContractFailureRecovery {
             kind: ContractFailureKind::OwnerContractViolation,
             capability: operation.capability.clone(),
             automatic_reexecution: false,
             execution_started,
             violations,
-            candidate: UncommittedOwnerResult {
-                outcome: plan.outcome,
-                output: plan.output,
-                error: plan.error,
-                recovery: plan.recovery,
-                facts: plan
-                    .facts
-                    .into_iter()
-                    .map(|f| UncommittedFact {
-                        domain: f.domain,
-                        schema: f.schema,
-                        key: f.key,
-                        value: f.value,
-                    })
-                    .collect(),
-                effect_observations: plan
-                    .effect_observations
-                    .into_iter()
-                    .map(|e| UncommittedEffectObservation {
-                        kind: e.kind,
-                        source: e.source,
-                        detail: e.detail,
-                        observed_at_ms: e.observed_at_ms,
-                        completeness: e.completeness,
-                    })
-                    .collect(),
-                events: plan
-                    .events
-                    .into_iter()
-                    .map(|e| UncommittedEvent {
-                        kind: e.kind,
-                        payload: e.payload,
-                    })
-                    .collect(),
-            },
+            candidate,
         };
         let recovery =
             serde_json::to_value(recovery).map_err(|e| OperationError::Contract(e.to_string()))?;
         schemas.recovery(&recovery)?;
         Ok(CommitPlan { outcome: if execution_started { OperationOutcome::Uncertain } else { OperationOutcome::Failed }, output: None,
             error: Some("The owner result violated its registered contract. Original uncommitted material is retained in recovery; no candidate domain facts or events were committed.".into()),
-            recovery: Some(recovery), facts: vec![], effect_observations: vec![], events: vec![] })
+            recovery: Some(recovery), facts: vec![], effect_observations: vec![], events: vec![], uncommitted_evidence })
     }
 }
