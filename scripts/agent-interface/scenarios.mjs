@@ -20,10 +20,10 @@ export function createScenario(id,repetition,directory,evidence) {
   state.checkFacts=async report=>{const facts=new Map(report.facts.map(fact=>[fact.key,fact.value]));assert.equal(facts.size,report.facts.length,'duplicate fact keys');assert.deepEqual([...facts.keys()].sort(),[...state.requiredFacts].sort(),'unvalidated extra or missing factual claims');for(const key of state.requiredFacts){assert.ok(facts.has(key),`missing fact ${key}`);assert.ok(report.facts.find(f=>f.key===key).evidence.length>0,`missing evidence for ${key}`);}for(const [key,value] of Object.entries(state.expected))exact(facts,key,value);return facts;};
   if(id==='discovery') {
     fs.writeFileSync(path.join(project,'project-notes.md'),`# Scientific workspace\nStudy marker: ${marker}\n`);
-    state.setup=async host=>{await host.newPage();const overview=(await host.query('host.overview')).data;state.expected={project_name:path.basename(project),native_session:host.session,study_marker:marker,windows:1,modules:overview.modules.filter(module=>module.available).map(module=>module.module).sort().join(',')};};
+    state.setup=async host=>{await host.newPage();state.expected={project_name:path.basename(project),native_session:host.session,study_marker:marker,windows:1};};
     state.prompt=()=>`Join this Rho scientific workspace and report the project name, native R session, study marker from the project notes, connected window count, and available scientific module IDs as a sorted comma-separated list without spaces. Inspect only; do not execute R or change state. Use fact keys project_name, native_session, study_marker, windows, modules.`;
     state.requiredFacts=['project_name','native_session','study_marker','windows','modules'];
-    state.verify=async(report,host,proxy)=>{const facts=await state.checkFacts(report);assert.ok(proxy.calls.length>0,'discovery must use actual Rho evidence');};
+    state.verify=async(report,host,proxy)=>{const facts=await state.checkFacts(report);const observations=proxy.results('rho.host.overview.v1').filter(snapshot=>snapshot?.status==='ready'&&snapshot.data?.modules).map(snapshot=>({source:snapshot.source,observed_at_ms:snapshot.observed_at_ms,modules:snapshot.data.modules}));assert.ok(observations.some(observation=>availableModuleList(observation.modules)===facts.get('modules')),'module facts must match one actual timed Host observation consumed by the Agent, not an earlier fixture observation or fabricated union');json(path.join(evidence,'grading-module-observations.json'),observations);};
   } else if(id==='large_objects') {
     const value=41000+repetition;
     state.setup=async host=>host.run(`for(i in 1:1215) assign(sprintf('campaign_%04d',i),i,envir=.GlobalEnv); campaign_1177 <- as.data.frame(matrix(seq_len(1400*72),nrow=1400,ncol=72)); names(campaign_1177)<-sprintf('assay_%02d',1:72); campaign_1177[1307,63]<-${value}; rm(i)`);
@@ -99,3 +99,5 @@ export function createScenario(id,repetition,directory,evidence) {
 }
 async function appendEditor(editor,text) {await editor.focus();await editor.press(process.platform==='darwin'?'Meta+End':'Control+End');await editor.press('End');await editor.pressSequentially(text);}
 function selectedText(text,selection){return text.slice(Math.min(selection.anchor,selection.head),Math.max(selection.anchor,selection.head));}
+
+export function availableModuleList(modules) {return modules.filter(module=>module.available).map(module=>module.module).sort().join(',');}
