@@ -294,9 +294,83 @@ impl QueryHandler for WorkspaceOutputHandler {
             Ok(data) => (QueryStatus::Ready, Some(data), Vec::new()),
             Err(error) => (QueryStatus::Unavailable, None, vec![error]),
         };
+        let mut next_reads = Vec::new();
+        if let Some(data) = &data {
+            let next = match self.kind {
+                OutputQueryKind::ReadText => data
+                    .get("continuation")
+                    .filter(|value| !value.is_null())
+                    .cloned()
+                    .map(|args| {
+                        (
+                            "Continue the same immutable UTF-8 text artifact",
+                            "output.read_text",
+                            args,
+                        )
+                    }),
+                OutputQueryKind::View => data.get("reference").cloned().map(|reference| {
+                    (
+                        "Read original evidence bytes; the preview is only a presentation",
+                        "workspace.read_output",
+                        json!({"reference":reference,"offset":0,"limit_bytes":65536}),
+                    )
+                }),
+                OutputQueryKind::Read
+                    if data.get("has_more").and_then(Value::as_bool) == Some(true) =>
+                {
+                    let mut args: ReadOutputArguments =
+                        serde_json::from_value(value.clone()).map_err(invalid)?;
+                    args.offset += data
+                        .get("bytes")
+                        .and_then(Value::as_array)
+                        .map_or(0, Vec::len) as u64;
+                    Some((
+                        "Continue original evidence bytes",
+                        "workspace.read_output",
+                        serde_json::to_value(args).map_err(invalid)?,
+                    ))
+                }
+                OutputQueryKind::List | OutputQueryKind::Events
+                    if data.get("has_more").and_then(Value::as_bool) == Some(true) =>
+                {
+                    let mut args: OutputEventsArguments =
+                        serde_json::from_value(value.clone()).map_err(invalid)?;
+                    args.after_sequence = data
+                        .get("next_sequence")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(args.after_sequence);
+                    Some((
+                        "Continue output observations",
+                        if matches!(self.kind, OutputQueryKind::List) {
+                            "workspace.list_outputs"
+                        } else {
+                            "workspace.output_events"
+                        },
+                        serde_json::to_value(args).map_err(invalid)?,
+                    ))
+                }
+                _ => None,
+            };
+            if let Some((purpose, capability, arguments)) = next {
+                next_reads.push(NextRead {
+                    purpose: purpose.into(),
+                    capability: CapabilityRef::new(capability, 1)?,
+                    arguments,
+                    missing_identity_fields: vec![],
+                });
+            }
+        }
+        let diagnostics = if status == QueryStatus::Unavailable {
+            notices
+                .iter()
+                .map(|notice| OperationError::Unavailable(notice.clone()).diagnostic())
+                .collect()
+        } else {
+            vec![]
+        };
         Ok(QuerySnapshot {
-            next_reads: Vec::new(),
-            diagnostics: Vec::new(),
+            next_reads,
+            diagnostics,
             target: TargetRef {
                 kind: if self.owner.is_some() {
                     "workspace"
