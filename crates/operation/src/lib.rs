@@ -442,7 +442,6 @@ pub struct CapabilityRegistry {
     handlers: BTreeMap<CapabilityRef, Arc<dyn OperationHandler>>,
     queries: BTreeMap<CapabilityRef, Arc<dyn QueryHandler>>,
     schemas: BTreeMap<CapabilityRef, schema::CapabilitySchemas>,
-    controls: BTreeMap<CapabilityRef, CapabilityDescriptor>,
     descriptors: BTreeMap<CapabilityRef, CapabilityDescriptor>,
 }
 
@@ -472,7 +471,6 @@ impl CapabilityRegistry {
         );
         self.descriptors
             .insert(capability.clone(), descriptor.clone());
-        self.controls.insert(capability, descriptor);
         Ok(())
     }
 
@@ -578,6 +576,51 @@ impl CapabilityRegistry {
     }
     pub fn descriptor(&self, capability: &CapabilityRef) -> Option<&CapabilityDescriptor> {
         self.descriptors.get(capability)
+    }
+    pub fn validate_control_input(
+        &self,
+        context: &CallContext,
+        capability: &CapabilityRef,
+        arguments: &Value,
+    ) -> Result<(), OperationError> {
+        context.validate()?;
+        let descriptor = self
+            .descriptors
+            .get(capability)
+            .filter(|d| d.kind == CapabilityKind::Control)
+            .ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))?;
+        let missing = descriptor
+            .required_scopes
+            .difference(&context.scopes)
+            .cloned()
+            .collect::<Vec<_>>();
+        if !missing.is_empty() {
+            return Err(OperationError::AccessDenied {
+                capability: capability.display_key(),
+                missing,
+            });
+        }
+        self.schemas
+            .get(capability)
+            .expect("registered schema")
+            .input(arguments)
+    }
+    pub fn validate_control_output(
+        &self,
+        capability: &CapabilityRef,
+        output: &Value,
+    ) -> Result<(), OperationError> {
+        if !self
+            .descriptors
+            .get(capability)
+            .is_some_and(|d| d.kind == CapabilityKind::Control)
+        {
+            return Err(OperationError::UnknownCapability(capability.display_key()));
+        }
+        self.schemas
+            .get(capability)
+            .expect("registered schema")
+            .output(output)
     }
 
     pub fn validate_links(&mut self) -> Result<(), OperationError> {
