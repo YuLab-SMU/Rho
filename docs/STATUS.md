@@ -28,6 +28,34 @@ remains established.
 The frozen baseline remains commit `d5a970b1559c9bd85567073108d05bca21886de4`, tagged
 `studio-round1-baseline-2026-09-07`.
 
+## Resume in a new session
+
+The latest product implementation is commit `83b9de6` on branch `wip/rho-next`.
+The authorized Packages construction is complete; no known failing checks or
+unfinished implementation remains. Further user feedback can build on this state.
+Repository instructions are consolidated in the root `AGENTS.md`.
+
+The review project is `target/calm-precision-project`, the operation journal is
+`target/calm-precision-run/next.sqlite`, and its application store is the sibling
+`next.studio.sqlite`. The built executable is `target/debug/rho`. At handoff,
+Chrome has the new Packages view open on the real ggplot2 Source inspector.
+The preview was restarted only after confirming an idle session with zero user
+bindings, no queue and no input request. R memory is not a recovery artifact.
+
+Inspect live Host ownership before launching another process. If the review Host
+has stopped, run this from the repository root and open its newly printed private
+URL (ports and tokens are ephemeral):
+
+```sh
+target/debug/rho --database "$PWD/target/calm-precision-run/next.sqlite" \
+  --project "$PWD/target/calm-precision-project" \
+  workbench --dev-assets "$PWD/crates/workbench/assets"
+```
+
+The review material under `target/` is local and untracked. If it has been cleaned,
+use the tracked gapminder fixture and the operator guide to prepare a new review
+project; do not treat a missing fixture as a migration or recovery requirement.
+
 ## Implemented
 
 | Area | Current behavior |
