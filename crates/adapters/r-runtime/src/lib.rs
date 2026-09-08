@@ -388,6 +388,7 @@ struct BridgeResponse {
 enum BridgeAction<'a> {
     Execute(&'a RunRArguments),
     Snapshot(&'a SnapshotArguments),
+    Packages(&'a rho_contract::PackageQueryArguments),
     InspectObject(&'a InspectArguments),
     Help(&'a HelpArguments),
     Lint(&'a LintArguments),
@@ -539,6 +540,7 @@ impl WorkspaceRuntime for ArkRuntime {
         let id = format!("query_{}", Uuid::new_v4().simple());
         let action = match query {
             WorkspaceQuery::Snapshot(args) => BridgeAction::Snapshot(args),
+            WorkspaceQuery::Packages(args) => BridgeAction::Packages(args),
             WorkspaceQuery::InspectObject(args) => BridgeAction::InspectObject(args),
         };
         let (response, _, result_path) = self
@@ -547,6 +549,12 @@ impl WorkspaceRuntime for ArkRuntime {
         // Query transport files are temporary; no Operation or retained query history.
         let _ = std::fs::remove_file(result_path);
         let data = match query {
+            WorkspaceQuery::Packages(_) => {
+                let data: rho_contract::PackageSnapshotData =
+                    serde_json::from_value(response.value).map_err(before)?;
+                serde_json::to_value(data).map_err(before)?
+            }
+
             WorkspaceQuery::Snapshot(_) => {
                 let data: WorkspaceSnapshotData =
                     serde_json::from_value(response.value).map_err(before)?;
@@ -559,9 +567,16 @@ impl WorkspaceRuntime for ArkRuntime {
             }
         };
         Ok(WorkspaceObservation {
-            session_id: self.session_id.clone(), source: "ark/rho.bridge".into(),
-            observed_at_ms: now_ms(), data, completeness: ObservationCompleteness::Partial,
-            notices: vec!["Bounded live observation; lazy/active bindings and classed values are not evaluated.".into()],
+            session_id: self.session_id.clone(),
+            source: "ark/rho.bridge".into(),
+            observed_at_ms: now_ms(),
+            data,
+            completeness: ObservationCompleteness::Partial,
+            notices: if matches!(query, WorkspaceQuery::Packages(_)) {
+                vec!["Read-only package metadata from the current session; loadability was not tested.".into()]
+            } else {
+                vec!["Bounded live observation; lazy/active bindings and classed values are not evaluated.".into()]
+            },
         })
     }
 
@@ -658,7 +673,9 @@ impl ArkRuntime {
             .data_root
             .join(format!("{:x}.json", Sha256::digest(id.as_bytes())));
         let recording = match &action {
-            BridgeAction::Snapshot(_) | BridgeAction::InspectObject(_) => None,
+            BridgeAction::Snapshot(_)
+            | BridgeAction::InspectObject(_)
+            | BridgeAction::Packages(_) => None,
             _ => Some(rho_contract::OperationId::new(id).map_err(before)?),
         };
         let bridge_request = BridgeRequest {

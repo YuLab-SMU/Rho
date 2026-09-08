@@ -254,6 +254,15 @@ async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
     .unwrap()
     .unwrap();
     assert_eq!(busy.status, QueryStatus::Busy);
+    let packages_busy = tokio::time::timeout(
+        Duration::from_millis(250),
+        host.query_snapshot(&context, query("workspace.packages", json!({}))),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(packages_busy.status, QueryStatus::Busy);
+
     let project_busy = host
         .query_snapshot(&context, query("project.snapshot", json!({})))
         .await
@@ -381,6 +390,37 @@ async fn real_workspace_queries_are_bounded_and_do_not_force_bindings_or_record_
         .unwrap();
     assert_eq!(snapshot.status, QueryStatus::Ready, "{snapshot:?}");
     assert_eq!(snapshot.target, created.operation.target);
+    let packages = host
+        .query_snapshot(
+            &context,
+            query("workspace.packages", json!({"filter":"stats"})),
+        )
+        .await
+        .unwrap();
+    assert_eq!(packages.status, QueryStatus::Ready, "{packages:?}");
+    assert_eq!(packages.target, snapshot.target);
+    let data: rho_contract::PackageSnapshotData =
+        serde_json::from_value(packages.data.unwrap()).unwrap();
+    let stats = data.packages.iter().find(|p| p.name == "stats").unwrap();
+    assert!(stats.loaded_version.is_some());
+    assert!(stats.attached);
+    assert!(stats.library_path.is_some());
+    assert!(!data.library_paths.is_empty());
+    assert!(
+        host.query_snapshot(
+            &context,
+            query(
+                "workspace.packages",
+                json!({"expected_session":"old-session"})
+            )
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(
+        host.outbox(&context, 0, 1000).await.unwrap().len(),
+        history.len()
+    );
     assert_eq!(snapshot.source, "ark/rho.bridge");
     assert!(snapshot.observed_at_ms > 0);
     let objects = snapshot.data.as_ref().unwrap()["objects"]

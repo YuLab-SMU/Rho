@@ -573,6 +573,35 @@ mod tests {
     }
 
     #[test]
+    fn packages_query_is_bounded_and_has_no_mutation_arguments() {
+        use rho_operation::QueryHandler;
+        let owner = Arc::new(WorkspaceRunHandler::new(Arc::new(CountingRuntime {
+            calls: AtomicUsize::new(0),
+        })));
+        let handler = WorkspaceQueryHandler::new(owner, WorkspaceQueryKind::Packages);
+        let defaults = handler.normalize_arguments(&json!({})).unwrap();
+        assert_eq!(defaults["limit"], 100);
+        assert_eq!(defaults["mode"], "installed");
+        for args in [
+            json!({"limit":0}),
+            json!({"limit":201}),
+            json!({"offset":10001}),
+            json!({"filter":"a".repeat(129)}),
+            json!({"filter":"\u{0}"}),
+            json!({"mode":"install"}),
+            json!({"library":"/tmp"}),
+            json!({"install":true}),
+        ] {
+            assert!(handler.normalize_arguments(&args).is_err(), "{args:?}");
+        }
+        assert!(
+            handler
+                .normalize_arguments(&json!({"filter":"中文", "mode":"loaded"}))
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn tools_normalize_defaults_and_reject_unbounded_or_executable_configuration() {
         let owner = Arc::new(WorkspaceRunHandler::new(Arc::new(CountingRuntime {
             calls: AtomicUsize::new(0),

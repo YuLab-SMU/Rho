@@ -171,6 +171,20 @@ Continue to identify outputs by their actual operation/output reference. Viewing
 must not rerun R; a missing original must not be replaced with a same-named image.
 SVG remains an image, and HTML/widgets must not acquire page execution privileges.
 
+### F08 — Package inspection without installation decisions
+
+**User direction (2026-09-08):** Inspecting variables and dealing with missing R
+packages are recurring pain points. Studio has an object inspector but needs a
+package view. Package installation depends on runtime management (local R, conda,
+renv and others), OS, configured libraries and R-version choices. Installation is
+excluded here and is intended for a separate future plugin.
+
+**Required experience:** Inspect what the connected R session can see, distinguish
+installed, loaded and attached packages, locate versions and library paths, and
+understand duplicate copies without making installation decisions. Preserve the
+current runtime, library configuration and loaded/attached state while viewing.
+The interaction contract is in [Design section 11](RHO-DESIGN.md#11-read-only-package-inspection).
+
 ## Workflow reference: a country development analysis
 
 The supplied tutorial follows a complete project using gapminder: import, clean,

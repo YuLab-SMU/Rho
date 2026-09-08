@@ -13,6 +13,7 @@ export const panelNames: Record<string, string> = {
   editor: "Editor",
   console: "Console",
   objects: "Objects",
+  packages: "Packages",
   plots: "Plots",
 };
 export const directions = {
@@ -240,7 +241,7 @@ export class PanelLayout {
       const preferred = this.model.getNodeById(
         component === "document"
           ? "editor-group"
-          : component === "viewer"
+          : component === "viewer" || component === "packages"
             ? "objects-group"
             : `${component}-group`,
       );

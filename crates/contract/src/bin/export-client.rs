@@ -30,6 +30,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     RunROutput::export_all(&config)?;
     BindingSummary::export_all(&config)?;
     WorkspaceSnapshotData::export_all(&config)?;
+    PackageQueryArguments::export_all(&config)?;
+    PackageSnapshotData::export_all(&config)?;
     FilePage::export_all(&config)?;
     ProjectPatchResult::export_all(&config)?;
     RecentOperations::export_all(&config)?;

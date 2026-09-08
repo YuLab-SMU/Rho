@@ -101,6 +101,14 @@ the UI can retain the previous observation with its timestamp. Object inspection
 avoids forcing promises/active bindings or invoking user-defined print, format and
 subset methods. Unsupported classed objects remain metadata-only.
 
+Live package inspection belongs to Workspace because the active R session owns
+its library search order, loaded namespaces and attached packages. The bounded
+`workspace.packages` query reads DESCRIPTION text and existing namespace metadata
+through the same idle-only lane, without loading packages or recording an Operation.
+It does not substitute a separate R process's inventory for the live session.
+Environment retains management/realization ownership; Studio package viewing adds
+no installation or environment-selection path.
+
 Paginated summaries come from the journal. Runtime output logs contain ordered,
 bounded observations and media references; they do not determine execution outcome.
 A missing output event is not itself execution failure. Output storage has an

@@ -1,6 +1,8 @@
 use super::WorkspaceRunHandler;
 use async_trait::async_trait;
-pub use rho_contract::{BindingSummary, WorkspaceSnapshotData};
+pub use rho_contract::{
+    BindingSummary, PackageQueryArguments, PackageSnapshotData, WorkspaceSnapshotData,
+};
 use rho_contract::{
     CancellationClass, CapabilityDescriptor, CapabilityKind, CapabilityRef, IdempotencyClass,
     ObservationCompleteness, QuerySnapshot, QueryStatus, RetryClass, TargetRef,
@@ -49,12 +51,14 @@ pub struct InspectArguments {
 pub enum WorkspaceQuery {
     Snapshot(SnapshotArguments),
     InspectObject(InspectArguments),
+    Packages(PackageQueryArguments),
 }
 impl WorkspaceQuery {
     fn expected_session(&self) -> Option<&str> {
         match self {
             Self::Snapshot(arguments) => arguments.expected_session.as_deref(),
             Self::InspectObject(arguments) => arguments.expected_session.as_deref(),
+            Self::Packages(arguments) => arguments.expected_session.as_deref(),
         }
     }
 }
@@ -70,6 +74,7 @@ pub struct WorkspaceObservation {
 
 #[derive(Clone, Copy)]
 pub enum WorkspaceQueryKind {
+    Packages,
     Snapshot,
     InspectObject,
 }
@@ -82,6 +87,10 @@ pub struct WorkspaceQueryHandler {
 impl WorkspaceQueryHandler {
     pub fn new(owner: Arc<WorkspaceRunHandler>, kind: WorkspaceQueryKind) -> Self {
         let (id, input_schema) = match kind {
+            WorkspaceQueryKind::Packages => (
+                "workspace.packages",
+                schema_for!(PackageQueryArguments).to_value(),
+            ),
             WorkspaceQueryKind::Snapshot => {
                 (SNAPSHOT_QUERY_ID, schema_for!(SnapshotArguments).to_value())
             }
@@ -110,6 +119,20 @@ impl WorkspaceQueryHandler {
     fn parse(&self, arguments: &Value) -> Result<WorkspaceQuery, OperationError> {
         let invalid = |e: serde_json::Error| OperationError::InvalidInput(e.to_string());
         match self.kind {
+            WorkspaceQueryKind::Packages => {
+                let args: PackageQueryArguments =
+                    serde_json::from_value(arguments.clone()).map_err(invalid)?;
+                if args.limit == 0
+                    || args.limit > 200
+                    || args.offset > 10000
+                    || args.filter.chars().count() > 128
+                    || args.filter.contains('\0')
+                {
+                    return Err(OperationError::InvalidInput("Packages requires limit 1..=200, offset <= 10000 and a filter of at most 128 characters".into()));
+                }
+                Ok(WorkspaceQuery::Packages(args))
+            }
+
             WorkspaceQueryKind::Snapshot => {
                 let args: SnapshotArguments =
                     serde_json::from_value(arguments.clone()).map_err(invalid)?;
@@ -149,6 +172,7 @@ impl QueryHandler for WorkspaceQueryHandler {
         let query = self.parse(arguments)?;
         match query {
             WorkspaceQuery::Snapshot(args) => serde_json::to_value(args),
+            WorkspaceQuery::Packages(args) => serde_json::to_value(args),
             WorkspaceQuery::InspectObject(args) => serde_json::to_value(args),
         }
         .map_err(|e| OperationError::InvalidInput(e.to_string()))

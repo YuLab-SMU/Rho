@@ -12,6 +12,7 @@ import {
   ObjectViewer,
 } from "./panels/resource-panels";
 import { useStudio } from "./context";
+import { PackagesPanel } from "./panels/packages-panel";
 import { ConsolePanel, PlotPanel } from "./panels/output-panels";
 import { LayoutHost, PanelLayout, panelNames } from "./layout-host";
 import type { RProbe } from "./generated/RProbe";
@@ -500,6 +501,8 @@ export function AppShell() {
                   return <DocumentPanel documentId={node.getId()} />;
                 case "files":
                   return <FilesPanel />;
+                case "packages":
+                  return <PackagesPanel />;
                 case "objects":
                   return <ObjectsPanel />;
                 case "viewer":

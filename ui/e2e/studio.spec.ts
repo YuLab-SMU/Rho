@@ -922,6 +922,7 @@ test("multiple Console drafts, continuation, history and IME events retain their
     exact: true,
   });
   await first.fill("1 + 1");
+  await expect(page.locator(".console-prompt .primary").first()).toBeEnabled();
   await first.press("Enter");
   await expect(page.locator(".console-transcript:visible")).toContainText(
     "[1] 2",
@@ -1398,4 +1399,104 @@ test("fixed gapminder analysis, in-place previews and input/frame latency under 
       async () => (await queryNative("workspace.console_state")).data.current,
     )
     .toBeNull();
+});
+
+test("Packages observes live libraries, duplicate versions and loaded state without installation", async ({
+  page,
+}) => {
+  await page.goto(url);
+  await resetLayout(page);
+  const setup = await invokeNative(`
+    .rho_packages_original <- .libPaths()
+    .rho_packages_dir <- tempfile('rho-packages-')
+    dir.create(.rho_packages_dir)
+    .rho_packages_libs <- file.path(.rho_packages_dir, c('库一', '库二'))
+    for (i in seq_along(.rho_packages_libs)) {
+      dir.create(.rho_packages_libs[[i]])
+      pkg <- file.path(.rho_packages_libs[[i]], 'rhoStudioFixture')
+      dir.create(pkg)
+      writeLines(c('Package: rhoStudioFixture', paste0('Version: ', i, '.0'), 'Title: 中文 <img src=x onerror=alert(1)>'), file.path(pkg, 'DESCRIPTION'))
+    }
+    .libPaths(c(.rho_packages_libs, .rho_packages_original))
+    rm(pkg, i)
+  `);
+  expect(setup.status).toBe("succeeded");
+  try {
+    await page.getByRole("button", { name: "Panels", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Packages", exact: true }).click();
+    const panel = page.locator(".packages-panel:visible");
+    await expect(panel.getByText(/Last observed \d/)).toBeVisible();
+    await panel.getByLabel("Search Packages").fill("rhoStudioFixture");
+    await expect(panel.locator(".package-row")).toHaveCount(2);
+    await expect(panel.locator(".package-row").first()).toContainText("1.0");
+    await expect(panel.locator(".package-row").last()).toContainText(
+      "Later copy",
+    );
+    await panel.locator(".package-row").first().click();
+    await expect(
+      panel.getByText("中文 <img src=x onerror=alert(1)>", { exact: true }),
+    ).toBeVisible();
+    await expect(panel.locator("img, script")).toHaveCount(0);
+    await expect(panel.getByText("Not loaded", { exact: true })).toBeVisible();
+    await expect(
+      panel.getByRole("button", {
+        name: /^(Install|Update|Remove|Load Package)( |$)/,
+      }),
+    ).toHaveCount(0);
+    const busyRun = invokeNative("Sys.sleep(2)");
+    await expect(panel.getByRole("status")).toContainText("R busy");
+    await expect(panel.locator(".package-row")).toHaveCount(2);
+    await expect(
+      panel.getByRole("button", { name: "Refresh", exact: true }),
+    ).toBeDisabled();
+    await busyRun;
+    await invokeNative(
+      ".libPaths(c(rev(.rho_packages_libs), .rho_packages_original))",
+    );
+    await expect(
+      panel.getByRole("button", { name: "Refresh", exact: true }),
+    ).toBeEnabled();
+    await panel.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(panel.locator(".package-row").first()).toContainText("2.0");
+    await panel.getByLabel("Search Packages").fill("stats");
+    await panel.getByLabel("Package View").selectOption("loaded");
+    await expect(
+      panel.locator(".package-row").filter({ hasText: /stats/ }).first(),
+    ).toContainText("Attached");
+    await panel.getByLabel("Package View").selectOption("attached");
+    await expect(panel.locator(".package-row").first()).toContainText(
+      "Attached",
+    );
+    await panel.locator("summary").click();
+    await expect(
+      panel.getByText("Current session library search order"),
+    ).toBeVisible();
+    await page.screenshot({
+      path: "../target/studio-browser/packages-runtime.png",
+    });
+    await panel.locator("summary").click();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(panel.locator(".package-row").first()).toBeVisible();
+    const rowBounds = await panel.locator(".package-row").first().boundingBox();
+    const scrollBounds = await panel.locator(".package-scroll").boundingBox();
+    expect(rowBounds!.y + rowBounds!.height).toBeLessThanOrEqual(
+      scrollBounds!.y + scrollBounds!.height,
+    );
+    await page.screenshot({
+      path: "../target/studio-browser/packages-panel.png",
+    });
+    await page
+      .locator('[data-rho-view="packages"]')
+      .locator("..")
+      .locator("..")
+      .locator(".flexlayout__tab_button_trailing")
+      .click();
+    await page.getByRole("button", { name: "Panels", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Packages", exact: true }).click();
+    await expect(panel.getByLabel("Search Packages")).toHaveValue("stats");
+  } finally {
+    await invokeNative(
+      ".libPaths(.rho_packages_original); unlink(.rho_packages_dir, recursive = TRUE); rm(.rho_packages_original, .rho_packages_dir, .rho_packages_libs)",
+    );
+  }
 });

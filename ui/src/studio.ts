@@ -3,6 +3,7 @@ import type { RunRArguments } from "./generated/RunRArguments";
 import type { ConsoleState } from "./generated/ConsoleState";
 import type { RunSource } from "./generated/RunSource";
 import { Documents } from "./documents";
+import { Packages } from "./packages";
 import { newPlotView } from "./plot-viewport";
 import type { PlotView } from "./plot-viewport";
 import type { Placement } from "./layout-model";
@@ -36,6 +37,7 @@ export const terminal = (status: string) =>
 export class Studio {
   info: WorkbenchInfo | null = null;
   readonly documents = new Documents(this);
+  readonly packages = new Packages(this);
   directory: DirectoryPage | null = null;
   directories = new Map<string, DirectoryPage>();
   expandedDirectories = new Set<string>([""]);
@@ -451,6 +453,7 @@ export class Studio {
     this.consoleState = null;
     this.directoryError = "";
     this.objects = null;
+    this.packages.reset();
     this.inspectors.clear();
     await this.restore();
     await this.observe();
@@ -473,6 +476,7 @@ export class Studio {
     ]);
     this.runtime = null;
     this.objects = null;
+    this.packages.reset();
     this.inspectors.clear();
     if (this.r.error) this.error = this.r.error;
     await this.observe();
@@ -733,7 +737,10 @@ export class Studio {
         id === "workspace.run_r",
       );
       this.records.set(record.operation.operation_id, record);
-      if (id.startsWith("workspace.")) this.observedAt = 0;
+      if (id.startsWith("workspace.")) {
+        this.observedAt = 0;
+        this.packages.invalidate();
+      }
       this.pending = this.pending.filter((p) => p !== request);
       this.persist();
       this.emit();
@@ -1065,8 +1072,10 @@ export class Studio {
     if (
       terminal(record.status) &&
       this.records.get(id)?.status !== record.status
-    )
+    ) {
       this.observedAt = 0;
+      this.packages.invalidate();
+    }
     this.records.set(id, record);
     const pending = this.pending.find(
       (p) =>
@@ -1101,6 +1110,7 @@ export class Studio {
         if (this.runtime && this.runtime.session_id !== next.session_id) {
           this.inspectors.clear();
           this.objects = null;
+          this.packages.reset();
         }
         this.runtime = next;
       }
@@ -1125,6 +1135,8 @@ export class Studio {
         } else this.objectsNotice = objects.notices.join("\n");
       }
     }
+    if (this.packages.visible && this.packages.dirty)
+      await this.packages.refresh();
     for (const pending of [...this.pending]) {
       if (pending.operationId) {
         await this.acceptRecord(project, pending.operationId);

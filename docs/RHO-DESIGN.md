@@ -568,3 +568,34 @@ plot history/comparison/export and recovery in one analysis. Performance evidenc
 must state workload, machine and measurement method independently of functional
 acceptance. Independent R sessions, LSP/DAP, package/data management, Quarto,
 plugins and distribution remain outside this round.
+
+
+## 11. Read-only package inspection
+
+Packages is an optional Studio view opened from **Panels → Packages**, initially
+joining the Objects group. It follows the same close, reopen and docking behavior.
+Existing layouts are preserved. Package inspection answers what the current R
+session observes, rather than selecting an installation strategy.
+
+- Show the actual R version, R home, platform and ordered `.libPaths()` from the
+  connected session. Do not infer conda, renv or another manager from a path name.
+- Distinguish installed DESCRIPTION metadata, loaded namespaces and packages
+  attached to the search path. Show all observed copies of a package, their
+  versions and libraries, the first installed copy in library order, and the
+  separate version/path of any already loaded namespace. A loaded namespace can
+  continue using a different copy from the one first in the current library paths.
+- Search names/titles, page results, and expand details in place. Bound each page
+  to 100 rows (API maximum 200), library paths to 128, scanned entries to 10,000,
+  namespaces to 512 and a DESCRIPTION file to 256 KiB. State incomplete reads;
+  absence from an incomplete observation is not proof a package is missing.
+- Query only an existing R session. Visible observations refresh after execution;
+  Refresh also covers external library changes. While busy, keep the last
+  observation and its timestamp. Clear observations on session/project changes
+  and reject late responses from the former session or an earlier search.
+- Inspection never installs, updates, removes, loads or attaches a package,
+  changes `.libPaths()`, executes startup files, or tests loadability. Package
+  installation and environment-management decisions belong to a future separate
+  plugin, including runtime, OS, library configuration and R-version choices.
+
+The user scoped this view on 2026-09-08. Existing scientific Environment capabilities
+remain available through their owner; this view adds no installation workflow.

@@ -301,3 +301,20 @@ It submits two real CPU jobs and cancels only its own receipt-loss test job. It
 retains evidence and is excluded from default CI. Inspect original operations/native
 references after failure instead of resubmitting blindly. See [Status](STATUS.md)
 for the actual tested scope and [Development](DEVELOPMENT.md) for local fixtures.
+
+
+## Inspect R packages in Studio
+
+Open **Panels → Packages** in a current Workbench build. The view joins Objects
+when that group exists; it can be moved, closed and reopened normally.
+Use the view selector for installed metadata, loaded namespaces or attached
+packages, and search by name (or installed title). Expand a package to inspect its
+library, lookup order and loaded version/path. Expand the R summary for R home,
+platform and the session's ordered library paths. **Refresh** rereads the current
+session when idle; busy observations retain their last-observed time.
+
+The view has no installation, update, removal, loading or library-configuration
+controls. It reports bounded observations and does not infer an environment
+manager. If an older running Host lacks `workspace.packages`, restart Workbench
+with the current binary when ready to end that R session; a browser asset refresh
+alone cannot add a Host capability.

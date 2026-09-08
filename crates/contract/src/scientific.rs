@@ -137,3 +137,65 @@ pub struct RunROutput {
     pub conditions: Vec<Value>,
     pub output_references: Vec<Value>,
 }
+
+/// Bounded observation of the libraries and namespaces of the existing R session.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackageQueryArguments {
+    #[serde(default)]
+    pub expected_session: Option<String>,
+    #[serde(default)]
+    #[schemars(length(max = 128))]
+    pub filter: String,
+    #[serde(default)]
+    pub mode: PackageQueryMode,
+    #[serde(default)]
+    #[schemars(range(max = 10000))]
+    pub offset: u32,
+    #[serde(default = "package_page_size")]
+    #[schemars(range(min = 1, max = 200))]
+    pub limit: u32,
+}
+fn package_page_size() -> u32 {
+    100
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageQueryMode {
+    #[default]
+    Installed,
+    Loaded,
+    Attached,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackageEntry {
+    pub name: String,
+    pub version: String,
+    pub title: Option<String>,
+    pub built: Option<String>,
+    pub library_path: Option<String>,
+    pub library_index: Option<u32>,
+    pub first_in_library_path: bool,
+    pub loaded_version: Option<String>,
+    pub loaded_path: Option<String>,
+    pub loaded_from_library: bool,
+    pub attached: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PackageSnapshotData {
+    pub r_version: String,
+    pub r_home: String,
+    pub platform: String,
+    pub library_paths: Vec<String>,
+    pub mode: PackageQueryMode,
+    pub filter: String,
+    pub offset: u32,
+    pub next_offset: Option<u32>,
+    pub packages: Vec<PackageEntry>,
+    pub total_matches: u32,
+    pub scanned: u32,
+    pub scan_complete: bool,
+    pub notices: Vec<String>,
+}

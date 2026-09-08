@@ -589,6 +589,10 @@ impl NextHost {
                 WorkspaceQueryKind::Snapshot,
             )))?;
             registry.register_query(Arc::new(WorkspaceQueryHandler::new(
+                workspace.clone(),
+                WorkspaceQueryKind::Packages,
+            )))?;
+            registry.register_query(Arc::new(WorkspaceQueryHandler::new(
                 workspace,
                 WorkspaceQueryKind::InspectObject,
             )))?;

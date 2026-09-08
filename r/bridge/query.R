@@ -126,3 +126,99 @@ rho_inspect_object <- function(name, max_items) {
             is.numeric(max_items), length(max_items) == 1L, max_items >= 1, max_items <= 100)
   rho_binding_summary(name, inspect = TRUE, max_items = as.integer(max_items))
 }
+
+# Observe DESCRIPTION text and existing namespaces only. No package is loaded,
+# attached, installed, or probed, and no library path or startup file is changed.
+rho_packages <- function(payload) {
+  stopifnot(payload$mode %in% c("installed", "loaded", "attached"),
+            length(payload$filter) == 1L, nchar(payload$filter) <= 128L,
+            payload$limit >= 1L, payload$limit <= 200L,
+            payload$offset >= 0L, payload$offset <= 10000L)
+  libs <- .libPaths()
+  complete <- length(libs) <= 128L
+  libs <- head(libs, 128L)
+  notices <- character()
+  note <- function(text) { notices <<- unique(c(notices, text)); complete <<- FALSE }
+  if (!complete) note("Library paths limited to 128.")
+  namespaces <- sort(loadedNamespaces())
+  if (length(namespaces) > 512L) note("Loaded namespaces limited to 512.")
+  attached <- sub("^package:", "", grep("^package:", search(), value = TRUE))
+  loaded <- setNames(lapply(head(namespaces, 512L), function(name) {
+    tryCatch(list(version = as.character(getNamespaceVersion(name)),
+                  path = if (identical(name, "base")) file.path(R.home("library"), "base") else getNamespaceInfo(name, "path")),
+             error = function(e) { note("Some loaded namespace metadata could not be read."); list(version = NULL, path = NULL) })
+  }), head(namespaces, 512L))
+  rows <- list()
+  scanned <- 0L
+  seen <- character()
+  add <- function(name, version, title, built, lib, index, first) {
+    if (nzchar(payload$filter) && !grepl(tolower(payload$filter), tolower(paste(name, title)), fixed = TRUE)) return(invisible(NULL))
+    native <- if (name %in% names(loaded)) loaded[[name]] else list(version = NULL, path = NULL)
+    rows[[length(rows) + 1L]] <<- list(name = name, version = version, title = title, built = built,
+      library_path = lib, library_index = index, first_in_library_path = first,
+      loaded_version = native$version, loaded_path = native$path,
+      loaded_from_library = !is.null(native$path) && !is.null(lib) &&
+        identical(normalizePath(native$path, winslash = "/", mustWork = FALSE),
+                  normalizePath(file.path(lib, name), winslash = "/", mustWork = FALSE)),
+      attached = name %in% attached)
+  }
+  if (identical(payload$mode, "installed")) {
+    fields <- c("Package", "Version", "Title", "Built")
+    for (index in seq_along(libs)) {
+      lib <- libs[[index]]
+      if (!dir.exists(lib) || file.access(lib, 4L) != 0L) {
+        note(paste("Library unavailable:", lib)); next
+      }
+      entries <- list.files(lib, pattern = "^[A-Za-z][A-Za-z0-9.]*$", full.names = TRUE)
+      budget <- max(0L, 10000L - scanned)
+      if (length(entries) > budget) note("Library scan limited to 10,000 entries. Narrowing a search does not scan beyond this bound.")
+      for (entry in head(entries, budget)) {
+        scanned <- scanned + 1L
+        description <- file.path(entry, "DESCRIPTION")
+        info <- file.info(description)
+        if (is.na(info$size) || isTRUE(info$isdir)) next
+        if (info$size > 262144L) { note("Oversized package DESCRIPTION metadata was skipped (256 KiB limit)."); next }
+        metadata <- tryCatch(read.dcf(description, fields = fields), error = function(e) NULL)
+        if (is.null(metadata) || nrow(metadata) != 1L || anyNA(metadata[1L, c("Package", "Version")])) {
+          note("Unreadable or invalid package DESCRIPTION metadata was skipped."); next
+        }
+        name <- unname(metadata[1L, "Package"])
+        if (!identical(name, basename(entry))) { note("Package directory and DESCRIPTION names disagree; entry skipped."); next }
+        value <- function(field, limit) {
+          text <- unname(metadata[1L, field])
+          if (is.na(text)) return(NULL)
+          if (nchar(text) > limit) note("Long package metadata fields were shortened.")
+          substr(text, 1L, limit)
+        }
+        first <- !name %in% seen
+        seen <- c(seen, name)
+        add(name, value("Version", 128L), value("Title", 512L), value("Built", 256L), lib, index, first)
+      }
+      if (scanned >= 10000L) {
+        if (index < length(libs)) note("Later libraries were not scanned after the 10,000-entry limit.")
+        break
+      }
+    }
+  } else {
+    for (name in names(loaded)) {
+      if (identical(payload$mode, "attached") && !name %in% attached) next
+      scanned <- scanned + 1L
+      native <- loaded[[name]]
+      lib <- if (is.null(native$path)) NULL else dirname(native$path)
+      index <- match(lib, libs)
+      if (!length(index) || is.na(index)) index <- NULL
+      add(name, if (is.null(native$version)) "Unknown" else native$version, NULL, NULL, lib, index, FALSE)
+    }
+  }
+  if (length(rows)) rows <- rows[order(vapply(rows, function(x) tolower(x$name), ""))]
+  total <- length(rows)
+  start <- payload$offset + 1L
+  end <- min(total, payload$offset + payload$limit)
+  page <- if (start <= end) rows[seq.int(start, end)] else list()
+  list(r_version = paste(R.version$major, R.version$minor, sep = "."),
+       r_home = R.home(), platform = R.version$platform,
+       library_paths = unname(as.list(libs)), mode = payload$mode, filter = payload$filter,
+       offset = payload$offset, next_offset = if (end < total) end else NULL,
+       packages = unname(page), total_matches = total, scanned = scanned,
+       scan_complete = complete, notices = unname(as.list(head(notices, 20L))))
+}

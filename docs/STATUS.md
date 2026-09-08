@@ -5,12 +5,13 @@ results establish behavior; Git retains the implementation history.
 
 ## Current focus
 
-**Calm Precision implementation and acceptance are complete for this round.**
-The automated and native R checks below passed, and the user confirmed the final
-macOS Chinese input-method manual check passed on 2026-09-08. The interaction
-specification is in [Design](RHO-DESIGN.md#10-studio-interaction-contract), with
-repeatable checks mapped to the seven reported issues in
-[Studio feedback](STUDIO-FEEDBACK.md#acceptance-map-for-the-calm-precision-implementation).
+**Read-only R package inspection is implemented and verified.** Open **Panels → Packages** to inspect the active session's installed
+metadata, loaded namespaces, attached packages and library paths. Installation and
+environment-management decisions are reserved for a future separate plugin.
+The interaction contract is in [Design section 11](RHO-DESIGN.md#11-read-only-package-inspection),
+with the user requirement in [F08](STUDIO-FEEDBACK.md#f08--package-inspection-without-installation-decisions).
+Calm Precision's prior acceptance, including the user's macOS Chinese IME check,
+remains established.
 The frozen baseline remains commit `d5a970b1559c9bd85567073108d05bca21886de4`, tagged
 `studio-round1-baseline-2026-09-07`.
 
@@ -26,6 +27,7 @@ The frozen baseline remains commit `d5a970b1559c9bd85567073108d05bca21886de4`, t
 | Execution | Workspace-owned FIFO queue, at most 32 pending runs, optional acceptance reply, guarded pending cancellation, pause/resume and final-commit fencing |
 | Input | Jupyter stdin control bound to session/operation/native request; separate answer field, transient password handling, timeout suspension and single-answer validation |
 | Objects | Multiple inline previews, explicit new viewer, bounded standard data frame/tibble/vector values and special-value metadata; no forced active/lazy bindings or user methods |
+| Packages | Read-only current-session metadata; installed/loaded/attached modes, search and bounded pages, duplicate versions/library precedence, physical-path matching for linked copies, stale/session guards |
 | Plots | Fit/100%/1–800% manual zoom, anchored zoom and bounded pan, per-output transforms, follow/history, pinned comparison, original export and shared byte-budgeted cache |
 | Historical output | Independent stored-media queries, including a project-only Host without live R |
 | Recovery | Current drafts/layout/view state in SQLite with optimistic concurrency; accepted requests are observed rather than replayed; native session identities isolate observations |
@@ -39,19 +41,31 @@ so one Host cannot retain another project's ownership lock.
 
 ## Evidence and limits
 
-The final run passed all 20 check entry points: Rust formatting, workspace Clippy
-and tests; contract generation, client build and asset checks; 39 frontend tests;
-the current binary build; 22 isolated Chrome scenarios; five explicitly enabled
-native Ark/R tests; MCP and HTTP Workbench checks with and without real R;
-environment isolation, process recovery, remote protocol fixtures, architecture,
-documentation governance and its tests. The command manifest and individual logs
-are in `target/calm-precision-run/checks/`. Skipped external tests are not counted
-as passes. Remote protocol checks use local fixtures, not a live SSH/Slurm cluster.
+Package inspection checks cover temporary double-library DESCRIPTION fixtures,
+Unicode and literal HTML-like text, pagination, incomplete metadata, changed
+`.libPaths()`, base and linked package paths, and disk/loaded-version disagreement.
+The query preserves loaded namespaces and the search path, produces no Operation,
+returns immediately when R is busy and rejects stale session identities. Browser
+checks cover the visible view, busy observations, refresh and close/reopen state.
+Verification passed Rust formatting, workspace Clippy and workspace tests;
+contract generation, client build and embedded-asset checks; 43 frontend tests;
+23 isolated Chrome scenarios; the five explicitly enabled real Ark/R tests and
+native package metadata fixture; and MCP/HTTP Workbench checks both with and
+without real R. Architecture and documentation governance checks also passed.
+The final command logs are in `target/package-checks/`; package screenshots are
+`target/studio-browser/packages-panel.png` and `packages-runtime.png`.
+The Chrome suite now waits for Console readiness before the Enter/history test;
+its first full run exposed a startup timing assumption in that existing test.
 
-Native checks cover per-expression Console printing, stdin identity and single
-answer handling, shutdown while waiting for input, original media reads without
-live R, and input/control access with 32 waiting MCP execution calls. Environment
-checks use temporary fixture libraries and verify the user library is unchanged.
+Current binaries/assets are built. An already running older Host requires an
+explicit restart to acquire the new query; the user's active R session was not
+restarted as part of this change.
+
+Calm Precision's broader acceptance included Rust workspace checks, frontend and
+Chrome scenarios, native R, MCP/HTTP, environment isolation, process recovery and
+local remote-protocol fixtures. Those original logs remain in
+`target/calm-precision-run/checks/`. Skipped external tests are not passes; remote
+protocol fixtures do not establish live SSH/Slurm behavior.
 
 The fixed gapminder CSV is pinned to upstream version 1.0.1, commit
 `5864ccaf4d4d59ca578c098a1400d2fed20584c0`; source and converted CSV checksums are in
@@ -60,7 +74,7 @@ transforms/summarizes them, fits an `lm`, and prints scatter/facet/trend plots.
 It uses installed R 4.5.2, dplyr 1.2.1, tibble 3.3.1 and ggplot2 4.0.3.9000.
 The analysis does not install dependencies.
 
-A final performance run on Apple M4 Pro / 24 GiB, isolated Chrome 152 at
+The Calm Precision acceptance performance run on Apple M4 Pro / 24 GiB, isolated Chrome 152 at
 1440 × 900 and device scale 1, used a 4,000-line file, 200 streamed lines with
 25 ms pauses and eleven existing plots. It recorded 120 input samples: P95 32.9 ms
 from keydown capture to the second animation frame; 192 frame samples had P95
@@ -95,6 +109,9 @@ current application data and the existing scientific owner boundaries. Independe
 R sessions, LSP/DAP, full data/package management, Quarto, plugins, a desktop shell
 and distribution remain outside this work. No abandoned implementation data is
 supported. [Scenario plugins](SCENARIO-PLUGINS.md) remain research.
+
+Read-only package inspection is now included; package installation and environment
+management UI remain outside this work.
 
 Current check entry points and prerequisites are in [Development](DEVELOPMENT.md).
 The native capability registry owns exact schemas. Keep new evidence and unresolved
