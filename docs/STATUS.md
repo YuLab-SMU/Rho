@@ -1,98 +1,98 @@
 # Rho: current state and focus
 
-Updated: 2026-09-07. This is the single current status page. Code and reproducible
-results establish what exists; Git retains completed work and its history.
+Updated: 2026-09-08. This is the single current status page. Code and reproducible
+results establish behavior; Git retains the implementation history.
 
 ## Current focus
 
-**Refine Studio into a coherent professional scientific workbench.**
+**Calm Precision is implemented and has passed the automated and native R checks
+below; remaining acceptance concerns native OS IME and user interaction review.** The interaction
+specification is in [Design](RHO-DESIGN.md#10-studio-interaction-contract), with
+repeatable checks mapped to the seven reported issues in
+[Studio feedback](STUDIO-FEEDBACK.md#acceptance-map-for-the-calm-precision-implementation).
+The frozen baseline remains commit `d5a970b1559c9bd85567073108d05bca21886de4`, tagged
+`studio-round1-baseline-2026-09-07`.
 
-The local editing and R execution loop is implemented. User review finds the
-overall appearance promising, with substantial interaction problems still open.
-Functional acceptance does not establish that the experience is polished.
-
-The next design work should apply the proposed
-[product philosophy](RHO-DESIGN.md) to the
-[reported usability issues](STUDIO-FEEDBACK.md), using the same analysis project
-across editing, Console exploration, object inspection and repeated plotting.
-The philosophy is v0.2 for review, including Apple-informed interaction, motion
-and feedback mechanics adapted to the browser Studio; these remain proposals.
-The gapminder tutorial supplies scenarios, not an automatic feature roadmap.
-
-Current design work has not yet changed the frozen UI implementation.
-
-## Implemented baseline
+## Implemented
 
 | Area | Current behavior |
 | --- | --- |
-| Studio | Local browser application launched by `rho workbench`; React, FlexLayout, CodeMirror and embedded assets |
-| Local R | Discovery, configuration and explicit restart; one project and one live R session per Host; file editing remains available without usable R |
-| Documents | Filesystem browsing, UTF-8 editing, BOM/line-ending preservation, digest-checked saves, captured save-then-run content, formatting comparison and synchronized drafts |
-| Output | Bounded incremental text, paginated operation summaries, original PNG/JPEG/SVG references, plot history and observed Ark/R resource metrics |
-| Objects | Read-only metadata and bounded previews; busy queries retain the previous observation |
-| Layout and recovery | Docking, grouping, collapse/maximize, document state outside panel lifetime, SQLite state across ports, explicit multiwindow conflict handling |
-| Shared execution | CLI, session protocol, browser and official MCP use one Host and the same scientific operations |
-| Other domain capabilities | Project/Git operations, isolated package environments, local processes and configured SSH/Slurm execution; these are not all exposed as Studio panels |
+| Studio shell | English product UI, local Inter, three-column defaults, common menus/commands, accurate session/queue/draft status |
+| Views | Close View/Group, space recovery, empty workspace, remembered reopening, 38 px collapse, maximize/restore and twenty committed layout undo steps |
+| Placement | Native FlexLayout dragging plus named parent/workspace targets; separate-model preview and keyboard Move To |
+| Files / Editor | Lazy directory tree, hidden-file option, bounded project search; pinned R grammar, stable CodeMirror state/Compartments, plain text mode, captured digest-verified save/run |
+| Console | Continuous selectable transcript, ordered text/ANSI interpretation, compact plot links/thumbnails, independent drafts/history/scroll for multiple views |
+| Execution | Workspace-owned FIFO queue, at most 32 pending runs, optional acceptance reply, guarded pending cancellation, pause/resume and final-commit fencing |
+| Input | Jupyter stdin control bound to session/operation/native request; separate answer field, transient password handling, timeout suspension and single-answer validation |
+| Objects | Multiple inline previews, explicit new viewer, bounded standard data frame/tibble/vector values and special-value metadata; no forced active/lazy bindings or user methods |
+| Plots | Fit/100%/1–800% manual zoom, anchored zoom and bounded pan, per-output transforms, follow/history, pinned comparison, original export and shared byte-budgeted cache |
+| Historical output | Independent stored-media queries, including a project-only Host without live R |
+| Recovery | Current drafts/layout/view state in SQLite with optimistic concurrency; accepted requests are observed rather than replayed; native session identities isolate observations |
+| Other scientific owners | Project/Git, isolated environments, local processes and configured SSH/Slurm continue through the same Host ports |
 
-The reproducible Studio baseline is commit `d5a970b1559c9bd85567073108d05bca21886de4`,
-tagged `studio-round1-baseline-2026-09-07`. Current documentation changes are
-separate from that application baseline.
+Console views share one local R session. They do not create parallel R evaluation
+or another Agent loop. The five scientific ports retain their defaults; stdin is
+a sibling control to the same running operation. Read/control capacity is separate
+from waiting execution calls. The native R watchdog closes inherited descriptors,
+so one Host cannot retain another project's ownership lock.
 
-## Open experience issues
+## Evidence and limits
 
-The user's feedback remains open. Detailed observations and questions are in
-[STUDIO-FEEDBACK.md](STUDIO-FEEDBACK.md); this table summarizes the current focus.
+The final run passed all 20 check entry points: Rust formatting, workspace Clippy
+and tests; contract generation, client build and asset checks; 39 frontend tests;
+the current binary build; 22 isolated Chrome scenarios; five explicitly enabled
+native Ark/R tests; MCP and HTTP Workbench checks with and without real R;
+environment isolation, process recovery, remote protocol fixtures, architecture,
+documentation governance and its tests. The command manifest and individual logs
+are in `target/calm-precision-run/checks/`. Skipped external tests are not counted
+as passes. Remote protocol checks use local fixtures, not a live SSH/Slurm cluster.
 
-| Topic | Required direction or unresolved question |
-| --- | --- |
-| Component removal | Make removal and reopening discoverable; determine why the user's intended action fails |
-| Group docking | Make placement around several panels understandable, including parent-group and workspace targets |
-| Interface language | Use consistent English for product-authored UI; preserve Unicode user content and native output |
-| Editor | Improve actual R syntax recognition and readability |
-| Console | Establish prompt/transcript continuity and fluent keyboard interaction |
-| Object inspection | Expand details in place by default; open a separate tab only through an explicit action |
-| Plots | Review navigation, zoom, layout, export and recovery together in a real workflow |
+Native checks cover per-expression Console printing, stdin identity and single
+answer handling, shutdown while waiting for input, original media reads without
+live R, and input/control access with 32 waiting MCP execution calls. Environment
+checks use temporary fixture libraries and verify the user library is unchanged.
 
-The English interface and revised object-inspection interaction are requirements,
-not descriptions of the current UI. Console and plot feedback needs concrete
-scenario observation before choosing a redesign.
+The fixed gapminder CSV is pinned to upstream version 1.0.1, commit
+`5864ccaf4d4d59ca578c098a1400d2fed20584c0`; source and converted CSV checksums are in
+`ui/e2e/fixtures/gapminder/source.json`. The same scenario imports 1,704 rows,
+transforms/summarizes them, fits an `lm`, and prints scatter/facet/trend plots.
+It uses installed R 4.5.2, dplyr 1.2.1, tibble 3.3.1 and ggplot2 4.0.3.9000.
+The analysis does not install dependencies.
 
-## Evidence and its limits
+A final performance run on Apple M4 Pro / 24 GiB, isolated Chrome 152 at
+1440 × 900 and device scale 1, used a 4,000-line file, 200 streamed lines with
+25 ms pauses and eleven existing plots. It recorded 120 input samples: P95 32.9 ms
+from keydown capture to the second animation frame; 192 frame samples had P95
+16.8 ms during typing, wheel zoom and splitter movement. This is a browser
+measurement under the stated workload, separate from native R execution latency.
+Final metrics and 1440 × 900 / 1280 × 800 screenshots are in
+`target/studio-browser/`.
 
-The application baseline was checked on macOS with Chrome and R 4.5.2:
+The same native Chrome analysis project was used across a review window exceeding
+30 minutes for import/model/plots, independent Console drafts, cross-view stdin,
+failure pause/resume, inline objects, historical plots and refresh. This is not a
+claim of uninterrupted input or measured performance throughout that window.
+Restarting the review Host with the current binary retained the application store.
+After a saved-file digest check, explicitly running the script in the new R session
+changed its binding count from zero to eight and produced three new plot originals;
+six historical operations remained available. The recovery observation is in
+`target/calm-precision-run/recovery-verification.json`.
 
-- Rust workspace tests, Clippy, formatting and generated client/asset checks;
-- 14 Vitest/React Testing Library tests and 15 isolated Chrome scenarios, including
-  the real save/run/object/plot loop, UTF-8 pages, BOM/CRLF, conflicts, layout,
-  focus, restart, reconnect and R configuration;
-- real Ark/R, HTTP/MCP, Environment and process-recovery scripts, plus local
-  SSH/Slurm protocol fixtures. Environment tests use temporary fixture libraries
-  and verify that the user's R library is unchanged.
-
-These are recorded baseline results, not a fresh runtime test claim for every
-subsequent documentation edit. Current test entry points and prerequisites are in
-[DEVELOPMENT.md](DEVELOPMENT.md). Logs and screenshots belong with their runs.
-
-A separate 2026-09-06 acceptance exercised CPU jobs on YuLabServer with Slurm
-19.05.2. That evidence does not cover arbitrary clusters, GPU allocations or
-connection providers. Windows/Linux, other browsers and distribution require
-separate verification. SVG attack fixtures test the rendering boundary; actual
-Ark PNG tests establish the scientific plotting path.
+Chrome's native IME composition path is exercised through CDP, in addition to
+composition-event regression tests. Native macOS keyboard/menu use and the same
+analysis project have also been inspected through Chrome. The automation did not
+establish an OS input-method candidate-window acceptance; this must remain distinct
+from the passing browser composition tests. User review of the complete interaction
+is still valuable; passing functional checks is not a universal usability claim.
 
 ## Scope
 
-Current product work concerns the local scientific workspace and its interaction
-quality. There is no active implementation commitment for a native desktop shell,
-installer/updater, Vibe, plugin loader, collaboration, multiple-runtime orchestration,
-LSP/DAP, full package/data browsers or Quarto integration.
+This round targets macOS Chrome, one local project and one R session. It preserves
+current application data and the existing scientific owner boundaries. Independent
+R sessions, LSP/DAP, full data/package management, Quarto, plugins, a desktop shell
+and distribution remain outside this work. No abandoned implementation data is
+supported. [Scenario plugins](SCENARIO-PLUGINS.md) remain research.
 
-[Scenario plugins](SCENARIO-PLUGINS.md) remain research. Data from abandoned
-implementations is not a supported input; there is no migration or compatibility
-workstream. Current application data and its recovery remain supported responsibilities.
-
-## Keeping this page useful
-
-Update current behavior, open focus or evidence when it changes. Keep proposals,
-implemented behavior and verified outcomes distinct. Replace stale summaries;
-do not append daily logs, completed phase tables or a second capability registry.
-The runtime registry owns exact capability schemas. Use Git to recover past decisions.
+Current check entry points and prerequisites are in [Development](DEVELOPMENT.md).
+The native capability registry owns exact schemas. Keep new evidence and unresolved
+focus here; do not append another progress ledger or completed-work archive.
