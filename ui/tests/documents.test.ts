@@ -183,7 +183,11 @@ describe("document byte and save discipline", () => {
       });
     await s.documents.runFile(d);
     expect(invoke).toHaveBeenCalledTimes(2);
-    expect(invoke.mock.calls[1][1].arguments).toEqual({ code: "x <- 2\n" });
+    expect(invoke.mock.calls[1][1].arguments).toMatchObject({
+      code: "x <- 2\n",
+      output_mode: "console",
+      source: { kind: "file", label: "中文 文件.R" },
+    });
     expect(d.raw).toBe("x <- 999\n");
     expect(d.dirty).toBe(true);
     s.stop();
@@ -205,4 +209,36 @@ describe("document byte and save discipline", () => {
     expect(d.comparison).toEqual({ before: "x=1", formatted: "x <- 1" });
     s.stop();
   });
+});
+
+it("deduplicates pending file reads and never reopens a view closed during the read", async () => {
+  const { s, client } = fixture();
+  let release!: (value: unknown) => void;
+  const read = vi.spyOn(client, "query").mockImplementation(
+    async () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  const show = vi.fn();
+  s.showPanel = show;
+  const first = s.documents.open("delayed.R"),
+    second = s.documents.open("delayed.R");
+  expect(read).toHaveBeenCalledTimes(1);
+  s.viewCloseVersion++;
+  release({
+    status: "ready",
+    data: {
+      offset: 0,
+      bytes: [49, 43, 49],
+      has_more: false,
+      file: { path: "delayed.R", sha256: "sha256:fixture", byte_size: 3 },
+    },
+    notices: [],
+  });
+  const document = await first;
+  expect(await second).toBe(document);
+  expect(s.documents.items.size).toBe(1);
+  expect(show).not.toHaveBeenCalled();
+  s.stop();
 });

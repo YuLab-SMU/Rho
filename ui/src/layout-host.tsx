@@ -1,234 +1,20 @@
-import { Component, useMemo, useSyncExternalStore } from "react";
-import type { ErrorInfo, ReactNode } from "react";
 import {
-  Actions,
-  DockLocation,
-  Layout,
-  Model,
-  TabNode,
-  TabSetNode,
-} from "flexlayout-react";
-import type { Action, IJsonModel } from "flexlayout-react";
+  Component,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import type { ReactNode } from "react";
+import { Actions, Layout, Model, TabNode, TabSetNode } from "flexlayout-react";
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { Modal } from "./primitives";
+import { directions, PanelLayout, regionName } from "./layout-model";
+import type { Direction } from "./layout-model";
 import type { Studio } from "./studio";
-
-export const panelNames: Record<string, string> = {
-  editor: "编辑器",
-  console: "R Console",
-  objects: "Workspace 对象",
-  plots: "图表",
-  files: "项目文件",
-};
-export function defaultLayout(): IJsonModel {
-  return {
-    global: {
-      tabMinHeight: 0,
-      tabEnablePopout: false,
-      tabSetMinHeight: 58,
-      tabSetMinWidth: 200,
-      tabSetEnableDeleteWhenEmpty: false,
-      tabSetEnableTabScrollbar: true,
-      tabSetEnableTabWrap: false,
-    },
-    layout: {
-      type: "row",
-      children: [
-        {
-          type: "row",
-          weight: 62.5,
-          children: [
-            {
-              type: "tabset",
-              id: "editor-group",
-              weight: 57,
-              minWidth: 240,
-              children: [
-                {
-                  type: "tab",
-                  id: "editor",
-                  name: "编辑器",
-                  component: "editor",
-                  minWidth: 240,
-                },
-              ],
-            },
-            {
-              type: "tabset",
-              id: "console-group",
-              weight: 43,
-              minWidth: 240,
-              children: [
-                {
-                  type: "tab",
-                  id: "console",
-                  name: "R Console",
-                  component: "console",
-                  minWidth: 240,
-                },
-              ],
-            },
-          ],
-        },
-        {
-          type: "row",
-          weight: 37.5,
-          children: [
-            {
-              type: "tabset",
-              id: "objects-group",
-              weight: 36,
-              children: [
-                {
-                  type: "tab",
-                  id: "objects",
-                  name: "Workspace 对象",
-                  component: "objects",
-                },
-              ],
-            },
-            {
-              type: "tabset",
-              id: "plots-group",
-              weight: 64,
-              children: [
-                { type: "tab", id: "plots", name: "图表", component: "plots" },
-              ],
-            },
-          ],
-        },
-      ],
-    },
-  };
-}
-export class PanelLayout {
-  model: Model;
-  constructor(private studio: Studio) {
-    try {
-      const saved = studio.layout as IJsonModel | null;
-      if (saved && (!saved.layout || JSON.stringify(saved).length > 100000))
-        throw new Error("invalid layout");
-      this.model = Model.fromJson(saved ?? defaultLayout());
-      this.model.visitNodes((n) => {
-        if (
-          n instanceof TabNode &&
-          !panelNames[n.getComponent() ?? ""] &&
-          n.getComponent() !== "document" &&
-          n.getComponent() !== "viewer"
-        )
-          throw new Error("unknown panel");
-      });
-    } catch {
-      this.model = Model.fromJson(defaultLayout());
-      studio.error = "布局损坏，已恢复默认布局；草稿仍保留。";
-    }
-  }
-  changed = () => {
-    this.studio.layout = this.model.toJson();
-    this.studio.persist();
-    this.studio.emit();
-  };
-  show(
-    component: string,
-    id = component,
-    name = panelNames[component],
-    config?: unknown,
-  ) {
-    if (this.model.getNodeById(id)) this.model.doAction(Actions.selectTab(id));
-    else {
-      const preferred =
-        component === "document"
-          ? this.model.getNodeById("editor-group")
-          : component === "viewer"
-            ? this.model.getNodeById("objects-group")
-            : null;
-      const target =
-        preferred ??
-        this.model.getActiveTabset() ??
-        this.model.getFirstTabSet();
-      if (!target) return;
-      this.model.doAction(
-        Actions.addTab(
-          {
-            type: "tab",
-            id,
-            name,
-            component,
-            config,
-            minWidth: ["editor", "document", "console"].includes(component)
-              ? 240
-              : 200,
-          },
-          target.getId(),
-          DockLocation.CENTER,
-          -1,
-          true,
-        ),
-      );
-    }
-    const tab = this.model.getNodeById(id);
-    if (tab?.getParent() instanceof TabSetNode) {
-      const parent = tab.getParent() as TabSetNode;
-      if (parent.getConfig()?.collapsed) this.collapse(parent);
-    }
-    this.changed();
-  }
-  prepareAction = (action: Action) => {
-    if (action.type === Actions.MAXIMIZE_TOGGLE) {
-      const node = this.model.getNodeById(action.data.node);
-      if (node instanceof TabSetNode) {
-        const config = node.getConfig() ?? {};
-        if (config.collapsed && !node.isMaximized())
-          return Actions.group([
-            Actions.updateNodeAttributes(node.getId(), {
-              minHeight: 58,
-              maxHeight: 99999,
-              config: { ...config, collapsed: false, restoreCollapsed: true },
-            }),
-            action,
-          ]);
-        if (config.restoreCollapsed && node.isMaximized())
-          return Actions.group([
-            Actions.updateNodeAttributes(node.getId(), {
-              minHeight: 0,
-              maxHeight: 0,
-              config: { ...config, collapsed: true, restoreCollapsed: false },
-            }),
-            action,
-          ]);
-      }
-    }
-    return action;
-  };
-  collapse(node: TabSetNode) {
-    const config = node.getConfig() ?? {};
-    if (node.isMaximized())
-      this.model.doAction(Actions.maximizeToggle(node.getId()));
-    if (config.collapsed) {
-      this.model.doAction(
-        Actions.updateNodeAttributes(node.getId(), {
-          minHeight: 58,
-          maxHeight: 99999,
-          weight: config.previousWeight ?? 50,
-          config: { ...config, collapsed: false, restoreCollapsed: false },
-        }),
-      );
-    } else {
-      this.model.doAction(
-        Actions.updateNodeAttributes(node.getId(), {
-          minHeight: 0,
-          maxHeight: 0,
-          config: {
-            ...config,
-            collapsed: true,
-            restoreCollapsed: false,
-            previousWeight: node.getWeight(),
-          },
-        }),
-      );
-    }
-    this.changed();
-  }
-}
-
+export { PanelLayout, panelNames, defaultLayout } from "./layout-model";
 class PanelBoundary extends Component<
   { children: ReactNode },
   { error: string }
@@ -237,21 +23,43 @@ class PanelBoundary extends Component<
   static getDerivedStateFromError(error: Error) {
     return { error: error.message };
   }
-  componentDidCatch(_error: Error, _info: ErrorInfo) {}
   render() {
     return this.state.error ? (
       <div className="empty">
-        <p>面板无法显示：{this.state.error}</p>
-        <button onClick={() => this.setState({ error: "" })}>
-          重新打开面板
-        </button>
+        <p>View unavailable: {this.state.error}</p>
+        <button onClick={() => this.setState({ error: "" })}>Retry View</button>
       </div>
     ) : (
       this.props.children
     );
   }
 }
-
+function DockPreview({ model, source }: { model: Model; source: string }) {
+  const [rect, setRect] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const r = model.getNodeById(source)?.getParent()?.getRect();
+      if (r) setRect({ x: r.x, y: r.y, width: r.width, height: r.height });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [model, source]);
+  return (
+    <div className="dock-preview">
+      <div className="dock-calculation">
+        <Layout model={model} factory={() => null} />
+      </div>
+      <div
+        className="dock-destination"
+        style={{
+          left: rect.x,
+          top: rect.y,
+          width: rect.width,
+          height: rect.height,
+        }}
+      />
+    </div>
+  );
+}
 export function LayoutHost({
   studio,
   registry,
@@ -261,49 +69,318 @@ export function LayoutHost({
   registry: (node: TabNode) => ReactNode;
   onLayout: (layout: PanelLayout) => void;
 }) {
-  useSyncExternalStore(studio.subscribe, studio.snapshot);
+  useSyncExternalStore(
+    (fn) => studio.subscribeChannels(["layout", "documents"], fn),
+    () => studio.channelSnapshot(["layout", "documents"]),
+  );
   const layout = useMemo(
     () => new PanelLayout(studio),
     [studio, studio.project],
   );
+  const [moving, setMoving] = useState<string | null>(null),
+    [dragging, setDragging] = useState<string | null>(null);
+  const [target, setTarget] = useState(""),
+    [direction, setDirection] = useState<Direction>("Left");
   onLayout(layout);
+  const dragChoice = useRef<{ target: string; direction: Direction } | null>(
+    null,
+  );
+  const clear = () => {
+    dragChoice.current = null;
+    setDragging(null);
+    setTarget("");
+  };
+  useEffect(() => {
+    const cancel = (e: KeyboardEvent) => {
+      if (e.key === "Escape") clear();
+    };
+    window.addEventListener("keydown", cancel);
+    window.addEventListener("blur", clear);
+    window.addEventListener("dragend", clear);
+    return () => {
+      window.removeEventListener("keydown", cancel);
+      window.removeEventListener("blur", clear);
+      window.removeEventListener("dragend", clear);
+    };
+  }, []);
+  const source = moving ?? dragging;
+  const preview = useMemo(
+    () => (source && target ? layout.preview(source, target, direction) : null),
+    [source, target, direction, layout, layout.model],
+  );
+  const region = target ? layout.model.getNodeById(target)?.getRect() : null;
   return (
-    <div className="layout-host">
-      <Layout
-        model={layout.model}
-        factory={(node) => <PanelBoundary>{registry(node)}</PanelBoundary>}
-        realtimeResize
-        onModelChange={layout.changed}
-        onAction={layout.prepareAction}
-        onRenderTab={(node, values) => {
-          const document = studio.documents.items.get(node.getId());
-          if (document)
+    <div
+      className="layout-host"
+      onDragStartCapture={(e) => {
+        const el = (e.target as HTMLElement).closest('[role="tab"]');
+        const id =
+          el?.querySelector<HTMLElement>("[data-rho-view]")?.dataset.rhoView;
+        if (id) {
+          setDragging(id);
+          setTarget("");
+        }
+      }}
+      onDragEnd={clear}
+      onDragOverCapture={(e) => {
+        if (!(e.target as HTMLElement).closest(".parent-dock-targets")) {
+          dragChoice.current = null;
+          setTarget("");
+        }
+      }}
+    >
+      {layout.empty ? (
+        <div className="empty workspace-empty">
+          <h2>Make room for your work</h2>
+          <button onClick={() => studio.openFile?.()}>Open File…</button>
+          <button className="primary" onClick={() => studio.documents.create()}>
+            New R File
+          </button>
+          <button onClick={() => studio.openPanels?.()}>Show Panels</button>
+        </div>
+      ) : (
+        <Layout
+          model={layout.model}
+          factory={(node) => <PanelBoundary>{registry(node)}</PanelBoundary>}
+          realtimeResize
+          tabDragSpeed={0}
+          keyMap={{ closeTab: undefined }}
+          invalidateTabContentOnParentRender={false}
+          onAction={layout.prepareAction}
+          onRenderTab={(node, values) => {
+            const document = studio.documents.items.get(node.getId());
             values.content = (
-              <span>
-                {document.name}
-                {document.dirty && !document.draft.readonly ? " •" : ""}
+              <span data-rho-view={node.getId()}>
+                {document?.name ?? node.getName()}
+                {document?.dirty && !document.draft.readonly ? " •" : ""}
               </span>
             );
-        }}
-        onRenderTabSet={(node, values) => {
-          if (node instanceof TabSetNode)
+          }}
+          onRenderTabSet={(node, values) => {
+            if (!(node instanceof TabSetNode)) return;
             values.buttons.unshift(
               <button
-                className="icon-button"
                 key="collapse"
+                className="icon-button"
                 aria-label={
-                  node.getConfig()?.collapsed ? "展开面板组" : "收起面板组"
+                  node.getConfig()?.collapsed
+                    ? "Restore Group"
+                    : "Collapse Group"
                 }
                 title={
-                  node.getConfig()?.collapsed ? "展开面板组" : "收起面板组"
+                  node.getConfig()?.collapsed
+                    ? "Restore Group"
+                    : "Collapse Group"
                 }
                 onClick={() => layout.collapse(node)}
               >
                 {node.getConfig()?.collapsed ? "⌄" : "−"}
               </button>,
+              <Menu.Root key="group-menu">
+                <Menu.Trigger
+                  className="icon-button"
+                  aria-label={`Group Actions: ${regionName(node)}`}
+                >
+                  •••
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content className="menu" align="end">
+                    <Menu.Label className="menu-label">
+                      {regionName(node)}
+                    </Menu.Label>
+                    <Menu.Item
+                      disabled={!node.getSelectedNode()}
+                      onSelect={() => {
+                        setMoving(node.getSelectedNode()!.getId());
+                        setTarget(node.getId());
+                      }}
+                    >
+                      Move To…
+                    </Menu.Item>
+                    <Menu.Item
+                      onSelect={() =>
+                        layout.model.doAction(
+                          layout.prepareAction(
+                            Actions.maximizeToggle(node.getId()),
+                          ),
+                        )
+                      }
+                    >
+                      Maximize / Restore Group
+                    </Menu.Item>
+                    <Menu.Item
+                      onSelect={() =>
+                        layout.close(node.getSelectedNode()!.getId())
+                      }
+                    >
+                      Close View
+                    </Menu.Item>
+                    <Menu.Item
+                      onSelect={() =>
+                        layout.model.doAction(
+                          Actions.deleteTabset(node.getId()),
+                        )
+                      }
+                    >
+                      Close Group ({node.getChildren().length} views)
+                    </Menu.Item>
+                    <Menu.Item
+                      disabled={!layout.history.length}
+                      onSelect={() => layout.undo()}
+                    >
+                      Undo Layout Change
+                    </Menu.Item>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu.Root>,
             );
-        }}
-      />
+          }}
+        />
+      )}
+      {source && region && preview && (
+        <div
+          className="dock-region"
+          style={{
+            left: region.x,
+            top: region.y,
+            width: region.width,
+            height: region.height,
+          }}
+        />
+      )}
+      {source && preview && <DockPreview model={preview} source={source} />}
+      {dragging && (
+        <div
+          className="parent-dock-targets"
+          aria-label="Parent docking targets"
+        >
+          {layout
+            .targets(dragging)
+            .filter((t) => t.kind !== "Group")
+            .map((t) => (
+              <div className="dock-target-row" key={t.id}>
+                <span>
+                  {t.kind}: {t.name}
+                </span>
+                {Object.keys(directions)
+                  .filter((d) => d !== "Join as Tab")
+                  .map((d) => {
+                    const valid = !!layout.preview(
+                      dragging,
+                      t.id,
+                      d as Direction,
+                    );
+                    return (
+                      <button
+                        key={d}
+                        disabled={!valid}
+                        title={
+                          valid
+                            ? `Move ${d.toLowerCase()} of ${t.name}`
+                            : "Not enough room for this split"
+                        }
+                        onDragOver={(e) => {
+                          if (!valid) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const rect = e.currentTarget.getBoundingClientRect(),
+                            previous = dragChoice.current;
+                          if (
+                            previous &&
+                            (previous.target !== t.id ||
+                              previous.direction !== d) &&
+                            (e.clientX < rect.left + 4 ||
+                              e.clientX > rect.right - 4 ||
+                              e.clientY < rect.top + 4 ||
+                              e.clientY > rect.bottom - 4)
+                          )
+                            return;
+                          dragChoice.current = {
+                            target: t.id,
+                            direction: d as Direction,
+                          };
+                          setTarget(t.id);
+                          setDirection(d as Direction);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (dragChoice.current)
+                            layout.move(
+                              dragging,
+                              dragChoice.current.target,
+                              dragChoice.current.direction,
+                            );
+                          clear();
+                        }}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
+              </div>
+            ))}
+        </div>
+      )}
+      {moving && (
+        <Modal
+          title={`Move ${regionName(layout.model.getNodeById(moving)!)}`}
+          description="Choose the whole destination region, then the placement."
+          onClose={() => {
+            setMoving(null);
+            setTarget("");
+          }}
+        >
+          <label>
+            Target Region
+            <select
+              aria-label="Target Region"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+            >
+              {layout.targets(moving).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.kind}: {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Placement
+            <select
+              aria-label="Placement"
+              value={direction}
+              onChange={(e) => setDirection(e.target.value as Direction)}
+            >
+              {Object.keys(directions).map((d) => (
+                <option
+                  key={d}
+                  disabled={!layout.preview(moving, target, d as Direction)}
+                >
+                  {d}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!preview && (
+            <p>
+              Choose another destination; this split has too little space or
+              leaves the view in the same position.
+            </p>
+          )}
+          <button
+            className="primary"
+            disabled={!preview}
+            onClick={() => {
+              layout.move(moving, target, direction);
+              setMoving(null);
+              setTarget("");
+            }}
+          >
+            Move View
+          </button>
+        </Modal>
+      )}
     </div>
   );
 }

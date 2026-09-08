@@ -9,49 +9,48 @@ import {
   highlightSpecialChars,
   drawSelection,
 } from "@codemirror/view";
-import { EditorState, StateEffect } from "@codemirror/state";
+import { Compartment, EditorState, StateEffect } from "@codemirror/state";
 import {
   defaultKeymap,
   history,
   historyKeymap,
   indentWithTab,
+  undo,
 } from "@codemirror/commands";
 import {
   bracketMatching,
   indentOnInput,
   indentUnit,
-  StreamLanguage,
-  syntaxHighlighting,
-  defaultHighlightStyle,
+  foldGutter,
 } from "@codemirror/language";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
-import { r } from "@codemirror/legacy-modes/mode/r";
+import { rSupport, isR } from "../r-language";
 import { useStudio } from "../context";
 import { Modal } from "../primitives";
 import { message } from "../host-client";
 import type { DocumentModel } from "../documents";
 
 export function EditorHub() {
-  const s = useStudio();
+  const s = useStudio("documents", "runtime", "console", "preferences");
   return (
     <section className="panel editor-hub">
       <div className="editor-toolbar">
         <button className="primary" onClick={() => s.documents.create()}>
-          ＋ 新建 R 文件
+          ＋ New R File
         </button>
-        <button onClick={() => s.showPanel?.("files")}>打开文件</button>
+        <button onClick={() => s.showPanel?.("files")}>Open File</button>
       </div>
       <div className="empty">
-        <h2>从一份脚本开始</h2>
-        <p>⌘ S 保存 · ⌘ Enter 运行选段 / 当前行</p>
-        <p>⌘ ⇧ Enter 保存并运行文件</p>
+        <h2>Start with a script</h2>
+        <p>⌘ S Save · ⌘ Enter Run Selection / Line</p>
+        <p>⌘ ⇧ Enter Save and Run File</p>
         {!!s.documents.items.size && (
           <div className="document-list">
             {[...s.documents.items.values()].map((d) => (
               <button key={d.id} onClick={() => s.documents.focus(d)}>
                 {d.name}
-                {d.dirty && !d.draft.readonly ? " · 未保存" : ""}
+                {d.dirty && !d.draft.readonly ? " · Unsaved" : ""}
               </button>
             ))}
           </div>
@@ -70,11 +69,28 @@ function CodeEditor({
   onSave: () => void;
   onRunFile: () => void;
 }) {
-  const s = useStudio(),
+  const s = useStudio("documents", "runtime", "console", "preferences"),
     parent = useRef<HTMLDivElement>(null),
     view = useRef<EditorView | null>(null),
-    actions = useRef({ onSave, onRunFile });
+    actions = useRef({ onSave, onRunFile }),
+    configuration = useRef(new Compartment());
   actions.current = { onSave, onRunFile };
+  function configure() {
+    return [
+      EditorState.readOnly.of(!!document.draft.readonly),
+      EditorView.contentAttributes.of({
+        "aria-label": `Code Editor ${document.name}`,
+      }),
+      EditorState.tabSize.of(s.preferences.indentWidth),
+      indentUnit.of(" ".repeat(s.preferences.indentWidth)),
+      EditorView.theme({
+        "&.cm-editor": { fontSize: `${s.preferences.editorFontSize}px` },
+      }),
+      ...(isR(document.path)
+        ? rSupport(() => s.objects?.objects.map((o) => o.name) ?? [])
+        : []),
+    ];
+  }
   useEffect(() => {
     const nonce =
       globalThis.document.querySelector<HTMLMetaElement>(
@@ -90,17 +106,13 @@ function CodeEditor({
       bracketMatching(),
       closeBrackets(),
       highlightSelectionMatches(),
-      syntaxHighlighting(defaultHighlightStyle),
-      StreamLanguage.define(r),
-      EditorState.tabSize.of(s.preferences.indentWidth),
-      indentUnit.of(" ".repeat(s.preferences.indentWidth)),
+      foldGutter(),
+      configuration.current.of(configure()),
       EditorView.cspNonce.of(nonce),
-      EditorView.theme({
-        "&.cm-editor": { fontSize: `${s.preferences.editorFontSize}px` },
-      }),
+
       EditorState.readOnly.of(!!document.draft.readonly),
       EditorView.contentAttributes.of({
-        "aria-label": `代码编辑器 ${document.name}`,
+        "aria-label": `Code Editor ${document.name}`,
       }),
       keymap.of([
         {
@@ -154,7 +166,8 @@ function CodeEditor({
       dispatchTransactions(transactions, v) {
         for (const transaction of transactions) document.update(transaction);
         v.update(transactions);
-        s.documents.changed();
+        if (transactions.some((t) => t.docChanged || t.selection))
+          s.documents.changed();
       },
     });
     view.current = editor;
@@ -165,6 +178,7 @@ function CodeEditor({
       if (id !== document.id) return;
       if (action === "save") actions.current.onSave();
       else if (action === "runFile") actions.current.onRunFile();
+      else if (action === "undo") undo(editor);
       else void s.documents.runSelection(document);
     };
     window.addEventListener("rho-document-command", command);
@@ -180,7 +194,12 @@ function CodeEditor({
       editor.destroy();
       view.current = null;
     };
-  }, [s, document.id, s.preferences.editorFontSize, s.preferences.indentWidth]);
+  }, [s, document.id]);
+  useEffect(() => {
+    view.current?.dispatch({
+      effects: configuration.current.reconfigure(configure()),
+    });
+  }, [s.preferences.editorFontSize, s.preferences.indentWidth, document.path]);
   useEffect(() => {
     if (view.current && view.current.state !== document.state)
       view.current.setState(document.state);
@@ -188,7 +207,7 @@ function CodeEditor({
   return <div className="code-editor" ref={parent} />;
 }
 export function DocumentPanel({ documentId }: { documentId: string }) {
-  const s = useStudio(),
+  const s = useStudio("documents", "runtime", "console", "preferences"),
     document = s.documents.items.get(documentId);
   const [saveAs, setSaveAs] = useState<{
       captured: string;
@@ -200,8 +219,8 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
   if (!document)
     return (
       <div className="empty">
-        <p>文档已丢弃或无法恢复。</p>
-        <button onClick={() => s.showPanel?.("editor")}>打开编辑器</button>
+        <p>This draft was discarded or could not be restored.</p>
+        <button onClick={() => s.showPanel?.("editor")}>Show Editor</button>
       </div>
     );
   const d = document;
@@ -234,52 +253,63 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
       <div className="editor-toolbar">
         <button
           className="primary"
-          aria-label={selection.empty ? "运行当前行" : "运行选中"}
-          title={selection.empty ? "运行当前行 ⌘ Enter" : "运行选中 ⌘ Enter"}
+          aria-label={
+            s.queueing
+              ? selection.empty
+                ? "Queue Line"
+                : "Queue Selection"
+              : selection.empty
+                ? "Run Line"
+                : "Run Selection"
+          }
+          title={selection.empty ? "Run Line ⌘ Enter" : "Run Selection ⌘ Enter"}
           disabled={!s.documents.canRunSelection(d)}
           onClick={() => attempt(() => s.documents.runSelection(d))}
         >
           <Icon name="play" size={14} />{" "}
           <span className="run-label">
-            {selection.empty ? "运行当前行" : "运行选中"}
+            {s.queueing
+              ? selection.empty
+                ? "Queue Line"
+                : "Queue Selection"
+              : selection.empty
+                ? "Run Line"
+                : "Run Selection"}
           </span>
         </button>
         <kbd className="editor-shortcut">⌘ Enter</kbd>
         <button disabled={!s.documents.canRunFile(d)} onClick={runFile}>
-          运行文件
+          {d.runningFile && d.saving
+            ? "Saving before run…"
+            : s.queueing
+              ? "Queue File"
+              : "Run File"}
         </button>
         <button
-          className="editor-secondary"
-          disabled={!s.documents.canRun(d)}
-          onClick={() => attempt(() => s.documents.format(d))}
-        >
-          格式化
-        </button>
-        <button
-          className="editor-secondary"
+          className="editor-save"
           disabled={!s.documents.canSave(d)}
           onClick={save}
         >
-          保存
+          Save
         </button>
         <div className="spacer" />
         <span className="save-status">
           {d.saving
-            ? "保存中…"
+            ? "Saving…"
             : d.draft.readonly
-              ? "只读"
+              ? "Read only"
               : d.dirty
-                ? "未保存"
-                : "✓ 已保存"}
+                ? "Unsaved"
+                : "✓ Saved"}
         </span>
         <Menu.Root>
-          <Menu.Trigger className="icon-button" aria-label="文档操作">
+          <Menu.Trigger className="icon-button" aria-label="Document Actions">
             •••
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content className="menu" align="end" sideOffset={4}>
               <Menu.Item disabled={!s.documents.canSave(d)} onSelect={save}>
-                保存 ⌘ S
+                Save ⌘ S
               </Menu.Item>
               <Menu.Item
                 disabled={!s.documents.canSave(d)}
@@ -289,22 +319,22 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
                   setSaveAs({ captured: d.raw, run: false });
                 }}
               >
-                另存为…
+                Save As…
               </Menu.Item>
               <Menu.Item
                 disabled={!s.documents.canRun(d)}
                 onSelect={() => attempt(() => s.documents.format(d))}
               >
-                格式化
+                Format
               </Menu.Item>
               <Menu.Item
                 disabled={!d.path || d.saving}
                 onSelect={() => attempt(() => s.documents.compareDisk(d))}
               >
-                比较磁盘 / 重新载入…
+                Compare Disk / Reload…
               </Menu.Item>
               <Menu.Item onSelect={() => setConfirmDiscard(true)}>
-                丢弃文档…
+                Discard Draft…
               </Menu.Item>
             </Menu.Content>
           </Menu.Portal>
@@ -315,7 +345,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
           {d.error}
           {d.path && (
             <button onClick={() => attempt(() => s.documents.compareDisk(d))}>
-              比较磁盘
+              Compare Disk
             </button>
           )}
         </div>
@@ -330,18 +360,18 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
       <CodeEditor document={d} onSave={save} onRunFile={runFile} />
       <div className="panel-footer">
         <span>
-          行 {line.number}, 列 {selection.head - line.from + 1}
+          Ln {line.number}, Col {selection.head - line.from + 1}
         </span>
         <span>
-          R　UTF-8{d.draft.bom ? " BOM" : ""}　
+          {isR(d.path) ? "R" : "Plain Text"}　UTF-8{d.draft.bom ? " BOM" : ""}　
           {d.draft.eol === "\r\n" ? "CRLF" : d.draft.eol === "\r" ? "CR" : "LF"}
-          　{s.preferences.indentWidth} 空格
+          　{s.preferences.indentWidth} spaces
         </span>
       </div>
       {saveAs && (
         <Modal
-          title={saveAs.run ? "保存并运行文件" : "另存为"}
-          description="使用项目内的相对路径。保存结果未确认时不会执行。"
+          title={saveAs.run ? "Save and Run File" : "Save As"}
+          description="Use a project-relative path. Execution starts only after a verified save."
           onClose={() => setSaveAs(null)}
         >
           <form
@@ -359,12 +389,12 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
                 else
                   await s.documents.save(d, snapshot.captured, path, overwrite);
                 setSaveAs(null);
-                s.documents.focus(d);
+                if (!s.closedViews.has(d.id)) s.documents.focus(d);
               });
             }}
           >
             <label>
-              文件路径
+              File Path
               <input
                 autoFocus
                 value={path}
@@ -378,22 +408,22 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
                 checked={overwrite}
                 onChange={(e) => setOverwrite(e.target.checked)}
               />
-              目标已存在时，确认替换其内容
+              Replace content if the target already exists
             </label>
             {d.error && <p className="error">{d.error}</p>}
             <button className="primary" disabled={d.saving}>
-              {saveAs.run ? "保存并运行" : "保存"}
+              {saveAs.run ? "Save and Run" : "Save"}
             </button>
           </form>
         </Modal>
       )}
       {confirmDiscard && (
         <Modal
-          title="丢弃文档"
+          title="Discard Draft"
           description={
             d.dirty
-              ? "文档有未保存修改。关闭面板会保留草稿；丢弃文档会移除这份草稿。"
-              : "从打开的文档中移除；磁盘文件仍保留。"
+              ? "This document has unsaved edits. Close View keeps them; Discard Draft removes them."
+              : "Remove this draft. The disk file is retained."
           }
           onClose={() => setConfirmDiscard(false)}
         >
@@ -404,7 +434,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
               setConfirmDiscard(false);
             }}
           >
-            先保存
+            Save First
           </button>
           <button
             className="danger"
@@ -414,14 +444,14 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
               setConfirmDiscard(false);
             }}
           >
-            放弃草稿并丢弃文档
+            Discard Draft
           </button>
         </Modal>
       )}
       {d.diskComparison && (
         <Modal
-          title="本地草稿与磁盘内容"
-          description="请检查差异。继续保留本地时，下次保存会使用此次观察到的磁盘摘要；不会自动运行。"
+          title="Compare Draft and Disk"
+          description="Compare the changes. Keeping your draft uses this disk version as the next save base."
           onClose={() => {
             d.diskComparison = null;
             s.emit();
@@ -429,24 +459,24 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
         >
           <div className="comparison">
             <div>
-              本地草稿<pre>{d.raw}</pre>
+              Local Draft<pre>{d.raw}</pre>
             </div>
             <div>
-              磁盘文件<pre>{d.diskComparison.raw}</pre>
+              Disk File<pre>{d.diskComparison.raw}</pre>
             </div>
           </div>
           <button onClick={() => s.documents.acceptDiskBase(d, true)}>
-            载入磁盘内容
+            Load Disk Content
           </button>
           <button onClick={() => s.documents.acceptDiskBase(d, false)}>
-            确认保留本地，以此磁盘版本为基础
+            Keep Draft with This Disk Base
           </button>
         </Modal>
       )}
       {d.comparison && (
         <Modal
-          title="格式化期间文档已改变"
-          description="当前编辑已保留。下方是请求时文本和格式化结果。"
+          title="Document Changed during Formatting"
+          description="Your edits are retained. Compare the original request with the formatted result."
           onClose={() => {
             d.comparison = null;
             s.emit();
@@ -463,7 +493,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
               s.documents.changed();
             }}
           >
-            采用格式化结果（可撤销）
+            Apply Formatted Text (Undo Available)
           </button>
         </Modal>
       )}

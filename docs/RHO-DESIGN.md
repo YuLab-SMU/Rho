@@ -1,16 +1,16 @@
 # Rho product design philosophy
 
-Version: 0.2 — proposed foundation and interaction mechanics, 2026-09-07.
+Version: 0.3 — Calm Precision interaction specification, 2026-09-08.
 
-This document expresses the proposed product design philosophy and interaction
-conventions for Rho. It provides reasons for design decisions, not an implementation
-plan or a claim that the interface already follows them. User feedback remains in
+This document defines the product principles and accepted Studio interaction
+contract. Section 10 specifies this implementation round. Runtime evidence and
+remaining verification limits are reported separately; this document alone does
+not establish that an interaction has been verified. User feedback remains in
 [STUDIO-FEEDBACK.md](STUDIO-FEEDBACK.md); implementation decisions, milestones and
 verification remain in [STATUS.md](STATUS.md).
 
-The Studio regression baseline is `studio-round1-baseline-2026-09-07`. Establishing
-this philosophy does not authorize implementing the tutorial's additional features
-or replacing the current libraries. Existing scientific and Agent ownership
+The Studio regression baseline is `studio-round1-baseline-2026-09-07`. This round retains React, FlexLayout and CodeMirror. Additional tutorial features
+and replacement libraries remain outside its scope. Existing scientific and Agent ownership
 constraints remain authoritative.
 
 ## 1. Product purpose
@@ -221,9 +221,8 @@ The current browser host must respect browser and OS conventions; adopting a
 professional desktop interaction model does not justify claiming native features
 that the delivery surface does not provide.
 
-This philosophy intentionally does not prescribe new pixel values, colors,
-animation durations or library choices before representative interaction work.
-Those choices should follow from the principles and measured use. Blur and
+The accepted values in section 10 give representative interaction work a concrete
+starting point. Changes to them should follow measured use. Blur and
 translucency are optional treatments, not identity requirements. Keep code, tables
 and plot interpretation surfaces stable and high-contrast; test any layered chrome
 against realistic content and accessibility preferences.
@@ -412,3 +411,160 @@ and [Accessibility](https://developer.apple.com/design/human-interface-guideline
 Sources inform the proposal; they do not certify Rho's implementation. The current
 browser delivery, scientific owners and open user feedback remain the basis for
 choosing and validating each interaction.
+
+## 10. Studio interaction contract
+
+The default workspace is `Files | [Editor / Console] | [Objects / Plots]`.
+At 1440 × 900, Files occupies 220 CSS pixels and the inspection column 360;
+at 1280 × 800 these become 200 and 320. The editing column receives the remainder.
+Editor/Console split 60/40, Objects/Plots 35/65. These defaults apply to new
+workspaces and explicit **Reset Layout**. Existing layouts remain valid.
+
+| Foundation | Value |
+| --- | --- |
+| App bar / status bar / group tab bar | 48 / 24 / 38 px |
+| Outer gap / splitter | 8 / 6 px |
+| Regular control / icon | 28 / 16 px |
+| UI / auxiliary / code type | Local Inter 13 / 12 px; monospace 14 px with 21 px line height |
+| Surface / canvas | `#FFFFFF` / `#F6F8FA` |
+| Text / secondary / accent | `#202936` / `#65717D` / `#2863D6` |
+| Panel / control / menu radius | 6 / 4 / 8 px |
+| Expanded minimum including group chrome | Editor/Console 240 × 96; Objects/Plots 200 × 96; Files 180 × 96 |
+
+Use English for all product-authored text and accessible names. User content and
+native output keep their original language. Code, text and status remain readable
+at 4.5:1 contrast. State has a text or icon cue as well as color. Small groups
+retain essential controls and a global reopening entry; insufficient workspace
+size permits scrolling instead of automatically closing views. Direct dragging,
+resizing and panning track the pointer. Controls use brief feedback and inline
+inspection uses 120 ms emphasis; reduced motion removes animated feedback.
+
+### Views and placement
+
+**Close View** removes a view and keeps its draft, recorded output and accepted
+runs. **Close Group** names its scope and closes every view in that group. Empty
+groups release their space. An entirely empty workspace offers Open File, New R
+File and Show Panels. Discard Draft is a separate document action.
+
+Collapse leaves exactly the group tab bar. Restore uses the retained weight within
+available space. Maximize/Restore returns to the corresponding group state.
+**Undo Layout Change** retains twenty committed changes and never shares the
+editor's undo history. A resize gesture contributes one history entry. Reopening
+uses a surviving original group or neighbor before choosing a current destination.
+A late file read cannot reopen a view closed while the read was in flight.
+
+Native FlexLayout tab dragging remains available. The additional targets name
+parent regions, for example **Editor + Console**, and the entire workspace.
+**Move To…** supplies a keyboard path through region and direction, including
+Join as Tab for a group. Previews use a separate model and show both the complete
+region and the resulting occupied area. Release commits one public move action;
+Escape, invalid destinations and cancellation discard the preview. Small target
+hysteresis reduces border flicker and the preview retains the native grab offset.
+
+### Editing and files
+
+The file tree reads real directories on demand, including Git-ignored data.
+Selection, expansion and opening remain separate: Enter or double-click opens a
+file, while repeated opens locate the same document. Hidden files default off.
+Directory filtering applies only to observed entries in the named directory.
+Project search has explicit limits of 200 results, 200 directories and 10,000
+entries and reports incomplete searches. Neither path treats an omitted result
+as evidence that a file does not exist.
+
+The editor hub is replaced by document tabs when a file opens. Primary actions are
+Run Line/Selection, Run File and Save. Secondary actions include formatting, Save
+As, disk comparison and discard. Buttons and shortcuts use the same document
+conditions; code execution requires an R document. Other text files use plain text.
+CodeMirror state belongs to the document and configuration uses Compartments.
+Layout changes and observations preserve selection and undo.
+
+R syntax support is pinned to `@codincod/codemirror-lang-r@0.1.1` through Rho's
+adapter. Ordinary names retain body text color; function definitions/calls,
+parameters, namespaces, literals, comments and operators have distinct treatments.
+Keyword, document-word and last-observed object suggestions are bounded editing
+aids. R remains the execution parser; no LSP or runtime-completeness claim is made
+for cached suggestions or the local completeness fallback.
+
+Run File captures its text at the click, saves it and verifies the returned file
+digest, then submits that exact capture. Later edits stay dirty. A new file first
+uses Save As. Conflict, unconfirmed save, size failure or page closure before
+submission cannot schedule a deferred replay. Saving a file and synchronizing a
+draft have distinct status. BOM, line endings, Unicode and patch/request bounds
+remain part of save correctness. Formatting applies automatically only when the
+request text is still current; otherwise comparison preserves newer edits.
+
+### Console, queue and input
+
+One project has one shared local R session. Multiple Console views have independent
+input/selection/scroll state and share execution history and the Workspace queue.
+Closing a Console never cancels accepted work. The status bar keeps a path to an
+active run or input request when its originating view is closed.
+
+Console is a continuous, selectable CodeMirror transcript with compact plot links
+and thumbnails. File runs identify their actual source; Run Details exposes full
+captured code, operation identity and diagnostics. Console mode prints each visible
+R expression through native R dispatch, including S3/S4 and ggplot values. Ordered
+stream events are not appended again at completion. Terminal controls are
+interpreted as bounded text/color changes; HTML is never inserted as live markup.
+Clear View changes only that view's display range. Scrolling back suspends following;
+New Output returns to the bottom.
+
+Enter submits complete input and continues incomplete input. Shift+Enter always
+inserts a line; Command+Enter explicitly submits the buffer. Up/Down browse history
+at visual boundaries and Escape restores the prior draft or dismisses completion.
+Pasting never executes, and composition keys never submit. Browser reload, tab-close
+and zoom shortcuts retain browser behavior. Idle completeness uses Ark's
+`is_complete`; busy fallback is explicitly an editing aid before native parsing.
+
+The Workspace queue accepts at most 32 pending runs and serializes all R sources.
+Accepted entries remain Queued until execution qualification is acquired; the
+qualification lasts through final operation commit. Pause Queue leaves the active
+run alone. Resume is bound to the observed pause identity. Pending cancellation
+arbitrates atomically with execution start; a started run requires an explicit
+Interrupt. Failure, interruption or an unconfirmed result/commit pauses followers.
+Queued code is immutable; Copy to Console starts a separate edit and submission.
+Host restart never replays the queue.
+
+Jupyter stdin is a separate control channel to the running R request. Identity
+binds session, operation, native input request and reply. An answer field does not
+replace the next command draft. Another Console can explicitly Answer Here.
+Only a focused origin without later edits may transfer focus automatically.
+Password answers are masked, transient and absent from drafts/history/logs.
+Input waiting suspends execution timeout while interruption remains available.
+Reconnect observes the request first; an answer is never blindly resent. Submitted
+is distinct from R having continued.
+
+### Objects and plots
+
+Object disclosure expands bounded content in place, with multiple simultaneous
+expansions and Collapse All. **Open in New Tab** is explicit. Standard data frames
+and ordinary tibbles use at most 20 rows × 10 columns; base vectors use at most 20
+items. NA, NaN, infinity and non-previewed values remain distinguishable. The
+object list contains at most 200 entries and states the observed total/truncation.
+Classed, opaque, active and lazy bindings retain the safe metadata-only boundary.
+Busy observations show their age. Refresh after execution covers the list and
+visible expanded previews; caches cannot cross a native session identity.
+
+Plots have a fitted canvas with 16 px padding, original-size view, pointer-anchored
+wheel zoom, center-anchored controls and bounded direct panning. Manual zoom spans
+1%–800%; Fit derives its scale from available space. Resizing preserves a manual
+view's inspected center. Each original has an independent transform in each view.
+
+Follow Latest is initially on. Selecting history or inspecting a plot pauses it;
+new output gets a count and Go to Latest restores following. A new comparison view
+pins the selected original and opens beside the existing workspace. History uses
+operation/output identities and an independent bounded media query, including
+when live R is unavailable. Visible thumbnails and the selected original share a
+byte-budgeted cache. Details report known source/time/format/dimensions/size and
+operation association; unknown values remain unknown. Export Original saves the
+verified original bytes with operation/output identifiers in its filename. Missing,
+checksum and decode failures retain separate explanations and recovery actions.
+SVG stays in an image element; HTML/widgets remain descriptive output.
+
+The ongoing acceptance project uses the fixed gapminder CSV and local R libraries.
+Its provenance is in `ui/e2e/fixtures/gapminder/source.json`. The required review
+covers editing, queue/error/input transitions, simultaneous object inspection,
+plot history/comparison/export and recovery in one analysis. Performance evidence
+must state workload, machine and measurement method independently of functional
+acceptance. Independent R sessions, LSP/DAP, package/data management, Quarto,
+plugins and distribution remain outside this round.

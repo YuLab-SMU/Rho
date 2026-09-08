@@ -91,10 +91,14 @@ export class HostClient {
       params: { capability: { id, version: 1 }, arguments: json(args) },
     });
   }
-  invoke(project: string, invocation: Invocation) {
+  invoke(
+    project: string,
+    invocation: Invocation,
+    return_after_acceptance = false,
+  ) {
     return this.port<OperationRecord>(project, {
       method: "invoke",
-      params: invocation,
+      params: { ...invocation, return_after_acceptance },
     });
   }
   getOperation(project: string, operation_id: string) {
@@ -103,10 +107,19 @@ export class HostClient {
       params: { operation_id },
     });
   }
-  cancel(project: string, operation_id: string) {
+  cancel(project: string, operation_id: string, only_if_pending = false) {
     return this.port<unknown>(project, {
       method: "request_cancellation",
-      params: { operation_id },
+      params: { operation_id, only_if_pending },
+    });
+  }
+  respondInput(
+    project: string,
+    params: import("./generated/RespondInput").RespondInput,
+  ) {
+    return this.port<{ submitted: boolean }>(project, {
+      method: "respond_input",
+      params,
     });
   }
   subscribe(project: string, after_sequence: number) {

@@ -24,7 +24,7 @@ export function Modal({
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>{description}</Dialog.Description>
           {children}
-          <Dialog.Close className="dialog-close icon-button" aria-label="关闭">
+          <Dialog.Close className="dialog-close icon-button" aria-label="Close">
             ×
           </Dialog.Close>
         </Dialog.Content>

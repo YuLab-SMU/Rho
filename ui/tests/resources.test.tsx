@@ -6,10 +6,12 @@ import { ObjectViewer } from "../src/panels/resource-panels";
 const { state } = vi.hoisted(() => ({
   state: {
     inspectors: new Map(),
+    visibleObjects: new Set(),
     runtime: { state: "busy" },
     inspectObject: vi.fn(),
   },
 }));
+vi.stubGlobal("IntersectionObserver",class { observe(){} disconnect(){} });
 vi.mock("../src/context", () => ({ useStudio: () => state }));
 afterEach(() => {
   cleanup();
@@ -40,7 +42,9 @@ it("renders hostile object text literally and keeps native queries disabled whil
   const { container } = render(<ObjectViewer name="frame" />);
   expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeTruthy();
   expect(container.querySelector("img,script")).toBeNull();
-  await userEvent.click(screen.getByRole("button", { name: "刷新预览" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Refresh Preview" }),
+  );
   expect(state.inspectObject).not.toHaveBeenCalled();
-  expect(screen.getByText("预览已截断。")).toBeTruthy();
+  expect(screen.getByText("Preview truncated.")).toBeTruthy();
 });

@@ -63,7 +63,49 @@ test.afterAll(async () => {
   await stopHost();
   if (directory) await rm(directory, { recursive: true, force: true });
 });
-test("real R Console, settings and docking shell", async ({ page }) => {
+async function resetLayout(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Reset Layout", exact: true })
+    .click();
+}
+async function newFile(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: "New R File", exact: true }).click();
+}
+async function openFile(page: import("@playwright/test").Page, path: string) {
+  await page.getByRole("button", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Open File…", exact: true }).click();
+  await page.getByRole("dialog").getByLabel("File Path").fill(path);
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Open", exact: true })
+    .click();
+}
+test.afterEach(async () => {
+  const state = (await queryNative("workspace.console_state")).data;
+  if (state?.pause) {
+    await api("/api/host", {
+      project_root: (await (await api("/api/info")).json()).project_root,
+      frame: {
+        id: crypto.randomUUID(),
+        request: {
+          method: "invoke",
+          params: {
+            client_request_id: crypto.randomUUID(),
+            capability: { id: "workspace.resume_queue", version: 1 },
+            arguments: {
+              session_id: state.session_id,
+              pause_id: state.pause.id,
+            },
+            preconditions: [],
+          },
+        },
+      },
+    });
+  }
+});
+test("real Console, settings and docking shell", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => {
@@ -71,21 +113,21 @@ test("real R Console, settings and docking shell", async ({ page }) => {
   });
   await page.goto(url);
   await expect(page.getByText("中文项目", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "执行", exact: true }),
-  ).toBeDisabled();
+  await expect(page.locator(".console-prompt .primary").first()).toBeDisabled();
   await page
-    .getByRole("textbox", { name: "R Console 输入" })
+    .getByRole("textbox", { name: "Console Input" })
     .fill('cat("Studio R ready\\n")');
-  await page.getByRole("button", { name: "执行", exact: true }).click();
+  await page.locator(".console-prompt .primary").first().click();
   await expect(page.getByText("Studio R ready", { exact: true })).toBeVisible();
-  await expect(page.locator(".run[data-status=succeeded]")).toBeVisible();
-  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await expect(page.locator(".console-status > span").first()).toHaveText(
+    "Ready",
+  );
+  await page.getByRole("button", { name: "Environment", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(
-    page.getByText("jsonlite 可用 · rlang 可用 · Ark 可用"),
+    page.getByText("jsonlite Available · rlang Available · Ark Available"),
   ).toBeVisible();
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("button", { name: "Close", exact: true }).click();
   await page.screenshot({ path: "../target/studio-browser/m1-shell.png" });
   expect(errors).toEqual([]);
 });
@@ -96,37 +138,45 @@ test("incremental output precedes completion and plots keep their identity", asy
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(url);
-  const input = page.getByRole("textbox", { name: "R Console 输入" });
+  const input = page.getByRole("textbox", { name: "Console Input" });
   await input.fill(
     'cat("first-live\\n"); Sys.sleep(3); cat("second-live\\n"); plot(1:4)',
   );
-  await page.getByRole("button", { name: "执行", exact: true }).click();
+  await page.locator(".console-prompt .primary").first().click();
   await expect(
-    page.locator(".stream-output").getByText("first-live", { exact: true }),
+    page
+      .locator(".console-transcript")
+      .getByText("first-live", { exact: true }),
   ).toBeVisible({ timeout: 2500 });
-  await expect(page.locator(".run[data-status=running]")).toBeVisible();
+  await expect(page.locator(".console-status > span").first()).toHaveText(
+    "Running",
+  );
   await expect(
-    page.locator(".stream-output").getByText("second-live", { exact: true }),
+    page
+      .locator(".console-transcript")
+      .getByText("second-live", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".media-card img").last()).toBeVisible();
-  await page.locator(".media-card").last().click();
-  await expect(page.locator(".plot-image img")).toBeVisible();
-  const original = await page.locator(".plot-image img").getAttribute("src");
+  await expect(page.locator(".plot-original img").last()).toBeVisible();
+  await page.locator(".console-plot-link").last().click();
+  await expect(page.locator(".plot-original img")).toBeVisible();
+  const original = await page.locator(".plot-original img").getAttribute("src");
   await input.fill(
     'plot(4:1); cat("before failure\\n"); stop("expected studio failure")',
   );
-  await page.getByRole("button", { name: "执行", exact: true }).click();
-  await expect(page.locator(".run[data-status=failed]")).toBeVisible();
+  await page.locator(".console-prompt .primary").first().click();
+  await expect(page.locator(".queue-notice").first()).toBeVisible();
   await expect(
-    page.locator(".stream-output").getByText("before failure", { exact: true }),
+    page
+      .locator(".console-transcript")
+      .getByText("before failure", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".media-card")).toHaveCount(2);
-  await expect(page.locator(".plot-image img")).toHaveAttribute(
+  await expect(page.locator(".console-plot-link")).toHaveCount(2);
+  await expect(page.locator(".plot-original img")).toHaveAttribute(
     "src",
     original!,
   );
-  await page.getByRole("button", { name: "下一张图" }).click();
-  await expect(page.locator(".plot-image img")).not.toHaveAttribute(
+  await page.getByRole("button", { name: "Next Plot" }).click();
+  await expect(page.locator(".plot-original img")).not.toHaveAttribute(
     "src",
     original!,
   );
@@ -139,21 +189,21 @@ test("create a Chinese R file, save-run, inspect objects and edit-run again", as
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(url);
-  await page
-    .getByRole("button", { name: "＋ 新建 R 文件", exact: true })
-    .click();
+  await newFile(page);
   const editor = page.locator(".document-panel .cm-content");
   await editor.fill(
     'studio_data <- data.frame(组别 = c("甲", "乙"), value = c(1, 2))\ncat("saved file ran\\n")\nplot(studio_data$value)\n',
   );
-  await page.getByRole("button", { name: "运行文件", exact: true }).click();
-  await page.getByLabel("文件路径", { exact: true }).fill("分析脚本.R");
-  await page.getByRole("button", { name: "保存并运行", exact: true }).click();
+  await page.getByRole("button", { name: "Run File", exact: true }).click();
+  await page.getByLabel("File Path", { exact: true }).fill("分析脚本.R");
+  await page.getByRole("button", { name: "Save and Run", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
-    page.locator(".stream-output").getByText("saved file ran", { exact: true }),
+    page
+      .locator(".console-transcript")
+      .getByText("saved file ran", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".save-status")).toHaveText("✓ 已保存");
+  await expect(page.locator(".save-status")).toHaveText("✓ Saved");
   await expect(
     page
       .getByRole("button")
@@ -163,17 +213,17 @@ test("create a Chinese R file, save-run, inspect objects and edit-run again", as
     .getByRole("button")
     .filter({ has: page.locator("code", { hasText: "studio_data" }) })
     .click();
-  await expect(page.locator(".object-viewer table")).toContainText("甲");
+  await expect(page.locator(".objects-panel table")).toContainText("甲");
   await editor.fill(
     'studio_data$value <- c(3, 4)\ncat("modified file ran\\n")\nplot(studio_data$value)\n',
   );
   await editor.press("Meta+Shift+Enter");
   await expect(
     page
-      .locator(".stream-output")
+      .locator(".console-transcript")
       .getByText("modified file ran", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".save-status")).toHaveText("✓ 已保存");
+  await expect(page.locator(".save-status")).toHaveText("✓ Saved");
   await page.screenshot({ path: "../target/studio-browser/m3-loop.png" });
   expect(errors).toEqual([]);
 });
@@ -185,11 +235,7 @@ test("UTF-8 pages, BOM/CRLF saves, disk conflicts and draft refresh", async ({
   const file = join(directory, "中文项目", "跨页 文件.R");
   await writeFile(file, fixture);
   await page.goto(url);
-  await page.getByRole("button", { name: "项目文件", exact: true }).click();
-  await page
-    .getByRole("textbox", { name: "打开相对文件路径" })
-    .fill("跨页 文件.R");
-  await page.getByRole("button", { name: "打开", exact: true }).click();
+  await openFile(page, "跨页 文件.R");
   const editor = page.locator(".document-panel:visible .cm-content");
   await expect(editor).toContainText("x <- 1");
   await editor.press("Meta+End");
@@ -198,7 +244,7 @@ test("UTF-8 pages, BOM/CRLF saves, disk conflicts and draft refresh", async ({
   await editor.press("x");
   await editor.press("Meta+s");
   await expect(page.locator(".document-panel:visible .save-status")).toHaveText(
-    "✓ 已保存",
+    "✓ Saved",
   );
   const saved = await readFile(file, "utf8");
   expect(saved.startsWith("\uFEFF")).toBe(true);
@@ -216,13 +262,13 @@ test("UTF-8 pages, BOM/CRLF saves, disk conflicts and draft refresh", async ({
         runs++;
     }
   });
-  await page.getByRole("button", { name: "运行文件", exact: true }).click();
+  await page.getByRole("button", { name: "Run File", exact: true }).click();
   await expect(
     page.locator(".document-panel:visible [role=alert]"),
   ).toContainText(/precondition failed|patch does not apply/);
   expect(runs).toBe(0);
   expect(await readFile(file, "utf8")).toBe("# external disk edit\r\n");
-  await expect(page.getByText("草稿已同步", { exact: true })).toBeVisible();
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
   await page.reload();
   await expect(
     page.locator(".document-panel:visible .cm-content"),
@@ -234,10 +280,8 @@ test("layout lifecycle preserves editor state, undo and R execution count", asyn
   page,
 }) => {
   await page.goto(url);
-  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
-  await page
-    .getByRole("button", { name: "＋ 新建 R 文件", exact: true })
-    .click();
+  await resetLayout(page);
+  await newFile(page);
   const editor = page.locator(".document-panel:visible .cm-content");
   await editor.fill("# draft preserved");
   await editor.press("End");
@@ -252,18 +296,19 @@ test("layout lifecycle preserves editor state, undo and R execution count", asyn
   });
   const group = page
     .locator(".flexlayout__tabset")
-    .filter({ has: page.getByRole("tab", { name: /未命名/ }) });
-  await group.getByRole("button", { name: "收起面板组" }).click();
+    .filter({ has: page.getByRole("tab", { name: /Untitled/ }) });
+  await group.getByRole("button", { name: "Collapse Group" }).click();
+
   await expect
     .poll(async () => Math.round((await group.boundingBox())!.height))
     .toBe(38);
-  await group.getByRole("button", { name: "展开面板组" }).click();
+  await group.getByRole("button", { name: "Restore Group" }).click();
   await expect(editor).toContainText("# draft preserved!");
   await group.getByRole("button", { name: "Maximize tab set" }).click();
   await expect(editor).toBeVisible();
   await group.getByRole("button", { name: "Restore tab set" }).click();
-  const tab = group.getByRole("tab", { name: /未命名/ });
-  const target = page.getByRole("tab", { name: "R Console", exact: true });
+  const tab = group.getByRole("tab", { name: /Untitled/ });
+  const target = page.getByRole("tab", { name: "Console", exact: true });
   const from = (await tab.boundingBox())!,
     to = (await target.boundingBox())!;
   await page.mouse.move(from.x + 50, from.y + 15);
@@ -276,11 +321,16 @@ test("layout lifecycle preserves editor state, undo and R execution count", asyn
   await expect(editor).toContainText("# draft preserved");
   await expect(editor).not.toContainText("!");
   await page
-    .getByRole("tab", { name: /未命名/ })
+    .getByRole("tab", { name: /Untitled/ })
     .locator(".flexlayout__tab_button_trailing")
     .click();
   await expect(page.locator(".document-panel")).toHaveCount(0);
-  await page.locator(".document-list button").last().click();
+  await page.getByRole("button", { name: "Commands", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /Untitled.R/ })
+    .last()
+    .click();
   await expect(editor).toContainText("# draft preserved");
   await editor.click();
   await editor.press("Meta+Shift+z");
@@ -295,14 +345,12 @@ test("draft and layout recover after Host restart on another port", async ({
   page,
 }) => {
   await page.goto(url);
-  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
-  await page
-    .getByRole("button", { name: "＋ 新建 R 文件", exact: true })
-    .click();
+  await resetLayout(page);
+  await newFile(page);
   await page
     .locator(".document-panel:visible .cm-content")
     .fill("# 跨端口保留的草稿");
-  await expect(page.getByText("草稿已同步", { exact: true })).toBeVisible();
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
   const previous = url;
   await stopHost();
   await startHost();
@@ -311,7 +359,7 @@ test("draft and layout recover after Host restart on another port", async ({
   await expect(
     page.locator(".document-panel:visible .cm-content"),
   ).toContainText("跨端口保留的草稿");
-  await expect(page.getByText("草稿已同步", { exact: true })).toBeVisible();
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
 });
 
 test("refresh never resubmits an unconfirmed invocation", async ({ page }) => {
@@ -333,21 +381,21 @@ test("refresh never resubmits an unconfirmed invocation", async ({ page }) => {
     } else await route.continue();
   });
   await page
-    .getByRole("textbox", { name: "R Console 输入" })
+    .getByRole("textbox", { name: "Console Input" })
     .fill(
       'cat("unconfirmed_once start\\n"); Sys.sleep(3); cat("unconfirmed_once end\\n")',
     );
-  await page.getByRole("button", { name: "执行", exact: true }).click();
+  await page.locator(".console-prompt .primary").first().click();
   await expect(
     page
-      .locator(".stream-output")
+      .locator(".console-transcript")
       .getByText("unconfirmed_once start", { exact: true }),
   ).toBeVisible({ timeout: 2500 });
   expect(requestId).not.toBe("");
   await page.reload();
   await expect(
     page
-      .locator(".stream-output")
+      .locator(".console-transcript")
       .getByText("unconfirmed_once end", { exact: true }),
   ).toBeVisible();
   expect(requests).toBe(1);
@@ -359,20 +407,20 @@ test("offline drafts remain visible and synchronize when the connection returns"
   context,
 }) => {
   await page.goto(url);
-  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
-  await page
-    .getByRole("button", { name: "＋ 新建 R 文件", exact: true })
-    .click();
+  await resetLayout(page);
+  await newFile(page);
   const editor = page.locator(".document-panel:visible .cm-content");
   await editor.fill("# initial");
-  await expect(page.getByText("草稿已同步", { exact: true })).toBeVisible();
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
   await context.setOffline(true);
   await editor.fill("# 离线草稿必须保留");
-  await expect(page.getByText("草稿待同步", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Draft sync pending", { exact: true }),
+  ).toBeVisible();
   await expect(page.locator(".notice")).toBeVisible();
   await expect(editor).toContainText("离线草稿必须保留");
   await context.setOffline(false);
-  await expect(page.getByText("草稿已同步", { exact: true })).toBeVisible();
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
   await page.reload();
   await expect(
     page.locator(".document-panel:visible .cm-content"),
@@ -384,14 +432,12 @@ test("two windows do not silently overwrite each other’s drafts", async ({
   context,
 }) => {
   await page.goto(url);
-  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
-  await page
-    .getByRole("button", { name: "＋ 新建 R 文件", exact: true })
-    .click();
+  await resetLayout(page);
+  await newFile(page);
   await page
     .locator(".document-panel:visible .cm-content")
     .fill("# shared starting draft");
-  await expect(page.getByText("草稿已同步", { exact: true })).toBeVisible();
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
   const second = await context.newPage();
   await second.goto(url);
   await expect(
@@ -400,7 +446,7 @@ test("two windows do not silently overwrite each other’s drafts", async ({
   await page
     .locator(".document-panel:visible .cm-content")
     .fill("# window one");
-  await expect(page.getByText("草稿已同步", { exact: true })).toBeVisible();
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
   await second
     .locator(".document-panel:visible .cm-content")
     .fill("# window two retained");
@@ -414,12 +460,12 @@ test("two windows do not silently overwrite each other’s drafts", async ({
   await expect(
     page.locator(".document-panel:visible .cm-content"),
   ).toContainText("window one");
-  await second.getByRole("button", { name: "重试草稿同步" }).click();
-  await second.getByRole("button", { name: "处理窗口冲突" }).click();
+  await second.getByRole("button", { name: "Retry Draft Sync" }).click();
+  await second.getByRole("button", { name: "Resolve Window Conflict" }).click();
   await second
-    .getByRole("button", { name: "确认使用当前窗口的草稿与布局" })
+    .getByRole("button", { name: "Use this window’s drafts and layout" })
     .click();
-  await expect(second.getByText("草稿已同步", { exact: true })).toBeVisible();
+  await expect(second.getByText("Draft synced", { exact: true })).toBeVisible();
   await second.close();
 });
 
@@ -460,12 +506,12 @@ test("R configuration rejects active requests and MCP sessions, then explicitly 
   const before = await queryNative("workspace.runtime_status");
   const config = await (await api("/api/r")).json();
   await page
-    .getByRole("textbox", { name: "R Console 输入" })
+    .getByRole("textbox", { name: "Console Input" })
     .fill('cat("switch fence started\\n"); Sys.sleep(3)');
-  await page.getByRole("button", { name: "执行", exact: true }).click();
+  await page.locator(".console-prompt .primary").first().click();
   await expect(
     page
-      .locator(".stream-output")
+      .locator(".console-transcript")
       .getByText("switch fence started", { exact: true }),
   ).toBeVisible({ timeout: 2500 });
   expect(
@@ -476,7 +522,11 @@ test("R configuration rejects active requests and MCP sessions, then explicitly 
       })
     ).status,
   ).toBe(409);
-  await expect(page.locator(".run[data-status=running]")).toHaveCount(0);
+  await expect
+    .poll(
+      async () => (await queryNative("workspace.console_state")).data.current,
+    )
+    .toBeNull();
   const parsed = new URL(url),
     authorization =
       "Bearer " + new URLSearchParams(parsed.hash.slice(1)).get("token");
@@ -562,12 +612,12 @@ test("development assets refresh without ending the R session", async ({
   await startHost(["--dev-assets", assets]);
   await page.goto(url);
   await page
-    .getByRole("textbox", { name: "R Console 输入" })
+    .getByRole("textbox", { name: "Console Input" })
     .fill('dev_sentinel <- 123; cat("dev session ready\\n")');
-  await page.getByRole("button", { name: "执行", exact: true }).click();
+  await page.locator(".console-prompt .primary").first().click();
   await expect(
     page
-      .locator(".stream-output")
+      .locator(".console-transcript")
       .getByText("dev session ready", { exact: true }),
   ).toBeVisible();
   const before = (await queryNative("workspace.runtime_status")).data;
@@ -655,18 +705,22 @@ test("SVG and HTML display fixtures cannot execute in the Studio document", asyn
     } else await route.continue();
   });
   await page.goto(url);
+  await page.getByRole("button", { name: "Plot Actions", exact: true }).click();
   await page
-    .getByRole("textbox", { name: "R Console 输入" })
+    .getByRole("menuitem", { name: "Go to Latest", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Console Input" })
     .fill('plot(1:3); cat("<iframe onload=parent.__rhoAttack=3>\\n")');
-  await page.getByRole("button", { name: "执行", exact: true }).click();
-  await expect(page.locator(".media-card img").last()).toBeVisible();
-  await page.locator(".media-card").last().click();
-  await expect(page.locator(".plot-image img")).toBeVisible();
+  await page.locator(".console-prompt .primary").first().click();
+  await expect(page.locator(".plot-original img").last()).toBeVisible();
+  await page.locator(".console-plot-link").last().click();
+  await expect(page.locator(".plot-original img")).toBeVisible();
   expect(await page.evaluate(() => "__rhoAttack" in window)).toBe(false);
   expect(await page.locator("iframe").count()).toBe(0);
   await expect(
     page
-      .locator(".stream-output")
+      .locator(".console-transcript")
       .getByText("<iframe onload=parent.__rhoAttack=3>", { exact: true }),
   ).toBeVisible();
 });
@@ -675,26 +729,26 @@ test("narrow and short containers keep essential controls and 38px groups", asyn
   page,
 }) => {
   await page.goto(url);
-  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
-  await page
-    .getByRole("button", { name: "＋ 新建 R 文件", exact: true })
-    .click();
+  await resetLayout(page);
+  await newFile(page);
   await page
     .locator(".document-panel:visible .cm-content")
     .fill("# size fixture");
   await page
-    .getByRole("textbox", { name: "R Console 输入" })
+    .getByRole("textbox", { name: "Console Input" })
     .fill("size_data <- data.frame(x=1:30, y=1:30); plot(1:3)");
-  await page.getByRole("button", { name: "执行", exact: true }).click();
-  await expect(page.locator(".media-card img").last()).toBeVisible();
-  await page.locator(".media-card").last().click();
+  await page.locator(".console-prompt .primary").first().click();
+  await expect(page.locator(".plot-original img").last()).toBeVisible();
+  await page.locator(".console-plot-link").last().click();
   const bounds = await page.getByRole("separator").evaluateAll((nodes) =>
     nodes.map((node) => {
       const r = node.getBoundingClientRect();
       return { x: r.x, y: r.y, width: r.width, height: r.height };
     }),
   );
-  const vertical = bounds.find((r) => r.width <= 10 && r.height > 600)!;
+  const vertical = bounds
+    .filter((r) => r.width <= 10 && r.height > 600)
+    .sort((a, b) => b.x - a.x)[0]!;
   await page.mouse.move(vertical.x + 4, vertical.y + 100);
   await page.mouse.down();
   await page.mouse.move(1148, vertical.y + 100, { steps: 10 });
@@ -706,26 +760,30 @@ test("narrow and short containers keep essential controls and 38px groups", asyn
         return { x: r.x, y: r.y, width: r.width, height: r.height };
       }),
     )
-  ).find((r) => r.width > 700 && r.height <= 10)!;
+  )
+    .filter((r) => r.width > 240 && r.height <= 10)
+    .sort((a, b) => b.width - a.width)[0]!;
   await page.mouse.move(horizontal.x + 200, horizontal.y + 4);
   await page.mouse.down();
   await page.mouse.move(horizontal.x + 200, 756, { steps: 10 });
   await page.mouse.up();
   await expect(
-    page.getByRole("button", { name: "运行文件", exact: true }),
+    page.getByRole("button", { name: "Run File", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".console-status")).toBeVisible();
-  await expect(page.getByRole("link", { name: "↓ 导出" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Plot Actions" }),
+  ).toBeVisible();
   await page.screenshot({ path: "../target/studio-browser/m4-h04.png" });
   const plotGroup = page
     .locator(".flexlayout__tabset")
-    .filter({ has: page.getByRole("tab", { name: "图表", exact: true }) });
-  await plotGroup.getByRole("button", { name: "收起面板组" }).click();
+    .filter({ has: page.getByRole("tab", { name: "Plots", exact: true }) });
+  await plotGroup.getByRole("button", { name: "Collapse Group" }).click();
   await expect
     .poll(async () => Math.round((await plotGroup.boundingBox())!.height))
     .toBe(38);
   await plotGroup.getByRole("button", { name: "Maximize tab set" }).click();
-  await expect(page.locator(".plot-image img")).toBeVisible();
+  await expect(page.locator(".plot-original img")).toBeVisible();
   await expect
     .poll(async () => (await plotGroup.boundingBox())!.height)
     .toBeGreaterThan(700);
@@ -733,13 +791,22 @@ test("narrow and short containers keep essential controls and 38px groups", asyn
   await expect
     .poll(async () => Math.round((await plotGroup.boundingBox())!.height))
     .toBe(38);
-  await plotGroup.getByRole("button", { name: "展开面板组" }).click();
-  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
-  await page.locator(".document-list button").last().click();
+  await plotGroup.getByRole("button", { name: "Restore Group" }).click();
+  await resetLayout(page);
+  await page.getByRole("button", { name: "Commands", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /Untitled.R/ })
+    .last()
+    .click();
   await page.setViewportSize({ width: 560, height: 300 });
   await expect(page.locator(".console-status")).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "图形缩放" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "↓ 导出" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Fit", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Plot Actions" }),
+  ).toBeVisible();
   await page.screenshot({ path: "../target/studio-browser/m4-combined.png" });
 });
 
@@ -747,10 +814,8 @@ test("editor preferences persist without executing code or losing document text"
   page,
 }) => {
   await page.goto(url);
-  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
-  await page
-    .getByRole("button", { name: "＋ 新建 R 文件", exact: true })
-    .click();
+  await resetLayout(page);
+  await newFile(page);
   const editor = page.locator(".document-panel:visible .cm-content");
   await editor.fill("# 偏好不改变文档");
   let invokes = 0;
@@ -761,53 +826,576 @@ test("editor preferences persist without executing code or losing document text"
     )
       invokes++;
   });
-  await page.getByRole("button", { name: "设置", exact: true }).click();
-  await page.getByRole("combobox", { name: "代码字号" }).selectOption("16");
-  await page.getByRole("combobox", { name: "缩进宽度" }).selectOption("2");
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("button", { name: "Environment", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Code Font Size" })
+    .selectOption("16");
+  await page.getByRole("combobox", { name: "Indent Width" }).selectOption("2");
+  await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.locator(".document-panel:visible .cm-editor")).toHaveCSS(
     "font-size",
     "16px",
   );
   await expect(editor).toContainText("偏好不改变文档");
-  await expect(page.getByText("草稿已同步", { exact: true })).toBeVisible();
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.locator(".document-panel:visible .cm-editor")).toHaveCSS(
     "font-size",
     "16px",
   );
   expect(invokes).toBe(0);
-  await page.getByRole("button", { name: "设置", exact: true }).click();
-  await page.getByRole("combobox", { name: "代码字号" }).selectOption("14");
-  await page.getByRole("combobox", { name: "缩进宽度" }).selectOption("4");
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("button", { name: "Environment", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Code Font Size" })
+    .selectOption("14");
+  await page.getByRole("combobox", { name: "Indent Width" }).selectOption("4");
+  await page.getByRole("button", { name: "Close", exact: true }).click();
 });
 
 test("long streaming output does not remount the editor or move its focus", async ({
   page,
 }) => {
   await page.goto(url);
-  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
-  await page
-    .getByRole("button", { name: "＋ 新建 R 文件", exact: true })
-    .click();
+  await resetLayout(page);
+  await newFile(page);
   const editor = page.locator(".document-panel:visible .cm-content");
   await editor.fill("# ");
   const handle = await editor.elementHandle();
   await page
-    .getByRole("textbox", { name: "R Console 输入" })
+    .getByRole("textbox", { name: "Console Input" })
     .fill(
       'for (i in 1:8) { cat(paste(rep("long output", 1200), collapse=" "), "\\n"); Sys.sleep(0.2) }',
     );
-  await page.getByRole("button", { name: "执行", exact: true }).click();
+  await page.locator(".console-prompt .primary").first().click();
   await editor.click();
   await editor.press("End");
   await page.keyboard.insertText("中文输入保持稳定");
-  await expect(page.locator(".stream-output").last()).toContainText(
+  await expect(page.locator(".console-transcript").last()).toContainText(
     "long output",
   );
-  await expect(page.locator(".run[data-status=running]")).toHaveCount(0);
+  await expect
+    .poll(
+      async () => (await queryNative("workspace.console_state")).data.current,
+    )
+    .toBeNull();
   expect(await handle!.evaluate((element) => element.isConnected)).toBe(true);
   await expect(editor).toBeFocused();
   await expect(editor).toContainText("中文输入保持稳定");
+});
+
+async function invokeNative(code: string, accepted = false) {
+  const info = await (await api("/api/info")).json();
+  const response = await api("/api/host", {
+    project_root: info.project_root,
+    frame: {
+      id: crypto.randomUUID(),
+      request: {
+        method: "invoke",
+        params: {
+          client_request_id: crypto.randomUUID(),
+          capability: { id: "workspace.run_r", version: 1 },
+          arguments: { code, output_mode: "console" },
+          preconditions: [],
+          return_after_acceptance: accepted,
+        },
+      },
+    },
+  });
+  const reply = await response.json();
+  expect(reply.ok, reply.error).toBe(true);
+  return reply.result;
+}
+async function runConsole(page: import("@playwright/test").Page, code: string) {
+  const panel = page.locator(".console-panel:visible").first();
+  await panel.locator(".console-input .cm-content").fill(code);
+  await panel.locator(".console-prompt .primary").click();
+  await expect(panel.locator(".console-input .cm-content")).toHaveText("");
+}
+
+test("multiple Console drafts, continuation, history and IME events retain their scope", async ({
+  page,
+}) => {
+  await page.goto(url);
+  await resetLayout(page);
+  const first = page.getByRole("textbox", {
+    name: "Console Input",
+    exact: true,
+  });
+  await first.fill("1 + 1");
+  await first.press("Enter");
+  await expect(page.locator(".console-transcript:visible")).toContainText(
+    "[1] 2",
+  );
+  await first.fill("mean(");
+  await first.press("Enter");
+  await expect(first).toContainText("mean(");
+  await expect.poll(() => first.innerText()).toContain("\n");
+  await first.fill("# draft before history");
+  await first.press("Home");
+  await first.press("ArrowUp");
+  await expect(first).toHaveText("1 + 1");
+  await first.press("Escape");
+  await expect(first).toHaveText("# draft before history");
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: "New Console View" }).click();
+  const second = page.locator(
+    ".console-panel:visible .console-input .cm-content",
+  );
+  await expect(second).toHaveText("");
+  await second.fill("# second draft");
+  await second.dispatchEvent("compositionstart", { data: "中" });
+  await second.dispatchEvent("keydown", {
+    key: "Enter",
+    code: "Enter",
+    isComposing: true,
+  });
+  await second.dispatchEvent("compositionend", { data: "中" });
+  await expect(second).toHaveText("# second draft");
+  await page.getByRole("tab", { name: "Console", exact: true }).click();
+  await expect(first).toHaveText("# draft before history");
+  await page.getByRole("tab", { name: "Console 2", exact: true }).click();
+  await page
+    .getByRole("tab", { name: "Console 2", exact: true })
+    .locator(".flexlayout__tab_button_trailing")
+    .click();
+  await page.getByRole("button", { name: "Commands", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Console 2", exact: true })
+    .click();
+  await expect(
+    page.locator(".console-panel:visible .console-input .cm-content"),
+  ).toHaveText("# second draft");
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(
+    page.locator(".console-panel:visible .console-input .cm-content"),
+  ).toHaveText("# second draft");
+});
+
+test("queued runs survive refresh and an error pauses the remaining code", async ({
+  page,
+}) => {
+  await page.goto(url);
+  await resetLayout(page);
+  await runConsole(
+    page,
+    'queue_counter <- 1L; Sys.sleep(2); cat("queue head done\\n")',
+  );
+  await runConsole(
+    page,
+    'queue_counter <- queue_counter + 1L; stop("queue barrier")',
+  );
+  await runConsole(
+    page,
+    'queue_counter <- queue_counter + 10L; cat("queue resumed\\n")',
+  );
+  await expect(page.locator(".queue-notice").first()).toBeVisible();
+  const state = (await queryNative("workspace.console_state")).data;
+  expect(state.pending).toHaveLength(1);
+  expect(
+    (
+      await queryNative("workspace.inspect_object", {
+        name: "queue_counter",
+        max_items: 1,
+      })
+    ).data.preview,
+  ).toEqual([2]);
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Resume Queue", exact: true }),
+  ).toBeVisible();
+  expect(
+    (await queryNative("workspace.console_state")).data.pending,
+  ).toHaveLength(1);
+  await page.getByRole("button", { name: "Resume Queue", exact: true }).click();
+  await expect(
+    page
+      .locator(".console-transcript")
+      .getByText("queue resumed", { exact: true }),
+  ).toBeVisible();
+  expect(
+    (
+      await queryNative("workspace.inspect_object", {
+        name: "queue_counter",
+        max_items: 1,
+      })
+    ).data.preview,
+  ).toEqual([12]);
+});
+
+test("stdin has a separate answer field and accepts an answer after a browser refresh", async ({
+  page,
+}) => {
+  await page.goto(url);
+  await resetLayout(page);
+  await runConsole(
+    page,
+    'input_answer <- readline("R answer: "); cat("received:", input_answer, "\\n")',
+  );
+  const draft = page.getByRole("textbox", {
+    name: "Console Input",
+    exact: true,
+  });
+  await draft.fill("# next command remains");
+  await expect(page.locator(".stdin-request")).toContainText("R answer:");
+  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(draft).toHaveText("# next command remains");
+  await page.getByRole("button", { name: "Answer Here" }).click();
+  await page
+    .getByRole("textbox", { name: "R Input Response" })
+    .fill("verified");
+  await page.getByRole("button", { name: "Answer", exact: true }).click();
+  await expect(page.locator(".console-transcript")).toContainText(
+    "received: verified",
+  );
+  await expect(draft).toHaveText("# next command remains");
+  await runConsole(
+    page,
+    'menu_answer <- menu(c("First", "Second"), graphics=FALSE); cat("choice:",menu_answer,"\\n")',
+  );
+  await expect(page.locator(".stdin-request")).toBeVisible();
+  if (await page.getByRole("button", { name: "Answer Here" }).isVisible())
+    await page.getByRole("button", { name: "Answer Here" }).click();
+  await page.getByRole("textbox", { name: "R Input Response" }).fill("2");
+  await page.getByRole("button", { name: "Answer", exact: true }).click();
+  await expect(page.locator(".console-transcript")).toContainText("choice: 2");
+});
+
+test("parent placement is reversible and every view can close without running R", async ({
+  page,
+}) => {
+  await page.goto(url);
+  await resetLayout(page);
+  let invokes = 0;
+  page.on("request", (r) => {
+    if (
+      r.url().endsWith("/api/host") &&
+      r.postDataJSON()?.frame.request.method === "invoke"
+    )
+      invokes++;
+  });
+  await page
+    .getByRole("button", { name: "Group Actions: Plots", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "Move To…", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Target Region" })
+    .selectOption("editing-region");
+  await page.getByRole("combobox", { name: "Placement" }).selectOption("Left");
+  await expect(page.locator(".dock-destination")).toBeVisible();
+  const preview = (await page.locator(".dock-destination").boundingBox())!;
+  await page.getByRole("button", { name: "Move View", exact: true }).click();
+  const plots = page
+    .locator(".flexlayout__tabset")
+    .filter({ has: page.getByRole("tab", { name: "Plots", exact: true }) });
+  const placed = (await plots.boundingBox())!;
+  expect(Math.abs(placed.x - preview.x)).toBeLessThan(3);
+  expect(Math.abs(placed.width - preview.width)).toBeLessThan(3);
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Undo Layout Change", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Group Actions: Plots", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "Move To…", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".dock-destination")).toHaveCount(0);
+  while (await page.getByRole("tab").count())
+    await page
+      .getByRole("tab")
+      .first()
+      .locator(".flexlayout__tab_button_trailing")
+      .click();
+  await expect(page.getByText("Make room for your work")).toBeVisible();
+  await page.getByRole("button", { name: "Show Panels", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Show Console", exact: true })
+    .click();
+  await expect(
+    page.getByRole("tab", { name: "Console", exact: true }),
+  ).toBeVisible();
+  expect(invokes).toBe(0);
+});
+
+test("plot comparison pins identity and Export Original preserves its checksum", async ({
+  page,
+}) => {
+  await page.goto(url);
+  await resetLayout(page);
+  const record = await invokeNative('plot(1:5, main="Export original")');
+  await expect(page.locator(".plot-original img")).toBeVisible();
+  await page.getByRole("button", { name: "Plot Actions" }).click();
+  await page
+    .getByRole("menuitem", { name: "Go to Latest", exact: true })
+    .click();
+  await page
+    .locator('.plot-panel[data-plot-view="plots"]')
+    .getByRole("button", { name: "Details", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText(
+    record.operation.operation_id,
+  );
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Plot Actions" }).click();
+  await page.getByRole("menuitem", { name: "Open Plot in New View" }).click();
+  await expect(page.locator(".plot-panel:visible")).toHaveCount(2);
+  const pinned = page.locator(".plot-panel").filter({ hasText: "Pinned plot" }),
+    original = await pinned.locator(".plot-original img").getAttribute("src");
+  await invokeNative('plot(5:1, main="Later output")');
+  await expect(pinned.locator(".plot-original img")).toHaveAttribute(
+    "src",
+    original!,
+  );
+  await pinned.getByRole("button", { name: "Plot Actions" }).click();
+  const downloadEvent = page.waitForEvent("download");
+  await page
+    .getByRole("menuitem", { name: "Export Original", exact: true })
+    .click();
+  const download = await downloadEvent;
+  const bytes = await readFile((await download.path())!);
+  const media = (
+    await queryNative("workspace.list_outputs", {
+      operation_id: record.operation.operation_id,
+      limit: 100,
+    })
+  ).data.media[0].reference;
+  expect("sha256:" + createHash("sha256").update(bytes).digest("hex")).toBe(
+    media.sha256,
+  );
+  expect(download.suggestedFilename()).toContain(record.operation.operation_id);
+});
+
+test("Chrome native IME composition never submits code on the commit key", async ({
+  page,
+  context,
+}) => {
+  await page.goto(url);
+  await resetLayout(page);
+  const input = page.getByRole("textbox", {
+    name: "Console Input",
+    exact: true,
+  });
+  await input.fill("# ");
+  await input.press("End");
+  let runs = 0;
+  page.on("request", (r) => {
+    if (
+      r.url().endsWith("/api/host") &&
+      r.postDataJSON()?.frame?.request?.method === "invoke" &&
+      r.postDataJSON().frame.request.params.capability.id === "workspace.run_r"
+    )
+      runs++;
+  });
+  const session = await context.newCDPSession(page);
+  await session.send("Input.imeSetComposition", {
+    text: "中文",
+    selectionStart: 2,
+    selectionEnd: 2,
+  });
+  await session.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Enter",
+    code: "Enter",
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 36,
+  });
+  await session.send("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "Enter",
+    code: "Enter",
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 36,
+  });
+  expect(runs).toBe(0);
+  await session.send("Input.insertText", { text: "中文" });
+  await expect(input).toContainText("中文");
+  expect(runs).toBe(0);
+  await session.detach();
+});
+
+test("fixed gapminder analysis, in-place previews and input/frame latency under load", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120000);
+  const project = join(directory, "中文项目");
+  for (const part of [
+    "data/raw",
+    "data/processed",
+    "R",
+    "scripts",
+    "output/figures",
+  ])
+    await mkdir(join(project, part), { recursive: true });
+  await copyFile(
+    resolve("e2e/fixtures/gapminder/gapminder.csv"),
+    join(project, "data/raw/gapminder.csv"),
+  );
+  const script = await readFile(
+    resolve("e2e/fixtures/gapminder/analysis.R"),
+    "utf8",
+  );
+  await page.goto(url);
+  await resetLayout(page);
+  await newFile(page);
+  const editor = page.locator(".document-panel:visible .cm-content");
+  await editor.fill(script);
+  await page.getByRole("button", { name: "Run File", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByLabel("File Path")
+    .fill("scripts/国家发展分析.R");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Save and Run", exact: true })
+    .click();
+  await expect(page.locator(".console-transcript:visible")).toContainText(
+    "Analysis complete: 1704 rows",
+  );
+  for (const name of ["raw", "clean", "summary_by_year"])
+    await page
+      .locator(".objects-panel")
+      .getByRole("button", { name: new RegExp(`› ${name}$`) })
+      .click();
+  await expect(page.locator(".objects-panel table")).toHaveCount(3);
+  await expect(page.locator(".object-viewer")).toHaveCount(0);
+  expect(
+    (
+      await queryNative("workspace.inspect_object", {
+        name: "model",
+        max_items: 20,
+      })
+    ).data.preview,
+  ).toBeNull();
+  await page.screenshot({
+    path: "../target/studio-browser/calm-gapminder-1440.png",
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.screenshot({
+    path: "../target/studio-browser/calm-gapminder-1280.png",
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const largeScript = Array.from(
+    { length: 4000 },
+    (_, i) => `# Analysis note ${i}: stable document, output and plot history`,
+  ).join("\n");
+  await writeFile(join(project, "scripts/large-analysis.R"), largeScript);
+  await openFile(page, "scripts/large-analysis.R");
+  await expect(
+    page.getByRole("tab", { name: "large-analysis.R", exact: true }),
+  ).toBeVisible();
+  await editor.press("Meta+End");
+  await runConsole(
+    page,
+    'for (i in 1:200) {cat("load-observation",i,"\\n"); Sys.sleep(0.025)}',
+  );
+  await editor.click();
+  await editor.press("Meta+End");
+  await page.evaluate(() => {
+    const state = {
+      input: [] as number[],
+      frames: [] as number[],
+      active: true,
+      last: performance.now(),
+    };
+    (window as any).__rhoPerformance = state;
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          state.active &&
+          (event.target as Element)?.closest(".document-panel") &&
+          event.key.length === 1
+        ) {
+          const start = performance.now();
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              state.input.push(performance.now() - start),
+            ),
+          );
+        }
+      },
+      true,
+    );
+    requestAnimationFrame(function frame(time) {
+      if (!state.active) return;
+      state.frames.push(time - state.last);
+      state.last = time;
+      requestAnimationFrame(frame);
+    });
+  });
+  await page.keyboard.type(" latency_sample".repeat(8), { delay: 10 });
+  await expect(editor).toBeFocused();
+  const canvas = page.getByLabel("Plot Canvas", { exact: true });
+  await canvas.hover();
+  for (let i = 0; i < 12; i++) await page.mouse.wheel(0, i < 6 ? -45 : 45);
+  const splitter = (
+    await page.getByRole("separator").evaluateAll((nodes) =>
+      nodes.map((n) => {
+        const r = n.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      }),
+    )
+  ).find((r) => r.w > 400 && r.h < 10)!;
+  await page.mouse.move(splitter.x + 120, splitter.y + 3);
+  await page.mouse.down();
+  await page.mouse.move(splitter.x + 120, splitter.y + 40, { steps: 24 });
+  await page.mouse.up();
+  const measured = await page.evaluate(() => {
+    const state = (window as any).__rhoPerformance;
+    state.active = false;
+    return {
+      input: state.input,
+      frames: state.frames,
+      userAgent: navigator.userAgent,
+      dpr: devicePixelRatio,
+    };
+  });
+  const percentile = (values: number[], p: number) =>
+    [...values].sort((a, b) => a - b)[
+      Math.min(values.length - 1, Math.floor(values.length * p))
+    ];
+  const os = await import("node:os");
+  const metrics = {
+    recordedAt: new Date().toISOString(),
+    viewport: { width: 1440, height: 900 },
+    scriptLines: 4000,
+    streamLines: 200,
+    streamDelayMs: 25,
+    plotHistory: await page
+      .locator('.plot-history button[aria-label^="Select Plot"]')
+      .count(),
+    inputSamples: measured.input.length,
+    inputP95Ms: percentile(measured.input, 0.95),
+    frameSamples: measured.frames.length,
+    frameP95Ms: percentile(measured.frames, 0.95),
+    measurement:
+      "keydown capture to second animation frame; frame intervals while typing, wheel zooming and dragging a splitter",
+    browser: measured.userAgent,
+    dpr: measured.dpr,
+    cpu: os.cpus()[0]?.model,
+    memoryGiB: Math.round(os.totalmem() / 2 ** 30),
+  };
+  await writeFile(
+    testInfo.outputPath("performance.json"),
+    JSON.stringify(metrics, null, 2),
+  );
+  await testInfo.attach("performance", {
+    body: JSON.stringify(metrics, null, 2),
+    contentType: "application/json",
+  });
+  expect(metrics.inputSamples).toBeGreaterThan(60);
+  expect(metrics.inputP95Ms).toBeLessThan(50);
+  expect(metrics.frameP95Ms).toBeLessThan(33);
+  await expect
+    .poll(
+      async () => (await queryNative("workspace.console_state")).data.current,
+    )
+    .toBeNull();
 });

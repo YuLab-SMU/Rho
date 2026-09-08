@@ -30,6 +30,7 @@
     "@codemirror/search": "6.7.2",
     "@codemirror/state": "6.7.4",
     "@codemirror/view": "6.43.11",
+    "@codincod/codemirror-lang-r": "0.1.1",
     "@fontsource/inter": "5.3.0",
     "@radix-ui/react-dialog": "1.1.23",
     "@radix-ui/react-dropdown-menu": "2.1.24",

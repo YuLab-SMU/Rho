@@ -1,4 +1,11 @@
+import type { MediaPage } from "./generated/MediaPage";
+import type { RunRArguments } from "./generated/RunRArguments";
+import type { ConsoleState } from "./generated/ConsoleState";
+import type { RunSource } from "./generated/RunSource";
 import { Documents } from "./documents";
+import { newPlotView } from "./plot-viewport";
+import type { PlotView } from "./plot-viewport";
+import type { Placement } from "./layout-model";
 import type { DirectoryPage } from "./generated/DirectoryPage";
 import type { WorkspaceSnapshotData } from "./generated/WorkspaceSnapshotData";
 import type { BindingSummary } from "./generated/BindingSummary";
@@ -30,6 +37,11 @@ export class Studio {
   info: WorkbenchInfo | null = null;
   readonly documents = new Documents(this);
   directory: DirectoryPage | null = null;
+  directories = new Map<string, DirectoryPage>();
+  expandedDirectories = new Set<string>([""]);
+  filesScrollTop = 0;
+  showHiddenFiles = false;
+  expandedObjects = new Set<string>();
   directoryError = "";
   directoryLoading = false;
   objects: WorkspaceSnapshotData | null = null;
@@ -45,6 +57,38 @@ export class Studio {
   error = "";
   connected = false;
   consoleInput = "";
+  consoleState: ConsoleState | null = null;
+  commandHistory: string[] = [];
+  consoleViews: Record<
+    string,
+    {
+      input: string;
+      hiddenBefore: number;
+      scrollTop: number;
+      follow: boolean;
+      anchor?: number;
+      head?: number;
+    }
+  > = {};
+  consoleView(id: string) {
+    return (this.consoleViews[id] ??= {
+      input: id === "console" ? this.consoleInput : "",
+      hiddenBefore: 0,
+      scrollTop: 0,
+      follow: true,
+    });
+  }
+  newConsole() {
+    const id = `console:${crypto.randomUUID()}`;
+    this.consoleView(id);
+    this.showPanel?.(
+      "console",
+      id,
+      `Console ${Object.keys(this.consoleViews).length}`,
+    );
+    this.persist();
+    this.emit();
+  }
   records = new Map<string, OperationRecord>();
   pending: PendingRequest[] = [];
   recent: string[] = [];
@@ -65,6 +109,108 @@ export class Studio {
   private mediaLoads = new Map<string, Promise<void>>();
   selectedPlot: string | null = null;
   plotZoom: number | null = null;
+  plotViews: Record<string, PlotView> = {};
+  plotMedia = new Map<string, MediaReference>();
+  plotTimes = new Map<string, number>();
+  plotRecords = new Map<string, OperationRecord>();
+  private mediaOrder = new Map<string, number>();
+  private plotCursor: number | null = null;
+  private plotLoading = false;
+  private mediaAccess = new Map<string, number>();
+  plotView(id: string) {
+    return (this.plotViews[id] ??= {
+      ...newPlotView(),
+      selected: id === "plots" ? this.selectedPlot : null,
+      follow: id !== "plots" || !this.selectedPlot,
+      transforms:
+        id === "plots" && this.selectedPlot && this.plotZoom !== null
+          ? { [this.selectedPlot]: { zoom: this.plotZoom, x: 0, y: 0 } }
+          : {},
+    });
+  }
+  async loadPlotDetails(reference: MediaReference) {
+    if (
+      !this.project ||
+      this.records.has(reference.operation_id) ||
+      this.plotRecords.has(reference.operation_id)
+    )
+      return;
+    const project = this.project,
+      record = await this.client.getOperation(project, reference.operation_id);
+    if (project === this.project && record) {
+      this.plotRecords.set(reference.operation_id, record);
+      this.emit("plots");
+    }
+  }
+  newPlotView(reference: MediaReference) {
+    const id = `plots:${crypto.randomUUID()}`;
+    this.plotViews[id] = {
+      ...newPlotView(),
+      selected: this.mediaKey(reference),
+      follow: false,
+      pinned: true,
+    };
+    this.showPanel?.(
+      "plots",
+      id,
+      `Comparison ${Object.values(this.plotViews).filter((v) => v.pinned).length}`,
+    );
+    this.persist();
+    this.emit();
+  }
+  async loadEarlierPlots() {
+    if (!this.project || this.plotLoading) return;
+    const project = this.project;
+    this.plotLoading = true;
+    try {
+      const page = await this.client.query(project, "operation.list_recent", {
+        before_cursor: this.plotCursor,
+        client_request_id: null,
+        limit: 30,
+      });
+      if (page.status !== "ready") return;
+      const data = page.data as RecentOperations;
+      this.plotCursor = data.next_cursor;
+      for (const op of data.operations) {
+        if (!op.capability.id.startsWith("workspace.")) continue;
+        this.mediaOrder.set(op.operation_id, op.cursor);
+        let after_sequence = 0,
+          more = true;
+        while (more) {
+          const result = await this.client.query(
+            project,
+            "workspace.list_outputs",
+            { operation_id: op.operation_id, after_sequence, limit: 100 },
+          );
+          if (result.status !== "ready") break;
+          const outputs = result.data as MediaPage;
+          if (project !== this.project) return;
+          for (const item of outputs.media) {
+            this.plotMedia.set(this.mediaKey(item.reference), item.reference);
+            this.plotTimes.set(
+              this.mediaKey(item.reference),
+              item.observed_at_ms,
+            );
+          }
+          more = outputs.has_more && outputs.next_sequence > after_sequence;
+          after_sequence = outputs.next_sequence;
+        }
+      }
+      this.followPlots();
+      this.emit();
+    } finally {
+      this.plotLoading = false;
+    }
+  }
+  private followPlots() {
+    const images = this.media;
+    for (const view of Object.values(this.plotViews))
+      if (view.follow && !view.pinned) {
+        view.selected = images.length ? this.mediaKey(images.at(-1)!) : null;
+        view.seen = images.length;
+      }
+  }
+
   recentCursor: number | null = null;
   showPanel?: (
     component: string,
@@ -74,11 +220,38 @@ export class Studio {
   ) => void;
   private observedAt = 0;
   layout: unknown = null;
+  viewPlacements: Record<string, Placement> = {};
+  knownViews: Record<
+    string,
+    { component: string; name: string; config?: unknown }
+  > = {};
+  layoutHistory: import("flexlayout-react").IJsonModel[] = [];
+  visibleObjects = new Set<string>();
+  closedViews = new Set<string>();
+  viewCloseVersion = 0;
+  openFile?: () => void;
+  renameView?: (id: string, name: string) => void;
+  openPanels?: () => void;
   state: ApplicationState = { key: "studio", version: null, value: null };
   syncError = "";
   unsynced = false;
   private revision = 0;
   private listeners = new Set<() => void>();
+  private channelListeners = new Map<string, Set<() => void>>();
+  private channelVersions = new Map<string, number>();
+  subscribeChannels(channels: string[], listener: () => void) {
+    for (const c of channels) {
+      if (!this.channelListeners.has(c))
+        this.channelListeners.set(c, new Set());
+      this.channelListeners.get(c)!.add(listener);
+    }
+    return () => {
+      for (const c of channels) this.channelListeners.get(c)?.delete(listener);
+    };
+  }
+  channelSnapshot(channels: string[]) {
+    return channels.map((c) => this.channelVersions.get(c) ?? 0).join(":");
+  }
   private timer?: ReturnType<typeof setTimeout>;
   private saveTimer?: ReturnType<typeof setTimeout>;
   private saving: Promise<void> | null = null;
@@ -95,7 +268,16 @@ export class Studio {
     };
   };
   snapshot = () => this.revision;
-  emit() {
+  emit(...channels: string[]) {
+    const selected = channels.length
+      ? channels
+      : [...this.channelListeners.keys()];
+    const listeners = new Set<() => void>();
+    for (const c of selected) {
+      this.channelVersions.set(c, (this.channelVersions.get(c) ?? 0) + 1);
+      for (const fn of this.channelListeners.get(c) ?? []) listeners.add(fn);
+    }
+    for (const fn of listeners) fn();
     this.revision++;
     for (const listener of this.listeners) listener();
   }
@@ -112,13 +294,68 @@ export class Studio {
     return (
       !!this.project &&
       this.connected &&
-      !this.busy &&
-      !this.pending.some((p) => !p.ignored) &&
-      this.runtime?.state === "idle" &&
+      ["idle", "busy"].includes(this.runtime?.state ?? "") &&
+      (this.consoleState?.pending.length ?? 0) < 32 &&
       !!this.info?.capabilities.some(
         (c) => c.capability.id === "workspace.run_r",
       )
     );
+  }
+  get queueing() {
+    return (
+      !!this.consoleState?.current ||
+      !!this.consoleState?.pause ||
+      !!this.consoleState?.pending.length ||
+      this.runtime?.state === "busy"
+    );
+  }
+  async refreshConsole() {
+    if (
+      !this.project ||
+      !this.info?.capabilities.some(
+        (c) => c.capability.id === "workspace.console_state",
+      )
+    )
+      return;
+    const project = this.project,
+      result = await this.client.query(project, "workspace.console_state");
+    if (
+      project === this.project &&
+      result.status === "ready" &&
+      JSON.stringify(result.data) !== JSON.stringify(this.consoleState)
+    ) {
+      this.consoleState = result.data as ConsoleState;
+      this.emit("console");
+    }
+  }
+  async queueControl(pause: boolean) {
+    if (!this.consoleState) return;
+    await this.invoke(
+      pause ? "workspace.pause_queue" : "workspace.resume_queue",
+      {
+        session_id: this.consoleState.session_id,
+        pause_id: pause ? null : (this.consoleState.pause?.id ?? null),
+      },
+    );
+    await this.refreshConsole();
+  }
+  async cancelPending(id?: string) {
+    if (!this.project) return;
+    const errors: string[] = [];
+    for (const run of this.consoleState?.pending ?? []) {
+      if (!id || id === run.operation_id) {
+        try {
+          await this.client.cancel(this.project, run.operation_id, true);
+        } catch (error) {
+          errors.push(message(error));
+        }
+      }
+    }
+    await this.refreshConsole();
+    if (errors.length)
+      throw new Error(
+        `Some entries changed state or could not be cancelled: ${errors.join("; ")}`,
+      );
   }
   async start() {
     try {
@@ -176,7 +413,7 @@ export class Studio {
           ![12, 14, 16, 18].includes(preferences.editorFontSize) ||
           ![2, 4, 8].includes(preferences.indentWidth)
         )
-          throw new Error("无效的编辑器偏好");
+          throw new Error("Invalid editor preferences");
         this.preferencesState = await this.client.writeState(null, {
           ...this.preferencesState,
           value: preferences,
@@ -194,7 +431,10 @@ export class Studio {
   async selectProject(path: string) {
     await this.flush();
     if (this.unsynced)
-      throw new Error(this.syncError || "草稿尚未同步，项目未切换");
+      throw new Error(
+        this.syncError ||
+          "Drafts are not synced. The project was not switched.",
+      );
     this.info = await this.client.selectProject(path);
     this.r = await this.client.rConfiguration();
     if (this.r.error) this.error = this.r.error;
@@ -206,6 +446,9 @@ export class Studio {
     this.clearOutputs();
     this.observedAt = 0;
     this.directory = null;
+    this.directories.clear();
+    this.expandedObjects.clear();
+    this.consoleState = null;
     this.directoryError = "";
     this.objects = null;
     this.inspectors.clear();
@@ -246,8 +489,94 @@ export class Studio {
       selectedPlot?: string;
       plotZoom?: number | null;
       cursor?: number;
+      viewPlacements?: Record<string, Placement>;
+      knownViews?: Studio["knownViews"];
+      layoutHistory?: import("flexlayout-react").IJsonModel[];
+      consoleViews?: Studio["consoleViews"];
+      expandedDirectories?: string[];
+      filesScrollTop?: number;
+      showHiddenFiles?: boolean;
+      commandHistory?: string[];
+      plotViews?: Record<string, PlotView>;
     } | null;
     this.layout = data?.layout ?? null;
+    this.viewPlacements = {};
+    for (const [id, p] of Object.entries(data?.viewPlacements ?? {}))
+      if (p && Array.isArray(p.neighbors))
+        this.viewPlacements[id] = {
+          group: typeof p.group === "string" ? p.group : undefined,
+          neighbors: p.neighbors.filter((v) => typeof v === "string"),
+        };
+    this.knownViews = {};
+    for (const [id, v] of Object.entries(data?.knownViews ?? {}))
+      if (
+        v &&
+        typeof v.name === "string" &&
+        [
+          "console",
+          "plots",
+          "document",
+          "viewer",
+          "files",
+          "objects",
+          "editor",
+        ].includes(v.component)
+      )
+        this.knownViews[id] = v;
+    this.layoutHistory = (data?.layoutHistory ?? [])
+      .filter((v) => v && typeof v === "object" && v.layout)
+      .slice(-20);
+    this.closedViews.clear();
+    this.plotViews = {};
+    for (const [id, value] of Object.entries(data?.plotViews ?? {})) {
+      if (!value || typeof value !== "object") continue;
+      const view = newPlotView();
+      view.selected =
+        typeof value.selected === "string" ? value.selected : null;
+      view.follow = value.follow !== false;
+      view.pinned = value.pinned === true;
+      view.history = value.history !== false;
+      view.seen = Number(value.seen) || 0;
+      for (const [key, p] of Object.entries(value.transforms ?? {}))
+        if (
+          p &&
+          (p.zoom === null || Number.isFinite(p.zoom)) &&
+          Number.isFinite(p.x) &&
+          Number.isFinite(p.y)
+        )
+          view.transforms[key] = {
+            zoom: p.zoom === null ? null : Math.max(0.01, Math.min(8, p.zoom)),
+            x: p.x,
+            y: p.y,
+          };
+      this.plotViews[id] = view;
+    }
+    this.consoleViews = {};
+    for (const [id, view] of Object.entries(data?.consoleViews ?? {})) {
+      if (view && typeof view.input === "string")
+        this.consoleViews[id] = {
+          input: view.input,
+          hiddenBefore: Number(view.hiddenBefore) || 0,
+          scrollTop: Number(view.scrollTop) || 0,
+          follow: view.follow !== false,
+          anchor: Math.max(
+            0,
+            Math.min(view.input.length, Number(view.anchor) || 0),
+          ),
+          head: Math.max(
+            0,
+            Math.min(view.input.length, Number(view.head) || 0),
+          ),
+        };
+    }
+    this.expandedDirectories = new Set(
+      (data?.expandedDirectories ?? [""]).filter((p) => typeof p === "string"),
+    );
+    this.filesScrollTop = Number(data?.filesScrollTop) || 0;
+    this.showHiddenFiles = data?.showHiddenFiles === true;
+    this.commandHistory = (data?.commandHistory ?? [])
+      .filter((v) => typeof v === "string")
+      .slice(-500);
     this.documents.restore(data?.documents);
     this.pending = Array.isArray(data?.pending) ? data.pending : [];
     this.consoleInput =
@@ -259,14 +588,16 @@ export class Studio {
       : null;
     this.cursor = Number.isSafeInteger(data?.cursor) ? data!.cursor! : 0;
     for (const pending of this.pending)
-      pending.error = "请求尚未确认；刷新不会重新执行。";
+      pending.error = "The request is unconfirmed. Refresh does not replay it.";
     this.unsynced = false;
     this.syncError = "";
     this.stateConflict = null;
     this.unconfirmedState = undefined;
   }
   persist() {
+    const changed = !this.unsynced;
     this.unsynced = true;
+    if (changed) this.emit("shell");
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
       void this.flush();
@@ -274,6 +605,16 @@ export class Studio {
   }
   serialize(): unknown {
     return {
+      version: 2,
+      viewPlacements: this.viewPlacements,
+      knownViews: this.knownViews,
+      layoutHistory: this.layoutHistory,
+      consoleViews: this.consoleViews,
+      commandHistory: this.commandHistory,
+      plotViews: this.plotViews,
+      expandedDirectories: [...this.expandedDirectories],
+      filesScrollTop: this.filesScrollTop,
+      showHiddenFiles: this.showHiddenFiles,
       documents: this.documents.serialize(),
       layout: this.layout,
       pending: this.pending,
@@ -307,7 +648,7 @@ export class Studio {
             else {
               this.stateConflict = remote;
               throw new Error(
-                "另一个窗口已更新共享草稿；本窗口的修改已保留，请处理窗口冲突。",
+                "Another window updated shared drafts. Your edits are retained. Resolve the window conflict.",
               );
             }
           }
@@ -329,7 +670,7 @@ export class Studio {
         this.unsynced = true;
       } finally {
         this.saving = null;
-        this.emit();
+        this.emit("shell");
       }
     })();
     await this.saving;
@@ -347,10 +688,12 @@ export class Studio {
     args: unknown,
     preconditions: Precondition[] = [],
   ): Promise<OperationRecord> {
-    if (!this.project) throw new Error("先打开项目");
+    if (!this.project) throw new Error("Open a project first");
     const project = this.project;
     if (new TextEncoder().encode(JSON.stringify(args)).length > 256 * 1024)
-      throw new Error("请求参数超过 256 KiB 上限；未提交，草稿仍保留");
+      throw new Error(
+        "Arguments exceed 256 KiB. Nothing was submitted; your draft is retained.",
+      );
     const request: PendingRequest = {
       invocation: {
         client_request_id: crypto.randomUUID(),
@@ -371,7 +714,9 @@ export class Studio {
       ).length >
       272 * 1024
     )
-      throw new Error("请求超过 272 KiB 传输上限；未提交，草稿仍保留");
+      throw new Error(
+        "The request exceeds 272 KiB. Nothing was submitted; your draft is retained.",
+      );
     this.pending.push(request);
     this.persist();
     this.emit();
@@ -379,10 +724,14 @@ export class Studio {
     if (this.unsynced) {
       this.pending = this.pending.filter((p) => p !== request);
       this.persist();
-      throw new Error(`请求未提交：${this.syncError}`);
+      throw new Error(`Request was not submitted: ${this.syncError}`);
     }
     try {
-      const record = await this.client.invoke(project, request.invocation);
+      const record = await this.client.invoke(
+        project,
+        request.invocation,
+        id === "workspace.run_r",
+      );
       this.records.set(record.operation.operation_id, record);
       if (id.startsWith("workspace.")) this.observedAt = 0;
       this.pending = this.pending.filter((p) => p !== request);
@@ -396,8 +745,24 @@ export class Studio {
       throw error;
     }
   }
+  async reviewOperation(id: string) {
+    const project = this.project;
+    if (!project || this.records.has(id)) return;
+    const record = await this.client.getOperation(project, id);
+    if (!record || project !== this.project) return;
+    const summary = await this.client.query(project, "operation.list_recent", {
+      client_request_id: record.operation.client_request_id,
+      limit: 1,
+    });
+    const entry = (summary.data as RecentOperations | null)?.operations[0];
+    if (entry) this.mediaOrder.set(id, entry.cursor);
+    if (project === this.project) {
+      this.records.set(id, record);
+      this.emit("outputs");
+    }
+  }
   async retryPending(request: PendingRequest) {
-    if (!this.project || !this.connected) throw new Error("Host 不可用");
+    if (!this.project || !this.connected) throw new Error("Host Unavailable");
     try {
       request.error = undefined;
       request.ignored = false;
@@ -416,62 +781,95 @@ export class Studio {
       this.emit();
     }
   }
-  async run(code: string) {
-    if (!this.canRun || !code.trim()) return;
-    if (code.includes("\0")) throw new Error("R 代码不能包含 NUL；请求未提交");
-    await this.invoke("workspace.run_r", { code });
+  async run(
+    code: string,
+    source: RunSource = {
+      view_id: "console",
+      label: "Console",
+      kind: "console",
+    },
+  ) {
+    if (!this.canRun || !code.trim())
+      throw new Error(
+        (this.consoleState?.pending.length ?? 0) >= 32
+          ? "Queue full (32 pending runs). Your input is retained."
+          : "R is unavailable. Your input is retained.",
+      );
+    if (code.includes("\0")) throw new Error("R code cannot contain NUL.");
+    const session = this.consoleState?.session_id ?? this.runtime?.session_id;
+    const args: RunRArguments = { code, output_mode: "console", source };
+    const record = await this.invoke(
+      "workspace.run_r",
+      args,
+      session
+        ? [{ kind: "workspace.session", subject: "active", expected: session }]
+        : [],
+    );
+    if (record.status === "failed" && record.output === null)
+      throw new Error(record.error ?? "Run was rejected");
+    await this.refreshConsole();
+    return record;
   }
   async cancel() {
-    if (!this.project) return;
-    for (const record of this.records.values())
-      if (!terminal(record.status))
-        await this.client.cancel(this.project, record.operation.operation_id);
+    const id =
+      this.consoleState?.current?.operation_id ??
+      [...this.records.values()].find((r) => r.status === "running")?.operation
+        .operation_id;
+    if (this.project && id) await this.client.cancel(this.project, id);
   }
   async listDirectory(path = "", append = false) {
     const project = this.project;
     if (!project) return;
     this.directoryLoading = true;
     this.directoryError = "";
-    this.emit();
+    this.emit("files");
     try {
       const result = await this.client.query(
         project,
         "project.list_directory",
         {
           path,
-          after_name: append ? this.directory?.next_name : null,
+          after_name: append ? this.directories.get(path)?.next_name : null,
           limit: 200,
         },
       );
       if (result.status !== "ready") throw new Error(result.notices.join("\n"));
       const page = result.data as DirectoryPage;
-      if (this.project === project)
+      if (this.project === project) {
         this.directory = {
           ...page,
           entries:
-            append && this.directory?.path === path
-              ? [...this.directory.entries, ...page.entries]
+            append && this.directories.has(path)
+              ? [...this.directories.get(path)!.entries, ...page.entries]
               : page.entries,
         };
+        this.directories.set(path, this.directory);
+      }
     } catch (error) {
       this.directoryError = message(error);
     } finally {
       this.directoryLoading = false;
-      this.emit();
+      this.emit("files");
     }
   }
   async inspectObject(name: string) {
-    const project = this.project;
+    const project = this.project,
+      session = this.runtime?.session_id;
     if (!project) return;
     const snapshot = await this.client.query(
       project,
       "workspace.inspect_object",
       { name, max_items: 20 },
     );
-    if (project !== this.project) return;
+    if (
+      project !== this.project ||
+      this.runtime?.session_id !== session ||
+      (session && snapshot.target.identity !== session)
+    )
+      return;
     if (snapshot.status !== "ready") {
       this.objectsNotice = snapshot.notices.join("\n");
-      this.emit();
+      this.emit("objects");
       return;
     }
     this.inspectors.set(name, {
@@ -480,8 +878,7 @@ export class Studio {
       notice: snapshot.notices.join("\n"),
     });
     this.selectedObject = name;
-    this.showPanel?.("viewer", `object:${name}`, name, { name });
-    this.emit();
+    this.emit("objects");
   }
   clearOutputs() {
     for (const url of this.mediaUrls.values()) URL.revokeObjectURL(url);
@@ -492,19 +889,36 @@ export class Studio {
     this.mediaUrls.clear();
     this.mediaErrors.clear();
     this.mediaLoads.clear();
+    this.plotMedia.clear();
+    this.plotTimes.clear();
+    this.plotRecords.clear();
+    this.mediaOrder.clear();
+    this.plotCursor = null;
+    this.plotViews = {};
     this.runtime = null;
   }
   mediaKey(reference: MediaReference) {
     return `${reference.operation_id}:${reference.sequence}:${reference.sha256}`;
   }
   get media(): MediaReference[] {
-    return [...this.outputEvents.values()].flatMap((events) =>
-      events.flatMap((e) => (e.media ? [e.media] : [])),
+    const all = new Map(this.plotMedia);
+    for (const events of this.outputEvents.values())
+      for (const e of events)
+        if (e.media) all.set(this.mediaKey(e.media), e.media);
+    return [...all.values()].sort(
+      (a, b) =>
+        (this.mediaOrder.get(a.operation_id) ?? Number.MAX_SAFE_INTEGER) -
+          (this.mediaOrder.get(b.operation_id) ?? Number.MAX_SAFE_INTEGER) ||
+        a.operation_id.localeCompare(b.operation_id) ||
+        a.sequence - b.sequence,
     );
   }
   selectPlot(reference: MediaReference) {
     this.selectedPlot = this.mediaKey(reference);
-    this.plotZoom = null;
+    const view = this.plotView("plots");
+    view.selected = this.selectedPlot;
+    view.follow = false;
+    view.seen = this.media.length;
     this.persist();
     this.emit();
   }
@@ -526,7 +940,7 @@ export class Studio {
           ) ||
           reference.byte_size > 16 * 1024 * 1024
         )
-          throw new Error("不支持或过大的媒体输出");
+          throw new Error("Unsupported or oversized media output");
         const bytes = new Uint8Array(reference.byte_size);
         let offset = 0;
         do {
@@ -545,7 +959,7 @@ export class Studio {
             offset + page.bytes.length > bytes.length ||
             (!page.bytes.length && page.has_more)
           )
-            throw new Error("媒体分段响应不一致");
+            throw new Error("Media chunk identity does not match");
           bytes.set(page.bytes, offset);
           offset += page.bytes.length;
           if (!page.has_more) break;
@@ -558,19 +972,58 @@ export class Studio {
             .map((b) => b.toString(16).padStart(2, "0"))
             .join("");
         if (offset !== bytes.length || digest !== reference.sha256)
-          throw new Error("原始输出摘要不匹配");
-        if (this.project === project)
+          throw new Error("Original output failed its checksum");
+        if (this.project === project) {
           this.mediaUrls.set(
             key,
             URL.createObjectURL(
               new Blob([bytes], { type: reference.mime_type }),
             ),
           );
+          let total = this.media
+            .filter((r) => this.mediaUrls.has(this.mediaKey(r)))
+            .reduce((sum, r) => sum + r.byte_size, 0);
+          const activeViews = new Set<string>();
+          const visit = (node: unknown) => {
+            if (!node || typeof node !== "object") return;
+            const n = node as {
+              type?: string;
+              selected?: number;
+              id?: string;
+              component?: string;
+              children?: unknown[];
+            };
+            if (n.type === "tabset") {
+              const tab = n.children?.[n.selected ?? 0] as
+                | { id?: string; component?: string }
+                | undefined;
+              if (tab?.component === "plots" && tab.id) activeViews.add(tab.id);
+            } else for (const child of n.children ?? []) visit(child);
+          };
+          visit((this.layout as { layout?: unknown } | null)?.layout);
+          // Keep visible originals; closed comparison views do not pin the cache.
+          const protectedKeys = new Set(
+            [...activeViews].map((id) => this.plotViews[id]?.selected),
+          );
+          protectedKeys.add(key);
+          for (const r of this.media.sort(
+            (a, b) =>
+              (this.mediaAccess.get(this.mediaKey(a)) ?? 0) -
+              (this.mediaAccess.get(this.mediaKey(b)) ?? 0),
+          )) {
+            const k = this.mediaKey(r);
+            if (total <= 64 * 1024 * 1024) break;
+            if (protectedKeys.has(k) || !this.mediaUrls.has(k)) continue;
+            URL.revokeObjectURL(this.mediaUrls.get(k)!);
+            this.mediaUrls.delete(k);
+            total -= r.byte_size;
+          }
+        }
       } catch (error) {
         if (this.project === project) this.mediaErrors.set(key, message(error));
       } finally {
         this.mediaLoads.delete(key);
-        this.emit();
+        this.emit("media");
       }
     })();
     this.mediaLoads.set(key, promise);
@@ -590,6 +1043,7 @@ export class Studio {
       this.recentCursor = data.next_cursor;
     for (const summary of [...data.operations].reverse()) {
       if (!summary.capability.id.startsWith("workspace.")) continue;
+      this.mediaOrder.set(summary.operation_id, summary.cursor);
       const existing = this.records.get(summary.operation_id);
       if (
         existing &&
@@ -626,12 +1080,13 @@ export class Studio {
         this.persist();
       }
     }
-    this.emit();
+    this.emit("outputs", "console", "runtime");
   }
   async observe() {
     const project = this.project;
     if (!project) return;
     await this.loadRecent();
+    const refreshObjects = this.observedAt === 0 || !this.objects;
     if (
       this.info?.capabilities.some(
         (c) => c.capability.id === "workspace.runtime_status",
@@ -641,12 +1096,20 @@ export class Studio {
         project,
         "workspace.runtime_status",
       );
-      if (project === this.project && status.status === "ready")
-        this.runtime = status.data as RuntimeStatus;
+      if (project === this.project && status.status === "ready") {
+        const next = status.data as RuntimeStatus;
+        if (this.runtime && this.runtime.session_id !== next.session_id) {
+          this.inspectors.clear();
+          this.objects = null;
+        }
+        this.runtime = next;
+      }
     }
     if (
       this.info?.capabilities.some(
-        (c) => c.capability.id === "workspace.snapshot",
+        (c) =>
+          (refreshObjects || !this.objects) &&
+          c.capability.id === "workspace.snapshot",
       )
     ) {
       const objects = await this.client.query(project, "workspace.snapshot", {
@@ -657,6 +1120,8 @@ export class Studio {
           this.objects = objects.data as WorkspaceSnapshotData;
           this.objectsObservedAt = objects.observed_at_ms;
           this.objectsNotice = "";
+          for (const name of this.visibleObjects)
+            await this.inspectObject(name);
         } else this.objectsNotice = objects.notices.join("\n");
       }
     }
@@ -691,6 +1156,7 @@ export class Studio {
           this.pending.some((p) => !p.operationId && !p.error)
         )
           await this.observe();
+        await this.refreshConsole();
         const events = await this.client.subscribe(project, this.cursor);
         if (generation !== this.generation) return;
         for (const id of new Set(events.map((e) => e.operation_id)))
@@ -716,7 +1182,7 @@ export class Studio {
             if (terminal(record.status)) {
               this.outputNotices.set(id, snapshot.notices.join("\n"));
               this.outputDone.add(id);
-              this.emit();
+              this.emit("outputs", "plots");
             }
             continue;
           }
@@ -725,9 +1191,15 @@ export class Studio {
             page.operation_id !== id ||
             !Number.isSafeInteger(page.next_sequence)
           )
-            throw new Error("输出关联不一致");
+            throw new Error("Output identity does not match");
           this.outputCursors.set(id, page.next_sequence);
           if (page.events.length) {
+            for (const event of page.events)
+              if (event.media)
+                this.plotTimes.set(
+                  this.mediaKey(event.media),
+                  event.observed_at_ms,
+                );
             this.outputEvents.set(id, [
               ...(this.outputEvents.get(id) ?? []),
               ...page.events,
@@ -736,14 +1208,17 @@ export class Studio {
               const media = page.events.find((e) => e.media)?.media;
               if (media) this.selectedPlot = this.mediaKey(media);
             }
-            this.emit();
+            this.followPlots();
+            this.emit("outputs", "plots");
           }
           if (page.truncated || page.gap)
             this.outputNotices.set(
               id,
               [
                 ...page.notices,
-                page.truncated ? "输出已达到观察上限，后续内容省略。" : "",
+                page.truncated
+                  ? "Output reached the observation limit. Later content is omitted."
+                  : "",
               ]
                 .filter(Boolean)
                 .join("\n"),
@@ -756,13 +1231,13 @@ export class Studio {
       if (!this.connected) {
         this.connected = true;
         if (this.unsynced) void this.flush();
-        this.emit();
+        this.emit("shell", "runtime", "console");
       }
     } catch (error) {
       if (this.connected) {
         this.connected = false;
         this.error = message(error);
-        this.emit();
+        this.emit("shell", "runtime", "console");
       }
     } finally {
       this.schedule();

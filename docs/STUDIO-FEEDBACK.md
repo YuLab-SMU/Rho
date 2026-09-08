@@ -30,8 +30,10 @@ This feedback comes from:
 
 The screenshot is a visual reference, not evidence of why an interaction fails.
 The tutorial is a workflow reference; its RStudio commands and shortcuts are not
-claims about current Rho functionality. The issues below have not been newly
-reproduced or diagnosed during this documentation pass. The list is open-ended.
+claims about current Rho functionality. The original observations below preserve the user’s reported problems. The
+implementation and verification response is summarized in STATUS.md; the
+acceptance map below identifies how to recheck each issue. The list remains
+open-ended for further user review.
 
 The proposed cross-product principles for interpreting this feedback are in
 [RHO-DESIGN.md](RHO-DESIGN.md). They do not replace or close the reported issues.
@@ -218,3 +220,26 @@ The next design review should establish the concrete plot and Console problems,
 resolve panel-removal and group-docking behavior, and distinguish experience
 refinement from new scientific capabilities. No library replacement, development
 sequence, or additional capability scope is decided by this document.
+
+## Acceptance map for the Calm Precision implementation
+
+The accepted interaction details are in [Design section 10](RHO-DESIGN.md#10-studio-interaction-contract).
+This map identifies repeatable checks, rather than declaring all future user
+experience concerns closed. Fresh results and any unverified details belong only
+in [STATUS.md](STATUS.md).
+
+| Feedback | Concrete review |
+| --- | --- |
+| F01 | Close every view, observe empty-group space recovery, reopen from Panels, restore a closed Console draft, undo layout and confirm no execution |
+| F02 | Move Plots to the common left of Editor + Console using Move To; compare preview with final area; check all model directions and cancel a preview |
+| F03 | Inspect menus, settings, errors, labels and keyboard hints in English while retaining Chinese paths, object columns and native output |
+| F04 | Read representative R syntax and function/parameter colors; preserve selection and undo across settings, polling and layout changes; retain plain text mode |
+| F05 | Print multiple expressions, queue a failure followed by retained work, resume explicitly, switch Console drafts, answer readline/menu, refresh and check history/composition boundaries |
+| F06 | Expand raw, clean and summary together without adding tabs; explicitly open a viewer; verify bounded tibbles/special values and safe busy observations |
+| F07 | Produce scatter/facet/trend plots, select history, zoom/pan, pin a comparison, export/check original bytes and inspect older output with R unavailable |
+
+The fixed CSV fixture and analysis script live in `ui/e2e/fixtures/gapminder/`.
+The analysis dependencies are already installed; the scenario does not install
+packages. Browser regression scenarios are in `ui/e2e/studio.spec.ts`, model
+checks in `ui/tests/`, and native ownership/queue/input checks in the Host tests.
+Report synthetic composition coverage separately from OS input-method testing.
