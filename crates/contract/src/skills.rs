@@ -21,14 +21,19 @@ fn root_directory() -> String {
 #[serde(deny_unknown_fields)]
 pub struct SkillListArguments {
     #[serde(default = "root_directory")]
+    #[schemars(length(min = 1, max = 4096))]
     pub working_directory: String,
     #[serde(default)]
+    #[schemars(length(max = 1024))]
     pub filter: String,
     #[serde(default)]
+    #[schemars(length(min = 1, max = 160))]
     pub source_id: Option<String>,
     #[serde(default)]
+    #[schemars(length(min = 1, max = 256))]
     pub cursor: Option<String>,
     #[serde(default = "list_limit")]
+    #[schemars(range(min = 1, max = 50))]
     pub limit: u32,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
@@ -71,6 +76,7 @@ pub struct SkillResourceSummary {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct SkillSummary {
     /// Observation identity bound to principal, project, scope and all package resources.
+    #[schemars(length(min = 1, max = 512))]
     pub skill_ref: String,
     pub source: SkillSourceRelation,
     pub available: bool,
@@ -90,6 +96,7 @@ pub struct SkillSourceNotice {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct SkillListPage {
+    #[schemars(length(min = 1, max = 4096))]
     pub working_directory: String,
     pub skills: Vec<SkillSummary>,
     pub total: u32,
@@ -113,27 +120,36 @@ fn text_kind() -> SkillReadKind {
 #[serde(deny_unknown_fields)]
 pub struct SkillReadArguments {
     #[serde(default = "root_directory")]
+    #[schemars(length(min = 1, max = 4096))]
     pub working_directory: String,
+    #[schemars(length(min = 1, max = 512))]
     pub skill_ref: String,
+    #[schemars(length(min = 71, max = 71))]
     pub expected_digest: String,
     #[serde(default = "text_kind")]
     pub kind: SkillReadKind,
     /// Defaults to SKILL.md. Paths are package-relative, never expressions or absolute paths.
     #[serde(default)]
+    #[schemars(length(min = 1, max = 4096))]
     pub resource_path: Option<String>,
     #[serde(default)]
+    #[schemars(length(min = 71, max = 71))]
     pub expected_resource_digest: Option<String>,
     #[serde(default)]
     pub offset: u64,
     #[serde(default = "byte_limit")]
+    #[schemars(range(min = 1, max = 65536))]
     pub limit_bytes: u32,
     #[serde(default = "resource_limit")]
+    #[schemars(range(min = 1, max = 200))]
     pub resource_limit: u32,
     #[serde(default)]
+    #[schemars(length(min = 1, max = 1024))]
     pub external_task_ref: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct SkillReadPage {
+    #[schemars(length(min = 1, max = 512))]
     pub skill_ref: String,
     pub source_ref: String,
     pub skill_digest: String,
@@ -153,14 +169,18 @@ pub struct SkillReadPage {
 #[serde(deny_unknown_fields)]
 pub struct ResolveContextArguments {
     #[serde(default = "root_directory")]
+    #[schemars(length(min = 1, max = 4096))]
     pub working_directory: String,
     #[serde(default)]
+    #[schemars(length(min = 1, max = 1024))]
     pub external_task_ref: Option<String>,
     #[serde(default)]
     pub target: Option<TargetRef>,
     #[serde(default)]
+    #[schemars(length(min = 1, max = 256))]
     pub cursor: Option<String>,
     #[serde(default = "list_limit")]
+    #[schemars(range(min = 1, max = 50))]
     pub limit: u32,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
@@ -176,6 +196,7 @@ pub struct MethodResolution {
     pub binding_id: String,
     pub version: String,
     pub source_ref: String,
+    #[schemars(length(min = 1, max = 512))]
     pub skill_ref: String,
     pub excluded: bool,
     pub valid: bool,
@@ -184,7 +205,9 @@ pub struct MethodResolution {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct ResolvedSkillContext {
+    #[schemars(length(min = 1, max = 4096))]
     pub working_directory: String,
+    #[schemars(length(min = 1, max = 1024))]
     pub external_task_ref: Option<String>,
     pub target: Option<TargetRef>,
     pub discoverable: SkillListPage,

@@ -28,7 +28,7 @@ impl SkillQueryHandler {
                 "Read an exact Skill body, resource manifest or resource byte page",
                 schema_for!(SkillReadArguments).to_value(),
                 schema_for!(SkillReadPage).to_value(),
-                json!({"working_directory":".","skill_ref":"skill-source:example:scope:manifest","expected_digest":"sha256:example","kind":"manifest"}),
+                json!({"working_directory":".","skill_ref":"skill-source:example:scope:manifest","expected_digest":format!("sha256:{}", "0".repeat(64)),"kind":"manifest"}),
             ),
             SkillQueryKind::ResolveContext => (
                 "host.resolve_context",
@@ -70,7 +70,10 @@ impl QueryHandler for SkillQueryHandler {
                     serde_json::from_value(value.clone()).map_err(invalid)?;
                 validate_relative(&a.working_directory, true)?;
                 if a.skill_ref.len() > 512
-                    || a.expected_digest.len() > 128
+                    || !valid_digest(&a.expected_digest)
+                    || a.expected_resource_digest
+                        .as_deref()
+                        .is_some_and(|d| !valid_digest(d))
                     || a.limit_bytes == 0
                     || a.limit_bytes > 65536
                     || a.resource_limit == 0
@@ -184,4 +187,10 @@ impl QueryHandler for SkillQueryHandler {
             diagnostics: vec![],
         })
     }
+}
+
+fn valid_digest(value: &str) -> bool {
+    value
+        .strip_prefix("sha256:")
+        .is_some_and(|hex| hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
 }
