@@ -85,6 +85,26 @@ impl OutputStore {
             verified: Mutex::new(VerifiedCache::default()),
         })
     }
+    /// Observe an existing output store without creating its directory or any run files.
+    /// Absence is an unavailable owner, never a newly initialized empty output store.
+    pub fn open_read_only(root: &Path, project: &str) -> Result<Option<Self>, String> {
+        let root = root
+            .join("outputs")
+            .join(format!("{:x}", Sha256::digest(project.as_bytes())));
+        match std::fs::symlink_metadata(&root) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(err(error)),
+            Ok(_) => {}
+        }
+        let root = root.canonicalize().map_err(err)?;
+        if !root.is_dir() {
+            return Err("Original output storage is not a directory".into());
+        }
+        Ok(Some(Self {
+            root,
+            verified: Mutex::new(VerifiedCache::default()),
+        }))
+    }
     fn directory(&self, id: &OperationId) -> PathBuf {
         self.root
             .join(format!("{:x}", Sha256::digest(id.as_str().as_bytes())))

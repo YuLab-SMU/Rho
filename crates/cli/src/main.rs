@@ -129,7 +129,7 @@ enum Command {
         #[arg(long)]
         expected_session: Option<String>,
     },
-    /// Read a shared Host query; a project-only profile does not start R.
+    /// Read through a standalone observer without runtime startup, writer leases or recovery.
     Query {
         #[arg(long)]
         capability: String,
@@ -231,16 +231,49 @@ async fn run() -> Result<(), CliFailure> {
             .await
             .map_err(Into::into);
     }
+    if let Command::Query {
+        capability,
+        capability_version,
+        arguments,
+    } = &cli.command
+    {
+        if cli.demo
+            || cli.ark.is_some()
+            || cli.r_home.is_some()
+            || cli.rscript.is_some()
+            || cli.environment.is_some()
+            || cli.remote_host.is_some()
+            || cli.remote_root.is_some()
+            || cli.slurm_cluster.is_some()
+            || cli.host_skills.is_some()
+        {
+            return Err(rho_host::OperationError::InvalidInput("Standalone query does not accept runtime or live-owner startup configuration. Connect to the existing Host session/MCP for R, Environment, remote or application/Skill queries.".into()).into());
+        }
+        let observer = NextHost::open_query_observer(&cli.database, cli.project.as_deref())?;
+        let observation = observer
+            .query_snapshot(
+                &context,
+                QueryRequest {
+                    capability: CapabilityRef::new(capability, *capability_version)
+                        .map_err(|e| e.to_string())?,
+                    arguments: serde_json::from_str(arguments).map_err(|e| e.to_string())?,
+                },
+            )
+            .await?;
+        return print_json(&json!({"ok":true,"observation":observation})).map_err(Into::into);
+    }
     let active_host = if matches!(
         cli.command,
-        Command::Invoke { .. } | Command::Query { .. } | Command::BindMethod { .. }
+        Command::Invoke { .. } | Command::BindMethod { .. }
     ) {
         Some(cli.open_host().await?)
     } else {
         None
     };
     let result = match cli.command {
-        Command::Session | Command::Mcp | Command::Workbench { .. } => unreachable!(),
+        Command::Session | Command::Mcp | Command::Workbench { .. } | Command::Query { .. } => {
+            unreachable!()
+        }
         Command::Invoke {
             client_request_id,
             code,
@@ -278,24 +311,6 @@ async fn run() -> Result<(), CliFailure> {
                 "runtime": if cli.demo { "deterministic_fake" } else if cli.ark.is_some() { "ark" } else if cli.rscript.is_some() { "environment" } else { "project" },
                 "operation": record,
             }))
-        }
-        Command::Query {
-            capability,
-            capability_version,
-            arguments,
-        } => {
-            let host = active_host.expect("query opens one Host");
-            let observation = host
-                .query_snapshot(
-                    &context,
-                    QueryRequest {
-                        capability: CapabilityRef::new(capability, capability_version)
-                            .map_err(|e| e.to_string())?,
-                        arguments: serde_json::from_str(&arguments).map_err(|e| e.to_string())?,
-                    },
-                )
-                .await?;
-            print_json(&json!({"ok":true,"observation":observation}))
         }
         Command::BindMethod {
             expected_version,

@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 mod application;
 mod discovery;
+mod observer;
 mod port_contracts;
+pub use observer::QueryObserver;
 mod skills;
 
 mod config;
@@ -615,36 +617,20 @@ impl NextHost {
         }
     }
 
+    /// Compose standalone file/history observations without writer ownership or runtime startup.
+    pub fn open_query_observer(
+        database: impl AsRef<Path>,
+        project: Option<&Path>,
+    ) -> Result<QueryObserver, OperationError> {
+        QueryObserver::open(database.as_ref(), project)
+    }
     pub fn open_read_only(database: impl AsRef<Path>) -> Result<Self, OperationError> {
         let journal = Arc::new(SqliteOperationJournal::open_read_only(database)?);
-        let mut registry = CapabilityRegistry::new();
-        let discovery = discovery::DiscoveryOwner::new(None, vec![], None);
-        for id in ["host.overview", "host.catalog", "host.describe"] {
-            registry.register_query(Arc::new(discovery::DiscoveryHandler::new(
-                discovery.clone(),
-                id,
-            )))?;
-        }
-        registry.register_query(Arc::new(rho_operation::OperationGetHandler::new(
-            journal.clone(),
-            None,
-            &registry.descriptors(),
-        )?))?;
-        registry.register_query(Arc::new(rho_operation::OperationEvidenceHandler::new(
-            journal.clone(),
-            None,
-        )))?;
-        let event_port = port_contracts::register(&mut registry, None, false)?;
-        registry.validate_links()?;
-        let registry = Arc::new(registry);
-        discovery.bind(&registry);
-        let gateway = Arc::new(OperationGateway::new(
-            registry.clone(),
-            journal,
-            Arc::new(SystemClock),
-            Arc::new(UuidOperationIdGenerator),
-        ));
-        event_port.bind(&gateway);
+        let observer = QueryObserver::from_sources(Some(journal), None, None)?;
+        let registry = observer.registry;
+        let gateway = observer
+            .gateway
+            .expect("A composed existing journal provides its read gateway");
         Ok(Self {
             runtime: Arc::new(HostRuntime {
                 gateway,
@@ -875,44 +861,18 @@ impl NextHost {
                 )))?;
             }
         }
-        let mut output_owner = None;
-        if let Some(outputs) = outputs {
-            output_owner = Some(Arc::new(rho_workspace::WorkspaceOutputHandler::with_store(
-                workspace_owner.clone(),
-                Some(outputs.clone()),
-                output_project.clone(),
-                records.clone(),
-                rho_workspace::OutputQueryKind::Read,
-            )));
-            for kind in [
-                rho_workspace::OutputQueryKind::Events,
-                rho_workspace::OutputQueryKind::Read,
-                rho_workspace::OutputQueryKind::List,
-                rho_workspace::OutputQueryKind::View,
-                rho_workspace::OutputQueryKind::ReadText,
-            ] {
-                registry.register_query(Arc::new(
-                    rho_workspace::WorkspaceOutputHandler::with_store(
-                        workspace_owner.clone(),
-                        Some(outputs.clone()),
-                        output_project.clone(),
-                        records.clone(),
-                        kind,
-                    ),
-                ))?;
-            }
-        }
+        let output_owner = outputs
+            .map(|outputs| {
+                observer::register_output_queries(
+                    &mut registry,
+                    workspace_owner.clone(),
+                    outputs,
+                    output_project.clone(),
+                    records.clone(),
+                )
+            })
+            .transpose()?;
         if let Some(project) = project {
-            registry.register_query(Arc::new(
-                rho_operation::OperationEventsCheckpointHandler::new(
-                    journal.clone(),
-                    project.root().into(),
-                ),
-            ))?;
-            registry.register_query(Arc::new(rho_operation::RecentOperationsHandler::new(
-                journal.clone(),
-                project.root().into(),
-            )))?;
             let process = Arc::new(
                 LocalProcessExecutor::new(project.root())
                     .map_err(|e| OperationError::TargetResolution(e.to_string()))?,
@@ -926,22 +886,8 @@ impl NextHost {
                 records.clone(),
                 lane.clone(),
             )))?;
-            let owner = Arc::new(ProjectOwner::new(project, lane.clone()));
-            registry.register(Arc::new(ProjectPatchHandler::new(owner.clone())))?;
-            registry.register_query(Arc::new(ProjectSnapshotHandler::new(owner.clone())))?;
-            registry.register_query(Arc::new(rho_project::ProjectDirectoryHandler::new(
-                owner.clone(),
-            )))?;
-            registry.register_query(Arc::new(rho_project::ProjectSearchHandler::new(
-                owner.clone(),
-            )))?;
-            registry.register_query(Arc::new(rho_project::ProjectReadTextHandler::new(
-                owner.clone(),
-            )))?;
-            registry.register_query(Arc::new(rho_project::ProjectSearchTextHandler::new(
-                owner.clone(),
-            )))?;
-            registry.register_query(Arc::new(ProjectReadHandler::new(owner)))?;
+            let owner = observer::register_project_queries(&mut registry, project, lane.clone())?;
+            registry.register(Arc::new(ProjectPatchHandler::new(owner)))?;
         }
         if let Some(environment) = environment {
             let owner = Arc::new(
@@ -974,17 +920,12 @@ impl NextHost {
                 )))?;
             }
         }
-        registry.register_query(Arc::new(rho_operation::OperationEvidenceHandler::new(
+        let event_port = observer::register_record_queries(
+            &mut registry,
             journal.clone(),
             output_project.clone(),
-        )))?;
-        registry.register_query(Arc::new(rho_operation::OperationGetHandler::new(
-            journal.clone(),
-            output_project.clone(),
-            &registry.descriptors(),
-        )?))?;
-        let event_port =
-            port_contracts::register(&mut registry, output_project.clone(), has_workspace)?;
+            has_workspace,
+        )?;
         registry.validate_links()?;
         let registry = Arc::new(registry);
         discovery.bind(&registry);
