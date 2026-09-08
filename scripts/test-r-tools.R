@@ -15,6 +15,15 @@ stopifnot(requireNamespace("lintr", quietly = TRUE),
 help <- dispatch("help", list(topic = "mean", package = "base", max_chars = 32L))
 stopifnot(identical(help$outcome, "succeeded"), help$value$found,
           !help$value$truncated, help$value$preview_truncated, nchar(help$value$preview) == 32L, nchar(help$value$text) > 32L)
+# Exact-copy help resolves one observed library and rejects changed index evidence.
+base_inventory <- bridge$rho_packages(list(mode = "installed", filter = "", limit = 200L, offset = 0L, grouped = FALSE, package_name = "base", observation_id = NULL))
+base_copy <- base_inventory$packages[[1L]]
+base_files <- bridge$rho_package_index_files(file.path(base_copy$library_path, "base"))
+exact <- dispatch("help", list(topic = "mean", package = "base", max_chars = 32L, library_path = base_copy$library_path, observation_id = base_inventory$observation_id, expected_index_files = base_files))
+stopifnot(exact$outcome == "succeeded", exact$value$found, identical(exact$value$text, help$value$text))
+base_files[[1L]]$digest <- "changed"
+changed <- dispatch("help", list(topic = "mean", package = "base", max_chars = 32L, library_path = base_copy$library_path, observation_id = base_inventory$observation_id, expected_index_files = base_files))
+stopifnot(changed$outcome == "failed", grepl("content_changed", changed$error, fixed = TRUE))
 missing <- dispatch("help", list(topic = "rho_nonexistent_help_topic", package = "base", max_chars = 32L))
 stopifnot(identical(missing$outcome, "succeeded"), !missing$value$found)
 

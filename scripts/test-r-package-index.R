@@ -30,5 +30,8 @@ local({
   stopifnot(inherits(error, "error"), grepl("content_changed", conditionMessage(error), fixed = TRUE))
   arguments$index_ref <- NULL; arguments$offset <- 0L; arguments$library_path <- libs[[2L]]
   page <- bridge$rho_package_index(arguments); stopifnot(page$version == "2.0")
+  writeLines(c("Package: fixturepkg", "Version: 3.0", "Title: Replacement"), file.path(libs[[2L]], "fixturepkg/DESCRIPTION"))
+  error <- tryCatch(bridge$rho_package_index(arguments), error = identity)
+  stopifnot(inherits(error, "error"), grepl("content_changed", conditionMessage(error), fixed = TRUE))
 })
 cat("R static package index checks passed\n")

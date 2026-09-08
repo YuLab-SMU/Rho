@@ -17,9 +17,17 @@ rho_package_exact_copy <- function(payload) {
   p <- list(mode = "installed", filter = "", limit = 200L, offset = 0L, grouped = FALSE, package_name = payload$package, observation_id = payload$observation_id)
   inventory <- rho_packages(p)
   matches <- Filter(function(row) identical(row$name, payload$package) && identical(row$library_path, payload$library_path), inventory$packages)
+  while (!length(matches) && !is.null(inventory$next_offset)) {
+    p$offset <- inventory$next_offset
+    inventory <- rho_packages(p)
+    matches <- Filter(function(row) identical(row$name, payload$package) && identical(row$library_path, payload$library_path), inventory$packages)
+  }
   if (length(matches) != 1L) rho_object_error("observation_invalid", "Exact package copy is absent from the package observation.")
   path <- file.path(payload$library_path, payload$package)
   if (!dir.exists(path)) rho_object_error("content_changed", "Package copy is no longer installed.")
+  # A retained inventory cannot attribute an updated installation to its old version.
+  current <- tryCatch(read.dcf(file.path(path, "DESCRIPTION"), fields = c("Package", "Version")), error = function(e) NULL)
+  if (is.null(current) || nrow(current) != 1L || !identical(unname(current[1L, "Package"]), payload$package) || !identical(unname(current[1L, "Version"]), matches[[1L]]$version)) rho_object_error("content_changed", "Installed copy changed since its package observation.")
   list(path = path, copy = matches[[1L]], observed_at_ms = inventory$observed_at_ms)
 }
 rho_package_static_index <- function(path) {

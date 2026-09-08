@@ -60,6 +60,7 @@ rho_object_metadata <- function(value = NULL, binding_kind = "value") {
   m$object_type <- typeof(value)
   classes <- attr(value, "class", exact = TRUE)
   if (is.character(classes) && !is.object(classes)) m$classes <- unname(as.list(substr(.subset(classes, seq_len(min(length(classes), 16L))), 1L, 128L)))
+  if (is.character(classes) && !is.object(classes) && (length(classes) > 16L || any(nchar(classes, type = "chars") > 128L))) m$notice <- "Class metadata is limited to 16 entries and 128 characters each; this unsupported metadata has no further read method."
   if (!rho_object_supported(value)) { m$notice <- "Unsupported object: safe metadata only; no user methods were called."; return(m) }
   bare <- value
   m$length <- rho_object_length(bare)
@@ -146,8 +147,9 @@ rho_observe_object <- function(payload) {
 rho_object_text <- function(text, start, max_bytes) {
   count <- nchar(text, type = "chars")
   if (start > count + 1) rho_object_error("invalid_cursor", "Text character offset exceeds length.")
-  part <- substr(text, start, min(count, start + max_bytes - 1L))
+  part <- enc2utf8(substr(text, start, min(count, start + max_bytes - 1L)))
   while (nchar(part, type = "bytes") > max_bytes) part <- substr(part, 1L, max(0L, floor(nchar(part, type = "chars") * 0.75)))
+  if (!nzchar(part) && start <= count) rho_object_error("budget_exhausted", "The next Unicode character exceeds text_limit_bytes; request at least 4 bytes.")
   next_start <- start + nchar(part, type = "chars")
   list(text = part, total = count, next_start = if (next_start <= count) next_start else NULL)
 }
