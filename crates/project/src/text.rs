@@ -121,6 +121,10 @@ macro_rules! handler {
                             reply.completeness = ObservationCompleteness::Complete;
                         }
                         reply.data = Some(serde_json::to_value(page).map_err(invalid)?);
+                        if let Some(cursor)=reply.data.as_ref().and_then(|data|data.get("continuation")).filter(|cursor|!cursor.is_null()) {
+                            let mut arguments=value.clone();arguments["continuation"]=cursor.clone();
+                            reply.next_reads.push(rho_contract::NextRead::query($cap,"Continue the same version-bound text investigation",arguments));
+                        }
                     }
                     Err(error) => {
                         reply.status = QueryStatus::Unavailable;

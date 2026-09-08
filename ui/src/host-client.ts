@@ -125,7 +125,7 @@ export class HostClient {
       project_root,
       frame: { id: crypto.randomUUID(), request },
     };
-    const reply = await this.request<SessionReply>("/api/host", frame);
+    const reply = await this.request<SessionReply>(request.method === "application_bridge" ? "/api/application/bridge" : "/api/host", frame);
     if (!reply || typeof reply.ok !== "boolean" || !("result" in reply))
       throw new Error("Invalid Host reply");
     if (!reply.ok) throw new Error(reply.error ?? "Host result is unconfirmed");

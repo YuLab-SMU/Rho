@@ -117,17 +117,17 @@ async fn project_only_host_shares_skill_queries_receipts_and_binding_control() {
         selected.binding.external_actor_ref.as_deref(),
         Some("associated-actor")
     );
-    assert!(
-        host.dispatch(
-            &NextHost::local_context(),
-            HostRequest::BindMethod(BindMethodRequest {
-                expected_version: None,
-                binding: binding.clone()
-            })
-        )
-        .await
-        .is_err()
-    );
+    let retried = host.dispatch(
+        &NextHost::local_context(),
+        HostRequest::BindMethod(BindMethodRequest { expected_version: None, binding: binding.clone() })
+    ).await.unwrap();
+    assert_eq!(serde_json::from_value::<ApplicationMethodBinding>(retried).unwrap(), binding);
+    let mut moved = binding.clone();
+    moved.version = "moved-version".into();
+    moved.working_directory = "different-scope".into();
+    assert!(host.dispatch(&NextHost::local_context(), HostRequest::BindMethod(BindMethodRequest {
+        expected_version: Some(binding.version.clone()), binding: moved,
+    })).await.is_err());
     let mut denied = NextHost::local_context();
     denied.scopes.remove("skill.read");
     assert!(

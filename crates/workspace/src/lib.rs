@@ -239,7 +239,7 @@ impl WorkspaceRunHandler {
                     .expect("static capability identity is valid"),
                 domain: "workspace".to_string(),
                 documentation: rho_contract::builtin_documentation(RUN_R_CAPABILITY_ID),
-                recovery_schema: serde_json::json!({"type":"null"}),
+                recovery_schema: schema_for!(rho_contract::WorkspaceRecovery).to_value(),
                 input_schema: schema_for!(RunRArguments).to_value(),
                 output_schema: schema_for!(RunROutput).to_value(),
                 required_scopes,

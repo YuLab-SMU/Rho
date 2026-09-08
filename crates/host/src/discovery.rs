@@ -8,10 +8,12 @@ use std::{collections::BTreeSet, sync::{Arc, OnceLock, Weak}};
 
 pub(crate) struct DiscoveryOwner {
     project: Option<String>,
+    targets: Vec<TargetRef>,
+    workspace: Option<Arc<dyn rho_workspace::WorkspaceRuntime>>,
     registry: OnceLock<Weak<CapabilityRegistry>>,
 }
 impl DiscoveryOwner {
-    pub(crate) fn new(project: Option<String>) -> Arc<Self> { Arc::new(Self {project,registry:OnceLock::new()}) }
+    pub(crate) fn new(project: Option<String>,targets:Vec<TargetRef>,workspace:Option<Arc<dyn rho_workspace::WorkspaceRuntime>>) -> Arc<Self> { Arc::new(Self {project,targets,workspace,registry:OnceLock::new()}) }
     pub(crate) fn bind(&self, registry: &Arc<CapabilityRegistry>) { self.registry.set(Arc::downgrade(registry)).expect("discovery binds once"); }
     fn registry(&self) -> Result<Arc<CapabilityRegistry>,OperationError> { self.registry.get().and_then(Weak::upgrade).ok_or_else(||OperationError::Unavailable("Host registry is not composed".into())) }
     fn visible(&self, context: &CallContext) -> Result<Vec<CapabilityDescriptor>,OperationError> {
@@ -38,13 +40,13 @@ impl DiscoveryOwner {
             ("slurm","slurm.read","Slurm target is not configured"),
             ("skills","skill.read","Skill sources are not configured"),
         ].into_iter().filter(|(_,scope,_)|context.scopes.contains(*scope)).map(|(module,_,reason)| {
-            let available=descriptors.iter().any(|d|module_for(&d.capability.id)==module);
+            let available=descriptors.iter().any(|d|belongs_to(&d.capability.id,module));
             ModuleAvailability{module:module.into(),available,reasons:if available {vec![]}else{vec![reason.into()]},catalog:NextRead::query("host.catalog",format!("Discover {module} capabilities"),json!({"module":module,"limit":20}))}
         }).collect()
     }
     fn catalog(&self, context: &CallContext, args: HostCatalogArguments) -> Result<HostCatalog,OperationError> {
         let mut visible = self.visible(context)?;
-        visible.retain(|d|args.module.as_ref().is_none_or(|module|module_for(&d.capability.id)==module));
+        visible.retain(|d|args.module.as_ref().is_none_or(|module|belongs_to(&d.capability.id,module)));
         if let Some(keyword)=&args.keyword {
             let keyword=keyword.to_lowercase();
             visible.retain(|d|format!("{} {} {}",d.capability.id,d.documentation.summary,d.documentation.purpose).to_lowercase().contains(&keyword));
@@ -79,7 +81,7 @@ impl DiscoveryOwner {
             },
             (None,Some(module))=>{
                 let available=self.modules(&visible,context).into_iter().find(|m|m.module==module).ok_or_else(||OperationError::NotFound("module is not visible".into()))?;
-                Ok(HostDescription::Module{module:available,capabilities:visible.iter().filter(|d|module_for(&d.capability.id)==module).map(summary).collect()})
+                Ok(HostDescription::Module{module:available,capabilities:visible.iter().filter(|d|belongs_to(&d.capability.id,&module)).map(summary).collect()})
             },
             _=>Err(invalid("describe requires exactly one of capability or module"))
         }
@@ -88,9 +90,16 @@ impl DiscoveryOwner {
         let visible=self.visible(context)?;
         let mut observations=vec![];
         let gateway=QueryGateway::new(self.registry()?);
-        for (id,args) in [("workspace.runtime_status",json!({})),("workspace.console_state",json!({})),("operation.list_recent",json!({"limit":3}))]{
+        for (id,args) in [("workspace.runtime_status",json!({})),("workspace.console_state",json!({})),("operation.list_recent",json!({"limit":3})),("application.windows",json!({"limit":3})),("environment.observe",json!({"limit":1}))]{
             if !visible.iter().any(|d|d.capability.id==id){continue;}
-            let snapshot=gateway.query(context,QueryRequest{capability:CapabilityRef::new(id,1)?,arguments:args}).await?;
+            let snapshot=match gateway.query(context,QueryRequest{capability:CapabilityRef::new(id,1)?,arguments:args}).await {
+                Ok(snapshot)=>snapshot,
+                Err(error)=>{
+                    let mut message=error.to_string();let shortened=truncate(&mut message,1024);
+                    let mut notices=vec![message];if shortened{notices.push("Error detail exceeds overview budget; read this capability directly for its diagnostic.".into());}
+                    QuerySnapshot{target:TargetRef{kind:"host".into(),identity:self.project.clone().unwrap_or_else(||"project-unselected".into())},source:format!("host/{id}/failed-read"),observed_at_ms:SystemClock.now_ms()?,status:QueryStatus::Unavailable,completeness:ObservationCompleteness::Unknown,data:None,notices,next_reads:vec![],diagnostics:vec![]}
+                }
+            };
             observations.push(match id {
                 "workspace.runtime_status"=>OverviewObservation::Session(observed(snapshot)?),
                 "workspace.console_state"=>{
@@ -103,10 +112,48 @@ impl DiscoveryOwner {
                     }
                     OverviewObservation::Console(observation)
                 },
+                "application.windows"=>OverviewObservation::Application(observed(snapshot)?),
+                "environment.observe"=>OverviewObservation::Environment(observed(snapshot)?),
                 _=>OverviewObservation::Operations(observed(snapshot)?),
             });
         }
-        Ok(HostOverview{project_root:self.project.clone(),modules:self.modules(&visible,context),observations,atomic_snapshot:false})
+        let mut modules=self.modules(&visible,context);
+        for observation in &observations {
+            match observation {
+                OverviewObservation::Session(session) if session.data.as_ref().is_none_or(|runtime|runtime.state=="unavailable")=>{
+                    for module in modules.iter_mut().filter(|module|matches!(module.module.as_str(),"session"|"console"|"objects"|"packages")){module.available=false;module.reasons=vec!["Native R is unavailable; inspect the separately timed Session observation".into()];}
+                },
+                OverviewObservation::Application(window) => {
+                    let online=window.data.as_ref().is_some_and(|page|page.online_count>0);
+                    if !online {for module in modules.iter_mut().filter(|module|matches!(module.module.as_str(),"application"|"documents"|"layout")){module.available=false;module.reasons=vec!["No active Studio window; discover synchronized window history with application.windows".into()];}}
+                },
+                OverviewObservation::Environment(environment) if environment.status!=QueryStatus::Ready=>{if let Some(module)=modules.iter_mut().find(|module|module.module=="environment"){module.available=false;module.reasons=environment.notices.clone();}},
+                _=>{},
+            }
+        }
+        let mut targets=vec![];
+        for target in &self.targets {if rho_skills::SkillCapabilityPort::target_is_current(self,context,target).await.map_err(invalid)?{targets.push(target.clone());}}
+        Ok(HostOverview{project_root:self.project.clone(),targets,modules,observations,atomic_snapshot:false})
+    }
+}
+#[async_trait::async_trait]
+impl rho_skills::SkillCapabilityPort for DiscoveryOwner {
+    async fn available_capabilities(&self,context:&CallContext,target:Option<&TargetRef>)->Result<Vec<CapabilityRef>,String>{
+        if let Some(target)=target {if !self.target_is_current(context,target).await? {return Ok(vec![]);}}
+        self.visible(context).map(|descriptors|descriptors.into_iter().map(|d|d.capability).collect()).map_err(|e|e.to_string())
+    }
+    async fn target_is_current(&self,context:&CallContext,target:&TargetRef)->Result<bool,String>{
+        context.validate().map_err(|e|e.to_string())?;
+        let allowed=match target.kind.as_str(){
+            "workspace"=>context.scopes.contains("workspace.read")||context.scopes.contains("workspace.run_r"),
+            "project"=>context.scopes.contains("project.read")||context.scopes.contains("project.write"),
+            "environment"=>context.scopes.contains("environment.read")||context.scopes.contains("environment.write"),
+            "local_process"=>context.scopes.contains("process.run_local"),
+            "remote"=>context.scopes.contains("remote.execute")||context.scopes.contains("slurm.read"),
+            _=>false,
+        };
+        let live=target.kind!="workspace" || self.workspace.as_ref().is_some_and(|runtime|runtime.session_id()==target.identity && runtime.runtime_status().state!="unavailable");
+        Ok(allowed && live && self.targets.contains(target))
     }
 }
 fn observed<T:DeserializeOwned>(snapshot:QuerySnapshot)->Result<Observed<T>,OperationError>{
@@ -123,6 +170,15 @@ pub(crate) fn module_for(id:&str)->&str{
         "application.read_document"=>"documents",
         "process.run_remote"=>"remote",
         _=>match id.split('.').next().unwrap_or("") {"host"=>"host","workspace"=>"console","project"=>"files","operation"=>"operations","process"=>"processes","skill"=>"skills",module=>module}
+    }
+}
+fn belongs_to(id:&str,module:&str)->bool {
+    module_for(id)==module || match module {
+        "layout"=>matches!(id,"application.control"|"application.context"|"application.windows"),
+        "documents"=>matches!(id,"application.control"|"application.context"|"application.windows"),
+        "plots"=>matches!(id,"workspace.list_outputs"|"application.control"),
+        "skills"=>matches!(id,"host.resolve_context"|"application.bind_method"),
+        _=>false,
     }
 }
 fn summary(descriptor:&CapabilityDescriptor)->CapabilitySummary{

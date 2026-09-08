@@ -56,12 +56,12 @@ rho_object_supported <- function(value) {
 }
 rho_object_metadata <- function(value = NULL, binding_kind = "value") {
   m <- list(kind = binding_kind, object_type = NULL, classes = list(), length = NULL, dimensions = list(), supported_reads = list(), attributes = list(), notice = NULL)
-  if (binding_kind != "value") { m$notice <- "Binding was not evaluated; active bindings and promises are never forced."; return(m) }
+  if (binding_kind != "value") { m$supported_reads <- list("structure"); m$notice <- "Only binding metadata is available; active bindings and promises are never evaluated."; return(m) }
   m$object_type <- typeof(value)
   classes <- attr(value, "class", exact = TRUE)
   if (is.character(classes) && !is.object(classes)) m$classes <- unname(as.list(substr(.subset(classes, seq_len(min(length(classes), 16L))), 1L, 128L)))
   if (is.character(classes) && !is.object(classes) && (length(classes) > 16L || any(nchar(classes, type = "chars") > 128L))) m$notice <- "Class metadata is limited to 16 entries and 128 characters each; this unsupported metadata has no further read method."
-  if (!rho_object_supported(value)) { m$notice <- "Unsupported object: safe metadata only; no user methods were called."; return(m) }
+  if (!rho_object_supported(value)) { m$supported_reads <- list("structure"); m$notice <- "Unsupported value reads: safe metadata only; no user methods were called. Class metadata is limited to 16 names of 128 characters; this interface cannot continue class metadata for unsupported objects."; return(m) }
   bare <- value
   m$length <- rho_object_length(bare)
   dims <- attr(value, "dim", exact = TRUE)
@@ -139,6 +139,8 @@ rho_list_objects <- function(payload) {
 }
 rho_observe_object <- function(payload) {
   binding <- rho_object_binding(payload$name)
+  if (binding$kind == "missing") rho_object_error("not_found", "Object binding does not exist.")
+  if (binding$kind != "value" && length(payload$path)) rho_object_error("unsupported", "Unevaluated bindings expose only root metadata.")
   value <- if (binding$kind == "value") rho_object_resolve(binding$value, payload$path) else NULL
   id <- rho_object_store(payload, "object", list(name = payload$name, path = payload$path, identity = rho_object_identity(binding), child_address = if (binding$kind == "value") rlang::obj_address(value) else NULL))
   h <- rho_object_handle(id, payload, "object")
@@ -168,11 +170,15 @@ rho_read_object <- function(payload) {
   h <- rho_object_handle(payload$object_ref, payload, "object")
   binding <- rho_object_binding(h$name)
   if (!identical(h$identity, rho_object_identity(binding))) rho_object_error("content_changed", "Binding changed; open a new object observation.")
-  if (binding$kind != "value") rho_object_error("unsupported", "Binding cannot be evaluated safely.")
-  value <- rho_object_resolve(binding$value, h$path)
-  if (!identical(h$child_address, rlang::obj_address(value))) rho_object_error("content_changed", "Observed child changed.")
-  value <- rho_object_resolve(value, payload$path)
-  metadata <- rho_object_metadata(value)
+  if (binding$kind != "value") {
+    if (payload$kind != "structure" || length(h$path) || length(payload$path)) rho_object_error("unsupported", "Binding cannot be evaluated safely; only root metadata is readable.")
+    value <- NULL
+  } else {
+    value <- rho_object_resolve(binding$value, h$path)
+    if (!identical(h$child_address, rlang::obj_address(value))) rho_object_error("content_changed", "Observed child changed.")
+    value <- rho_object_resolve(value, payload$path)
+  }
+  metadata <- rho_object_metadata(value, binding$kind)
   if (!payload$kind %in% unlist(metadata$supported_reads)) rho_object_error("unsupported", "This read kind is not supported; inspect metadata.supported_reads.")
   bare <- value
   result <- list(object_ref = payload$object_ref, root_name = h$name, observed_path = h$path, path = payload$path, kind = payload$kind, metadata = metadata, values = list(), children = list(), columns = list(), start = payload$start, next_start = NULL, column_start = payload$column_start, next_column_start = NULL, text_start = payload$text_start, next_text_start = NULL, observed_at_ms = h$created, complete = TRUE, notices = list())

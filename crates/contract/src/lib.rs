@@ -32,6 +32,10 @@ pub mod environment;
 pub use environment::*;
 pub mod execution;
 pub use execution::*;
+pub mod recovery;
+pub use recovery::*;
+pub mod record_query;
+pub use record_query::*;
 
 use std::collections::BTreeSet;
 

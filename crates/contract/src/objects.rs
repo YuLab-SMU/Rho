@@ -22,6 +22,7 @@ pub struct ListObjectsArguments {
     pub expected_session: String,
     #[serde(default)]
     pub name_contains: String,
+    /// Filter by native R typeof (for example double, character, list or closure); classes remain metadata.
     #[serde(default)]
     pub object_type: Option<String>,
     #[serde(default)]
@@ -29,12 +30,13 @@ pub struct ListObjectsArguments {
     #[serde(default)]
     pub offset: u32,
     #[serde(default = "page_limit")]
+    #[schemars(range(min = 1, max = 200))]
     pub limit: u32,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ObjectPathElement {
-    Index { index: u64 },
+    Index { #[schemars(range(min = 1))] index: u64 },
     Name { name: String },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
@@ -65,19 +67,25 @@ pub struct ReadObjectArguments {
     #[serde(default)]
     pub path: Vec<ObjectPathElement>,
     #[serde(default = "one")]
+    #[schemars(range(min = 1))]
     pub start: u64,
     #[serde(default = "page_limit")]
+    #[schemars(range(min = 1, max = 200))]
     pub limit: u32,
     #[serde(default = "first_column")]
+    #[schemars(range(min = 1))]
     pub column_start: u32,
     #[serde(default = "column_limit")]
+    #[schemars(range(min = 1, max = 50))]
     pub column_limit: u32,
     /// For kind=text, select "names" or "levels" instead of character values.
     #[serde(default)]
     pub text_attribute: Option<String>,
     #[serde(default = "one")]
+    #[schemars(range(min = 1))]
     pub text_start: u64,
     #[serde(default = "text_limit")]
+    #[schemars(range(min = 1, max = 65536))]
     pub text_limit_bytes: u32,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]

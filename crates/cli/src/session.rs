@@ -125,8 +125,9 @@ async fn dispatch(host: Arc<NextHost>, frame: SessionFrame) -> SessionReply {
             ok: true,
             result: Some(result),
             error: None,
+            diagnostic: None,
         },
-        Err(error) => failure(Some(frame.id), error.to_string()),
+        Err(error) => SessionReply {id:Some(frame.id),ok:false,result:None,error:Some(error.to_string()),diagnostic:Some(error.diagnostic())},
     }
 }
 
@@ -136,6 +137,7 @@ fn failure(id: Option<String>, error: String) -> SessionReply {
         ok: false,
         result: None,
         error: Some(error),
+        diagnostic: None,
     }
 }
 

@@ -26,6 +26,7 @@ pub enum HostRequest {
     ApplicationControl(crate::ApplicationCommandRequest),
     ApplicationBridge(crate::ApplicationBridgeRequest),
     ApplicationExecute(crate::ApplicationExecuteRequest),
+    BindMethod(crate::BindMethodRequest),
     Subscribe {
         after_sequence: u64,
         limit: usize,
@@ -50,4 +51,7 @@ pub struct SessionReply {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub diagnostic: Option<crate::Diagnostic>,
 }

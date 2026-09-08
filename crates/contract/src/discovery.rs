@@ -145,6 +145,7 @@ pub struct ModuleAvailability {
 #[serde(deny_unknown_fields)]
 pub struct HostOverview {
     pub project_root: Option<String>,
+    pub targets: Vec<crate::TargetRef>,
     pub modules: Vec<ModuleAvailability>,
     /// Each component retains its own source, time and completeness.
     pub observations: Vec<OverviewObservation>,
@@ -165,6 +166,8 @@ pub enum OverviewObservation {
     Session(Observed<crate::RuntimeStatus>),
     Console(Observed<ConsoleOverview>),
     Operations(Observed<crate::RecentOperations>),
+    Application(Observed<crate::ApplicationWindows>),
+    Environment(Observed<crate::EnvironmentObservation>),
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 pub struct ConsoleOverview {

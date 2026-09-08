@@ -152,6 +152,8 @@ pub struct ApplicationWindowsArguments {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct ApplicationWindows {
+    pub total: usize,
+    pub online_count: usize,
     pub windows: Vec<ApplicationWindowSummary>,
     pub next_after_window_id: Option<String>,
 }
@@ -497,6 +499,13 @@ pub struct ApplicationMethodBinding {
     pub required_capabilities: Vec<crate::CapabilityRef>,
     pub target: Option<crate::TargetRef>,
     pub excluded: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct BindMethodRequest {
+    pub expected_version: Option<String>,
+    pub binding: ApplicationMethodBinding,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

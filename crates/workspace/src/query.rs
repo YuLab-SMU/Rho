@@ -439,6 +439,7 @@ impl WorkspaceQueryHandler {
                             OperationError::ObservationExpired(error.message.clone())
                         }
                         "content_changed" => OperationError::ContentChanged(error.message.clone()),
+                        "not_found" => OperationError::NotFound(error.message.clone()),
                         "budget_exhausted" => OperationError::BudgetExceeded(error.message.clone()),
                         "unavailable" | "unsupported" => {
                             OperationError::Unavailable(error.message.clone())
@@ -451,6 +452,29 @@ impl WorkspaceQueryHandler {
                     Err(error) => error.message,
                     Ok(_) => "query response belongs to a different R session".into(),
                 });
+            }
+        }
+        if snapshot.status==QueryStatus::Ready {
+            let id=self.descriptor.capability.id.as_str();
+            let mut bound=arguments.clone();bound["expected_session"]=serde_json::json!(snapshot.target.identity);
+            if let Some(data)=&snapshot.data {
+                match self.kind {
+                    WorkspaceQueryKind::Snapshot=>snapshot.next_reads.push(rho_contract::NextRead::query("workspace.list_objects","Browse a stable complete binding directory",serde_json::json!({"expected_session":snapshot.target.identity,"limit":100}))),
+                    WorkspaceQueryKind::InspectObject=>snapshot.next_reads.push(rho_contract::NextRead::query("workspace.observe_object","Open an observation that supports continued investigation",serde_json::json!({"expected_session":snapshot.target.identity,"name":arguments["name"]}))),
+                    WorkspaceQueryKind::ObserveObject=>snapshot.next_reads.push(rho_contract::NextRead::query("workspace.read_object","Read metadata and supported structure from this exact observation",serde_json::json!({"expected_session":snapshot.target.identity,"object_ref":data["object_ref"],"kind":"structure"}))),
+                    WorkspaceQueryKind::ListObjects|WorkspaceQueryKind::Packages|WorkspaceQueryKind::PackageIndex=>{
+                        if let Some(offset)=data.get("next_offset").filter(|value|!value.is_null()) {
+                            bound["offset"]=offset.clone();
+                            for reference in ["directory_ref","observation_id","index_ref"] {if let Some(value)=data.get(reference).filter(|value|!value.is_null()){bound[reference]=value.clone();}}
+                            snapshot.next_reads.push(rho_contract::NextRead::query(id,"Continue the same native observation and filters",bound));
+                        }
+                    },
+                    WorkspaceQueryKind::ReadObject=>{
+                        for (source,destination,purpose) in [("next_start","start","Read the next values, children or row slice"),("next_column_start","column_start","Read the next column slice at the same starting row"),("next_text_start","text_start","Continue the same long text value")] {
+                            if let Some(value)=data.get(source).filter(|value|!value.is_null()){let mut next=bound.clone();next[destination]=value.clone();snapshot.next_reads.push(rho_contract::NextRead::query(id,purpose,next));}
+                        }
+                    },
+                }
             }
         }
         Ok(snapshot)

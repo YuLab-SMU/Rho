@@ -27,6 +27,9 @@ use tokio_util::sync::CancellationToken;
 use tower_http::limit::RequestBodyLimitLayer;
 
 const MAX_BODY: usize = 272 * 1024;
+// Draft synchronization has its own bounded application quota. It must be able
+// to carry the existing 512 KiB editable document and its captured base together.
+const MAX_BRIDGE_BODY: usize = 32 * 1024 * 1024;
 const MAX_REPLY: usize = 8 * 1024 * 1024;
 
 struct SelectedHost {
@@ -73,6 +76,7 @@ fn failure(status: StatusCode, error: impl Into<String>) -> Response {
     (
         status,
         Json(SessionReply {
+            diagnostic: None,
             id: None,
             ok: false,
             result: None,
@@ -247,12 +251,14 @@ async fn dispatch(State(state): State<AppState>, headers:HeaderMap, Json(request
             ok: true,
             result: Some(result),
             error: None,
+            diagnostic: None,
         },
         Err(error) => SessionReply {
             id: Some(request.frame.id),
             ok: false,
             result: None,
             error: Some(error.to_string()),
+            diagnostic: Some(error.diagnostic()),
         },
     };
     match serde_json::to_vec(&reply) {
@@ -265,6 +271,11 @@ async fn dispatch(State(state): State<AppState>, headers:HeaderMap, Json(request
         ),
         Err(error) => failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
     }
+}
+
+async fn dispatch_bridge(State(state): State<AppState>,headers:HeaderMap,Json(request):Json<WorkbenchFrame>)->Response{
+    if !matches!(request.frame.request,HostRequest::ApplicationBridge(_)){return failure(StatusCode::BAD_REQUEST,"this endpoint accepts only the resident Studio bridge protocol");}
+    dispatch(State(state),headers,Json(request)).await
 }
 
 async fn shell(State(state): State<AppState>) -> Html<String> {
@@ -369,6 +380,9 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .nest_service("/mcp", mcp)
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024 + 8192))
         .layer(RequestBodyLimitLayer::new(2 * 1024 * 1024 + 8192))
+        .merge(Router::new().route("/api/application/bridge",post(dispatch_bridge)
+            .layer::<_,std::convert::Infallible>(DefaultBodyLimit::max(MAX_BRIDGE_BODY))
+            .layer(RequestBodyLimitLayer::new(MAX_BRIDGE_BODY))))
         .layer(middleware::from_fn_with_state(state.clone(), boundary))
         .with_state(state)
 }
@@ -490,6 +504,7 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         let root = root.canonicalize().unwrap();
         let profile = HostProfile {
+            host_skills: None,
             database: temp.path().join("next.sqlite"),
             runtime: RuntimeConfiguration::Project,
             remote: None,

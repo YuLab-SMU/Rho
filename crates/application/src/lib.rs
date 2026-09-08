@@ -170,6 +170,8 @@ impl ApplicationOwner {
             None
         };
         Ok(ApplicationWindows {
+            total: windows.len(),
+            online_count: windows.iter().filter(|window|self.online(window,now)).count(),
             windows: selected
                 .into_iter()
                 .map(|w| self.summary(&scope, w, now))

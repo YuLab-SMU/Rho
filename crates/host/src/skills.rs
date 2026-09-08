@@ -143,6 +143,12 @@ pub(crate) async fn bind_method(
     if let Some(target) = &binding.target {
         target.validate()?;
     }
+    if let Some(previous)=app.method_bindings(context).map_err(application_error)?.into_iter().find(|previous|previous.binding_id==binding.binding_id) {
+        if previous==*binding {return Ok(previous);}
+        if previous.source_ref!=binding.source_ref || previous.working_directory!=binding.working_directory || previous.external_task_ref!=binding.external_task_ref {
+            return Err(OperationError::InvalidInput("A binding's method source and work scope are stable. Use a new binding ID for a different source/scope; clear an existing exclusion explicitly in its original scope.".into()));
+        }
+    }
     for capability in &binding.required_capabilities {
         capability.validate()?;
     }

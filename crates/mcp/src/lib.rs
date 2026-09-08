@@ -254,9 +254,11 @@ impl McpEdge {
             Route::View => {
                 return Err(invalid_operation("native view uses the presentation route"));
             }
-            Route::Capability(_, CapabilityKind::Control) => HostRequest::ApplicationControl(
-                serde_json::from_value(args).map_err(invalid_operation)?,
-            ),
+            Route::Capability(capability, CapabilityKind::Control) => match capability.id.as_str() {
+                "application.control"=>HostRequest::ApplicationControl(serde_json::from_value(args).map_err(invalid_operation)?),
+                "application.bind_method"=>HostRequest::BindMethod(serde_json::from_value(args).map_err(invalid_operation)?),
+                _=>return Err(rho_operation::OperationError::UnknownCapability(capability.display_key())),
+            },
             Route::Get => {
                 let input: OperationArguments =
                     serde_json::from_value(args).map_err(invalid_operation)?;
