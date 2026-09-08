@@ -711,3 +711,153 @@ mod media_tests {
         assert!(text_page(bytes, &args).is_err());
     }
 }
+
+#[cfg(test)]
+mod media_authority_tests {
+    use super::*;
+    struct Records(OperationRecord);
+    #[async_trait]
+    impl OperationRecords for Records {
+        async fn get(&self, id: &str) -> Result<Option<OperationRecord>, String> {
+            Ok((id == self.0.operation.operation_id.as_str()).then(|| self.0.clone()))
+        }
+        async fn successful_outputs(
+            &self,
+            _: &str,
+            _: &CapabilityRef,
+            _: Option<&str>,
+            _: usize,
+        ) -> Result<rho_operation::OperationOutputPage, String> {
+            Err("not used".into())
+        }
+    }
+    struct Originals {
+        reference: MediaReference,
+        bytes: Arc<[u8]>,
+        reads: std::sync::atomic::AtomicUsize,
+    }
+    #[async_trait]
+    impl WorkspaceOutputs for Originals {
+        async fn verified_original(&self, reference: &MediaReference) -> Result<Arc<[u8]>, String> {
+            self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if reference != &self.reference {
+                return Err("identity mismatch".into());
+            }
+            Ok(self.bytes.clone())
+        }
+        async fn output_events(&self, _: &OutputEventsArguments) -> Result<OutputEvents, String> {
+            Err("not used".into())
+        }
+        async fn read_output(&self, _: &ReadOutputArguments) -> Result<OutputPage, String> {
+            Err("not used".into())
+        }
+        async fn list_outputs(&self, _: &OutputEventsArguments) -> Result<MediaPage, String> {
+            Err("not used".into())
+        }
+    }
+    fn fixture() -> (WorkspaceOutputHandler, CallContext, Arc<Originals>) {
+        let caller = CallerIdentity {
+            kind: CallerKind::Human,
+            id: "owner".into(),
+        };
+        let context = CallContext {
+            caller: caller.clone(),
+            principal: None,
+            scopes: BTreeSet::from([WORKSPACE_READ_SCOPE.into()]),
+            connection_id: "test".into(),
+            correlation_id: None,
+            causation_id: None,
+            trace_parent: None,
+        };
+        let bytes: Arc<[u8]> = Arc::from(&b"text evidence"[..]);
+        let reference = MediaReference {
+            operation_id: OperationId::new("op-authority").unwrap(),
+            sequence: 1,
+            mime_type: "text/plain".into(),
+            byte_size: bytes.len() as u64,
+            sha256: media_digest(&bytes),
+            display_id: None,
+        };
+        let record = OperationRecord {
+            operation: Operation {
+                operation_id: reference.operation_id.clone(),
+                client_request_id: "request".into(),
+                caller,
+                principal: None,
+                capability: CapabilityRef::new("workspace.run_r", 1).unwrap(),
+                domain: "workspace".into(),
+                target: TargetRef {
+                    kind: "workspace".into(),
+                    identity: "session".into(),
+                },
+                normalized_arguments: json!({}),
+                invocation_digest: "digest".into(),
+                idempotency_scope: Some("/project".into()),
+                preconditions: vec![],
+                potential_effects: BTreeSet::new(),
+                correlation_id: "test".into(),
+                causation_id: None,
+                trace_parent: None,
+                accepted_at_ms: 1,
+            },
+            status: OperationStatus::Succeeded,
+            outcome: Some(OperationOutcome::Succeeded),
+            output: None,
+            error: None,
+            recovery: None,
+            cancellation_requested: false,
+            updated_at_ms: 1,
+        };
+        let source = Arc::new(Originals {
+            reference,
+            bytes,
+            reads: std::sync::atomic::AtomicUsize::new(0),
+        });
+        (
+            WorkspaceOutputHandler::with_store(
+                None,
+                Some(source.clone()),
+                Some("/project".into()),
+                Arc::new(Records(record)),
+                OutputQueryKind::ReadText,
+            ),
+            context,
+            source,
+        )
+    }
+    #[tokio::test]
+    async fn original_port_checks_principal_project_scope_before_reading() {
+        let (mut owner, context, source) = fixture();
+        assert_eq!(
+            &*owner
+                .verified_original_for(&context, &source.reference)
+                .await
+                .unwrap(),
+            b"text evidence"
+        );
+        let mut stranger = context.clone();
+        stranger.caller.id = "stranger".into();
+        assert!(
+            owner
+                .verified_original_for(&stranger, &source.reference)
+                .await
+                .is_err()
+        );
+        let mut denied = context.clone();
+        denied.scopes.clear();
+        assert!(matches!(
+            owner
+                .verified_original_for(&denied, &source.reference)
+                .await,
+            Err(OperationError::AccessDenied { .. })
+        ));
+        owner.project_root = Some("/different".into());
+        assert!(
+            owner
+                .verified_original_for(&context, &source.reference)
+                .await
+                .is_err()
+        );
+        assert_eq!(source.reads.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+}
