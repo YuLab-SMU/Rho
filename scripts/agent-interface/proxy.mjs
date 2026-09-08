@@ -11,7 +11,7 @@ import {digest,json,parseRpc} from './runtime.mjs';
  */
 export class RecordingProxy {
   constructor(host,scenario,evidence,{maxCalls=80,maxTextBytes=1024*1024}={}) {
-    this.host=host;this.scenario=scenario;this.evidence=evidence;this.limits={maxCalls,maxTextBytes};this.token=randomUUID();this.calls=[];this.responses=[];this.violations=[];this.images=[];this.textBytes=0;this.discoveryBytes=0;this.sequence=0;this.inflight=new Set();
+    this.host=host;this.scenario=scenario;this.evidence=evidence;this.limits={maxCalls,maxTextBytes};this.token=randomUUID();this.calls=[];this.responses=[];this.violations=[];this.images=[];this.textBytes=0;this.discoveryBytes=0;this.sequence=0;this.inflight=new Set();this.readonlyTools=new Set();
     fs.mkdirSync(path.join(evidence,'images'),{recursive:true});this.trace=fs.createWriteStream(path.join(evidence,'mcp.jsonl'),{mode:0o600});
   }
   fail(reason) {this.violations.push(reason);this.onViolation?.(reason);}
@@ -33,8 +33,7 @@ export class RecordingProxy {
         const name=rpc.params?.name;const args=rpc.params?.arguments??{};
         if(!name?.startsWith('rho.'))this.fail(`non_rho_tool:${name}`);
         if(this.scenario.prohibitR&&name==='rho.workspace.run_r.v1')this.fail('readonly_task_executed_R');
-        if(this.scenario.readonly&&args.client_request_id&&!(this.scenario.id==='package_copies'&&name==='rho.workspace.help.v1'))this.fail(`readonly_task_mutation:${name}`);
-        if(this.scenario.readonly&&name==='rho.application.control.v1'&&!(this.scenario.id==='recovery_disconnect'&&args.action?.kind==='run_file'))this.fail('readonly_application_mutation');
+        if(this.scenario.readonly&&!this.readonlyTools.has(name)&&!explicitReadTaskAction(this.scenario.id,name,args))this.fail(`readonly_task_mutation:${name}`);
         if(['rho.process.run_local.v1','rho.process.run_remote.v1','rho.slurm.submit.v1'].includes(name))this.fail(`scientific_sidechannel:${name}`);
         const code=args.arguments?.code;
         if(typeof code==='string'&&/\b(system2?|download\.file|socketConnection|url)\s*\(/.test(code))this.fail('R_code_attempted_external_sidechannel');
@@ -55,7 +54,7 @@ export class RecordingProxy {
     const raw=Buffer.from(await upstream.arrayBuffer());
     let messages=[];try{messages=parseRpc(raw.toString('utf8'));}catch(error){if(upstream.ok&&raw.length)this.fail(`unparseable_MCP_response:${error.message}`);}
     for(const message of messages){
-      const result=message.result;const clean=this.extractImages(message,call.sequence);
+      const result=message.result;if(rpc?.method==='tools/list')for(const tool of result?.tools??[])if(tool.annotations?.readOnlyHint===true)this.readonlyTools.add(tool.name);const clean=this.extractImages(message,call.sequence);
       const textSize=textResponseBytes(message);
       if(evaluated){this.textBytes+=textSize;this.responses.push({call,...clean});if(this.textBytes>this.limits.maxTextBytes)this.fail('text_tool_return_budget_exceeded');}
       else this.discoveryBytes+=textSize;
@@ -112,4 +111,9 @@ export function textResponseBytes(value) {
     for(const [key,child] of Object.entries(item))if(!['data','blob'].includes(key)||typeof child!=='string')visit(child);
   }
   visit(value);return Buffer.byteLength(JSON.stringify(value))-encodedImageBytes;
+}
+
+export function explicitReadTaskAction(task,name,args) {
+  return (task==='package_copies'&&name==='rho.workspace.help.v1')
+    || (task==='recovery_disconnect'&&name==='rho.application.control.v1'&&args.action?.kind==='run_file');
 }

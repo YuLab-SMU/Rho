@@ -29,7 +29,7 @@ export async function runAgent(options,scenario,proxy,cwd,skillsOverride) {
     'model_reasoning_effort="high"','approval_policy="never"','web_search="disabled"','features.apps=false','features.hooks=false','features.multi_agent=false','features.goals=false','features.skill_mcp_dependency_install=false',
     `features.shell_tool=${scenario.skillMode==='native'}`,'features.unified_exec=false','features.shell_snapshot=false','features.code_mode.enabled=false',
     `developer_instructions=${JSON.stringify(policy)}`,skillsOverride,
-    `mcp_servers.rho.url=${JSON.stringify(proxy.url)}`,'mcp_servers.rho.bearer_token_env_var="RHO_ACCEPTANCE_MCP_TOKEN"','mcp_servers.rho.required=true','mcp_servers.rho.startup_timeout_sec=30','mcp_servers.rho.tool_timeout_sec=90',
+    `mcp_servers.rho.url=${JSON.stringify(proxy.url)}`,'mcp_servers.rho.bearer_token_env_var="RHO_ACCEPTANCE_MCP_TOKEN"','mcp_servers.rho.default_tools_approval_mode="approve"','mcp_servers.rho.required=true','mcp_servers.rho.startup_timeout_sec=30','mcp_servers.rho.tool_timeout_sec=90',
   ];
   const args=['exec','--ignore-user-config','--ignore-rules','--json','--ephemeral','--skip-git-repo-check','--sandbox','read-only','-m','gpt-6-astra','-C',cwd,'--output-schema',schemaFile,'--output-last-message',outputFile,...overrides.flatMap(value=>['-c',value]),'-'];
   // Process-local bearer only; no persisted Codex configuration or auth changes.
@@ -69,6 +69,6 @@ export async function runAgent(options,scenario,proxy,cwd,skillsOverride) {
   const result={thread_id:threadId,exit_code:exitCode,signal,elapsed_ms:Date.now()-started,model:'gpt-6-astra',reasoning_effort:'high',tokens,raw_usage:usage,violations,nativeSkillReads,native_text_bytes:nativeBytes,report};
   json(path.join(options.evidence,'agent-result.json'),result);
   // Non-secret reproducibility inputs, with the transport token intentionally absent.
-  json(path.join(options.evidence,'codex-invocation.json'),{executable:options.codex,version:options.codexVersion,model:result.model,reasoning_effort:result.reasoning_effort,ephemeral:true,ignore_user_config:true,sandbox:'read-only',policy,final_schema_sha256:digest(JSON.stringify(FINAL_SCHEMA)),prompt_sha256:digest(prompt),cwd_is_outside_scientific_project:true});
+  json(path.join(options.evidence,'codex-invocation.json'),{executable:options.codex,version:options.codexVersion,model:result.model,reasoning_effort:result.reasoning_effort,ephemeral:true,ignore_user_config:true,sandbox:'read-only',mcp_preauthorization:{server:'rho',mode:'approve',scope:'User-authorized isolated acceptance operations; proxy enforces each task boundary.'},policy,final_schema_sha256:digest(JSON.stringify(FINAL_SCHEMA)),prompt_sha256:digest(prompt),cwd_is_outside_scientific_project:true});
   return result;
 }

@@ -52,6 +52,13 @@ Codex usage events; missing required usage fails the run. Images have separate b
 SHA-256 accounting. Scientific records are reread from the real owner to assert actor,
 principal and idempotency identities, including browser-mediated saves.
 
+The temporary Codex invocation preauthorizes only its `rho` MCP server using
+`mcp_servers.rho.default_tools_approval_mode = "approve"`, reflecting the user's
+explicit authorization of these isolated tests. The shell/filesystem sandbox stays
+read-only; user configuration is unchanged. The recording proxy enforces each
+task's operation boundary using actual MCP read-only annotations and its explicit
+help/run-file exceptions, including controls without client_request_id.
+
 The Agent cannot use shell, web, other MCP providers or filesystem scientific-data
 reads. Read-only tasks cannot execute R. Native Skill equivalence permits only exact
 literal reads of the supplied standard Skill resources; scientific data/actions still
