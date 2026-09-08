@@ -11,6 +11,8 @@ async-trait.workspace = true
 rho-project = { path = "../../project" }
 rho-process = { path = "../process" }
 sha2.workspace = true
+serde_json.workspace = true
+serde.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]

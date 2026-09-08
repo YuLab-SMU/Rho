@@ -13,7 +13,7 @@ impl ProjectDirectoryHandler {
                 "project.list_directory",
                 CapabilityKind::Query,
                 schema_for!(ListDirectoryArguments).to_value(),
-                schema_for!(QuerySnapshot).to_value(),
+                schema_for!(rho_contract::DirectoryPage).to_value(),
             ),
         }
     }
@@ -78,7 +78,7 @@ impl ProjectSearchHandler {
                 "project.search_files",
                 CapabilityKind::Query,
                 schema_for!(rho_contract::SearchFilesArguments).to_value(),
-                schema_for!(QuerySnapshot).to_value(),
+                schema_for!(rho_contract::FileSearchResult).to_value(),
             ),
         }
     }
@@ -99,67 +99,110 @@ impl QueryHandler for ProjectSearchHandler {
     async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
         let args: rho_contract::SearchFilesArguments =
             serde_json::from_value(value.clone()).map_err(invalid)?;
-        let mut remaining = std::collections::VecDeque::from([(String::new(), None)]);
+        let mut cursor = args
+            .continuation
+            .clone()
+            .unwrap_or_else(|| SearchFilesCursor {
+                project: self.owner.runtime.root().into(),
+                text: args.text.clone(),
+                show_hidden: args.show_hidden,
+                directories: vec![DirectoryScanFrame {
+                    path: String::new(),
+                    after_name: None,
+                }],
+            });
+        if cursor.project != self.owner.runtime.root()
+            || cursor.text != args.text
+            || cursor.show_hidden != args.show_hidden
+            || cursor.directories.len() > 64
+        {
+            return Err(invalid("path search continuation project/query mismatch"));
+        }
         let mut result = rho_contract::FileSearchResult {
             entries: vec![],
             scanned_entries: 0,
             scanned_directories: 0,
             truncated: false,
             notices: vec![],
+            continuation: None,
         };
         let needle = args.text.to_lowercase();
-        while let Some((path, after_name)) = remaining.pop_front() {
+        while !cursor.directories.is_empty() {
+            result.continuation = Some(cursor.clone());
             if result.scanned_entries >= 10000
                 || result.scanned_directories >= 200
                 || result.entries.len() >= 200
+                || serde_json::to_vec(&result).map_err(invalid)?.len() > 56 * 1024
             {
                 result.truncated = true;
+                result.notices.push("Page budget reached; continue with the unchanged query and returned continuation.".into());
                 break;
             }
-            if after_name.is_none() {
+            let frame = cursor.directories.last_mut().unwrap();
+            if !frame.path.is_empty() {
+                validate_path(&frame.path).map_err(invalid)?;
+            }
+            if frame
+                .after_name
+                .as_ref()
+                .is_some_and(|name| name.len() > 1024 || name.contains('/'))
+            {
+                return Err(invalid("invalid path continuation name"));
+            }
+            if frame.after_name.is_none() {
                 result.scanned_directories += 1;
             }
             match self
                 .owner
                 .runtime
                 .list_directory(&ListDirectoryArguments {
-                    path,
-                    after_name,
-                    limit: 200,
+                    path: frame.path.clone(),
+                    after_name: frame.after_name.clone(),
+                    limit: 1,
                 })
                 .await
             {
                 Ok(page) => {
-                    if let Some(next) = page.next_name {
-                        remaining.push_back((page.path, Some(next)));
+                    if page.truncated {
+                        result.notices.extend(page.notices);
+                        result.truncated = true;
                     }
-                    result.scanned_entries += page.entries.len() as u32;
-                    for entry in page.entries {
-                        if !args.show_hidden && entry.name.starts_with('.') {
-                            continue;
+                    let Some(entry) = page.entries.into_iter().next() else {
+                        cursor.directories.pop();
+                        continue;
+                    };
+                    frame.after_name = Some(entry.name.clone());
+                    result.scanned_entries += 1;
+                    if !args.show_hidden && entry.name.starts_with('.') {
+                        continue;
+                    }
+                    if entry.kind == "directory" {
+                        if cursor.directories.len() == 64 {
+                            result.truncated = true;
+                            result.notices.push(format!("Directory depth exceeds 64 at {}; enumerate that directory explicitly.",entry.path));
+                        } else {
+                            cursor.directories.push(DirectoryScanFrame {
+                                path: entry.path.clone(),
+                                after_name: None,
+                            });
                         }
-                        if entry.kind == "directory" {
-                            remaining.push_back((entry.path.clone(), None));
-                        }
-                        if entry.path.to_lowercase().contains(&needle) {
-                            if result.entries.len() < 200 {
-                                result.entries.push(entry);
-                            } else {
-                                result.truncated = true;
-                            }
-                        }
+                    }
+                    if entry.path.to_lowercase().contains(&needle) {
+                        result.entries.push(entry);
                     }
                 }
                 Err(error) => {
                     result.truncated = true;
-                    if result.notices.len() < 10 {
-                        result.notices.push(error);
-                    }
+                    result.notices.push(error);
+                    cursor.directories.pop();
                 }
             }
         }
-        if result.truncated {
-            result.notices.push("Search is bounded to 200 results, 200 directories and 10,000 entries. Refine the name or browse a directory.".into());
+        result.continuation = (!cursor.directories.is_empty()).then_some(cursor);
+        if serde_json::to_vec(&result).map_err(invalid)?.len() > 64 * 1024 {
+            return Err(invalid(
+                "path search continuation exceeds 64 KiB; browse a narrower directory",
+            ));
         }
         Ok(QuerySnapshot {
             target: self.owner.target(),

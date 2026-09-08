@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod text;
 
 use async_trait::async_trait;
 use rho_process::{ProcessOptions, ProcessTermination, run_command};
@@ -227,15 +228,12 @@ impl ProjectRuntime for GitProject {
         if !metadata.is_dir() || metadata.file_type().is_symlink() {
             return Err("directory must not be a symbolic link".into());
         }
+        if !(1..=200).contains(&args.limit) {
+            return Err("directory page limit must be 1..=200".into());
+        }
         let mut entries = Vec::new();
         let mut truncated = false;
-        let mut scanned = 0;
-        for entry in std::fs::read_dir(&directory).map_err(display)?.take(5001) {
-            scanned += 1;
-            if scanned > 5000 {
-                truncated = true;
-                break;
-            }
+        for entry in std::fs::read_dir(&directory).map_err(display)? {
             let entry = entry.map_err(display)?;
             let Ok(name) = entry.file_name().into_string() else {
                 truncated = true;
@@ -268,6 +266,9 @@ impl ProjectRuntime for GitProject {
                 kind: kind.into(),
                 byte_size: metadata.len(),
             });
+            // Keep only the next page and one lookahead; enumeration has no lossy prefix cutoff.
+            entries.sort_by(|a, b| a.name.cmp(&b.name));
+            entries.truncate(args.limit as usize + 1);
         }
         entries.sort_by(|a, b| a.name.cmp(&b.name));
         let next_name = (entries.len() > args.limit as usize)
@@ -279,13 +280,25 @@ impl ProjectRuntime for GitProject {
             next_name,
             truncated,
             notices: if truncated {
-                vec!["Directory scan was bounded to 5000 entries; some names may be unavailable. Open a known relative path directly.".into()]
+                vec!["Non-UTF-8 directory names cannot be represented by the project path protocol; those entries are unavailable.".into()]
             } else {
                 Vec::new()
             },
         })
     }
 
+    async fn read_text(
+        &self,
+        args: &rho_project::ReadTextArguments,
+    ) -> Result<rho_project::TextPage, String> {
+        self.read_text_page(args).await
+    }
+    async fn search_text(
+        &self,
+        args: &rho_project::SearchTextArguments,
+    ) -> Result<rho_project::SearchTextPage, String> {
+        self.search_text_page(args).await
+    }
     async fn read_file(&self, args: &ReadFileArguments) -> Result<FilePage, String> {
         self.read_page(args).await
     }
