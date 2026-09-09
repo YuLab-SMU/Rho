@@ -7,7 +7,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import {FixtureHost,exec,json,digest,discoverSkills,skillOverrides} from './agent-interface/runtime.mjs';
-import {RecordingProxy} from './agent-interface/proxy.mjs';
+import {RecordingProxy,assertOperationIdentities,assertConsumedEvidence} from './agent-interface/proxy.mjs';
 import {runAgent,EXPECTED_VERSION} from './agent-interface/agent.mjs';
 import {createScenario,CORE_CASES,ADDITIONAL_CASES} from './agent-interface/scenarios.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
@@ -31,7 +31,7 @@ let failures=0;
 for(const test of selected) {
   const caseEvidence=path.join(evidence,`${test.id}-${test.repetition}`);fs.mkdirSync(caseEvidence,{mode:0o700});
   const scientific=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-agent-science-')));const agentCwd=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-agent-isolated-')));assert.ok(!agentCwd.startsWith(root)&&!agentCwd.startsWith(scientific));
-  const scenario=createScenario(test.id,test.repetition,scientific,caseEvidence);const host=new FixtureHost({...options,evidence:caseEvidence},scientific);let proxy,agent;const result={...test,passed:false,evidence:caseEvidence,errors:[]};
+  const scenario=createScenario(test.id,test.repetition,scientific,caseEvidence);const host=new FixtureHost({...options,evidence:caseEvidence},scientific);let proxy,agent,agentStartedAt;const result={...test,passed:false,evidence:caseEvidence,errors:[]};
   console.log(`Starting ${test.id} ${test.repetition}/${CORE_CASES.includes(test.id)?runs:1}`);
   const heartbeat=setInterval(()=>console.log(`Running ${test.id}-${test.repetition}: ${proxy?.calls.length??0} tool calls, ${proxy?.textBytes??0} text bytes`),45000);
   try {
@@ -54,19 +54,38 @@ for(const test of selected) {
     await host.start(scenario.project,manifestFile);await scenario.setup(host);
     json(path.join(caseEvidence,'private-fixture-truth.json'),{expected:scenario.expected,seed_operations:host.seedRecords,native_session:host.session,project:host.project,marker:scenario.marker});
     await host.screenshot('before.png');proxy=await new RecordingProxy(host,scenario,caseEvidence).start();
-    agent=await runAgent({...options,evidence:caseEvidence},scenario,proxy,agentCwd,override);
-    Object.assign(result,{facts:agent.report?.facts??null,tokens:agent.tokens,thread_id:agent.thread_id,calls:proxy.calls.length,text_bytes:proxy.textBytes,image_bytes:proxy.images.reduce((sum,image)=>sum+image.bytes,0),elapsed_ms:agent.elapsed_ms});
+    agentStartedAt=Date.now();agent=await runAgent({...options,evidence:caseEvidence},scenario,proxy,agentCwd,override);
+    // Stop admission and settle the exact outstanding transport ledger before
+    // computing counters or declaring any result. Host-owned work survives.
+    await proxy.close();agent.finalizeAccounting();captureRunStatistics(result,agent,proxy);
     assert.deepEqual(agent.violations,[],'Agent boundary/token/run violations');assert.ok(agent.report,'Real Codex final JSON is required');
-    assert.ok(agent.report.complete,'Agent did not finish the requested task');await scenario.verify(agent.report,host,proxy,agent);await verifyScientificHistory(host,scenario,proxy,caseEvidence);
+    assert.ok(agent.report.complete,'Agent did not finish the requested task');
+    await settleScientificHistory(host,caseEvidence,agentStartedAt+600000);
+    await scenario.verify(agent.report,host,proxy,agent);
+    await verifyScientificHistory(host,scenario,proxy,caseEvidence,agent.report);
+    assertConsumedEvidence(agent.report,proxy.responses,agent.nativeSkillReads);
     proxy.assertNoDuplicateExecution();assert.deepEqual(proxy.violations,[],'Transport/scientific mechanical violations');
-    assert.ok(proxy.calls.length+agent.nativeSkillReads.length<=80);assert.ok(proxy.textBytes+agent.native_text_bytes<=1048576);
+    assert.ok(agent.total_tool_attempts<=80);assert.ok(agent.total_text_return_bytes<=1048576);
+    assert.ok(Date.now()<=agentStartedAt+600000,'original scientific completion exceeded the task window');
+    result.canonical_facts=agent.report.facts.map(({key,value})=>({key,value:typeof scenario.expected[key]==='number'?Number(value):value})).sort((a,b)=>a.key.localeCompare(b.key));
     result.passed=true;
   } catch(error) {failures++;result.errors.push(error.stack??String(error));console.error(`FAILED ${test.id}-${test.repetition}: ${error.message}`);}
-  finally {clearInterval(heartbeat);if(host.origin&&!fs.existsSync(path.join(caseEvidence,'authoritative-operations.json')))await captureScientificHistory(host,caseEvidence).catch(error=>result.errors.push(`history capture: ${error.message}`));await proxy?.close().catch(error=>result.errors.push(`proxy cleanup: ${error.message}`));await host.close().catch(error=>result.errors.push(`Host cleanup: ${error.message}`));if(result.errors.length&&result.passed){result.passed=false;failures++;}json(path.join(caseEvidence,'result.json'),result);startManifest.cases.push(result);json(path.join(evidence,'manifest.json'),startManifest);if(!process.argv.includes('--keep-fixtures')){fs.rmSync(scientific,{recursive:true,force:true});fs.rmSync(agentCwd,{recursive:true,force:true});}else result.private_fixture_roots={scientific,agent:agentCwd};}
+  finally {
+    clearInterval(heartbeat);
+    await proxy?.close().catch(error=>result.errors.push(`proxy cleanup: ${error.message}`));
+    if(agent){agent.finalizeAccounting();captureRunStatistics(result,agent,proxy);if(agent.violations.length)result.errors.push(`Agent violations: ${JSON.stringify(agent.violations)}`);}
+    if(proxy?.violations.length)result.errors.push(`Transport violations: ${JSON.stringify(proxy.violations)}`);
+    if(host.origin)await captureScientificHistory(host,caseEvidence).catch(error=>result.errors.push(`history capture: ${error.message}`));
+    await host.close().catch(error=>result.errors.push(`Host cleanup: ${error.message}`));
+    if(result.errors.length&&result.passed){result.passed=false;failures++;}
+    if(process.argv.includes('--keep-fixtures'))result.private_fixture_roots={scientific,agent:agentCwd};
+    json(path.join(caseEvidence,'result.json'),result);startManifest.cases.push(result);json(path.join(evidence,'manifest.json'),startManifest);
+    if(!process.argv.includes('--keep-fixtures')){fs.rmSync(scientific,{recursive:true,force:true});fs.rmSync(agentCwd,{recursive:true,force:true});}
+  }
   console.log(`${result.passed?'PASS':'FAIL'} ${test.id}-${test.repetition}`);
 }
 let equivalence={checked:false};const native=startManifest.cases.find(c=>c.id==='skill_native');const rho=startManifest.cases.find(c=>c.id==='skill_rho');
-if(native&&rho){try{assert.ok(native.passed&&rho.passed);assert.deepEqual(native.skill_resources,rho.skill_resources,'Native and Rho must read byte-identical standard Skill resources');const core=run=>run.facts.map(({key,value})=>({key,value})).sort((a,b)=>a.key.localeCompare(b.key));assert.deepEqual(core(native),core(rho),'Native and Rho standard method results must agree');equivalence={checked:true,passed:true};}catch(error){failures++;equivalence={checked:true,passed:false,error:error.message};}}
+if(native&&rho){try{assert.ok(native.passed&&rho.passed);assert.deepEqual(native.skill_resources,rho.skill_resources,'Native and Rho must read byte-identical standard Skill resources');assert.deepEqual(native.canonical_facts,rho.canonical_facts,'Native and Rho standard method results must agree');equivalence={checked:true,passed:true};}catch(error){failures++;equivalence={checked:true,passed:false,error:error.message};}}
 const endCommit=exec('git',['rev-parse','HEAD'],{cwd:root});const endStatus=exec('git',['status','--porcelain'],{cwd:root});
 const fixedTree=commit===endCommit&&status===endStatus&&sourceDiff===digest(exec('git',['diff','--binary','HEAD'],{cwd:root,maxBuffer:64*1024*1024}))&&exec(codex,['--version'])===codexVersion&&digest(fs.readFileSync(fs.realpathSync(codex)))===startManifest.binaries.codex.sha256&&digest(fs.readFileSync(binary))===startManifest.binaries.rho.sha256&&digest(fs.readFileSync(ark))===startManifest.binaries.ark.sha256;if(!fixedTree){failures++;startManifest.fixed_tree_error='Source or native binary changed during evaluation';}
 const coreRuns=startManifest.cases.filter(c=>CORE_CASES.includes(c.id));
@@ -86,12 +105,27 @@ async function captureScientificHistory(host,evidence) {
   }
   json(path.join(evidence,'authoritative-operations.json'),records);return records;
 }
-async function verifyScientificHistory(host,scenario,proxy,evidence) {
+async function verifyScientificHistory(host,scenario,proxy,evidence,report) {
   const records=await captureScientificHistory(host,evidence);
-  const byRequest=new Map();const byCode=new Map();
+  assertOperationIdentities(records,proxy.receipts());
   for(const record of records){const op=record.operation;if(host.seedRecords.includes(op.operation_id))continue;
     assert.equal(op.principal.kind,'human','principal mixup');assert.equal(op.principal.id,'local-user','principal mixup');assert.equal(op.caller.kind,'agent','Agent scientific actor was lost');assert.equal(op.caller.id,'local-mcp','Agent scientific actor was replaced by the Studio bridge');
-    const previous=byRequest.get(op.client_request_id);assert.ok(!previous||previous===op.operation_id,'duplicate client request produced independent scientific execution');byRequest.set(op.client_request_id,op.operation_id);
-    if(op.capability.id==='workspace.run_r') {assert.ok(!scenario.prohibitR,'task executed prohibited R through an indirect path');const code=op.normalized_arguments.code;assert.ok(!byCode.has(code)||byCode.get(code)===op.operation_id,'duplicate scientific execution under a fresh identity');byCode.set(code,op.operation_id);}
+    assert.ok(['succeeded','failed','cancelled','uncertain'].includes(record.status),'original operation has no terminal result');
+    if(op.capability.id==='workspace.run_r')assert.ok(!scenario.prohibitR,'task executed prohibited R through an indirect path');
   }
+  for(const id of report.operation_ids)assert.ok(records.some(record=>record.operation.operation_id===id),'reported operation must be visible in this exact project/principal journal');
+}
+
+async function settleScientificHistory(host,evidence,deadline) {
+  const until=Math.min(deadline,Date.now()+45000);
+  for(;;){const records=await captureScientificHistory(host,evidence);
+    if(records.every(record=>host.seedRecords.includes(record.operation.operation_id)||['succeeded','failed','cancelled','uncertain'].includes(record.status)))return;
+    assert.ok(Date.now()<until,'Agent finished while original scientific work still lacked a terminal record');
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+}
+
+function captureRunStatistics(result,agent,proxy) {
+  Object.assign(result,{facts:agent.report?.facts??null,tokens:agent.tokens,thread_id:agent.thread_id,calls:agent.total_tool_attempts,text_bytes:agent.total_text_return_bytes,image_bytes:proxy.images.reduce((sum,image)=>sum+image.bytes,0),elapsed_ms:agent.elapsed_ms});
+  for(const key of ['model_tool_attempts','transport_calls','matched_transport_calls','unmatched_transport_calls','client_error_text_bytes','total_tool_attempts','total_text_return_bytes'])result[key]=agent[key];
 }

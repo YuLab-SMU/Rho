@@ -77,12 +77,32 @@ export class FixtureHost {
     this.seedRecords.push(record.operation.operation_id);assert.equal(record.status,'succeeded');
   }
   async runWithLostAcknowledgement(code,id) {
-    const body={project_root:this.project,frame:{id:randomUUID(),request:{method:'invoke',params:{client_request_id:id,capability:{id:'workspace.run_r',version:1},arguments:{code,output_mode:'console'},preconditions:[]}}}};
-    const response=await fetch(`${this.origin}/api/host`,{method:'POST',headers:{authorization:`Bearer ${this.token}`,'content-type':'application/json','X-Rho-Studio-Window':'acceptance-lost-client'},body:JSON.stringify(body),signal:AbortSignal.timeout(60000)});
-    assert.ok(response.ok);await response.body.cancel(); // Original client consumes no acknowledgement body.
-    const page=(await this.query('operation.list_recent',{client_request_id:id,limit:1})).data;
-    assert.equal(page.operations.length,1);const record=await this.get(page.operations[0].operation_id);assert.equal(record.status,'succeeded');this.seedRecords.push(record.operation.operation_id);
-    json(path.join(this.options.evidence,'lost-acknowledgement.json'),{client_request_id:id,original_response_body_cancelled:true,recovered_operation_id:record.operation.operation_id});return record;
+    const gate=path.join(this.directory,`lost-ack-${randomUUID()}`),started=gate+'.started',released=gate+'.released';
+    // A native gate proves the response is lost while R is still executing.
+    // These private coordination files contain no answers and are never passed
+    // to the Agent as task inputs or a prescribed recovery sequence.
+    const gated=`writeLines('started',${JSON.stringify(started)}); while(!file.exists(${JSON.stringify(released)})) Sys.sleep(0.05); unlink(c(${JSON.stringify(started)},${JSON.stringify(released)})); ${code}`;
+    const originalSession=this.mcp.session;
+    try {
+      const body={jsonrpc:'2.0',id:++this.mcp.sequence,method:'tools/call',params:{name:'rho.workspace.run_r.v1',arguments:{client_request_id:id,arguments:{code:gated,output_mode:'console'},preconditions:[],return_after_acceptance:true}}};
+      const response=await fetch(`${this.origin}/mcp`,{method:'POST',headers:{authorization:`Bearer ${this.token}`,accept:'application/json, text/event-stream','content-type':'application/json','mcp-session-id':originalSession},body:JSON.stringify(body),signal:AbortSignal.timeout(60000)});
+      assert.ok(response.ok);await until(()=>fs.existsSync(started),Boolean,'accepted native work must enter its execution gate');
+      const page=(await this.query('operation.list_recent',{client_request_id:id,limit:2})).data;
+      assert.equal(page.operations.length,1);const operationId=page.operations[0].operation_id;
+      const before=await this.get(operationId);assert.equal(before.status,'running');
+      await response.body.cancel();await this.mcp.close();
+      this.mcp=new McpClient(`${this.origin}/mcp`,this.token);await this.mcp.initialize();assert.notEqual(this.mcp.session,originalSession);
+      const reconnected=(await this.mcp.query('operation.get',{operation_id:operationId})).data.record;
+      assert.equal(reconnected.operation.operation_id,operationId);assert.equal(reconnected.status,'running');
+      fs.writeFileSync(released,'release');
+      const record=await until(()=>this.get(operationId),terminal,'original accepted work survives response loss and reconnect');
+      assert.equal(record.status,'succeeded');this.seedRecords.push(operationId);
+      const originals=(await this.query('operation.list_recent',{client_request_id:id,limit:2})).data.operations;assert.equal(originals.length,1);
+      this.lostAcknowledgement={client_request_id:id,original_response_body_cancelled:true,status_at_disconnect:before.status,status_after_reconnect:reconnected.status,reconnected_to_new_mcp_session:true,recovered_operation_id:operationId,terminal_status:record.status,original_operation_count:originals.length};
+      json(path.join(this.options.evidence,'lost-acknowledgement.json'),this.lostAcknowledgement);return record;
+    } finally {
+      if(fs.existsSync(started)&&!fs.existsSync(released))fs.writeFileSync(released,'release after fixture failure');
+    }
   }
   async get(id) {
     const snapshot=await this.query('operation.get',{operation_id:id});assert.equal(snapshot.status,'ready','authoritative record query must be ready');
