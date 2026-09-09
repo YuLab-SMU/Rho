@@ -3,7 +3,6 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -13,6 +12,7 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Modal } from "./primitives";
 import { directions, PanelLayout, regionName } from "./layout-model";
 import type { Direction } from "./layout-model";
+import { Icon } from "./icons";
 import { renderBuiltinPanel } from "./builtin-panel-renderers";
 export { PanelLayout, panelNames, defaultLayout } from "./layout-model";
 class PanelBoundary extends Component<
@@ -45,7 +45,7 @@ function DockPreview({ model, source }: { model: Model; source: string }) {
   }, [model, source]);
   return (
     <div className="dock-preview">
-      <div className="dock-calculation">
+      <div className="dock-calculation" aria-hidden="true">
         <Layout model={model} factory={() => null} />
       </div>
       <div
@@ -74,11 +74,7 @@ export function LayoutHost({
     [dragging, setDragging] = useState<string | null>(null);
   const [target, setTarget] = useState(""),
     [direction, setDirection] = useState<Direction>("Left");
-  const dragChoice = useRef<{ target: string; direction: Direction } | null>(
-    null,
-  );
   const clear = () => {
-    dragChoice.current = null;
     setDragging(null);
     setTarget("");
   };
@@ -100,10 +96,11 @@ export function LayoutHost({
     () => (source && target ? layout.preview(source, target, direction) : null),
     [source, target, direction, layout, layout.model],
   );
+  const zones = dragging ? layout.parentDropZones(dragging) : [];
   const region = target ? layout.model.getNodeById(target)?.getRect() : null;
   return (
     <div
-      className="layout-host"
+      className={`layout-host${dragging && target ? " parent-drop-active" : ""}`}
       onDragStartCapture={(e) => {
         const el = (e.target as HTMLElement).closest('[role="tab"]');
         const id =
@@ -115,8 +112,7 @@ export function LayoutHost({
       }}
       onDragEnd={clear}
       onDragOverCapture={(e) => {
-        if (!(e.target as HTMLElement).closest(".parent-dock-targets")) {
-          dragChoice.current = null;
+        if (!(e.target as HTMLElement).closest(".parent-dock-zone")) {
           setTarget("");
         }
       }}
@@ -187,7 +183,7 @@ export function LayoutHost({
                       disabled={!node.getSelectedNode()}
                       onSelect={() => {
                         setMoving(node.getSelectedNode()!.getId());
-                        setTarget(node.getId());
+                        setTarget("");
                       }}
                     >
                       Move To…
@@ -234,79 +230,27 @@ export function LayoutHost({
         />
       )}
       {source && preview && <DockPreview model={preview} source={source} />}
-      {dragging && (
-        <div
-          className="parent-dock-targets"
-          aria-label="Parent docking targets"
-        >
-          {layout
-            .targets(dragging)
-            .filter((t) => t.kind !== "Group")
-            .map((t) => (
-              <div className="dock-target-row" key={t.id}>
-                <span>
-                  {t.kind}: {t.name}
-                </span>
-                {Object.keys(directions)
-                  .filter((d) => d !== "Join as Tab")
-                  .map((d) => {
-                    const valid = !!layout.preview(
-                      dragging,
-                      t.id,
-                      d as Direction,
-                    );
-                    return (
-                      <button
-                        key={d}
-                        disabled={!valid}
-                        title={
-                          valid
-                            ? `Move ${d.toLowerCase()} of ${t.name}`
-                            : "Not enough room for this split"
-                        }
-                        onDragOver={(e) => {
-                          if (!valid) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const rect = e.currentTarget.getBoundingClientRect(),
-                            previous = dragChoice.current;
-                          if (
-                            previous &&
-                            (previous.target !== t.id ||
-                              previous.direction !== d) &&
-                            (e.clientX < rect.left + 4 ||
-                              e.clientX > rect.right - 4 ||
-                              e.clientY < rect.top + 4 ||
-                              e.clientY > rect.bottom - 4)
-                          )
-                            return;
-                          dragChoice.current = {
-                            target: t.id,
-                            direction: d as Direction,
-                          };
-                          setTarget(t.id);
-                          setDirection(d as Direction);
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          if (dragChoice.current)
-                            layout.move(
-                              dragging,
-                              dragChoice.current.target,
-                              dragChoice.current.direction,
-                            );
-                          clear();
-                        }}
-                      >
-                        {d}
-                      </button>
-                    );
-                  })}
-              </div>
-            ))}
-        </div>
-      )}
+      {dragging && zones.map((zone, index) => {
+        const active = target === zone.target && direction === zone.direction;
+        const label = `${zone.direction}${zone.direction === "Left" || zone.direction === "Right" ? " of" : ""} ${zone.name}`;
+        return <button key={`${zone.target}:${zone.direction}:${index}`}
+          className={`parent-dock-zone dock-${zone.direction.toLowerCase()}${active ? " active" : ""}`}
+          aria-label={`Move ${regionName(layout.model.getNodeById(dragging)!)} ${label[0].toLowerCase()}${label.slice(1)}`}
+          data-region={zone.name} data-direction={zone.direction}
+          style={{ left: zone.x, top: zone.y, width: zone.width, height: zone.height }}
+          onDragOver={e => {
+            e.preventDefault(); e.stopPropagation();
+            setTarget(zone.target); setDirection(zone.direction);
+          }}
+          onDrop={e => {
+            e.preventDefault(); e.stopPropagation();
+            // Use the actual drop target, never an earlier hover choice.
+            layout.move(dragging, zone.target, zone.direction); clear();
+          }}>
+          <Icon name="chevron" size={16} />
+          {active && <span className="parent-dock-label">{label}</span>}
+        </button>;
+      })}
       {moving && (
         <Modal
           title={`Move ${regionName(layout.model.getNodeById(moving)!)}`}
@@ -323,9 +267,10 @@ export function LayoutHost({
               value={target}
               onChange={(e) => setTarget(e.target.value)}
             >
+              <option value="" disabled>Choose a region…</option>
               {layout.targets(moving).map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.kind}: {t.name}
+                  {t.kind === "Parent region" ? "Region" : t.kind}: {t.name}
                 </option>
               ))}
             </select>
@@ -349,8 +294,7 @@ export function LayoutHost({
           </label>
           {!preview && (
             <p>
-              Choose another destination; this split has too little space or
-              leaves the view in the same position.
+              Choose a destination and placement.
             </p>
           )}
           <button

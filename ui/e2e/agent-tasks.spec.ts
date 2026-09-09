@@ -67,3 +67,28 @@ test('wide tasks, real R table and plot references use their owners and the edit
  await page.screenshot({path:'../target/studio-browser/agent-tasks-wide-context.png'});await panel.getByRole('textbox',{name:'Agent message',exact:true}).fill('review these references');await panel.getByRole('button',{name:'Send message',exact:true}).click();await expect(panel.getByText('Image received',{exact:true})).toBeVisible();
  await expect(panel.locator('.at-sent-context').filter({hasText:'agent_table'})).toBeVisible();
 });
+
+test('dragging Agent to the shared column edge spans Objects and Plots and can be undone',async({page})=>{
+ await page.setViewportSize({width:1440,height:1000});await openAgent(page);const panel=await newTask(page);
+ const input=panel.getByRole('textbox',{name:'Agent message',exact:true});await input.fill('Draft kept while docking');await expect(panel.locator('.at-draft-status')).toHaveText('Draft saved');
+ async function place(target:string){
+  await page.getByRole('button',{name:'Group Actions: Agent',exact:true}).click();await page.getByRole('menuitem',{name:'Move To…',exact:true}).click();
+  await page.getByRole('combobox',{name:'Target Region'}).selectOption(target);await page.getByRole('combobox',{name:'Placement'}).selectOption('Right');await page.getByRole('button',{name:'Move View',exact:true}).click();
+ }
+ await place('plots-group');
+ const group=(name:string)=>page.locator('.flexlayout__tabset').filter({has:page.getByRole('tab',{name,exact:true})});
+ const before=await group('Agent').boundingBox(),objectsBefore=await group('Objects').boundingBox();expect(before!.y).toBeGreaterThan(objectsBefore!.y+objectsBefore!.height-5);
+ let commands=0;page.on('request',r=>{if(r.url().endsWith('/api/agents/tasks/command'))commands++;});
+ const tab=await page.getByRole('tab',{name:'Agent',exact:true}).boundingBox();await page.mouse.move(tab!.x+25,tab!.y+15);await page.mouse.down();await page.mouse.move(tab!.x-45,tab!.y+65,{steps:8});
+ const zone=page.locator('.parent-dock-zone[data-region="Objects + Plots"][data-direction="Right"]');await expect(zone).toBeVisible();await expect(page.locator('.parent-dock-targets')).toHaveCount(0);
+ const bounds=await zone.boundingBox();await page.mouse.move(bounds!.x+bounds!.width/2,bounds!.y+bounds!.height/2,{steps:12});await page.mouse.move(bounds!.x+bounds!.width/2+1,bounds!.y+bounds!.height/2);await expect(zone).toHaveClass(/active/);
+ await expect(page.getByText('Right of Objects + Plots',{exact:true})).toBeVisible();await expect(page.locator('.dock-destination')).toBeVisible();
+ const preview=await page.locator('.dock-destination').boundingBox();await page.screenshot({path:'../target/studio-browser/agent-parent-drag-preview.png'});
+ await page.mouse.up();await expect(zone).toHaveCount(0);const agent=await group('Agent').boundingBox(),objects=await group('Objects').boundingBox(),plots=await group('Plots').boundingBox();
+ expect(agent!.x).toBeGreaterThan(objects!.x+objects!.width-2);expect(Math.abs(agent!.y-objects!.y)).toBeLessThan(3);expect(Math.abs(agent!.y+agent!.height-plots!.y-plots!.height)).toBeLessThan(3);
+ expect(Math.abs(agent!.x-preview!.x)).toBeLessThan(3);expect(Math.abs(agent!.height-preview!.height)).toBeLessThan(3);await expect(input).toHaveValue('Draft kept while docking');expect(commands).toBe(0);
+ await page.screenshot({path:'../target/studio-browser/agent-parent-drag-result.png'});
+ await page.getByRole('button',{name:'View',exact:true}).click();await page.getByRole('menuitem',{name:'Undo Layout Change',exact:true}).click();const undone=await group('Agent').boundingBox();expect(Math.abs(undone!.y-before!.y)).toBeLessThan(3);await expect(input).toHaveValue('Draft kept while docking');
+ // Escaping a second drag must remove all previews without moving the panel.
+ const again=await page.getByRole('tab',{name:'Agent',exact:true}).boundingBox();await page.mouse.move(again!.x+25,again!.y+15);await page.mouse.down();await page.mouse.move(again!.x-45,again!.y+65,{steps:8});await expect(zone).toBeVisible();await page.keyboard.press('Escape');await page.mouse.up();await expect(zone).toHaveCount(0);expect(Math.abs((await group('Agent').boundingBox())!.y-before!.y)).toBeLessThan(3);
+});

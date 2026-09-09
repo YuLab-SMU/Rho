@@ -75,6 +75,14 @@ Visible drop targets and explicit placement commands are candidates to evaluate,
 not chosen solutions. The requested positions are left, right, and top; broader
 docking behavior should be assessed consistently without inventing new scope.
 
+**Follow-up (2026-09-09):** The user tried to place Agent to the shared right of
+Objects and Plots, but normal dragging placed it beside Plots alone. The floating
+parent-region matrix exposed internal hierarchy, even including the dragged Agent
+in the target name. Its controls were also below FlexLayout's transparent drag
+overlay. Parent placement needs an actual reachable target at the shared boundary,
+with the complete region highlighted and the dragged view excluded from its label.
+An explicit placement command remains useful as a keyboard alternative.
+
 ### F03 — The product interface should use English
 
 **User direction:** Use English for professionalism and international use; do not

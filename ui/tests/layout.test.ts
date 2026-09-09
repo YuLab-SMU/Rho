@@ -93,3 +93,23 @@ it("ignores a retired layout model's late UI action after restoring another proj
   expect(l.serialize()).toEqual(before);
   expect(l.isClosed("plots")).toBe(false);
 });
+
+it("names parent destinations after the remaining panels when Agent leaves its own column", () => {
+  const l = new PanelLayout({ width: 1060 });
+  l.show("agent");
+  expect(l.move("agent", "plots-group", "Right")).toBe(true);
+  const before = l.model.toJson();
+  const targets = l.targets("agent");
+  expect(targets.find(t => t.id === "inspection-region")?.name).toBe("Objects + Plots");
+  expect(targets.filter(t => t.kind === "Parent region").map(t => t.name)).not.toContain("Plots");
+  expect(targets.some(t => t.name.includes("Agent"))).toBe(false);
+  const preview = l.preview("agent", "inspection-region", "Right");
+  expect(preview).not.toBeNull();
+  expect(l.model.toJson()).toEqual(before);
+  expect(l.move("agent", "inspection-region", "Right")).toBe(true);
+  const column = l.model.getNodeById("objects")!.getParent()!.getParent();
+  expect(l.model.getNodeById("plots")!.getParent()!.getParent()).toBe(column);
+  expect(l.model.getNodeById("agent")!.getParent()!.getParent()).toBe(column!.getParent());
+  l.undo();
+  expect(l.model.toJson()).toEqual(before);
+});

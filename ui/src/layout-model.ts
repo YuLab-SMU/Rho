@@ -74,10 +74,11 @@ export function defaultLayout(width = 1440): IJsonModel {
     },
   };
 }
-export function regionName(node: Node): string {
+export function regionName(node: Node, excluding?: string): string {
+  if (node.getId() === excluding) return "";
   return node instanceof TabNode
     ? node.getName()
-    : node.getChildren().map(regionName).filter(Boolean).join(" + ");
+    : node.getChildren().map(child => regionName(child, excluding)).filter(Boolean).join(" + ");
 }
 export interface LayoutSnapshot {
   readonly knownViews: Readonly<Record<string, Omit<PanelInstance, "id">>>;
@@ -448,18 +449,43 @@ export class PanelLayout extends Model<LayoutSnapshot> {
       name: string;
       kind: "Group" | "Parent region" | "Workspace";
     }[] = [];
+    const remainingGroups = (node: Node): number => node.getId() === from ? 0 : node instanceof TabSetNode
+      ? Number(!!regionName(node, from)) : node.getChildren().reduce((n, child) => n + remainingGroups(child), 0);
     this.model.visitNodes((n) => {
       if (n instanceof TabSetNode)
-        targets.push({ id: n.getId(), name: regionName(n), kind: "Group" });
-      if (n instanceof RowNode)
+        targets.push({ id: n.getId(), name: regionName(n, from), kind: "Group" });
+      if (n instanceof RowNode && remainingGroups(n) > 1)
         targets.push({
           id: n.getId(),
           name:
-            n === this.model.getRootRow() ? "Entire workspace" : regionName(n),
+            n === this.model.getRootRow() ? "Entire workspace" : regionName(n, from),
           kind: n === this.model.getRootRow() ? "Workspace" : "Parent region",
         });
     });
     return targets.filter((t) => t.id !== from && t.name);
+  }
+  /** Parent edges at the junction between children have their own drop area.
+   * Panel-edge drops elsewhere remain with FlexLayout's ordinary tab targets. */
+  parentDropZones(from: string) {
+    const zones: { target: string; name: string; direction: Direction; x: number; y: number; width: number; height: number }[] = [];
+    for (const target of this.targets(from).filter(t => t.kind === "Parent region")) {
+      const node = this.model.getNodeById(target.id)!;
+      const rect = node.getRect(), children = node.getChildren();
+      if (!rect.width || !rect.height) continue;
+      for (let i = 1; i < children.length; i++) {
+        const before = children[i - 1].getRect(), after = children[i].getRect();
+        const stacked = Math.abs(after.y - before.y) > Math.abs(after.x - before.x);
+        const seam = stacked ? (before.y + before.height + after.y) / 2 : (before.x + before.width + after.x) / 2;
+        for (const direction of (stacked ? ["Left", "Right"] : ["Above", "Below"]) as Direction[]) {
+          if (!this.preview(from, target.id, direction)) continue;
+          zones.push({ target: target.id, name: target.name, direction,
+            x: stacked ? (direction === "Left" ? rect.x : rect.x + rect.width - 28) : seam - 24,
+            y: stacked ? seam - 24 : (direction === "Above" ? rect.y : rect.y + rect.height - 28),
+            width: stacked ? 28 : 48, height: stacked ? 48 : 28 });
+        }
+      }
+    }
+    return zones;
   }
   preview(from: string, to: string, direction: Direction): FlexModel | null {
     const source = this.model.getNodeById(from),
@@ -473,14 +499,8 @@ export class PanelLayout extends Model<LayoutSnapshot> {
       return null;
     if (source.getParent() === target && target.getChildren().length === 1)
       return null;
-    const rect = target.getRect(),
-      vertical = direction === "Above" || direction === "Below";
-    if (
-      rect.width > 0 &&
-      direction !== "Join as Tab" &&
-      (vertical ? rect.height < 198 : rect.width < 406)
-    )
-      return null;
+    // Moving the source frees its old space. Let FlexLayout redistribute the
+    // complete layout instead of rejecting a split from the target's old size.
     try {
       const preview = FlexModel.fromJson(this.model.toJson());
       preview.doAction(

@@ -1194,55 +1194,57 @@ button {
   position: absolute;
   pointer-events: none;
   border: 2px dashed var(--color-accent);
-  z-index: 80;
+  z-index: 1100;
 }
 .dock-preview {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 81;
+  z-index: 1101;
 }
 .dock-calculation {
   position: absolute;
   inset: 0;
   visibility: hidden;
 }
+.dock-calculation, .dock-calculation * { visibility: hidden !important; }
 .dock-destination {
   position: absolute;
   background: #2863d62b;
   border: 2px solid var(--color-accent);
   border-radius: 6px;
 }
-.parent-dock-targets {
+.parent-dock-zone {
   position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 90;
-  padding: 6px;
+  z-index: 1102;
+  padding: 0;
+  min-height: 0;
   border: 1px solid var(--color-accent);
-  border-radius: 8px;
-  background: white;
-  box-shadow: 0 8px 24px #20293624;
+  border-radius: 6px;
+  color: var(--color-accent);
+  background: var(--color-surface);
+  box-shadow: 0 2px 8px #20293624;
 }
-.dock-target-row {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-.dock-target-row > span {
-  width: 230px;
+.parent-dock-zone.active { background: var(--color-accent); color: white; }
+.parent-dock-zone.dock-left > .icon { transform: rotate(180deg); }
+.parent-dock-zone.dock-above > .icon { transform: rotate(-90deg); }
+.parent-dock-zone.dock-below > .icon { transform: rotate(90deg); }
+.parent-dock-label {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  max-width: 280px;
+  width: max-content;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: var(--color-accent);
+  color: white;
   font-size: 12px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
+  white-space: normal;
+  pointer-events: none;
 }
-.dock-target-row button {
-  border: 1px solid var(--color-border);
-}
-.dock-target-row button:hover {
-  outline: 2px solid var(--color-accent);
-}
+.dock-left .parent-dock-label { left: 0; right: auto; }
+.parent-drop-active .flexlayout__outline_rect, .parent-drop-active .flexlayout__outline_rect_edge { visibility: hidden !important; }
 .workspace-empty {
   background: white;
   border: 1px solid var(--color-border);

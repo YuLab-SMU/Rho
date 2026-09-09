@@ -453,13 +453,20 @@ editor's undo history. A resize gesture contributes one history entry. Reopening
 uses a surviving original group or neighbor before choosing a current destination.
 A late file read cannot reopen a view closed while the read was in flight.
 
-Native FlexLayout tab dragging remains available. The additional targets name
-parent regions, for example **Editor + Console**, and the entire workspace.
+Native FlexLayout tab and workspace-edge dragging remain available. Shared-region
+targets name the remaining panels, for example **Editor + Console**.
+During a drag, small parent-region targets sit at the shared child boundary:
+left/right of stacked panels and above/below panels arranged side by side.
+Hover names the remaining panels, outlines the full region and previews the actual
+result. Drop targets stay above the native drag overlay. The global matrix of
+parent-direction buttons is removed; the source is excluded from destination names.
+Moving a view frees its original space, so validity uses the layout engine's
+redistribution rather than a fixed threshold on the target's previous dimensions.
 **Move To…** supplies a keyboard path through region and direction, including
 Join as Tab for a group. Previews use a separate model and show both the complete
 region and the resulting occupied area. Release commits one public move action;
-Escape, invalid destinations and cancellation discard the preview. Small target
-hysteresis reduces border flicker and the preview retains the native grab offset.
+Escape, invalid destinations and cancellation discard the preview. Shared-boundary
+targets remain stationary during preview; the native drag image retains its grab offset.
 
 ### Editing and files
 

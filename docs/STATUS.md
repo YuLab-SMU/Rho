@@ -2,6 +2,28 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
+## Parent-region docking refinement
+
+The 2026-09-09 follow-up identified an unreachable/unclear parent docking path:
+Agent could land beside Plots, while the requested destination was the common
+right of Objects and Plots. The floating parent matrix was below the native
+transparent drag overlay and included the source in region names. The new client
+places reachable arrow targets at shared panel boundaries, highlights the whole
+destination and previews the final occupied area. Native single-panel and workspace
+edge drops remain available, with Move To for explicit placement. Target names omit
+the dragged source; the engine can redistribute space released by that source.
+
+The user's live trial window was moved through the existing placement command to
+Agent beside the complete Objects/Plots column. No Host, Agent task or R session was
+restarted. The running Host retains its embedded client; the improved drag targets
+are in the rebuilt client for subsequent launches. Validation passed: 296 frontend
+tests (including the parent/source-extraction regression), all 34 isolated Chrome
+scenarios, frontend boundary checks/fixtures, typecheck, generated client consistency,
+current binary build and governance checks. The real mouse-drag case verifies exact
+preview/drop geometry, draft preservation, no Agent commands, undo and Escape.
+Screenshots are `target/studio-browser/agent-parent-drag-{preview,result}.png`; the
+full Chrome log is `target/agent-task-development/parent-docking-chrome.log`.
+
 ## Workspace Agent tasks
 
 The user approved the fourteen [Paper Agent boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2)
