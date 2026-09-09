@@ -834,6 +834,14 @@ identity, persistence, recovery or single-writer requirements.
 
 ### Composer permissions and context channels
 
+The browser/input method owns uncommitted text composition. Draft synchronization
+only receives confirmed text; incoming snapshots and autosizing must not rewrite
+an active preedit range. Candidate-confirmation keys do not submit a turn, including
+native key code 229 and the immediate post-composition Enter. Ordinary Enter still
+sends and Shift+Enter inserts a newline. Changing tasks binds a new input identity;
+an ownership change during composition preserves the completed local text as a
+conflict copy instead of overwriting the other window's saved draft.
+
 The composer is the predictable place for permissions, attachments, context
 selection and sending/stopping. Its toolbar contains **+**, an attachment button,
 **@**, the selected native permission mode, model/reasoning and Send/Stop. Narrow

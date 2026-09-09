@@ -288,6 +288,25 @@ interaction requirements; the supplied screenshots are design references, not
 evidence that every runtime supports identical modes, options or input types.
 Native capabilities and scientific-owner identities remain authoritative.
 
+### F13 — Agent input prematurely commits Chinese preedit
+
+**User feedback (2026-09-09):** Agent's message field turns Pinyin into literal text
+before the user can select Chinese characters. The user suspects draft autosave.
+The confirmed browser reproduction starts a second composition while extending
+`ni` to `nihao`, leaving `ninihao`. The textarea's controlled value is restored to
+its old external-store snapshot, then rewritten after a batched notification;
+this happens before an autosave response.
+
+The input method must retain its marked range until confirmation or cancellation.
+Draft saving and polling must not replace preedit text, and the candidate-selection
+Enter must not send a turn. Preserve committed local text as a conflict copy if
+another window takes over during composition. Report browser composition-protocol
+coverage separately from actual OS input-method testing.
+
+**User verification (2026-09-09):** After trying the corrected ime-test page, the
+user confirmed Chinese input works. This is recorded alongside the browser-native
+composition/ACK regression tests, rather than inferred from those tests alone.
+
 ## Workflow reference: a country development analysis
 
 The supplied tutorial follows a complete project using gapminder: import, clean,

@@ -2,6 +2,31 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
+## Agent Chinese input composition
+
+The reported Pinyin-to-literal-text bug was reproduced through Chrome's native
+composition protocol: `ni → nihao` produced `ninihao`, with JavaScript value writes
+back to the previous text between input events. This occurs before draft autosave;
+the controlled textarea was backed directly by asynchronously notified task state.
+The message input now leaves native preedit in the DOM, reconciles external text
+only outside composition, and sends confirmed text to the draft owner. Resizing
+and @ completion also wait for committed input. IME confirmation/229/post-end keys
+cannot submit, and an ownership change retains a local conflict copy.
+
+Focused tests passed: native Chrome composition across autosave/poll intervals,
+delayed draft ACK during composition, committed-only saving and explicit subsequent
+Enter. These are browser-native CDP tests. The user separately tested the corrected
+ime-test page with their actual input method and confirmed it works on 2026-09-09.
+This confirms that configuration, not every possible OS/IME combination. Validation
+passed: 300 frontend tests, all 36 isolated Chrome scenarios, frontend boundary
+checks/fixtures, typecheck, client build/generated-asset consistency, current binary
+build and governance checks. The regression also preserves the original attachments
+when composition finishes after another window takes control. The task selector
+now has a distinct accessible label from the New task action. Evidence is in
+`target/agent-task-development/ime-{unit,chrome-final}.log`. The user's existing
+trial Host/page is preserved. A separate `target/experience/agent-ime-review/ime-test`
+workspace uses refreshable development assets for testing the corrected client.
+
 ## Parent-region docking refinement
 
 The 2026-09-09 follow-up identified an unreachable/unclear parent docking path:

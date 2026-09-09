@@ -243,6 +243,16 @@ export class AgentTasks extends Model<AgentTaskSnapshot> {
     this.changed(); this.publish(); this.queueSave(id);
   }
   editText(id: string, text: string) { this.edit(id, { ...this.local(id).content, text }); }
+  commitComposition(id: string, text: string, original?: AgentDraftContent) {
+    if (this.canEdit(id)) { this.editText(id, text); return; }
+    // Control can transfer while the OS candidate window is open. Keep the
+    // final local text without writing over the new controller's saved draft.
+    const local = this.local(id);
+    if (local.content.text === text) return;
+    local.conflict = { ...clone(original ?? local.content), text };
+    this.changed(); this.publish();
+  }
+
   private queueSave(id: string) { clearTimeout(this.timers.get(id)); this.timers.set(id, setTimeout(() => { void this.flushDraft(id); }, 400)); }
   async flushDraft(id: string): Promise<void> {
     const previous=this.saveFlights.get(id);

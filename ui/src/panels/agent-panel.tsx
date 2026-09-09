@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useAgentTasks, useLayout, useNavigation } from "../context";
 import { Icon } from "../icons";
+import { AgentMessageInput } from "./agent-message-input";
 import { agentBusy } from "../agent-tasks";
 import { encodeAgentFile } from "../agent-task-adapter";
 import type { AgentProvider } from "../generated/AgentProvider";
@@ -48,7 +49,7 @@ function TaskList() {
 }
 function TaskSelector() {
   const owner = useAgentTasks(), state = owner.getSnapshot(), task = state.selected ? owner.summary(state.selected) : null;
-  return <div className="at-task-selector"><Menu.Root><Menu.Trigger asChild><button className="at-select-task"><span>{task?.task.title ?? "Choose a task"}</span><Down /></button></Menu.Trigger><Menu.Portal><Menu.Content className="at-menu at-task-menu" align="start" sideOffset={5}>
+  return <div className="at-task-selector"><Menu.Root><Menu.Trigger asChild><button className="at-select-task" aria-label={`Select task: ${task?.task.title ?? "No task selected"}`}><span>{task?.task.title ?? "Choose a task"}</span><Down /></button></Menu.Trigger><Menu.Portal><Menu.Content className="at-menu at-task-menu" align="start" sideOffset={5}>
     <div className="at-filters"><button className={!state.archived ? "selected" : ""} onClick={() => owner.filterArchived(false)}>Active</button><button className={state.archived ? "selected" : ""} onClick={() => owner.filterArchived(true)}>Archived</button></div>
     {state.tasks.map(task => <Menu.Item className="at-menu-item" key={task.task.task_id} onSelect={() => owner.select(task.task.task_id)}><span className="at-task-label"><strong>{task.task.title}</strong><small>{providers[task.task.provider]} · {statusLabel[task.attachment.state]}</small></span>{task.attachment.decisions.length > 0 && <span className="at-count">{task.attachment.decisions.length}</span>}</Menu.Item>)}
     {state.next && <Menu.Item className="at-menu-item" onSelect={e => { e.preventDefault(); void owner.loadMore(); }}>Load more tasks</Menu.Item>}
@@ -119,19 +120,20 @@ function ContextPreview({ preview, onChange, onAdd, onClose }: { preview: AgentC
 function Composer({ task }: { task: AgentTaskSummary }) {
   const owner = useAgentTasks(), state = owner.getSnapshot(), id = task.task.task_id, detail = state.details.get(id), local = state.drafts.get(id);
   const content = local?.content ?? detail?.draft.content ?? { text: "", assets: [], context: [] };
-  const editable = owner.canEdit(id) && !!detail, busy = agentBusy(task.attachment.state), input = useRef<HTMLTextAreaElement>(null), files = useRef<HTMLInputElement>(null), region = useRef<HTMLDivElement>(null), popover = useRef<HTMLDivElement>(null);
+  const editable = owner.canEdit(id) && !!detail, busy = agentBusy(task.attachment.state), files = useRef<HTMLInputElement>(null), region = useRef<HTMLDivElement>(null), popover = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<"context" | "preview" | "asset" | null>(null), [search, setSearch] = useState(""), [source, setSource] = useState<string | null>(null), [assetId, setAssetId] = useState<string | null>(null), [localError, setLocalError] = useState(""), [decisionIndex, setDecisionIndex] = useState(0);
+  const [composing, setComposing] = useState(false);
+  const compositionDraft = useRef<typeof content | null>(null);
   const catalog = state.catalogs[task.task.provider];
   const models = catalog?.models ?? task.attachment.capabilities.models;
   const model = models.find(m => m.id === task.task.model);
   const modes = task.attachment.capabilities.modes, currentMode = task.attachment.capabilities.current_mode ?? task.task.mode;
   const mode = modes.find(m => m.id === currentMode), decisions = task.attachment.decisions, decision = decisions[Math.min(decisionIndex, Math.max(0, decisions.length - 1))];
   const pendingSend = state.pending.some(p => p.taskId === id && p.kind === "send");
-  const canSend = editable && owner.connected && !busy && !pendingSend && !local?.conflict && !["disconnected", "uncertain"].includes(task.attachment.state) && (!!content.text.trim() || !!content.assets.length || !!content.context.length);
+  const canSend = !composing && editable && owner.connected && !busy && !pendingSend && !local?.conflict && !["disconnected", "uncertain"].includes(task.attachment.state) && (!!content.text.trim() || !!content.assets.length || !!content.context.length);
   useEffect(() => { setMenu(null); setSearch(""); setAssetId(null); setLocalError(""); setDecisionIndex(0); }, [id]);
   useEffect(() => { if (menu !== "context") return; owner.clearContext(true); const timer = setTimeout(() => { void owner.searchContext(source, search); }, 160); return () => clearTimeout(timer); }, [menu, search, source]);
   useEffect(() => { if (!menu) return; const listener = (event: PointerEvent) => { if (!region.current?.contains(event.target as Node) && !popover.current?.contains(event.target as Node)) setMenu(null); }; document.addEventListener("pointerdown", listener); return () => document.removeEventListener("pointerdown", listener); }, [menu]);
-  useLayoutEffect(() => { const e = input.current; if (e) { e.style.height = "0px"; e.style.height = `${Math.min(180, Math.max(54, e.scrollHeight))}px`; } }, [content.text, id]);
   async function attach(list: FileList | null) { if (!list || !editable) return; for (const file of Array.from(list).slice(0, 20)) { try { await owner.upload(id, file.name, file.type || "application/octet-stream", await encodeAgentFile(file)); } catch (e) { setLocalError(e instanceof Error ? e.message : String(e)); } } }
   function contextMenu(value: string | null = null) { setSource(value); setSearch(""); setMenu("context"); }
   async function preview(selection: AgentContextSelection) { setMenu("preview"); await owner.previewContext(selection); }
@@ -146,9 +148,10 @@ function Composer({ task }: { task: AgentTaskSummary }) {
       {!!content.context.length && <div className="at-context-chips">{content.context.map((selection, i) => <span className="at-context-chip" key={`${selection.source}:${i}`}><button onClick={() => void preview(selection)}><Icon name={selection.source === "objects" ? "object" : selection.source === "plots" ? "plot" : selection.source === "tables" ? "table" : selection.source.startsWith("plugin.") ? "components" : "file"} size={14} /><strong>{selection.label}</strong><small>{selection.source.startsWith("plugin.") ? "Plugin" : selection.source}</small></button>{editable && <button className="at-chip-remove" aria-label={`Remove ${selection.label}`} onClick={() => owner.removeContext(id, i)}><Icon name="close" size={12} /></button>}</span>)}</div>}
       {!!content.assets.length && <div className="at-assets">{content.assets.map(asset => { const record = detail?.assets.find(a => a.asset_id === asset); return record ? <AssetCard key={asset} asset={record} taskId={id} removable={editable} onPreview={() => { setAssetId(asset); setMenu("asset"); void owner.loadAsset(id, asset); }} /> : <span key={asset}>Attachment pending…</span>; })}</div>}
       {!editable && <div className="at-readonly-caption"><Icon name="lock" size={13} />Saved draft · Read-only</div>}
-      <textarea ref={input} aria-label="Agent message" placeholder={`Message ${providers[task.task.provider]}…`} value={content.text} readOnly={!editable} maxLength={32768} rows={3}
-        onChange={e => { owner.editText(id, e.target.value); if (e.target.value.endsWith("@")) contextMenu(); }}
-        onKeyDown={e => { if (e.key === "Escape") { setMenu(null); owner.clearContext(); } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && canSend && !menu) { e.preventDefault(); void owner.send(id); } }}
+      <AgentMessageInput value={content.text} placeholder={`Message ${providers[task.task.provider]}…`} readOnly={!editable}
+        canSubmit={canSend && !menu} onComposingChange={active => { if (active) compositionDraft.current = structuredClone(content); setComposing(active); }}
+        onChange={text => owner.editText(id, text)} onCompositionCommit={text => owner.commitComposition(id, text, compositionDraft.current ?? content)}
+        onSubmit={() => void owner.send(id)} onEscape={() => { setMenu(null); owner.clearContext(); }} onMention={() => contextMenu()}
         onPaste={e => { if (e.clipboardData.files.length && editable && owner.connected) { e.preventDefault(); void attach(e.clipboardData.files); } }} />
       <div className="at-composer-tools"><div className="at-input-tools">
         <Menu.Root><Menu.Trigger asChild><button className="at-icon" aria-label="Add context" title="Add context" disabled={!editable || !owner.connected}><Icon name="plus" /></button></Menu.Trigger><Menu.Portal><Menu.Content className="at-menu" side="top" align="start" sideOffset={6}>
@@ -181,7 +184,7 @@ export function AgentPanel({ viewId }: { viewId: string }) {
   useEffect(() => { owner.show(viewId); return () => owner.hide(viewId); }, [owner, viewId]);
   return <div className="agent-panel" aria-label="Agent panel"><TaskList /><main className="at-main"><TaskSelector />
     {state.error && <div className="at-error" role="alert"><span>{state.error}</span><button className="at-icon" aria-label="Dismiss Agent error" onClick={() => owner.clearError()}><Icon name="close" size={13} /></button></div>}
-    {task ? <><TaskHeader task={task} /><Conversation task={task} /><Composer task={task} /></> : <div className="at-start"><Icon name="agent" size={28} /><h2>Work with an Agent</h2><NewTaskButton /><button onClick={() => navigation.setDialog("agents")}><Icon name="settings" />Agent Settings</button></div>}
+    {task ? <><TaskHeader task={task} /><Conversation task={task} /><Composer key={task.task.task_id} task={task} /></> : <div className="at-start"><Icon name="agent" size={28} /><h2>Work with an Agent</h2><NewTaskButton /><button onClick={() => navigation.setDialog("agents")}><Icon name="settings" />Agent Settings</button></div>}
   </main></div>;
 }
 export function AgentLauncher() {

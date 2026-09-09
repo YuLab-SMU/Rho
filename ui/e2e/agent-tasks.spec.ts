@@ -14,7 +14,7 @@ test.beforeAll(async()=>{
 test.afterAll(async()=>{if(host?.exitCode===null){host.kill('SIGINT');await Promise.race([new Promise(r=>host.once('exit',r)),pause(12000)]);if(host.exitCode===null)host.kill('SIGKILL');}if(directory)await rm(directory,{recursive:true,force:true});});
 async function nativeCalls(){try{return (await readFile(log,'utf8')).trim().split('\n').filter(Boolean).map(s=>JSON.parse(s));}catch{return[];}}
 async function openAgent(page:import('@playwright/test').Page){await page.goto(url);await page.getByRole('button',{name:'Agents',exact:true}).click();await expect(page.getByLabel('Agent panel',{exact:true})).toBeVisible();}
-async function newTask(page:import('@playwright/test').Page){const panel=page.getByLabel('Agent panel',{exact:true});await panel.getByRole('button',{name:'New task',exact:true}).last().click();await page.getByRole('menuitem',{name:'Kimi Code',exact:true}).click();await expect(panel.getByRole('textbox',{name:'Agent message',exact:true})).toBeEditable();return panel;}
+async function newTask(page:import('@playwright/test').Page){const panel=page.getByLabel('Agent panel',{exact:true}),action=panel.locator('button[aria-label="New task"]:visible').first();await action.click();await page.getByRole('menuitem',{name:'Kimi Code',exact:true}).click();await expect(action).toBeEnabled();await expect(panel.getByRole('textbox',{name:'Agent message',exact:true})).toBeEditable();return panel;}
 
 test('workspace Agent opens without CLI discovery; task drafts survive close, refresh and running work',async({page})=>{
  page.on('dialog',d=>void d.accept());const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openAgent(page);
@@ -91,4 +91,38 @@ test('dragging Agent to the shared column edge spans Objects and Plots and can b
  await page.getByRole('button',{name:'View',exact:true}).click();await page.getByRole('menuitem',{name:'Undo Layout Change',exact:true}).click();const undone=await group('Agent').boundingBox();expect(Math.abs(undone!.y-before!.y)).toBeLessThan(3);await expect(input).toHaveValue('Draft kept while docking');
  // Escaping a second drag must remove all previews without moving the panel.
  const again=await page.getByRole('tab',{name:'Agent',exact:true}).boundingBox();await page.mouse.move(again!.x+25,again!.y+15);await page.mouse.down();await page.mouse.move(again!.x-45,again!.y+65,{steps:8});await expect(zone).toBeVisible();await page.keyboard.press('Escape');await page.mouse.up();await expect(zone).toHaveCount(0);expect(Math.abs((await group('Agent').boundingBox())!.y-before!.y)).toBeLessThan(3);
+});
+
+test('Agent native IME replaces preedit and waits for committed text before saving or sending',async({page,context})=>{
+ await openAgent(page);const panel=await newTask(page),input=panel.getByRole('textbox',{name:'Agent message',exact:true});await input.click();
+ const commands:any[]=[];page.on('request',r=>{if(r.url().endsWith('/api/agents/tasks/command'))commands.push(r.postDataJSON().command);});
+ await input.evaluate(el=>{const trace:any[]=[];(window as any).__agentImeTrace=trace;const value=Object.getOwnPropertyDescriptor(el,'value')??Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!;Object.defineProperty(el,'value',{get(){return value.get!.call(this);},set(v){trace.push({type:'value-write',value:v});value.set!.call(this,v);},configurable:true});for(const name of ['compositionstart','compositionupdate','compositionend','input'])el.addEventListener(name,e=>trace.push({type:e.type,data:(e as CompositionEvent).data,composing:(e as InputEvent).isComposing,value:(el as HTMLTextAreaElement).value}));});
+ const cdp=await context.newCDPSession(page);
+ await cdp.send('Input.imeSetComposition',{text:'ni',selectionStart:2,selectionEnd:2});
+ await cdp.send('Input.imeSetComposition',{text:'nihao',selectionStart:5,selectionEnd:5});
+ const preedit=await page.evaluate(()=>(window as any).__agentImeTrace);expect(preedit.filter((e:any)=>e.type==='value-write')).toHaveLength(0);expect(preedit.filter((e:any)=>e.type==='compositionstart')).toHaveLength(1);
+ await expect(input).toHaveValue('nihao');
+ // Cross both autosave and summary polling while the native preedit remains active.
+ await page.waitForTimeout(1250);expect(commands.filter(c=>c.kind==='save_draft'||c.kind==='send')).toEqual([]);
+ await cdp.send('Input.imeSetComposition',{text:'你好',selectionStart:2,selectionEnd:2});
+ await cdp.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:36});await cdp.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:36});
+ expect(commands.filter(c=>c.kind==='send')).toHaveLength(0);
+ await cdp.send('Input.insertText',{text:'你好'});await expect(input).toHaveValue('你好');await expect(panel.locator('.at-draft-status')).toHaveText('Draft saved');
+ expect(commands.filter(c=>c.kind==='save_draft').map(c=>c.content.text)).toEqual(['你好']);expect(commands.filter(c=>c.kind==='send')).toHaveLength(0);
+ await input.press('Enter');await expect.poll(()=>commands.filter(c=>c.kind==='send').length).toBe(1);await cdp.detach();
+});
+
+test('Agent IME stays active across a delayed draft ACK and repeated task snapshots',async({page,context})=>{
+ await openAgent(page);const panel=await newTask(page),input=panel.getByRole('textbox',{name:'Agent message',exact:true});
+ const saved:string[]=[];let release!:()=>void,accepted!:()=>void;
+ const held=new Promise<void>(r=>release=r),received=new Promise<void>(r=>accepted=r);
+ await page.route('**/api/agents/tasks/command',async route=>{const c=route.request().postDataJSON().command;if(c.kind==='save_draft'){saved.push(c.content.text);if(saved.length===1){const response=await route.fetch();accepted();await held;await route.fulfill({response});return;}}await route.continue();});
+ await input.fill('Before ');await received;await input.press('End');const cdp=await context.newCDPSession(page);
+ try{
+  await cdp.send('Input.imeSetComposition',{text:'zhong',selectionStart:5,selectionEnd:5});release();
+  await page.waitForTimeout(1250);await expect(input).toHaveValue('Before zhong');expect(saved).toEqual(['Before ']);
+  await cdp.send('Input.imeSetComposition',{text:'中文',selectionStart:2,selectionEnd:2});await expect(input).toHaveValue('Before 中文');await cdp.send('Input.insertText',{text:'中文'});
+  await expect(panel.locator('.at-draft-status')).toHaveText('Draft saved');await expect(input).toHaveValue('Before 中文');expect(saved).toEqual(['Before ','Before 中文']);
+  await page.screenshot({path:'../target/studio-browser/agent-ime-committed.png'});
+ }finally{release();await cdp.detach();}
 });

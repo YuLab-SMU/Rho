@@ -81,3 +81,9 @@ it('initial newest-page cursors do not confuse older history with forward pollin
  f.eventPage({task_id:'a',history_generation:0,events:[event],next_cursor:101,has_more:true,history_gap:false,oldest_cursor:1,durable_cursor:200});await f.model.observeEvents();expect(f.model.getSnapshot().earlier.get('a')).toBe(true);await f.model.observeEvents();
  const queries=vi.mocked(f.ports.query).mock.calls.map(([r])=>r.query).filter(q=>q.kind==='events');expect(queries.at(-1)).toMatchObject({after:200});
 });
+it('retains text committed by an IME after takeover as a local conflict without writing it remotely',async()=>{
+ const f=fixture();await f.model.observeSummary();await f.model.loadDetail('a');
+ const d=f.records.get('a')!;d.summary.attachment.controller={window_id:'other-window',incarnation:'other'};d.summary.attachment.generation=2;d.summary.observation_version=2;d.draft.version=1;d.draft.content.text='new controller draft';
+ await f.model.loadDetail('a');f.model.commitComposition('a','local 中文',{text:'local ',assets:['original-image'],context:[]});
+ expect(f.model.getSnapshot().drafts.get('a')?.conflict).toEqual({text:'local 中文',assets:['original-image'],context:[]});expect(f.records.get('a')!.draft.content.text).toBe('new controller draft');expect(f.ports.command).not.toHaveBeenCalled();
+});
