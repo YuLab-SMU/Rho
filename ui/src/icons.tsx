@@ -3,11 +3,18 @@ type IconName =
   | "file"
   | "components"
   | "settings"
+  | "agent" | "terminal" | "code" | "back" | "chevron" | "link"
   | "folder"
   | "search"
   | "reset"
   | "play";
 const paths: Record<IconName, React.ReactNode> = {
+  agent: <><rect x="4" y="6" width="16" height="14" rx="5" /><path d="M12 3v3M2 11v4m20-4v4M9 15h6M9 11h.1M15 11h.1" /></>,
+  terminal: <path d="m5 6 5 6-5 6m9 0h5" />,
+  code: <path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 20" />,
+  back: <path d="m14 6-6 6 6 6M8 12h13" />,
+  chevron: <path d="m9 6 6 6-6 6" />,
+  link: <path d="m8 4 12 12m-16-4L12 4m0 16 8-8M4 12l8 8M7 9l8 8M9 7l8 8" />,
   studio: (
     <>
       <rect x="3" y="3" width="18" height="18" rx="2" />

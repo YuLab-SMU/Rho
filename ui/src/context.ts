@@ -8,6 +8,7 @@ function useModule<T extends { subscribe(listener: () => void): () => void; getS
   return owner;
 }
 export const useSession = () => useModule(studio.session);
+export const useAgents = () => useModule(studio.agents);
 export const useOperations = () => useModule(studio.operations);
 export const useFiles = () => useModule(studio.files);
 export const useObjects = () => useModule(studio.objects);

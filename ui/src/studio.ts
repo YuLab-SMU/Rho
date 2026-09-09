@@ -15,6 +15,8 @@ import { MediaCache } from "./media-cache";
 import { Plots } from "./plots";
 import { PanelLayout } from "./layout-model";
 import { Navigation } from "./navigation";
+import { Agents } from "./agents";
+import { copyAgentText } from "./agent-adapter";
 import { browserMedia } from "./media-adapter";
 import { mediaKey } from "./output-ports";
 import type { ApplicationBridgeSession } from "./generated/ApplicationBridgeSession";
@@ -44,6 +46,7 @@ export class Studio {
   readonly persistence: ApplicationPersistence;
   readonly preferences: Preferences;
   readonly application: ApplicationBridge;
+  readonly agents: Agents;
   private readonly documentPersistence: PersistenceFragment;
   private readonly subscriptions: (() => void)[] = [];
   private stopped = false;
@@ -220,6 +223,11 @@ export class Studio {
       },
     });
 
+    this.agents = new Agents({ context: this.session.context,
+      window: () => this.application.getSnapshot().online ? this.application.window : null,
+      read: client.agentConnection.bind(client), configuration: client.agentConfiguration.bind(client),
+      copy: copyAgentText, schedule: () => this.coordinator.wake("agents") });
+
     for (const fragment of [this.operations, this.console, this.files, this.objects, this.packages, this.plots, this.layout])
       this.persistence.register(fragment);
     this.documentPersistence = { serialize: () => ({}),
@@ -234,10 +242,11 @@ export class Studio {
         this.session.setReady(false);
         this.operations.reset(); this.console.reset(); this.files.reset(); this.objects.reset(); this.packages.reset();
         this.documents.reset(); this.outputs.reset(); this.mediaCache.reset(); this.plots.reset(); this.layout.resetState(); this.navigation.reset();
-        this.application.reset();
+        this.application.reset(); this.agents.reset();
         this.persistence.prepareRestore();
       }),
       this.notifications.on("sessionChanged", () => {
+        this.agents.reset();
         this.application.disconnected();
         this.operations.sessionChanged(); this.console.resetSession(); this.documents.sessionChanged();
         this.objects.sessionChanged(); this.packages.sessionChanged(); this.outputs.sessionChanged(); this.mediaCache.sessionChanged();
@@ -270,6 +279,7 @@ export class Studio {
       return this.operations.consumeEvents();
     }));
     this.coordinator.register("runtime", 2000, ready(() => this.session.refreshRuntime()));
+    this.coordinator.register("agents", 2000, async () => { if (!this.stopped) await this.agents.observe(); });
     this.coordinator.register("pending", 2000, ready(async () => {
       await this.operations.reconcilePending(); await this.operations.ensureReferences(this.console.operationIds());
     }));
@@ -371,6 +381,7 @@ export class Studio {
   }
   stop() {
     this.application.stop();
+    this.agents.stop();
     this.stopped = true; this.lifecycle++; this.session.stop(); this.coordinator.stop(); this.client.stopReads(); this.persistence.stop(); this.preferences.stop();
     this.operations.stop(); this.console.stop(); this.documents.stop(); this.files.stop(); this.objects.stop(); this.packages.stop();
     this.outputs.stop(); this.mediaCache.stop(); this.plots.stop(); this.navigation.stop(); this.layout.stop();

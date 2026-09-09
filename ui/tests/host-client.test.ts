@@ -35,6 +35,7 @@ afterEach(() => { for (const host of clients.splice(0)) host.stopReads(); vi.cle
 
 it.each([
   ["Host health", (host: HostClient) => host.info()],
+  ["Agent connections", (host: HostClient) => host.agentConnection()],
   ["application state", (host: HostClient) => host.readState("/project", "studio")],
   ["scientific query", (host: HostClient) => host.query("/project", "workspace.snapshot")],
   ["operation record", (host: HostClient) => host.getOperation("/project", "operation-1")],
@@ -122,4 +123,17 @@ it("routes full draft/base synchronization through the dedicated application bri
   expect(options.headers).toMatchObject({ Authorization: "Bearer test-only-token", "X-Rho-Studio-Window": host.windowId });
   await host.applicationControl("/project", { window, request_id: "ordinary-control", action: { kind: "open_view", view_type: "files", view_id: null, expected_context_version: "context" } }); expect(fetch.mock.calls[1][0]).toBe("/api/host");
   await host.invoke("/project", invocation, true); expect(fetch.mock.calls[2][0]).toBe("/api/host");
+});
+
+it("prepares masked Codex and generic MCP configuration only for this Workbench origin", () => {
+  const host = client(), data = { project_root: "/project", endpoint: `${location.origin}/mcp`, suggested_server_name: "rho_12345", observed_at_ms: 1, active_sessions: 0, sessions: [], history_truncated: false };
+  const preview = host.agentConfiguration(data, "codex", true);
+  expect(preview).toContain("[mcp_servers.rho_12345]");
+  expect(preview).not.toContain("test-only-token");
+  expect(host.agentConfiguration(data, "codex", false)).toContain('Authorization = "Bearer test-only-token"');
+  expect(JSON.parse(host.agentConfiguration(data, "mcp", false))).toEqual({ transport: "streamable-http", url: data.endpoint, headers: { Authorization: "Bearer test-only-token" } });
+  for (const endpoint of ["https://foreign.example/mcp", `${location.origin}/mcp#token=bad`, `${location.origin}/api/host`]) {
+    expect(() => host.agentConfiguration({ ...data, endpoint }, "codex", false)).toThrow("does not belong");
+  }
+  expect(() => host.agentConfiguration({ ...data, suggested_server_name: 'rho_12345]\nmalicious = "x"' }, "codex", false)).toThrow();
 });

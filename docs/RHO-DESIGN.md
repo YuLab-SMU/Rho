@@ -674,13 +674,13 @@ execution. Explicit repository URLs can identify a known provider/snapshot; abse
 delivery records stay unrecorded. No new conda database or renv lockfile attribution
 is inferred. Scope remains read-only.
 
-## 12. Agent connection experience — proposed
+## 12. Agent connection experience
 
 The user rejected the initial modal design on 2026-09-09 and supplied a desktop
 Agent-settings screenshot as the visual reference. The current
 [Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)
-contains two revised settings-page boards: Agent apps and Connections. This
-proposal is awaiting visual/interaction review; no Agent settings UI is implemented.
+contains two revised settings-page boards: Agent apps and Connections. The user
+approved these designs on 2026-09-09 and authorized implementation.
 
 The revised direction uses a persistent 200 px settings rail, a broad white
 content surface and a centered list. The selected Codex row expands in place;
@@ -691,12 +691,15 @@ UI font with 24 px page titles, 13–14 px controls/body and 12 px secondary lab
 Neutral canvas/row/border/text values are #F3F3F4 / #F8F8F9 / #E5E5E7 / #242426;
 secondary text is #68686D. A charcoal primary action and restrained semantic
 connection badges replace the earlier blue instructional dialog. These settings
-values are a proposal, not an approved global restyling of the scientific panels.
+values apply to the approved settings surface; scientific panels retain their
+existing visual tokens.
 
 The front page identifies the current project and window, keeps **Connect Codex**
 as the setup entry and moves configuration snippets into **Manual setup**.
-The entry must lead to concrete setup/handoff; clicking it alone never establishes
-connection success. Automatic CLI discovery, user-configuration writes, app
+The entry expands local setup: copy a masked-previewed Codex configuration into
+user settings, reload the external MCP client, then copy a read-only workspace
+check containing the project and exact window incarnation. Clicking Connect or
+copying configuration alone never establishes connection success. Automatic CLI discovery, user-configuration writes, app
 launching and model/provider management are not established by this mockup.
 Model/account decisions remain with the external Agent platform. Do not open R,
 start an Agent or install Skills merely to visit settings. The supplied screenshot

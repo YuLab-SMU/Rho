@@ -5,7 +5,7 @@ import { sameScope } from "./shared/ports";
 import type { RequestContext } from "./shared/ports";
 
 export type DocumentAction = "save" | "runFile" | "runSelection" | "undo";
-export type Dialog = "project" | "settings" | "commands" | "conflict" | "open-file" | null;
+export type Dialog = "project" | "settings" | "agents" | "commands" | "conflict" | "open-file" | null;
 interface NavigationPorts {
   context(): RequestContext;
   show(component: BuiltinPanel, id?: string, name?: string, config?: unknown): void;

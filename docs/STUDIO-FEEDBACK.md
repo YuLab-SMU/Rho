@@ -212,13 +212,13 @@ Agent settings. The reference has persistent sidebar navigation, a broad white
 surface, gray segmented controls, recognizable Agent rows and an expanded selected
 row with aligned configuration fields and actions.
 
-**Design response under review:** Replace the instructional modal with a settings
+**Approved design response (2026-09-09):** Replace the instructional modal with a settings
 page, reduce front-page explanatory copy, expand the selected Agent in place and
 put detailed connection evidence on a separate tab. Use neutral gray layers,
 consistent icon/text/action lanes and a single clear primary action. The reference
 does not establish Rho support for its model/provider settings or list of CLIs.
-The updated Paper link and proposed interaction are in Design section 12. This
-feedback remains open until the user reviews the revised result.
+The user approved the revised Paper design. The approved interaction is in Design
+section 12; implementation and runtime/visual verification belong in STATUS.md.
 
 ## Workflow reference: a country development analysis
 

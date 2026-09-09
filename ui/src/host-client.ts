@@ -1,6 +1,8 @@
 import type { HostRequest } from "./generated/HostRequest";
 import type { SessionReply } from "./generated/SessionReply";
 import type { WorkbenchInfo } from "./generated/WorkbenchInfo";
+import type { WorkbenchAgentConnection } from "./generated/WorkbenchAgentConnection";
+import type { AgentConfigurationFormat } from "./agent-ports";
 import type { WorkbenchFrame } from "./generated/WorkbenchFrame";
 import type { QuerySnapshot } from "./generated/QuerySnapshot";
 import type { Invocation } from "./generated/Invocation";
@@ -103,6 +105,18 @@ export class HostClient {
   stopReads() {
     for (const controller of this.reads) controller.abort(new Error("Client stopped reading"));
     this.reads.clear();
+  }
+  agentConnection() { return this.request<WorkbenchAgentConnection>("/api/agent-connection"); }
+  agentConfiguration(data: WorkbenchAgentConnection, format: AgentConfigurationFormat, masked: boolean) {
+    const endpoint = new URL(data.endpoint);
+    if (endpoint.origin !== location.origin || endpoint.pathname !== "/mcp" || endpoint.search || endpoint.hash ||
+      endpoint.username || endpoint.password || !/^rho_[0-9]+$/.test(data.suggested_server_name))
+      throw new Error("The connection endpoint does not belong to this Workbench.");
+    const authorization = `Bearer ${masked ? "<private-workbench-token>" : this.token}`;
+    if (format === "codex") return `[mcp_servers.${data.suggested_server_name}]\n` +
+      `url = ${JSON.stringify(data.endpoint)}\nhttp_headers = { Authorization = ${JSON.stringify(authorization)} }\n` +
+      "startup_timeout_sec = 30\ntool_timeout_sec = 90\n";
+    return JSON.stringify({ transport: "streamable-http", url: data.endpoint, headers: { Authorization: authorization } }, null, 2);
   }
   info() {
     return this.request<WorkbenchInfo>("/api/info");

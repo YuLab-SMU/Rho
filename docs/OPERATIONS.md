@@ -186,8 +186,24 @@ Rows include client-reported name/version, the last request time, protocol closu
 and successful overview/live-window response times. Those response observations
 are not delivery acknowledgements. A quiet open session can outlive its network
 connection, and closing it does not cancel accepted work. New project/R Hosts
-start fresh observations. The proposed Studio setup dialog is in
-[Design section 12](RHO-DESIGN.md#12-agent-connection-experience--proposed).
+start fresh observations.
+
+Open **Agents** in the Studio app bar or **Session → Agent Settings…**. The settings
+page keeps the scientific workspace mounted. Select Codex, then **Connect Codex**
+to reveal setup. Copy the configuration into your Codex user settings and reload
+its MCP servers. The preview masks the token; the copied block contains the actual
+local credential. No Codex configuration is edited automatically. Replace the old
+entry for this Workbench after a restart changes its endpoint/token.
+
+**Copy connection check** prepares a read-only task containing the project and
+this window's exact incarnation. Send it in Codex. The **Connections** tab reports
+the observed protocol session and whether Rho served this window's context.
+Copying setup is not reported as connected. Read failures label old observations
+as stale and disable credential/context copying until refreshed. **Another agent**
+provides the same endpoint and Authorization header as generic connection details;
+use the configuration format required by that MCP client. Editor and R settings
+remain available in the settings rail. See the approved
+[interaction design](RHO-DESIGN.md#12-agent-connection-experience).
 
 ## Discover and investigate through the shared Host
 

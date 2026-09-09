@@ -28,6 +28,7 @@ function fixture(delay: "runtime" | "plot" | "persistence" | null = null) {
   const entered = deferred<void>(), release = deferred<void>();
   const session = { window: { window_id: "window", incarnation: "incarnation" }, bridge_token: "fixture-bridge" };
   const host = {
+    agentConnection: vi.fn(), agentConfiguration: vi.fn(),
     windowId: session.window.window_id, incarnation: session.window.incarnation,
     previousBridgeSession: () => undefined, rememberBridgeSession: vi.fn(), stopReads: vi.fn(),
     info: vi.fn(async () => ({ project_root: "/project", runtime: "R", capabilities: [{ capability: { id: "workspace.runtime_status", version: 1 } }] })),

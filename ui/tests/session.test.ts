@@ -137,7 +137,7 @@ it("disposes pending Session subscriptions when stopped", async () => {
 async function studioFixture() {
   const { Studio } = await import("../src/studio");
   const f = fixture();
-  const host = { ...f.ports, invoke: vi.fn(), cancel: vi.fn(async () => {}), respondInput: vi.fn(async () => ({})),
+  const host = { ...f.ports, agentConnection: vi.fn(), agentConfiguration: vi.fn(), invoke: vi.fn(), cancel: vi.fn(async () => {}), respondInput: vi.fn(async () => ({})),
     subscribe: vi.fn(async () => []), getOperation: vi.fn(async () => null), stopReads: vi.fn(),
     windowId: "test-window", incarnation: "test-incarnation", previousBridgeSession: () => undefined, rememberBridgeSession: vi.fn(),
     applicationExecute: vi.fn(), applicationStatus: vi.fn(), applicationReadDocument: vi.fn(),

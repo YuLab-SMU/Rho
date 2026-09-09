@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import ts from "../ui/node_modules/typescript/lib/typescript.js";
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const domains = new Set(["session", "operations", "console", "objects", "packages", "files", "documents", "outputs", "media-cache", "plots"]);
+const domains = new Set(["session", "operations", "console", "objects", "packages", "files", "documents", "outputs", "media-cache", "plots", "agents"]);
 const stem = (file) => file.replace(/\.[^.]+$/, "");
 const domain = (file) => domains.has(stem(file)) ? stem(file) : null;
 const panel = (file) => file.startsWith("panels/") || ["app-shell.tsx", "commands.ts"].includes(file);

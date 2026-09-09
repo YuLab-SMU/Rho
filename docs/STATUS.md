@@ -4,16 +4,32 @@ Updated: 2026-09-09. This is the single current status summary. Git retains hist
 
 ## Current work: daily Codex connection
 
-The user rejected the initial modal design and supplied a desktop Agent-settings
-reference. Two revised
-[Paper review boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)
-now show a settings page with an expanded Codex row and a separate Connections tab.
-They use neutral gray layers, compact fields and secondary disclosure for setup
-and connection details. Both screenshots were inspected and sidebar spacing was
-corrected. Visual/interaction review is still pending under AGENTS.md; no Agent
-settings UI has been implemented. The proposal is in Design section 12 and the
-reported problem is Feedback F09. This revision changed Paper and documentation
-only; it did not add CLI discovery, model configuration or automatic installation.
+The user approved the revised
+[Paper settings design](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)
+on 2026-09-09. Studio now opens the implemented settings page from **Agents** or
+**Session → Agent Settings…**. Codex expands in place, with current project/window
+context, a masked configuration preview, explicit clipboard copy and a read-only
+connection-check prompt. Another agent exposes generic MCP connection details.
+Connections shows real Host session observations and scoped window response times;
+setup copying is never displayed as a successful connection.
+
+The page preserves the mounted editor, drafts, undo and native R session. Existing
+Editor/R controls are shared with the original runtime dialog. Only visible Agent
+settings request connection observations through the existing coordinator; stale
+or mismatched scope disables copying. Private configuration never enters a model
+snapshot, DOM preview or persistent application state. Codex user configuration
+remains unchanged; the first connection requires pasting its generated block into
+Codex user settings and reloading that client's MCP connection.
+
+Current UI verification: **278/278 unit tests and 27/27 isolated Chrome cases
+passed** against the current built binary and assets. The new case covers actual
+MCP initialization, overview/window queries, private clipboard contents versus
+masked DOM, false-connection prevention, read-failure recovery, protocol closure,
+current window incarnation, preserved drafts/undo and unchanged R session/operation
+checkpoint. Normal (1440 × 900), wide (1920 × 1080), constrained (768 × 760), setup
+and connection screenshots were inspected under `target/studio-browser/agents-*`.
+Rust-generated types, frontend build/check and `cargo build --locked` passed, as did
+architecture, frontend boundaries, their 24 fixtures, governance and diff checks.
 
 The independent backend now exposes authenticated `GET /api/agent-connection`.
 It returns the current endpoint and bounded MCP session observations, including
@@ -23,16 +39,12 @@ belong to the selected Host and reset on replacement; an open protocol session i
 not proof of an active Agent task. Existing caller identities and scientific ports
 are preserved. Codex user configuration has not been changed.
 
-Current checks: MCP 9 tests, Workbench 8 tests, frontend 270 tests, Rust-to-client
-generation/build/check, architecture and frontend boundaries, 24 boundary fixtures,
-governance and Agent-harness self-test passed. Affected MCP/Workbench all-target
-Clippy with warnings denied and workspace formatting checks passed.
-`node scripts/test-workbench.mjs`
-and its `--real-r` variant passed actual HTTP/MCP initialization, scoped overview
-and window observations, credential exclusion, query purity, session closure,
-Host replacement, cancellation and disconnected-work checks. The latter used
-actual Ark/R and Environment observations. These are checks of the current work,
-not a rerun of the frozen 34-session independent Codex acceptance below.
+The unchanged connection backend was verified in `8ec6b62`: MCP 9 tests,
+Workbench 8 tests, affected Clippy/format checks, and real HTTP/MCP tests both with
+and without the explicit real-R option passed. Those checks cover initialization,
+scoped response observations, credential exclusion, query purity, closure, Host
+replacement and disconnected-work handling. No new model-based Codex acceptance
+was run for this UI change; the frozen acceptance below remains separate.
 
 ## Agent interface acceptance baseline
 
