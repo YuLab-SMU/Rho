@@ -743,17 +743,24 @@ explores the user's first-version task plan. These editable state boards are
 scientific references and plot content are illustrative; they are not live evidence.
 Section 12 describes the existing settings experience until the task work ships.
 
+Following the user's F11 feedback, the revision removes the setup form, explanatory
+recovery cards and rules gallery. The main surface contains task navigation,
+conversation, concise state and the relevant action. Detailed evidence opens only
+on demand. All nine boards now belong to the independent **Agent · 工作区任务设计评审**
+page; the general high-fidelity workspace page contains only its original five
+boards. Page membership was verified from both page roots.
+
 | Board | Review focus |
 | --- | --- |
 | A01 | 1440 × 900 workspace; 440 px Agent panel docked on the right |
 | A02 | 1060 × 800 window; 332 px Agent tab in the right inspection group |
-| A03 | 960 × 820 panel; 240 px project task list and independent conversation |
+| A03 | 960 × 820 panel; 240 px task list and a compact New task runtime menu |
 | A04 | Another window's read-only view, saved draft and idle Take over |
-| A05 | Native permission choices, another task running, editable next draft |
-| A06 | Explicit Resume after Host restart, unconfirmed turn and history gap |
+| A05 | Native permission choices attached to their tool activity; editable next draft |
+| A06 | Resume in the task header; concise unconfirmed-turn and history-gap disclosures |
 | A07 | Closed panel, persistent top-bar badge and task reminder popover |
-| A08 | New task runtime/model/reasoning selection before any connection |
-| A09 | Task actions, archive, stop/takeover, draft conflict, uncertain submission and history sources |
+| A08 | Empty task ready for input, with model/reasoning controls inside the composer |
+| A09 | Read-only conversation after the control window is lost; Stop Agent and take over |
 
 The proposed single-instance **Agent** panel uses the Studio panel chrome, Inter,
 white content surfaces, restrained borders and the existing semantic colors.
@@ -773,7 +780,10 @@ an explicit running/waiting status; there is no second-turn send queue. Read-onl
 views show the saved draft without editable controls. Local conflicts retain a
 separate copy. An old acknowledgement cannot erase later edits.
 
-**Create task** stores a task/draft; first send creates its native connection.
+**New task** opens a small runtime menu. Selecting a runtime creates the task/draft
+with its remembered model defaults and opens the empty conversation. The user can
+adjust model/reasoning in the composer before sending; there is no separate setup
+form or second Create confirmation. First send creates the native connection.
 The first user message supplies the default title without a naming request.
 Rename, Archive, Unarchive and Session details are local task-management actions.
 Archiving preserves the task, draft and history; unarchiving does not reconnect.
@@ -782,14 +792,16 @@ diagnostic **Test** and manual MCP configuration. Daily chat moves to the panel.
 Opening the panel reads task state without scanning CLIs or sending model requests.
 
 Native permission labels and order are preserved; the Codex file-change example
-uses the currently supplied Allow once / Decline choices. Pending permissions
+places Allow once / Decline directly under the tool title and target file, without
+a separate permission explainer card. Pending permissions
 remain visible in other task rows and the top-bar reminder. Idle takeover requires
 no pending permission or submission. If the original window is unreachable while
 running, **Stop Agent and take over** waits for confirmed native quiet or safe
 recovery. An unconfirmed stop keeps the task read-only and never starts a second
 writer. Stopping an Agent does not establish cancellation or rollback of R work.
 
-Resume reconnects the recorded native session explicitly and sends no prompt.
+Resume sits in the disconnected task's header; the conversation remains visible.
+It reconnects the recorded native session explicitly and sends no prompt.
 Unconfirmed creation/submission displays a status check for the original request,
 not a resend action. Missing native sessions or capabilities get a specific reason;
 a separate New task is explicit. Agent context and R memory remain distinct.
@@ -797,6 +809,13 @@ Codex history is native and paginated, Kimi history is native context replay wit
 possible omissions, and DeepSeek displays the bounded Rho observation cache.
 History gaps and unresolved old turns stay visible. Native history, display cache
 and verified scientific results must retain their separate identities.
+Use short cues such as **Last turn unconfirmed**, **Earlier messages unavailable**
+and **R session changed**, with a disclosure for the native identity, history source,
+receipt and scientific-context details. Read-only ownership and Take over belong
+in the task header; preserve the saved draft as read-only content below. Do not
+replace conversations with recovery instructions or put backend guarantees into
+routine task controls. These presentation changes do not relax the underlying
+identity, persistence, recovery or single-writer requirements.
 
 Screenshot review covered all nine boards for spacing, type, contrast, alignment
 and clipping. This is static design inspection, not browser behavior, keyboard,

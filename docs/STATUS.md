@@ -8,9 +8,13 @@ The user's first-version task plan now has nine editable
 [Paper review boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2):
 normal/right-docked and narrow/inspection-tab layouts, wide multi-task navigation,
 read-only ownership, native permissions, explicit resume, closed-panel reminders,
-New task and management/recovery details. The proposed interaction is recorded in
+direct composition for New task, and stop/takeover after window loss. The revised
+proposal removes the setup form and instructional cards; concise states and actions
+stay with the task or tool, while details are disclosed on demand. All nine boards
+were verified on the independent Agent page, and the general workspace page has
+only its original five boards. The proposed interaction is recorded in
 [Design section 13](RHO-DESIGN.md#13-workspace-agent-tasks--proposed-for-review).
-All boards received static screenshot inspection. **User review is pending; no
+The revised boards received static screenshot inspection. **User review is pending; no
 task storage, panel or native-resume implementation is claimed.** The next step
 is to review these boards before substantial Studio implementation. Existing Hosts,
 R sessions and native settings were not changed. This design-only work adds no

@@ -242,6 +242,24 @@ installation of a product-specific connection component through `dsh`. This exte
 the same direct-use interaction to another native Agent runtime. The reference's
 installation text does not authorize modifying that other product's configuration.
 
+### F11 — Agent work must not become a configuration manual
+
+**User feedback (2026-09-09):** The user rejected the first workspace Agent task
+proposal because actions and long explanations were crowded into popup/card
+surfaces. This repeats the instructional-interface problem in F09. They also
+found the Agent boards on the general high-fidelity workspace Paper page instead
+of an independent Agent page. The new page had been created without switching
+the write target; its existence and link did not establish board ownership.
+
+The main surface should support choosing a task, reading messages and acting.
+New task should lead directly to composition; model controls belong with the
+composer. Permission choices belong beside the actual tool activity. Recovery
+and ownership need a concise state and a relevant action, with detailed evidence
+available on demand. Backend rules belong in the specification, not explanatory
+cards that users must read before working. Verify actual page membership when
+delivering a Paper link. The revised proposal is in Design section 13 and still
+requires user review; screenshot inspection does not approve its usability.
+
 ## Workflow reference: a country development analysis
 
 The supplied tutorial follows a complete project using gapminder: import, clean,
