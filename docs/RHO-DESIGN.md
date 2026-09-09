@@ -696,7 +696,7 @@ existing visual tokens.
 
 After trying the manual flow, the user explicitly requested direct local CLI use
 and native model selection on 2026-09-09. The approved visual hierarchy remains;
-the primary cards now discover installed Codex and Kimi, show their native model
+the primary cards now discover installed Codex, Kimi and DeepSeek Harness, show their native model
 and reasoning choices, and connect to the current project/window without clipboard
 steps. **Test** connects if needed and sends a minimal response check. A connected
 card accepts the user's task and displays streamed native replies and activity.
@@ -709,6 +709,14 @@ native CLI. The model list reflects its advertised configuration, while **Test**
 establishes whether the chosen service responds. User configuration is not edited.
 **Advanced: manual MCP setup** retains configuration copying for other clients.
 Copying setup alone never establishes a successful connection.
+
+DeepSeek Harness uses the same card and conversation controls. If its compatible
+ACP runtime is missing, **Install connection component** explicitly adds an isolated
+official runtime for Rho. Show the installation state and errors, with a bounded
+timeout and explicit retry. Visiting the page or pressing Rescan must not install
+software. Native grouped model choices retain opaque identities internally while
+the selector displays human-readable names. Permission prompts use the corresponding
+native tool-call title even when the permission frame only supplies a tool-call ID.
 
 The Connections tab uses the existing Host-scoped observations: keep configuration
 copied, MCP initialized and successful overview/window responses distinct. Client

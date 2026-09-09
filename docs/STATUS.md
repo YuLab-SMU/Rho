@@ -2,86 +2,75 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
-## Current work: direct native Agent use
+## Current work: native Codex, Kimi and DeepSeek Harness
 
-The user approved the revised [Paper settings design](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)
-on 2026-09-09, then reported that manual configuration and two clipboard steps
-made actual Kimi setup too slow. Studio now offers direct Codex app-server and
-Kimi ACP connections in that settings surface. It reads native model/reasoning
-choices, supplies the current project/window and Rho MCP connection, and accepts
-user tasks with streamed responses and native permission choices. **Test** connects
-and requests a minimal response. **Advanced: manual MCP setup** remains available
-for other clients. No CLI user configuration is edited.
+Studio's approved [Agent settings design](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)
+now supports Codex app-server, Kimi ACP and DeepSeek Harness ACP. The cards expose
+native model/reasoning choices, connect the current project and Studio window,
+and accept user tasks without configuration or prompt copying. They show native
+responses, tool activity, permissions, uncertainty and disconnected-session evidence.
+Manual MCP setup remains an advanced option. Rho does not add an Agent behavior loop.
 
-Rho is a native protocol client, not an Agent behavior loop. The CLI owns login,
-provider execution, conversation history and permission semantics. Model discovery
-does not submit a model task, and a listed model is not evidence that its account
-or quota is usable. The live conversation display is bounded; scientific actions
-still return through the shared MCP/Host owners. Window/project fencing and request
-identities protect against stale views and duplicate submissions after lost HTTP
-acknowledgements. Native uncertainty remains explicit.
+DeepSeek's installed user launcher was `0.1.1-rc.2`, which lacks ACP. **Install
+connection component** adds isolated official DSH/ACP packages pinned at
+`0.1.2-alpha.2` under Rho's application-data directory. It does not upgrade the
+user launcher or install during discovery. Each native launch copies only bounded
+`settings.yaml` and `.credentials.yaml` files into a private temporary home. This
+allows the newer native credential provider to convert its own copy without
+changing the original. Temporary copies are removed on close or cancellation;
+native conversation/attachment storage remains in a versioned component data area.
+Other products' profiles and `.env` files are not copied.
 
-The rescue review found an automatic model-discovery retry after every failed
-poll, historical connections exhausting the active-session budget, and native
-setup depending on the lifetime of one HTTP request. These are fixed with
-bounded discovery, explicit rescan, active-session accounting and owned setup
-completion. Closed native transports retain their diagnostic and session identity
-without being reused. The frozen scientific acceptance below is unchanged.
-
-The original local experience project at `target/experience/agent-playground`
-contains the fixed 1,704-row Gapminder CSV, attribution and `01_explore.R`. Its
-base-R analysis produced a 142-country view, continent summary and scatter plot.
-The original live Host and R memory have been preserved. Inspect live ownership
-before starting or replacing a Host for this project; private runtime files stay
-in the ignored experience runtime directory.
+Three-provider discovery is serialized and does not retry indefinitely. DeepSeek
+can publish configured providers after its first session response; a bounded
+750 ms startup collection retains native `config_option_update` notifications
+even before a visible session exists. A separate keyless Host probe after this
+fix returned all 64 models in 1.80 s, including the configured 115 NewAPI model. Setup is
+explicit, has a three-minute installation deadline, and survives a lost HTTP
+acknowledgement through owned, idempotent installation. DeepSeek's grouped model
+options retain their opaque IDs while the UI displays native names. Permission
+frames that contain only a tool-call ID are associated with that native call's
+observed title/input. Tool activity separates progress speech from a subsequent
+assistant response without dropping either message.
 
 Current verification:
 
-- Native Agent client: 7 Rust tests; Workbench: 10 Rust tests. Protocol fixtures
-  cover permission decisions, reply streaming, credential redaction, output bounds,
-  repeated model cursors, timeout uncertainty, closed transports, active capacity
-  and setup surviving a lost HTTP waiter.
-- Frontend: 284 unit tests, typecheck and 24 boundary fixtures passed. The complete
-  Chrome run passed 27 existing cases; the new native case initially exposed a
-  macOS canonical-path mismatch in its fixture. After using the Host's real root,
-  that case passed separately, covering all 28 cases. It verifies native model and
-  reasoning selection, Test, direct tasks, streaming, permission choices,
-  disconnection and zero clipboard steps. Normal and 600 px constrained screenshots
-  under `target/studio-browser/native-agents-*` were inspected.
-- Generated contracts, embedded assets, `cargo build --locked`, affected strict
-  Clippy/format, architecture, governance and Agent harness self-tests passed.
-  Real Workbench and MCP scripts with `--real-r` passed. An initial non-escalated
-  MCP invocation could not bind loopback (`EPERM`); the authorized run passed.
-- Explicitly authorized live tests used Codex `gpt-6-astra` and Kimi's configured
-  `115-newapi/deepseek-v4-flash`, only in disposable projects. Codex advertised six
-  native models, connected in 1.49 s and replied `ok` in 4.61 s. Kimi advertised
-  85 native choices, connected in 2.64–2.66 s and replied `ok` in 31–44 s in the
-  final runs. This provider latency is separate from local setup. Duplicate test
-  request identities did not replay the model task; user configuration hashes
-  remained unchanged in both completed runs.
+- Native Agent client: **14 Rust tests**; Workbench: **11 Rust tests**; frontend:
+  **288 unit tests**. Typecheck, generated bindings/assets, current binary, strict
+  affected Clippy/format, architecture and frontend ownership checks passed.
+- The focused Chrome Agent settings cases passed **2/2**, covering manual fallback
+  and all three native providers, explicit component setup, models/reasoning,
+  Test, native permission choices, direct tasks, disconnection, window scope and
+  zero clipboard setup. Normal and 600 px constrained DeepSeek setup/conversation
+  screenshots were inspected under `target/studio-browser/agents-native-*`.
+- First real DeepSeek run installed the component in 68.8 s, advertised 64 native
+  model choices, connected in 2.27 s and returned `ok` in 7.16 s using
+  `115-newapi/deepseek-v4-flash`. It then actually read the Rho overview and returned
+  the correct directory name. Its initial assertion failed because progress speech
+  and the final answer were concatenated. The protocol view and smoke test now
+  preserve that tool boundary. The final real trial **passed**: 2.10 s connection,
+  16.06 s `ok` response, and a verified native MCP overview with correct project
+  name in 27.40 s. Duplicate requests did not replay. Original native settings
+  and credential hashes were unchanged. Both logs are retained at
+  `target/agent-integration/deepseek-native-acceptance.log` and
+  `target/agent-integration/deepseek-native-final.log`.
 
-The first exact long-path answer assertion failed. Native Kimi history contains
-that same shortened answer even though its MCP tool result contains the full
-correct path and the provider reports `end_turn`. Rho did not lose reply chunks.
-This remains a model-answer failure, not a successful scientific conclusion; no
-adapter reconstructs the missing text. Its log remains in
-`target/agent-integration/native-acceptance.log`. The reproducible native transport
-smoke script now requests the short directory name while still requiring a new
-observed MCP overview read. That Kimi rerun returned `ok`, then reached the
-120-second MCP-task deadline after the native permission response; it stopped
-without retry and cleaned up its temporary processes. The result is retained in
-`target/agent-integration/native-acceptance-kimi-short.log`. Full Kimi model-based
-acceptance is therefore **not passed**. Native connection and real MCP delivery
-are established, but this configured model's complete response remains unreliable.
-No further provider retries are scheduled. Scientific reasoning acceptance remains
-separate from these connection checks.
+The earlier Codex live test (`gpt-6-astra`) connected in 1.49 s and replied `ok`
+in 4.61 s. Earlier Kimi tests established native MCP delivery, but the configured
+DeepSeek service also returned an incomplete long path and timed out on another
+read-only task. Those failures remain in `target/agent-integration/native-acceptance*`;
+full Kimi model acceptance is not passed and has not been silently retried here.
+Model/provider response quality remains distinct from protocol delivery and from
+the frozen scientific acceptance below.
 
-A new independent project, `target/experience/agent-direct-playground`, is open
-with the native connection UI. Its sample script was run through Studio, producing
-Gapminder objects and a plot. Kimi is connected to that window with the user's
-selected DeepSeek model, ready for a task. Runtime ownership and private launch
-material stay in `target/experience/agent-direct-playground-runtime`; inspect it
-before any replacement. The original experience Host and R memory were not restarted.
+Existing `target/experience/agent-playground`, `agent-direct-playground` and
+`agent-harness-playground` Hosts and R memory are preserved. Automatic approval
+rejected restarting the last instance because it already contained sample R
+objects; that restart did not run. A new independent `target/experience/deepseek-ready`
+project hosts the final build with the configured DeepSeek Harness model selected.
+Its sample data and script are available; existing R objects remain in the earlier
+instances. Private launch/runtime directories remain next to
+the projects. Inspect current process and work ownership before any replacement.
 
 ## Agent interface acceptance baseline
 

@@ -7,6 +7,7 @@ use ts_rs::TS;
 pub enum AgentProvider {
     Codex,
     Kimi,
+    Deepseek,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -26,6 +27,13 @@ pub struct LocalAgent {
     pub selected_effort: Option<String>,
     pub discovery_ms: u64,
     pub error: Option<String>,
+    pub setup_required: bool,
+}
+#[derive(Debug, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SetupAgent {
+    pub project_root: String,
+    pub provider: AgentProvider,
 }
 #[derive(Debug, Deserialize, TS)]
 #[serde(deny_unknown_fields)]

@@ -23,7 +23,7 @@ responds to requested operations; it does not infer a new goal, construct an Age
 plan, run a competing behavior loop or introduce a second approval decision.
 Conversation content is not an authority source or a parallel Rho database.
 Scientific requests use MCP. The optional local CLI client uses Codex app-server
-or Kimi ACP to discover native models, open a native session, submit a user turn
+or Kimi/DeepSeek Harness ACP to discover native models, open a native session, submit a user turn
 and relay native output and permission choices. It supplies the current Host's
 MCP connection for that session without editing the CLI's user configuration.
 The CLI retains authentication, model execution, conversation history and Agent
@@ -38,6 +38,15 @@ selected native response is forwarded unchanged. Stopping or disconnecting the
 Agent does not prove that already accepted scientific work stopped or rolled back.
 The local MCP credential is passed privately to the owned CLI process and excluded
 from browser session snapshots and diagnostic output.
+
+DeepSeek's older launcher lacks ACP. Explicit setup can add a versioned official
+DSH/ACP runtime under Rho's application-data directory without replacing the
+user's `dsh`. Discovery never installs it. Each launch uses a private temporary
+home with bounded copies of native settings and credentials, because the newer
+native credential provider may convert the old format on startup. Only the copy
+may change; it is removed when the owned client closes. Native session, storage
+and attachment providers point at separate persistent component data. Rho does
+not import other products' profiles or implement a credential migration itself.
 
 ## Request paths
 
@@ -534,7 +543,7 @@ and runtime acquisition remain separate from read-only package inspection.
 | `crates/application`, `skills` | Application context/control and method/source ports, separate from scientific execution |
 | `crates/adapters/` | SQLite, Git, R, package, process and SSH/Slurm implementations |
 | `crates/host` | Concrete composition and runtime configuration |
-| `crates/agent-client` | Bounded native Codex app-server / Kimi ACP client; no scientific handlers or Agent behavior loop |
+| `crates/agent-client` | Bounded native Codex app-server / Kimi and DeepSeek ACP clients; no scientific handlers or Agent behavior loop |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
 | `r/bridge`, `r/environment` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |

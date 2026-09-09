@@ -232,6 +232,7 @@ export class Studio {
     this.nativeAgents = new NativeAgents({ context: this.session.context,
       window: () => this.application.getSnapshot().online ? this.application.window : null,
       discover: request => client.discoverAgent(request), connect: request => client.connectAgent(request),
+      setup: request => client.setupAgent(request),
       sessions: () => client.nativeAgentSessions(), action: request => client.nativeAgentAction(request),
       schedule: () => this.coordinator.wake("native-agents") });
 

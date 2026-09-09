@@ -16,18 +16,26 @@ import type { AgentClientAction } from "../src/generated/AgentClientAction";
 import type { ConnectAgent } from "../src/generated/ConnectAgent";
 import type { DiscoverAgent } from "../src/generated/DiscoverAgent";
 import type { LocalAgent } from "../src/generated/LocalAgent";
+import type { SetupAgent } from "../src/generated/SetupAgent";
 
-function nativeAgentCatalog(request: DiscoverAgent): LocalAgent {
+const deepseekChatModel = '["configured","deepseek-chat"]';
+const deepseekReasonerModel = '["configured","deepseek-reasoner"]';
+
+function nativeAgentCatalog(request: DiscoverAgent, setup_required = false): LocalAgent {
   const codex = request.provider === "codex";
+  const deepseek = request.provider === "deepseek";
   return {
-    provider: request.provider, executable: codex ? "/fixture/bin/codex" : "/fixture/bin/kimi", version: codex ? "0.153.4" : "0.41.0",
+    provider: request.provider, executable: codex ? "/fixture/bin/codex" : deepseek ? "/fixture/bin/dsh" : "/fixture/bin/kimi", version: codex ? "0.153.4" : deepseek ? "0.1.0" : "0.41.0",
     models: codex ? [
       { id: "native-balanced", name: "Native Balanced", efforts: ["low", "high"], default_effort: "low" },
       { id: "native-detailed", name: "Native Detailed", efforts: ["medium", "high"], default_effort: "medium" },
+    ] : deepseek ? [
+      { id: deepseekChatModel, name: "DeepSeek Chat", efforts: [], default_effort: null },
+      { id: deepseekReasonerModel, name: "DeepSeek Reasoner", efforts: [], default_effort: null },
     ] : [{ id: "configured/flash", name: "Configured Flash", efforts: [], default_effort: null }],
-    selected_model: request.model ?? (codex ? "native-balanced" : "configured/flash"),
+    selected_model: request.model ?? (codex ? "native-balanced" : deepseek ? deepseekChatModel : "configured/flash"),
     selected_effort: codex ? request.model === "native-detailed" ? "medium" : "low" : null,
-    discovery_ms: 150, error: null,
+    discovery_ms: 150, error: null, setup_required,
   };
 }
 
@@ -1987,8 +1995,9 @@ test("Agent settings share the current Host, protect setup credentials and prese
   expect(errors).toEqual([]);
 });
 
-test("Native Agent settings select CLI models, test and send tasks without copying setup", async ({ page }) => {
+test("Native Agent settings select Codex, Kimi and DeepSeek models without copying setup", async ({ page }) => {
   const errors: string[] = [], connections: ConnectAgent[] = [], actions: AgentClientAction[] = [];
+  const installations: SetupAgent[] = []; let deepseekInstalled = false;
   const clients = new Map<string, AgentClientSession>();
   const project = (await (await api("/api/info")).json()).project_root as string;
   page.on("pageerror", e => errors.push(e.message));
@@ -2001,7 +2010,13 @@ test("Native Agent settings select CLI models, test and send tasks without copyi
   await page.route("**/api/agents/discover", route => {
     const request = route.request().postDataJSON() as DiscoverAgent;
     expect(request.project_root).toBe(project);
-    return route.fulfill({ json: nativeAgentCatalog(request) });
+    return route.fulfill({ json: nativeAgentCatalog(request, request.provider === "deepseek" && !deepseekInstalled) });
+  });
+  await page.route("**/api/agents/setup", route => {
+    const request = route.request().postDataJSON() as SetupAgent;
+    expect(request).toEqual({ project_root: project, provider: "deepseek" });
+    installations.push(request); deepseekInstalled = true;
+    return route.fulfill({ json: nativeAgentCatalog({ ...request, model: null }) });
   });
   await page.route("**/api/agents/sessions", route => route.fulfill({ json: [...clients.values()] }));
   await page.route("**/api/agents/connect", route => {
@@ -2055,13 +2070,33 @@ test("Native Agent settings select CLI models, test and send tasks without copyi
   const settings = page.getByRole("dialog", { name: "Settings", exact: true });
   const codex = settings.getByRole("article", { name: "Codex connection", exact: true });
   const kimi = settings.getByRole("article", { name: "Kimi CLI connection", exact: true });
+  const deepseek = settings.getByRole("article", { name: "DeepSeek Harness connection", exact: true });
   await expect(codex.getByRole("combobox", { name: "Codex model", exact: true })).toHaveValue("native-balanced");
   await expect(kimi.getByRole("combobox", { name: "Kimi CLI model", exact: true })).toHaveValue("configured/flash");
   await expect(kimi.getByRole("combobox", { name: /reasoning effort/ })).toHaveCount(0);
+  await expect(deepseek.getByRole("button", { name: "Install connection component", exact: true })).toBeEnabled();
+  await expect(deepseek.getByText("Adds an isolated DeepSeek ACP runtime for Rho. Keeps your existing dsh installation and settings.", { exact: true })).toBeVisible();
+  expect(installations).toEqual([]);
+  await expect(deepseek.getByRole("button", { name: "Test", exact: true })).toBeDisabled();
+  await deepseek.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "../target/studio-browser/agents-native-deepseek-setup.png" });
+  await page.setViewportSize({ width: 600, height: 760 });
+  await deepseek.scrollIntoViewIfNeeded();
+  expect(await settings.locator(".settings-main").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.screenshot({ path: "../target/studio-browser/agents-native-deepseek-setup-compact.png" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await deepseek.getByRole("button", { name: "Install connection component", exact: true }).click();
+  await expect(deepseek.getByRole("button", { name: "Install connection component", exact: true })).toHaveCount(0);
+  expect(installations).toHaveLength(1);
+  await expect(deepseek.getByRole("combobox", { name: "DeepSeek Harness model", exact: true })).toHaveValue(deepseekChatModel);
+  await expect(deepseek.getByRole("combobox", { name: /reasoning effort/ })).toHaveCount(0);
+  await expect(deepseek.locator("option:checked")).toHaveText("DeepSeek Chat");
   await expect(codex.getByText("From your CLI", { exact: true })).toBeVisible();
   await expect(kimi.getByText("Moonshot · Local CLI · 0.41.0", { exact: true })).toBeVisible();
+  await expect(deepseek.getByText("DeepSeek · Local CLI · 0.1.0", { exact: true })).toBeVisible();
   await expect(codex.getByRole("button", { name: "Connect Codex", exact: true })).toBeEnabled();
   await expect(kimi.getByRole("button", { name: "Connect Kimi CLI", exact: true })).toBeEnabled();
+  await expect(deepseek.getByRole("button", { name: "Connect DeepSeek Harness", exact: true })).toBeEnabled();
   await expect(settings.getByRole("button", { name: /Copy/ })).toHaveCount(0);
   expect(connections).toHaveLength(0); expect(actions).toHaveLength(0);
   await page.screenshot({ path: "../target/studio-browser/agents-native-models-normal.png" });
@@ -2115,9 +2150,35 @@ test("Native Agent settings select CLI models, test and send tasks without copyi
   await expect(kimi.getByRole("button", { name: "Connect Kimi CLI", exact: true })).toBeEnabled();
   await kimi.getByText("Session details", { exact: true }).click();
   await expect(kimi.getByText("native-kimi", { exact: true })).toBeVisible();
+  await deepseek.getByRole("combobox", { name: "DeepSeek Harness model", exact: true }).selectOption(deepseekReasonerModel);
+  await expect(deepseek.getByRole("combobox", { name: "DeepSeek Harness model", exact: true })).toHaveValue(deepseekReasonerModel);
+  await deepseek.getByRole("button", { name: "Test", exact: true }).click();
+  await expect(deepseek.getByRole("status")).toHaveText("Agent working");
+  expect(connections.at(-1)).toMatchObject({ provider: "deepseek", model: deepseekReasonerModel, effort: null, project_root: project });
+  const deepseekClient = clients.get("fixture-deepseek")!;
+  deepseekClient.messages.push({ role: "assistant", text: "ok" }); deepseekClient.state = "ready"; deepseekClient.elapsed_ms = 1100;
+  await expect(deepseek.getByRole("status")).toHaveText("Session ready");
+  await expect(deepseek.locator(".native-message.assistant small")).toHaveText("DeepSeek Harness");
+  await expect(deepseek.locator(".native-message.assistant pre")).toHaveText("ok");
+  await deepseek.getByRole("textbox", { name: "Ask about this workspace" }).fill("Read the current workspace overview.");
+  await deepseek.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(deepseek.getByRole("status")).toHaveText("Your Agent is waiting for permission");
+  await deepseek.getByRole("button", { name: "Allow once", exact: true }).click();
+  await expect(deepseek.getByRole("status")).toHaveText("Agent working");
+  deepseekClient.messages.push({ role: "assistant", text: "Workspace ready · 中文项目" }); deepseekClient.state = "ready"; deepseekClient.elapsed_ms = 1900;
+  await expect(deepseek.getByRole("status")).toHaveText("Session ready");
+  await expect(deepseek.locator(".native-message.assistant pre").last()).toHaveText("Workspace ready · 中文项目");
+  await deepseek.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "../target/studio-browser/agents-native-deepseek-response.png" });
+  await page.setViewportSize({ width: 600, height: 760 });
+  expect(await settings.locator(".settings-main").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await deepseek.locator(".native-message.assistant pre").last().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "../target/studio-browser/agents-native-deepseek-compact.png" });
+  await deepseek.getByRole("button", { name: "Disconnect", exact: true }).click();
+  await expect(deepseek.getByRole("status")).toHaveText("Agent disconnected");
   const windowId = await page.evaluate(() => sessionStorage.getItem("rho-window-id"));
   expect(connections.every(request => request.window.window_id === windowId)).toBe(true);
-  expect(actions.map(request => request.action.kind)).toEqual(["test", "prompt", "decision", "disconnect"]);
+  expect(actions.map(request => request.action.kind)).toEqual(["test", "prompt", "decision", "disconnect", "test", "prompt", "decision", "disconnect"]);
   expect(JSON.stringify({ connections, actions })).not.toContain("Bearer");
   expect((await queryNative("operation.events_checkpoint")).data.sequence).toBe(checkpoint);
   expect(errors).toEqual([]);

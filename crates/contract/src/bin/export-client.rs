@@ -18,6 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     WorkbenchInfo::export_all(&config)?;
     LocalAgent::export_all(&config)?;
     DiscoverAgent::export_all(&config)?;
+    SetupAgent::export_all(&config)?;
     ConnectAgent::export_all(&config)?;
     AgentClientAction::export_all(&config)?;
     AgentClientSession::export_all(&config)?;

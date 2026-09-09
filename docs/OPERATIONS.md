@@ -189,7 +189,7 @@ connection, and closing it does not cancel accepted work. New project/R Hosts
 start fresh observations.
 
 Open **Agents** in the Studio app bar or **Session → Agent Settings…**. The settings
-page keeps the scientific workspace mounted. Installed Codex and Kimi CLIs expose
+page keeps the scientific workspace mounted. Installed Codex, Kimi and DeepSeek Harness CLIs expose
 their own model list and supported reasoning choices. Select a model and click
 **Connect**, or **Test** to connect and request a minimal `ok` response. Then enter
 a task in the connected card. The current project, window and Rho MCP connection
@@ -203,12 +203,26 @@ remain native decisions and appear as buttons in the conversation. **Stop Agent*
 requests interruption; **Disconnect** closes the owned native client. Neither
 implies cancellation or rollback of work already accepted by Rho.
 
-Codex uses app-server; Kimi uses ACP. Settings and conversation history remain
+Codex uses app-server; Kimi and DeepSeek Harness use ACP. Settings and conversation history remain
 with the native CLI. Rho keeps a bounded live display and does not write the
 CLI's user configuration. New turns require the current synchronized window.
 After an uncertain response, inspect the retained native session instead of
 resubmitting the same task. A lost connection acknowledgement reuses its original
 request identity.
+
+For an older DeepSeek launcher without ACP, choose **Install connection component**
+once. Rho installs pinned official `@deepseek-ai/dsh` and `dsh-acp-app` packages
+(`0.1.2-alpha.2`) in its application-data `rho/agent-components` directory. The
+global `dsh` is unchanged. Node.js and npm must already be installed. Setup has a
+three-minute npm timeout, retains the package lock, and is safe to retry after a
+lost HTTP acknowledgement. No package installation runs merely to discover models.
+
+DeepSeek launches with private copies of `settings.yaml` and `.credentials.yaml`
+from `DSH_HOME` (default `~/.dsh`). Its native loader may update these temporary
+copies to its current format; originals are preserved. The component does not copy
+other profiles or `.env` files. Native conversations and attachments remain under
+the versioned component data directory after temporary configuration is removed.
+`RHO_AGENT_COMPONENTS_DIR` selects an absolute component root for isolated tests.
 
 For an external client, open **Advanced: manual MCP setup**. The preview masks the
 token; the explicitly copied block contains the actual local credential. Reload

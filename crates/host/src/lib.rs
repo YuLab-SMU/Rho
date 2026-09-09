@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-pub use rho_agent_client::{ExternalAgentClient, discover_agent};
+pub use rho_agent_client::{ExternalAgentClient, discover_agent, install_deepseek_component};
 mod application;
 mod discovery;
 mod observer;

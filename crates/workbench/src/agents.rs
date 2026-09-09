@@ -8,8 +8,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use rho_contract::{
-    AgentAction, AgentClientAction, ApplicationWindowRef, ConnectAgent, DiscoverAgent, HostRequest,
-    QueryRequest,
+    AgentAction, AgentClientAction, AgentProvider, ApplicationWindowRef, ConnectAgent,
+    DiscoverAgent, HostRequest, QueryRequest, SetupAgent,
 };
 use rho_host::{ExternalAgentClient, NextHost};
 use serde_json::{Value, json};
@@ -158,6 +158,43 @@ pub(super) async fn discover(
     let result =
         rho_host::discover_agent(request.provider, &selected.root, request.model.as_deref()).await;
     Json(result).into_response()
+}
+pub(super) async fn setup(
+    State(state): State<AppState>,
+    Json(request): Json<SetupAgent>,
+) -> Response {
+    if request.provider != AgentProvider::Deepseek {
+        return failure(
+            StatusCode::BAD_REQUEST,
+            "This Agent has no Rho-managed connection component",
+        );
+    }
+    let (host, root) = {
+        let hosting = state.hosting.read().await;
+        let Some(selected) = &hosting.selected else {
+            return failure(StatusCode::CONFLICT, "Select a project first");
+        };
+        if selected.root.to_str() != Some(&request.project_root) {
+            return failure(StatusCode::CONFLICT, "Project changed");
+        }
+        (selected.host.clone(), selected.root.clone())
+    };
+    // Explicit setup owns its work even if an HTTP acknowledgement is lost.
+    // The installer is idempotent and serializes concurrent setup requests.
+    let result = tokio::spawn(async move {
+        let _host = host;
+        rho_host::install_deepseek_component().await?;
+        Ok::<_, String>(rho_host::discover_agent(AgentProvider::Deepseek, &root, None).await)
+    })
+    .await;
+    match result {
+        Ok(Ok(agent)) => Json(agent).into_response(),
+        Ok(Err(error)) => failure(StatusCode::BAD_GATEWAY, error),
+        Err(_) => failure(
+            StatusCode::BAD_GATEWAY,
+            "Connection setup could not complete",
+        ),
+    }
 }
 pub(super) async fn connect(
     State(state): State<AppState>,

@@ -7,10 +7,13 @@ import type { AgentClientSession } from "./generated/AgentClientSession";
 import type { AgentAction } from "./generated/AgentAction";
 import type { ConnectAgent } from "./generated/ConnectAgent";
 
+const providers = ["codex", "kimi", "deepseek"] as const;
+
 /** Explicit native Agent actions and bounded projections; never chooses a task. */
 export class NativeAgents extends Model<{
   catalog: Readonly<Partial<Record<AgentProvider, LocalAgent>>>;
   loading: Readonly<Partial<Record<AgentProvider, boolean>>>;
+  installing: AgentProvider | null;
   connecting: AgentProvider | null;
   sessions: readonly AgentClientSession[];
   error: string;
@@ -19,34 +22,57 @@ export class NativeAgents extends Model<{
   private loading: Partial<Record<AgentProvider, boolean>> = {};
   private sessions: AgentClientSession[] = [];
   private connecting: AgentProvider | null = null;
+  private installing: AgentProvider | null = null;
   private error = "";
   private visible = false;
   private generation = 0;
-  private revisions = { codex: 0, kimi: 0 };
-  private discovered = { codex: false, kimi: false };
+  private revisions = { codex: 0, kimi: 0, deepseek: 0 };
+  private discovered = { codex: false, kimi: false, deepseek: false };
+  private discoveryQueue: Promise<void> = Promise.resolve();
   private reading = false;
   private actionRevision = 0;
   private pendingConnect: ConnectAgent | null = null;
   private pendingTests = new Map<string, string>();
   constructor(private ports: NativeAgentPorts) { super(); }
-  protected readSnapshot() { return { catalog: Object.freeze({ ...this.catalog }), loading: Object.freeze({ ...this.loading }), connecting: this.connecting, sessions: Object.freeze([...this.sessions]), error: this.error }; }
+  protected readSnapshot() { return { catalog: Object.freeze({ ...this.catalog }), loading: Object.freeze({ ...this.loading }), installing: this.installing, connecting: this.connecting, sessions: Object.freeze([...this.sessions]), error: this.error }; }
   show() { this.visible = true; this.ports.schedule(); this.discoverInitial(); }
   hide() { this.visible = false; }
-  reset() { this.generation++; this.catalog = {}; this.loading = {}; this.discovered = { codex: false, kimi: false }; this.sessions = []; this.connecting = null; this.reading = false; this.pendingConnect = null; this.pendingTests.clear(); this.error = ""; this.publish(); }
+  reset() { this.generation++; this.catalog = {}; this.loading = {}; this.discovered = { codex: false, kimi: false, deepseek: false }; this.sessions = []; this.connecting = null; this.installing = null; this.reading = false; this.pendingConnect = null; this.pendingTests.clear(); this.error = ""; this.publish(); }
   private discoverInitial() {
-    for (const provider of ["codex", "kimi"] as const) if (!this.discovered[provider]) void this.discover(provider);
+    for (const provider of providers) if (!this.discovered[provider]) void this.discover(provider);
   }
-  async rescan() { await Promise.all([this.discover("codex"), this.discover("kimi")]); }
+  async rescan() { const generation = this.generation; for (const provider of providers) { if (generation !== this.generation) return; await this.discover(provider); } }
   async discover(provider: AgentProvider, model: string | null = null) {
     const scope = this.ports.context(), generation = this.generation, revision = ++this.revisions[provider];
     if (!scope.project || !scope.connected) return;
     this.discovered[provider] = true;
     this.loading[provider] = true; this.error = ""; this.publish();
+    const current = () => generation === this.generation && revision === this.revisions[provider] && sameScope(scope, this.ports.context());
+    // Keep one discovery in flight, leaving Host capacity for an explicit connection.
+    // Queued reads from a previous project must never launch another CLI.
+    const request = this.discoveryQueue.then(async () => {
+      try {
+        if (!current()) return;
+        const result = await this.ports.discover({ project_root: scope.project!, provider, model });
+        if (current()) this.catalog[provider] = immutable(result);
+      } catch (error) { if (current()) this.error = message(error); }
+      finally { if (generation === this.generation && revision === this.revisions[provider]) { this.loading[provider] = false; this.publish(); } }
+    });
+    this.discoveryQueue = request;
+    await request;
+  }
+  async setup(provider: AgentProvider) {
+    const scope = this.ports.context(), generation = this.generation;
+    if (!scope.project || !scope.connected || this.installing || this.connecting || this.loading[provider]) return;
+    const revision = ++this.revisions[provider];
+    this.installing = provider; this.loading[provider] = true; this.error = ""; this.publish();
     try {
-      const result = await this.ports.discover({ project_root: scope.project, provider, model });
-      if (generation === this.generation && revision === this.revisions[provider] && sameScope(scope, this.ports.context())) this.catalog[provider] = immutable(result);
-    } catch (error) { if (generation === this.generation && revision === this.revisions[provider]) this.error = message(error); }
-    finally { if (generation === this.generation && revision === this.revisions[provider]) { this.loading[provider] = false; this.publish(); } }
+      const result = await this.ports.setup({ project_root: scope.project, provider });
+      if (generation === this.generation && revision === this.revisions[provider] && sameScope(scope, this.ports.context())) {
+        this.catalog[provider] = immutable(result); this.discovered[provider] = true;
+      }
+    } catch (error) { if (generation === this.generation) this.error = message(error); }
+    finally { if (generation === this.generation) { this.installing = null; this.loading[provider] = false; this.publish(); } }
   }
   async observe() {
     if (this.visible) this.discoverInitial();

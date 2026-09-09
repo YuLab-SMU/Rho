@@ -237,6 +237,11 @@ permission waits and provider errors must be visible rather than looking like an
 indefinite setup spinner. The user subsequently reported that the implementation
 task itself appeared stuck; verification must have bounded waits and a clear end.
 
+The user next requested DeepSeek Harness on 2026-09-09, with a reference showing
+installation of a product-specific connection component through `dsh`. This extends
+the same direct-use interaction to another native Agent runtime. The reference's
+installation text does not authorize modifying that other product's configuration.
+
 ## Workflow reference: a country development analysis
 
 The supplied tutorial follows a complete project using gapminder: import, clean,

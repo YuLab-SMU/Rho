@@ -1,9 +1,11 @@
 #![forbid(unsafe_code)]
 //! Deterministic clients of external Agent protocols. No planning, tool-selection
 //! loop, scientific execution or conversation database is implemented here.
+mod deepseek;
 #[cfg(all(test, unix))]
 mod protocol_tests;
 mod rpc;
+pub use deepseek::install as install_deepseek_component;
 use rho_contract::{
     AgentClientSession, AgentMessage, AgentModel, AgentProvider, ApplicationWindowRef, LocalAgent,
 };
@@ -19,6 +21,7 @@ fn executable(provider: AgentProvider) -> Option<PathBuf> {
     let name = match provider {
         AgentProvider::Codex => "codex",
         AgentProvider::Kimi => "kimi",
+        AgentProvider::Deepseek => "dsh",
     };
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|p| {
@@ -58,25 +61,62 @@ fn option<'a>(data: &'a Value, id: &str) -> Option<&'a Value> {
         .iter()
         .find(|o| o["id"] == id)
 }
-fn kimi_models(data: &Value) -> (Vec<AgentModel>, Option<String>, Option<String>) {
+fn effort_option(provider: AgentProvider) -> &'static str {
+    if provider == AgentProvider::Deepseek {
+        "reasoning_effort"
+    } else {
+        "thinking"
+    }
+}
+fn flatten_choices<'a>(value: &'a Value, depth: usize, choices: &mut Vec<&'a Value>) {
+    if depth > 4 {
+        return;
+    }
+    for item in value.as_array().into_iter().flatten() {
+        if choices.len() >= 256 {
+            return;
+        }
+        if item["value"].is_string() {
+            choices.push(item);
+        } else {
+            flatten_choices(&item["options"], depth + 1, choices);
+        }
+    }
+}
+fn acp_models(
+    data: &Value,
+    provider: AgentProvider,
+) -> (Vec<AgentModel>, Option<String>, Option<String>) {
     let selected = option(data, "model")
         .and_then(|o| o["currentValue"].as_str())
         .map(str::to_owned);
-    let thinking = option(data, "thinking");
+    let thinking = option(data, effort_option(provider));
     let effort = thinking
         .and_then(|o| o["currentValue"].as_str())
+        .filter(|v| !v.is_empty())
         .map(str::to_owned);
     let efforts: Vec<String> = thinking
         .and_then(|o| o["options"].as_array())
         .into_iter()
         .flatten()
-        .filter_map(|v| v["value"].as_str().map(str::to_owned))
+        .filter_map(|v| {
+            v["value"]
+                .as_str()
+                .filter(|v| !v.is_empty())
+                .map(str::to_owned)
+        })
         .take(20)
         .collect();
-    let models = option(data, "model")
-        .and_then(|o| o["options"].as_array())
+    let mut choices = Vec::new();
+    flatten_choices(
+        option(data, "model")
+            .map(|o| &o["options"])
+            .unwrap_or(&Value::Null),
+        0,
+        &mut choices,
+    );
+    let models = choices
         .into_iter()
-        .flatten()
         .take(256)
         .filter_map(|m| {
             let id = m["value"].as_str()?;
@@ -156,6 +196,7 @@ pub async fn discover_agent(
         selected_effort: None,
         discovery_ms: 0,
         error: None,
+        setup_required: false,
     };
     let Some(path) = executable(provider) else {
         result.error =
@@ -163,6 +204,11 @@ pub async fn discover_agent(
         return result;
     };
     result.executable = Some(path.to_string_lossy().into_owned());
+    if provider == AgentProvider::Deepseek && !deepseek::is_installed() {
+        result.setup_required = true;
+        result.discovery_ms = start.elapsed().as_millis() as u64;
+        return result;
+    }
     let rpc = match Rpc::spawn(&path, provider, root, "").await {
         Ok(r) => r,
         Err(e) => {
@@ -187,14 +233,23 @@ pub async fn discover_agent(
                 result.selected_model = result.models.first().map(|m| m.id.clone());
             }
         } else {
-            result.version = init["agentInfo"]["version"].as_str().map(str::to_owned);
+            result.version = if provider == AgentProvider::Deepseek {
+                Some(deepseek::VERSION.into())
+            } else {
+                init["agentInfo"]["version"].as_str().map(str::to_owned)
+            };
             let mut data = rpc
                 .call("session/new", json!({"cwd":root,"mcpServers":[]}), 15)
                 .await?;
             let session = data["sessionId"]
                 .as_str()
-                .ok_or("Kimi did not return a session")?
+                .ok_or("The ACP agent did not return a session")?
                 .to_owned();
+            if provider == AgentProvider::Deepseek {
+                data["configOptions"] = rpc
+                    .initial_acp_options(&session, data["configOptions"].clone())
+                    .await;
+            }
             if let Some(model) = model {
                 let changed = rpc
                     .call(
@@ -205,7 +260,8 @@ pub async fn discover_agent(
                     .await?;
                 data["configOptions"] = changed["configOptions"].clone();
             }
-            (result.models, result.selected_model, result.selected_effort) = kimi_models(&data);
+            (result.models, result.selected_model, result.selected_effort) =
+                acp_models(&data, provider);
             rpc.call("session/close", json!({"sessionId":session}), 5)
                 .await?;
         }
@@ -287,7 +343,7 @@ impl ExternalAgentClient {
             let result=self.rpc.call("session/new",json!({"cwd":root,"mcpServers":[{"type":"http","name":"rho","url":endpoint,"headers":[{"name":"Authorization","value":format!("Bearer {token}")}]}]}),30).await?;
             let id = result["sessionId"]
                 .as_str()
-                .ok_or("Kimi did not return a session")?
+                .ok_or("The ACP agent did not return a session")?
                 .to_owned();
             self.rpc
                 .call(
@@ -300,7 +356,7 @@ impl ExternalAgentClient {
                 self.rpc
                     .call(
                         "session/set_config_option",
-                        json!({"sessionId":id,"configId":"thinking","value":effort}),
+                        json!({"sessionId":id,"configId":effort_option(self.provider),"value":effort}),
                         15,
                     )
                     .await?;
@@ -489,7 +545,7 @@ impl ExternalAgentClient {
     }
     pub async fn close(&self) {
         let s = self.snapshot();
-        if self.provider == AgentProvider::Kimi {
+        if self.provider != AgentProvider::Codex {
             let _ = self
                 .rpc
                 .call("session/close", json!({"sessionId":s.native_session_id}), 5)
@@ -514,12 +570,26 @@ mod tests {
     #[test]
     fn native_kimi_choices_preserve_aliases_and_only_assert_current_model_efforts() {
         let data = json!({"configOptions":[{"id":"model","currentValue":"provider/a","options":[{"value":"provider/a","name":"A"},{"value":"another/a","name":"A"}]},{"id":"thinking","currentValue":"low","options":[{"value":"off"},{"value":"low"}]}]});
-        let (models, model, effort) = kimi_models(&data);
+        let (models, model, effort) = acp_models(&data, AgentProvider::Kimi);
         assert_eq!(models.len(), 2);
         assert_eq!(model.as_deref(), Some("provider/a"));
         assert_eq!(effort.as_deref(), Some("low"));
         assert_eq!(models[0].efforts, vec!["off", "low"]);
         assert!(models[1].efforts.is_empty());
+    }
+    #[test]
+    fn deepseek_grouped_models_preserve_opaque_ids_and_native_efforts() {
+        let id = r#"["provider","deepseek-v4-flash"]"#;
+        let data = json!({"configOptions":[
+            {"id":"model","currentValue":id,"options":[{"name":"Provider","options":[{"name":"DeepSeek V4 Flash","value":id}]}]},
+            {"id":"reasoning_effort","currentValue":"","options":[{"value":""},{"value":"high"},{"value":"max"}]}
+        ]});
+        let (models, selected, effort) = acp_models(&data, AgentProvider::Deepseek);
+        assert_eq!(models[0].id, id);
+        assert_eq!(selected.as_deref(), Some(id));
+        assert_eq!(effort, None);
+        assert_eq!(models[0].efforts, ["high", "max"]);
+        assert_eq!(effort_option(AgentProvider::Deepseek), "reasoning_effort");
     }
     #[test]
     fn text_bounds_preserve_unicode() {

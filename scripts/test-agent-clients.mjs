@@ -10,45 +10,58 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const usage = `Usage:
   node scripts/test-agent-clients.mjs --real-model --provider codex
   node scripts/test-agent-clients.mjs --real-model --provider kimi --kimi-model MODEL --allow-overview
-  node scripts/test-agent-clients.mjs --real-model --provider all --kimi-model MODEL --allow-overview
+  node scripts/test-agent-clients.mjs --real-model --provider deepseek --deepseek-model '["PROVIDER","MODEL"]' --allow-overview
+  node scripts/test-agent-clients.mjs --real-model --provider all --kimi-model MODEL --deepseek-model '["PROVIDER","MODEL"]' --allow-overview
 
 Options:
   --real-model       Required opt-in to external model requests and CLI context.
-  --provider NAME    codex, kimi, or all (default: all).
+  --provider NAME    codex, kimi, deepseek, or all (default: all).
   --kimi-model ID    Exact configured Kimi model ID; required when testing Kimi.
-  --allow-overview   Authorize Kimi to send temporary project and R environment
-                    metadata to its model, and approve that native tool once.
+  --deepseek-model ID Exact opaque DeepSeek model ID from native discovery.
+  --allow-overview   Authorize Kimi/DeepSeek to send temporary project and R
+                    environment metadata, and approve that native tool once.
+  --setup-component Explicitly install Rho's official DeepSeek ACP component
+                    through the setup endpoint before discovery (if selected).
   --binary PATH     Built Rho executable (default: target/debug/rho).
   --help            Print this help without starting any process.
 
 Uses installed, authenticated CLIs and their native model lists. Codex uses its
 configured default model. No model service is called without --real-model.
 The test creates a disposable project and Host, checks exact 'ok' replies and
-request deduplication, and verifies Kimi actually reads Rho through native MCP.
+request deduplication, and verifies Kimi/DeepSeek read Rho through native MCP.
 It never approves other tools, retries an uncertain prompt, or edits user config.
 CLI-native context still follows your existing CLI configuration. Build Rho first.
 `;
 
 function parseOptions(argv) {
-  const options = { provider: "all", realModel: false, allowOverview: false,
+  const options = { provider: "all", realModel: false, allowOverview: false, setupComponent: false,
     binary: path.join(root, "target/debug", process.platform === "win32" ? "rho.exe" : "rho") };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--help") return { help: true };
     if (arg === "--real-model") options.realModel = true;
     else if (arg === "--allow-overview") options.allowOverview = true;
-    else if (["--provider", "--kimi-model", "--binary"].includes(arg)) {
+    else if (arg === "--setup-component") options.setupComponent = true;
+    else if (["--provider", "--kimi-model", "--deepseek-model", "--binary"].includes(arg)) {
       const value = argv[++i];
       assert.ok(value && !value.startsWith("--"), `${arg} requires a value`);
-      options[{ "--provider": "provider", "--kimi-model": "kimiModel", "--binary": "binary" }[arg]] = value;
+      options[{ "--provider": "provider", "--kimi-model": "kimiModel", "--deepseek-model": "deepseekModel", "--binary": "binary" }[arg]] = value;
     } else throw new Error(`Unknown option: ${arg}`);
   }
   assert.ok(options.realModel, "External tests require the explicit --real-model option.");
-  assert.ok(["codex", "kimi", "all"].includes(options.provider), "--provider must be codex, kimi, or all");
-  if (options.provider !== "codex") {
+  assert.ok(["codex", "kimi", "deepseek", "all"].includes(options.provider), "--provider must be codex, kimi, deepseek, or all");
+  options.providers = options.provider === "all" ? ["codex", "kimi", "deepseek"] : [options.provider];
+  if (options.providers.includes("kimi")) {
     assert.ok(options.kimiModel, "Kimi acceptance requires --kimi-model with an exact configured model ID.");
     assert.ok(options.allowOverview, "Kimi acceptance requires --allow-overview for its read-only MCP check.");
   }
+  if (options.providers.includes("deepseek")) {
+    assert.ok(options.deepseekModel, "DeepSeek acceptance requires --deepseek-model with an exact opaque native model ID.");
+    const route = JSON.parse(options.deepseekModel);
+    assert.ok(Array.isArray(route) && route.length === 2 && route.every(value => typeof value === "string" && value.length > 0),
+      "--deepseek-model must be the native JSON string containing [provider, model].");
+    assert.ok(options.allowOverview, "DeepSeek acceptance requires --allow-overview for its read-only MCP check.");
+  } else assert.ok(!options.setupComponent, "--setup-component requires --provider deepseek or all.");
   options.binary = path.resolve(options.binary);
   assert.ok(fs.existsSync(options.binary), `Build Rho first; executable missing: ${options.binary}`);
   return options;
@@ -61,10 +74,13 @@ async function run(options) {
   fs.writeFileSync(path.join(project, "README.md"), "Synthetic native Agent acceptance project. Contains no research data.\n");
   const launchFile = path.join(dir, "launch.url");
   const windowId = `agent-acceptance-${randomUUID()}`;
+  const dshHome = process.env.DSH_HOME?.trim() || path.join(os.homedir(), ".dsh");
   const watched = [...new Set([
     path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "config.toml"),
     path.join(os.homedir(), ".kimi-code/config.toml"),
     path.join(os.homedir(), ".kimi-code/mcp.json"),
+    path.join(dshHome, "settings.yaml"),
+    path.join(dshHome, ".credentials.yaml"),
   ])];
   const hashes = () => watched.map(file => fs.existsSync(file)
     ? createHash("sha256").update(fs.readFileSync(file)).digest("hex") : null);
@@ -73,7 +89,8 @@ async function run(options) {
   const cancel = () => cancellation.abort(new Error("Acceptance interrupted; cleaning up owned processes."));
   process.on("SIGINT", cancel);
   process.on("SIGTERM", cancel);
-  const maximum = setTimeout(() => cancellation.abort(new Error("Acceptance exceeded its six-minute budget.")), 360_000);
+  const budget = options.setupComponent ? 540_000 : 360_000;
+  const maximum = setTimeout(() => cancellation.abort(new Error(`Acceptance exceeded its ${budget / 60_000}-minute budget.`)), budget);
   let token = "", origin, window, sequence = 0, heartbeat, hostError, log = "";
   const clients = new Set();
   const safe = value => String(value)
@@ -129,7 +146,7 @@ async function run(options) {
   }, cleanup ? 5000 : 15_000, cleanup);
   const reply = client => {
     const lastUser = client.messages.findLastIndex(message => message.role === "user");
-    return client.messages.slice(lastUser + 1).filter(message => message.role === "assistant").map(message => message.text).join("").trim();
+    return client.messages.slice(lastUser + 1).filter(message => message.role === "assistant").at(-1)?.text.trim() || "";
   };
   const settled = async (client, requestId, { overview = false } = {}) => {
     const deadline = Date.now() + (overview ? 120_000 : 90_000);
@@ -140,13 +157,17 @@ async function run(options) {
       client = await action(client, { kind: "read" });
       assert.equal(client.last_request_id, requestId, "Native session lost the submitted request identity");
       for (const decision of client.decisions) {
+        const permissionOption = client.provider === "deepseek" ? "allow-once" : "approve_once";
+        const overviewTool = client.provider === "deepseek"
+          ? `mcp__rho__rho_host_overview_v1_${createHash("sha256").update("rho\0rho.host.overview.v1").digest("hex").slice(0, 12)}`
+          : "mcp__rho__rho_host_overview_v1";
         assert.ok(overview && options.allowOverview
-          && decision.title === "mcp__rho__rho_host_overview_v1"
-          && decision.options.some(option => option.id === "approve_once"),
+          && decision.title === overviewTool
+          && decision.options.some(option => option.id === permissionOption),
         `Unexpected native permission request: ${decision.title}; no approval was sent`);
         if (!decisions.has(decision.id)) {
           decisions.add(decision.id);
-          await action(client, { kind: "decision", id: decision.id, option: "approve_once" });
+          await action(client, { kind: "decision", id: decision.id, option: permissionOption });
           report({ provider: client.provider, phase: "approved-once", tool: decision.title });
         }
       }
@@ -187,13 +208,21 @@ async function run(options) {
       finally { renewing = false; }
     }, 5000);
 
-    for (const provider of options.provider === "all" ? ["codex", "kimi"] : [options.provider]) {
+    for (const provider of options.providers) {
+      if (provider === "deepseek" && options.setupComponent) {
+        const setupStarted = Date.now();
+        const setup = await api("/api/agents/setup", { project_root: project, provider }, 225_000);
+        assert.equal(setup.error, null, safe(setup.error));
+        assert.equal(setup.setup_required, false, "DeepSeek setup did not report a ready component");
+        report({ provider, phase: "component-setup", ms: Date.now() - setupStarted });
+      }
+      const requestedModel = provider === "kimi" ? options.kimiModel : provider === "deepseek" ? options.deepseekModel : null;
       const catalog = await api("/api/agents/discover", {
-        project_root: project, provider, model: provider === "kimi" ? options.kimiModel : null,
+        project_root: project, provider, model: requestedModel,
       }, 45_000);
       assert.equal(catalog.error, null, safe(catalog.error));
       assert.ok(catalog.models.length > 0, `${provider} returned no native models`);
-      if (provider === "kimi") assert.equal(catalog.selected_model, options.kimiModel);
+      if (requestedModel) assert.equal(catalog.selected_model, requestedModel);
       const selected = catalog.models.find(model => model.id === catalog.selected_model);
       assert.ok(selected, `${provider}'s selected model was absent from its native list`);
       const effort = selected.efforts.includes(catalog.selected_effort) ? catalog.selected_effort : selected.default_effort;
@@ -219,7 +248,7 @@ async function run(options) {
       assert.deepEqual(projection(await action(client, { kind: "read" })), projection(client), "Duplicate request replayed a native task");
       report({ provider, phase: "request-deduplication", passed: true });
 
-      if (provider === "kimi") {
+      if (provider === "kimi" || provider === "deepseek") {
         const beforeOverview = await api("/api/agent-connection");
         const served = new Map(beforeOverview.sessions.map(session => [session.connection_id, session.overview_served_at_ms]));
         const overviewId = randomUUID();
@@ -229,10 +258,10 @@ async function run(options) {
         const observed = await api("/api/agent-connection");
         const reads = observed.sessions.filter(session => session.overview_served_at_ms
           && session.overview_served_at_ms !== served.get(session.connection_id));
-        assert.ok(reads.length > 0, "Kimi did not perform a new native Rho MCP overview read");
+        assert.ok(reads.length > 0, `${provider} did not perform a new native Rho MCP overview read`);
         // This is a transport smoke check. The observed native MCP read proves
         // the connection; a short name avoids grading a long random temp path.
-        assert.equal(reply(client), path.basename(project), "Kimi did not return the temporary project directory name");
+        assert.equal(reply(client), path.basename(project), `${provider} did not return the temporary project directory name`);
         report({ provider, phase: "native-mcp-overview", actualOverviewReads: reads.length,
           project_name_matches: true, ms: client.elapsed_ms });
       }

@@ -2,4 +2,4 @@
 import type { AgentModel } from "./AgentModel";
 import type { AgentProvider } from "./AgentProvider";
 
-export type LocalAgent = { provider: AgentProvider, executable: string | null, version: string | null, models: Array<AgentModel>, selected_model: string | null, selected_effort: string | null, discovery_ms: number, error: string | null, };
+export type LocalAgent = { provider: AgentProvider, executable: string | null, version: string | null, models: Array<AgentModel>, selected_model: string | null, selected_effort: string | null, discovery_ms: number, error: string | null, setup_required: boolean, };

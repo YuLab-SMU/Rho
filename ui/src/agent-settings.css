@@ -99,6 +99,8 @@
 .native-provider-row { display: flex; align-items: center; }
 .native-provider-title { display: flex; flex: 1; min-width: 0; gap: 14px; text-align: left; padding: 0; justify-content: flex-start; }
 .kimi-mark { font-size: 27px; font-weight: 600; background: white; color: var(--agent-ink); border: 1px solid var(--agent-border); }
+.deepseek-mark { font-size: 24px; font-weight: 600; background: #edf2ff; color: #4d6bfe; border: 1px solid #dce4fa; }
+.native-setup { display: flex; flex-direction: column; gap: 14px; }
 .native-model-field { display: flex; flex-direction: column; gap: 9px; }
 .native-model-field select { width: 100%; min-width: 0; height: 42px; border: 1px solid var(--agent-border); border-radius: 7px; font-size: 13px; }
 .native-source { color: #25775b; font-size: 11px; font-weight: 400; margin-left: 8px; }

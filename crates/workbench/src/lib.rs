@@ -431,6 +431,7 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/info", get(info))
         .route("/api/agent-connection", get(agent_connection))
         .route("/api/agents/discover", post(agents::discover))
+        .route("/api/agents/setup", post(agents::setup))
         .route("/api/agents/connect", post(agents::connect))
         .route("/api/agents/sessions", get(agents::sessions))
         .route("/api/agents/action", post(agents::action))
@@ -637,6 +638,36 @@ mod tests {
         json!({"project_root":state.hosting.read().await.info().project_root, "frame":{"id":"request","request":{"method":method,"params":params}}})
     }
 
+    #[tokio::test]
+    async fn agent_component_setup_rejects_wrong_project_and_unsupported_provider() {
+        let (_temp, state, app) = fixture().await;
+        let wrong = request(
+            &app,
+            "/api/agents/setup",
+            Some(json!({"project_root":"/wrong-project","provider":"deepseek"})),
+        )
+        .await;
+        assert_eq!(wrong.status(), StatusCode::CONFLICT);
+        let root = state.hosting.read().await.info().project_root;
+        let unsupported = request(
+            &app,
+            "/api/agents/setup",
+            Some(json!({"project_root":root,"provider":"codex"})),
+        )
+        .await;
+        assert_eq!(unsupported.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            state
+                .hosting
+                .read()
+                .await
+                .selected
+                .as_ref()
+                .unwrap()
+                .host
+                .is_idle()
+        );
+    }
     #[tokio::test]
     async fn local_boundary_rejects_foreign_host_origin_and_missing_token() {
         let (_temp, _state, app) = fixture().await;

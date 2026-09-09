@@ -5,7 +5,7 @@ use rho_contract::{
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
-    path::Path,
+    path::{Path, PathBuf},
     process::Stdio,
     sync::{
         Arc, Mutex,
@@ -38,10 +38,24 @@ pub(crate) struct Rpc {
     child: AsyncMutex<Option<Child>>,
     replies: Arc<Mutex<HashMap<u64, Reply>>>,
     decisions: Arc<Mutex<DecisionReplies>>,
+    tool_calls: Mutex<Vec<(String, String, String)>>,
+    assistant_boundary: AtomicBool,
+    acp_config: Mutex<HashMap<String, Value>>,
     next: AtomicU64,
     closed: AtomicBool,
     pub buffer: Arc<Mutex<Buffer>>,
     secret: String,
+    owned_home: Option<PathBuf>,
+}
+impl Drop for Rpc {
+    fn drop(&mut self) {
+        // Cancellation can drop a metadata probe before its explicit close.
+        // Dropping the owned child requests kill before private copies are removed.
+        self.child.get_mut().take();
+        if let Some(home) = &self.owned_home {
+            let _ = std::fs::remove_dir_all(home);
+        }
+    }
 }
 
 pub(crate) fn bounded(text: &str, limit: usize) -> String {
@@ -58,13 +72,25 @@ impl Rpc {
         root: &Path,
         secret: &str,
     ) -> Result<Arc<Self>, String> {
-        let mut command = Command::new(program);
-        command
-            .arg(if provider == AgentProvider::Codex {
+        let launch = if provider == AgentProvider::Deepseek {
+            Some(crate::deepseek::prepare()?)
+        } else {
+            None
+        };
+        let mut command = if let Some(launch) = &launch {
+            let mut command = Command::new(&launch.program);
+            command.args(&launch.args).env(&launch.env.0, &launch.env.1);
+            command
+        } else {
+            let mut command = Command::new(program);
+            command.arg(if provider == AgentProvider::Codex {
                 "app-server"
             } else {
                 "acp"
-            })
+            });
+            command
+        };
+        command
             .current_dir(root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -73,9 +99,12 @@ impl Rpc {
         if provider == AgentProvider::Codex {
             command.env("RHO_AGENT_MCP_TOKEN", secret);
         }
-        let mut child = command
-            .spawn()
-            .map_err(|e| format!("Cannot start Agent: {e}"))?;
+        let mut child = command.spawn().map_err(|e| {
+            if let Some(launch) = &launch {
+                let _ = std::fs::remove_dir_all(&launch.owned_home);
+            }
+            format!("Cannot start Agent: {e}")
+        })?;
         let writer = child.stdin.take().ok_or("Agent stdin unavailable")?;
         let stdout = child.stdout.take().ok_or("Agent stdout unavailable")?;
         let mut stderr = child.stderr.take().ok_or("Agent stderr unavailable")?;
@@ -91,6 +120,9 @@ impl Rpc {
             child: AsyncMutex::new(Some(child)),
             replies: Arc::default(),
             decisions: Arc::default(),
+            tool_calls: Mutex::new(Vec::new()),
+            assistant_boundary: AtomicBool::new(false),
+            acp_config: Mutex::new(HashMap::new()),
             next: AtomicU64::new(1),
             closed: AtomicBool::new(false),
             buffer: Arc::new(Mutex::new(Buffer {
@@ -100,6 +132,7 @@ impl Rpc {
                 requests: HashMap::new(),
             })),
             secret: secret.to_owned(),
+            owned_home: launch.map(|launch| launch.owned_home),
         });
         let weak = Arc::downgrade(&rpc);
         tokio::spawn(async move {
@@ -211,6 +244,7 @@ impl Rpc {
             s.decisions.clear();
         }
         self.decisions.lock().unwrap().clear();
+        self.tool_calls.lock().unwrap().clear();
     }
     pub fn complete(&self, error: Option<String>, interrupted: bool) {
         let mut b = self.buffer.lock().unwrap();
@@ -239,6 +273,18 @@ impl Rpc {
     fn notification(&self, value: Value) {
         let method = value["method"].as_str().unwrap_or("");
         let p = &value["params"];
+        if method == "session/update" && p["update"]["sessionUpdate"] == "config_option_update" {
+            if let Some(id) = p["sessionId"].as_str() {
+                let options = &p["update"]["configOptions"];
+                if options.is_array() && options.to_string().len() <= 1024 * 1024 {
+                    let mut config = self.acp_config.lock().unwrap();
+                    if config.len() < 4 || config.contains_key(id) {
+                        config.insert(id.to_owned(), options.clone());
+                    }
+                }
+            }
+            return;
+        }
         if self.provider == AgentProvider::Codex && method == "turn/started" {
             self.buffer.lock().unwrap().turn = p["turn"]["id"].as_str().map(str::to_owned);
         }
@@ -275,11 +321,30 @@ impl Rpc {
                     ));
                 }
             }
-            (AgentProvider::Kimi, "session/update") => {
+            (AgentProvider::Kimi | AgentProvider::Deepseek, "session/update") => {
                 let update = &p["update"];
                 match update["sessionUpdate"].as_str().unwrap_or("") {
                     "agent_message_chunk" => text = update["content"]["text"].as_str(),
                     "tool_call" | "tool_call_update" => {
+                        if let Some(id) = update["toolCallId"].as_str() {
+                            let mut calls = self.tool_calls.lock().unwrap();
+                            let old = calls.iter().find(|(key, _, _)| key == id).cloned();
+                            let title = update["title"]
+                                .as_str()
+                                .map(|v| self.scrub(v))
+                                .or_else(|| old.as_ref().map(|v| v.1.clone()))
+                                .unwrap_or_default();
+                            let details = if update.get("rawInput").is_some() {
+                                bounded(&self.scrub(&update["rawInput"].to_string()), 2000)
+                            } else {
+                                old.map(|v| v.2).unwrap_or_default()
+                            };
+                            calls.retain(|(key, _, _)| key != id);
+                            if calls.len() >= 32 {
+                                calls.remove(0);
+                            }
+                            calls.push((id.to_owned(), title, details));
+                        }
                         activity = Some(format!(
                             "{} · {}",
                             update["title"].as_str().unwrap_or("Tool"),
@@ -292,7 +357,13 @@ impl Rpc {
             _ => {}
         }
         if let Some(text) = text {
-            if s.messages.last().is_none_or(|m| m.role != "assistant") {
+            if self.assistant_boundary.swap(false, Ordering::Relaxed)
+                || s.messages.last().is_none_or(|m| m.role != "assistant")
+            {
+                while s.messages.len() >= 40 {
+                    s.messages.drain(..2);
+                    s.truncated = true;
+                }
                 s.messages.push(AgentMessage {
                     role: "assistant".into(),
                     text: String::new(),
@@ -314,6 +385,9 @@ impl Rpc {
             last.text.push_str(&bounded(&text, remaining));
         }
         if let Some(activity) = activity {
+            // Native tool activity separates a progress utterance from the
+            // subsequent assistant response; neither text segment is discarded.
+            self.assistant_boundary.store(true, Ordering::Relaxed);
             if s.activity.len() == 20 {
                 s.activity.remove(0);
             }
@@ -325,11 +399,27 @@ impl Rpc {
         let params = &value["params"];
         let mut options = Vec::new();
         let title;
+        let mut details = String::new();
         if method == "session/request_permission" {
+            let observed = params["toolCall"]["toolCallId"].as_str().and_then(|id| {
+                self.tool_calls
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .find(|(key, _, _)| key == id)
+                    .cloned()
+            });
             title = params["toolCall"]["title"]
                 .as_str()
+                .or_else(|| {
+                    observed
+                        .as_ref()
+                        .map(|call| call.1.as_str())
+                        .filter(|title| !title.is_empty())
+                })
                 .unwrap_or("Agent requests permission")
                 .to_owned();
+            details = observed.map(|call| call.2).unwrap_or_default();
             for option in params["options"].as_array().into_iter().flatten().take(8) {
                 if let Some(id) = option["optionId"].as_str() {
                     options.push((
@@ -365,7 +455,10 @@ impl Rpc {
         let decision = AgentDecision {
             id,
             title: self.scrub(&title),
-            details: bounded(&self.scrub(params["command"].as_str().unwrap_or("")), 2000),
+            details: bounded(
+                &self.scrub(params["command"].as_str().unwrap_or(&details)),
+                2000,
+            ),
             options: options
                 .iter()
                 .map(|(id, (label, _))| AgentDecisionOption {
@@ -423,6 +516,17 @@ impl Rpc {
         }
         Ok(())
     }
+    pub async fn initial_acp_options(&self, session: &str, initial: Value) -> Value {
+        // DeepSeek mounts settings-backed providers asynchronously and reports
+        // the corrected catalog through standard ACP configuration updates.
+        // Collect that startup burst within a fixed, sub-second read budget.
+        tokio::time::sleep(Duration::from_millis(750)).await;
+        self.acp_config
+            .lock()
+            .unwrap()
+            .remove(session)
+            .unwrap_or(initial)
+    }
     pub async fn close(&self) {
         self.closed.store(true, Ordering::Release);
         if let Some(s) = &mut self.buffer.lock().unwrap().session {
@@ -438,6 +542,9 @@ impl Rpc {
         {
             let _ = child.kill().await;
             let _ = child.wait().await;
+        }
+        if let Some(home) = &self.owned_home {
+            let _ = std::fs::remove_dir_all(home);
         }
     }
 }

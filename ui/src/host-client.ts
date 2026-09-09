@@ -3,6 +3,7 @@ import type { SessionReply } from "./generated/SessionReply";
 import type { WorkbenchInfo } from "./generated/WorkbenchInfo";
 import type { WorkbenchAgentConnection } from "./generated/WorkbenchAgentConnection";
 import type { LocalAgent } from "./generated/LocalAgent";
+import type { SetupAgent } from "./generated/SetupAgent";
 import type { DiscoverAgent } from "./generated/DiscoverAgent";
 import type { ConnectAgent } from "./generated/ConnectAgent";
 import type { AgentClientSession } from "./generated/AgentClientSession";
@@ -115,6 +116,7 @@ export class HostClient {
   }
   agentConnection() { return this.request<WorkbenchAgentConnection>("/api/agent-connection"); }
   discoverAgent(request: DiscoverAgent) { return this.request<LocalAgent>("/api/agents/discover", request); }
+  setupAgent(request: SetupAgent) { return this.request<LocalAgent>("/api/agents/setup", request); }
   connectAgent(request: ConnectAgent) { return this.request<AgentClientSession>("/api/agents/connect", request); }
   nativeAgentSessions() { return this.request<AgentClientSession[]>("/api/agents/sessions"); }
   nativeAgentAction(request: AgentClientAction) { return this.request<AgentClientSession>("/api/agents/action", request); }

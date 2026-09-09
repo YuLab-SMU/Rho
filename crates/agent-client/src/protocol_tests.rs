@@ -13,6 +13,18 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='session/prompt'){
   count++;pending=m.id;
   send({jsonrpc:'2.0',id:'permission-1',method:'session/request_permission',params:{toolCall:{title:'Read the fixture'},options:[{optionId:'yes',name:'Allow once',kind:'allow_once'},{optionId:'no',name:'Decline',kind:'reject_once'}]}});
+ }else if(m.method==='fixture/config'){
+  send({jsonrpc:'2.0',id:m.id,result:{}});
+  setTimeout(()=>send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'native-1',update:{sessionUpdate:'config_option_update',configOptions:[{id:'model',currentValue:'configured',options:[{value:'builtin'},{value:'configured'}]}]}}}),30);
+ }else if(m.method==='fixture/segments'){
+  send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'native-1',update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'I will inspect the workspace.'}}}});
+  send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'native-1',update:{sessionUpdate:'tool_call',toolCallId:'tool-0',title:'Overview',status:'completed'}}});
+  send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'native-1',update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'study'}}}});
+  send({jsonrpc:'2.0',id:m.id,result:{}});
+ }else if(m.method==='fixture/correlated'){
+  send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'native-1',update:{sessionUpdate:'tool_call',toolCallId:'tool-1',title:'Read Rho overview',rawInput:{scope:'fixture'},status:'pending'}}});
+  send({jsonrpc:'2.0',id:'permission-2',method:'session/request_permission',params:{toolCall:{toolCallId:'tool-1'},options:[{optionId:'allow-once',name:'Allow once',kind:'allow_once'},{optionId:'reject-once',name:'Reject once',kind:'reject_once'}]}});
+  send({jsonrpc:'2.0',id:m.id,result:{}});
  }else if(m.id==='permission-1'&&m.result){
   send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'native-1',update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'ok fixture-private-token '+ '界'.repeat(100000)}}}});
   send({jsonrpc:'2.0',id:pending,result:{stopReason:'end_turn'}});
@@ -132,13 +144,56 @@ async fn native_permission_streaming_redaction_and_lost_ack_retries_preserve_one
     assert_eq!(
         client
             .rpc
-            .call("fixture/count", json!({}), 1)
+            .call("fixture/count", json!({}), 3)
             .await
             .unwrap()["count"],
         1
     );
     client.close().await;
     assert_eq!(client.snapshot().state, "disconnected");
+}
+#[tokio::test]
+async fn acp_permission_without_title_uses_its_observed_tool_call() {
+    let (_dir, client) = fixture().await;
+    client
+        .rpc
+        .call("fixture/correlated", json!({}), 2)
+        .await
+        .unwrap();
+    state(&client, "waiting_for_permission").await;
+    let snapshot = client.snapshot();
+    assert_eq!(snapshot.decisions[0].title, "Read Rho overview");
+    assert_eq!(snapshot.decisions[0].details, r#"{"scope":"fixture"}"#);
+    assert_eq!(snapshot.decisions[0].options[0].id, "allow-once");
+    client.close().await;
+}
+#[tokio::test]
+async fn native_tool_activity_separates_progress_from_the_final_response() {
+    let (_dir, client) = fixture().await;
+    client
+        .rpc
+        .call("fixture/segments", json!({}), 2)
+        .await
+        .unwrap();
+    let snapshot = client.snapshot();
+    assert_eq!(snapshot.messages.len(), 2);
+    assert_eq!(snapshot.messages[0].text, "I will inspect the workspace.");
+    assert_eq!(snapshot.messages[1].text, "study");
+    client.close().await;
+}
+#[tokio::test]
+async fn acp_catalog_updates_are_retained_before_a_ui_session_exists() {
+    let (_dir, client) = fixture().await;
+    client.rpc.buffer.lock().unwrap().session = None;
+    client
+        .rpc
+        .call("fixture/config", json!({}), 3)
+        .await
+        .unwrap();
+    let options = client.rpc.initial_acp_options("native-1", json!([])).await;
+    assert_eq!(options[0]["options"].as_array().unwrap().len(), 2);
+    assert_eq!(options[0]["currentValue"], "configured");
+    client.rpc.close().await;
 }
 #[tokio::test]
 async fn timeout_remains_uncertain_and_foreign_windows_cannot_submit() {
@@ -156,15 +211,18 @@ async fn timeout_remains_uncertain_and_foreign_windows_cannot_submit() {
     assert_eq!(
         client
             .rpc
-            .call("fixture/count", json!({}), 1)
+            .call("fixture/count", json!({}), 3)
             .await
             .unwrap()["count"],
         0
     );
-    client.rpc.complete(
-        Some("Agent session/prompt timed out; native outcome pending".into()),
-        false,
-    );
+    let error = client
+        .rpc
+        .call("fixture/no-response", json!({}), 0)
+        .await
+        .unwrap_err();
+    assert!(error.contains("timed out"));
+    client.rpc.complete(Some(error), false);
     assert_eq!(client.snapshot().state, "uncertain");
     assert!(
         client
