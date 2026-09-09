@@ -108,11 +108,14 @@ class Sanitizer:
 
     def learn(self, value):
         if (not isinstance(value, str) or isinstance(value, Number) or
-                REDACTED in value or value in {'Bearer', '[REDACTED'}):
+                REDACTED in value or value in {'Bearer', '[REDACTED', 'true', 'false',
+                                             'null', 'none', 'undefined'}):
             return
         if value.startswith('Bearer '):
             value = value[7:]
-        if len(value) >= 4:
+        # Numeric credentials are masked at their labelled source; learning a
+        # number globally would also rewrite unrelated usage counts.
+        if len(value) >= 4 and not re.fullmatch(r'-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?', value):
             self.secrets.add(value)
 
     def replacement(self, value):
@@ -143,7 +146,12 @@ class Sanitizer:
         text = ASSIGNMENT.sub(assignment, text)
         if not self.collecting:
             for secret in sorted(self.secrets, key=len, reverse=True):
-                if secret in text:
+                # Bound short values so 'token' cannot rewrite input_tokens.
+                pattern = re.compile(r'(?<!\w)' + re.escape(secret) + r'(?!\w)') if len(secret) < 8 else None
+                if pattern is not None:
+                    text, count = pattern.subn(REDACTED, text)
+                    self.redactions += count
+                elif secret in text:
                     self.redactions += text.count(secret)
                     text = text.replace(secret, REDACTED)
         return text

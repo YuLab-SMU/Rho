@@ -201,6 +201,18 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(keyed[PACK.REDACTED], PACK.REDACTED)
             self.assertEqual(keyed['total_tokens'], 654)
 
+    def test_numeric_and_short_auth_do_not_rewrite_usage_metrics(self):
+        self.evidence.joinpath('auth-values.json').write_text(
+            '{"auth":"token","bridge_token":"123456789","input_tokens":123456789}')
+        self.evidence.joinpath('usage.log').write_text('input_tokens=123456789 output_tokens=99')
+        self.pack()
+        with zipfile.ZipFile(self.output) as archive:
+            values = json.loads(archive.read('evidence/auth-values.json'))
+            self.assertEqual(values['auth'], PACK.REDACTED)
+            self.assertEqual(values['bridge_token'], PACK.REDACTED)
+            self.assertEqual(values['input_tokens'], 123456789)
+            self.assertEqual(archive.read('evidence/usage.log'), b'input_tokens=123456789 output_tokens=99')
+
     def test_existing_output_not_overwritten(self):
         self.output.write_bytes(b'original')
         with self.assertRaisesRegex(PACK.PackError, 'overwrite'):
