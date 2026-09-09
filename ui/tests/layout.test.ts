@@ -94,6 +94,36 @@ it("ignores a retired layout model's late UI action after restoring another proj
   expect(l.isClosed("plots")).toBe(false);
 });
 
+it("collapses full columns on their width and restores tab limits and saved layouts", () => {
+  const l = new PanelLayout(); l.show("agent");
+  for (const id of ["files", "agent"]) {
+    const group = l.model.getNodeById(id)!.getParent() as TabSetNode;
+    const before = group.toJson();
+    l.collapse(group);
+    expect(group.toJson()).toMatchObject({ maxWidth: 38, minWidth: 38, enableTabStrip: false });
+    expect(group.getAttrMaxHeight()).toBeGreaterThan(1000);
+    expect(l.getSnapshot().activeViewIds).not.toContain(id);
+    const restored = new PanelLayout(); restored.restore(l.serialize());
+    const savedGroup = restored.model.getNodeById(id)!.getParent() as TabSetNode;
+    restored.collapse(savedGroup);
+    expect(savedGroup.toJson().children[0]).toMatchObject(before.children[0]);
+    expect(savedGroup.getWeight()).toBe(before.weight);
+    l.undo(); expect(l.model.getNodeById(id)!.getParent()!.getConfig()?.collapsed).not.toBe(true);
+  }
+});
+
+it("collapses a stacked panel on height and restores a maximized collapsed group", () => {
+  const l = new PanelLayout();
+  const group = l.model.getNodeById("console")!.getParent() as TabSetNode;
+  l.collapse(group); expect(group.getConfig().collapseAxis).toBe("height");
+  expect(group.toJson()).toMatchObject({ maxHeight: 0 });
+  l.model.doAction(l.prepareAction(Actions.maximizeToggle(group.getId())));
+  expect(group.getConfig().collapsed).toBe(false);
+  l.model.doAction(l.prepareAction(Actions.maximizeToggle(group.getId())));
+  expect(group.getConfig().collapsed).toBe(true);
+  l.collapse(group); expect(group.getAttrMaxHeight()).toBeGreaterThan(1000);
+});
+
 it("names parent destinations after the remaining panels when Agent leaves its own column", () => {
   const l = new PanelLayout({ width: 1060 });
   l.show("agent");
@@ -112,4 +142,13 @@ it("names parent destinations after the remaining panels when Agent leaves its o
   expect(l.model.getNodeById("agent")!.getParent()!.getParent()).toBe(column!.getParent());
   l.undo();
   expect(l.model.toJson()).toEqual(before);
+});
+
+it('restores view membership without reopening collapsed groups or reporting them as active', () => {
+  const l = new PanelLayout(); l.show('agent');
+  const group = l.model.getNodeById('agent')!.getParent() as TabSetNode;
+  l.collapse(group); expect(l.getSnapshot().activeTabId).toBeNull();
+  l.restoreView('agent', 'agent', 'Agent');
+  expect(l.isCollapsed('agent')).toBe(true);
+  l.show('agent'); expect(l.isCollapsed('agent')).toBe(false);
 });

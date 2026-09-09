@@ -323,6 +323,28 @@ coverage separately from actual OS input-method testing.
 user confirmed Chinese input works. This is recorded alongside the browser-native
 composition/ACK regression tests, rather than inferred from those tests alone.
 
+### F14 — Object viewing hides basic content and lacks a real table browser
+
+**User feedback and authorization (2026-09-09):** Users should see an object's
+basic content immediately: table size, string length, colors and numbers. Expanded
+and dedicated tables should use a mature frontend grid. The user requested a
+separate Paper page for object exploration, then authorized implementation of
+its six boards. The approved interaction and bounded class support are in
+Design section 14; visual examples alone do not establish scientific correctness.
+
+### F15 — Full-column collapse shrinks the whole workspace vertically
+
+**User report (2026-09-09):** Minimizing Files or Agent while it occupies an entire
+column leaves a short horizontal header and squeezes all neighboring panels
+upward. Such a group should collapse toward the side and release its width.
+The screenshot identifies the group minimize controls, not object disclosure.
+
+Choose the collapse axis from the actual parent split, preserve cross-axis space,
+restore the prior sizing constraints, and retain the result through refresh.
+Startup view reconciliation must not treat restoring membership as an explicit
+request to expand each group. Check both side columns and stacked panels with
+real geometry, undo, drafts and existing R memory intact.
+
 ## Workflow reference: a country development analysis
 
 The supplied tutorial follows a complete project using gapminder: import, clean,

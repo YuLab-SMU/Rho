@@ -97,3 +97,21 @@ it("Agent-provided references are adopted only from matching native root evidenc
   expect(() => f.owner.selectObservation(selection, { ...page("x"), observed_path: [{ kind: "index", index: 1 }] })).toThrow("root binding");
   f.owner.selectObservation(selection, page("x", "ref-x", "structure")); expect(f.owner.applicationSelection).toEqual(selection);
 });
+
+it("deduplicates detail pages on the original observation and fences late responses", async () => {
+  const f = fixture(); await f.owner.observe(); f.owner.inspect('x'); await f.owner.observe(); await f.owner.observe();
+  const options = { kind: 'values' as const, start: 101, limit: 20 };
+  const first = f.owner.readPage('x', options), second = f.owner.readPage('x', options);
+  expect(second).toBe(first);
+  f.query.mockResolvedValueOnce(ready({ ...page('x'), start: 101 })); await f.owner.observe();
+  expect((await first).start).toBe(101);
+  expect(await f.owner.readPage('x', options)).toEqual(await second);
+  expect(f.query).toHaveBeenCalledTimes(4);
+  let release!: (value: ReturnType<typeof ready>) => void;
+  f.query.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+  const pending = f.owner.readPage('x', { kind: 'values', start: 121 });
+  const rejected = expect(pending).rejects.toThrow('observation changed');
+  const inFlight = f.owner.observe(); f.owner.invalidate(); release(ready({ ...page('x'), start: 121 }));
+  await inFlight; await rejected;
+  expect(f.owner.inspectors.get('x')?.stale).toBe(true);
+});

@@ -8,7 +8,7 @@ export const builtinPanels = {
   plots: { name: "Plots", renderer: "plots", instances: "multiple", menu: true, minWidth: 200, preferredGroup: "plots-group" },
   agent: { name: "Agent", renderer: "agent", instances: "single", menu: true, minWidth: 280, preferredGroup: "objects-group" },
   document: { name: "Document", renderer: "document", instances: "multiple", menu: false, minWidth: 240, preferredGroup: "editor-group" },
-  viewer: { name: "Object Viewer", renderer: "viewer", instances: "multiple", menu: false, minWidth: 200, preferredGroup: "objects-group" },
+  viewer: { name: "Object Viewer", renderer: "viewer", instances: "multiple", menu: false, minWidth: 320, preferredGroup: "editor-group" },
 } as const;
 
 export type BuiltinPanel = keyof typeof builtinPanels;

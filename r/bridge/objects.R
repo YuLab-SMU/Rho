@@ -77,26 +77,69 @@ rho_object_binding <- function(name) {
   value <- get(name, .GlobalEnv, inherits = FALSE)
   list(kind = "value", address = rho_object_address(value), value = value)
 }
+# Native storage readers: no S3/S4 accessors, printing, loading or coercion methods.
+rho_object_container <- function(value) {
+  cl <- attr(value, "class", exact = TRUE)
+  if (!isS4(value)) return(if (typeof(value) == "list") value else NULL)
+  slot <- function(x, n) attr(x, n, exact = TRUE)
+  if (any(cl %in% c("SingleCellExperiment", "SummarizedExperiment", "RangedSummarizedExperiment"))) {
+    assays <- slot(slot(value, "assays"), "data")
+    assays <- slot(assays, "listData")
+    if (!is.list(assays) || is.object(assays)) return(NULL)
+    parts <- list(assays = assays, rowData = slot(value, "elementMetadata"), colData = slot(value, "colData"))
+    internal <- slot(slot(value, "int_colData"), "listData")
+    if (is.list(internal) && !is.object(internal) && "reducedDims" %in% names(internal)) parts$reducedDims <- rho_object_container(internal[["reducedDims"]])
+    parts$metadata <- slot(value, "metadata")
+    return(parts)
+  }
+  if (any(cl %in% c("DFrame", "DataFrame", "SimpleList"))) {
+    x <- slot(value, "listData")
+    if (is.list(x) && !is.object(x)) return(x)
+  }
+  NULL
+}
+rho_object_sparse <- function(value) {
+  cl <- attr(value, "class", exact = TRUE)
+  isS4(value) && is.character(cl) && !is.object(cl) && length(cl) == 1L && identical(.subset2(cl, 1L), "dgCMatrix")
+}
+rho_object_source <- function(value) {
+  if (typeof(value) %in% c("closure", "builtin", "special", "language", "expression", "symbol"))
+    paste(base::deparse(value, width.cutoff = 80L, nlines = 500L), collapse = "\n") else NULL
+}
 rho_object_supported <- function(value) {
   classes <- attr(value, "class", exact = TRUE)
-  if (isS4(value)) return(FALSE)
+  if (isS4(value)) return(!is.null(rho_object_container(value)) || rho_object_sparse(value))
+  if (!is.null(rho_object_source(value))) return(TRUE)
+  if (typeof(value) == "list" && (identical(classes, "lm") || identical(classes, c("glm", "lm")) || identical(classes, "phylo"))) return(TRUE)
   if (!is.null(classes) && !(identical(classes, "factor") || identical(classes, c("ordered", "factor")) || identical(classes, "Date") || identical(classes, c("POSIXct", "POSIXt")) || identical(classes, "difftime") || identical(classes, "data.frame") || identical(classes, c("tbl_df", "tbl", "data.frame")))) return(FALSE)
   typeof(value) %in% c("NULL", "logical", "integer", "double", "complex", "raw", "character", "list")
 }
 rho_object_metadata <- function(value = NULL, binding_kind = "value") {
-  m <- list(kind = binding_kind, object_type = NULL, classes = list(), length = NULL, dimensions = list(), supported_reads = list(), attributes = list(), notice = NULL)
+  m <- list(kind = binding_kind, object_type = NULL, classes = list(), length = NULL, dimensions = list(), supported_reads = list(), attributes = list(), notice = NULL, preview = list())
   if (binding_kind != "value") { m$supported_reads <- list("structure"); m$notice <- "Only binding metadata is available; active bindings and promises are never evaluated."; return(m) }
   m$object_type <- typeof(value)
   classes <- attr(value, "class", exact = TRUE)
   if (is.character(classes) && !is.object(classes)) m$classes <- unname(as.list(substr(.subset(classes, seq_len(min(length(classes), 16L))), 1L, 128L)))
   if (is.character(classes) && !is.object(classes) && (length(classes) > 16L || any(nchar(classes, type = "chars") > 128L))) m$notice <- "Class metadata is limited to 16 entries and 128 characters each; this unsupported metadata has no further read method."
   if (!rho_object_supported(value)) { m$supported_reads <- list("structure"); m$notice <- "Unsupported value reads: safe metadata only; no user methods were called. Class metadata is limited to 16 names of 128 characters; this interface cannot continue class metadata for unsupported objects."; return(m) }
-  bare <- value
-  m$length <- rho_object_length(bare)
-  dims <- attr(value, "dim", exact = TRUE)
+  source <- rho_object_source(value)
+  if (!is.null(source)) {
+    m$length <- if (typeof(value) == "closure") rho_object_length(formals(value)) else 1L
+    m$supported_reads <- list("structure", "text")
+    m$preview <- list(rho_object_scalar(source, 1, 160L)); if (length(strsplit(source, "\n", fixed=TRUE)[[1L]]) >= 500L) m$notice <- "Source preview is limited to 500 lines."; return(m)
+  }
+  container <- rho_object_container(value)
+  bare <- if (!is.null(container)) container else value
+  m$length <- if (rho_object_sparse(value)) prod(attr(value, "Dim", exact = TRUE)) else rho_object_length(bare)
+  dims <- attr(value, if (rho_object_sparse(value)) "Dim" else "dim", exact = TRUE)
+  if (isS4(value) && "assays" %in% names(container) && length(container$assays)) {
+    assay <- .subset2(container$assays, 1L)
+    dims <- attr(assay, if (rho_object_sparse(assay)) "Dim" else "dim", exact = TRUE)
+  }
   if (is.numeric(dims) && !is.object(dims)) m$dimensions <- unname(as.list(dims))
   frame <- identical(classes, "data.frame") || identical(classes, c("tbl_df", "tbl", "data.frame"))
-  if (frame) m$dimensions <- list(.row_names_info(value, 2L), rho_object_length(bare))
+  if (isS4(value) && any(classes %in% c("DFrame", "DataFrame"))) { m$dimensions <- list(attr(value, "nrows", exact = TRUE), length(container)); frame <- TRUE }
+  else if (frame) m$dimensions <- list(.row_names_info(value, 2L), rho_object_length(bare))
   for (attribute in c("units", "tzone")) {
     av <- attr(value, attribute, exact = TRUE)
     if (!is.null(av)) {
@@ -106,17 +149,27 @@ rho_object_metadata <- function(value = NULL, binding_kind = "value") {
   }
   reads <- "structure"
   if (!is.null(attr(value, "names", exact = TRUE))) reads <- c(reads, "names")
-  if (frame || (length(dims) == 2L && is.atomic(bare))) reads <- c(reads, "table")
+  if (frame || rho_object_sparse(value) || (!isS4(value) && length(dims) >= 2L && is.atomic(bare))) reads <- c(reads, "table")
   if (typeof(bare) == "list") reads <- c(reads, "children")
   else if (!is.null(bare)) reads <- c(reads, "values")
   if (typeof(bare) == "character" || !is.null(attr(value, "names", exact = TRUE)) || "factor" %in% unlist(m$classes)) reads <- c(reads, "text")
   if (typeof(bare) == "integer" && "factor" %in% unlist(m$classes)) reads <- c(reads, "levels")
+  if (rho_object_sparse(value)) reads <- c("structure", "table")
+  if (is.atomic(bare) && !is.null(bare) && !isS4(bare)) m$preview <- lapply(seq_len(min(4L, rho_object_length(bare))), function(i) rho_object_factor_label(rho_object_scalar(.subset2(bare, i), 1, 80L), value))
+  for (attribute in c("names", "levels")) {
+    av <- attr(value, attribute, exact = TRUE)
+    if (is.character(av) && !is.object(av)) m$attributes[[length(m$attributes) + 1L]] <- list(name = attribute, values = unname(as.list(substr(head(av, 8L), 1, 80L))))
+  }
+  lv <- attr(value, "levels", exact = TRUE)
+  if (is.character(lv) && !is.object(lv)) m$level_count <- length(lv)
+  if ("table" %in% reads) m$table_features <- list("sort", "filter", "slice")
   m$supported_reads <- as.list(reads)
   m
 }
 rho_object_resolve <- function(value, path) {
   for (step in path) {
-    if (!rho_object_supported(value) || typeof(value) != "list") rho_object_error("unsupported", "Child paths require an ordinary list or standard data frame.")
+    if (!rho_object_supported(value) || is.null(rho_object_container(value))) rho_object_error("unsupported", "Child paths require an ordinary list or standard data frame.")
+    value <- rho_object_container(value)
     if (identical(step$kind, "index")) index <- step$index
     else if (identical(step$kind, "name")) {
       names <- attr(value, "names", exact = TRUE)
@@ -184,6 +237,24 @@ rho_object_text <- function(text, start, max_bytes) {
   next_start <- start + nchar(part, type = "chars")
   list(text = part, total = count, next_start = if (next_start <= count) next_start else NULL)
 }
+rho_object_color_names <- NULL
+rho_object_color <- function(text) {
+  if (nchar(text, type = "bytes") > 64L) return(NULL)
+  if (grepl("^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$", text)) return(text)
+  if (!grepl("^[A-Za-z][A-Za-z0-9]*$", text) || is.null(base::.Internal(getRegisteredNamespace("grDevices")))) return(NULL)
+  if (is.null(rho_object_color_names)) rho_object_color_names <<- c("transparent", rho_readonly_binding("grDevices", "colors")())
+  if (!text %in% rho_object_color_names) return(NULL)
+  rgb <- rho_readonly_binding("grDevices", "col2rgb")(text, alpha = TRUE)
+  paste0("#", paste(sprintf("%02X", rgb[, 1L]), collapse = ""))
+}
+rho_object_factor_label <- function(scalar, value) {
+  if (scalar$kind != "value" || !"factor" %in% attr(value, "class", exact = TRUE)) return(scalar)
+  levels <- attr(value, "levels", exact = TRUE); code <- scalar$number
+  if (is.character(levels) && !is.object(levels) && !is.null(code) && code >= 1 && code <= length(levels)) {
+    scalar$kind <- "factor"; label <- .subset2(levels, code); scalar$label <- substr(label, 1L, 128L); if (nchar(label) > 128L) scalar$label <- paste0(scalar$label, "…")
+  }
+  scalar
+}
 rho_object_scalar <- function(value, text_start = 1, text_limit = 512L) {
   type <- typeof(value)
   out <- list(kind = "value", object_type = type, logical = NULL, number = NULL, imaginary = NULL, text = NULL, label = NULL, text_characters = NULL, next_text_start = NULL)
@@ -192,7 +263,7 @@ rho_object_scalar <- function(value, text_start = 1, text_limit = 512L) {
   if (type %in% c("double", "complex") && is.infinite(value)) { out$kind <- "non_finite"; out$label <- if (type == "complex") paste(Re(value), Im(value), sep = ",") else if (value > 0) "Inf" else "-Inf"; return(out) }
   if (type == "logical") out$logical <- value
   else if (type %in% c("integer", "double", "complex")) { out$number <- Re(value); if (type == "complex") out$imaginary <- Im(value) }
-  else if (type == "character") { page <- rho_object_text(value, text_start, text_limit); out$text <- page$text; out$text_characters <- page$total; out$next_text_start <- page$next_start }
+  else if (type == "character") { page <- rho_object_text(value, text_start, text_limit); out$text <- page$text; out$text_characters <- page$total; out$next_text_start <- page$next_start; if (is.null(page$next_start)) out$color <- rho_object_color(value) }
   out
 }
 rho_read_object <- function(payload) {
@@ -209,7 +280,9 @@ rho_read_object <- function(payload) {
   }
   metadata <- rho_object_metadata(value, binding$kind)
   if (!payload$kind %in% unlist(metadata$supported_reads)) rho_object_error("unsupported", "This read kind is not supported; inspect metadata.supported_reads.")
-  bare <- value
+  container <- rho_object_container(value)
+  source <- rho_object_source(value)
+  bare <- if (!is.null(source)) source else if (!is.null(container)) container else value
   result <- list(object_ref = payload$object_ref, root_name = h$name, observed_path = h$path, path = payload$path, kind = payload$kind, metadata = metadata, values = list(), children = list(), columns = list(), start = payload$start, next_start = NULL, column_start = payload$column_start, next_column_start = NULL, text_start = payload$text_start, next_text_start = NULL, observed_at_ms = h$created, complete = TRUE, notices = list())
   start <- payload$start; limit <- payload$limit
   if (payload$kind %in% c("values", "levels", "names", "text")) {
@@ -219,38 +292,83 @@ rho_read_object <- function(payload) {
     if (payload$kind == "levels") { bare <- attr(value, "levels", exact = TRUE); if (!is.character(bare) || is.object(bare)) rho_object_error("unsupported", "Factor levels are nonstandard.") }
     if (start > rho_object_length(bare) + 1) rho_object_error("invalid_cursor", "Vector index exceeds length.")
     n <- if (payload$kind == "text") min(1, rho_object_length(bare) - start + 1) else min(limit, rho_object_length(bare) - start + 1)
-    if (n > 0) result$values <- lapply(seq.int(start, length.out = n), function(index) rho_object_scalar(.subset2(bare, index), if (payload$kind == "text") payload$text_start else 1, if (payload$kind == "text") payload$text_limit_bytes else 512L))
+    if (n > 0) result$values <- lapply(seq.int(start, length.out = n), function(index) rho_object_factor_label(rho_object_scalar(.subset2(bare, index), if (payload$kind == "text") payload$text_start else 1, if (payload$kind == "text") payload$text_limit_bytes else 512L), if (payload$kind == "values") value else NULL))
     if (start + n <= rho_object_length(bare)) result$next_start <- start + n
     if (payload$kind == "text" && n) result$next_text_start <- result$values[[1L]]$next_text_start
   } else if (payload$kind %in% c("children", "structure")) {
-    if (typeof(bare) == "list") {
-      names <- attr(value, "names", exact = TRUE); n <- min(limit, max(0, rho_object_length(bare) - start + 1))
+    if (rho_object_supported(value) && typeof(bare) == "list") {
+      names <- attr(bare, "names", exact = TRUE); n <- min(limit, max(0, rho_object_length(bare) - start + 1))
       if (n) result$children <- lapply(seq.int(start, length.out = n), function(index) list(index = index, name = if (is.character(names) && !is.object(names)) .subset2(names, index) else NULL, metadata = rho_object_metadata(.subset2(bare, index))))
       if (start + n <= rho_object_length(bare)) result$next_start <- start + n
     }
   } else if (payload$kind == "table") {
-    dims <- metadata$dimensions; rows <- dims[[1L]]; cols <- dims[[2L]]
+    dims <- unlist(metadata$dimensions); rows <- dims[[1L]]; cols <- dims[[2L]]
+    sparse <- rho_object_sparse(value)
+    slice <- rep(1, max(0, length(dims) - 2L))
+    if (length(payload$slice)) {
+      if (length(payload$slice) != length(slice)) rho_object_error("invalid_slice", "Supply one coordinate for every dimension after the first two.")
+      slice <- unlist(payload$slice)
+    }
+    if (length(slice) && any(!is.finite(slice) | slice < 1 | slice > dims[-c(1, 2)] | slice != floor(slice))) rho_object_error("invalid_slice", "Slice coordinate is outside the array.")
+    offset <- if (length(slice)) sum((slice - 1) * cumprod(c(1, head(dims[-c(1, 2)], -1)))) * rows * cols else 0
+    result$slice <- as.list(slice)
+    matrix <- typeof(bare) != "list"
+    get_column <- function(index, indices) {
+      if (sparse) {
+        p <- attr(value, "p", exact = TRUE); ii <- attr(value, "i", exact = TRUE); xx <- attr(value, "x", exact = TRUE)
+        a <- .subset2(p, index) + 1L; b <- .subset2(p, index + 1L)
+        nonzero <- if (b >= a) seq.int(a, b) else integer()
+        hits <- match(indices - 1L, .subset(ii, nonzero))
+        out <- rep(0, length(indices)); present <- !is.na(hits)
+        out[present] <- .subset(xx, nonzero[hits[present]]); return(out)
+      }
+      column <- if (matrix) bare else .subset2(bare, index)
+      if (!rho_object_supported(column) || typeof(column) == "list" || (!matrix && length(attr(column, "dim", exact = TRUE)))) return(NULL)
+      out <- .subset(column, if (matrix) indices + (index - 1) * rows + offset else indices)
+      attributes(out) <- NULL; out
+    }
+    order_rows <- seq_len(rows)
+    if (!is.null(payload$sort_column) || !is.null(payload$filter_column)) {
+      if (rows > 1000000) rho_object_error("budget_exhausted", "Whole-table sorting and filtering is limited to 1,000,000 rows per read.")
+      for (index in c(payload$sort_column, payload$filter_column)) if (index < 1 || index > cols) rho_object_error("invalid_column", "Sort/filter column is outside the table.")
+      if (!is.null(payload$filter_column) && !is.null(payload$filter_text) && nzchar(payload$filter_text)) {
+        if (!matrix && any(attr(.subset2(bare, payload$filter_column), "class", exact = TRUE) %in% c("Date", "POSIXct", "difftime"))) rho_object_error("unsupported", "Calendar/time text filtering is not available; choose a character, factor or numeric column.")
+        fv <- get_column(payload$filter_column, order_rows)
+        if (is.null(fv)) rho_object_error("unsupported", "This column cannot be filtered safely.")
+        if (!matrix && "factor" %in% attr(.subset2(bare, payload$filter_column), "class", exact = TRUE)) fv <- .subset(attr(.subset2(bare, payload$filter_column), "levels", exact = TRUE), fv)
+        order_rows <- order_rows[!is.na(fv) & grepl(payload$filter_text, as.character(fv), fixed = TRUE)]
+      }
+      if (!is.null(payload$sort_column)) {
+        sv <- get_column(payload$sort_column, order_rows)
+        if (is.null(sv) || is.complex(sv)) rho_object_error("unsupported", "This column cannot be sorted safely.")
+        order_rows <- order_rows[order(sv, decreasing = isTRUE(payload$sort_descending), na.last = TRUE, method = "radix")]
+      }
+    }
+    total <- length(order_rows); result$total_rows <- total
     cs <- payload$column_start
-    if (start > rows + 1 || cs > cols + 1) rho_object_error("invalid_cursor", "Table row or column index exceeds dimensions.")
-    nc <- min(payload$column_limit, 50L, max(0, cols - cs + 1)); nr <- min(limit, 200L, max(0, rows - start + 1), if (nc) floor(2000 / nc) else 200L)
+    if (start > total + 1 || cs > cols + 1) rho_object_error("invalid_cursor", "Table row or column index exceeds dimensions.")
+    nc <- min(payload$column_limit, 50L, max(0, cols - cs + 1)); nr <- min(limit, 200L, max(0, total - start + 1), if (nc) floor(2000 / nc) else 200L)
+    selected_rows <- if (nr) order_rows[seq.int(start, length.out = nr)] else integer()
+    result$row_indices <- as.list(selected_rows)
+    rn <- if (matrix) { dn <- attr(value, if (sparse) "Dimnames" else "dimnames", exact = TRUE); if (is.list(dn) && !is.object(dn) && length(dn)) .subset2(dn, 1L) else NULL } else attr(value, if (isS4(value)) "rownames" else "row.names", exact = TRUE)
+    if (is.character(rn) && !is.object(rn)) result$row_names <- lapply(.subset(rn, selected_rows), function(n) if (nchar(n) > 128L) paste0(substr(n, 1, 128L), "…") else n)
     if (nc) result$columns <- lapply(seq.int(cs, length.out = nc), function(index) {
-      matrix <- typeof(bare) != "list"
       column <- if (matrix) NULL else .subset2(bare, index)
-      cm <- if (matrix) { m <- metadata; m$dimensions <- list(); m$length <- rows; m } else rho_object_metadata(column)
-      safe <- matrix || (rho_object_supported(column) && typeof(column) != "list")
-      cv <- column
-      values <- if (safe && nr) lapply(seq.int(start, length.out = nr), function(row) rho_object_scalar(if (matrix) .subset2(bare, row + (index - 1) * rows) else .subset2(cv, row))) else list()
-      names <- if (matrix) { dn <- attr(value, "dimnames", exact = TRUE); if (is.list(dn) && !is.object(dn) && length(dn) == 2L) .subset2(dn, 2L) else NULL } else attr(value, "names", exact = TRUE)
+      cm <- if (matrix) { m <- metadata; m$dimensions <- list(); m$length <- rows; m$preview <- list(); m$supported_reads <- list("values"); if (sparse) { m$object_type <- typeof(attr(value, "x", exact = TRUE)); m$classes <- list() }; m } else rho_object_metadata(column)
+      cv <- get_column(index, selected_rows)
+      values <- if (!is.null(cv)) lapply(seq_along(cv), function(i) rho_object_factor_label(rho_object_scalar(.subset2(cv, i)), column)) else list()
+      names <- if (matrix) { dn <- attr(value, if (sparse) "Dimnames" else "dimnames", exact = TRUE); if (is.list(dn) && !is.object(dn) && length(dn) >= 2L) .subset2(dn, 2L) else NULL } else attr(bare, "names", exact = TRUE)
       list(index = index, name = if (is.character(names) && !is.object(names)) .subset2(names, index) else NULL, metadata = cm, values = values)
     })
-    if (start + nr <= rows) result$next_start <- start + nr
+    if (start + nr <= total) result$next_start <- start + nr
     if (cs + nc <= cols) result$next_column_start <- cs + nc
   }
+
   # Reduce an oversized page without dropping continuation. Scalar text can be read separately.
   while (nchar(rho_readonly_binding("jsonlite", "toJSON")(result, auto_unbox = TRUE, null = "null", digits = NA), type = "bytes") > 250000) {
     if (length(result$values) > 1L) { result$values <- head(result$values, -1L); result$next_start <- start + length(result$values) }
     else if (length(result$children) > 1L) { result$children <- head(result$children, -1L); result$next_start <- start + length(result$children) }
-    else if (length(result$columns) && length(result$columns[[1L]]$values) > 1L) { result$columns <- lapply(result$columns, function(c) { c$values <- head(c$values, -1L); c }); result$next_start <- start + length(result$columns[[1L]]$values) }
+    else if (length(result$columns) && length(result$columns[[1L]]$values) > 1L) { result$columns <- lapply(result$columns, function(c) { c$values <- head(c$values, -1L); c }); result$next_start <- start + length(result$columns[[1L]]$values); result$row_indices <- head(result$row_indices, length(result$columns[[1L]]$values)); if (!is.null(result$row_names)) result$row_names <- head(result$row_names, length(result$row_indices)) }
     else if (length(result$columns) > 1L) { result$columns <- head(result$columns, -1L); result$next_column_start <- payload$column_start + length(result$columns) }
     else rho_object_error("budget_exhausted", "One metadata entry exceeds the page budget; a narrower structural path is required.")
   }

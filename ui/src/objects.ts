@@ -8,22 +8,25 @@ import type { ObjectMetadata } from "./generated/ObjectMetadata";
 import type { ObjectDirectoryPage } from "./generated/ObjectDirectoryPage";
 import type { ObjectObservation as NativeObjectObservation } from "./generated/ObjectObservation";
 import type { ObjectReadPage } from "./generated/ObjectReadPage";
+import type { ReadObjectArguments } from "./generated/ReadObjectArguments";
 import type { ObjectReadKind } from "./generated/ObjectReadKind";
 import type { ObjectScalar } from "./generated/ObjectScalar";
 import type { JsonValue } from "./generated/serde_json/JsonValue";
 
-export interface ObjectObservation { readonly binding: BindingSummary; readonly observedAt: number; readonly notice: string; readonly stale: boolean }
+export interface ObjectObservation { readonly page?: ObjectReadPage; readonly binding: BindingSummary; readonly observedAt: number; readonly notice: string; readonly stale: boolean }
 interface ObjectIndex { readonly objects: readonly BindingSummary[]; readonly total_bindings: number; readonly truncated: boolean; readonly directory_ref: string }
 interface ObjectsSnapshot {
   readonly data: ObjectIndex | null; readonly observedAt: number | null; readonly notice: string; readonly stale: boolean; readonly loading: boolean;
   readonly expanded: ReadonlySet<string>; readonly inspectors: ReadonlyMap<string, ObjectObservation>; readonly selected: string | null; readonly canLoadMore: boolean; readonly indexExpired: boolean;
 }
 interface ObservedReference { reference: string; metadata: ObjectMetadata | null; observedAt: number | null; expiresAt: number; validated: boolean }
-type ObjectRead = { kind: "directory"; reference: string | null; offset: number } | { kind: "observe"; name: string } | { kind: "read"; name: string; reference: string; readKind: ObjectReadKind };
+export type ObjectPageRequest = Partial<Omit<ReadObjectArguments, "expected_session" | "object_ref">> & { kind: ObjectReadKind };
+interface DetailRequest { key: string; name: string; reference: string; options: ObjectPageRequest; resolve(page: ObjectReadPage): void; reject(error: Error): void; promise: Promise<ObjectReadPage> }
+type ObjectRead = { kind: "detail"; detail: DetailRequest; name: string; reference: string } | { kind: "directory"; reference: string | null; offset: number } | { kind: "observe"; name: string } | { kind: "read"; name: string; reference: string; readKind: ObjectReadKind };
 const capabilities = ["workspace.list_objects", "workspace.observe_object", "workspace.read_object"];
 const previewKind = (metadata: ObjectMetadata | null): ObjectReadKind => metadata?.supported_reads.includes("table") ? "table" : metadata?.supported_reads.includes("values") ? "values" : metadata?.supported_reads.includes("children") ? "children" : "structure";
 const summary = (name: string, metadata: ObjectMetadata): BindingSummary => ({ name, kind: metadata.kind, object_type: metadata.object_type, classes: metadata.classes,
-  length: metadata.length, dimensions: metadata.dimensions, preview: null, preview_kind: null, truncated: false, notice: metadata.notice });
+  length: metadata.length, dimensions: metadata.dimensions, preview: metadata.preview?.length ? metadata.preview.map(scalar) : null, preview_kind: metadata.preview?.length ? "values" : null, truncated: false, notice: metadata.notice });
 function scalar(value: ObjectScalar): JsonValue {
   if (value.label !== null) return { kind: value.kind, label: value.label };
   if (value.text !== null) return value.text;
@@ -43,6 +46,15 @@ function preview(name: string, page: ObjectReadPage): BindingSummary {
 
 /** One native observation lane serves the retained directory and independent view demands. */
 export class Objects extends Model<ObjectsSnapshot> {
+  private viewState = new Map<string, unknown>();
+  viewValue<T>(key: string, initial: T): T { return (this.viewState.has(key) ? this.viewState.get(key) : initial) as T; }
+  setViewValue<T>(key: string, value: T) {
+    if (!this.viewState.has(key) && this.viewState.size >= 128) this.viewState.delete(this.viewState.keys().next().value!);
+    this.viewState.set(key, value); this.publish(); this.ports.changed();
+  }
+  private details = new Map<string, DetailRequest>();
+  private pages = new Map<string, ObjectReadPage>();
+  private indexMetadata = new Map<string, ObjectMetadata>();
   private dataValue: ObjectIndex | null = null;
   private time: number | null = null;
   private error = "";
@@ -73,6 +85,25 @@ export class Objects extends Model<ObjectsSnapshot> {
     return { data: this.dataValue, observedAt: this.time, notice: this.notice, stale: this.staleValue, loading: !!this.inFlight,
       expanded: readonlySet(this.expandedNames), inspectors: readonlyMap(this.previews), selected: this.selectedName, canLoadMore: this.canLoadMore, indexExpired: this.directoryExpired };
   }
+  metadata(name: string) { return this.references.get(name)?.metadata ?? this.indexMetadata.get(name) ?? null; }
+  get version() { return this.invalidation; }
+  readPage(name: string, options: ObjectPageRequest): Promise<ObjectReadPage> {
+    const scope = this.ports.context(), ref = this.references.get(name);
+    if (!scope.connected || scope.runtimeState !== "idle") return Promise.reject(new Error("R is busy or disconnected. The previous observation is retained."));
+    if (!ref?.validated || Date.now() >= ref.expiresAt) return Promise.reject(new Error("Refresh this object to read a current observation."));
+    const key = JSON.stringify([ref.reference, options]);
+    const cached = this.pages.get(key); if (cached) return Promise.resolve(cached);
+    const pending = this.details.get(key); if (pending) return pending.promise;
+    if (this.details.size >= 64) return Promise.reject(new Error("Too many object pages requested. Narrow the view."));
+    let resolve!: DetailRequest["resolve"], reject!: DetailRequest["reject"];
+    const promise = new Promise<ObjectReadPage>((yes, no) => { resolve = yes; reject = no; });
+    this.details.set(key, { key, name, reference: ref.reference, options, resolve, reject, promise });
+    this.ports.schedule(); return promise;
+  }
+  private clearPages() {
+    for (const request of this.details.values()) request.reject(new Error("Object observation changed. Refresh to read current values."));
+    this.details.clear(); this.pages.clear();
+  }
   get data() { return this.dataValue; }
   get observedAt() { return this.time; }
   get notice() { return this.ports.context().session && !this.supported ? "Progressive object reads are unavailable for this Host." : this.error; }
@@ -101,31 +132,34 @@ export class Objects extends Model<ObjectsSnapshot> {
   get needsObservation() {
     const scope = this.ports.context();
     return !this.stopped && this.supported && !!scope.project && !!scope.session && scope.connected && scope.runtimeState === "idle" &&
-      (!!this.retryRead || this.listDirty || this.requestedOffset !== null || [...this.pending].some((name) => !this.blocked.has(name)));
+      (!!this.retryRead || this.listDirty || this.details.size > 0 || this.requestedOffset !== null || [...this.pending].some((name) => !this.blocked.has(name)));
   }
-  serialize() { return { expandedObjects: [...this.expandedNames], selectedObject: this.selectedName }; }
+  serialize() { return { objectViews: Object.fromEntries(this.viewState), expandedObjects: [...this.expandedNames], selectedObject: this.selectedName }; }
   restore(value: unknown) {
-    this.reset(); const data = value as { expandedObjects?: unknown; selectedObject?: unknown } | null;
+    this.reset(); const data = value as { objectViews?: Record<string, unknown>; expandedObjects?: unknown; selectedObject?: unknown } | null;
+    this.viewState = new Map(Object.entries(data?.objectViews ?? {}).slice(0, 128));
     if (Array.isArray(data?.expandedObjects)) for (const name of data.expandedObjects) if (typeof name === "string") this.expandedNames.add(name);
     if (typeof data?.selectedObject === "string") this.selectedName = data.selectedObject; this.publish();
   }
   reset() {
-    this.revision++; this.stopped = false; this.inFlight = null; this.dataValue = null; this.time = null; this.error = ""; this.staleValue = true;
+    this.clearPages(); this.viewState.clear(); this.indexMetadata.clear(); this.revision++; this.stopped = false; this.inFlight = null; this.dataValue = null; this.time = null; this.error = ""; this.staleValue = true;
     this.previews.clear(); this.references.clear(); this.blocked.clear(); this.pending.clear(); this.manual.clear(); this.demands.clear(); this.activeViewIds = null;
     this.listDirty = true; this.requestedOffset = this.nextOffset = null; this.directoryExpired = false; this.directoryExpiresAt = 0; this.retryRead = null;
     this.names = Object.freeze([]); this.expandedNames.clear(); this.selectedName = null; this.publish();
   }
   sessionChanged() {
+    this.clearPages(); this.indexMetadata.clear();
     this.revision++; this.inFlight = null; this.dataValue = null; this.time = null; this.previews.clear(); this.references.clear(); this.blocked.clear(); this.manual.clear();
     this.names = Object.freeze([]); this.error = ""; this.staleValue = true; this.listDirty = true; this.requestedOffset = this.nextOffset = null;
     this.directoryExpired = false; this.directoryExpiresAt = 0; this.retryRead = null; this.pending = new Set(this.visibleNames); this.publish(); this.ports.schedule();
   }
-  stop() { this.stopped = true; this.revision++; this.inFlight = null; this.demands.clear(); this.pending.clear(); this.retryRead = null; this.publish(); this.dispose(); }
+  stop() { this.clearPages(); this.stopped = true; this.revision++; this.inFlight = null; this.demands.clear(); this.pending.clear(); this.retryRead = null; this.publish(); this.dispose(); }
   operationChanged(event: OperationChange) {
     const scope = this.ports.context();
     if (event.epoch === scope.epoch && event.project === scope.project && event.capability.startsWith("workspace.") && (event.status === "running" || terminal(event.status))) this.invalidate();
   }
   invalidate() {
+    this.clearPages();
     this.invalidation++; this.listDirty = true; this.staleValue = true; this.references.clear(); this.blocked.clear(); this.retryRead = null;
     this.requestedOffset = this.nextOffset = null; this.directoryExpired = false;
     for (const [name, observed] of this.previews) this.previews.set(name, Object.freeze({ ...observed, stale: true }));
@@ -155,6 +189,8 @@ export class Objects extends Model<ObjectsSnapshot> {
   }
   collapseAll() { this.expandedNames.clear(); this.publish(); this.ports.changed(); }
   inspect(name: string) {
+    for (const [key, page] of this.pages) if (page.root_name === name) this.pages.delete(key);
+    const previous = this.previews.get(name); if (previous) this.previews.set(name, Object.freeze({ ...previous, stale: true }));
     if (this.blocked.delete(name) || (this.references.get(name)?.expiresAt ?? Infinity) <= Date.now()) this.references.delete(name);
     this.manual.add(name); this.pending.add(name); this.selectedName = name; this.publish(); this.ports.changed(); this.ports.schedule();
   }
@@ -176,6 +212,8 @@ export class Objects extends Model<ObjectsSnapshot> {
     if (this.listDirty) return { kind: "directory", reference: null, offset: 0 };
     const name = [...this.pending].find((name) => !this.blocked.has(name));
     if (name) { const observed = this.references.get(name); return observed ? { kind: "read", name, reference: observed.reference, readKind: previewKind(observed.metadata) } : { kind: "observe", name }; }
+    const detail = this.details.values().next().value;
+    if (detail) return { kind: "detail", detail, name: detail.name, reference: detail.reference };
     return this.requestedOffset !== null && this.dataValue ? { kind: "directory", reference: this.dataValue.directory_ref, offset: this.requestedOffset } : null;
   }
   /** Exactly one serial native query per slice; pages never drain implicitly. */
@@ -185,22 +223,29 @@ export class Objects extends Model<ObjectsSnapshot> {
     const request = this.request(); if (!request) return;
     const capability = request.kind === "directory" ? "workspace.list_objects" : request.kind === "observe" ? "workspace.observe_object" : "workspace.read_object";
     const args = request.kind === "directory" ? { expected_session: identity.session, name_contains: "", object_type: null, directory_ref: request.reference, offset: request.offset, limit: 200 }
+      : request.kind === "detail" ? { expected_session: identity.session, object_ref: request.reference, path: [], start: 1, limit: 100, column_start: 1, column_limit: 20, ...request.detail.options }
       : request.kind === "observe" ? { expected_session: identity.session, name: request.name, path: [] }
         : { expected_session: identity.session, object_ref: request.reference, kind: request.readKind, path: [], start: 1, limit: 20, column_start: 1, column_limit: 10 };
     const flight = { revision: this.revision, generation: ++this.generation }, invalidation = this.invalidation, started = Date.now(); this.inFlight = flight; this.publish();
     const current = () => !this.stopped && this.inFlight === flight && flight.revision === this.revision && sameScope(identity, this.ports.context(), true);
     try {
-      const result = await this.ports.query(identity.project, capability, args); if (!current()) return;
+      // Empty optional features do not require a newer live Host. Feature-bearing
+      // reads are enabled only by the native metadata's table_features.
+      const nativeArgs = Object.fromEntries(Object.entries(args).filter(([key, value]) => !["slice", "sort_column", "sort_descending", "filter_column", "filter_text"].includes(key) || (value !== null && value !== false && value !== "" && (!Array.isArray(value) || value.length > 0))));
+      const result = await this.ports.query(identity.project, capability, nativeArgs); if (!current()) return;
       if (result.target.identity !== identity.session) throw new Error("The object observation belongs to another R session.");
       if (result.status !== "ready" || !result.data) {
         this.error = result.notices.join("\n") || `Objects ${result.status}.`; this.staleValue = true;
-        const permanent = result.diagnostics?.some((d) => ["observation_expired", "content_changed", "budget_exceeded", "stale_session", "invalid_input"].includes(d.code));
-        if (permanent) this.block(request); else this.retryRead = request; return;
+        const permanent = result.diagnostics?.some((d) => ["observation_expired", "content_changed", "budget_exceeded", "stale_session", "invalid_input", "not_found"].includes(d.code));
+        if (request.kind === "detail") { request.detail.reject(new Error(this.error)); this.details.delete(request.detail.key); if (permanent) this.block(request); }
+        else if (permanent) this.block(request); else this.retryRead = request; return;
       }
       if (request.kind === "directory") {
         const page = result.data as ObjectDirectoryPage;
         if (!page.directory_ref || !Array.isArray(page.entries) || page.offset !== request.offset || (request.reference && page.directory_ref !== request.reference) || (page.next_offset !== null && page.next_offset <= page.offset)) throw new Error("The object directory page does not match its original reference and position.");
         if (invalidation !== this.invalidation) return;
+        if (!request.reference) this.indexMetadata.clear();
+        for (const entry of page.entries) this.indexMetadata.set(entry.name, entry.metadata);
         const entries = request.reference ? [...this.dataValue!.objects, ...page.entries.map((entry) => summary(entry.name, entry.metadata))] : page.entries.map((entry) => summary(entry.name, entry.metadata));
         this.dataValue = immutable({ directory_ref: page.directory_ref, objects: [...new Map(entries.map((entry) => [entry.name, entry])).values()], total_bindings: page.total, truncated: !page.complete });
         const names = this.dataValue.objects.map((entry) => entry.name); if (names.length !== this.names.length || names.some((name, i) => name !== this.names[i])) this.names = Object.freeze(names);
@@ -212,10 +257,19 @@ export class Objects extends Model<ObjectsSnapshot> {
         if (invalidation !== this.invalidation) return;
         this.references.set(request.name, { reference: observed.object_ref, metadata: observed.metadata, observedAt: observed.observed_at_ms, expiresAt: Math.min(observed.expires_at_ms, started + 60000), validated: true });
         if (!this.previews.has(request.name)) this.previews.set(request.name, immutable({ binding: summary(request.name, observed.metadata), observedAt: observed.observed_at_ms, notice: "Reading bounded preview…", stale: true })); this.ports.changed();
+      } else if (request.kind === "detail") {
+        const page = result.data as ObjectReadPage, expected = request.detail.options;
+        if (invalidation !== this.invalidation || page.object_ref !== request.reference || page.root_name !== request.name || page.observed_path.length ||
+          page.kind !== expected.kind || JSON.stringify(page.path) !== JSON.stringify(expected.path ?? []) || page.start !== (expected.start ?? 1) || page.column_start !== (expected.column_start ?? 1))
+          throw new Error("The page no longer matches the requested object observation.");
+        this.details.delete(request.detail.key);
+        if (this.pages.size >= 48) this.pages.delete(this.pages.keys().next().value!);
+        this.pages.set(request.detail.key, immutable(page)); request.detail.resolve(page);
+        const ref = this.references.get(request.name); if (ref) ref.expiresAt = Math.min(page.observed_at_ms + 300000, started + 60000);
       } else {
         const page = result.data as ObjectReadPage;
         if (page.object_ref !== request.reference || page.root_name !== request.name || page.observed_path.length || page.path.length || page.kind !== request.readKind) throw new Error("The preview does not match the original object reference.");
-        const stale = invalidation !== this.invalidation; this.previews.set(request.name, immutable({ binding: preview(request.name, page), observedAt: page.observed_at_ms, notice: page.notices.join("\n"), stale }));
+        const stale = invalidation !== this.invalidation; this.previews.set(request.name, immutable({ page, binding: preview(request.name, page), observedAt: page.observed_at_ms, notice: page.notices.join("\n"), stale }));
         if (!stale) {
           this.references.set(request.name, { reference: request.reference, metadata: page.metadata, observedAt: page.observed_at_ms, expiresAt: Math.min(page.observed_at_ms + 300000, started + 60000), validated: true });
           if (request.readKind !== "structure" || !["table", "values"].includes(previewKind(page.metadata))) { this.pending.delete(request.name); this.manual.delete(request.name); } this.ports.changed();
@@ -225,7 +279,8 @@ export class Objects extends Model<ObjectsSnapshot> {
     } catch (error) {
       if (current()) {
         this.error = message(error); this.staleValue = true;
-        if (/observation_expired|content_changed|budget_exhausted|budget_exceeded|stale_session|reference[^\n]*(expired|invalid)|binding[^\n]*changed/i.test(this.error)) this.block(request);
+        if (request.kind === "detail") { request.detail.reject(new Error(this.error)); this.details.delete(request.detail.key); if (invalidation === this.invalidation && /expired|changed|invalid|budget|stale_session/i.test(this.error)) this.block(request); return; }
+        if (/not_found|does not exist|observation_expired|content_changed|budget_exhausted|budget_exceeded|stale_session|reference[^\n]*(expired|invalid)|binding[^\n]*changed/i.test(this.error)) this.block(request);
         else if (invalidation === this.invalidation) this.retryRead = request; throw error;
       }
     } finally { if (current()) { this.inFlight = null; this.publish(); if (this.needsObservation) this.ports.schedule(); } }

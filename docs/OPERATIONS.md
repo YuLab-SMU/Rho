@@ -61,7 +61,7 @@ is not accepted by the workbench.
 | Run selection/current line | Execute selected text, or the current line when selection is empty; no automatic save |
 | Run File | Capture the text, save and verify it, then execute that snapshot; later edits remain dirty |
 | Format | Invoke native R tooling; apply only if the document still matches, otherwise offer comparison |
-| Inspect objects through Host | Filter/page binding observations, open exact object references and continue values, rows/columns, lists or text; unsupported values remain metadata-only |
+| Inspect objects through Host | Read immediate values/shapes, expand containers, or open a dedicated grid in the editor area; page and sort/filter supported tables against one observation; unsupported classes remain metadata only |
 | View/export a plot | Use the original operation/output reference; viewing does not execute R |
 
 Cmd/Ctrl-S saves, Cmd/Ctrl-Enter runs a selection/current line, and
@@ -99,6 +99,8 @@ receipts and unconfirmed request IDs. Browser session storage retains
 the current local access token. Draft synchronization is separate from saving a
 project file. Restart restores synchronized UI state across ports, not R memory
 or the previous in-memory undo stack.
+
+Full-column groups collapse to a side rail; stacked groups collapse to their tab bar. Restoring a window preserves that state.
 
 Closing a panel retains its document. Discarding a draft is explicit. Concurrent
 windows use version checks; conflicts preserve local text for comparison and

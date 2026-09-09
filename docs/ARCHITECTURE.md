@@ -263,7 +263,16 @@ directories and 32 object references per principal/session.
 
 Ordinary vectors, atomic matrices, standard data frames/tibbles and lists support
 bounded reads. Known base classes expose underlying values and attributes; other
-classed/opaque values remain safe metadata. Queries do not force promises or active
+classed/opaque values remain safe metadata unless a named native-storage reader
+supports them. Structural size describes the exposed read space (including
+formal parameters for functions and semantic members for S4 containers), without
+dispatching class-defined length methods. Known S3 list storage and S4 container/sparse storage use primitive
+attribute/subset access, not class accessors. Function/language source is bounded
+and never evaluated. Directory samples contain at most four atomic values; named
+color decoding uses already resident grDevices providers. Table sorting/filtering
+is bounded to 1,000,000 rows, returns original row indices and retains the object
+reference and structured slice/path. The client keeps at most 48 detail pages;
+failed identity checks invalidate reuse. Queries do not force promises or active
 bindings, or call user print, format, length, subset or conversion methods. Paths
 contain exact names or one-based indices; duplicate names require indices. Pages
 contain at most 200 entries/values, or 200 rows, 50 columns and 2,000 cells within

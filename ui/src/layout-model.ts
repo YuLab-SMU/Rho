@@ -2,6 +2,7 @@ import {
   Actions,
   DockLocation,
   Model as FlexModel,
+  Orientation,
   RowNode,
   TabNode,
   TabSetNode,
@@ -185,6 +186,17 @@ export class PanelLayout extends Model<LayoutSnapshot> {
           }),
         );
       });
+      // Current saved layouts may contain the old height-only collapse state.
+      // Reapply the same user's intent on the actual sibling axis.
+      this.model.visitNodes((node) => {
+        if (!(node instanceof TabSetNode) || !node.getConfig()?.collapsed || node.getConfig()?.collapseRestore) return;
+        const config = node.getConfig();
+        this.model.doAction(Actions.updateNodeAttributes(node.getId(), {
+          minHeight: 58, maxHeight: 99999, weight: config.previousWeight ?? node.getWeight(),
+          config: { ...config, collapsed: false },
+        }));
+        this.model.doAction(Actions.group(this.collapseActions(node, true)));
+      });
     } catch {
       this.currentModel = FlexModel.fromJson(defaultLayout(this.options.width));
       this.error =
@@ -280,7 +292,8 @@ export class PanelLayout extends Model<LayoutSnapshot> {
     return count === 0;
   }
   private get activeTab() {
-    return this.model.getActiveTabset()?.getSelectedNode();
+    const group = this.model.getActiveTabset();
+    return group?.getConfig()?.collapsed ? undefined : group?.getSelectedNode();
   }
   undo() {
     const json = this.history.pop();
@@ -315,6 +328,14 @@ export class PanelLayout extends Model<LayoutSnapshot> {
     if (saved) this.knownViews[id] = Object.freeze({ ...saved, name });
     if (this.has(id)) this.model.doAction(Actions.renameTab(id, name));
     else this.changed();
+  }
+  isCollapsed(id: string) { const group = this.model.getNodeById(id)?.getParent(); return group instanceof TabSetNode && !!group.getConfig()?.collapsed; }
+  restoreView(component: string, id: string, name?: string, config?: unknown) {
+    if (!this.has(id)) { this.show(component, id, name, config); return; }
+    if (!isBuiltinPanel(component)) return;
+    const title = name ?? builtinPanels[component].name;
+    this.knownViews[id] = Object.freeze({ component, name: title, config });
+    this.model.doAction(Actions.updateNodeAttributes(id, { name: title, config }));
   }
   show(
     component: string,
@@ -394,53 +415,48 @@ export class PanelLayout extends Model<LayoutSnapshot> {
         const config = node.getConfig() ?? {};
         if (config.collapsed && !node.isMaximized())
           return Actions.group([
-            Actions.updateNodeAttributes(node.getId(), {
-              minHeight: 58,
-              maxHeight: 99999,
-              config: { ...config, collapsed: false, restoreCollapsed: true },
-            }),
+            ...this.collapseActions(node, false, true),
             action,
           ]);
         if (config.restoreCollapsed && node.isMaximized())
           return Actions.group([
-            Actions.updateNodeAttributes(node.getId(), {
-              minHeight: 0,
-              maxHeight: 0,
-              config: { ...config, collapsed: true, restoreCollapsed: false },
-            }),
+            ...this.collapseActions(node, true),
             action,
           ]);
       }
     }
     return action;
   };
+  private collapseActions(node: TabSetNode, collapsed: boolean, restoreCollapsed = false): Action[] {
+    const config = node.getConfig() ?? {};
+    const side = node.getParent()?.getOrientation() === Orientation.HORZ;
+    const saved = config.collapseRestore ?? {
+      minWidth: node.getAttrMinWidth(), maxWidth: node.getAttrMaxWidth(),
+      minHeight: node.getAttrMinHeight(), maxHeight: node.getAttrMaxHeight(),
+      enableTabStrip: node.isEnableTabStrip(), weight: node.getWeight(),
+      tabs: Object.fromEntries(node.getChildren().map(tab => [tab.getId(), {
+        minWidth: (tab as TabNode).getMinWidth(), minHeight: (tab as TabNode).getMinHeight(),
+      }])),
+    };
+    const actions = node.getChildren().map(tab => Actions.updateNodeAttributes(tab.getId(),
+      collapsed ? { ...(side ? { minWidth: 0 } : { minHeight: 0 }) } : saved.tabs[tab.getId()] ?? {}));
+    actions.push(Actions.updateNodeAttributes(node.getId(), collapsed ? {
+      ...(side ? { minWidth: 38, maxWidth: 38, enableTabStrip: false } : { minHeight: 0, maxHeight: 0 }),
+      config: { ...config, collapsed: true, collapseAxis: side ? "width" : "height", collapseRestore: saved, restoreCollapsed: false },
+    } : {
+      minWidth: saved.minWidth, maxWidth: saved.maxWidth, minHeight: saved.minHeight, maxHeight: saved.maxHeight,
+      enableTabStrip: saved.enableTabStrip, weight: saved.weight,
+      config: { ...config, collapsed: false, collapseRestore: restoreCollapsed ? saved : undefined, restoreCollapsed },
+    }));
+    return actions;
+  }
   collapse(node: TabSetNode) {
     const config = node.getConfig() ?? {},
       collapsed = !config.collapsed;
     const actions = node.isMaximized()
       ? [Actions.maximizeToggle(node.getId())]
       : [];
-    actions.push(
-      Actions.updateNodeAttributes(
-        node.getId(),
-        collapsed
-          ? {
-              minHeight: 0,
-              maxHeight: 0,
-              config: {
-                ...config,
-                collapsed,
-                previousWeight: node.getWeight(),
-              },
-            }
-          : {
-              minHeight: 58,
-              maxHeight: 99999,
-              weight: config.previousWeight ?? 50,
-              config: { ...config, collapsed },
-            },
-      ),
-    );
+    actions.push(...this.collapseActions(node, collapsed));
     this.model.doAction(Actions.group(actions));
   }
   targets(from: string) {

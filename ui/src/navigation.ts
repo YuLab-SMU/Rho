@@ -34,7 +34,7 @@ export class Navigation extends Model<{ dialog: Dialog }> {
     try { await this.ports.openDocument(path, bytes); }
     catch (error) { if (generation === this.generation && sameScope(scope, this.ports.context())) this.ports.reportError(error instanceof Error ? error.message : String(error)); }
   }
-  openObject(name: string) { this.ports.show("viewer", `object:${name}`, name, { name }); }
+  openObject(name: string, path: import("./generated/ObjectPathElement").ObjectPathElement[] = []) { this.ports.show("viewer", `object:${name}${path.length ? ":" + JSON.stringify(path) : ""}`, name + path.map(x => x.kind === "index" ? `[[${x.index}]]` : `$${x.name}`).join(""), { name, path }); }
   locatePlot(reference: MediaReference) { this.ports.locatePlot(reference); }
   documentCommand(id: string, action: DocumentAction) {
     const listeners = this.documentListeners.get(id);

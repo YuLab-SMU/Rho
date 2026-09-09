@@ -130,7 +130,8 @@ export class Studio {
         selected_plot: plot ? { operation_id: plot.operation_id, sequence: plot.sequence } : null,
       };
     };
-    const activateView = (id: string) => {
+    const activateView = (id: string, preserveCollapsed = false) => {
+      if (preserveCollapsed && this.layout.isCollapsed(id)) return;
       const view = this.layout.getSnapshot().knownViews[id];
       if (!view || !this.layout.has(id)) throw new Error("The requested view is not open.");
       this.layout.show(view.component, id, view.name, view.config);
@@ -167,7 +168,7 @@ export class Studio {
           for (const view of saved.views) {
             const known = current.knownViews[view.view_id];
             const document = view.document_id ? this.documents.getDocumentSnapshot(view.document_id) : null;
-            this.layout.show(view.view_type, view.view_id, document?.name ?? known?.name,
+            this.layout.restoreView(view.view_type, view.view_id, document?.name ?? known?.name,
               document ? { documentId: document.id } : known?.config);
           }
           const session = this.session.context().session;
@@ -178,8 +179,8 @@ export class Studio {
               this.outputs.restoreReferences([mediaKey(reference)]); this.plots.restoreSelection(reference);
             } else if (plotError) this.session.reportError(plotError);
           }
-          for (const view of saved.views) if (view.active) activateView(view.view_id);
-          if (saved.active_view_id) activateView(saved.active_view_id);
+          for (const view of saved.views) if (view.active) activateView(view.view_id, true);
+          if (saved.active_view_id) activateView(saved.active_view_id, true);
           if (saved.active_document_id) this.documents.activate(saved.active_document_id);
         },
         openView: (type, id) => {

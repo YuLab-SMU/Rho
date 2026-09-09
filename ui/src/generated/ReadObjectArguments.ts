@@ -6,4 +6,8 @@ export type ReadObjectArguments = { expected_session: string, object_ref: string
 /**
  * For kind=text, select "names" or "levels" instead of character values.
  */
-text_attribute: string | null, text_start: number, text_limit_bytes: number, };
+text_attribute: string | null, text_start: number, text_limit_bytes: number,
+/**
+ * One-based coordinates for dimensions 3 and above; omitted coordinates select the first slice.
+ */
+slice: Array<number>, sort_column: number | null, sort_descending: boolean, filter_column: number | null, filter_text: string | null, };

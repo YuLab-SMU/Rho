@@ -446,8 +446,13 @@ runs. **Close Group** names its scope and closes every view in that group. Empty
 groups release their space. An entirely empty workspace offers Open File, New R
 File and Show Panels. Discard Draft is a separate document action.
 
-Collapse leaves exactly the group tab bar. Restore uses the retained weight within
+Collapse follows the parent split: a full column becomes a 38 px side rail;
+a vertically stacked group leaves its 38 px tab bar. The cross axis stays
+unconstrained so neighboring groups retain the workspace height or width.
+Restore uses the retained weight and original group/tab limits within
 available space. Maximize/Restore returns to the corresponding group state.
+Startup reconciliation restores view membership without expanding collapsed
+groups; only an explicit Show/Activate/Restore action expands them.
 **Undo Layout Change** retains twenty committed changes and never shares the
 editor's undo history. A resize gesture contributes one history entry. Reopening
 uses a surviving original group or neighbor before choosing a current destination.
@@ -548,7 +553,9 @@ expansions and Collapse All. **Open in New Tab** is explicit. Standard data fram
 and ordinary tibbles use at most 20 rows × 10 columns; base vectors use at most 20
 items. NA, NaN, infinity and non-previewed values remain distinguishable. The
 object list contains at most 200 entries and states the observed total/truncation.
-Classed, opaque, active and lazy bindings retain the safe metadata-only boundary.
+Unsupported classed/opaque values and active/lazy bindings retain the safe
+metadata-only boundary. Section 14 extends inspection for named native storage
+layouts without calling their methods.
 Busy observations show their age. Refresh after execution covers the list and
 visible expanded previews; caches cannot cross a native session identity.
 
@@ -915,3 +922,50 @@ Approve once, Approve for this session and Reject. The four-option feedback boar
 does not add a fabricated feedback field to that protocol. Short inspection groups
 retain a 360 px Agent minimum; context pickers stay inside the panel and long
 input/permission content scrolls without losing access to Send/Stop.
+
+## 14. Objects — approved viewing experience
+
+The user authorized implementation of the six [Objects Paper boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0)
+on 2026-09-09, together with the full-column collapse correction. Native owner
+observations supply every displayed value; Paper fixtures are not runtime data.
+
+The directory uses a small sample to show numbers, literal strings and their
+character counts, R color swatches, vector lengths and table/array dimensions.
+Wide lists align name, type, size and content. Narrow lists retain the value or
+shape beneath the name; shape takes precedence over sample elements for arrays.
+A color remains a character value. Named colors use R's interpretation rather
+than CSS names. Missing values, literal `"NA"`, empty text, NULL and empty vectors
+remain distinct. Factor labels retain separately inspectable integer codes.
+
+Disclosure is local and supports several open objects. Standard containers expose
+indexed children; dedicated container views use a contents rail and selected
+child viewer. Duplicate names remain addressable by index. Explicit **Open in New
+Tab** opens a retained viewer in the main editor group, leaving Objects available.
+Tables use React Data Grid for virtualized cells, resizing, pinning, keyboard
+navigation and column management. Selection and view preferences belong to the
+Objects model, not panel lifetime. Current selected cells can be copied as TSV;
+long strings are continued before copying, within a 1 MiB copy budget.
+
+Dedicated table reads retain the native object reference, relative path and
+original row indices. Row and column paging, direct row navigation, array slice
+coordinates, sorting and substring filtering use that same owner. Sorting and
+filtering apply to the whole table, with a 1,000,000-row processing ceiling;
+calendar/time text filters and opaque/complex column ordering are unavailable.
+A returned page still has the existing row/cell/byte bounds. No loaded fragment is
+silently treated as the full dataset. Short active values occupy a compact bar;
+full text is an explicit detail view with Unicode counts and continuation.
+
+Known native readers include ordinary R containers, base semantic vector classes,
+function/language source, `lm`/`glm`/`phylo` list storage, `dgCMatrix`, DFrame and
+SimpleList, and the supported native storage of SummarizedExperiment and
+SingleCellExperiment. SCE assays, rowData, colData, reductions and metadata reuse
+the same viewers. Sparse reads materialize only requested values. This is not
+blanket S4, Seurat, delayed-array or custom-method support. Unknown storage stays
+metadata only. Source previews are capped at 500 lines with a visible notice.
+Plot rendering is an explicit Console-owned execution, separate from observation.
+
+Busy/disconnected views retain their last observation and timestamp. New sessions
+clear scientific page caches; changed/expired references cannot merge with old
+pagination or complete a stale copy. Refresh opens fresh evidence. User Hosts
+must not be restarted merely to deliver new view code without preserving the
+existing restart boundary. Current verification and remaining limits are in Status.

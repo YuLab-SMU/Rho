@@ -40,6 +40,15 @@ narrow ports. Domain snapshots are read-only. Document and undo state survive pa
 lifecycle changes. Layout changes must not execute code. Keep visual feedback tied
 to actual owner state. Studio only composes and manages the client lifecycle.
 
+## Object viewer acceptance fixtures
+
+The object viewer uses `react-data-grid` with React 19. Real native-storage checks
+in `scripts/test-r-objects.R` require Matrix and SingleCellExperiment in addition
+to the existing jsonlite/rlang bridge providers; tests never install them. Use
+`node scripts/test-real-r.mjs` for the complete native suite. The Studio browser
+scenario exercises a real 501-row table, Unicode text, array slices and SCE assay
+storage. Check ordinary/wide/constrained layouts and copying, not only snapshots.
+
 ## Checks
 
 | Change or verification need | Closest entry point |

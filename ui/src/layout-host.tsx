@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { ReactNode } from "react";
-import { Layout, Model, TabSetNode } from "flexlayout-react";
+import { Layout, Model, TabNode, TabSetNode } from "flexlayout-react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Modal } from "./primitives";
 import { directions, PanelLayout, regionName } from "./layout-model";
@@ -59,6 +59,19 @@ function DockPreview({ model, source }: { model: Model; source: string }) {
       />
     </div>
   );
+}
+function LayoutContent({ layout, node }: { layout: PanelLayout; node: TabNode }) {
+  useSyncExternalStore(layout.subscribe, layout.getSnapshot);
+  const group = node.getParent(), view = layout.instance(node);
+  if (group instanceof TabSetNode && group.getConfig()?.collapsed) {
+    return group.getConfig()?.collapseAxis === "width" ? (
+      <button className="collapsed-side-rail" aria-label={`Restore Group: ${regionName(group)}`}
+        title={`Restore ${regionName(group)}`} onClick={() => layout.collapse(group)}>
+        <span aria-hidden="true">›</span><span>{regionName(group)}</span>
+      </button>
+    ) : null;
+  }
+  return view ? renderBuiltinPanel(view) : <div className="empty">View unavailable</div>;
 }
 export function LayoutHost({
   layout,
@@ -130,8 +143,7 @@ export function LayoutHost({
         <Layout
           model={layout.model}
           factory={(node) => {
-            const view = layout.instance(node);
-            return <PanelBoundary>{view ? renderBuiltinPanel(view) : <div className="empty">View unavailable</div>}</PanelBoundary>;
+            return <PanelBoundary><LayoutContent layout={layout} node={node} /></PanelBoundary>;
           }}
           realtimeResize
           tabDragSpeed={0}

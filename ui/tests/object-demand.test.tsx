@@ -15,12 +15,14 @@ vi.mock("../src/context", () => ({
   },
   useSession: () => ({ runtime: { state: "idle" } }),
   useNavigation: () => ({ openObject: vi.fn() }),
+  useConsole: () => ({ run: vi.fn() }),
 }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); state.owner?.stop(); });
 const metadata = { classes: ["data.frame"], object_type: "list", kind: "value", length: 1, dimensions: [1, 1], supported_reads: ["structure", "table", "children"], attributes: [], notice: null };
 
 it("loads every explicitly expanded row even when its preview never intersects the scroll viewport", async () => {
   // A preview below the panel's clipped bottom can remain nonintersecting forever.
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} unobserve() {} });
   vi.stubGlobal("IntersectionObserver", class { observe() {} disconnect() {} });
   vi.spyOn(Date, "now").mockReturnValue(1);
   const scope: ResourceIdentity = { epoch: 1, project: "/project", session: "session", runtimeState: "idle", connected: true,
@@ -45,7 +47,7 @@ it("loads every explicitly expanded row even when its preview never intersects t
   await owner.observe(); expect(query).toHaveBeenCalledTimes(1);
   owner.viewsChanged({ activeViewIds: ["objects"] });
   await act(async () => { for (let i = 0; i < names.length * 2; i++) await owner.observe(); });
-  expect(container.querySelectorAll("table")).toHaveLength(3);
+  expect(container.querySelectorAll('[role="grid"]')).toHaveLength(3);
   expect(query.mock.calls.filter(([, capability]) => capability === "workspace.observe_object").map(([, , args]) => args.name)).toEqual(names);
   expect(query.mock.calls.filter(([, capability]) => capability === "workspace.read_object").map(([, , args]) => args.object_ref)).toEqual(names.map((name) => `ref-${name}`));
 });

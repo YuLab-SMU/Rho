@@ -10,4 +10,4 @@ export type ObjectReadPage = { object_ref: string, root_name: string,
 /**
  * Path fixed when the observation opened, separate from this read's relative path.
  */
-observed_path: Array<ObjectPathElement>, path: Array<ObjectPathElement>, kind: ObjectReadKind, metadata: ObjectMetadata, values: Array<ObjectScalar>, children: Array<ObjectChild>, columns: Array<ObjectColumn>, start: number, next_start: number | null, column_start: number, next_column_start: number | null, text_start: number, next_text_start: number | null, observed_at_ms: number, complete: boolean, notices: Array<string>, };
+observed_path: Array<ObjectPathElement>, path: Array<ObjectPathElement>, kind: ObjectReadKind, metadata: ObjectMetadata, values: Array<ObjectScalar>, children: Array<ObjectChild>, columns: Array<ObjectColumn>, start: number, next_start: number | null, column_start: number, next_column_start: number | null, text_start: number, next_text_start: number | null, observed_at_ms: number, complete: boolean, notices: Array<string>, row_indices?: Array<number>, row_names?: Array<string>, total_rows?: number, slice?: Array<number>, };

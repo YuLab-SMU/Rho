@@ -94,6 +94,17 @@ pub struct ReadObjectArguments {
     #[serde(default = "text_limit")]
     #[schemars(range(min = 1, max = 65536))]
     pub text_limit_bytes: u32,
+    /// One-based coordinates for dimensions 3 and above; omitted coordinates select the first slice.
+    #[serde(default)]
+    pub slice: Vec<u64>,
+    #[serde(default)]
+    pub sort_column: Option<u32>,
+    #[serde(default)]
+    pub sort_descending: bool,
+    #[serde(default)]
+    pub filter_column: Option<u32>,
+    #[serde(default)]
+    pub filter_text: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct ObjectMetadata {
@@ -105,6 +116,17 @@ pub struct ObjectMetadata {
     pub supported_reads: Vec<ObjectReadKind>,
     pub attributes: Vec<ObjectAttribute>,
     pub notice: Option<String>,
+    /// A small native sample for immediate recognition, never a full profile.
+    #[serde(default)]
+    #[ts(optional)]
+    pub preview: Option<Vec<ObjectScalar>>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub level_count: Option<u64>,
+    /// Native reader features, separate from attributes stored on the R object.
+    #[serde(default)]
+    #[ts(optional)]
+    pub table_features: Option<Vec<String>>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct ObjectAttribute {
@@ -147,6 +169,10 @@ pub struct ObjectScalar {
     pub label: Option<String>,
     pub text_characters: Option<u64>,
     pub next_text_start: Option<u64>,
+    /// Canonical R color when this complete character value is a valid color.
+    #[serde(default)]
+    #[ts(optional)]
+    pub color: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct ObjectChild {
@@ -182,4 +208,16 @@ pub struct ObjectReadPage {
     pub observed_at_ms: i64,
     pub complete: bool,
     pub notices: Vec<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub row_indices: Option<Vec<u64>>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub row_names: Option<Vec<String>>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub total_rows: Option<u64>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub slice: Option<Vec<u64>>,
 }

@@ -238,7 +238,7 @@ test("create a Chinese R file, save-run, inspect objects and edit-run again", as
     .getByRole("button")
     .filter({ has: page.locator("code", { hasText: "studio_data" }) })
     .click();
-  await expect(page.locator(".objects-panel table")).toContainText("甲");
+  await expect(page.locator(".objects-panel [role=grid]")).toContainText("甲");
   await editor.fill(
     'studio_data$value <- c(3, 4)\ncat("modified file ran\\n")\nplot(studio_data$value)\n',
   );
@@ -1343,16 +1343,14 @@ test("fixed gapminder analysis, in-place previews and input/frame latency under 
       .locator(".objects-panel")
       .getByRole("button", { name: new RegExp(`› ${name}$`) })
       .click();
-  await expect(page.locator(".objects-panel table")).toHaveCount(3);
+  await expect(page.locator(".objects-panel [role=grid]")).toHaveCount(3);
   await expect(page.locator(".object-viewer")).toHaveCount(0);
-  expect(
-    (
-      await queryNative("workspace.inspect_object", {
-        name: "model",
-        max_items: 20,
-      })
-    ).data.preview,
-  ).toBeNull();
+  let modelObservation: any;
+  await expect.poll(async () => {
+    modelObservation = await queryNative("workspace.inspect_object", { name: "model", max_items: 20 });
+    return modelObservation.status;
+  }).toBe("ready");
+  expect(modelObservation.data.preview).toBeNull();
   let analysisMedia: { reference: { operation_id: string; sequence: number } }[] = [];
   await expect.poll(async () => {
     const observation = await queryNative("workspace.list_outputs", { operation_id: analysisOperationId, after_sequence: 0, limit: 100 });
@@ -1833,7 +1831,7 @@ test("terminal output transport failures recover while failed execution refreshe
   await page.getByRole("tab", { name: "Objects", exact: true }).click();
   await page.getByLabel("Filter Objects").fill("rho_recovery_object");
   await page.getByRole("button", { name: /^› rho_recovery_object$/ }).click();
-  await expect(page.locator(".objects-panel table")).toContainText("41");
+  await expect(page.locator(".objects-panel [role=grid]")).toContainText("41");
   expect((await queryNative("workspace.inspect_object", { name: "rho_terminal_effect", max_items: 1 })).data.preview).toEqual([1]);
   expect(browserInvokes).toBe(0);
   await testInfo.attach("terminal-output-recovery", { body: JSON.stringify({ operationId, terminalFailures, browserInvokes, counter: 1 }, null, 2), contentType: "application/json" });
@@ -1845,11 +1843,11 @@ test("same-name previews retain independent demand and closed Packages restores 
   await invokeNative("rho_dual_preview <- data.frame(value=11L)");
   await page.getByLabel("Filter Objects").fill("rho_dual_preview");
   await page.getByRole("button", { name: /^› rho_dual_preview$/ }).click();
-  await expect(page.locator(".objects-panel table")).toContainText("11");
+  await expect(page.locator(".objects-panel [role=grid]")).toContainText("11");
   await page.getByRole("button", { name: "Open rho_dual_preview in New Tab", exact: true }).click();
   await moveVisibleView(page, "rho_dual_preview", "workspace", "Left");
-  await expect(page.locator(".objects-panel:visible table")).toContainText("11");
-  await expect(page.locator(".object-viewer:visible table")).toContainText("11");
+  await expect(page.locator(".objects-panel:visible [role=grid]")).toContainText("11");
+  await expect(page.locator(".object-viewer:visible [role=grid]")).toContainText("11");
   let inspections = 0;
   page.on("request", (request) => {
     if (!request.url().endsWith("/api/host")) return;
@@ -1857,12 +1855,12 @@ test("same-name previews retain independent demand and closed Packages restores 
     if (call?.method === "query_snapshot" && call.params.capability.id === "workspace.observe_object" && call.params.arguments.name === "rho_dual_preview") inspections++;
   });
   await invokeNative("rho_dual_preview$value <- 22L");
-  await expect(page.locator(".objects-panel:visible table")).toContainText("22");
-  await expect(page.locator(".object-viewer:visible table")).toContainText("22");
+  await expect(page.locator(".objects-panel:visible [role=grid]")).toContainText("22");
+  await expect(page.locator(".object-viewer:visible [role=grid]")).toContainText("22");
   expect(inspections).toBe(1);
   await page.getByRole("tab", { name: "rho_dual_preview", exact: true }).locator(".flexlayout__tab_button_trailing").click();
   await invokeNative("rho_dual_preview$value <- 33L");
-  await expect(page.locator(".objects-panel:visible table")).toContainText("33");
+  await expect(page.locator(".objects-panel:visible [role=grid]")).toContainText("33");
   expect(inspections).toBe(2);
   await page.getByRole("button", { name: "Panels", exact: true }).click();
   await page.getByRole("menuitem", { name: "Packages", exact: true }).click();
@@ -1896,7 +1894,7 @@ test("same-name previews retain independent demand and closed Packages restores 
   await expect(page.locator(".packages-panel:visible").getByLabel("Search Packages")).toHaveValue("stats");
   await page.getByRole("tab", { name: "Objects", exact: true }).click();
   await page.getByLabel("Filter Objects").fill("rho_dual_preview");
-  await expect(page.locator(".objects-panel:visible table")).toContainText("33");
+  await expect(page.locator(".objects-panel:visible [role=grid]")).toContainText("33");
   const cancellation = await invokeNative('rho_dual_preview$value <- 44L; cat("rho_cancel_ready\\n"); Sys.sleep(8)', true);
   await expect.poll(async () => (await queryNative("workspace.console_state")).data.current?.operation_id).toBe(cancellation.operation.operation_id);
   await expect.poll(async () => (await queryNative("workspace.output_events", { operation_id: cancellation.operation.operation_id, after_sequence: 0, limit: 100 })).data.events.some((event: { text?: string }) => event.text?.includes("rho_cancel_ready"))).toBe(true);
@@ -1904,7 +1902,7 @@ test("same-name previews retain independent demand and closed Packages restores 
   const reply = await (await api("/api/host", { project_root: info.project_root, frame: { id: crypto.randomUUID(), request: { method: "request_cancellation", params: { operation_id: cancellation.operation.operation_id, only_if_pending: false } } } })).json();
   expect(reply.ok, reply.error).toBe(true);
   await expect.poll(async () => (await queryNative("operation.list_recent", { operation_id: cancellation.operation.operation_id, limit: 1 })).data.operations[0].status).toBe("cancelled");
-  await expect(page.locator(".objects-panel:visible table")).toContainText("44");
+  await expect(page.locator(".objects-panel:visible [role=grid]")).toContainText("44");
   await testInfo.attach("view-demand", { body: JSON.stringify({ queriesForTwoViews: 1, queriesAfterClosingViewer: 1, cancelledOperation: cancellation.operation.operation_id, closedPackagesRestored: true }, null, 2), contentType: "application/json" });
 });
 
@@ -2017,4 +2015,81 @@ test("Native Agent settings use separate diagnostics and never expose daily chat
   expect(diagnostics[0]).toMatchObject({ provider: "codex", model: "native-detailed", observe_only: false }); expect(diagnostics[0]).not.toHaveProperty("session_id");
   await expect(settings.getByRole("textbox", { name: "Ask about this workspace" })).toHaveCount(0); await expect(settings.getByRole("button", { name: /^Connect (Codex|Kimi Code|DeepSeek Harness)$/ })).toHaveCount(0);
   await page.screenshot({ path: "../target/studio-browser/agents-diagnostic-settings.png" });
+});
+
+test("full-height Files and Agent collapse to side rails without shortening the workspace", async ({ page }) => {
+  await page.goto(url); await resetLayout(page);
+  await page.getByRole('button', { name: 'Panels', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Agent', exact: true }).click();
+  const editor = page.locator('.flexlayout__tabset').filter({ has: page.getByRole('tab', { name: 'Editor', exact: true }) });
+  const consoleGroup = page.locator('.flexlayout__tabset').filter({ has: page.getByRole('tab', { name: 'Console', exact: true }) });
+  const bottom = (await consoleGroup.boundingBox())!;
+  const original = (await editor.boundingBox())!;
+  for (const name of ['Files', 'Agent']) {
+    const group = page.locator('.flexlayout__tabset').filter({ has: page.getByRole('tab', { name, exact: true }) });
+    await group.getByRole('button', { name: 'Collapse Group', exact: true }).click();
+    const rail = page.getByRole('button', { name: `Restore Group: ${name}`, exact: true });
+    await expect(rail).toBeVisible();
+    expect((await rail.boundingBox())!.width).toBeLessThanOrEqual(38);
+    expect((await rail.boundingBox())!.height).toBeGreaterThan(700);
+    const after = (await consoleGroup.boundingBox())!;
+    expect(Math.abs(after.y + after.height - bottom.y - bottom.height)).toBeLessThan(3);
+  }
+  expect((await editor.boundingBox())!.width).toBeGreaterThan(original.width + 250);
+  await page.screenshot({ path: '../target/studio-browser/side-rails.png' });
+  await expect(page.getByText('Draft synced', { exact: true })).toBeVisible();
+  await page.reload();
+  for (const name of ['Files', 'Agent']) await page.getByRole('button', { name: `Restore Group: ${name}`, exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
+  expect(Math.abs((await editor.boundingBox())!.width - original.width)).toBeLessThan(4);
+});
+
+test("object viewers browse real R values, all table rows, array slices and SCE contents", async ({ page }) => {
+  test.setTimeout(120000);
+  await page.goto(url); await resetLayout(page);
+  await runConsole(page, `threshold <- 0.05; labels <- c("PBMC treatment response", "处理组 α\\n第二行", "", NA_character_); palette <- c("#440154", "#3B528B", "#21918C", "#5EC962", "#FDE725"); long_text <- paste(rep("界", 800), collapse=""); qc <- data.frame(cell_id=sprintf("cell_%04d",1:501), value=1:501, group=factor(rep(c("Control","Treated","Recovery"),167)), color=rep("#21918C",501)); expression_cube <- array(1:24,c(2,3,4)); analysis <- list(qc=qc, labels=labels); library(Matrix); library(SingleCellExperiment); sce <- SingleCellExperiment(assays=list(counts=as(Matrix(matrix(c(0,1,2,0,0,3),3),sparse=TRUE),"dgCMatrix")),colData=DataFrame(group=c("A","B")))`);
+  const objects = page.locator('.object-directory');
+  await expect(objects.locator('.object-entry').filter({ has: page.locator('code', { hasText: /^threshold$/ }) })).toContainText('0.05');
+  await expect(objects.locator('.object-entry').filter({ has: page.locator('code', { hasText: /^qc$/ }) })).toContainText('501 rows × 4 columns');
+  await page.screenshot({ path: '../target/studio-browser/objects-values-normal.png' });
+  await objects.getByRole('button', { name: 'Open qc in New Tab', exact: true }).click();
+  const viewer = page.locator('.object-viewer:visible');
+  const viewerGroup = page.locator('.flexlayout__tabset').filter({ has: page.getByRole('tab', { name: 'qc', exact: true }) });
+  await viewerGroup.getByRole('button', { name: 'Maximize tab set' }).click();
+  await expect(viewer.getByRole('gridcell', { name: '"cell_0001"', exact: true })).toBeVisible();
+  await viewer.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(viewer.getByRole('gridcell', { name: '"cell_0101"', exact: true })).toBeVisible();
+  await viewer.getByRole('columnheader', { name: /^value/ }).click();
+  await viewer.getByRole('columnheader', { name: /^value/ }).click();
+  await expect(viewer.getByRole('gridcell', { name: '"cell_0501"', exact: true })).toBeVisible();
+  await viewer.getByRole('button', { name: /^Filter rows/ }).click();
+  await viewer.getByLabel('Filter column').selectOption('3');
+  await viewer.getByLabel('Filter text').fill('Treated');
+  await viewer.getByRole('button', { name: 'Apply to all rows', exact: true }).click();
+  await expect(viewer).toContainText('167 of 501 rows');
+  await expect(viewer.getByRole('gridcell', { name: '"cell_0500"', exact: true })).toBeVisible();
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  const row500 = viewer.getByRole('row').filter({ has: page.getByRole('gridcell', { name: '"cell_0500"', exact: true }) });
+  const row497 = viewer.getByRole('row').filter({ has: page.getByRole('gridcell', { name: '"cell_0497"', exact: true }) });
+  await row500.getByRole('gridcell').nth(1).click();
+  await row497.getByRole('gridcell').nth(2).click({ modifiers: ['Shift'] });
+  await viewer.getByRole('button', { name: 'Copy selection', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('cell_0500\t500\ncell_0497\t497');
+  await viewer.getByRole('button', { name: /^Columns ·/ }).click();
+  await page.screenshot({ path: '../target/studio-browser/object-table-real.png' });
+  await viewerGroup.getByRole('button', { name: 'Restore tab set' }).click();
+  await objects.getByRole('button', { name: 'Open expression_cube in New Tab', exact: true }).click();
+  await expect(viewer.getByLabel('Dimension 3 slice')).toBeVisible();
+  await viewer.getByLabel('Dimension 3 slice').fill('3');
+  await expect(viewer.getByRole('gridcell', { name: '13', exact: true })).toBeVisible();
+  await objects.getByRole('button', { name: 'Open long_text in New Tab', exact: true }).click();
+  await expect(viewer.getByRole('button', { name: 'Load more text' })).toBeVisible();
+  await viewer.getByRole('button', { name: 'Load more text' }).click();
+  await expect(viewer.locator('.object-text-detail pre')).toHaveText('界'.repeat(800));
+  await objects.getByRole('button', { name: 'Open sce in New Tab', exact: true }).click();
+  await expect(viewer.getByRole('navigation', { name: 'Object contents' })).toBeVisible();
+  await expect(viewer.getByRole('gridcell', { name: '3', exact: true }).last()).toBeVisible();
+  const sceGroup = page.locator('.flexlayout__tabset').filter({ has: page.getByRole('tab', { name: 'sce', exact: true }) });
+  await sceGroup.getByRole('button', { name: 'Maximize tab set' }).click();
+  await page.screenshot({ path: '../target/studio-browser/object-sce-real.png' });
 });

@@ -2,30 +2,46 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
-## Object viewing design exploration
+## Object viewers and directional collapse
 
-The user requested a separate Paper page to redesign object inspection around
-visible values, dimensions, string lengths, colors and useful table browsing.
-The [Objects review page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0)
-in **Rho · 工作台交互草稿** contains six editable proposals: O01 immediate object
-summaries at wide and 320 px widths; O02 simultaneous inline tables, colors,
-vectors and nested lists; O03 a dedicated grid with column controls, range
-selection, copying and raw cell detail; O04 a SingleCellExperiment content tree
-and sparse assay view; O05 character values, factor levels/codes and array slices;
-O06 busy observations, unsupported classes, explicit plot rendering and special
-values. Actual page membership and screenshots of all six boards were checked.
-The examples are design fixtures, not observations of a live R session.
+The user authorized implementation of the six [Objects Paper boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0)
+on 2026-09-09, plus correction of full-column minimize behavior.
+[Design section 14](RHO-DESIGN.md#14-objects--approved-viewing-experience) records the
+approved interaction and named storage readers. Object lists now display bounded
+native samples, values, dimensions, string lengths and canonical R colors.
+Inline inspection and main-area viewers share the Objects owner, including
+retained view preferences, nested containers, factor labels/codes, source text,
+array slices and SCE/sparse storage. React Data Grid supplies the actual table
+surface. Whole-table order/filter reads retain original row indices; oversized
+copies, unsupported calendar filters and the one-million-row processing ceiling
+are explicit limits. Current Host metadata controls extended table features.
 
-This is an unapproved interaction proposal, not an implementation milestone.
-The current dedicated viewer still reuses the small bounded preview. A new grid
-must use version-bound progressive reads; whole-object sorting/filtering cannot
-silently apply only to loaded rows. Class-specific SCE/sparse readers and plot
-rendering need explicit capability work; unknown classes retain the current safe
-metadata boundary. Glide Data Grid and AG Grid were researched through current
-documentation; selection remains open pending performance, accessibility and
-licensing review. No application code, dependency or running Host was changed
-by this design task. Continue review on O01's density and O03's table interaction.
-Documentation governance and the scoped whitespace check passed.
+Groups collapse along their parent split: full columns release width into a
+38 px side rail; stacked panels release height. Original limits/weights restore,
+and startup view reconciliation preserves collapsed state. Explicit activation
+still restores the group. The user's existing development Host and R memory are
+preserved; a frontend refresh cannot install the new native reader capabilities.
+A reproducible synthetic review script is in
+`target/experience/object-viewers-ready/study/objects-demo.R`.
+
+Validation passed: 309 frontend tests, all 39 isolated Chrome scenarios, four
+contract tests, all five real-R integration cases and the real CLI/session runner.
+The native object script verifies full-table ordering/filtering, Unicode/special
+values, array slices, non-executed source, R color interpretation and real SCE
+counts/colData/PCA storage. Real-R MCP and Workbench checks passed, as did generated
+bindings/client consistency, typecheck, architecture/frontend boundaries, Rust
+formatting and governance checks. A broad Rust workspace run was interrupted;
+it is not recorded as a complete pass. Current evidence logs are
+`target/object-viewer-{browser-verified,frontend-final,contract-tests,real-r-suite,mcp-tests,workbench-tests}.log`.
+
+The review Host is running for
+`target/experience/object-viewers-ready/study`, using refreshable development
+assets. Its retained browser has executed `objects-demo.R`; the 2,700-row table,
+canonical colors, SCE and plot objects are real synthetic R fixtures. Inspect this
+Host before starting another instance for that project. Its private launch URL
+remains in ignored local material. Existing user Hosts were not restarted.
+Screenshots are under `target/studio-browser/`; successful inspection does not
+replace further user feedback on interaction quality.
 
 ## Agent Chinese input composition
 

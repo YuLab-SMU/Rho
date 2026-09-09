@@ -17,7 +17,7 @@ const renderers: Record<BuiltinRenderer, (view: PanelInstance) => ReactNode> = {
   plots: (view) => <PlotPanel viewId={view.id} />,
   agent: (view) => <AgentPanel viewId={view.id} />,
   document: (view) => <DocumentPanel documentId={view.id} />,
-  viewer: (view) => <ObjectViewer name={String((view.config as { name?: string } | undefined)?.name ?? "")} viewId={view.id} />,
+  viewer: (view) => <ObjectViewer name={String((view.config as { name?: string } | undefined)?.name ?? "")} viewId={view.id} path={(view.config as { path?: import("./generated/ObjectPathElement").ObjectPathElement[] } | undefined)?.path} />,
 };
 
 export function renderBuiltinPanel(view: PanelInstance): ReactNode {
