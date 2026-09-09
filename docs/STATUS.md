@@ -21,6 +21,13 @@ snapshot, DOM preview or persistent application state. Codex user configuration
 remains unchanged; the first connection requires pasting its generated block into
 Codex user settings and reloading that client's MCP connection.
 
+A local experience project is available at `target/experience/agent-playground`.
+It contains the fixed 1,704-row Gapminder CSV, attribution and `01_explore.R`, a
+base-R analysis producing a 142-country view, continent summary and scatter plot.
+The example was run successfully through Studio. Inspect live ownership before
+starting another Host for this project; private launch/runtime files remain in
+the ignored experience runtime directory.
+
 Current UI verification: **278/278 unit tests and 27/27 isolated Chrome cases
 passed** against the current built binary and assets. The new case covers actual
 MCP initialization, overview/window queries, private clipboard contents versus
