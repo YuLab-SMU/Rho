@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
 rho-contract = { path = "../contract" }
 rho-host = { path = "../host" }
 rho-mcp = { path = "../mcp" }

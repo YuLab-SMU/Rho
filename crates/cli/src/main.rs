@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+mod connection;
 mod session;
 
 use clap::{Parser, Subcommand};
@@ -12,6 +13,9 @@ use serde_json::json;
 struct Cli {
     #[arg(long, default_value_os_t = rho_host::default_database())]
     database: PathBuf,
+    /// Connect to an existing Workbench using its private launch URL file; no local Host is opened.
+    #[arg(long)]
+    connect_url_file: Option<PathBuf>,
     /// Explicit test-only runtime; does not run R.
     #[arg(long, conflicts_with = "ark")]
     demo: bool,
@@ -145,6 +149,11 @@ enum Command {
         #[arg(long)]
         binding: String,
     },
+    /// Send one typed HostRequest through --connect-url-file (including application controls).
+    Request {
+        #[arg(long)]
+        json: String,
+    },
     GetOperation {
         operation_id: String,
     },
@@ -166,6 +175,7 @@ async fn main() {
     }
 }
 
+#[derive(Debug)]
 struct CliFailure {
     message: String,
     diagnostic: Option<rho_contract::Diagnostic>,
@@ -195,6 +205,39 @@ impl From<rho_host::OperationError> for CliFailure {
 async fn run() -> Result<(), CliFailure> {
     let cli = Cli::parse();
     let context = NextHost::local_context();
+    if let Some(path) = &cli.connect_url_file {
+        if cli.demo
+            || cli.ark.is_some()
+            || cli.r_home.is_some()
+            || cli.rscript.is_some()
+            || cli.environment.is_some()
+            || cli.remote_host.is_some()
+            || cli.remote_root.is_some()
+            || cli.slurm_cluster.is_some()
+            || cli.host_skills.is_some()
+        {
+            return Err(rho_host::OperationError::InvalidInput("Connected commands use the existing Host configuration; runtime/source startup flags cannot be combined with --connect-url-file".into()).into());
+        }
+        let (request,label)=match &cli.command {
+            Command::Query {capability,capability_version,arguments}=>(json!({"method":"query_snapshot","params":{"capability":CapabilityRef::new(capability,*capability_version).map_err(|e|e.to_string())?,"arguments":serde_json::from_str::<serde_json::Value>(arguments).map_err(|e|e.to_string())?}}),"observation"),
+            Command::Invoke {..}=>(json!({"method":"invoke","params":invocation(&cli.command)?}),"operation"),
+            Command::GetOperation {operation_id}=>(json!({"method":"get_operation","params":{"operation_id":OperationId::new(operation_id).map_err(|e|e.to_string())?}}),"operation"),
+            Command::BindMethod {expected_version,binding}=>{let binding:rho_contract::ApplicationMethodBinding=serde_json::from_str(binding).map_err(|e|e.to_string())?;(json!({"method":"bind_method","params":{"expected_version":expected_version,"binding":binding}}),"binding")},
+            Command::Request {json}=>(serde_json::from_str::<serde_json::Value>(json).map_err(|e|e.to_string())?,"result"),
+            _=>return Err(rho_host::OperationError::InvalidInput("--connect-url-file supports query, invoke, get-operation, bind-method and request; it never launches a server or runtime".into()).into()),
+        };
+        let host = connection::ConnectedHost::open(path, cli.project.as_deref()).await?;
+        let result = host.submit(request).await?;
+        let mut response = json!({"ok":true,"mode":"connected_host"});
+        response[label] = result;
+        return print_json(&response).map_err(Into::into);
+    }
+    if matches!(cli.command, Command::Request { .. }) {
+        return Err(rho_host::OperationError::InvalidInput(
+            "The request command requires --connect-url-file for an existing Host".into(),
+        )
+        .into());
+    }
     if let Command::Workbench {
         port,
         url_file,
@@ -260,8 +303,16 @@ async fn run() -> Result<(), CliFailure> {
                 },
             )
             .await?;
-        return print_json(&json!({"ok":true,"observation":observation})).map_err(Into::into);
+        return print_json(
+            &json!({"ok":true,"mode":"standalone_observer","observation":observation}),
+        )
+        .map_err(Into::into);
     }
+    let prepared_invocation = if matches!(cli.command, Command::Invoke { .. }) {
+        Some(invocation(&cli.command)?)
+    } else {
+        None
+    };
     let active_host = if matches!(
         cli.command,
         Command::Invoke { .. } | Command::BindMethod { .. }
@@ -271,40 +322,17 @@ async fn run() -> Result<(), CliFailure> {
         None
     };
     let result = match cli.command {
-        Command::Session | Command::Mcp | Command::Workbench { .. } | Command::Query { .. } => {
+        Command::Session
+        | Command::Mcp
+        | Command::Workbench { .. }
+        | Command::Query { .. }
+        | Command::Request { .. } => {
             unreachable!()
         }
-        Command::Invoke {
-            client_request_id,
-            code,
-            arguments,
-            capability,
-            capability_version,
-            preconditions,
-            expected_session,
-        } => {
-            let host = active_host.expect("invoke opens one host");
-            let mut preconditions: Vec<Precondition> =
-                serde_json::from_str(&preconditions).map_err(|error| error.to_string())?;
-            if let Some(session) = expected_session {
-                preconditions.push(Precondition {
-                    kind: "workspace.session".to_string(),
-                    subject: "active".to_string(),
-                    expected: json!(session),
-                });
-            }
-            let arguments = if let Some(arguments) = arguments {
-                serde_json::from_str(&arguments).map_err(|error| error.to_string())?
-            } else {
-                json!({"code":code.ok_or("--code or --arguments is required")?})
-            };
-            let invocation = Invocation {
-                client_request_id,
-                capability: CapabilityRef::new(capability, capability_version)
-                    .map_err(|error| error.to_string())?,
-                arguments,
-                preconditions,
-            };
+        Command::Invoke { .. } => {
+            let host = active_host.expect("invoke opens one Host");
+            let invocation =
+                prepared_invocation.expect("invoke uses its prepared original parameters");
             let record = host.invoke(&context, invocation).await?;
             print_json(&json!({
                 "ok": true,
@@ -340,6 +368,44 @@ async fn run() -> Result<(), CliFailure> {
         }
     };
     result.map_err(Into::into)
+}
+
+fn invocation(command: &Command) -> Result<Invocation, CliFailure> {
+    let Command::Invoke {
+        client_request_id,
+        code,
+        arguments,
+        capability,
+        capability_version,
+        preconditions,
+        expected_session,
+    } = command
+    else {
+        return Err("Expected invoke arguments".into());
+    };
+    let mut preconditions: Vec<Precondition> =
+        serde_json::from_str(preconditions).map_err(|e| e.to_string())?;
+    if let Some(session) = expected_session {
+        preconditions.push(Precondition {
+            kind: "workspace.session".into(),
+            subject: "active".into(),
+            expected: json!(session),
+        });
+    }
+    let arguments = if let Some(arguments) = arguments {
+        serde_json::from_str(arguments).map_err(|e| e.to_string())?
+    } else {
+        json!({"code":code.as_ref().ok_or("--code or --arguments is required")?})
+    };
+    let invocation = Invocation {
+        client_request_id: client_request_id.clone(),
+        capability: CapabilityRef::new(capability, *capability_version)
+            .map_err(|e| e.to_string())?,
+        arguments,
+        preconditions,
+    };
+    invocation.validate().map_err(|e| e.to_string())?;
+    Ok(invocation)
 }
 
 fn print_json(value: &serde_json::Value) -> Result<(), String> {

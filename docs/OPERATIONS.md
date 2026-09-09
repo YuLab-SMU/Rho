@@ -187,15 +187,20 @@ these are `rho.host.overview.v1`, `rho.host.catalog.v1` and
 `rho.host.describe.v1`. Unavailable modules retain a reason. Overview components
 have independent timestamps and completeness.
 
-For a new Project-only Host, a one-shot query does not start R:
+A standalone `query` opens a query-only observer. It reads project files and an
+existing journal/output store without creating a database, acquiring a writer or
+project lease, recovering unfinished operations, or starting R. A missing journal
+is unavailable, not an empty history. This works while a live Host owns the project:
 
 ```sh
 target/debug/rho --database /absolute/path/to/state.sqlite \
   --project /absolute/path/to/project query --capability host.overview
 ```
 
-Use the existing Workbench MCP/session connection for an already running Host.
-Starting another CLI Host cannot take over its project lease. Keep returned native
+The observer does not attach to live R, Application state or Skill-read receipt
+storage. Use `--connect-url-file`, the existing session or Workbench MCP for those
+owners. Runtime/remote/Skill-source startup flags are rejected by standalone
+`query`. Explicit Host startup still requires its own project lease. Keep returned native
 identities, content hashes and continuation arguments together. `next_reads` points
 to additional evidence, not commands to execute automatically. On expired/changed
 observations, reopen deliberately; do not join pages from different versions.
@@ -289,6 +294,42 @@ references, targets and unmet conditions. Clear an ancestor exclusion at its own
 scope before selecting that method below it. Host-disabled sources cannot be
 re-enabled through an alias. A binding declares method use; it does not certify
 scientific correctness or schedule another Agent.
+
+## Connect the CLI to an existing Workbench
+
+Use the private URL file created by `workbench --url-file`:
+
+```sh
+target/debug/rho --connect-url-file /absolute/path/to/private-launch-url \
+  --project /absolute/path/to/project query --capability host.overview
+```
+
+The CLI reads the existing Host's project identity from `/api/info` and includes
+that identity in every `/api/host` request. A supplied `--project` must match; a
+project change is rejected. The URL must use a literal loopback HTTP address and
+its private token fragment. The credential remains outside command output. Proxies,
+redirects and automatic request retries are disabled.
+
+Connected `query`, `invoke`, `get-operation` and `bind-method` use the same Host
+ports and native owners. Storage/runtime/source configuration belongs to the
+running Host; startup flags cannot be combined with `--connect-url-file`. Connect
+failures do not start a local Host. After a missing effectful acknowledgement,
+retain the original request ID and inspect its receipt/operation: accepted work
+continues under the existing Host.
+
+For other shared controls, `request --json` accepts a typed `HostRequest`. Replace
+window/incarnation/context placeholders below with current application observations:
+
+```sh
+target/debug/rho --connect-url-file /absolute/path/to/private-launch-url \
+  --project /absolute/path/to/project request --json \
+  '{"method":"application_control","params":{"window":{"window_id":"WINDOW_ID","incarnation":"INCARNATION"},"request_id":"open-console-1","action":{"kind":"open_view","view_type":"console","view_id":null,"expected_context_version":"CONTEXT_VERSION"}}}'
+```
+
+This request reaches the same Application owner as browser/MCP requests. It does
+not edit layout/draft storage directly or introduce another scientific execution
+path. HTTP replies are bounded to 8 MiB. Long work can set `return_after_acceptance: true` on the typed Invoke request, then
+query the original operation.
 
 ## CLI and JSON sessions
 
