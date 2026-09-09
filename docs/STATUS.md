@@ -2,6 +2,22 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
+## Next interface work: workspace Agent tasks
+
+The user's first-version task plan now has nine editable
+[Paper review boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2):
+normal/right-docked and narrow/inspection-tab layouts, wide multi-task navigation,
+read-only ownership, native permissions, explicit resume, closed-panel reminders,
+New task and management/recovery details. The proposed interaction is recorded in
+[Design section 13](RHO-DESIGN.md#13-workspace-agent-tasks--proposed-for-review).
+All boards received static screenshot inspection. **User review is pending; no
+task storage, panel or native-resume implementation is claimed.** The next step
+is to review these boards before substantial Studio implementation. Existing Hosts,
+R sessions and native settings were not changed. This design-only work adds no
+runtime acceptance evidence and does not supersede the native baseline below.
+Documentation verification passed: governance impact mapping, governance check,
+governance tests and `git diff --check`.
+
 ## Current work: native Codex, Kimi and DeepSeek Harness
 
 Studio's approved [Agent settings design](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)

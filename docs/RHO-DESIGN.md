@@ -734,3 +734,71 @@ can leave a protocol session open. Unreachable hosting shows stale/unavailable
 status with Retry. A new Host starts fresh observations; restarted Workbenches
 need fresh address/credential configuration. Project-only Hosts can connect for
 available file/application capabilities with R unavailability explicit.
+
+## 13. Workspace Agent tasks — proposed for review
+
+The 2026-09-09 [Paper task-panel review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2)
+explores the user's first-version task plan. These editable state boards are
+**proposed, not approved or implemented**. Their messages, task states, models,
+scientific references and plot content are illustrative; they are not live evidence.
+Section 12 describes the existing settings experience until the task work ships.
+
+| Board | Review focus |
+| --- | --- |
+| A01 | 1440 × 900 workspace; 440 px Agent panel docked on the right |
+| A02 | 1060 × 800 window; 332 px Agent tab in the right inspection group |
+| A03 | 960 × 820 panel; 240 px project task list and independent conversation |
+| A04 | Another window's read-only view, saved draft and idle Take over |
+| A05 | Native permission choices, another task running, editable next draft |
+| A06 | Explicit Resume after Host restart, unconfirmed turn and history gap |
+| A07 | Closed panel, persistent top-bar badge and task reminder popover |
+| A08 | New task runtime/model/reasoning selection before any connection |
+| A09 | Task actions, archive, stop/takeover, draft conflict, uncertain submission and history sources |
+
+The proposed single-instance **Agent** panel uses the Studio panel chrome, Inter,
+white content surfaces, restrained borders and the existing semantic colors.
+Top-bar **Agents**, Panels and the command palette open that same panel; its gear
+opens Agent Settings. First placement is on the right for windows at least 1100 px
+wide, otherwise as an inspection-group tab. Reopening prefers saved placement.
+The task rail appears at **panel width 640 px**; smaller panels use a top selector.
+The breakpoint concerns the panel, independently of the window placement rule.
+Closing, collapsing, docking, maximizing and undoing layout only change the view.
+
+The task rail is project-wide; selection, filtering and reading position belong
+to the window. One task binds one Rho-created native session and one runtime.
+Same-runtime tasks can run independently. Only the controlling window edits the
+task draft, sends, changes the next-turn model or replies to native permissions.
+The running composer accepts a saved next draft but exposes **Stop Agent**, with
+an explicit running/waiting status; there is no second-turn send queue. Read-only
+views show the saved draft without editable controls. Local conflicts retain a
+separate copy. An old acknowledgement cannot erase later edits.
+
+**Create task** stores a task/draft; first send creates its native connection.
+The first user message supplies the default title without a naming request.
+Rename, Archive, Unarchive and Session details are local task-management actions.
+Archiving preserves the task, draft and history; unarchiving does not reconnect.
+Settings retains CLI discovery, explicit component setup, model catalogs, isolated
+diagnostic **Test** and manual MCP configuration. Daily chat moves to the panel.
+Opening the panel reads task state without scanning CLIs or sending model requests.
+
+Native permission labels and order are preserved; the Codex file-change example
+uses the currently supplied Allow once / Decline choices. Pending permissions
+remain visible in other task rows and the top-bar reminder. Idle takeover requires
+no pending permission or submission. If the original window is unreachable while
+running, **Stop Agent and take over** waits for confirmed native quiet or safe
+recovery. An unconfirmed stop keeps the task read-only and never starts a second
+writer. Stopping an Agent does not establish cancellation or rollback of R work.
+
+Resume reconnects the recorded native session explicitly and sends no prompt.
+Unconfirmed creation/submission displays a status check for the original request,
+not a resend action. Missing native sessions or capabilities get a specific reason;
+a separate New task is explicit. Agent context and R memory remain distinct.
+Codex history is native and paginated, Kimi history is native context replay with
+possible omissions, and DeepSeek displays the bounded Rho observation cache.
+History gaps and unresolved old turns stay visible. Native history, display cache
+and verified scientific results must retain their separate identities.
+
+Screenshot review covered all nine boards for spacing, type, contrast, alignment
+and clipping. This is static design inspection, not browser behavior, keyboard,
+scrolling, performance, native-resume or acceptance-test verification. Implementation
+must read Paper JSX/computed styles and validate the user's runtime scenarios.
