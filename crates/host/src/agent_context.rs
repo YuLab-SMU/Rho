@@ -145,10 +145,13 @@ pub(crate) async fn search(
             }).take(remaining as usize).collect(),
             "objects"|"tables"=>{
                 let session=context["context"]["native_session_id"].as_str().ok_or("R is not connected")?;
+                let instance=context["context"]["workspace_instance_id"].as_str();
                 // Suggestions do not allocate directory observations for every
                 // keystroke. Resolve an exact native object only on preview.
                 if object_snapshot.is_none() {
-                    let page=reader.query("workspace.snapshot",json!({"expected_session":session,"limit":200})).await?;
+                    let mut arguments=json!({"expected_session":session,"limit":200});
+                    if let Some(instance)=instance { arguments["workspace_instance_id"]=json!(instance); }
+                    let page=reader.query("workspace.snapshot",arguments).await?;
                     if page["truncated"]==true { notices.push("Objects: suggestions cover the first 200 bindings".into()); }
                     object_snapshot=Some(page);
                 }
@@ -158,7 +161,9 @@ pub(crate) async fn search(
                     .filter(|e|source.id!="tables" || e["dimensions"].as_array().is_some_and(|d|d.len()==2))
                     .take(remaining as usize).filter_map(|e|{
                         let name=e["name"].as_str()?;let dims=e["dimensions"].as_array().map(|a|a.iter().map(Value::to_string).collect::<Vec<_>>().join(" × ")).unwrap_or_default();
-                        Some(item(&source.id,name.into(),if dims.is_empty(){e["object_type"].as_str().unwrap_or("R object").into()}else{dims},if source.id=="tables"{"table"}else{"object"},json!({"name":name,"expected_session":session}),if source.id=="tables"{"selection"}else{"summary"}))
+                        let mut reference=json!({"name":name,"expected_session":session});
+                        if let Some(instance)=instance { reference["workspace_instance_id"]=json!(instance); }
+                        Some(item(&source.id,name.into(),if dims.is_empty(){e["object_type"].as_str().unwrap_or("R object").into()}else{dims},if source.id=="tables"{"table"}else{"object"},reference,if source.id=="tables"{"selection"}else{"summary"}))
                     }).collect()
 
             },
@@ -327,11 +332,15 @@ pub(crate) async fn preview(
                 if sending {
                     return Err("Preview this object before including it".into());
                 }
-                let observation=reader.query("workspace.observe_object",json!({"expected_session":session,"name":field(&reference,"name")?,"path":[]})).await?;
+                let mut arguments=json!({"expected_session":session,"name":field(&reference,"name")?,"path":[]});
+                if let Some(instance)=reference["workspace_instance_id"].as_str() { arguments["workspace_instance_id"]=json!(instance); }
+                let observation=reader.query("workspace.observe_object",arguments).await?;
                 reference["object_ref"] = observation["object_ref"].clone();
             }
             let table = s.inclusion == "selection";
-            let data=reader.query("workspace.read_object",json!({"expected_session":session,"object_ref":field(&reference,"object_ref")?,"kind":if table{"table"}else{"structure"},"start":reference["start"].as_u64().unwrap_or(1),"limit":reference["limit"].as_u64().unwrap_or(20).min(20),"column_start":reference["column_start"].as_u64().unwrap_or(1),"column_limit":reference["column_limit"].as_u64().unwrap_or(6).min(10)})).await?;
+            let mut arguments=json!({"expected_session":session,"object_ref":field(&reference,"object_ref")?,"kind":if table{"table"}else{"structure"},"start":reference["start"].as_u64().unwrap_or(1),"limit":reference["limit"].as_u64().unwrap_or(20).min(20),"column_start":reference["column_start"].as_u64().unwrap_or(1),"column_limit":reference["column_limit"].as_u64().unwrap_or(6).min(10)});
+            if let Some(instance)=reference["workspace_instance_id"].as_str() { arguments["workspace_instance_id"]=json!(instance); }
+            let data=reader.query("workspace.read_object",arguments).await?;
             let page: ObjectReadPage =
                 serde_json::from_value(data.clone()).map_err(|e| e.to_string())?;
             let mut p = preview_base(s, &["summary", "selection"]);

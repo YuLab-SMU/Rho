@@ -1,7 +1,7 @@
 # Loaded into a private environment by the Ark adapter. No Operation or Store policy here.
 rho_dispatch <- function(request) {
   stopifnot(identical(request$protocol_version, 1L),
-            request$action %in% c("execute", "snapshot", "packages", "inspect_object", "list_objects", "observe_object", "read_object", "package_index", "help", "lint", "format"),
+            request$action %in% c("execute", "checkpoint_capture", "checkpoint_restore", "snapshot", "packages", "inspect_object", "list_objects", "observe_object", "read_object", "package_index", "help", "lint", "format"),
             is.character(request$request_id), length(request$request_id) == 1L)
   if (request$action %in% c("snapshot", "packages", "inspect_object", "list_objects", "observe_object", "read_object", "package_index")) {
     failure <- NULL
@@ -20,7 +20,7 @@ rho_dispatch <- function(request) {
   }
   # Invalidate before parsing, loading tools or executing; failures and cancellation never restore old handles.
   rho_invalidate_objects()
-  if (!identical(request$action, "help")) {
+  if (!request$action %in% c("help", "checkpoint_capture", "checkpoint_restore")) {
     stopifnot(is.character(request$payload$code), length(request$payload$code) == 1L)
   }
   conditions <- list()
@@ -51,7 +51,8 @@ rho_dispatch <- function(request) {
         }
         if (console || is.null(result) || !result$visible) NULL else result$value
       } else {
-        switch(request$action, help = rho_help(request$payload),
+        switch(request$action, checkpoint_capture = rho_checkpoint_capture(request$payload),
+               checkpoint_restore = rho_checkpoint_restore(request$payload), help = rho_help(request$payload),
                lint = rho_lint(request$payload), format = rho_format(request$payload))
       }
     }, warning = function(condition) {

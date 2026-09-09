@@ -127,6 +127,7 @@ impl ApplicationOwner {
                 utf8_bytes: document.text.len(),
                 run_sha256: run_code.as_ref().map(sha256),
                 native_session_id: window.context.native_session_id.clone(),
+                workspace_instance_id: window.context.workspace_instance_id.clone(),
                 selection: document.selection,
             },
             text: document.text,
@@ -189,11 +190,13 @@ impl ApplicationOwner {
                     "run requires the captured Project save to succeed with the exact capture digest",
                 ));
             }
-            if window.context.native_session_id
-                != command
-                    .capture
-                    .as_ref()
-                    .and_then(|c| c.summary.native_session_id.clone())
+            // A managed capture keeps its original instance even if this window
+            // selects another one while a save is in flight. The Workspace
+            // owner validates the captured native session at execution admission.
+            // Older single-session captures still use the bridge's session fence.
+            if command.capture.as_ref().is_some_and(|c| c.summary.workspace_instance_id.is_none())
+                && window.context.native_session_id
+                    != command.capture.as_ref().and_then(|c| c.summary.native_session_id.clone())
             {
                 return Err(ApplicationError::Conflict);
             }
@@ -600,9 +603,13 @@ fn build_invocation(
             } else {
                 "selection"
             };
+            let mut arguments = json!({"code": code, "source": {"view_id": capture.summary.document.document_id, "label": capture.summary.path.as_deref().unwrap_or("Untitled.R"), "kind": kind}});
+            if let Some(instance) = &capture.summary.workspace_instance_id {
+                arguments["workspace_instance_id"] = json!(instance);
+            }
             (
                 "workspace.run_r",
-                json!({"code": code, "source": {"view_id": capture.summary.document.document_id, "label": capture.summary.path.as_deref().unwrap_or("Untitled.R"), "kind": kind}}),
+                arguments,
                 vec![Precondition {
                     kind: "workspace.session".into(),
                     subject: "active".into(),

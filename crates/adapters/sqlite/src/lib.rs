@@ -2,6 +2,9 @@
 mod agent_tasks;
 mod application;
 pub use application::ApplicationStore;
+mod runtime_instances;
+pub use runtime_instances::RuntimeInstancePage;
+mod filtered_records;
 
 use std::fs::{File, OpenOptions, TryLockError};
 use std::path::Path;
@@ -190,6 +193,10 @@ impl SqliteOperationJournal {
 
                 CREATE INDEX IF NOT EXISTS idx_operation_events_operation
                     ON operation_events(operation_id, sequence);
+                CREATE INDEX IF NOT EXISTS idx_operation_owner_history
+                    ON operations(capability_id, capability_version,
+                        json_extract(output_json, '$.workspace_instance_id'),
+                        json_extract(output_json, '$.continuation_lineage_id'));
                 CREATE INDEX IF NOT EXISTS idx_domain_facts_operation
                     ON domain_facts(source_operation_id);
                 CREATE INDEX IF NOT EXISTS idx_outbox_delivery
@@ -226,7 +233,7 @@ impl OperationJournal for SqliteOperationJournal {
                 &format!(
                     "SELECT COALESCE(MAX(o.sequence), 0)
                      FROM outbox o JOIN operations op ON op.operation_id = o.operation_id
-                     WHERE {OPERATION_VISIBILITY}"
+                 WHERE {OPERATION_VISIBILITY}"
                 ),
                 params![scope, caller_kind(principal.kind), principal.id],
                 |row| row.get(0),
@@ -291,6 +298,16 @@ impl OperationJournal for SqliteOperationJournal {
             operations,
             next_cursor,
         })
+    }
+
+    async fn list_recent_for_capability(
+        &self,
+        scope: &str,
+        caller: &CallerIdentity,
+        args: &rho_contract::RecentOperationsArguments,
+        filter: &rho_operation::OperationRecordFilter,
+    ) -> Result<rho_contract::RecentOperations, OperationError> {
+        filtered_records::read(self, scope, caller, args, filter)
     }
 
     async fn admit(&self, operation: &Operation) -> Result<Admission, OperationError> {
@@ -1675,6 +1692,41 @@ mod tests {
             trace_parent: None,
             accepted_at_ms: 1,
         }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn owner_history_filters_before_limit_and_preserves_principal_and_lineage() {
+        let journal = SqliteOperationJournal::open_in_memory().unwrap();
+        let checkpoint = CapabilityRef::new("workspace.checkpoint_capture", 1).unwrap();
+        let principal = operation("unused", "unused", "unused").caller;
+        for index in 0..225 {
+            let id = format!("history-{index:04}");
+            let mut op = operation(&id, &id, &id);
+            op.idempotency_scope = Some("/project".into());
+            if index < 5 || index >= 220 { op.capability = checkpoint.clone(); }
+            if index == 223 { op.idempotency_scope = Some("/other-project".into()); }
+            if index == 224 { op.principal = Some(CallerIdentity { kind: principal.kind, id: "other-person".into() }); }
+            journal.admit(&op).await.unwrap();
+            journal.mark_running(&op.operation_id, 2).await.unwrap();
+            journal.commit(&op.operation_id, &CommitPlan::succeeded(json!({
+                "workspace_instance_id": if index == 220 {"scratch"} else {"main"},
+                "continuation_lineage_id": if index == 221 {"old"} else {"current"},
+            })), 3).await.unwrap();
+        }
+        let filter = rho_operation::OperationRecordFilter { capability:checkpoint,
+            workspace_instance_id:Some("main".into()), continuation_lineage_id:Some("current".into()) };
+        let mut args = rho_contract::RecentOperationsArguments {
+            before_cursor:None, client_request_id:None, operation_id:None, limit:2,
+        };
+        let first = journal.list_recent_for_capability("/project", &principal, &args, &filter).await.unwrap();
+        assert_eq!(first.operations.iter().map(|r|r.operation_id.as_str()).collect::<Vec<_>>(), vec!["history-0222","history-0004"]);
+        args.before_cursor = first.next_cursor;
+        let second = journal.list_recent_for_capability("/project", &principal, &args, &filter).await.unwrap();
+        assert_eq!(second.operations.iter().map(|r|r.operation_id.as_str()).collect::<Vec<_>>(), vec!["history-0003","history-0002"]);
+        let all_lineages = rho_operation::OperationRecordFilter { continuation_lineage_id:None, ..filter };
+        args.before_cursor = None;
+        let all = journal.list_recent_for_capability("/project", &principal, &args, &all_lineages).await.unwrap();
+        assert_eq!(all.operations[1].operation_id.as_str(), "history-0221");
     }
 
     #[tokio::test(flavor = "current_thread")]

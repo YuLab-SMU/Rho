@@ -33,6 +33,14 @@ impl Default for ConsoleQueue {
     }
 }
 impl ConsoleQueue {
+    pub(super) fn try_acquire_maintenance(&self, lane: Arc<tokio::sync::Mutex<()>>) -> Result<OwnedMutexGuard<()>, HandlerError> {
+        let data=self.data.lock().unwrap_or_else(|e|e.into_inner());
+        if data.closing || data.controls_pending>0 || data.current.is_some() || data.reserved.is_some() || !data.pending.is_empty() || data.pause.is_some() {
+            return Err(HandlerError::before_effect("Scientific work has priority; automatic capture deferred"));
+        }
+        lane.try_lock_owned().map_err(|_|HandlerError::before_effect("Workspace busy; automatic capture deferred"))
+    }
+
     pub fn snapshot(&self, session_id: &str, input: Option<InputRequest>) -> ConsoleState {
         let d = self.data.lock().unwrap_or_else(|e| e.into_inner());
         ConsoleState {

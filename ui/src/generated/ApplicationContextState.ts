@@ -7,4 +7,8 @@ import type { ApplicationView } from "./ApplicationView";
 /**
  * Compact context; document bodies are independently versioned resources.
  */
-export type ApplicationContextState = { version: string, label: string, active_document_id: string | null, active_view_id: string | null, native_session_id: string | null, views: Array<ApplicationView>, selected_object: ApplicationObjectSelection | null, selected_package: ApplicationPackageSelection | null, selected_plot: ApplicationPlotSelection | null, };
+export type ApplicationContextState = { version: string, label: string, active_document_id: string | null, active_view_id: string | null, native_session_id: string | null,
+/**
+ * Stable execution target selected by this window; captured with submitted code.
+ */
+workspace_instance_id?: string, views: Array<ApplicationView>, selected_object: ApplicationObjectSelection | null, selected_package: ApplicationPackageSelection | null, selected_plot: ApplicationPlotSelection | null, };

@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 mod outputs;
+mod checkpoints;
+pub use checkpoints::CheckpointArchiveRuntime;
 pub use outputs::OutputStore;
 
 use async_trait::async_trait;
@@ -35,10 +37,12 @@ const QUERIES: &str = include_str!("../../../../r/bridge/query.R");
 const PACKAGES: &str = include_str!("../../../../r/bridge/packages.R");
 const OBJECTS: &str = include_str!("../../../../r/bridge/objects.R");
 const PACKAGE_INDEX: &str = include_str!("../../../../r/bridge/package-index.R");
+const CHECKPOINTS: &str = include_str!("../../../../r/bridge/checkpoint.R");
 const TOOLS: &str = include_str!("../../../../r/bridge/tools.R");
 const OUTPUT_LIMIT: usize = 1024 * 1024;
 
 pub struct ArkConfig {
+    pub checkpoint_helper_path: Option<PathBuf>,
     pub executable: PathBuf,
     pub r_home: PathBuf,
     pub project_root: PathBuf,
@@ -55,6 +59,8 @@ struct ActiveInput {
     echo: Option<String>,
 }
 pub struct ArkRuntime {
+    checkpoints: checkpoints::CheckpointStore,
+    checkpoint_ready: bool,
     client: Mutex<Option<Arc<Client>>>,
     session_id: String,
     project_root: String,
@@ -137,7 +143,11 @@ impl ArkRuntime {
         .map_err(|_| "Ark startup timed out".to_string())?
         .map_err(|error| error.to_string())?;
         drop(boot);
+        let helper = config.checkpoint_helper_path.as_ref().map(|p|checkpoints::verify_helper(p,&config.r_home)).transpose()?;
+        let checkpoint_store = checkpoints::CheckpointStore::new(&config.data_root,&project)?;
         let runtime = Self {
+            checkpoints:checkpoint_store,
+            checkpoint_ready:helper.is_some(),
             client: Mutex::new(Some(Arc::new(client))),
             session_id,
             project_root: project.to_string_lossy().into_owned(),
@@ -160,10 +170,14 @@ impl ArkRuntime {
             ),
             None => String::new(),
         };
+        let helper_setup = helper.as_ref().map(|path| {
+            let manifest_path=path.parent().unwrap().join("manifest.json");
+            format!("m <- jsonlite::fromJSON({}); if (!identical(as.character(getRversion()),m$r_version) || !identical(R.version$platform,m$platform)) stop('Checkpoint native provider ABI differs'); e$rho_checkpoint_initialize({});",quote(&manifest_path.to_string_lossy()).unwrap(),quote(&path.to_string_lossy()).unwrap())
+        }).unwrap_or_default();
         let bootstrap = format!(
-            "local({{ requireNamespace('jsonlite'); requireNamespace('tools'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); {library_setup} invisible(TRUE) }})",
+            "local({{ requireNamespace('jsonlite'); requireNamespace('tools'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); {library_setup} {helper_setup} invisible(TRUE) }})",
             quote(&format!(
-                "{BRIDGE}\n{QUERIES}\n{PACKAGES}\n{OBJECTS}\n{PACKAGE_INDEX}\n{TOOLS}"
+                "{BRIDGE}\n{QUERIES}\n{PACKAGES}\n{OBJECTS}\n{PACKAGE_INDEX}\n{TOOLS}\n{CHECKPOINTS}"
             ))?,
             quote(&project.to_string_lossy())?
         );
@@ -391,6 +405,8 @@ struct BridgeResponse {
 #[derive(Serialize)]
 #[serde(tag = "action", content = "payload", rename_all = "snake_case")]
 enum BridgeAction<'a> {
+    CheckpointCapture(&'a Value),
+    CheckpointRestore(&'a Value),
     Execute(&'a RunRArguments),
     Snapshot(&'a SnapshotArguments),
     Packages(&'a rho_contract::PackageQueryArguments),
@@ -416,6 +432,18 @@ struct BridgeRequest<'a> {
 
 #[async_trait]
 impl WorkspaceRuntime for ArkRuntime {
+    fn checkpoint_available(&self)->bool { self.checkpoint_ready }
+    async fn shutdown(&self)->Result<(),WorkspaceRuntimeError>{self.shutdown_confirmed().await}
+    async fn checkpoint_capture(&self,op:&Operation,args:&rho_contract::CheckpointCaptureArguments,cancel:watch::Receiver<bool>)->Result<rho_workspace::CheckpointArtifact,WorkspaceRuntimeError>{self.capture_checkpoint(op,args,cancel).await}
+    async fn checkpoint_publish(&self,manifest:&rho_contract::CheckpointManifest)->Result<(),WorkspaceRuntimeError>{self.publish_checkpoint(manifest)}
+    async fn checkpoint_candidates(&self)->Result<Vec<rho_contract::CheckpointManifest>,WorkspaceRuntimeError>{let store=self.checkpoints.clone();tokio::task::spawn_blocking(move||store.candidates()).await.map_err(before)?.map_err(before)}
+    async fn checkpoint_control_evidence(&self,id:&rho_contract::OperationId)->Result<Vec<rho_workspace::CheckpointControlEvidence>,WorkspaceRuntimeError>{self.checkpoints.controls(id).map_err(before)}
+    async fn checkpoint_write_control(&self,evidence:&rho_workspace::CheckpointControlEvidence)->Result<(),WorkspaceRuntimeError>{self.write_checkpoint_control(evidence)}
+    fn checkpoint_remove_payload(&self,id:&rho_contract::OperationId)->Result<(),String>{self.remove_checkpoint_payload(id)}
+    async fn checkpoint_present(&self,manifest:&rho_contract::CheckpointManifest)->Result<bool,WorkspaceRuntimeError>{self.checkpoints.present(manifest).map_err(before)}
+    async fn checkpoint_verify(&self,manifest:&rho_contract::CheckpointManifest)->Result<bool,WorkspaceRuntimeError>{let store=self.checkpoints.clone();let manifest=manifest.clone();tokio::task::spawn_blocking(move||store.verify(&manifest)).await.map_err(before)?.map_err(before)}
+    async fn checkpoint_restore(&self,op:&Operation,manifest:&rho_contract::CheckpointManifest,cancel:watch::Receiver<bool>)->Result<Vec<String>,WorkspaceRuntimeError>{self.restore_checkpoint(op,manifest,cancel).await}
+
     fn begin_shutdown(&self) {
         self.closing
             .store(true, std::sync::atomic::Ordering::Release);

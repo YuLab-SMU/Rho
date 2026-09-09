@@ -172,6 +172,9 @@ pub(crate) fn validate_context(
     if let Some(session) = &context.native_session_id {
         validate_id(session)?;
     }
+    if let Some(instance) = &context.workspace_instance_id {
+        validate_id(instance)?;
+    }
     if let Some(object) = &context.selected_object {
         validate_object(object, context)?;
     }

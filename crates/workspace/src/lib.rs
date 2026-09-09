@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 pub use rho_contract::RunROutput;
 
+mod checkpoints;
+pub use checkpoints::*;
+
 mod console;
 pub use console::{ConsoleQueryHandler, ConsoleQueue, QueueControlHandler};
 mod outputs;
@@ -126,6 +129,27 @@ impl WorkspaceRuntimeError {
 
 #[async_trait]
 pub trait WorkspaceRuntime: Send + Sync {
+    fn checkpoint_available(&self) -> bool { false }
+    fn checkpoint_archive_only(&self) -> bool { false }
+    async fn shutdown(&self) -> Result<(), WorkspaceRuntimeError> { Err(WorkspaceRuntimeError::before_effect("Confirmed native shutdown unavailable")) }
+    async fn checkpoint_capture(&self, _operation: &Operation, _args: &rho_contract::CheckpointCaptureArguments, _cancellation: tokio::sync::watch::Receiver<bool>) -> Result<CheckpointArtifact, WorkspaceRuntimeError> {
+        Err(WorkspaceRuntimeError::before_effect("Native checkpoint provider unavailable"))
+    }
+    async fn checkpoint_publish(&self, _manifest: &rho_contract::CheckpointManifest) -> Result<(), WorkspaceRuntimeError> {
+        Err(WorkspaceRuntimeError::before_effect("Checkpoint storage unavailable"))
+    }
+    async fn checkpoint_candidates(&self) -> Result<Vec<rho_contract::CheckpointManifest>, WorkspaceRuntimeError> { Ok(Vec::new()) }
+    async fn checkpoint_control_evidence(&self, _checkpoint: &rho_contract::OperationId) -> Result<Vec<CheckpointControlEvidence>, WorkspaceRuntimeError> { Ok(Vec::new()) }
+    async fn checkpoint_write_control(&self, _evidence: &CheckpointControlEvidence) -> Result<(), WorkspaceRuntimeError> {
+        Err(WorkspaceRuntimeError::before_effect("Checkpoint storage unavailable"))
+    }
+    fn checkpoint_remove_payload(&self, _checkpoint: &rho_contract::OperationId) -> Result<(), String> { Err("Checkpoint storage unavailable".into()) }
+    async fn checkpoint_present(&self, _manifest: &rho_contract::CheckpointManifest) -> Result<bool, WorkspaceRuntimeError> { Ok(false) }
+    async fn checkpoint_verify(&self, _manifest: &rho_contract::CheckpointManifest) -> Result<bool, WorkspaceRuntimeError> { Ok(false) }
+    async fn checkpoint_restore(&self, _operation: &Operation, _manifest: &rho_contract::CheckpointManifest, _cancellation: tokio::sync::watch::Receiver<bool>) -> Result<Vec<String>, WorkspaceRuntimeError> {
+        Err(WorkspaceRuntimeError::before_effect("Native checkpoint restore unavailable"))
+    }
+
     fn begin_shutdown(&self) {}
     fn input_request(&self) -> Option<rho_contract::InputRequest> {
         None
@@ -206,6 +230,7 @@ pub struct WorkspaceRunHandler {
 }
 
 impl WorkspaceRunHandler {
+    pub fn checkpoint_queue(&self) -> Arc<ConsoleQueue> { self.queue.clone() }
     pub fn begin_shutdown(&self) {
         self.queue.begin_shutdown();
         self.runtime.begin_shutdown();

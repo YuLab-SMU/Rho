@@ -16,6 +16,7 @@ pub(crate) struct DiscoveryOwner {
     targets: Vec<TargetRef>,
     workspace: Option<Arc<dyn rho_workspace::WorkspaceRuntime>>,
     registry: OnceLock<Weak<CapabilityRegistry>>,
+    instances: OnceLock<Weak<crate::instances::InstanceOwner>>,
 }
 impl DiscoveryOwner {
     pub(crate) fn new(
@@ -28,12 +29,16 @@ impl DiscoveryOwner {
             targets,
             workspace,
             registry: OnceLock::new(),
+            instances: OnceLock::new(),
         })
     }
     pub(crate) fn bind(&self, registry: &Arc<CapabilityRegistry>) {
         self.registry
             .set(Arc::downgrade(registry))
             .expect("discovery binds once");
+    }
+    pub(crate) fn bind_instances(&self, instances: &Arc<crate::instances::InstanceOwner>) {
+        let _ = self.instances.set(Arc::downgrade(instances));
     }
     fn registry(&self) -> Result<Arc<CapabilityRegistry>, OperationError> {
         self.registry
@@ -54,6 +59,7 @@ impl DiscoveryOwner {
     ) -> Vec<ModuleAvailability> {
         [
             ("session", "workspace.read", "No connected R runtime"),
+            ("runtime", "workspace.read", "No runtime manager is composed"),
             (
                 "operations",
                 "operation.read",
@@ -231,7 +237,7 @@ impl DiscoveryOwner {
         let visible = self.visible(context)?;
         let mut observations = vec![];
         let gateway = QueryGateway::new(self.registry()?);
-        for (id, args) in [
+        for (id, mut args) in [
             ("workspace.runtime_status", json!({})),
             ("workspace.console_state", json!({})),
             ("operation.list_recent", json!({"limit":3})),
@@ -240,6 +246,10 @@ impl DiscoveryOwner {
         ] {
             if !visible.iter().any(|d| d.capability.id == id) {
                 continue;
+            }
+            if id.starts_with("workspace.") && let Some(instances) = self.instances.get().and_then(Weak::upgrade) {
+                let Some(instance_id) = instances.list(&RuntimeInstancesArguments { after_instance_id: None, limit: 1 })?.default_workspace_instance_id else { continue; };
+                args["workspace_instance_id"] = json!(instance_id);
             }
             let snapshot = match gateway
                 .query(
@@ -346,7 +356,9 @@ impl DiscoveryOwner {
             }
         }
         let mut targets = vec![];
-        for target in &self.targets {
+        let mut observed_targets = self.targets.clone();
+        if let Some(instances) = self.instances.get().and_then(Weak::upgrade) { observed_targets.extend(instances.targets()); }
+        for target in &observed_targets {
             if rho_skills::SkillCapabilityPort::target_is_current(self, context, target)
                 .await
                 .map_err(invalid)?
@@ -403,6 +415,9 @@ impl rho_skills::SkillCapabilityPort for DiscoveryOwner {
             }
             _ => false,
         };
+        if target.kind == "workspace" && let Some(instances) = self.instances.get().and_then(Weak::upgrade) {
+            return Ok(allowed && instances.targets().contains(target));
+        }
         let live = target.kind != "workspace"
             || self.workspace.as_ref().is_some_and(|runtime| {
                 runtime.session_id() == target.identity

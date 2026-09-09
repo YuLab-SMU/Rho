@@ -333,6 +333,14 @@ pub trait ExecutionLease: Send + Sync {
 }
 impl ExecutionLease for () {}
 
+/// Typed internal selectors for an owner's records, applied before pagination.
+#[derive(Debug, Clone)]
+pub struct OperationRecordFilter {
+    pub capability: CapabilityRef,
+    pub workspace_instance_id: Option<String>,
+    pub continuation_lineage_id: Option<String>,
+}
+
 #[async_trait]
 pub trait OperationJournal: Send + Sync {
     async fn events_checkpoint(
@@ -350,6 +358,17 @@ pub trait OperationJournal: Send + Sync {
         Err(OperationError::InvalidInput(
             "operation summaries are unavailable".into(),
         ))
+    }
+    /// Owner-specific history filters are applied before pagination and visibility.
+    /// This is an internal read port, not a caller-supplied SQL expression.
+    async fn list_recent_for_capability(
+        &self,
+        _scope: &str,
+        _caller: &rho_contract::CallerIdentity,
+        _args: &rho_contract::RecentOperationsArguments,
+        _filter: &OperationRecordFilter,
+    ) -> Result<rho_contract::RecentOperations, OperationError> {
+        Err(OperationError::Unavailable("filtered operation history is unavailable".into()))
     }
     async fn admit(&self, operation: &Operation) -> Result<Admission, OperationError>;
 

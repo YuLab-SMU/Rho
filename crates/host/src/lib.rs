@@ -6,6 +6,9 @@ mod observer;
 mod port_contracts;
 pub use observer::QueryObserver;
 mod skills;
+mod instances;
+mod instance_router;
+pub use instances::{InstanceLauncher, PreparedInstanceLaunch, LaunchedInstance};
 
 mod config;
 mod r_configuration;
@@ -30,7 +33,7 @@ use rho_environment::{
 };
 use rho_r_environment::REnvironment;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -146,6 +149,7 @@ struct HostRuntime {
     gateway: Arc<OperationGateway>,
     queries: Arc<QueryGateway>,
     workspace: Option<Arc<WorkspaceRunHandler>>,
+    instances: Option<Arc<instances::InstanceOwner>>,
     application: Option<Arc<rho_application::ApplicationOwner>>,
     output_owner: Option<Arc<rho_workspace::WorkspaceOutputHandler>>,
     skills: Option<Arc<rho_skills::SkillOwner>>,
@@ -163,8 +167,15 @@ struct HostDomains {
     project: Option<Arc<dyn ProjectRuntime>>,
     environment: Option<Arc<dyn EnvironmentRuntime>>,
     active_library: Option<String>,
+    managed: Option<ManagedInstances>,
     remote: Option<Arc<SshRemote>>,
     project_lease: Option<ProjectLease>,
+}
+struct ManagedInstances {
+    launcher: Arc<dyn instances::InstanceLauncher>,
+    app_store: Arc<ApplicationStore>,
+    initial: Option<rho_contract::RuntimeLaunchBinding>,
+    auto_continue: bool,
 }
 fn remote_components(
     root: &Path,
@@ -215,6 +226,16 @@ impl NextHost {
                 .map_err(OperationError::TargetResolution)?,
         );
         let remote = remote_components(Path::new(project.root()), remote)?;
+        let managed = ManagedInstances {
+            launcher: Arc::new(instances::ArkInstanceLauncher {
+                project: PathBuf::from(project.root()),
+                data_root: database.parent().unwrap_or(Path::new(".")).join("runtime"),
+                environment_root: database.parent().unwrap_or(Path::new(".")).join("environment"),
+                execution_timeout: std::time::Duration::from_secs(600), journal: journal.clone(),
+            }),
+            app_store: Arc::new(ApplicationStore::open(&database.parent().unwrap_or(Path::new(".")).join("runtime-preferences.sqlite")).map_err(OperationError::Storage)?),
+            initial: None, auto_continue: false,
+        };
         Self::compose(
             journal,
             HostDomains {
@@ -232,6 +253,7 @@ impl NextHost {
                     .map_err(OperationError::Storage)?,
                 )),
                 project: Some(project),
+                managed: Some(managed),
                 remote,
                 project_lease: Some(lease),
                 ..HostDomains::default()
@@ -306,10 +328,10 @@ impl NextHost {
                         "Input request session or scope does not match".into(),
                     ));
                 }
-                self.runtime
-                    .workspace
-                    .as_ref()
-                    .ok_or_else(|| OperationError::InvalidInput("R input is unavailable".into()))?
+                let workspace = if let Some(instances) = &self.runtime.instances {
+                    instances.workspace_for_native(&reply.session_id)
+                } else { self.runtime.workspace.clone() };
+                workspace.ok_or_else(|| OperationError::StaleSession("The input's original R session is no longer available".into()))?
                     .respond_input(reply)
                     .map_err(OperationError::InvalidInput)?;
                 let result =
@@ -548,14 +570,6 @@ impl NextHost {
                 .canonicalize()
                 .map_err(|e| OperationError::Storage(e.to_string()))?,
         );
-        if let Some(id) = realization_id {
-            let receipt = selected_environment(journal.as_ref(), environment.as_ref(), id).await?;
-            config.library_path = Some(receipt.library_path.into());
-        }
-        let active_library = config
-            .library_path
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned());
         let project = Arc::new(
             GitProject::open(&config.project_root, excluded.clone())
                 .map_err(OperationError::TargetResolution)?,
@@ -564,11 +578,20 @@ impl NextHost {
             rho_r_runtime::OutputStore::open(&config.data_root, project.root())
                 .map_err(OperationError::Storage)?,
         );
-        let runtime = Arc::new(
-            ArkRuntime::launch(config)
-                .await
-                .map_err(OperationError::TargetResolution)?,
-        );
+        let managed = ManagedInstances {
+            launcher: Arc::new(instances::ArkInstanceLauncher {
+                project: config.project_root.clone(), data_root: config.data_root.clone(), environment_root,
+                execution_timeout: config.execution_timeout, journal: journal.clone(),
+            }),
+            app_store: Arc::new(ApplicationStore::open(&database.parent().unwrap_or(Path::new(".")).join("runtime-preferences.sqlite")).map_err(OperationError::Storage)?),
+            initial: Some(rho_contract::RuntimeLaunchBinding {
+                r_executable: config.r_home.join("bin").join(if cfg!(windows) {"R.exe"} else {"R"}).to_string_lossy().into_owned(),
+                ark_executable: config.executable.to_string_lossy().into_owned(),
+                environment_realization_id: realization_id.map(str::to_owned),
+                library_path: config.library_path.as_ref().map(|path| path.to_string_lossy().into_owned()),
+            }),
+            auto_continue: true,
+        };
         Self::compose(
             journal,
             HostDomains {
@@ -578,11 +601,12 @@ impl NextHost {
                     ApplicationStore::open(&database.with_extension("studio.sqlite"))
                         .map_err(OperationError::Storage)?,
                 )),
-                workspace: Some(runtime),
+                workspace: None,
                 outputs: Some(outputs),
                 project: Some(project),
                 environment: Some(environment),
-                active_library,
+                active_library: None,
+                managed: Some(managed),
                 remote,
                 project_lease: Some(lease),
             },
@@ -642,6 +666,7 @@ impl NextHost {
                 queries: Arc::new(QueryGateway::new(registry.clone())),
                 registry,
                 workspace: None,
+                instances: None,
                 application: None,
                 output_owner: None,
                 skills: None,
@@ -696,10 +721,19 @@ impl NextHost {
             project,
             environment,
             active_library,
+            managed,
             remote,
             project_lease,
         } = domains;
         let output_project = project.as_ref().map(|p| p.root().to_string());
+        let auto_continue = managed.as_ref().is_some_and(|managed| managed.auto_continue);
+        let instance_owner = managed.map(|managed| {
+            instances::InstanceOwner::open(
+                output_project.clone().ok_or_else(|| OperationError::Contract("Managed instances require a project".into()))?,
+                application_store.clone().ok_or_else(|| OperationError::Contract("Managed instances require application storage".into()))?,
+                managed.app_store, journal.clone(), managed.launcher, managed.initial,
+            )
+        }).transpose()?;
         let application_owner =
             application_store
                 .zip(output_project.clone())
@@ -737,6 +771,7 @@ impl NextHost {
         }
         let discovery =
             discovery::DiscoveryOwner::new(output_project.clone(), targets, runtime.clone());
+        if let Some(owner) = &instance_owner { discovery.bind_instances(owner); }
         let skill_owner = if let Some(app) = &application_owner {
             Some(skills::compose(
                 output_project.as_deref().unwrap(),
@@ -799,12 +834,18 @@ impl NextHost {
                 registry.register_query(Arc::new(SlurmQueryHandler::new(owner)))?;
             }
         }
-        let has_workspace = runtime.is_some();
-        let usage = runtime.as_ref().map(|runtime| {
+        let has_workspace = runtime.is_some() || instance_owner.is_some();
+        let usage = if let Some(owner) = &instance_owner {
+            Some(Arc::new(usage::InstancesUsage(owner.clone())) as Arc<dyn rho_environment::EnvironmentUsage>)
+        } else { runtime.as_ref().map(|runtime| {
             Arc::new(usage::WorkspaceUsage(runtime.clone()))
                 as Arc<dyn rho_environment::EnvironmentUsage>
-        });
+        }) };
         let mut workspace_owner = None;
+        if let Some(owner) = &instance_owner {
+            instances::register_lifecycle(&mut registry, owner.clone())?;
+            instance_router::register(&mut registry, owner.clone(), &owner.prototype()?)?;
+        }
         if let Some(runtime) = runtime {
             let workspace = Arc::new(WorkspaceRunHandler::with_lane(runtime, lane.clone()));
             workspace_owner = Some(workspace.clone());
@@ -939,13 +980,16 @@ impl NextHost {
                 .with_project_scope(output_project),
         );
         event_port.bind(&gateway);
+        if let Some(owner) = &instance_owner { owner.bind(&gateway); }
         let recovered_on_open = gateway.recover_incomplete().await?;
+        if auto_continue && let Some(owner) = &instance_owner { owner.continue_default().await?; }
         Ok(Self {
             runtime: Arc::new(HostRuntime {
                 gateway,
                 queries: Arc::new(QueryGateway::new(registry.clone())),
                 registry,
                 workspace: workspace_owner,
+                instances: instance_owner,
                 application: application_owner,
                 output_owner,
                 skills: skill_owner,
@@ -1128,6 +1172,7 @@ impl NextHost {
 
     /// The caller must first stop accepting new work through every edge.
     pub async fn drain(&self) {
+        if let Some(instances) = &self.runtime.instances { instances.begin_shutdown(); }
         if let Some(workspace) = &self.runtime.workspace {
             workspace.begin_shutdown();
         }

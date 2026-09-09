@@ -2,4 +2,4 @@
 import type { ApplicationDocumentRef } from "./ApplicationDocumentRef";
 import type { ApplicationSelection } from "./ApplicationSelection";
 
-export type ApplicationCaptureSummary = { document: ApplicationDocumentRef, path: string | null, base_hash: string | null, sha256: string, utf8_bytes: number, run_sha256: string | null, native_session_id: string | null, selection: ApplicationSelection, };
+export type ApplicationCaptureSummary = { document: ApplicationDocumentRef, path: string | null, base_hash: string | null, sha256: string, utf8_bytes: number, run_sha256: string | null, native_session_id: string | null, workspace_instance_id?: string, selection: ApplicationSelection, };

@@ -4,6 +4,9 @@ pub use agent_client::*;
 mod agent_task;
 pub use agent_task::*;
 
+pub mod checkpoints;
+pub use checkpoints::*;
+
 mod query;
 pub use query::*;
 mod host;
@@ -44,6 +47,8 @@ pub mod operation_evidence;
 pub use operation_evidence::*;
 pub mod port_controls;
 pub use port_controls::*;
+pub mod instances;
+pub use instances::*;
 
 use std::collections::BTreeSet;
 

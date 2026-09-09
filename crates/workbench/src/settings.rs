@@ -197,6 +197,9 @@ pub(super) async fn read_state(
     State(state): State<AppState>,
     Json(request): Json<ReadApplicationState>,
 ) -> Response {
+    if request.key.starts_with("hosting.") {
+        return failure(StatusCode::BAD_REQUEST, "use the runtime owner queries");
+    }
     match state_scope(&state, request.project_root.as_deref())
         .await
         .and_then(|scope| state.application.read(&scope, &request.key))
@@ -209,6 +212,9 @@ pub(super) async fn write_state(
     State(state): State<AppState>,
     Json(request): Json<WriteApplicationState>,
 ) -> Response {
+    if request.state.key.starts_with("hosting.") {
+        return failure(StatusCode::BAD_REQUEST, "use the runtime owner commands");
+    }
     if request.project_root.is_none() && request.state.key == "runtime" {
         return failure(
             StatusCode::BAD_REQUEST,

@@ -131,6 +131,10 @@ pub struct ApplicationContextState {
     #[serde(default)]
     pub active_view_id: Option<String>,
     pub native_session_id: Option<String>,
+    /// Stable execution target selected by this window; captured with submitted code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub workspace_instance_id: Option<String>,
     pub views: Vec<ApplicationView>,
     pub selected_object: Option<ApplicationObjectSelection>,
     pub selected_package: Option<ApplicationPackageSelection>,
@@ -351,6 +355,9 @@ pub struct ApplicationCaptureSummary {
     pub utf8_bytes: usize,
     pub run_sha256: Option<String>,
     pub native_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub workspace_instance_id: Option<String>,
     pub selection: ApplicationSelection,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

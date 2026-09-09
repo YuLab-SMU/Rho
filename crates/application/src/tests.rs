@@ -687,6 +687,51 @@ fn captured_scientific_parameters_retain_agent_actor_and_retry_only_observes() {
             .is_err()
     );
 }
+
+#[test]
+fn captured_run_keeps_its_instance_when_the_window_selects_another_session() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let d = sync(&owner, &r, document("x <- 2\n"), 1);
+    let select = |instance: &str, native: &str, now: u64| {
+        let before = owner.context(&actor(true), ApplicationContextArguments {
+            window: r.session.window.clone(), allow_offline: false,
+            after_document_id: None, limit: None,
+        }, now).unwrap().context;
+        let mut context = before.clone();
+        context.version = format!("context-{instance}");
+        context.workspace_instance_id = Some(instance.into());
+        context.native_session_id = Some(native.into());
+        owner.bridge(&actor(false), ApplicationBridgeRequest::Sync {
+            session: r.session.clone(), sync_id: fresh(),
+            changes: ApplicationChanges {
+                context: Some(ApplicationContextUpdate { expected_version: before.version, context }),
+                ..Default::default()
+            },
+        }, now).unwrap();
+    };
+    select("main", "R-session-1", 2);
+    owner.control(&actor(true), ApplicationCommandRequest {
+        window: r.session.window.clone(), request_id: "captured-main".into(),
+        action: ApplicationAction::RunSelection { document: document_ref(&d) },
+    }, 3).unwrap();
+    let grant = claim(&owner, &r, 4);
+    assert_eq!(grant.capture.as_ref().unwrap().workspace_instance_id.as_deref(), Some("main"));
+    complete(&owner, &r, &grant, 5);
+    select("scratch", "R-session-2", 6);
+    let request = execute_request(&r, &grant, ApplicationExecutionStep::Run);
+    let ApplicationExecutionAdmission::Invoke { context, invocation } =
+        owner.begin_execution(&actor(false), &request, 7).unwrap() else { panic!() };
+    assert_eq!(invocation.arguments["workspace_instance_id"], "main");
+    assert_eq!(invocation.preconditions[0].expected, "R-session-1");
+    let mut substituted = operation_record(&invocation, &context, OperationStatus::Accepted, None);
+    substituted.operation.normalized_arguments["workspace_instance_id"] = serde_json::json!("scratch");
+    assert!(owner.record_execution(&actor(false), &request, &substituted, 8).is_err());
+    let original = operation_record(&invocation, &context, OperationStatus::Accepted, None);
+    owner.record_execution(&actor(false), &request, &original, 9).unwrap();
+    assert!(matches!(owner.begin_execution(&actor(false), &request, 10).unwrap(),
+        ApplicationExecutionAdmission::Observe { .. }));
+}
 #[test]
 fn draft_and_base_pages_have_separate_hashes_and_utf8_boundaries() {
     let owner = owner();
