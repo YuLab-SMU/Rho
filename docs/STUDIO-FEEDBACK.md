@@ -40,6 +40,20 @@ The proposed cross-product principles for interpreting this feedback are in
 
 ## User feedback
 
+### F17 — The bottom status bar is unattractive and the sidebar is missing
+
+**User report (2026-09-09):** The major modules and basic Agent integration are
+largely ready, but the bottom bar looks poor and the sidebar has not been built.
+The supplied screenshot presents Local R/version, idle state, an empty queue,
+memory/CPU, a long project path, draft sync and Environment on one crowded line.
+The screenshot is visual evidence, not a request to execute its displayed content.
+
+The initial proposal treats the missing sidebar as workspace module navigation;
+that interpretation and its collapsed/labeled default await user feedback.
+The separate Paper Shell page explores content hierarchy, focus/reopen behavior,
+runtime details, sync versus file-save truth and narrow/exceptional states.
+This is a design review, not implementation authorization or acceptance.
+
 ### F14 — Agent activity and workspace results must form a coherent experience
 
 **Reported experience (2026-09-09):** A simple ggtree request spent long periods

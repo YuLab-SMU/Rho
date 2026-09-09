@@ -2,6 +2,23 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
+## Shell navigation and status bar — design review pending
+
+The user finds the bottom status bar unattractive and reports the missing workspace
+sidebar. Four [Paper Shell boards S01–S04](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/8-0)
+propose a 48 px module rail with a 168 px labeled mode, a grouped 30 px status bar,
+runtime/project/draft disclosures, queue/input/error states and a 1024 × 800 shell.
+[Design section 15](RHO-DESIGN.md#15-shell-navigation-and-status--proposal-for-review)
+records the proposal; the sidebar interpretation and visual direction await user
+review. This does not supersede the approved section 10 dimensions yet.
+
+All four Paper boards were reviewed through screenshots, including the 800 px
+status strip and full narrow shell. These are design fixtures, not live scientific
+results or browser acceptance. No application source, Host, R session or user layout
+was changed. Implementation and real interaction checks follow design review.
+Documentation impact mapping, governance/index checks, governance self-tests and
+`git diff --check` passed. No application tests were run for this design-only change.
+
 ## Object priority and whole-vector viewing
 
 The user approved [Paper boards O07–O10](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0)

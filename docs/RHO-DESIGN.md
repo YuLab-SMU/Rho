@@ -1016,3 +1016,50 @@ exact values and full names/levels are obtained before changing the clipboard.
 Original R vector copy retains supported classes, units and timezone attributes.
 Incomplete or unsupported exact representations fail explicitly. See Status for
 executed interaction, keyboard, copy and native-data verification.
+
+## 15. Shell navigation and status — proposal for review
+
+The [Paper Shell page, S01–S04](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/8-0)
+responds to the 2026-09-09 sidebar/status-bar feedback. It is proposed, not approved
+or implemented. Sidebar currently means workspace module navigation; its scope
+and default presentation need user review. Section 10 remains the accepted contract
+until this proposal is approved.
+
+- S01 places Files, Editor, Console, Objects, Plots and Packages in a 48 px rail,
+  with a separate Agent entry and expansion/settings controls at the bottom.
+  A 36 px target contains an 18–19 px icon; hover and keyboard focus expose names.
+  Only the focused module receives the blue selection surface. A 30 px footer
+  groups runtime/execution at left and draft synchronization at right. Empty queue
+  counts and routine CPU/memory values are absent from the resting footer.
+- S02 offers a persistent 168 px labeled navigation preference. Clicking focuses
+  an existing view or restores a closed/collapsed view using its retained placement;
+  repeated clicks do not close it. Multiple Console/Plots instances use a chooser.
+  An Agent attention mark opens the relevant native task; permission controls stay
+  in that task. Layout actions remain discoverable in the top Layout menu.
+  Settings retains the existing settings capabilities.
+- The runtime footer entry opens a bounded observation of R version, process
+  memory/CPU, freshness and queue state, with Console and R settings links. Busy,
+  cached, unknown and disconnected observations must be labeled. Reading this
+  disclosure does not start R, probe package loadability or recover executions.
+  The top project disclosure owns the full path, Copy path and Open Project.
+  Project switching retains its existing session-ending semantics and disclosure.
+- Draft synchronization is not file saving. Its disclosure distinguishes synced
+  working drafts from files with unsaved changes and links to the Editor. Sync
+  pending/error states stay at the right; retry uses the existing persistence owner.
+- S03 specifies Idle, Running, input waiting, queue pause, lost connection and
+  sync failure. Current execution and paused followers can coexist visibly. Input
+  waiting provides a route to the owning Console even when its originating view
+  is closed. Connection loss leaves R state unknown; it is not proof of stopping.
+  Not started and Not configured are explicit alternatives to Idle.
+- S03's 800 px footer removes execution source before shortening the runtime
+  label; successful sync can become a labeled/tooltip icon, while required input
+  and errors retain text. S04 shows all docked panels in a 1024 × 800 workspace.
+  Viewport shrinkage must not close panels or overwrite saved docking weights;
+  insufficient space retains workspace scrolling. Navigation expansion is a
+  separate preference. Existing owners retain documents, observations and work.
+
+All board data and plots are design fixtures. Their screenshots verify the
+proposal's visual composition only. After approval, implementation must read Paper
+JSX/computed styles, reuse the built-in registry and current owners, and verify
+focus/reopen, keyboard access, multiple instances, preserved drafts/layouts,
+native input/queue truth and normal/wide/constrained browser geometry.
