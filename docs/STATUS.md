@@ -2,21 +2,45 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
-## Object priority and vector-view follow-up
+## Object priority and whole-vector viewing
 
-The user found the implemented directory too focused on Type/Size and the palette
-viewer too focused on individual strings. Directory field reordering is currently
-absent; the dedicated data grid's column controls are a separate feature.
-Four new editable [Paper boards O07–O10](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0)
-propose content-first summaries, configurable columns, whole-palette viewing/copying,
-and range-based vector browsing with explicit copy scope. All four were checked
-through screenshots and verified to belong to the Objects page. The 320 px view,
-transparent/missing/non-color entries and the original `green` value are included.
+The user approved [Paper boards O07–O10](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0)
+on 2026-09-09 and authorized further refinements from real scenarios. The directory
+now defaults to Name, Content and Type. Content shows values, dimensions, function
+signatures, levels or colors. Fields controls and header dragging reorder, hide
+and resize Content/Size/Type; Name stays first. Widths and visibility persist with
+the view. Narrow panels retain compact semantic summaries and return to the saved
+columns when widened.
 
-This follow-up is a design proposal awaiting review, not a runtime change.
-F16 and the follow-up subsection of Design section 14 contain the rationale and
-interaction details. The existing R Host, unsaved script and running components
-were not changed. Documentation governance and scoped whitespace checks passed.
+Complete small palettes open as one strip or tile set in inline and dedicated
+viewers. Selecting a color shows its original value, rendered hex and opacity.
+Ordinary string vectors do not automatically open one string's detail. Long vectors
+use ranges, explicit item inspection and a scrolling body with visible navigation.
+Copy vector preserves original strings, names, NA, supported classes and complete
+factor levels; explicit formats offer hex or selected/shown ranges. The shared
+Objects owner gathers every requested page and text continuation on one native
+observation before writing to the clipboard. Expiry, cancellation, missing pages,
+unsupported exact representations and the 1 MiB / 100,000-value limits fail without
+publishing a partial copy. A view opened during transient R activity resumes the
+same observation when idle; it does not start or re-run R work.
+
+Validation passed: 320 frontend tests, all 40 isolated Chrome scenarios, plus a
+final two-scenario Chrome run after narrow-view refinements. Tests cover mouse/keyboard
+field controls, saved order/width, approximately 320 px docked views with measured
+visible color height, whole palettes,
+Unicode continuations, duplicate names, factor levels, missing values and rejected
+partial copies. A 252-value copied expression passes `identical()` in real R. Hex
+conversion fails on a non-color value beyond the first page without changing the
+clipboard. Table ordering/filtering, arrays and SCE browsing still pass. Real-R MCP
+and Workbench checks, typecheck, generated-client consistency, architecture/frontend
+boundaries and documentation checks also passed. The broad Rust workspace suite
+was not rerun for this frontend change. Evidence is in `target/object-refinement-*.log`
+and `target/studio-browser/object-{fields,palette}-*.png`.
+
+The existing demo Host has been refreshed with new development assets; its live
+objects, plots and unsaved script are preserved. No R Host was restarted to deliver
+this refinement. Both inline and independent vector views use the same owner.
+Further user feedback on information priority and real vector workflows remains open.
 
 ## Object viewers and directional collapse
 

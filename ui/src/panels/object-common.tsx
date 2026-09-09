@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useObjects } from "../context";
+import { useObjects, useSession } from "../context";
 import type { ObjectMetadata } from "../generated/ObjectMetadata";
 import type { ObjectReadPage } from "../generated/ObjectReadPage";
 import type { ObjectPathElement } from "../generated/ObjectPathElement";
@@ -20,6 +20,7 @@ export function usePage(
   enabled = true,
 ) {
   const o = useObjects(),
+    runtimeState = useSession().runtime?.state,
     observation = o.inspectors.get(name),
     key = JSON.stringify(options);
   const [result, setResult] = useState<{
@@ -36,11 +37,28 @@ export function usePage(
       inline &&
       !options.path?.length &&
       options.kind === observation?.page?.kind &&
-      (options.start ?? 1) === 1
+      (options.start ?? 1) === 1 &&
+      !options.slice?.length &&
+      !options.sort_column &&
+      !options.filter_column &&
+      !options.text_attribute &&
+      (options.column_start ?? 1) === 1 &&
+      (observation.page.values.length >=
+        Math.min(
+          options.limit ?? 100,
+          observation.page.metadata.length ?? Infinity,
+        ) ||
+        (options.kind === "table" &&
+          observation.page.columns.length >=
+            Math.min(
+              options.column_limit ?? 20,
+              observation.page.metadata.dimensions[1] ?? 0,
+            )))
     ) {
       setResult({ key, page: observation.page, loading: false });
       return;
     }
+    if (runtimeState !== "idle") return;
     setResult((previous) => ({
       key,
       page: previous.key === key ? previous.page : undefined,
@@ -62,7 +80,16 @@ export function usePage(
     return () => {
       current = false;
     };
-  }, [o, name, reference, key, observation?.stale, inline, enabled]);
+  }, [
+    o,
+    name,
+    reference,
+    key,
+    observation?.stale,
+    inline,
+    enabled,
+    runtimeState,
+  ]);
   return reference &&
     result.key === key &&
     (!result.page || result.page.object_ref === reference)

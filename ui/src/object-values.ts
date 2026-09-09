@@ -99,3 +99,29 @@ export function objectExpression(
       .join("")
   );
 }
+
+/** A display signature, never executable reconstruction or evaluation. */
+export function functionSignature(source: string): string {
+  const open = source.indexOf("(");
+  if (open < 0) return source.split("\n")[0];
+  let depth = 0,
+    quote = "",
+    escaped = false;
+  for (let i = open; i < source.length; i++) {
+    const c = source[i];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === quote) quote = "";
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      quote = c;
+      continue;
+    }
+    if (c === "(") depth++;
+    if (c === ")" && --depth === 0)
+      return source.slice(0, i + 1).replace(/\n\s*/g, " ");
+  }
+  return source.replace(/\n\s*/g, " ") + "…";
+}

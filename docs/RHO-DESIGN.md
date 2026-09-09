@@ -971,12 +971,12 @@ must not be restarted merely to deliver new view code without preserving the
 existing restart boundary. Current verification and remaining limits are in Status.
 
 
-### Follow-up proposal: information priority and whole-vector viewing
+### Approved follow-up: information priority and whole-vector viewing
 
 The 2026-09-09 F16 review adds O07–O10 to the same
 [Objects Paper page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0).
-These four boards are a new proposal, not covered by the original six-board
-implementation acceptance and not yet implemented.
+The user approved these four boards for implementation on 2026-09-09, including
+further refinement when real scenarios expose problems.
 
 - O07 defaults to Name, Content and a secondary Type field. Content answers the
   immediate question: scalar value, table dimensions, array shape, function
@@ -994,6 +994,8 @@ implementation acceptance and not yet implemented.
   compact original/rendered-color detail, not a full text page. Copy vector is
   distinct from Copy color. Hex conversion is an explicitly chosen copy format;
   original strings such as `green` are preserved by the default copy action.
+  Constrained docks use a compact heading and a view selector, preserving a visible
+  color strip when both width and height are limited.
 - O10 treats long vectors as ranges. It distinguishes selected/shown/full-vector
   copy scope; whole-vector copying obtains complete values before publishing the
   clipboard result and retains the existing budget/error boundaries. Short string
@@ -1008,6 +1010,9 @@ non-color values and their original positions visible. Copies retain order,
 names and NA semantics. A requested hex copy cannot silently drop non-color items.
 Changing a view's field order or color arrangement does not mutate the R object.
 
-Review O07's default hierarchy and O09's whole-vector workflow before revising
-the running components. Static screenshot checks cover the new boards' layout;
-they do not establish interaction, keyboard, copy or native-data acceptance.
+The directory and vector viewers implement these interactions. Whole-vector
+copying uses bounded reads on one observation, with a 1 MiB / 100,000-value ceiling;
+exact values and full names/levels are obtained before changing the clipboard.
+Original R vector copy retains supported classes, units and timezone attributes.
+Incomplete or unsupported exact representations fail explicitly. See Status for
+executed interaction, keyboard, copy and native-data verification.

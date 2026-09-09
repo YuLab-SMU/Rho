@@ -115,3 +115,46 @@ it("deduplicates detail pages on the original observation and fences late respon
   await inFlight; await rejected;
   expect(f.owner.inspectors.get('x')?.stale).toBe(true);
 });
+
+async function settleCopy<T>(f: ReturnType<typeof fixture>, task: Promise<T>) {
+  let result!: T, failure: unknown, settled = false;
+  task.then(value => { result = value; settled = true; }, error => { failure = error; settled = true; });
+  for (let i = 0; i < 2000 && !settled; i++) { await Promise.resolve(); if (f.owner.needsObservation) await f.owner.observe(); }
+  expect(settled).toBe(true);
+  if (failure) throw failure;
+  return result;
+}
+it('whole-vector copy joins pages, full Unicode text and duplicate names on one reference', async () => {
+  const f = fixture(), m = { ...metadata('value', 201), object_type: 'character', supported_reads: ['values', 'names', 'text'] as const } as ObjectMetadata;
+  const scalar = (text: string) => ({ ...page('x').values[0], object_type: 'character', number: null, text });
+  f.query.mockImplementation(async (_project, capability, args) => {
+    if (capability === 'workspace.list_objects') return ready(directory());
+    if (capability === 'workspace.observe_object') return ready(observed('x', 'ref-x', m));
+    const start = Number(args.start ?? 1), limit = Number(args.limit ?? 20), kind = args.kind as ObjectReadPage['kind'];
+    if (kind === 'text') return ready({ ...page('x', 'ref-x', 'text', m), start, values: [scalar('尾部')], next_text_start: null });
+    const values = Array.from({ length: Math.min(limit, 202 - start) }, (_, i) => kind === 'names' ? scalar('重复名') : scalar(`value${start + i}`));
+    if (kind === 'values' && start === 1) values[0] = { ...scalar('首部'), next_text_start: 3 };
+    return ready({ ...page('x', 'ref-x', kind, m), start, values, next_start: start + values.length <= 201 ? start + values.length : null });
+  });
+  await f.owner.observe(); f.owner.inspect('x'); await f.owner.observe(); await f.owner.observe();
+  const copied = await settleCopy(f, f.owner.collectVector('x', [], { reference: 'ref-x' }));
+  expect(copied.values).toHaveLength(201); expect(copied.values[0].text).toBe('首部尾部'); expect(copied.values[0].next_text_start).toBeNull();
+  expect(copied.values[200].text).toBe('value201'); expect(copied.names?.map(v => v.text)).toEqual(Array(201).fill('重复名'));
+  expect(f.query.mock.calls.filter(([, c]) => c === 'workspace.observe_object')).toHaveLength(1);
+  expect(f.query.mock.calls.filter(([, c]) => c === 'workspace.read_object').every(([, , a]) => a.object_ref === 'ref-x')).toBe(true);
+});
+it('copy rejects a prematurely ended native vector instead of returning a partial whole', async () => {
+  const f = fixture(); await f.owner.observe(); f.owner.inspect('x'); await f.owner.observe(); await f.owner.observe();
+  f.query.mockResolvedValueOnce(ready(page('x', 'ref-x', 'values', metadata('value', 20))));
+  await expect(settleCopy(f, f.owner.collectVector('x', [], { reference: 'ref-x' }))).rejects.toThrow('complete vector');
+});
+it('copy rejects a changed observation and does not read while R is busy', async () => {
+  const f = fixture(); await f.owner.observe(); f.owner.inspect('x'); await f.owner.observe(); await f.owner.observe();
+  const task = f.owner.collectVector('x', [], { reference: 'ref-x' });
+  const rejected = expect(task).rejects.toThrow(/observation changed/i);
+  f.owner.invalidate(); await rejected;
+  await f.owner.observe(); f.owner.inspect('x'); await f.owner.observe(); await f.owner.observe();
+  f.scope({ runtimeState: 'busy' }); const calls = f.query.mock.calls.length;
+  await expect(f.owner.collectVector('x', [], { reference: 'ref-x' })).rejects.toThrow('busy');
+  expect(f.query).toHaveBeenCalledTimes(calls);
+});

@@ -12,6 +12,7 @@ import {
   objectSize,
   objectType,
 } from "../object-values";
+import { VectorInspector } from "./object-vector-view";
 import { ObjectGrid } from "./object-grid";
 import {
   ScalarValue,
@@ -19,6 +20,14 @@ import {
   useObjectView,
   usePage,
 } from "./object-common";
+import {
+  normalizeFields,
+  fieldTemplate,
+  fieldMinimumWidth,
+} from "../object-fields";
+import type { ObjectFields } from "../object-fields";
+import { ObjectFieldsMenu, DirectoryHeader } from "./object-field-controls";
+import { ObjectSummary } from "./object-summary";
 import "./object-panel.css";
 const preferred = (m: ObjectMetadata | null): ObjectReadKind =>
   m?.supported_reads.includes("table")
@@ -53,7 +62,12 @@ function Sample({ metadata: m }: { metadata: ObjectMetadata | null }) {
     return (
       <span className="object-sample">
         {values.map((v, i) => (
-          <ScalarValue key={i} value={v} metadata={m} raw={m.object_type !== "character" && v.text !== null} />
+          <ScalarValue
+            key={i}
+            value={v}
+            metadata={m}
+            raw={m.object_type !== "character" && v.text !== null}
+          />
         ))}
         {(m.length ?? 0) > values.length && <span>…</span>}
       </span>
@@ -82,6 +96,14 @@ export function ObjectsPanel({ viewId = "objects" }: { viewId?: string }) {
       setFilter(savedFilter);
   }, [savedFilter, session.project]);
   const [type, setType] = useObjectView("directory:type", "");
+  const [savedFields, saveFields] = useObjectView<unknown>(
+    `directory:${viewId}:fields`,
+    null,
+  );
+  const fields = normalizeFields(savedFields);
+  const [resizing, setResizing] = useState<ObjectFields["widths"] | null>(null);
+  const visibleFields = fields.order.filter((f) => !fields.hidden.includes(f));
+  const sizeVisible = visibleFields.includes("size");
   const entries = o.data?.objects ?? [],
     types = [
       ...new Set(entries.map((x) => objectType(o.metadata(x.name)))),
@@ -92,7 +114,23 @@ export function ObjectsPanel({ viewId = "objects" }: { viewId?: string }) {
       (!type || objectType(o.metadata(x.name)) === type),
   );
   return (
-    <section className="panel objects-panel object-directory">
+    <section
+      className="panel objects-panel object-directory"
+      style={
+        {
+          "--object-columns": fieldTemplate({
+            ...fields,
+            widths: resizing ?? fields.widths,
+          }),
+          "--object-field-count": visibleFields.length,
+          "--object-min-width":
+            fieldMinimumWidth({
+              ...fields,
+              widths: resizing ?? fields.widths,
+            }) + "px",
+        } as React.CSSProperties
+      }
+    >
       <div className="resource-search object-search">
         <input
           ref={filterInput}
@@ -122,6 +160,7 @@ export function ObjectsPanel({ viewId = "objects" }: { viewId?: string }) {
             <option key={x}>{x}</option>
           ))}
         </select>
+        <ObjectFieldsMenu config={fields} change={saveFields} />
         <button
           aria-label="Refresh Objects"
           title="Refresh Objects"
@@ -138,79 +177,99 @@ export function ObjectsPanel({ viewId = "objects" }: { viewId?: string }) {
           −
         </button>
       </div>
-      <div className="object-column-head">
-        <span>Name</span>
-        <span>Type</span>
-        <span>Size</span>
-        <span>Value / content</span>
-      </div>
-      <div className="object-list">
-        {visible.map((x) => {
-          const m = o.metadata(x.name);
-          return (
-            <div className="object-entry" key={x.name}>
-              <div
-                className={`object-row ${m?.preview?.length && !m.dimensions.length && (m.length === 1 || m.preview.every(v => colorValue(v))) ? "has-preview" : ""} ${o.expanded.has(x.name) ? "selected" : ""}`}
-              >
-                <button
-                  className="object-name"
-                  aria-expanded={o.expanded.has(x.name)}
-                  onClick={() => o.toggleExpanded(x.name)}
+      <div className="object-directory-body">
+        <DirectoryHeader
+          config={fields}
+          change={saveFields}
+          previewWidths={setResizing}
+        />
+        <div className="object-list">
+          {visible.map((x) => {
+            const m = o.metadata(x.name);
+            return (
+              <div className="object-entry" key={x.name}>
+                <div
+                  className={`object-row directory-row ${o.expanded.has(x.name) ? "selected" : ""}`}
                 >
-                  <span>{o.expanded.has(x.name) ? "⌄" : "›"}</span>
-                  <code title={x.name}>{x.name}</code>
-                </button>
-                <span className="object-type" title={m?.classes.join(", ")}>
-                  {objectType(m)}
-                  {m?.object_type === "character" &&
-                    m.length === 1 &&
-                    m.preview?.[0]?.text_characters != null && (
-                      <small className="compact-string-length">
-                        {" "}
-                        · {m.preview[0].text_characters} chars
-                      </small>
-                    )}
-                </span>
-                <span className="object-size">{objectSize(m)}</span>
-                <div className="object-row-sample">
-                  <Sample metadata={m} />
+                  <button
+                    className="object-name"
+                    aria-expanded={o.expanded.has(x.name)}
+                    onClick={() => o.toggleExpanded(x.name)}
+                  >
+                    <span>{o.expanded.has(x.name) ? "⌄" : "›"}</span>
+                    <code title={x.name}>{x.name}</code>
+                  </button>
+                  {visibleFields.map((field) => (
+                    <div
+                      key={field}
+                      className={`directory-field directory-${field}`}
+                      data-field={field}
+                    >
+                      {field === "type" ? (
+                        <span title={m?.classes.join(", ")}>
+                          {objectType(m)}
+                        </span>
+                      ) : field === "size" ? (
+                        objectSize(m)
+                      ) : (
+                        <ObjectSummary
+                          metadata={m}
+                          values={o.summaryValues(x.name)}
+                          showSize={sizeVisible}
+                        />
+                      )}
+                    </div>
+                  ))}
+                  <div className="directory-compact-summary">
+                    {visibleFields.includes("content") ? (
+                      <ObjectSummary
+                        metadata={m}
+                        values={o.summaryValues(x.name)}
+                      />
+                    ) : sizeVisible ? (
+                      objectSize(m)
+                    ) : null}
+                  </div>
+                  <button
+                    className="object-open icon-button"
+                    title="Open in New Tab"
+                    aria-label={`Open ${x.name} in New Tab`}
+                    onClick={() => nav.openObject(x.name)}
+                  >
+                    ↗
+                  </button>
                 </div>
-                <button
-                  className="object-open icon-button"
-                  title="Open in New Tab"
-                  aria-label={`Open ${x.name} in New Tab`}
-                  onClick={() => nav.openObject(x.name)}
-                >
-                  ↗
-                </button>
+                {o.expanded.has(x.name) && (
+                  <ObjectInspector name={x.name} viewId={viewId} inline />
+                )}
               </div>
-              {o.expanded.has(x.name) && (
-                <ObjectInspector name={x.name} viewId={viewId} inline />
-              )}
-            </div>
-          );
-        })}
-        {!visible.length && (
-          <p className="empty-message muted">
-            {entries.length
-              ? "No matching objects."
-              : session.runtime
-                ? "No objects observed."
-                : "Start R to observe objects."}
-          </p>
-        )}
-        {filter && !entries.some((x) => x.name === filter) && (
-          <button onClick={() => o.setExpanded(filter, true)}>
-            Inspect Exact Name: {filter}
-          </button>
-        )}
-        {filter &&
-          o.expanded.has(filter) &&
-          !entries.some((x) => x.name === filter) && (
-            <ObjectInspector name={filter} viewId={viewId} inline />
+            );
+          })}
+          {!visible.length && (
+            <p className="empty-message muted">
+              {entries.length
+                ? "No matching objects."
+                : session.runtime
+                  ? "No objects observed."
+                  : "Start R to observe objects."}
+            </p>
           )}
+          {filter && !entries.some((x) => x.name === filter) && (
+            <button onClick={() => o.setExpanded(filter, true)}>
+              Inspect Exact Name: {filter}
+            </button>
+          )}
+          {filter &&
+            o.expanded.has(filter) &&
+            !entries.some((x) => x.name === filter) && (
+              <ObjectInspector name={filter} viewId={viewId} inline />
+            )}
+        </div>
       </div>
-      {(o.notice || o.stale || o.getSnapshot().indexExpired || session.runtime?.state === "busy") && (
+      {(o.notice ||
+        o.stale ||
+        o.getSnapshot().indexExpired ||
+        session.runtime?.state === "busy") && (
         <div className="object-observation-status" role="status">
           {session.runtime?.state === "busy"
             ? "R busy · Showing the last observation"
@@ -315,7 +374,11 @@ export function ObjectInspector({
     }),
     [chosen, JSON.stringify(path), start, inline],
   );
-  const result = usePage(name, options, inline, chosen !== "table"),
+  const vector =
+    !!m?.supported_reads.includes("values") &&
+    !m.dimensions.length &&
+    m.object_type !== "list";
+  const result = usePage(name, options, inline, chosen !== "table" && !vector),
     p = result.page;
   const isStale =
     o.inspectors.get(name)?.stale || runtime.runtime?.state !== "idle";
@@ -349,6 +412,20 @@ export function ObjectInspector({
           ].includes(m.object_type ?? "")),
     ) ?? [];
   const readPage = p?.kind === chosen ? p : undefined;
+  if (vector && m)
+    return (
+      <div
+        className={`object-preview object-inspector object-vector-inspector ${inline ? "is-inline" : "is-dedicated"}`}
+      >
+        <VectorInspector
+          name={name}
+          viewId={viewId}
+          path={path}
+          metadata={m}
+          inline={inline}
+        />
+      </div>
+    );
   return (
     <div
       className={`object-preview object-inspector ${inline ? "is-inline" : "is-dedicated"}`}

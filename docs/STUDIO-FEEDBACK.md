@@ -354,11 +354,12 @@ They also find palette inspection impractical: a five-element character vector
 is treated as individually paged text, with repeated character/byte/line details.
 Column management in the dedicated data grid does not cover these directory fields.
 
-The follow-up Paper boards O07–O10 propose content-first summaries, configurable
+The follow-up Paper boards O07–O10 specify content-first summaries, configurable
 field order/visibility/width, complete small-palette overviews and vector-level
 copying. Single-item details are secondary; long vectors use explicit ranges and
-retain missing/non-color positions. These remain proposals pending review. Current
-runtime behavior and previous verification remain separate in Status.
+retain missing/non-color positions. The user approved implementation on 2026-09-09.
+These interactions are implemented; executed checks and remaining limitations are
+in Status. Further real-use feedback remains open.
 
 ## Workflow reference: a country development analysis
 

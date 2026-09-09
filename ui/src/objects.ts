@@ -8,6 +8,9 @@ import type { ObjectMetadata } from "./generated/ObjectMetadata";
 import type { ObjectDirectoryPage } from "./generated/ObjectDirectoryPage";
 import type { ObjectObservation as NativeObjectObservation } from "./generated/ObjectObservation";
 import type { ObjectReadPage } from "./generated/ObjectReadPage";
+import type { CollectedVector } from "./object-vector";
+import { vectorCopyBytes } from "./object-vector";
+import type { ObjectPathElement } from "./generated/ObjectPathElement";
 import type { ReadObjectArguments } from "./generated/ReadObjectArguments";
 import type { ObjectReadKind } from "./generated/ObjectReadKind";
 import type { ObjectScalar } from "./generated/ObjectScalar";
@@ -99,6 +102,72 @@ export class Objects extends Model<ObjectsSnapshot> {
     const promise = new Promise<ObjectReadPage>((yes, no) => { resolve = yes; reject = no; });
     this.details.set(key, { key, name, reference: ref.reference, options, resolve, reject, promise });
     this.ports.schedule(); return promise;
+  }
+  summaryValues(name: string): readonly ObjectScalar[] {
+    const observed = this.previews.get(name);
+    if (observed?.page?.kind === "values" && observed.page.object_ref === this.references.get(name)?.reference && !observed.page.path.length && !observed.page.observed_path.length)
+      return observed.page.values.slice(0, (observed.page.metadata.length ?? Infinity) <= 8 ? 8 : 4);
+    return this.metadata(name)?.preview ?? [];
+  }
+  /** Explicit user copy reads are bounded and may never combine observations. */
+  async collectVector(name: string, path: ObjectPathElement[], options: {
+    reference: string; basis?: "values" | "levels"; range?: { start: number; count: number }; cancelled?: () => boolean;
+  }): Promise<CollectedVector> {
+    const scope = { ...this.ports.context() }, revision = this.revision, invalidation = this.invalidation;
+    let bytes = 0;
+    const check = () => {
+      const ref = this.references.get(name);
+      if (options.cancelled?.()) throw new Error("Copy cancelled.");
+      if (!this.ports.context().connected || this.ports.context().runtimeState !== "idle") throw new Error("R is busy or disconnected. The previous observation is retained.");
+      if (this.stopped || revision !== this.revision || invalidation !== this.invalidation || !sameScope(scope, this.ports.context(), true) || !ref?.validated || ref.reference !== options.reference || Date.now() >= ref.expiresAt)
+        throw new Error("The object observation changed. Refresh before copying again.");
+    };
+    const read = async (request: ObjectPageRequest) => {
+      check(); const page = await this.readPage(name, { ...request, path }); check();
+      if (page.object_ref !== options.reference) throw new Error("The object changed during copy.");
+      if (page.kind !== request.kind || page.start !== (request.start ?? 1)) throw new Error("The requested copy range is unavailable.");
+      return page;
+    };
+    const completeText = async (value: ObjectScalar, index: number, attribute?: "names" | "levels") => {
+      let v = { ...value }, next = v.text !== null ? v.next_text_start : null;
+      while (next !== null) {
+        const part = await read({ kind: "text", start: index, text_start: next, text_limit_bytes: 16384, text_attribute: attribute });
+        const text = part.values[0];
+        if (!text || text.text === null || (part.next_text_start !== null && part.next_text_start <= next)) throw new Error("Text continuation did not advance.");
+        v.text = (v.text ?? "") + text.text; next = part.next_text_start;
+        if (new TextEncoder().encode(v.text).length > vectorCopyBytes) throw new Error("Copy exceeds 1 MiB. Select a smaller range.");
+      }
+      if(v.text !== null) v.next_text_start = null;
+      bytes += new TextEncoder().encode(v.text ?? String(v.number ?? v.logical ?? v.label ?? "")).length + 4;
+      if(bytes > vectorCopyBytes) throw new Error("Copy exceeds 1 MiB. Select a smaller range.");
+      return v;
+    };
+    const gather = async (kind: "values" | "names" | "levels", range?: {start: number;count: number}) => {
+      let start = range?.start ?? 1; const values: ObjectScalar[] = []; let metadata: ObjectMetadata | null = null;
+      if(!Number.isSafeInteger(start) || start < 1 || (range && (!Number.isSafeInteger(range.count) || range.count < 0 || range.count > 100000))) throw new Error("Copy range is outside the supported limit.");
+      do {
+        const remaining = range ? range.count - values.length : 100000 - values.length;
+        if(remaining <= 0 && metadata) break;
+        const limit = Math.max(1, Math.min(200, remaining));
+        const page = await read({ kind, start, limit }); metadata = page.metadata;
+        if(page.values.length > limit) throw new Error("Copy page exceeds its requested range.");
+        if(range?.count === 0) break;
+        for(let i=0;i<page.values.length;i++) values.push(await completeText(page.values[i], start+i, kind==='values' ? undefined : kind));
+        if(page.next_start === null) break;
+        if(!page.values.length || page.next_start !== start + page.values.length) throw new Error("Vector continuation did not advance without gaps.");
+        if(values.length >= 100000 && (!range || values.length < range.count)) throw new Error("Copy is limited to 100,000 values. Select a smaller range.");
+        start = page.next_start;
+      } while (!range || values.length < range.count);
+      if(range && values.length !== range.count) throw new Error("The full requested range is unavailable.");
+      const total = kind === "levels" ? metadata?.level_count : metadata?.length;
+      if (!range && total != null && values.length !== total) throw new Error("The complete vector is unavailable. Copy a shown range instead.");
+      return { values, metadata: metadata! };
+    };
+    const basis = options.basis ?? "values", data = await gather(basis, options.range);
+    const metadata = basis === "levels" ? { ...data.metadata, object_type: "character", classes: [], dimensions: [], attributes: [], length: data.values.length } : data.metadata;
+    const names = basis === "values" && metadata.supported_reads.includes("names") ? (await gather("names", { start: options.range?.start ?? 1, count: data.values.length })).values : undefined;
+    const levels = basis === "values" && metadata.classes.includes("factor") ? (await gather("levels")).values : undefined;
+    check(); return { values: data.values, names, levels, metadata, objectRef: options.reference, start: options.range?.start ?? 1 };
   }
   private clearPages() {
     for (const request of this.details.values()) request.reject(new Error("Object observation changed. Refresh to read current values."));
