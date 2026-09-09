@@ -45,7 +45,14 @@ separate binary artifacts, and counts tool/resource calls and UTF-8 textual repl
 The proxy does not implement capabilities or synthesize scientific responses. Fixture
 faults modify real files/browser state or drop a real response after execution.
 
-Each task is limited to 80 calls, 1 MiB textual tool returns and ten minutes. The raw
+Each task is limited to 80 tool attempts, 1 MiB textual tool returns and ten minutes.
+Model attempts include client-side rejections before MCP delivery and native/plan
+tool attempts. They are recorded separately from transport calls; matching Rho tool
+names and canonical arguments are paired one-to-one so delivered calls count once.
+Unmatched resource calls or transport attempts still count. Client error text adds
+only bytes not already represented in its matched recorded MCP reply. Accounting
+is checked live and recomputed after transport drain without rereading Skill files.
+The raw
 Codex JSONL and MCP transcript survive failure, timeout and budget exhaustion. Actual
 input, cached input, cache-write input, output and reasoning token fields come from
 Codex usage events; missing required usage fails the run. Images have separate byte and
