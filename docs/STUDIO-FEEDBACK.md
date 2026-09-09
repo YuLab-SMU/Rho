@@ -40,6 +40,20 @@ The proposed cross-product principles for interpreting this feedback are in
 
 ## User feedback
 
+### F18 — Runtime foundations need an understandable management experience
+
+**User request (2026-09-09):** Investigate the current implementation before
+deciding how to design an interface for the powerful runtime management foundation.
+This asks for investigation and design exploration, not implementation of multiple
+runtimes or package installation.
+
+The investigation distinguishes Host lifecycle, live R sessions, queued executions,
+dependency realizations, remote jobs and native Agent tasks. [Design section 16](RHO-DESIGN.md#16-runtime-management--investigation-and-interaction-proposal)
+maps those capabilities to current owners and records the proposed daily entry,
+run inspection and restart/recovery interactions. The separate Paper Runtime page
+contains R01–R03 for review. Existing Shell work overlaps the entry/status layer;
+the proposal should integrate with it rather than create a second status owner.
+
 ### F17 — The bottom status bar is unattractive and the sidebar is missing
 
 **User report (2026-09-09):** The major modules and basic Agent integration are

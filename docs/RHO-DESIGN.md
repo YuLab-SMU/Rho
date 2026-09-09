@@ -1063,3 +1063,136 @@ proposal's visual composition only. After approval, implementation must read Pap
 JSX/computed styles, reuse the built-in registry and current owners, and verify
 focus/reopen, keyboard access, multiple instances, preserved drafts/layouts,
 native input/queue truth and normal/wide/constrained browser geometry.
+
+## 16. Runtime management — investigation and interaction proposal
+
+The 2026-09-09 investigation responds to F18. [Paper R01–R03](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/9-0)
+explores session inspection, runs/queue and restart/recovery. These are proposals
+for review, not approved interactions or implementation authorization. The boards
+extend section 15's R entry without deciding the Shell navigation preference.
+All displayed versions, metrics, runs and failures are illustrative fixtures.
+
+### What the implementation supports
+
+The important distinction is between management foundations and a multiple-runtime
+product. Host currently composes one live R Workspace per selected project.
+Several Console views share it. Several native Agent tasks have independent Agent
+sessions, but this does not create independent R sessions.
+
+| Area | Existing implementation | Interaction consequence |
+| --- | --- | --- |
+| Hosting and R selection | `crates/host/src/config.rs`, `crates/workbench/src/settings.rs`: installed R/Ark probing, project lease, selected Host replacement and startup failure reporting | Separate configuration from inspecting a running session; do not present an instance list as an existing capability |
+| R execution | `crates/workspace/src/console.rs`, `ui/src/console.ts`, `ui/src/operations.ts`: shared serial queue, pause/resume, pending cancellation, active interruption, stdin and retained request identities | Present current work and waiting work independently, with actions that name their scope |
+| Native observation | `crates/adapters/r-runtime/src/lib.rs`, `ui/src/session.ts`: starting/idle/busy/unavailable, session identity, observation time, Ark/R process memory and CPU | Separate Host connectivity, R state and observation freshness; these metrics are not total project or child-process usage |
+| Dependency environments | `crates/environment`, `crates/host/src/environment.rs`: pak/renv planning, isolated realization, verification, reconciliation and reference-aware quarantine/restore/purge; verified realization can bind a new R launch | Environment management needs its own future workflow; it is not the live Packages inventory and does not imply switching the current library in place |
+| Processes and remote jobs | `crates/execution`, Host registration: local process supervision/reconciliation and conditionally configured SSH/Slurm execution, job observations and cancellation | Remote jobs have their own lifetimes. Successful submission is not job completion; an SSH transport is not a remote interactive R Workspace |
+| Durable results and recovery | `crates/operation`, `ui/src/operations.ts`: original operation identities, immutable outcomes, reconciliation and retained unconfirmed requests | Show readable results and original evidence; an unconfirmed outcome must not become an automatic new submission |
+
+The committed Shell at investigation start (`b391d93`) routed both Local R and
+Environment to the same settings dialog, showed routine metrics in the footer and
+prioritized queue pause over an active run. Concurrent, uncommitted Shell work was
+already adding a status disclosure and separate execution/queue presentation during
+this investigation. Integrate with that owner; those findings are baseline evidence,
+not claims that the concurrent implementation still has every old defect.
+The existing Console Run Details renders raw records with `JSON.stringify`.
+Settings exposes R/Ark paths, Check Configuration and Apply and Start R, leaving
+ordinary session inspection and restart buried in configuration.
+
+### One daily entry, three depths
+
+**R01 — quick observation and session management.** The footer identifies Local R,
+version and current state. Waiting input and exceptional states retain text.
+Clicking opens a small disclosure with current source, elapsed time when known,
+queue state, Open Console and a scoped Interrupt run action. Optional persistent
+metrics can follow the Shell preference; the default disclosure labels observation
+time and Ark/R-only coverage. Running and Queue paused can coexist. A missing or
+old observation does not become zero usage or an idle session.
+
+Manage R Session opens a secondary workspace surface with Overview, Runs and
+Details. Preserve editor/Console drafts and selection behind it; closing returns
+to that context. Overview shows the selected installation, project and current
+library information, with links to Packages and Runs. Library data comes from the
+live Workspace package owner, or is explicitly unavailable/cached; another Rscript
+process's Environment inventory cannot substitute for it. Details contains paths,
+native session identity, adapter and diagnostics. Opening either surface only reads.
+
+**R02 — runs and queue.** A runs list identifies the source and outcome; selected
+detail presents result/error, actual captured code, elapsed time when available,
+and recorded outputs. Original IDs, receipts and JSON remain in a disclosure.
+An available file link opens the current file; it is not the captured historical
+code. Missing provenance stays unknown. Start with R runs in this surface, without
+silently presenting every process/environment operation as an R execution.
+
+Queue actions remain Pause/Resume and Cancel Pending. Cancellation retains the
+native start-race check. Cancelled pending work is not an interrupted execution.
+There is no editable or draggable scheduler in this proposal. Copy to Console
+creates an editable draft; submitting it is a new action. On failure, the original
+error and paused followers stay visible. Do not imply that prior assignments or
+file effects were rolled back. Success should show useful outputs rather than an
+error-shaped diagnostic card. Live output and stdin continue to use Console.
+
+At constrained widths, Runs uses list → detail → Back while retaining selection
+and scroll, rather than compressing two columns. Input actions route to the owning
+Console, including when its original view is closed. Opening run detail does not
+change a deliberately selected plot or rerun code.
+
+**R03 — restart and recovery.** Restart R and Change R installation are distinct.
+Before restart, show loss of live R memory and retention of files, synchronized
+drafts, layout and recorded outputs. Flush drafts through their owner before acting;
+unsynchronized/conflicted drafts must not be described as retained remotely.
+Do not promise restoration of R memory or automatic script replay.
+
+Restart eligibility needs a bounded, read-only Host observation with concrete
+blockers: active work, attached MCP/native Agent connections and unresolved holds.
+Link to the owning run or connection where identifiable, otherwise report the
+unknown hold. Inspecting blockers must not stop tasks or disconnect clients.
+Execution rechecks native conditions; a prior eligibility read is not a reservation.
+This exposes existing mechanical preconditions, not another Agent approval policy.
+
+Current `apply_r` validates a candidate, rejects active requests/Host references or
+live Agent connections, drains and replaces the selected Host, and explicitly sets
+`environment: None`. It must not merely be relabeled Restart R: the proposed restart
+needs to retain the current installation **and bound environment**, and report
+startup failure honestly. Host-only metadata lacks a complete named-blocker list
+and a durable lifecycle receipt. A typed hosting lifecycle observation/control with
+session preconditions and lost-acknowledgement handling is therefore backend work,
+not a frontend-only button. Keep scientific operations on their existing ports.
+
+Host disconnection shows last-seen work and Check connection. It does not establish
+that R stopped. An unconfirmed run offers Check original request first. The existing
+explicit same-ID retry remains a distinct advanced action after reconciliation,
+subject to its original scope and preconditions; it is not a new run or an automatic
+retry. Owner recovery that may signal processes or change material must state those
+effects, rather than being labeled as a harmless status check. Agent stop, R interrupt
+and remote job cancellation retain separate targets and outcomes.
+
+### Delivery boundaries and subsequent design
+
+The first useful slice is the current single-R experience: integrate the Shell
+disclosure, add readable run detail, then provide session management with the
+required hosting lifecycle support. Reuse Session, Console and Operations; a
+presentation model may combine their snapshots but must not add polling, a second
+queue, result store or scientific authority. Suggested admission/freshness fields
+are proposed contracts, not existing API promises.
+
+A later Environment plugin can express plan → prepare → verify → use in a new
+session, with original plan/realization/verification records and retention reasons.
+Core Packages stays read-only. Process/job inspection should be a separate scoped
+surface when configured, rather than a permanent cluster dashboard for local users.
+These are design directions, not authorization to install packages, add a plugin,
+connect a server or implement all backend capabilities as controls.
+
+Future multiple-R work follows Architecture's instance boundaries: first independent
+sessions of the same R version, then multiple installations/environments. Named
+sessions such as Main and Scratch would be analysis targets; runtime definitions
+and dependency environments remain configuration. Editor execution must capture its
+target with its code; Console/Objects/Packages follow or pin to an explicit instance.
+Already accepted work must not move when a selector changes. This proposal does
+not introduce that selector before those identities and isolated queues exist.
+
+Review should exercise running with a paused queue, input with a closed Console,
+failure after partial effects, lost acknowledgements, stale metrics, Host loss,
+restart blockers, preserved environment binding and failed startup. Normal and
+constrained layouts need keyboard/focus/scroll checks. Paper screenshots establish
+composition only; the four existing frontend suites run during this investigation
+establish a model baseline, not acceptance of these new interactions.

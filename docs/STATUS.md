@@ -2,6 +2,32 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
+## Runtime management — investigation and design proposal
+
+The user requested code investigation and interaction exploration. [Design section
+16](RHO-DESIGN.md#16-runtime-management--investigation-and-interaction-proposal)
+records the implementation map and [Paper Runtime R01–R03](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/9-0):
+daily R disclosure/session overview, readable runs/queue, and restart/recovery.
+The proposal awaits design review; no runtime implementation was authorized here.
+
+The current Host has one live R Workspace, with separate Environment, process,
+remote-job and native Agent ownership. A useful first slice can reuse the current
+Session/Console/Operations models. Restart needs additional hosting support:
+readable blockers, native preconditions/lost-acknowledgement handling and preservation
+of the bound Environment; existing Apply R replaces the Host and clears that binding.
+Multiple R instances and Environment-management UI remain subsequent scoped work.
+
+The four existing Session, RuntimeCoordinator, Operations and Console model suites
+passed: **85 tests**. All three Paper boards were reviewed through screenshots;
+R03 was fitted to its content. These are model-baseline and static-design checks,
+not a new live-R, browser, remote-cluster or visual-acceptance result. Concurrent
+Shell/storage source edits were observed and preserved. This investigation changed
+only design/feedback/status documentation and Paper; it did not launch or restart
+a Host, operate R, change a user layout or install anything.
+Documentation impact mapping, governance/index checks, governance self-tests and
+`git diff --check` passed. Source-area checks listed for concurrent edits were not
+claimed as part of this documentation-only investigation.
+
 ## Shell navigation and status bar — design review pending
 
 The user finds the bottom status bar unattractive and reports the missing workspace
