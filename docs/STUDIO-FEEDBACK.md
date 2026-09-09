@@ -253,12 +253,31 @@ the write target; its existence and link did not establish board ownership.
 
 The main surface should support choosing a task, reading messages and acting.
 New task should lead directly to composition; model controls belong with the
-composer. Permission choices belong beside the actual tool activity. Recovery
+composer. Permission replies need context about the actual tool activity; F12
+further establishes their fixed location near the composer. Recovery
 and ownership need a concise state and a relevant action, with detailed evidence
 available on demand. Backend rules belong in the specification, not explanatory
 cards that users must read before working. Verify actual page membership when
 delivering a Paper link. The revised proposal is in Design section 13 and still
 requires user review; screenshot inspection does not approve its usability.
+
+### F12 — Permission and information controls belong around the composer
+
+**User feedback (2026-09-09):** The user supplied examples of a three-mode permission
+selector, a CLI request with four ordered options including session approval and
+feedback, and composer controls for attachments/workspace/plugin channels. A fixed
+Allow/Decline design does not represent native variation. The user wants a
+predictable area near message input for actions, instead of searching the transcript
+for permission controls. They also want images/files and @ references to particular
+component data, files, plots, tables and plugin-provided information.
+
+The revised proposal separates native mode selection from individual responses,
+anchors pending requests immediately above the composer and supports native option
+lists/feedback without imposing a common mode count. Context selection includes
+source-labeled, previewable and removable items with explicit scope. These are
+interaction requirements; the supplied screenshots are design references, not
+evidence that every runtime supports identical modes, options or input types.
+Native capabilities and scientific-owner identities remain authoritative.
 
 ## Workflow reference: a country development analysis
 

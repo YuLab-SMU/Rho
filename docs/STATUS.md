@@ -4,13 +4,18 @@ Updated: 2026-09-09. This is the single current status summary. Git retains hist
 
 ## Next interface work: workspace Agent tasks
 
-The user's first-version task plan now has nine editable
+The user's first-version task plan now has fourteen editable
 [Paper review boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2):
 normal/right-docked and narrow/inspection-tab layouts, wide multi-task navigation,
 read-only ownership, native permissions, explicit resume, closed-panel reminders,
-direct composition for New task, and stop/takeover after window loss. The revised
-proposal removes the setup form and instructional cards; concise states and actions
-stay with the task or tool, while details are disclosed on demand. All nine boards
+direct composition for New task, and stop/takeover after window loss. F12 adds
+native permission-mode selection, pending requests fixed above the input,
+variable response options/feedback, @ component information, file/image attachments
+and plugin context channels with source/scope previews. These catalogs and plugin
+examples are illustrative; runtime mode control, multimodal input and plugin
+context-provider contracts are not implemented or verified by this design work.
+The revised proposal removes the setup form and instructional cards; permission
+controls stay in the composer area, while details are disclosed on demand. All fourteen boards
 were verified on the independent Agent page, and the general workspace page has
 only its original five boards. The proposed interaction is recorded in
 [Design section 13](RHO-DESIGN.md#13-workspace-agent-tasks--proposed-for-review).

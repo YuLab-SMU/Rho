@@ -746,7 +746,7 @@ Section 12 describes the existing settings experience until the task work ships.
 Following the user's F11 feedback, the revision removes the setup form, explanatory
 recovery cards and rules gallery. The main surface contains task navigation,
 conversation, concise state and the relevant action. Detailed evidence opens only
-on demand. All nine boards now belong to the independent **Agent · 工作区任务设计评审**
+on demand. All fourteen boards belong to the independent **Agent · 工作区任务设计评审**
 page; the general high-fidelity workspace page contains only its original five
 boards. Page membership was verified from both page roots.
 
@@ -756,11 +756,16 @@ boards. Page membership was verified from both page roots.
 | A02 | 1060 × 800 window; 332 px Agent tab in the right inspection group |
 | A03 | 960 × 820 panel; 240 px task list and a compact New task runtime menu |
 | A04 | Another window's read-only view, saved draft and idle Take over |
-| A05 | Native permission choices attached to their tool activity; editable next draft |
+| A05 | Pending permission fixed immediately above the composer; editable next draft |
 | A06 | Resume in the task header; concise unconfirmed-turn and history-gap disclosures |
 | A07 | Closed panel, persistent top-bar badge and task reminder popover |
 | A08 | Empty task ready for input, with model/reasoning controls inside the composer |
 | A09 | Read-only conversation after the control window is lost; Stop Agent and take over |
+| A10 | Native permission-mode menu beside the input controls; illustrative three-mode catalog |
+| A11 | @ picker for specific files, objects, plots, table selections, code and plugin information |
+| A12 | Add-channel menu, selected component references, image/file attachments |
+| A13 | Variable native permission options, feedback field and explicit response confirmation |
+| A14 | Attached-context preview with source, bounded sample and inclusion scope |
 
 The proposed single-instance **Agent** panel uses the Studio panel chrome, Inter,
 white content surfaces, restrained borders and the existing semantic colors.
@@ -791,9 +796,11 @@ Settings retains CLI discovery, explicit component setup, model catalogs, isolat
 diagnostic **Test** and manual MCP configuration. Daily chat moves to the panel.
 Opening the panel reads task state without scanning CLIs or sending model requests.
 
-Native permission labels and order are preserved; the Codex file-change example
-places Allow once / Decline directly under the tool title and target file, without
-a separate permission explainer card. Pending permissions
+Native permission labels and order are preserved. Following F12, actionable
+requests sit in a fixed area immediately above the message input, outside the
+conversation's scroll region. The request identifies the actual tool/target but
+does not require finding an earlier chat message to respond. After resolution,
+the history retains a non-interactive activity/result record. Pending permissions
 remain visible in other task rows and the top-bar reminder. Idle takeover requires
 no pending permission or submission. If the original window is unreachable while
 running, **Stop Agent and take over** waits for confirmed native quiet or safe
@@ -817,7 +824,62 @@ replace conversations with recovery instructions or put backend guarantees into
 routine task controls. These presentation changes do not relax the underlying
 identity, persistence, recovery or single-writer requirements.
 
-Screenshot review covered all nine boards for spacing, type, contrast, alignment
-and clipping. This is static design inspection, not browser behavior, keyboard,
+### Composer permissions and context channels
+
+The composer is the predictable place for permissions, attachments, context
+selection and sending/stopping. Its toolbar contains **+**, an attachment button,
+**@**, the selected native permission mode, model/reasoning and Send/Stop. Narrow
+panels use two toolbar rows without shrinking labels or hiding the primary action.
+
+Task/session permission mode and a response to an individual request are separate
+controls. Mode names, count, meaning, scope and changeability come from the chosen
+runtime's actual capabilities. The Ask / Auto approval / Full access menu follows
+the user's reference as an illustration, not a promise that Codex, Kimi and DeepSeek
+all expose these three modes. Missing capabilities must not produce fabricated
+options; show the known native value read-only or an unavailable mode control.
+Rho does not implement a second approval engine, silently edit global CLI settings,
+or let a native mode override Host containment. Native acknowledgement establishes
+an applied mode. Changing it does not implicitly answer an existing request.
+
+The response area adapts to native option count, labels, order and any supported
+feedback input. A05 shows two options; A13 uses the four-option CLI example from
+the user's screenshot without attributing it to a verified provider implementation.
+Confirmation forwards that native choice, not a separate Rho approval. A new
+request must not steal typing focus or turn Enter in the draft into approval.
+Long requests have bounded detail/option scrolling while the input remains usable.
+Requests, permission modes and replies retain task/window/attachment identity;
+resolved, expired and old-generation requests cannot remain actionable.
+
+**+** selects information channels; the attachment shortcut supports native-capable
+image/file selection, paste and drop. **@** opens the same context-provider system
+at a specific component/item. Built-in sources include Files, Editor selections,
+Objects, Plots and table selections. Plugins can register named information sources
+with searchable items, preview and supported inclusion scopes. The Enrichment
+Explorer entries are illustrative plugin contributions, not an installed plugin
+or a commitment to implement that analysis plugin. Opening a picker is a bounded
+read; it does not run analysis, start R, install a plugin or collect an entire
+workspace implicitly.
+
+Chosen items appear as removable references with their source, alongside image
+previews and file names. Clicking a reference previews its owned content and the
+chosen inclusion scope, such as summary or selected rows. Previewed sample rows
+are labeled separately from the amount included. Reference identity includes the
+provider, item, scope and owner-specific version/capture; a visible name alone is
+not provenance. File, image and plugin delivery must respect the selected runtime's
+actual input capabilities and limits. Unsupported, expired or changed content
+stays visible for correction/removal rather than being silently dropped or replaced.
+Plugin sources preserve project containment and principal visibility.
+
+Draft persistence and CAS include staged attachments and reference selections;
+send receipts identify the resolved payload so a lost acknowledgement cannot
+duplicate delivery or clear later edits. Native attachment data and verified Rho
+references are explicit new-turn input, never a replay of the observation cache
+as model memory. Binary content is not duplicated into the text history cache.
+Read-only windows can inspect the saved material but cannot change it or permissions.
+These additions are a design proposal; native mode catalogs, multimodal delivery
+and plugin context-provider contracts have not been implemented or verified here.
+
+Screenshot review covered the affected boards for spacing, type, contrast,
+alignment and clipping. This is static design inspection, not browser behavior, keyboard,
 scrolling, performance, native-resume or acceptance-test verification. Implementation
 must read Paper JSX/computed styles and validate the user's runtime scenarios.
