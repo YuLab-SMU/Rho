@@ -69,6 +69,7 @@ async function runCase(test) {
       result.skill_resources=scenario.allowedSkillFiles.map(file=>({resource:path.relative(scenario.skillRoot,file),sha256:digest(fs.readFileSync(file))}));
       if(scenario.disabledSkill)assert.equal(actual.find(skill=>skill.path===scenario.disabledSkill)?.enabled,false,'Original method must really be disabled in platform discovery');
     }
+    await scenario.prepareFixture?.({...options,evidence:caseEvidence});
     await host.start(scenario.project,manifestFile);await scenario.setup(host);
     json(path.join(caseEvidence,'private-fixture-truth.json'),{expected:scenario.expected,seed_operations:host.seedRecords,native_session:host.session,project:host.project,marker:scenario.marker});
     await host.screenshot('before.png');proxy=await new RecordingProxy(host,scenario,caseEvidence).start();
