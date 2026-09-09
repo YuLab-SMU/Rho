@@ -1,5 +1,6 @@
 // Parser and acceptance-assertion checks only. No model, Rho, R, or mock Agent run.
 import assert from 'node:assert/strict';
+import './image-self-test.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
