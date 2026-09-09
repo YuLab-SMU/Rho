@@ -78,6 +78,53 @@ async fn snapshot(host: &NextHost, paths: &[&str]) -> Value {
 }
 
 #[tokio::test]
+async fn project_storage_reads_volume_capacity_without_r_or_project_writes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("study");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(root.join("keep.txt"), "untouched").unwrap();
+    let host = NextHost::open_project(temp.path().join("state.sqlite"), &root)
+        .await
+        .unwrap();
+    let request = |arguments| QueryRequest {
+        capability: CapabilityRef::new("project.storage_status", 1).unwrap(),
+        arguments,
+    };
+    let result = host
+        .query_snapshot(&NextHost::local_context(), request(json!({})))
+        .await
+        .unwrap();
+    assert_eq!(result.status, QueryStatus::Ready, "{result:?}");
+    let storage: rho_contract::ProjectStorage =
+        serde_json::from_value(result.data.unwrap()).unwrap();
+    assert_eq!(
+        storage.project,
+        root.canonicalize().unwrap().to_str().unwrap()
+    );
+    assert!(storage.total_bytes > 0);
+    assert!(storage.available_bytes <= storage.total_bytes);
+    assert!(storage.free_bytes <= storage.total_bytes);
+    assert_eq!(
+        std::fs::read_to_string(root.join("keep.txt")).unwrap(),
+        "untouched"
+    );
+    assert!(
+        host.outbox(&NextHost::local_context(), 0, 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        host.query_snapshot(
+            &NextHost::local_context(),
+            request(json!({"path":"../outside"}))
+        )
+        .await
+        .is_err()
+    );
+}
+
+#[tokio::test]
 async fn git_patch_preserves_dirty_staged_untracked_and_uses_native_preconditions() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("project");

@@ -98,6 +98,10 @@ pause, including duplicate-request identity and explicit queue recovery.
 
 These scripts live in `scripts/`. R tests accept `RHO_ARK` and `RHO_R_HOME` where
 applicable. Ignored or unavailable external-runtime checks are not passes.
+The shell scenarios are in `ui/e2e/shell.spec.ts`, with their own disposable Host.
+Keep independent suites isolated rather than raising the product's retained-window
+budget for tests. Geometry checks wait for ResizeObserver layout to settle.
+
 Playwright uses isolated Chrome and disposable projects; build the current client
 and `rho` binary before running it. Keep real interactive workbench sessions in
 the integration checkout, separate from disposable test projects.

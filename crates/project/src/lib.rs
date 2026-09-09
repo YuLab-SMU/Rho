@@ -1,12 +1,15 @@
 #![forbid(unsafe_code)]
 mod directory;
+mod storage;
 mod text;
 pub use directory::{ProjectDirectoryHandler, ProjectSearchHandler};
+pub use rho_contract::ProjectStorage;
 pub use rho_contract::text::*;
 pub use rho_contract::{DirectoryEntry, DirectoryPage, ListDirectoryArguments};
 pub use rho_contract::{
     FileObservation, FilePage, GitObservation, GitStatusEntry, ProjectPatchResult, ProjectSnapshot,
 };
+pub use storage::ProjectStorageHandler;
 pub use text::{ProjectReadTextHandler, ProjectSearchTextHandler, ProjectTextError};
 
 use async_trait::async_trait;
@@ -90,6 +93,9 @@ pub struct GitApplyReport {
 
 #[async_trait]
 pub trait ProjectRuntime: Send + Sync {
+    async fn storage_status(&self) -> Result<ProjectStorage, String> {
+        Err("Project disk capacity is unavailable in this provider".into())
+    }
     async fn list_directory(
         &self,
         _args: &rho_contract::ListDirectoryArguments,

@@ -422,7 +422,7 @@ workspaces and explicit **Reset Layout**. Existing layouts remain valid.
 
 | Foundation | Value |
 | --- | --- |
-| App bar / status bar / group tab bar | 48 / 24 / 38 px |
+| App bar / status bar / group tab bar | 48 / 30 / 38 px |
 | Outer gap / splitter | 8 / 6 px |
 | Regular control / icon | 28 / 16 px |
 | UI / auxiliary / code type | Local Inter 13 / 12 px; monospace 14 px with 21 px line height |
@@ -1017,20 +1017,23 @@ Original R vector copy retains supported classes, units and timezone attributes.
 Incomplete or unsupported exact representations fail explicitly. See Status for
 executed interaction, keyboard, copy and native-data verification.
 
-## 15. Shell navigation and status — proposal for review
+## 15. Shell navigation and status — approved first version
 
 The [Paper Shell page, S01–S04](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/8-0)
-responds to the 2026-09-09 sidebar/status-bar feedback. It is proposed, not approved
-or implemented. Sidebar currently means workspace module navigation; its scope
-and default presentation need user review. Section 10 remains the accepted contract
-until this proposal is approved.
+was approved for first-version implementation on 2026-09-09. The user additionally
+requires individually selectable, persistent CPU, memory and disk usage in the
+footer: removing all metrics would reduce convenience. Sidebar means workspace
+module navigation. The implementation uses the existing domain and layout owners.
 
 - S01 places Files, Editor, Console, Objects, Plots and Packages in a 48 px rail,
   with a separate Agent entry and expansion/settings controls at the bottom.
   A 36 px target contains an 18–19 px icon; hover and keyboard focus expose names.
   Only the focused module receives the blue selection surface. A 30 px footer
-  groups runtime/execution at left and draft synchronization at right. Empty queue
-  counts and routine CPU/memory values are absent from the resting footer.
+  groups runtime/execution at left and resources/draft synchronization at right.
+  Empty queue counts and resource values are hidden by default. The runtime menu
+  and footer customization button offer separate **R CPU**, **R memory** and
+  **Project disk** checkboxes that keep the menu open while selecting. Preferences
+  persist independently of docking and merge against the latest shared settings.
 - S02 offers a persistent 168 px labeled navigation preference. Clicking focuses
   an existing view or restores a closed/collapsed view using its retained placement;
   repeated clicks do not close it. Multiple Console/Plots instances use a chooser.
@@ -1038,14 +1041,21 @@ until this proposal is approved.
   in that task. Layout actions remain discoverable in the top Layout menu.
   Settings retains the existing settings capabilities.
 - The runtime footer entry opens a bounded observation of R version, process
-  memory/CPU, freshness and queue state, with Console and R settings links. Busy,
+  memory/CPU, disk capacity/available space, freshness and queue state, with Console
+  and R settings links. CPU and memory refer to the Ark process embedding R;
+  children are excluded. Disk usage is total minus free space on the filesystem
+  containing the canonical project root, not project directory size or disk I/O.
+  Project storage uses a direct native filesystem statistics call, not disk
+  enumeration or a directory scan. Busy,
   cached, unknown and disconnected observations must be labeled. Reading this
   disclosure does not start R, probe package loadability or recover executions.
   The top project disclosure owns the full path, Copy path and Open Project.
   Project switching retains its existing session-ending semantics and disclosure.
 - Draft synchronization is not file saving. Its disclosure distinguishes synced
-  working drafts from files with unsaved changes and links to the Editor. Sync
-  pending/error states stay at the right; retry uses the existing persistence owner.
+  working drafts from files with unsaved changes and links to their Editor views.
+  The footer checks document-version acknowledgements in ApplicationBridge as well
+  as ApplicationPersistence. An old acknowledgement cannot mark a newer edit synced.
+  Sync pending/error states stay at the right; retry uses those existing owners.
 - S03 specifies Idle, Running, input waiting, queue pause, lost connection and
   sync failure. Current execution and paused followers can coexist visibly. Input
   waiting provides a route to the owning Console even when its originating view
@@ -1053,16 +1063,18 @@ until this proposal is approved.
   Not started and Not configured are explicit alternatives to Idle.
 - S03's 800 px footer removes execution source before shortening the runtime
   label; successful sync can become a labeled/tooltip icon, while required input
-  and errors retain text. S04 shows all docked panels in a 1024 × 800 workspace.
+  and errors retain text. User-pinned metrics remain visible. Below 700 px they use
+  a second footer row instead of disappearing. S04 shows all docked panels in a
+  1024 × 800 workspace.
   Viewport shrinkage must not close panels or overwrite saved docking weights;
   insufficient space retains workspace scrolling. Navigation expansion is a
   separate preference. Existing owners retain documents, observations and work.
 
-All board data and plots are design fixtures. Their screenshots verify the
-proposal's visual composition only. After approval, implementation must read Paper
-JSX/computed styles, reuse the built-in registry and current owners, and verify
-focus/reopen, keyboard access, multiple instances, preserved drafts/layouts,
-native input/queue truth and normal/wide/constrained browser geometry.
+Paper data and plots remain design fixtures. The implementation reads the reviewed
+JSX/computed styles and reuses the built-in registry and current owners. Explicit
+navigation also reveals views outside another maximized group. Current browser,
+keyboard, resource, persistence and native verification evidence belongs in Status;
+implementation does not close further first-version usability feedback.
 
 ## 16. Runtime management — investigation and interaction proposal
 

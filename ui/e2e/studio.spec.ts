@@ -88,6 +88,10 @@ test.afterAll(async () => {
   await stopHost();
   if (directory) await rm(directory, { recursive: true, force: true });
 });
+async function openShellSettings(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("menuitem", { name: "R and Editor Settings…", exact: true }).click();
+}
 async function resetLayout(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "View", exact: true }).click();
   await page
@@ -147,7 +151,7 @@ test("real Console, settings and docking shell", async ({ page }) => {
   await expect(page.locator(".console-status > span").first()).toHaveText(
     "Ready",
   );
-  await page.getByRole("button", { name: "Environment", exact: true }).click();
+  await openShellSettings(page);
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(
     page.getByText("jsonlite Available · rlang Available · Ark Available"),
@@ -293,7 +297,7 @@ test("UTF-8 pages, BOM/CRLF saves, disk conflicts and draft refresh", async ({
   ).toContainText(/precondition failed|patch does not apply/);
   expect(runs).toBe(0);
   expect(await readFile(file, "utf8")).toBe("# external disk edit\r\n");
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   await page.reload();
   await expect(
     page.locator(".document-panel:visible .cm-content"),
@@ -375,7 +379,7 @@ test("draft and layout recover after Host restart on another port", async ({
   await page
     .locator(".document-panel:visible .cm-content")
     .fill("# 跨端口保留的草稿");
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   const previous = url;
   const windowId = new URL(page.url()).searchParams.get("window");
   expect(windowId).toBeTruthy();
@@ -388,7 +392,7 @@ test("draft and layout recover after Host restart on another port", async ({
   await expect(
     page.locator(".document-panel:visible .cm-content"),
   ).toContainText("跨端口保留的草稿");
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
 });
 
 test("refresh never resubmits an unconfirmed invocation", async ({ page }) => {
@@ -440,7 +444,7 @@ test("offline drafts remain visible and synchronize when the connection returns"
   await newFile(page);
   const editor = page.locator(".document-panel:visible .cm-content");
   await editor.fill("# initial");
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   await context.setOffline(true);
   await editor.fill("# 离线草稿必须保留");
   await expect(
@@ -449,7 +453,7 @@ test("offline drafts remain visible and synchronize when the connection returns"
   await expect(page.locator(".notice")).toBeVisible();
   await expect(editor).toContainText("离线草稿必须保留");
   await context.setOffline(false);
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   await page.reload();
   await expect(
     page.locator(".document-panel:visible .cm-content"),
@@ -466,7 +470,7 @@ test("two windows do not silently overwrite each other’s drafts", async ({
   await page
     .locator(".document-panel:visible .cm-content")
     .fill("# window one starting draft");
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   const second = await context.newPage();
   await second.goto(url);
   await resetLayout(second);
@@ -475,11 +479,11 @@ test("two windows do not silently overwrite each other’s drafts", async ({
   await page
     .locator(".document-panel:visible .cm-content")
     .fill("# window one");
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   await second
     .locator(".document-panel:visible .cm-content")
     .fill("# window two retained");
-  await expect(second.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(second.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   await expect(
     second.locator(".document-panel:visible .cm-content"),
   ).toContainText("window two retained");
@@ -489,7 +493,7 @@ test("two windows do not silently overwrite each other’s drafts", async ({
   ).toContainText("window one");
   await second.reload();
   await expect(second.locator(".document-panel:visible .cm-content")).toContainText("window two retained");
-  await expect(second.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(second.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   await second.close();
 });
 
@@ -850,7 +854,7 @@ test("editor preferences persist without executing code or losing document text"
     )
       invokes++;
   });
-  await page.getByRole("button", { name: "Environment", exact: true }).click();
+  await openShellSettings(page);
   await page
     .getByRole("combobox", { name: "Code Font Size" })
     .selectOption("16");
@@ -861,14 +865,14 @@ test("editor preferences persist without executing code or losing document text"
     "16px",
   );
   await expect(editor).toContainText("偏好不改变文档");
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   await page.reload();
   await expect(page.locator(".document-panel:visible .cm-editor")).toHaveCSS(
     "font-size",
     "16px",
   );
   expect(invokes).toBe(0);
-  await page.getByRole("button", { name: "Environment", exact: true }).click();
+  await openShellSettings(page);
   await page
     .getByRole("combobox", { name: "Code Font Size" })
     .selectOption("14");
@@ -1030,7 +1034,7 @@ test("multiple Console drafts, continuation, history and IME events retain their
   await expect(
     page.locator(".console-panel:visible .console-input .cm-content"),
   ).toHaveText("# second draft");
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   await page.reload();
   await expect(
     page.locator(".console-panel:visible .console-input .cm-content"),
@@ -1103,7 +1107,7 @@ test("stdin has a separate answer field and accepts an answer after a browser re
   });
   await draft.fill("# next command remains");
   await expect(page.locator(".stdin-request")).toContainText("R answer:");
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   await page.reload();
   await expect(draft).toHaveText("# next command remains");
   await page.getByRole("button", { name: "Answer Here" }).click();
@@ -1556,7 +1560,7 @@ test("Packages follows the Paper design with grouped copies, sources and busy ca
   `);
   expect(setup.status).toBe("succeeded");
   try {
-    await page.getByRole("button", { name: "Panels", exact: true }).click();
+    await page.getByRole("button", { name: "Layout", exact: true }).click();
     await page.getByRole("menuitem", { name: "Packages", exact: true }).click();
     const panel = page.locator(".packages-panel:visible");
     await expect(panel.getByRole("status")).toContainText("Observed");
@@ -1695,7 +1699,7 @@ test("Packages follows the Paper design with grouped copies, sources and busy ca
       .locator("..")
       .locator(".flexlayout__tab_button_trailing")
       .click();
-    await page.getByRole("button", { name: "Panels", exact: true }).click();
+    await page.getByRole("button", { name: "Layout", exact: true }).click();
     await page.getByRole("menuitem", { name: "Packages", exact: true }).click();
     await expect(panel.getByLabel("Search Packages")).toHaveValue(
       "rhoStudioFixture",
@@ -1763,7 +1767,7 @@ test("checkpoint startup and reconnect consume an external burst beyond recent h
   await details.getByRole("button", { name: "Close", exact: true }).click();
   expect((await queryNative("workspace.inspect_object", { name: "rho_burst_count", max_items: 1 })).data.preview).toEqual([105]);
   expect(browserInvokes).toBe(0);
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   recordReads.clear();
   await page.reload();
   await expect.poll(() => checkpoints.length).toBe(2);
@@ -1799,7 +1803,7 @@ test("terminal output transport failures recover while failed execution refreshe
   test.setTimeout(90000);
   await page.goto(url); await resetLayout(page);
   await invokeNative('rho_terminal_effect <- 0L; if ("package:ggplot2" %in% search()) detach("package:ggplot2", unload=FALSE)');
-  await page.getByRole("button", { name: "Panels", exact: true }).click();
+  await page.getByRole("button", { name: "Layout", exact: true }).click();
   await page.getByRole("menuitem", { name: "Packages", exact: true }).click();
   const packages = page.locator(".packages-panel:visible");
   await packages.getByRole("button", { name: /^All \d/ }).click();
@@ -1862,11 +1866,11 @@ test("same-name previews retain independent demand and closed Packages restores 
   await invokeNative("rho_dual_preview$value <- 33L");
   await expect(page.locator(".objects-panel:visible [role=grid]")).toContainText("33");
   expect(inspections).toBe(2);
-  await page.getByRole("button", { name: "Panels", exact: true }).click();
+  await page.getByRole("button", { name: "Layout", exact: true }).click();
   await page.getByRole("menuitem", { name: "Packages", exact: true }).click();
   await page.locator(".packages-panel:visible").getByLabel("Search Packages").fill("stats");
   await page.getByRole("tab", { name: "Packages", exact: true }).locator(".flexlayout__tab_button_trailing").click();
-  await expect(page.getByText("Draft synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Drafts synced", exact: true })).toBeVisible();
   // Hold a real registration response so the command necessarily competes
   // with restoration; waiting for restoration before clicking would hide it.
   let registered!: () => void, releaseRestore!: () => void;
@@ -2019,7 +2023,7 @@ test("Native Agent settings use separate diagnostics and never expose daily chat
 
 test("full-height Files and Agent collapse to side rails without shortening the workspace", async ({ page }) => {
   await page.goto(url); await resetLayout(page);
-  await page.getByRole('button', { name: 'Panels', exact: true }).click();
+  await page.getByRole('button', { name: 'Layout', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Agent', exact: true }).click();
   const editor = page.locator('.flexlayout__tabset').filter({ has: page.getByRole('tab', { name: 'Editor', exact: true }) });
   const consoleGroup = page.locator('.flexlayout__tabset').filter({ has: page.getByRole('tab', { name: 'Console', exact: true }) });
@@ -2037,7 +2041,7 @@ test("full-height Files and Agent collapse to side rails without shortening the 
   }
   expect((await editor.boundingBox())!.width).toBeGreaterThan(original.width + 250);
   await page.screenshot({ path: '../target/studio-browser/side-rails.png' });
-  await expect(page.getByText('Draft synced', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Drafts synced', exact: true })).toBeVisible();
   await page.reload();
   for (const name of ['Files', 'Agent']) await page.getByRole('button', { name: `Restore Group: ${name}`, exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
@@ -2131,7 +2135,7 @@ test('object fields persist and vectors support whole palettes, deliberate detai
   await page.getByRole('menuitemcheckbox', { name: 'Size', exact: true }).click();
   await page.keyboard.press('Escape');
   await expect(headers).toHaveText(['Name', 'Type', 'Content']);
-  await expect(page.getByText('Draft synced', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Drafts synced', exact: true })).toBeVisible();
   await page.reload();
   // Maximize is transient; field settings belong to the document snapshot.
   if (await group.getByRole('button', { name: 'Maximize tab set' }).isVisible()) await group.getByRole('button', { name: 'Maximize tab set' }).click();
@@ -2140,8 +2144,10 @@ test('object fields persist and vectors support whole palettes, deliberate detai
   await page.screenshot({ path: '../target/studio-browser/object-fields-wide.png' });
   await group.getByRole('button', { name: 'Restore tab set' }).click();
   await page.setViewportSize({ width: 1280, height: 900 });
-  const compactWidth = (await objects.boundingBox())!.width;
-  expect(compactWidth).toBeGreaterThan(280); expect(compactWidth).toBeLessThan(340);
+  // FlexLayout reacts through ResizeObserver; setViewportSize does not wait for
+  // its next layout frame. Keep the same geometry bounds and await that frame.
+  await expect.poll(async () => (await objects.boundingBox())!.width).toBeGreaterThan(280);
+  await expect.poll(async () => (await objects.boundingBox())!.width).toBeLessThan(340);
   await objects.locator('.directory-compact-summary').filter({ hasText: '0.05' }).scrollIntoViewIfNeeded();
   await expect(objects.locator('.directory-compact-summary').filter({ hasText: '0.05' })).toBeVisible();
   await expect(objects.locator('[role=columnheader]')).toHaveCount(3);
@@ -2174,8 +2180,8 @@ test('object fields persist and vectors support whole palettes, deliberate detai
   await viewerGroup.getByRole('button', { name: 'Restore tab set' }).click();
   await page.setViewportSize({ width: 1280, height: 900 });
   await moveVisibleView(page, 'palette', 'objects-group', 'Join as Tab');
+  await expect.poll(async () => (await viewer.boundingBox())!.width).toBeLessThan(340);
   const narrowPalette = (await viewer.boundingBox())!, copyButton = (await viewer.getByRole('button', { name: 'Copy vector', exact: true }).boundingBox())!;
-  expect(narrowPalette.width).toBeLessThan(340);
   expect(copyButton.x + copyButton.width).toBeLessThanOrEqual(narrowPalette.x + narrowPalette.width);
   const colorStrip = viewer.getByRole('listbox', { name: 'Palette colors' });
   expect(await colorStrip.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);

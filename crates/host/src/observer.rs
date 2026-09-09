@@ -156,6 +156,9 @@ pub(crate) fn register_project_queries(
     lane: Arc<tokio::sync::Mutex<()>>,
 ) -> Result<Arc<ProjectOwner>, OperationError> {
     let owner = Arc::new(ProjectOwner::new(project, lane));
+    registry.register_query(Arc::new(rho_project::ProjectStorageHandler::new(
+        owner.clone(),
+    )))?;
     registry.register_query(Arc::new(ProjectSnapshotHandler::new(owner.clone())))?;
     registry.register_query(Arc::new(rho_project::ProjectDirectoryHandler::new(
         owner.clone(),

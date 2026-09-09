@@ -5,8 +5,11 @@ import type { ResourcePorts } from "./resource-ports";
 import type { DirectoryPage } from "./generated/DirectoryPage";
 import type { FileSearchResult } from "./generated/FileSearchResult";
 import type { SearchFilesCursor } from "./generated/SearchFilesCursor";
+import type { ProjectStorage } from "./generated/ProjectStorage";
 
 interface FilesSnapshot {
+  readonly storage: ProjectStorage | null;
+  readonly storageError: string;
   readonly directories: ReadonlyMap<string, DirectoryPage>;
   readonly expanded: ReadonlySet<string>;
   readonly showHidden: boolean;
@@ -28,6 +31,9 @@ interface DirectoryRead { path: string; after: string | null; generation: number
 interface SearchRead { text: string; showHidden: boolean; generation: number; continuation: SearchFilesCursor | null; }
 /** Files owns directory and search state; views register intent and never own reads. */
 export class Files extends Model<FilesSnapshot> {
+  private storageValue: ProjectStorage | null = null;
+  private storageErrorValue = "";
+  private storageRequest = 0;
   private pages = new Map<string, DirectoryPage>();
   private expandedPaths = new Set<string>([""]);
   private hidden = false;
@@ -51,12 +57,30 @@ export class Files extends Model<FilesSnapshot> {
   private stopped = false;
   constructor(private readonly ports: ResourcePorts) { super(); }
   protected readSnapshot(): FilesSnapshot {
-    return { directories: readonlyMap(this.pages), expanded: readonlySet(this.expandedPaths), showHidden: this.hidden,
+    return { storage: this.storageValue, storageError: this.storageErrorValue,
+      directories: readonlyMap(this.pages), expanded: readonlySet(this.expandedPaths), showHidden: this.hidden,
       scrollTop: this.scroll, error: this.errorValue, loading: !!this.flight, searching: !!this.searchRead || !!this.flight?.search,
       results: this.resultsValue, filter: this.filterValue, scope: this.scopeValue, searchMode: this.mode, selected: this.selectedValue, stale: this.staleValue,
       resultsStale: this.searchStale, resultsQuery: this.resultQuery?.text ?? null, canContinueSearch: this.canContinueSearch };
   }
   get directories() { return this.getSnapshot().directories; }
+  async observeStorage() {
+    const scope = this.ports.context(), revision = this.revision, request = ++this.storageRequest;
+    if (this.stopped || !scope.connected || !scope.project || !scope.capabilities.includes("project.storage_status")) return;
+    const current = () => !this.stopped && revision === this.revision && request === this.storageRequest && sameScope(scope, this.ports.context());
+    try {
+      const result = await this.ports.query(scope.project, "project.storage_status", {});
+      if (!current()) return;
+      if (result.status !== "ready" || !result.data) throw new Error(result.notices.join("\n") || "Disk capacity is unavailable.");
+      const value = result.data as ProjectStorage;
+      if (value.project !== scope.project || !Number.isSafeInteger(value.free_bytes) || value.free_bytes < 0 || value.free_bytes > value.total_bytes || !Number.isSafeInteger(value.total_bytes) ||
+          !Number.isSafeInteger(value.available_bytes) || value.total_bytes <= 0 || value.available_bytes < 0 ||
+          value.available_bytes > value.total_bytes || !Number.isFinite(value.observed_at_ms)) throw new Error("Invalid project disk observation.");
+      this.storageValue = immutable(value); this.storageErrorValue = ""; this.publish();
+    } catch (error) {
+      if (current()) { this.storageErrorValue = message(error); this.publish(); throw error; }
+    }
+  }
   get expanded() { return this.getSnapshot().expanded; }
   get showHidden() { return this.hidden; }
   get scrollTop() { return this.scroll; }
@@ -89,6 +113,7 @@ export class Files extends Model<FilesSnapshot> {
     this.refresh();
   }
   reset() {
+    this.storageRequest++; this.storageValue = null; this.storageErrorValue = "";
     this.revision++; this.stopped = false; this.flight = null; this.pages.clear(); this.queued.clear();
     this.expandedPaths = new Set([""]); this.searchRead = null; this.searchGeneration++;
     this.directoryGenerations.clear(); this.resultsValue = null; this.errorValue = ""; this.staleValue = true;

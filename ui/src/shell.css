@@ -1,0 +1,84 @@
+/* Approved Paper Shell S01–S04; user-selectable resource metrics stay visible. */
+.workspace-sidebar {
+  width: 48px; flex-shrink: 0; display: flex; flex-direction: column;
+  align-items: center; gap: 6px; padding: 12px 0;
+  border-right: 1px solid var(--color-border); background: var(--color-surface);
+  overflow-y: auto; scrollbar-width: thin;
+}
+.workspace-sidebar.is-expanded { width: 168px; padding-inline: 8px; align-items: stretch; }
+.sidebar-modules, .sidebar-bottom { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.sidebar-bottom { margin-top: auto; padding-top: 18px; }
+.sidebar-item {
+  position: relative; width: 36px; height: 36px; min-height: 36px;
+  padding: 0; border-radius: 7px; color: var(--color-muted); flex-shrink: 0;
+}
+.sidebar-item[aria-current] { background: var(--color-accent-soft); color: var(--color-accent); }
+.sidebar-label { display: none; }
+.is-expanded .sidebar-item { width: 100%; justify-content: flex-start; gap: 10px; padding: 0 10px; }
+.is-expanded .sidebar-label { display: inline; color: var(--color-text); }
+.is-expanded .sidebar-item[aria-current] .sidebar-label { color: var(--color-accent); }
+.sidebar-item .icon { width: 20px; }
+.sidebar-separator { width: 20px; height: 1px; background: var(--color-border); margin: 7px auto; flex-shrink: 0; }
+.is-expanded .sidebar-separator { width: calc(100% - 20px); }
+.workspace-sidebar .sidebar-agent { position: relative; display: flex; flex-shrink: 0; }
+.sidebar-agent .at-launcher-badge { position: absolute; top: -3px; right: -3px; min-width: 17px; min-height: 17px; height: 17px; font-size: 10px; padding: 0 3px; }
+.is-expanded .sidebar-agent .at-launcher-badge { top: 9px; right: 8px; }
+.sidebar-running { position: absolute; right: 3px; top: 4px; width: 5px; height: 5px; background: var(--color-accent); border-radius: 50%; }
+.is-expanded .sidebar-running { right: 14px; top: 15px; }
+.shell-tooltip { background: var(--color-text); color: white; padding: 5px 9px; border-radius: 5px; font-size: 12px; line-height: 18px; z-index: 1300; max-width: 240px; }
+.topbar .project-button { font-size: 13px; gap: 8px; max-width: min(30vw, 300px); }
+.topbar .project-button > .icon:last-child, .status-runtime > .icon:last-child { transform: rotate(90deg); }
+.shell-menu { width: 352px; max-width: calc(100vw - 16px); max-height: var(--radix-dropdown-menu-content-available-height); overflow: auto; padding: 6px; border-radius: 10px; }
+.shell-menu [role="menuitem"], .shell-menu [role="menuitemcheckbox"] { display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 6px 12px; border-radius: 5px; cursor: pointer; outline: none; }
+.shell-menu small { margin-left: auto; color: var(--color-muted); flex-shrink: 0; font-size: 12px; }
+.shell-menu-heading { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; font-weight: 600; }
+.shell-menu-heading .muted { font-weight: 400; font-size: 12px; text-align: right; }
+.shell-menu-label { padding: 8px 12px; color: var(--color-muted); font-size: 12px; }
+.shell-menu-separator { height: 1px; background: var(--color-border); margin: 5px 0; }
+.shell-runtime-facts { padding: 2px 12px; }
+.shell-runtime-facts > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 7px 0; }
+.shell-runtime-facts > div > span { color: var(--color-muted); }
+.shell-runtime-facts strong { font-weight: 500; font-variant-numeric: tabular-nums; }
+.shell-observation-note { padding: 8px 12px; color: var(--color-muted); font-size: 12px; line-height: 19px; overflow-wrap: anywhere; }
+.shell-project-path { padding: 0 12px 10px; font: 12px/20px var(--font-code); overflow-wrap: anywhere; user-select: text; }
+.menu-check { width: 16px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--color-accent); }
+.shell-view-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-view-menu { width: 280px; }
+.statusbar { height: 30px; min-height: 30px; padding: 0 10px 0 14px; gap: 10px; color: var(--color-muted); font-size: 12px; line-height: 18px; }
+.statusbar button { height: 28px; min-height: 28px; padding: 0 4px; border-radius: 4px; color: inherit; }
+.status-runtime { gap: 7px; flex-shrink: 0; color: var(--color-text) !important; }
+.status-divider { width: 1px; height: 12px; background: var(--color-border); flex-shrink: 0; }
+.status-work { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.status-execution, .status-queue { flex-shrink: 0; }
+.status-short { display: none; }
+.status-execution.is-running { color: var(--color-accent); }
+.status-elapsed { color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.status-source { overflow: hidden; text-overflow: ellipsis; display: block; max-width: 220px; min-width: 0; }
+.status-action { color: var(--color-accent); }
+.status-metrics { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.status-metrics:empty { display: none; }
+.status-metric { gap: 6px; font-variant-numeric: tabular-nums; }
+.status-metric strong { font-weight: 500; color: var(--color-text); }
+.status-sync { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.statusbar .is-attention { color: var(--color-warning); }
+.statusbar .is-error { color: var(--color-danger); }
+.status-customize { width: 24px; flex-shrink: 0; }
+@media (max-width: 1150px) {
+  .status-source { display: none; }
+  .status-sync-success { display: none; }
+  .statusbar { gap: 6px; padding-inline: 8px; }
+  .status-metrics { gap: 3px; }
+}
+@media (max-width: 900px) {
+  .status-local, .status-full { display: none; }
+  .status-short { display: inline; }
+  .topbar { gap: 8px; }
+  .topbar .project-button { max-width: 22vw; }
+}
+@media (max-width: 700px) {
+  .statusbar { height: auto; flex-wrap: wrap; row-gap: 0; }
+  .status-metrics:not(:empty) { order: 5; width: 100%; border-top: 1px solid var(--color-border); justify-content: flex-end; }
+  .status-work { overflow-x: auto; scrollbar-width: thin; }
+  .topbar { overflow-x: auto; scrollbar-width: thin; }
+  .topbar > * { flex-shrink: 0; }
+}

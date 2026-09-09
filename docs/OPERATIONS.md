@@ -80,8 +80,13 @@ not a new rendering with arbitrary dimensions. Script-controlled rendering is
 appropriate when dimensions and reproducibility matter.
 
 Output is observed incrementally, with explicit truncation/gap information.
-Execution outcome still comes from the Operation record. Resource metrics cover
-known Ark/R processes, not every descendant or inferred UI activity. The current
+Execution outcome still comes from the Operation record. CPU and memory metrics cover
+known Ark/R processes, not every descendant or inferred UI activity. The status
+bar's customization button (or Local R menu) can pin R CPU, R memory and Project
+disk individually. Disk usage describes the filesystem containing the project;
+its details include capacity and available space. Preferences survive refresh.
+Unavailable or stale measurements remain unknown. Older running Hosts without the
+storage capability need a separately authorized restart before they can supply it. The current
 interaction limitations and requested refinements are in [Status](STATUS.md)
 and [Studio feedback](STUDIO-FEEDBACK.md).
 

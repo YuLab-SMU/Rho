@@ -23,6 +23,7 @@ export const useLayout = () => useModule(studio.layout);
 export const useNavigation = () => useModule(studio.navigation);
 export const usePreferences = () => useModule(studio.preferences);
 export const usePersistence = () => useModule(studio.persistence);
+export const useApplication = () => useModule(studio.application);
 export function useDocuments(id?: string) {
   const owner = studio.documents;
   useSyncExternalStore<unknown>(id ? (listener) => owner.subscribeDocument(id, listener) : owner.subscribe,

@@ -111,6 +111,15 @@ pub struct ProcessObservation {
     pub memory_bytes: Option<u64>,
     pub cpu_percent: Option<f32>,
 }
+/// Capacity of the filesystem containing the canonical project root, not project size.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+pub struct ProjectStorage {
+    pub project: String,
+    pub free_bytes: u64,
+    pub total_bytes: u64,
+    pub available_bytes: u64,
+    pub observed_at_ms: i64,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct RuntimeStatus {
     pub session_id: String,

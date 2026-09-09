@@ -100,6 +100,28 @@ function fixture(initial: ApplicationDocument[] = [draft()], remoteInitial: Appl
     advance: (ms: number) => { time += ms; }, type: (text: string) => { local[0].text = text; local[0].version = crypto.randomUUID(); local[0].selection.version = crypto.randomUUID(); } };
 }
 
+it("reports draft synchronization only after matching acknowledgements, independently of file saving", async () => {
+  const f = fixture(); await f.bridge.start();
+  expect(f.bridge.draftsSynced).toBe(true);
+  expect(f.local()[0].text).not.toBe(f.local()[0].base_text);
+  f.type("first unsaved edit"); expect(f.bridge.draftsSynced).toBe(false);
+  const held = deferred<ApplicationBridgeReply>(), reached = deferred<void>(), original = f.transport.bridge;
+  f.transport.bridge = vi.fn(async (project, request) => {
+    const reply = await original(project, request);
+    if (request.kind === "sync") { reached.resolve(); return held.promise; }
+    return reply;
+  });
+  const flushing = f.bridge.flush(); await reached.promise;
+  expect(f.bridge.draftsSynced).toBe(false);
+  f.type("newer edit before acknowledgement");
+  const request = vi.mocked(f.transport.bridge).mock.calls.find(([, r]) => r.kind === "sync")![1];
+  held.resolve(await original("/project", request));
+  await expect(flushing).rejects.toThrow("latest application draft");
+  expect(f.bridge.draftsSynced).toBe(false);
+  f.transport.bridge = original; await f.bridge.flush();
+  expect(f.bridge.draftsSynced).toBe(true); expect(f.remote()[0].text).toBe("newer edit before acknowledgement");
+});
+
 it("applies a versioned edit without any mounted panel and rejects later stale commands", async () => {
   const f = fixture(); await f.bridge.start();
   const old = reference(f.local()[0]);

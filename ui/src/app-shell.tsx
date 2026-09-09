@@ -13,7 +13,7 @@ import { panelNames } from "./builtin-panels";
 import type { DocumentAction, Dialog } from "./navigation";
 import { SettingsDialog } from "./settings-controls";
 import { SettingsPage } from "./settings-page";
-import { AgentLauncher } from "./panels/agent-panel";
+import { WorkspaceSidebar, WorkspaceStatusBar, ProjectMenu } from "./panels/shell-panels";
 
 function ProjectDialog({ onClose }: { onClose: () => void }) {
   const session = useSession(),
@@ -271,11 +271,7 @@ export function AppShell() {
       <header className="topbar">
         <strong className="wordmark">rho</strong>
         <span className="divider" />
-        <button className="project-button" onClick={() => setDialog("project")}>
-          <Icon name="folder" />{" "}
-          <span>{session.project?.split("/").at(-1) ?? "Open Project"}</span>
-          <small>⌄</small>
-        </button>
+        <ProjectMenu />
         {(["File", "Edit", "View", "Session"] as const).map((group) => (
           <Menu.Root key={group}>
             <Menu.Trigger className="app-menu">{group}</Menu.Trigger>
@@ -297,10 +293,9 @@ export function AppShell() {
           </Menu.Root>
         ))}
         <div className="spacer" />
-        <AgentLauncher />
         <Menu.Root>
           <Menu.Trigger className="bordered">
-            <Icon name="studio" /> Panels
+            <Icon name="studio" /> Layout
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content className="menu" sideOffset={6}>
@@ -309,6 +304,8 @@ export function AppShell() {
                   {name}
                 </Menu.Item>
               ))}
+              <Menu.Separator className="shell-menu-separator" />
+              {commands.entries.filter(c => ["view.undo", "view.reset"].includes(c.id)).map(c => <Menu.Item key={c.id} disabled={!c.enabled()} onSelect={() => commands.execute(c.id)}>{c.label}</Menu.Item>)}
             </Menu.Content>
           </Menu.Portal>
         </Menu.Root>
@@ -321,6 +318,7 @@ export function AppShell() {
         </button>
       </header>
       <div className="work-area">
+        <WorkspaceSidebar />
         {session.project && !session.ready ? (
           <main className="welcome"><p className="muted" role="status">Opening project…</p></main>
         ) : session.project ? (
@@ -374,59 +372,7 @@ export function AppShell() {
           </button>
         </div>
       )}
-      <footer className="statusbar">
-        <button onClick={() => setDialog("settings")}>
-          <i className={session.connected ? "dot" : "dot offline"} />
-          Local R {session.r?.current?.version ?? "Not configured"}
-        </button>
-        <span>
-          {session.connected
-            ? consoleModel.consoleState?.input
-              ? "Waiting for input"
-              : consoleModel.consoleState?.pause
-                ? "Queue paused"
-                : consoleModel.consoleState?.current
-                  ? operations.records.get(consoleModel.consoleState.current.operation_id)
-                      ?.status === "running"
-                    ? "Running"
-                    : "Queued"
-                  : session.runtime?.state === "idle"
-                    ? "Idle"
-                    : session.runtime?.state === "busy"
-                      ? "Running"
-                      : "Unavailable"
-            : "Disconnected"}
-        </span>
-        <button
-          onClick={() => {
-            const source = consoleModel.consoleState?.current?.source;
-            navigation.showPanel(
-              "console",
-              source?.kind === "console" ? source.view_id : "console",
-              source?.kind === "console" ? source.label : "Console",
-            );
-          }}
-        >
-          {consoleModel.consoleState?.input
-            ? "Answer R Input"
-            : `${consoleModel.consoleState?.pending.length ?? 0} queued`}
-          {consoleModel.consoleState?.pause ? " · Paused" : ""}
-        </button>
-        <span className="secondary" title={session.runtime?.notices.join("\n")}>
-          Memory{" "}
-          {session.runtime?.processes[0]?.memory_bytes == null
-            ? "Unknown"
-            : `${(session.runtime.processes[0].memory_bytes / 1048576).toFixed(0)} MiB`}
-          　CPU{" "}
-          {session.runtime?.processes[0]?.cpu_percent == null
-            ? "Unknown"
-            : `${session.runtime.processes[0].cpu_percent.toFixed(1)}%`}
-        </span>
-        <div className="spacer" />
-        <span className="project-path">{session.project}</span>
-        <span>{persistence.unsynced ? "Draft sync pending" : "Draft synced"}</span>
-        <button onClick={() => setDialog("settings")}>Environment</button>
-      </footer>
+      <WorkspaceStatusBar />
       {dialog === "open-file" && (
         <Modal
           title="Open File"

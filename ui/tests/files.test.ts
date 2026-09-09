@@ -12,6 +12,30 @@ function fixture() {
   owner.setSearchMode(true); owner.setFilter("analysis");
   return { owner, query, scope: (patch: Partial<ResourceIdentity>) => { scope = { ...scope, ...patch }; } };
 }
+const storage = { project: "/project", free_bytes: 650, total_bytes: 1000, available_bytes: 600, observed_at_ms: 100 };
+it("reads project volume capacity without R and rejects missing, invalid and mismatched observations", async () => {
+  const f = fixture();
+  await f.owner.observeStorage(); expect(f.query).not.toHaveBeenCalled();
+  f.scope({ capabilities: ["project.storage_status"] });
+  f.query.mockResolvedValue(ready(storage)); await f.owner.observeStorage();
+  expect(f.query).toHaveBeenCalledWith("/project", "project.storage_status", {});
+  expect(f.owner.getSnapshot().storage).toEqual(storage);
+  for (const invalid of [{ ...storage, project: "/other" }, { ...storage, total_bytes: 0 }, { ...storage, available_bytes: 1001 }]) {
+    f.query.mockResolvedValue(ready(invalid)); await expect(f.owner.observeStorage()).rejects.toThrow("Invalid project disk observation");
+    expect(f.owner.getSnapshot().storage).toEqual(storage);
+    expect(f.owner.getSnapshot().storageError).toBeTruthy();
+  }
+  f.scope({ connected: false }); f.query.mockClear(); await f.owner.observeStorage(); expect(f.query).not.toHaveBeenCalled();
+});
+it("does not publish old disk observations after project reset or a newer request", async () => {
+  const f = fixture(); f.scope({ capabilities: ["project.storage_status"] });
+  let resolve!: (value: unknown) => void;
+  f.query.mockImplementationOnce(() => new Promise(r => { resolve = r; })); const old = f.owner.observeStorage();
+  f.owner.reset(); resolve(ready(storage)); await old; expect(f.owner.getSnapshot().storage).toBeNull();
+  f.query.mockImplementationOnce(() => new Promise(r => { resolve = r; })); const older = f.owner.observeStorage();
+  f.query.mockResolvedValueOnce(ready({ ...storage, available_bytes: 400 })); await f.owner.observeStorage();
+  resolve(ready(storage)); await older; expect(f.owner.getSnapshot().storage?.available_bytes).toBe(400);
+});
 it("continues beyond 200 path results explicitly using the original query and cursor", async () => {
   const f = fixture(), first = Array.from({ length: 200 }, (_, i) => `analysis-${i}.R`), continuation = cursor();
   f.owner.search(); f.query.mockResolvedValueOnce(ready(result(first, continuation))); await f.owner.observe();

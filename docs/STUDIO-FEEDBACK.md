@@ -62,11 +62,11 @@ The supplied screenshot presents Local R/version, idle state, an empty queue,
 memory/CPU, a long project path, draft sync and Environment on one crowded line.
 The screenshot is visual evidence, not a request to execute its displayed content.
 
-The initial proposal treats the missing sidebar as workspace module navigation;
-that interpretation and its collapsed/labeled default await user feedback.
-The separate Paper Shell page explores content hierarchy, focus/reopen behavior,
-runtime details, sync versus file-save truth and narrow/exceptional states.
-This is a design review, not implementation authorization or acceptance.
+The user approved the four Paper Shell boards for first-version implementation.
+They additionally requested checkboxes to keep CPU, memory and disk usage visible:
+forcing all metrics into a disclosure would sacrifice convenience. The accepted
+interaction is in Design section 15. Implementation and executed checks are in
+Status; the user intends to try the first version and refine it from real use.
 
 ### F14 — Agent activity and workspace results must form a coherent experience
 

@@ -448,10 +448,18 @@ receive Studio, mutate snapshots, call HostClient or poll scientific queries.
 | Console | Shared queue/stdin observation, independent view drafts, history, selection and scroll |
 | Objects | Binding observations, timestamps, stale state, expansion and view-token preview demand |
 | Packages | Session/observation-bound grouped index, installed-copy details, source, filters and cached pages |
-| Files / Documents | Directory/search observations; independently retained editor state, captured save/run text, digests and comparisons |
+| Files / Documents | Directory/search/project-volume observations; independently retained editor state, captured save/run text, digests and comparisons |
 | Outputs / MediaCache | Ordered stream/history observations; validated original bytes, bounded cache and injected browser URL lifetime |
 | Plots | Per-view selection, following, pinning, transforms and protected-media identities |
 | Layout | Built-in view instances, placement, active visibility, close/reopen and layout undo |
+
+`project.storage_status` belongs to Project and uses its canonical-root native
+filesystem adapter. It returns volume total/free/available bytes through the shared
+query port, without R, file scans or disk enumeration. Files owns its client
+observation and freshness; the existing Coordinator schedules it. Runtime process
+metrics remain with Session. Shell preferences belong to Preferences, independently
+of docking. Document synchronization status compares ApplicationBridge's acknowledged
+document/selection versions; it does not infer file-save success from draft sync.
 
 The built-in registry defines names, renderer keys, instance rules, menu entries
 and restoration validation. Its UI renderer mapping is exhaustive. FlexLayout

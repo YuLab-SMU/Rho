@@ -7,9 +7,12 @@ type IconName =
   | "folder"
   | "search"
   | "reset"
-  | "play";
+  | "play" | "sidebar" | "package" | "disk";
 type ExtraIcon = "plus" | "close" | "more" | "stop" | "send" | "shield" | "attach" | "image" | "object" | "plot" | "table" | "check" | "clock" | "warning" | "lock";
 const paths: Record<IconName | ExtraIcon, React.ReactNode> = {
+  sidebar: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16m4-11 3 3-3 3" /></>,
+  package: <path d="m12 3 9 5v9l-9 5-9-5V8l9-5ZM3 8l9 5 9-5M12 13v9M8 5l9 5v4" />,
+  disk: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 14h18M16 17h2" /></>,
   plus: <path d="M12 5v14M5 12h14" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   more: <><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>,
