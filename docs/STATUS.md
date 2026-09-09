@@ -2,6 +2,31 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
+## Object viewing design exploration
+
+The user requested a separate Paper page to redesign object inspection around
+visible values, dimensions, string lengths, colors and useful table browsing.
+The [Objects review page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0)
+in **Rho · 工作台交互草稿** contains six editable proposals: O01 immediate object
+summaries at wide and 320 px widths; O02 simultaneous inline tables, colors,
+vectors and nested lists; O03 a dedicated grid with column controls, range
+selection, copying and raw cell detail; O04 a SingleCellExperiment content tree
+and sparse assay view; O05 character values, factor levels/codes and array slices;
+O06 busy observations, unsupported classes, explicit plot rendering and special
+values. Actual page membership and screenshots of all six boards were checked.
+The examples are design fixtures, not observations of a live R session.
+
+This is an unapproved interaction proposal, not an implementation milestone.
+The current dedicated viewer still reuses the small bounded preview. A new grid
+must use version-bound progressive reads; whole-object sorting/filtering cannot
+silently apply only to loaded rows. Class-specific SCE/sparse readers and plot
+rendering need explicit capability work; unknown classes retain the current safe
+metadata boundary. Glide Data Grid and AG Grid were researched through current
+documentation; selection remains open pending performance, accessibility and
+licensing review. No application code, dependency or running Host was changed
+by this design task. Continue review on O01's density and O03's table interaction.
+Documentation governance and the scoped whitespace check passed.
+
 ## Agent Chinese input composition
 
 The reported Pinyin-to-literal-text bug was reproduced through Chrome's native
