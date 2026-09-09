@@ -2,56 +2,86 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
-## Current work: daily Codex connection
+## Current work: direct native Agent use
 
-The user approved the revised
-[Paper settings design](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)
-on 2026-09-09. Studio now opens the implemented settings page from **Agents** or
-**Session → Agent Settings…**. Codex expands in place, with current project/window
-context, a masked configuration preview, explicit clipboard copy and a read-only
-connection-check prompt. Another agent exposes generic MCP connection details.
-Connections shows real Host session observations and scoped window response times;
-setup copying is never displayed as a successful connection.
+The user approved the revised [Paper settings design](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)
+on 2026-09-09, then reported that manual configuration and two clipboard steps
+made actual Kimi setup too slow. Studio now offers direct Codex app-server and
+Kimi ACP connections in that settings surface. It reads native model/reasoning
+choices, supplies the current project/window and Rho MCP connection, and accepts
+user tasks with streamed responses and native permission choices. **Test** connects
+and requests a minimal response. **Advanced: manual MCP setup** remains available
+for other clients. No CLI user configuration is edited.
 
-The page preserves the mounted editor, drafts, undo and native R session. Existing
-Editor/R controls are shared with the original runtime dialog. Only visible Agent
-settings request connection observations through the existing coordinator; stale
-or mismatched scope disables copying. Private configuration never enters a model
-snapshot, DOM preview or persistent application state. Codex user configuration
-remains unchanged; the first connection requires pasting its generated block into
-Codex user settings and reloading that client's MCP connection.
+Rho is a native protocol client, not an Agent behavior loop. The CLI owns login,
+provider execution, conversation history and permission semantics. Model discovery
+does not submit a model task, and a listed model is not evidence that its account
+or quota is usable. The live conversation display is bounded; scientific actions
+still return through the shared MCP/Host owners. Window/project fencing and request
+identities protect against stale views and duplicate submissions after lost HTTP
+acknowledgements. Native uncertainty remains explicit.
 
-A local experience project is available at `target/experience/agent-playground`.
-It contains the fixed 1,704-row Gapminder CSV, attribution and `01_explore.R`, a
-base-R analysis producing a 142-country view, continent summary and scatter plot.
-The example was run successfully through Studio. Inspect live ownership before
-starting another Host for this project; private launch/runtime files remain in
-the ignored experience runtime directory.
+The rescue review found an automatic model-discovery retry after every failed
+poll, historical connections exhausting the active-session budget, and native
+setup depending on the lifetime of one HTTP request. These are fixed with
+bounded discovery, explicit rescan, active-session accounting and owned setup
+completion. Closed native transports retain their diagnostic and session identity
+without being reused. The frozen scientific acceptance below is unchanged.
 
-Current UI verification: **278/278 unit tests and 27/27 isolated Chrome cases
-passed** against the current built binary and assets. The new case covers actual
-MCP initialization, overview/window queries, private clipboard contents versus
-masked DOM, false-connection prevention, read-failure recovery, protocol closure,
-current window incarnation, preserved drafts/undo and unchanged R session/operation
-checkpoint. Normal (1440 × 900), wide (1920 × 1080), constrained (768 × 760), setup
-and connection screenshots were inspected under `target/studio-browser/agents-*`.
-Rust-generated types, frontend build/check and `cargo build --locked` passed, as did
-architecture, frontend boundaries, their 24 fixtures, governance and diff checks.
+The original local experience project at `target/experience/agent-playground`
+contains the fixed 1,704-row Gapminder CSV, attribution and `01_explore.R`. Its
+base-R analysis produced a 142-country view, continent summary and scatter plot.
+The original live Host and R memory have been preserved. Inspect live ownership
+before starting or replacing a Host for this project; private runtime files stay
+in the ignored experience runtime directory.
 
-The independent backend now exposes authenticated `GET /api/agent-connection`.
-It returns the current endpoint and bounded MCP session observations, including
-client-reported labels, initialization/closure and successful overview/live-window
-response times. It stores no tokens, conversation or scientific results. Records
-belong to the selected Host and reset on replacement; an open protocol session is
-not proof of an active Agent task. Existing caller identities and scientific ports
-are preserved. Codex user configuration has not been changed.
+Current verification:
 
-The unchanged connection backend was verified in `8ec6b62`: MCP 9 tests,
-Workbench 8 tests, affected Clippy/format checks, and real HTTP/MCP tests both with
-and without the explicit real-R option passed. Those checks cover initialization,
-scoped response observations, credential exclusion, query purity, closure, Host
-replacement and disconnected-work handling. No new model-based Codex acceptance
-was run for this UI change; the frozen acceptance below remains separate.
+- Native Agent client: 7 Rust tests; Workbench: 10 Rust tests. Protocol fixtures
+  cover permission decisions, reply streaming, credential redaction, output bounds,
+  repeated model cursors, timeout uncertainty, closed transports, active capacity
+  and setup surviving a lost HTTP waiter.
+- Frontend: 284 unit tests, typecheck and 24 boundary fixtures passed. The complete
+  Chrome run passed 27 existing cases; the new native case initially exposed a
+  macOS canonical-path mismatch in its fixture. After using the Host's real root,
+  that case passed separately, covering all 28 cases. It verifies native model and
+  reasoning selection, Test, direct tasks, streaming, permission choices,
+  disconnection and zero clipboard steps. Normal and 600 px constrained screenshots
+  under `target/studio-browser/native-agents-*` were inspected.
+- Generated contracts, embedded assets, `cargo build --locked`, affected strict
+  Clippy/format, architecture, governance and Agent harness self-tests passed.
+  Real Workbench and MCP scripts with `--real-r` passed. An initial non-escalated
+  MCP invocation could not bind loopback (`EPERM`); the authorized run passed.
+- Explicitly authorized live tests used Codex `gpt-6-astra` and Kimi's configured
+  `115-newapi/deepseek-v4-flash`, only in disposable projects. Codex advertised six
+  native models, connected in 1.49 s and replied `ok` in 4.61 s. Kimi advertised
+  85 native choices, connected in 2.64–2.66 s and replied `ok` in 31–44 s in the
+  final runs. This provider latency is separate from local setup. Duplicate test
+  request identities did not replay the model task; user configuration hashes
+  remained unchanged in both completed runs.
+
+The first exact long-path answer assertion failed. Native Kimi history contains
+that same shortened answer even though its MCP tool result contains the full
+correct path and the provider reports `end_turn`. Rho did not lose reply chunks.
+This remains a model-answer failure, not a successful scientific conclusion; no
+adapter reconstructs the missing text. Its log remains in
+`target/agent-integration/native-acceptance.log`. The reproducible native transport
+smoke script now requests the short directory name while still requiring a new
+observed MCP overview read. That Kimi rerun returned `ok`, then reached the
+120-second MCP-task deadline after the native permission response; it stopped
+without retry and cleaned up its temporary processes. The result is retained in
+`target/agent-integration/native-acceptance-kimi-short.log`. Full Kimi model-based
+acceptance is therefore **not passed**. Native connection and real MCP delivery
+are established, but this configured model's complete response remains unreliable.
+No further provider retries are scheduled. Scientific reasoning acceptance remains
+separate from these connection checks.
+
+A new independent project, `target/experience/agent-direct-playground`, is open
+with the native connection UI. Its sample script was run through Studio, producing
+Gapminder objects and a plot. Kimi is connected to that window with the user's
+selected DeepSeek model, ready for a task. Runtime ownership and private launch
+material stay in `target/experience/agent-direct-playground-runtime`; inspect it
+before any replacement. The original experience Host and R memory were not restarted.
 
 ## Agent interface acceptance baseline
 

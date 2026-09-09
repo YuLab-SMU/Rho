@@ -694,17 +694,21 @@ connection badges replace the earlier blue instructional dialog. These settings
 values apply to the approved settings surface; scientific panels retain their
 existing visual tokens.
 
-The front page identifies the current project and window, keeps **Connect Codex**
-as the setup entry and moves configuration snippets into **Manual setup**.
-The entry expands local setup: copy a masked-previewed Codex configuration into
-user settings, reload the external MCP client, then copy a read-only workspace
-check containing the project and exact window incarnation. Clicking Connect or
-copying configuration alone never establishes connection success. Automatic CLI discovery, user-configuration writes, app
-launching and model/provider management are not established by this mockup.
-Model/account decisions remain with the external Agent platform. Do not open R,
-start an Agent or install Skills merely to visit settings. The supplied screenshot
-informs visual hierarchy; its provider list and model controls are not a request
-to copy those capabilities into Rho.
+After trying the manual flow, the user explicitly requested direct local CLI use
+and native model selection on 2026-09-09. The approved visual hierarchy remains;
+the primary cards now discover installed Codex and Kimi, show their native model
+and reasoning choices, and connect to the current project/window without clipboard
+steps. **Test** connects if needed and sends a minimal response check. A connected
+card accepts the user's task and displays streamed native replies and activity.
+Native permission requests offer the choices supplied by that CLI. A waiting
+permission, uncertain result and completed reply must have distinct states.
+
+Visiting settings only reads local CLI metadata; it does not submit a model task,
+start R or install anything. Authentication and available models remain with the
+native CLI. The model list reflects its advertised configuration, while **Test**
+establishes whether the chosen service responds. User configuration is not edited.
+**Advanced: manual MCP setup** retains configuration copying for other clients.
+Copying setup alone never establishes a successful connection.
 
 The Connections tab uses the existing Host-scoped observations: keep configuration
 copied, MCP initialized and successful overview/window responses distinct. Client

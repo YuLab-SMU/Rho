@@ -75,6 +75,7 @@ Native/transport verification:
 | `test-remote-protocol.mjs` | Local SSH/Slurm transcript fixtures; does not validate a remote cluster |
 | `test-remote-live.mjs` | Opt-in real jobs on an explicitly selected host/scratch directory; see Operations |
 | `test-agent-interface.mjs` | Independent local Codex sessions with prebuilt Rho/Ark, installed R, Chrome, UI dependencies and authenticated pinned Codex; self-test/debug modes are not acceptance |
+| `test-agent-clients.mjs` | Explicitly opted-in native Codex/Kimi response and MCP checks in a disposable project; installed/authenticated CLI and current built Rho required |
 
 These scripts live in `scripts/`. R tests accept `RHO_ARK` and `RHO_R_HOME` where
 applicable. Ignored or unavailable external-runtime checks are not passes.

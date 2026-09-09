@@ -189,14 +189,34 @@ connection, and closing it does not cancel accepted work. New project/R Hosts
 start fresh observations.
 
 Open **Agents** in the Studio app bar or **Session → Agent Settings…**. The settings
-page keeps the scientific workspace mounted. Select Codex, then **Connect Codex**
-to reveal setup. Copy the configuration into your Codex user settings and reload
-its MCP servers. The preview masks the token; the copied block contains the actual
-local credential. No Codex configuration is edited automatically. Replace the old
-entry for this Workbench after a restart changes its endpoint/token.
+page keeps the scientific workspace mounted. Installed Codex and Kimi CLIs expose
+their own model list and supported reasoning choices. Select a model and click
+**Connect**, or **Test** to connect and request a minimal `ok` response. Then enter
+a task in the connected card. The current project, window and Rho MCP connection
+are supplied to the native session; no configuration or prompt copying is needed.
+
+The CLI must already be installed and authenticated. Discovery reads native
+metadata without calling a model; a listed model can still be unavailable because
+of that provider's account, quota or network state. Errors are displayed in the
+card. **Rescan** refreshes local availability. Native tool permission requests
+remain native decisions and appear as buttons in the conversation. **Stop Agent**
+requests interruption; **Disconnect** closes the owned native client. Neither
+implies cancellation or rollback of work already accepted by Rho.
+
+Codex uses app-server; Kimi uses ACP. Settings and conversation history remain
+with the native CLI. Rho keeps a bounded live display and does not write the
+CLI's user configuration. New turns require the current synchronized window.
+After an uncertain response, inspect the retained native session instead of
+resubmitting the same task. A lost connection acknowledgement reuses its original
+request identity.
+
+For an external client, open **Advanced: manual MCP setup**. The preview masks the
+token; the explicitly copied block contains the actual local credential. Reload
+that client's MCP servers after configuring it. Replace the entry for this
+Workbench after a restart changes its endpoint/token.
 
 **Copy connection check** prepares a read-only task containing the project and
-this window's exact incarnation. Send it in Codex. The **Connections** tab reports
+this window's exact incarnation. Send it in that external client. The **Connections** tab reports
 the observed protocol session and whether Rho served this window's context.
 Copying setup is not reported as connected. Read failures label old observations
 as stale and disable credential/context copying until refreshed. **Another agent**

@@ -2,6 +2,11 @@ import type { HostRequest } from "./generated/HostRequest";
 import type { SessionReply } from "./generated/SessionReply";
 import type { WorkbenchInfo } from "./generated/WorkbenchInfo";
 import type { WorkbenchAgentConnection } from "./generated/WorkbenchAgentConnection";
+import type { LocalAgent } from "./generated/LocalAgent";
+import type { DiscoverAgent } from "./generated/DiscoverAgent";
+import type { ConnectAgent } from "./generated/ConnectAgent";
+import type { AgentClientSession } from "./generated/AgentClientSession";
+import type { AgentClientAction } from "./generated/AgentClientAction";
 import type { AgentConfigurationFormat } from "./agent-ports";
 import type { WorkbenchFrame } from "./generated/WorkbenchFrame";
 import type { QuerySnapshot } from "./generated/QuerySnapshot";
@@ -90,11 +95,13 @@ export class HostClient {
     const value: unknown = await response.json();
     if (!response.ok) {
       const detail = value as { error?: string; diagnostics?: string[] } | null;
-      throw new Error(
+      const error = new Error(
         detail?.error ??
           detail?.diagnostics?.join("\n") ??
           `Host HTTP ${response.status}`,
       );
+      Object.assign(error, { status: response.status });
+      throw error;
     }
     return value as T;
     } finally {
@@ -107,6 +114,10 @@ export class HostClient {
     this.reads.clear();
   }
   agentConnection() { return this.request<WorkbenchAgentConnection>("/api/agent-connection"); }
+  discoverAgent(request: DiscoverAgent) { return this.request<LocalAgent>("/api/agents/discover", request); }
+  connectAgent(request: ConnectAgent) { return this.request<AgentClientSession>("/api/agents/connect", request); }
+  nativeAgentSessions() { return this.request<AgentClientSession[]>("/api/agents/sessions"); }
+  nativeAgentAction(request: AgentClientAction) { return this.request<AgentClientSession>("/api/agents/action", request); }
   agentConfiguration(data: WorkbenchAgentConnection, format: AgentConfigurationFormat, masked: boolean) {
     const endpoint = new URL(data.endpoint);
     if (endpoint.origin !== location.origin || endpoint.pathname !== "/mcp" || endpoint.search || endpoint.hash ||

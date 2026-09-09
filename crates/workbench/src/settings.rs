@@ -126,7 +126,10 @@ pub(super) async fn apply_r(
                 "Confirm that switching R ends the current session memory",
             );
         }
-        if !selected.host.is_idle() || Arc::strong_count(&selected.host) != 1 {
+        if !selected.host.is_idle()
+            || Arc::strong_count(&selected.host) != 1
+            || selected.agents.has_live().await
+        {
             return failure(
                 StatusCode::CONFLICT,
                 "Host is busy or an MCP session is attached; R was not changed",

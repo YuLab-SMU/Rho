@@ -11,6 +11,25 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { AgentClientSession } from "../src/generated/AgentClientSession";
+import type { AgentClientAction } from "../src/generated/AgentClientAction";
+import type { ConnectAgent } from "../src/generated/ConnectAgent";
+import type { DiscoverAgent } from "../src/generated/DiscoverAgent";
+import type { LocalAgent } from "../src/generated/LocalAgent";
+
+function nativeAgentCatalog(request: DiscoverAgent): LocalAgent {
+  const codex = request.provider === "codex";
+  return {
+    provider: request.provider, executable: codex ? "/fixture/bin/codex" : "/fixture/bin/kimi", version: codex ? "0.153.4" : "0.41.0",
+    models: codex ? [
+      { id: "native-balanced", name: "Native Balanced", efforts: ["low", "high"], default_effort: "low" },
+      { id: "native-detailed", name: "Native Detailed", efforts: ["medium", "high"], default_effort: "medium" },
+    ] : [{ id: "configured/flash", name: "Configured Flash", efforts: [], default_effort: null }],
+    selected_model: request.model ?? (codex ? "native-balanced" : "configured/flash"),
+    selected_effort: codex ? request.model === "native-detailed" ? "medium" : "low" : null,
+    discovery_ms: 150, error: null,
+  };
+}
 
 let directory: string, url: string, host: ReturnType<typeof spawn>;
 async function startHost(extra: string[] = []) {
@@ -1886,6 +1905,8 @@ test("same-name previews retain independent demand and closed Packages restores 
 test("Agent settings share the current Host, protect setup credentials and preserve drafts", async ({ page, context }) => {
   const errors: string[] = [];
   page.on("pageerror", e => errors.push(e.message));
+  await page.route("**/api/agents/discover", route => route.fulfill({ json: nativeAgentCatalog(route.request().postDataJSON()) }));
+  await page.route("**/api/agents/sessions", route => route.fulfill({ json: [] }));
   await writeFile(join(directory, "中文项目", "02_explore.R"), "agent_draft <- 1\n");
   await page.goto(url);
   await openFile(page, "02_explore.R");
@@ -1898,9 +1919,11 @@ test("Agent settings share the current Host, protect setup credentials and prese
   await page.getByRole("button", { name: "Agents", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(settings).toBeVisible();
-  await expect(settings.getByRole("button", { name: "Connect Codex", exact: true })).toBeEnabled();
-  await expect(settings.getByText("This window · 02_explore.R", { exact: true })).toBeVisible();
-  await expect(settings.getByText("Unsaved changes", { exact: true })).toBeVisible();
+  await settings.getByText("Advanced: manual MCP setup", { exact: true }).click();
+  const manual = settings.locator(".native-manual");
+  await expect(manual.getByRole("button", { name: "Connect Codex", exact: true })).toBeEnabled();
+  await expect(manual.getByText("This window · 02_explore.R", { exact: true })).toBeVisible();
+  await expect(manual.getByText("Unsaved changes", { exact: true })).toBeVisible();
   await page.screenshot({ path: "../target/studio-browser/agents-settings-normal.png" });
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.screenshot({ path: "../target/studio-browser/agents-settings-wide.png" });
@@ -1908,20 +1931,20 @@ test("Agent settings share the current Host, protect setup credentials and prese
   await page.screenshot({ path: "../target/studio-browser/agents-settings-compact.png" });
   expect(await settings.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await settings.getByRole("button", { name: "Connect Codex", exact: true }).click();
-  await expect(settings.getByRole("region", { name: "Codex setup" })).toBeVisible();
-  await settings.getByText("Configuration preview", { exact: true }).click();
+  await manual.getByRole("button", { name: "Connect Codex", exact: true }).click();
+  await expect(manual.getByRole("region", { name: "Codex setup" })).toBeVisible();
+  await manual.getByText("Configuration preview", { exact: true }).click();
   const token = new URLSearchParams(new URL(url).hash.slice(1)).get("token")!;
   expect(await settings.innerText()).not.toContain(token);
-  await settings.getByRole("button", { name: "Copy Codex configuration", exact: true }).click();
-  await expect(settings.getByRole("status")).toContainText("Configuration copied");
+  await manual.getByRole("button", { name: "Copy Codex configuration", exact: true }).click();
+  await expect(manual.getByRole("status")).toContainText("Configuration copied");
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain(`url = "${new URL(url).origin}/mcp"`);
   expect(copied).toContain(`Authorization = "Bearer ${token}"`);
-  await expect(settings.getByText("Not connected", { exact: true })).toBeVisible();
+  await expect(manual.getByText("Not connected", { exact: true })).toBeVisible();
   await page.screenshot({ path: "../target/studio-browser/agents-setup.png" });
-  await settings.getByRole("button", { name: "Copy connection check", exact: true }).click();
-  await expect(settings.getByRole("status")).toContainText("Workspace check copied");
+  await manual.getByRole("button", { name: "Copy connection check", exact: true }).click();
+  await expect(manual.getByRole("status")).toContainText("Workspace check copied");
   const check = await page.evaluate(() => navigator.clipboard.readText());
   const windowId = await page.evaluate(() => sessionStorage.getItem("rho-window-id"));
   const windows = (await queryNative("application.windows")).data.windows;
@@ -1961,5 +1984,141 @@ test("Agent settings share the current Host, protect setup credentials and prese
   await expect.poll(() => editor.innerText()).not.toBe(textBefore);
   expect((await queryNative("workspace.runtime_status")).data.session_id).toBe(runtimeBefore);
   expect((await queryNative("operation.events_checkpoint")).data.sequence).toBe(checkpointBefore);
+  expect(errors).toEqual([]);
+});
+
+test("Native Agent settings select CLI models, test and send tasks without copying setup", async ({ page }) => {
+  const errors: string[] = [], connections: ConnectAgent[] = [], actions: AgentClientAction[] = [];
+  const clients = new Map<string, AgentClientSession>();
+  const project = (await (await api("/api/info")).json()).project_root as string;
+  page.on("pageerror", e => errors.push(e.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", { value: {
+      writeText: () => { throw new Error("Native setup must not write the clipboard"); },
+      readText: () => { throw new Error("Native setup must not read the clipboard"); },
+    } });
+  });
+  await page.route("**/api/agents/discover", route => {
+    const request = route.request().postDataJSON() as DiscoverAgent;
+    expect(request.project_root).toBe(project);
+    return route.fulfill({ json: nativeAgentCatalog(request) });
+  });
+  await page.route("**/api/agents/sessions", route => route.fulfill({ json: [...clients.values()] }));
+  await page.route("**/api/agents/connect", route => {
+    const request = route.request().postDataJSON() as ConnectAgent;
+    expect(request.project_root).toBe(project);
+    expect(route.request().headers()["x-rho-studio-window"]).toBe(request.window.window_id);
+    expect(request.window.incarnation).toBeTruthy();
+    connections.push(request);
+    const client: AgentClientSession = {
+      id: `fixture-${request.provider}`, provider: request.provider, native_session_id: `native-${request.provider}`,
+      project_root: project, window: request.window, model: request.model, effort: request.effort, state: "ready",
+      messages: [], activity: [], decisions: [], error: null, truncated: false, elapsed_ms: null, last_request_id: null,
+    };
+    clients.set(client.id, client);
+    return route.fulfill({ json: client });
+  });
+  await page.route("**/api/agents/action", route => {
+    const request = route.request().postDataJSON() as AgentClientAction;
+    expect(request.project_root).toBe(project);
+    expect(route.request().headers()["x-rho-studio-window"]).toBe(request.window.window_id);
+    const client = clients.get(request.session_id)!;
+    expect(client.window).toEqual(request.window);
+    actions.push(request);
+    switch (request.action.kind) {
+      case "test":
+        client.last_request_id = request.action.request_id;
+        client.state = "running";
+        client.messages = [{ role: "user", text: "Reply with exactly ok. Do not call tools or read files." }];
+        client.activity = ["Waiting for the native model"];
+        break;
+      case "prompt":
+        client.last_request_id = request.action.request_id;
+        client.state = "waiting_for_permission";
+        client.messages.push({ role: "user", text: request.action.text });
+        client.messages.push({ role: "assistant", text: "I will read the current workspace overview." });
+        client.decisions = [{ id: 42, title: "mcp__rho__rho_host_overview_v1", details: "Read this workspace overview", options: [{ id: "approve_once", label: "Allow once" }, { id: "reject_once", label: "Decline" }] }];
+        break;
+      case "decision":
+        expect(request.action).toEqual({ kind: "decision", id: 42, option: "approve_once" });
+        client.decisions = []; client.state = "running"; client.activity = ["Reading the current workspace"];
+        break;
+      case "disconnect": client.state = "disconnected"; break;
+      default: throw new Error(`Unexpected native action ${request.action.kind}`);
+    }
+    return route.fulfill({ json: client });
+  });
+  await page.goto(url);
+  await expect(page.locator(".console-status > span").first()).toHaveText("Ready");
+  const checkpoint = (await queryNative("operation.events_checkpoint")).data.sequence;
+  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Settings", exact: true });
+  const codex = settings.getByRole("article", { name: "Codex connection", exact: true });
+  const kimi = settings.getByRole("article", { name: "Kimi CLI connection", exact: true });
+  await expect(codex.getByRole("combobox", { name: "Codex model", exact: true })).toHaveValue("native-balanced");
+  await expect(kimi.getByRole("combobox", { name: "Kimi CLI model", exact: true })).toHaveValue("configured/flash");
+  await expect(kimi.getByRole("combobox", { name: /reasoning effort/ })).toHaveCount(0);
+  await expect(codex.getByText("From your CLI", { exact: true })).toBeVisible();
+  await expect(kimi.getByText("Moonshot · Local CLI · 0.41.0", { exact: true })).toBeVisible();
+  await expect(codex.getByRole("button", { name: "Connect Codex", exact: true })).toBeEnabled();
+  await expect(kimi.getByRole("button", { name: "Connect Kimi CLI", exact: true })).toBeEnabled();
+  await expect(settings.getByRole("button", { name: /Copy/ })).toHaveCount(0);
+  expect(connections).toHaveLength(0); expect(actions).toHaveLength(0);
+  await page.screenshot({ path: "../target/studio-browser/agents-native-models-normal.png" });
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.screenshot({ path: "../target/studio-browser/agents-native-models-wide.png" });
+  await page.setViewportSize({ width: 600, height: 760 });
+  expect(await settings.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  expect(await settings.locator(".settings-main").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.screenshot({ path: "../target/studio-browser/agents-native-models-compact.png" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await codex.getByRole("combobox", { name: "Codex model", exact: true }).selectOption("native-detailed");
+  await expect(codex.getByRole("combobox", { name: "Codex reasoning effort", exact: true })).toHaveValue("medium");
+  await codex.getByRole("combobox", { name: "Codex reasoning effort", exact: true }).selectOption("high");
+  await codex.getByRole("button", { name: "Test", exact: true }).click();
+  await expect(codex.getByRole("status")).toHaveText("Agent working");
+  expect(connections).toHaveLength(1);
+  expect(connections[0]).toMatchObject({ provider: "codex", model: "native-detailed", effort: "high", project_root: project });
+  expect(actions.map(r => r.action.kind)).toEqual(["test"]);
+  const codexClient = clients.get("fixture-codex")!;
+  codexClient.messages.push({ role: "assistant", text: "ok" }); codexClient.state = "ready"; codexClient.elapsed_ms = 1300;
+  await expect(codex.getByRole("status")).toHaveText("Session ready");
+  await expect(codex.locator(".native-message.assistant pre")).toHaveText("ok");
+  await expect(codex.getByText("Responded in 1.3s", { exact: true })).toBeVisible();
+  await kimi.getByRole("button", { name: "Connect Kimi CLI", exact: true }).click();
+  await expect(kimi.getByRole("status")).toHaveText("Session ready");
+  await kimi.getByRole("textbox", { name: "Ask about this workspace" }).fill("Read the current workspace overview.");
+  await kimi.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(kimi.getByRole("status")).toHaveText("Your Agent is waiting for permission");
+  await expect(kimi.getByRole("textbox", { name: "Ask about this workspace" })).toHaveValue("");
+  await expect(kimi.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await expect(kimi.getByRole("button", { name: "Allow once", exact: true })).toBeVisible();
+  await expect(kimi.getByRole("button", { name: "Decline", exact: true })).toBeVisible();
+  await kimi.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "../target/studio-browser/agents-native-permission.png" });
+  await kimi.getByRole("button", { name: "Allow once", exact: true }).click();
+  await expect(kimi.getByRole("status")).toHaveText("Agent working");
+  const kimiClient = clients.get("fixture-kimi")!;
+  kimiClient.messages.push({ role: "assistant", text: "Workspace ready · 中文项目" }); kimiClient.state = "ready"; kimiClient.elapsed_ms = 2200;
+  await expect(kimi.getByRole("status")).toHaveText("Session ready");
+  await expect(kimi.locator(".native-message.assistant pre").last()).toHaveText("Workspace ready · 中文项目");
+  await page.screenshot({ path: "../target/studio-browser/agents-native-response.png" });
+  kimiClient.state = "uncertain"; kimiClient.error = "The native Agent did not confirm completion.";
+  await expect(kimi.getByRole("status")).toHaveText("Outcome not confirmed");
+  await expect(kimi.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+  await expect(kimi.getByRole("button", { name: "Disconnect", exact: true })).toBeEnabled();
+  await kimi.getByRole("button", { name: "Disconnect", exact: true }).click();
+  await expect(kimi.getByRole("status")).toHaveText("Agent disconnected");
+  await expect(kimi.getByRole("alert")).toContainText("The native Agent did not confirm completion.");
+  await expect(kimi.locator(".native-message.assistant pre").last()).toHaveText("Workspace ready · 中文项目");
+  await expect(kimi.getByRole("textbox", { name: "Ask about this workspace" })).toBeDisabled();
+  await expect(kimi.getByRole("button", { name: "Connect Kimi CLI", exact: true })).toBeEnabled();
+  await kimi.getByText("Session details", { exact: true }).click();
+  await expect(kimi.getByText("native-kimi", { exact: true })).toBeVisible();
+  const windowId = await page.evaluate(() => sessionStorage.getItem("rho-window-id"));
+  expect(connections.every(request => request.window.window_id === windowId)).toBe(true);
+  expect(actions.map(request => request.action.kind)).toEqual(["test", "prompt", "decision", "disconnect"]);
+  expect(JSON.stringify({ connections, actions })).not.toContain("Bearer");
+  expect((await queryNative("operation.events_checkpoint")).data.sequence).toBe(checkpoint);
   expect(errors).toEqual([]);
 });

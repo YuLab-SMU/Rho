@@ -1,4 +1,6 @@
 #![forbid(unsafe_code)]
+mod agent_client;
+pub use agent_client::*;
 
 mod query;
 pub use query::*;

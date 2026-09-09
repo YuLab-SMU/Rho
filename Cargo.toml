@@ -19,6 +19,7 @@ members = [
   "crates/host",
   "crates/cli",
   "crates/mcp",
+  "crates/agent-client",
   "crates/workbench",
 ]
 default-members = ["crates/cli"]

@@ -2099,6 +2099,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-agent-client"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "rho-contract",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
 name = "rho-application"
 version = "0.1.0"
 dependencies = [
@@ -2182,6 +2195,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "rho-adapter-skills",
+ "rho-agent-client",
  "rho-application",
  "rho-contract",
  "rho-environment",

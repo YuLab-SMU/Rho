@@ -16,6 +16,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Invocation::export_all(&config)?;
     MediaPage::export_all(&config)?;
     WorkbenchInfo::export_all(&config)?;
+    LocalAgent::export_all(&config)?;
+    DiscoverAgent::export_all(&config)?;
+    ConnectAgent::export_all(&config)?;
+    AgentClientAction::export_all(&config)?;
+    AgentClientSession::export_all(&config)?;
     WorkbenchAgentConnection::export_all(&config)?;
     WorkbenchFrame::export_all(&config)?;
     SelectProject::export_all(&config)?;

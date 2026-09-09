@@ -3,6 +3,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useAgents, useDocuments, useNavigation, useSession } from "./context";
 import { Icon } from "./icons";
 import { SettingsControls } from "./settings-controls";
+import { NativeAgentSettings } from "./native-agent-settings";
 import type { AgentConfigurationFormat } from "./agent-ports";
 import type { McpSessionObservation } from "./generated/McpSessionObservation";
 import "./agent-settings.css";
@@ -108,7 +109,7 @@ function AgentSettings() {
       {["apps", "connections"].map(value => <button key={value} id={`agent-tab-${value}`} role="tab" aria-selected={tab === value} tabIndex={tab === value ? 0 : -1} aria-controls="agent-tab-panel" onClick={() => setTab(value)}>{value === "apps" ? "Agent apps" : "Connections"}{value === "connections" && !state.stale && !!state.data?.active_sessions && <span className="agent-count">{state.data.active_sessions}</span>}</button>)}
     </div>
     {state.error && <div className="agent-error" role="alert"><span>{state.error}{state.stale ? " Previous observations may be stale." : ""}</span><button disabled={state.loading} onClick={() => void agents.refresh()}>Retry</button></div>}
-    <div role="tabpanel" id="agent-tab-panel" aria-labelledby={`agent-tab-${tab}`}>{tab === "apps" ? <AgentApps /> : <Connections />}</div>
+    <div role="tabpanel" id="agent-tab-panel" aria-labelledby={`agent-tab-${tab}`}>{tab === "apps" ? <><NativeAgentSettings /><details className="native-manual"><summary>Advanced: manual MCP setup</summary><AgentApps /></details></> : <Connections />}</div>
   </>;
 }
 

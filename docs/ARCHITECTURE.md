@@ -22,9 +22,22 @@ Agent integration is a thin boundary. Rho validates mechanical constraints and
 responds to requested operations; it does not infer a new goal, construct an Agent
 plan, run a competing behavior loop or introduce a second approval decision.
 Conversation content is not an authority source or a parallel Rho database.
-The current Agent transport is MCP; ACP or other Agent adapters must follow the
-same boundary. Scientific state and capabilities should be discoverable through
+Scientific requests use MCP. The optional local CLI client uses Codex app-server
+or Kimi ACP to discover native models, open a native session, submit a user turn
+and relay native output and permission choices. It supplies the current Host's
+MCP connection for that session without editing the CLI's user configuration.
+The CLI retains authentication, model execution, conversation history and Agent
+behavior. Rho retains only a bounded, ephemeral view of the native session;
+opening settings does not submit a model task. Scientific capabilities remain discoverable through
 the shared Host, with no Agent-specific handler bypass.
+
+Native client actions bind the project and synchronized Studio window. Connection
+and turn request identities survive lost HTTP acknowledgements; uncertainty does
+not authorize replay. Native permission requests are shown to the user and their
+selected native response is forwarded unchanged. Stopping or disconnecting the
+Agent does not prove that already accepted scientific work stopped or rolled back.
+The local MCP credential is passed privately to the owned CLI process and excluded
+from browser session snapshots and diagnostic output.
 
 ## Request paths
 
@@ -521,6 +534,7 @@ and runtime acquisition remain separate from read-only package inspection.
 | `crates/application`, `skills` | Application context/control and method/source ports, separate from scientific execution |
 | `crates/adapters/` | SQLite, Git, R, package, process and SSH/Slurm implementations |
 | `crates/host` | Concrete composition and runtime configuration |
+| `crates/agent-client` | Bounded native Codex app-server / Kimi ACP client; no scientific handlers or Agent behavior loop |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
 | `r/bridge`, `r/environment` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |

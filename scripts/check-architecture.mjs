@@ -30,8 +30,9 @@ const allowed = {
   "rho-git": ["rho-project", "rho-process"],
   "rho-sqlite": ["rho-contract", "rho-operation", "rho-application"],
   "rho-r-runtime": ["rho-contract", "rho-workspace"],
-  "rho-host": ["rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
+  "rho-host": ["rho-agent-client", "rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
   "rho-mcp": ["rho-contract", "rho-host"],
+  "rho-agent-client": ["rho-contract"],
   "rho-workbench": ["rho-contract", "rho-host", "rho-mcp"],
   "rho-cli": ["rho-contract", "rho-host", "rho-mcp", "rho-workbench"],
 };

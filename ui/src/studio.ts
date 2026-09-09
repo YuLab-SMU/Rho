@@ -16,6 +16,7 @@ import { Plots } from "./plots";
 import { PanelLayout } from "./layout-model";
 import { Navigation } from "./navigation";
 import { Agents } from "./agents";
+import { NativeAgents } from "./native-agents";
 import { copyAgentText } from "./agent-adapter";
 import { browserMedia } from "./media-adapter";
 import { mediaKey } from "./output-ports";
@@ -47,6 +48,7 @@ export class Studio {
   readonly preferences: Preferences;
   readonly application: ApplicationBridge;
   readonly agents: Agents;
+  readonly nativeAgents: NativeAgents;
   private readonly documentPersistence: PersistenceFragment;
   private readonly subscriptions: (() => void)[] = [];
   private stopped = false;
@@ -227,6 +229,11 @@ export class Studio {
       window: () => this.application.getSnapshot().online ? this.application.window : null,
       read: client.agentConnection.bind(client), configuration: client.agentConfiguration.bind(client),
       copy: copyAgentText, schedule: () => this.coordinator.wake("agents") });
+    this.nativeAgents = new NativeAgents({ context: this.session.context,
+      window: () => this.application.getSnapshot().online ? this.application.window : null,
+      discover: request => client.discoverAgent(request), connect: request => client.connectAgent(request),
+      sessions: () => client.nativeAgentSessions(), action: request => client.nativeAgentAction(request),
+      schedule: () => this.coordinator.wake("native-agents") });
 
     for (const fragment of [this.operations, this.console, this.files, this.objects, this.packages, this.plots, this.layout])
       this.persistence.register(fragment);
@@ -242,11 +249,12 @@ export class Studio {
         this.session.setReady(false);
         this.operations.reset(); this.console.reset(); this.files.reset(); this.objects.reset(); this.packages.reset();
         this.documents.reset(); this.outputs.reset(); this.mediaCache.reset(); this.plots.reset(); this.layout.resetState(); this.navigation.reset();
-        this.application.reset(); this.agents.reset();
+        this.application.reset(); this.agents.reset(); this.nativeAgents.reset();
         this.persistence.prepareRestore();
       }),
       this.notifications.on("sessionChanged", () => {
         this.agents.reset();
+        this.nativeAgents.reset();
         this.application.disconnected();
         this.operations.sessionChanged(); this.console.resetSession(); this.documents.sessionChanged();
         this.objects.sessionChanged(); this.packages.sessionChanged(); this.outputs.sessionChanged(); this.mediaCache.sessionChanged();
@@ -280,6 +288,7 @@ export class Studio {
     }));
     this.coordinator.register("runtime", 2000, ready(() => this.session.refreshRuntime()));
     this.coordinator.register("agents", 2000, async () => { if (!this.stopped) await this.agents.observe(); });
+    this.coordinator.register("native-agents", 500, async () => { if (!this.stopped) await this.nativeAgents.observe(); });
     this.coordinator.register("pending", 2000, ready(async () => {
       await this.operations.reconcilePending(); await this.operations.ensureReferences(this.console.operationIds());
     }));
@@ -382,6 +391,7 @@ export class Studio {
   stop() {
     this.application.stop();
     this.agents.stop();
+    this.nativeAgents.stop();
     this.stopped = true; this.lifecycle++; this.session.stop(); this.coordinator.stop(); this.client.stopReads(); this.persistence.stop(); this.preferences.stop();
     this.operations.stop(); this.console.stop(); this.documents.stop(); this.files.stop(); this.objects.stop(); this.packages.stop();
     this.outputs.stop(); this.mediaCache.stop(); this.plots.stop(); this.navigation.stop(); this.layout.stop();

@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+pub use rho_agent_client::{ExternalAgentClient, discover_agent};
 mod application;
 mod discovery;
 mod observer;

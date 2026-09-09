@@ -220,6 +220,23 @@ does not establish Rho support for its model/provider settings or list of CLIs.
 The user approved the revised Paper design. The approved interaction is in Design
 section 12; implementation and runtime/visual verification belong in STATUS.md.
 
+### F10 — Agent connection must be immediately usable
+
+**User feedback (2026-09-09):** The approved appearance did not resolve the setup
+experience. Connecting Kimi took a long time and required two manual copies.
+The user supplied a working local-CLI reference with native model selection and
+a direct response test, and requested the same practical ease of use.
+
+The supplied transcript records both a provider quota failure and setup friction:
+the Agent searched for configuration instructions, used mismatched server names,
+and fell back to shell requests instead of registered native MCP tools. These are
+distinct problems. The product should discover an already installed CLI, show its
+native model choices, connect it to the current Rho workspace and accept a task
+without asking the user to shuttle configuration or verification prompts. Native
+permission waits and provider errors must be visible rather than looking like an
+indefinite setup spinner. The user subsequently reported that the implementation
+task itself appeared stuck; verification must have bounded waits and a clear end.
+
 ## Workflow reference: a country development analysis
 
 The supplied tutorial follows a complete project using gapminder: import, clean,

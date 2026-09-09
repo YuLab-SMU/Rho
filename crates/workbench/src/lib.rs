@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod agents;
 mod settings;
 
 use std::{
@@ -36,6 +37,7 @@ struct SelectedHost {
     host: Arc<NextHost>,
     root: PathBuf,
     connections: Arc<rho_mcp::McpConnections>,
+    agents: Arc<agents::AgentClients>,
 }
 
 impl SelectedHost {
@@ -44,6 +46,7 @@ impl SelectedHost {
             host,
             root,
             connections: Arc::default(),
+            agents: Arc::default(),
         }
     }
 }
@@ -188,7 +191,10 @@ async fn select_project(
         if selected.root == root {
             return Json(hosting.info()).into_response();
         }
-        if !selected.host.is_idle() || Arc::strong_count(&selected.host) != 1 {
+        if !selected.host.is_idle()
+            || Arc::strong_count(&selected.host) != 1
+            || selected.agents.has_live().await
+        {
             return failure(
                 StatusCode::CONFLICT,
                 "Host is busy or an MCP session is attached; finish work and disconnect the session before switching",
@@ -424,6 +430,10 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/style.css", get(stylesheet))
         .route("/api/info", get(info))
         .route("/api/agent-connection", get(agent_connection))
+        .route("/api/agents/discover", post(agents::discover))
+        .route("/api/agents/connect", post(agents::connect))
+        .route("/api/agents/sessions", get(agents::sessions))
+        .route("/api/agents/action", post(agents::action))
         .route("/api/project", post(select_project))
         .route("/api/r", get(settings::read_r).post(settings::apply_r))
         .route("/api/r/probe", post(settings::probe))
@@ -488,6 +498,7 @@ pub async fn serve_with_assets(
             }),
             root,
             connections: Arc::default(),
+            agents: Arc::default(),
         })
     } else {
         None
@@ -549,6 +560,7 @@ pub async fn serve_with_assets(
         })
         .await;
     if let Some(selected) = &hosting.read().await.selected {
+        selected.agents.close().await;
         selected.host.drain().await;
     }
     result.map_err(|e| e.to_string())
