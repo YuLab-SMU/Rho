@@ -104,7 +104,12 @@ try {
   assert.equal(fs.readFileSync(path.join(project, "analysis.R"), "utf8"), "x <- 2\n");
   assert.deepEqual((await peer.call(commandTool.name, input).result).structuredContent.result, patched);
   const humanRead = JSON.parse(run(binary, ["--database", database, "get-operation", patched.operation.operation_id]));
-  assert.deepEqual(humanRead.operation, patched, "human edge cannot read Agent owner truth");
+  const { next_reads: humanReads, ...humanRecord } = humanRead.operation;
+  const { next_reads: agentReads, ...agentRecord } = patched;
+  assert.deepEqual(humanRecord, agentRecord, "human edge cannot read Agent owner truth");
+  assert.ok(humanReads.some(read => read.capability.id === "operation.get" && read.arguments.operation_id === patched.operation.operation_id));
+  assert.ok(!humanReads.some(read => read.capability.id === "project.read_text"), "a journal-only reader must not advertise an unavailable owner");
+  assert.ok(agentReads.some(read => read.capability.id === "project.read_text" && read.arguments.path === "analysis.R"));
   const beforeInjection = (await peer.call("rho.events.poll", { limit: 1000 }).result).structuredContent.result;
   const injected = await peer.call(commandTool.name, { ...input, client_request_id: "spoof", principal: { id: "other-user" } }).result.catch((error) => ({ isError: true, error: String(error) }));
   assert.equal(injected.isError, true);
@@ -161,7 +166,10 @@ try {
     assert.equal(realized.output.verified, true);
     assert.equal(realized.operation.caller.kind, "agent");
     assert.equal(realized.output.plan_operation_id, humanPlan.operation.operation_id);
-    assert.deepEqual(JSON.parse(run(binary, ["--database", database, "get-operation", realized.operation.operation_id])).operation, realized);
+    const { next_reads: readerNavigation, ...observedRealization } = JSON.parse(run(binary, ["--database", database, "get-operation", realized.operation.operation_id])).operation;
+    const { next_reads: _liveNavigation, ...nativeRealization } = realized;
+    assert.deepEqual(observedRealization, nativeRealization);
+    assert.ok(readerNavigation.some(read => read.capability.id === "operation.get" && read.arguments.operation_id === realized.operation.operation_id));
     console.log("Verified real Ark/R execution and Query through MCP, plus Agent realization of a Human-created environment plan under one principal.");
   }
 

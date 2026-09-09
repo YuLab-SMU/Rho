@@ -263,6 +263,18 @@ try {
   });
   assert.equal(snapshot.status, "ready");
   assert.deepEqual(await history(), before);
+  const connected = JSON.parse(run(binary, ["--connect-url-file", urlFile,
+    "--project", selectedRoot, "query", "--capability", "host.overview"]));
+  assert.equal(connected.ok, true);
+  assert.equal(connected.observation.data.project_root, selectedRoot);
+  const connectedRecord = JSON.parse(run(binary, ["--connect-url-file", urlFile,
+    "invoke", "--client-request-id", "connected-cli-once", "--capability", "process.run_local",
+    "--arguments", JSON.stringify({ program: process.execPath, args: ["-e", "process.stdout.write('connected')"] })])).operation;
+  assert.equal(connectedRecord.status, "succeeded");
+  const connectedHistory = await history();
+  assert.ok(connectedHistory.some(event => event.operation_id === connectedRecord.operation.operation_id));
+  assert.deepEqual(await host("get_operation", { operation_id: connectedRecord.operation.operation_id }), connectedRecord);
+  const applicationBaseline = await history();
   const bridgeHeaders = { ...headers, "X-Rho-Studio-Window": "http-document-fixture" };
   const bridgeFrame = (method, params) => ({
     project_root: selectedRoot,
@@ -298,6 +310,16 @@ try {
   } });
   assert.equal(draftPage.data.content_sha256, draftHash);
   assert.ok(draftPage.data.next_offset_utf8 > 0);
+  const controlFrame = { method: "application_control", params: {
+    window: registration.data.session.window, request_id: "connected-application-command",
+    action: { kind: "open_view", view_type: "console", view_id: null,
+      expected_context_version: registration.data.context.version },
+  } };
+  const control = JSON.parse(run(binary, ["--connect-url-file", urlFile, "request", "--json", JSON.stringify(controlFrame)])).result;
+  assert.equal(control.state, "pending", "CLI admission is not proof of Studio application");
+  assert.equal(control.completed_at_ms, null);
+  assert.equal(control.actor.kind, "human");
+  assert.deepEqual(JSON.parse(run(binary, ["--connect-url-file", urlFile, "request", "--json", JSON.stringify(controlFrame)])).result, control);
   assert.equal(await fetch(new URL("/api/host", url), {
     method: "POST", headers: bridgeHeaders, body: JSON.stringify(bridgeFrame("application_bridge", largeSync)),
   }).then(r => r.status), 413);
@@ -307,7 +329,7 @@ try {
   assert.equal(await fetch(new URL("/api/application/bridge", url), {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(bridgeFrame("application_bridge", { kind: "renew", session: registration.data.session })),
   }).then(r => r.status), 401);
-  assert.deepEqual(await history(), before, "Application draft synchronization must not write scientific history");
+  assert.deepEqual(await history(), applicationBaseline, "Application draft synchronization must not write scientific history");
   const hello = await mcp("initialize", {
     protocolVersion: "2025-11-25",
     capabilities: {},

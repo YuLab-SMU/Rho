@@ -18,6 +18,9 @@ Studio bridge; standard/local and launcher-attested Skill sources and explicit
 method bindings. Operation result/recovery validation and original-record reads
 retain contract-fault evidence atomically in the scientific journal. Oversized
 uncommitted candidates have digest-bound chunk reads. Source presence is not acceptance.
+Standalone CLI queries now use a query-only observer without writer leases,
+runtime startup or journal recovery. The connected CLI uses a private launch-URL
+file and the existing Workbench Host for native queries and application controls.
 
 Application commands retain explicit window/incarnation/resource identities.
 Scientific captures preserve original Agent identity through the existing gateway.
@@ -58,12 +61,25 @@ reads native process markers without starting R or signalling processes.
   passed on the bare image tool; the new equivalent versioned route still needs
   its expanded transport rerun. Basic Workbench HTTP checks passed, including an
   exact 512 KiB draft plus base on the dedicated bridge endpoint and its limits.
-- Integration frontend tests now pass 255 tests. Chrome's first full run passed
+- Integration frontend tests now pass 270 tests. Chrome's first full run passed
   22/26; explicit window resume, per-window draft expectations and current object
   read routes passed focused rechecks. A native IME commit-key replay was observed
   in repeated Chrome runs and fixed; five consecutive checks now verify both no
-  accidental execution and a successful subsequent intentional Enter. Full Chrome
-  and final visual review still remain.
+  accidental execution and a successful subsequent intentional Enter. Startup
+  restoration was subsequently fixed to preserve user edits and view choices
+  before/during asynchronous reads. The complete Chrome suite now passes all
+  26 cases; normal, wide and compact screenshots were inspected. The measured
+  typing p95 was 34.4 ms and frame p95 16.8 ms in the fixed Gapminder scenario.
+- Whole-workspace Rust checks reached 193 passing tests and one observer fixture
+  failure; the fixture incorrectly read the typed record wrapper, was fixed with
+  explicit identity assertions, and all 12 observer/CLI tests now pass. A complete
+  rerun on the final tree remains required. Strict whole-workspace Clippy passed
+  before the connected CLI addition; final lint checking remains required.
+- Full Environment, real MCP, real Workbench, native process recovery, local
+  SSH/Slurm protocol and Jet checks passed. The native session evidence fix keeps
+  unobservable same-family processes protected. Connected CLI queries, a real
+  process invocation and repeatable pending application admission also passed the
+  actual Workbench HTTP test. No live remote-cluster acceptance is claimed.
 - Rust whole-workspace type checking and one client generate/build cycle passed
   at intermediate integration points. The following client check correctly
   rejected stale ObjectReadPage bindings after root identity fields were added.
@@ -73,7 +89,13 @@ reads native process markers without starting R or signalling processes.
   Skill discovery checks passed. Two real discovery debug runs returned supported
   facts with zero channel/identity violations, but failed stale harness assumptions
   about module names/tool sequence and then separately timed availability. Those
-  oracles were corrected; both failed traces remain and no final acceptance is claimed.
+  oracles were corrected. Five core debug categories have since passed: discovery,
+  large objects, deep values, selected drafts and file search/change. All failed
+  attempts remain. Package help exposed a client preauthorization setting, now
+  corrected only for the isolated Rho MCP server while retaining its file sandbox.
+  The harness is being strengthened for capture/image provenance, late results,
+  exact original identities and complete tool-attempt accounting before further
+  model runs. No final 34-run acceptance is claimed.
 
 Logs and the detailed local working plan are under `target/agent-interface/`.
 The acceptance runner retains all attempts, counters, actual token usage and
