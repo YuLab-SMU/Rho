@@ -204,6 +204,22 @@ visual evidence belongs in STATUS.md; the earlier rejected screenshot remains th
 problem reference.
 
 
+### F09 — Agent setup should feel like a polished settings surface
+
+**User feedback (2026-09-09):** The user rejected the initial Codex-connection
+Paper design as unattractive and supplied a screenshot of a desktop application's
+Agent settings. The reference has persistent sidebar navigation, a broad white
+surface, gray segmented controls, recognizable Agent rows and an expanded selected
+row with aligned configuration fields and actions.
+
+**Design response under review:** Replace the instructional modal with a settings
+page, reduce front-page explanatory copy, expand the selected Agent in place and
+put detailed connection evidence on a separate tab. Use neutral gray layers,
+consistent icon/text/action lanes and a single clear primary action. The reference
+does not establish Rho support for its model/provider settings or list of CLIs.
+The updated Paper link and proposed interaction are in Design section 12. This
+feedback remains open until the user reviews the revised result.
+
 ## Workflow reference: a country development analysis
 
 The supplied tutorial follows a complete project using gapminder: import, clean,

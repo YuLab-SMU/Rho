@@ -648,36 +648,6 @@ Unrecorded provenance displays **Not recorded**. Project links stay separate fro
 installation provenance. Repository URLs must omit embedded credentials. Inspection
 does not load packages, invoke a package manager, change repositories or install.
 
-## 12. Agent connection experience — proposed
-
-The user requested a daily Codex connection workflow on 2026-09-09. The
-[Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/4-0)
-contains first connection, observed connection, and narrow/recovery states.
-This interaction is awaiting user review; it is not an implemented Studio feature.
-
-The proposal adds **Connect Agent** to the app bar and command menu. A compact
-**Connect Codex** dialog identifies the project, R availability, current window
-and unsaved document before showing setup. It offers a Codex user configuration
-for this Workbench and a read-only connection-check prompt carrying the actual
-project/window references. Configuration contains a private credential; display
-it masked by default and copy it only on an explicit action. Do not write user
-configuration, start an Agent, install Skills or start R merely to open this dialog.
-
-Keep configuration copied, MCP session initialized, and successful overview/window
-responses distinct. A server-side response observation is not a model-consumption
-acknowledgement or proof of scientific correctness. Client name/version are
-self-reported display metadata. Show the last observed request and exact window
-incarnation; another window's response does not verify this window. Multiple
-clients remain separate, with bounded history labeled if truncated.
-
-Closing the dialog leaves accepted work and the connection unchanged. Protocol
-session closure does not imply R work stopped; network loss can leave a protocol
-session open. Unreachable hosting shows an unavailable/stale state and Retry;
-never present the previous response as a fresh connection check. A new Host starts
-with no inherited connection observations. Workbench restarts require fresh address
-and credential configuration. Project-only Hosts may still connect for available
-file/application capabilities, with R unavailability explicit.
-
 Documentation basis: [renv package sources](https://rstudio.github.io/renv/articles/package-sources.html),
 [remotes source types](https://remotes.r-lib.org/),
 [R-universe repositories](https://docs.r-universe.dev/install/dependencies.html),
@@ -703,3 +673,49 @@ installed DESCRIPTION fields, not current repository options or package-manager
 execution. Explicit repository URLs can identify a known provider/snapshot; absent
 delivery records stay unrecorded. No new conda database or renv lockfile attribution
 is inferred. Scope remains read-only.
+
+## 12. Agent connection experience — proposed
+
+The user rejected the initial modal design on 2026-09-09 and supplied a desktop
+Agent-settings screenshot as the visual reference. The current
+[Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)
+contains two revised settings-page boards: Agent apps and Connections. This
+proposal is awaiting visual/interaction review; no Agent settings UI is implemented.
+
+The revised direction uses a persistent 200 px settings rail, a broad white
+content surface and a centered list. The selected Codex row expands in place;
+other connection presets remain compact. At 1440 × 900, the surface starts at
+(232, 64), is 1192 × 820, and uses 184 px horizontal insets. App chrome is 56 px;
+controls are 38–42 px, row icons 42 px, and card corners 12 px. Inter remains the
+UI font with 24 px page titles, 13–14 px controls/body and 12 px secondary labels.
+Neutral canvas/row/border/text values are #F3F3F4 / #F8F8F9 / #E5E5E7 / #242426;
+secondary text is #68686D. A charcoal primary action and restrained semantic
+connection badges replace the earlier blue instructional dialog. These settings
+values are a proposal, not an approved global restyling of the scientific panels.
+
+The front page identifies the current project and window, keeps **Connect Codex**
+as the setup entry and moves configuration snippets into **Manual setup**.
+The entry must lead to concrete setup/handoff; clicking it alone never establishes
+connection success. Automatic CLI discovery, user-configuration writes, app
+launching and model/provider management are not established by this mockup.
+Model/account decisions remain with the external Agent platform. Do not open R,
+start an Agent or install Skills merely to visit settings. The supplied screenshot
+informs visual hierarchy; its provider list and model controls are not a request
+to copy those capabilities into Rho.
+
+The Connections tab uses the existing Host-scoped observations: keep configuration
+copied, MCP initialized and successful overview/window responses distinct. Client
+name/version are self-reported labels. A server response does not acknowledge
+model consumption or scientific correctness. Show the exact window incarnation
+in details; another window's response cannot verify this one. Display bounded
+active/recent sessions separately, with truncation when applicable. Paper names,
+versions, dates and states are illustrative, not new live connection evidence.
+
+Full paths, endpoints, credentials and request records belong in disclosure
+rather than dominating the main card. Mask configuration credentials on screen;
+copy only on an explicit action. Closing settings preserves accepted work and
+connections. Protocol closure does not imply R work stopped, and network loss
+can leave a protocol session open. Unreachable hosting shows stale/unavailable
+status with Retry. A new Host starts fresh observations; restarted Workbenches
+need fresh address/credential configuration. Project-only Hosts can connect for
+available file/application capabilities with R unavailability explicit.

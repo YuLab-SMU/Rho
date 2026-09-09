@@ -4,11 +4,16 @@ Updated: 2026-09-09. This is the single current status summary. Git retains hist
 
 ## Current work: daily Codex connection
 
-The user requested a daily Agent connection experience. Three
-[Paper review boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/4-0)
-cover initial Codex setup, observed connection evidence, and narrow/recovery states.
-The UI is awaiting user review under AGENTS.md; no Connect Agent dialog has been
-implemented. The proposed interaction contract is in Design section 12.
+The user rejected the initial modal design and supplied a desktop Agent-settings
+reference. Two revised
+[Paper review boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)
+now show a settings page with an expanded Codex row and a separate Connections tab.
+They use neutral gray layers, compact fields and secondary disclosure for setup
+and connection details. Both screenshots were inspected and sidebar spacing was
+corrected. Visual/interaction review is still pending under AGENTS.md; no Agent
+settings UI has been implemented. The proposal is in Design section 12 and the
+reported problem is Feedback F09. This revision changed Paper and documentation
+only; it did not add CLI discovery, model configuration or automatic installation.
 
 The independent backend now exposes authenticated `GET /api/agent-connection`.
 It returns the current endpoint and bounded MCP session observations, including
