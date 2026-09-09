@@ -339,8 +339,10 @@ export class PanelLayout extends Model<LayoutSnapshot> {
       const preferred = this.model.getNodeById(
         definition.preferredGroup,
       );
+      const width = this.model.getRootRow()?.getRect().width || this.options.width || 1440;
+      const agentDock = component === "agent" && !remembered && !neighbor && width >= 1100;
       const comparison =
-        component === "plots" && id !== "plots" && !remembered && !neighbor;
+        (component === "plots" && id !== "plots" && !remembered && !neighbor) || agentDock;
       const target =
         (comparison ? this.model.getRootRow() : undefined) ??
         remembered ??
@@ -358,6 +360,7 @@ export class PanelLayout extends Model<LayoutSnapshot> {
           component,
           config,
           minWidth: definition.minWidth,
+          ...(component === "agent" ? { minHeight: 360 } : {}),
         },
         target.getId(),
         comparison ? DockLocation.RIGHT : DockLocation.CENTER,
@@ -369,6 +372,15 @@ export class PanelLayout extends Model<LayoutSnapshot> {
           ? Actions.group([add, Actions.deleteTab("editor")])
           : add,
       );
+      if (agentDock) {
+        const group = this.model.getNodeById(id)?.getParent();
+        if (group instanceof TabSetNode) {
+          const siblings = this.model.getRootRow()?.getChildren().filter(node => node !== group) ?? [];
+          const total = siblings.reduce((sum, node) => sum + (node instanceof RowNode || node instanceof TabSetNode ? node.getWeight() : 0), 0);
+          const fraction = Math.min(0.4, 440 / width);
+          this.model.doAction(Actions.updateNodeAttributes(group.getId(), { weight: total * fraction / (1 - fraction) }));
+        }
+      }
     }
     const parent = this.model.getNodeById(id)?.getParent();
     if (parent instanceof TabSetNode && parent.getConfig()?.collapsed)

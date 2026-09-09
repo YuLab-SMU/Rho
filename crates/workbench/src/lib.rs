@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod agent_tasks;
 mod agents;
 mod settings;
 
@@ -79,6 +80,8 @@ struct AppState {
     authority: String,
     origin: String,
     authorization: String,
+    native_mcp_authorization: String,
+    task_agents: Arc<rho_host::AgentTaskService>,
     calls: Arc<Semaphore>,
     observations: Arc<Semaphore>,
     application: Arc<rho_host::ApplicationStore>,
@@ -113,12 +116,12 @@ async fn boundary(State(state): State<AppState>, request: Request, next: Next) -
         return failure(StatusCode::FORBIDDEN, "foreign Origin");
     }
     let public_asset = matches!(request.uri().path(), "/" | "/app.js" | "/style.css");
-    if !public_asset
-        && headers
-            .get(header::AUTHORIZATION)
-            .and_then(|h| h.to_str().ok())
-            != Some(&state.authorization)
-    {
+    let credential = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok());
+    let native_mcp = (request.uri().path() == "/mcp" || request.uri().path().starts_with("/mcp/"))
+        && credential == Some(state.native_mcp_authorization.as_str());
+    if !public_asset && credential != Some(state.authorization.as_str()) && !native_mcp {
         return failure(StatusCode::UNAUTHORIZED, "local bearer token required");
     }
     let mut response = next.run(request).await;
@@ -193,7 +196,7 @@ async fn select_project(
         }
         if !selected.host.is_idle()
             || Arc::strong_count(&selected.host) != 1
-            || selected.agents.has_live().await
+            || state.task_agents.has_live().await
         {
             return failure(
                 StatusCode::CONFLICT,
@@ -432,9 +435,9 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/agent-connection", get(agent_connection))
         .route("/api/agents/discover", post(agents::discover))
         .route("/api/agents/setup", post(agents::setup))
-        .route("/api/agents/connect", post(agents::connect))
-        .route("/api/agents/sessions", get(agents::sessions))
-        .route("/api/agents/action", post(agents::action))
+        .route("/api/agents/test", post(agent_tasks::test))
+        .route("/api/agents/tasks/query", post(agent_tasks::query))
+        .route("/api/agents/tasks/asset", post(agent_tasks::asset))
         .route("/api/project", post(select_project))
         .route("/api/r", get(settings::read_r).post(settings::apply_r))
         .route("/api/r/probe", post(settings::probe))
@@ -455,6 +458,14 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
                 post(dispatch_bridge)
                     .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(MAX_BRIDGE_BODY))
                     .layer(RequestBodyLimitLayer::new(MAX_BRIDGE_BODY)),
+            ),
+        )
+        .merge(
+            Router::new().route(
+                "/api/agents/tasks/command",
+                post(agent_tasks::command)
+                    .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(12 * 1024 * 1024))
+                    .layer(RequestBodyLimitLayer::new(12 * 1024 * 1024)),
             ),
         )
         .layer(middleware::from_fn_with_state(state.clone(), boundary))
@@ -528,6 +539,12 @@ pub async fn serve_with_assets(
         authority,
         origin: origin.clone(),
         authorization: format!("Bearer {token}"),
+        native_mcp_authorization: format!(
+            "Bearer {}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
+        ),
+        task_agents: rho_host::AgentTaskService::new(application.clone()),
         calls: Arc::new(Semaphore::new(32)),
         observations: Arc::new(Semaphore::new(16)),
         application,
@@ -535,6 +552,7 @@ pub async fn serve_with_assets(
         nonce: uuid::Uuid::new_v4().simple().to_string(),
     };
     let shutdown = CancellationToken::new();
+    let task_agents = state.task_agents.clone();
     let app = router(state, shutdown.clone());
     if let Some(path) = url_file {
         let mut options = std::fs::OpenOptions::new();
@@ -560,8 +578,8 @@ pub async fn serve_with_assets(
             shutdown.cancel();
         })
         .await;
+    task_agents.close().await;
     if let Some(selected) = &hosting.read().await.selected {
-        selected.agents.close().await;
         selected.host.drain().await;
     }
     result.map_err(|e| e.to_string())
@@ -587,6 +605,8 @@ mod tests {
             remote: None,
         };
         let host = Arc::new(profile.open(&root).await.unwrap());
+        let application =
+            Arc::new(rho_host::ApplicationStore::open(&temp.path().join("studio.sqlite")).unwrap());
         let state = AppState {
             hosting: Arc::new(RwLock::new(Hosting {
                 r_configuration: rho_contract::RConfiguration {
@@ -601,11 +621,11 @@ mod tests {
             authority: "127.0.0.1:10001".into(),
             origin: "http://127.0.0.1:10001".into(),
             authorization: "Bearer fixture-only".into(),
+            native_mcp_authorization: "Bearer native-fixture-only".into(),
+            task_agents: rho_host::AgentTaskService::new(application.clone()),
             calls: Arc::new(Semaphore::new(32)),
             observations: Arc::new(Semaphore::new(16)),
-            application: Arc::new(
-                rho_host::ApplicationStore::open(&temp.path().join("studio.sqlite")).unwrap(),
-            ),
+            application,
             dev_assets: None,
             nonce: "fixture-nonce".into(),
         };

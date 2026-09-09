@@ -75,13 +75,34 @@ Native/transport verification:
 | `test-remote-protocol.mjs` | Local SSH/Slurm transcript fixtures; does not validate a remote cluster |
 | `test-remote-live.mjs` | Opt-in real jobs on an explicitly selected host/scratch directory; see Operations |
 | `test-agent-interface.mjs` | Independent local Codex sessions with prebuilt Rho/Ark, installed R, Chrome, UI dependencies and authenticated pinned Codex; self-test/debug modes are not acceptance |
-| `test-agent-clients.mjs` | Explicitly opted-in native Codex/Kimi response and MCP checks in a disposable project; installed/authenticated CLI and current built Rho required |
+| `test-agent-clients.mjs` | Opt-in native Codex/Kimi/DeepSeek: two same-model tasks, request deduplication, same-ID resume and fresh MCP reads; installed/authenticated CLI and current binary required |
+| `test-deepseek-inbox.mjs` | Checks the installed, lock-matched native Inbox replay/clear implementation with a disposable journal; no provider calls or session scan |
+| `test-agent-task-recovery.mjs` | Disposable Host crash, explicit same-ID resume, retained draft/uncertain receipt, refreshed MCP and images; local ACP fixture by default, `--real-kimi`, `--real-codex`, `--real-deepseek` use the documented configured development models and verify fresh MCP delivery |
 
 These scripts live in `scripts/`. R tests accept `RHO_ARK` and `RHO_R_HOME` where
 applicable. Ignored or unavailable external-runtime checks are not passes.
 Playwright uses isolated Chrome and disposable projects; build the current client
 and `rho` binary before running it. Keep real interactive workbench sessions in
 the integration checkout, separate from disposable test projects.
+
+The approved workspace Agent task UI is in Design section 13. Focused Chrome tests
+are `ui/e2e/agent-tasks.spec.ts`; local native protocol fixtures never call a model.
+For the configured Kimi development model, explicitly run:
+
+```sh
+node scripts/test-agent-clients.mjs --real-model --provider kimi --kimi-model b-ai/glm-5.3-flash --allow-overview
+node scripts/test-agent-task-recovery.mjs --real-kimi
+# Other configured runtime recovery checks:
+node scripts/test-agent-task-recovery.mjs --real-codex
+node scripts/test-agent-task-recovery.mjs --real-deepseek
+```
+
+Both create and clean up independent test Hosts and preserve native config hashes.
+They must not be pointed at an existing research Host. The exact reviewed Kimi source
+is tag `@moonshot-ai/kimi-code@0.41.0`, commit
+`95478e8c7ba248fd2470d5bb151555ec7fedd19d`; adapter behavior is checked against actual
+handshake metadata and that version's ACP/session source. A live-model failure is
+not converted to a retry of its uncertain original request.
 
 ## Contract and source changes
 

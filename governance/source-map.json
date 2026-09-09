@@ -157,6 +157,12 @@
         "python3",
         "scripts/test-pack-agent-evidence.py"
       ]
+    },
+    "system.agent-tasks": {
+      "command": [
+        "node",
+        "scripts/test-agent-task-recovery.mjs"
+      ]
     }
   },
   "areas": {
@@ -217,7 +223,8 @@
         "system.vendor-tests",
         "system.agent-harness",
         "system.output-media",
-        "system.evidence-pack"
+        "system.evidence-pack",
+        "system.agent-tasks"
       ]
     },
     "development-tools": {

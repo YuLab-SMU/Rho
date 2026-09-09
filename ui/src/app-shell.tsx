@@ -13,6 +13,7 @@ import { panelNames } from "./builtin-panels";
 import type { DocumentAction, Dialog } from "./navigation";
 import { SettingsDialog } from "./settings-controls";
 import { SettingsPage } from "./settings-page";
+import { AgentLauncher } from "./panels/agent-panel";
 
 function ProjectDialog({ onClose }: { onClose: () => void }) {
   const session = useSession(),
@@ -203,11 +204,12 @@ export function AppShell() {
     },
     {
       id: "session.agents",
-      label: "Agent Settings…",
+      label: "Open Agent",
       group: "Session",
       enabled: () => true,
-      run: () => setDialog("agents"),
+      run: () => layout.show("agent"),
     },
+    { id: "session.agent-settings", label: "Agent Settings…", group: "Session", enabled: () => true, run: () => setDialog("agents") },
     {
       id: "session.settings",
       label: "R and Editor Settings…",
@@ -295,7 +297,7 @@ export function AppShell() {
           </Menu.Root>
         ))}
         <div className="spacer" />
-        <button className="bordered" onClick={() => setDialog("agents")}><Icon name="agent" /> Agents</button>
+        <AgentLauncher />
         <Menu.Root>
           <Menu.Trigger className="bordered">
             <Icon name="studio" /> Panels

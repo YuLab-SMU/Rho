@@ -5,9 +5,6 @@ import type { WorkbenchAgentConnection } from "./generated/WorkbenchAgentConnect
 import type { LocalAgent } from "./generated/LocalAgent";
 import type { SetupAgent } from "./generated/SetupAgent";
 import type { DiscoverAgent } from "./generated/DiscoverAgent";
-import type { ConnectAgent } from "./generated/ConnectAgent";
-import type { AgentClientSession } from "./generated/AgentClientSession";
-import type { AgentClientAction } from "./generated/AgentClientAction";
 import type { AgentConfigurationFormat } from "./agent-ports";
 import type { WorkbenchFrame } from "./generated/WorkbenchFrame";
 import type { QuerySnapshot } from "./generated/QuerySnapshot";
@@ -29,6 +26,13 @@ import type { ApplicationExecuteReply } from "./generated/ApplicationExecuteRepl
 import type { ApplicationCommandStatusArguments } from "./generated/ApplicationCommandStatusArguments";
 import type { ApplicationReadDocumentArguments } from "./generated/ApplicationReadDocumentArguments";
 import type { ApplicationDocumentPage } from "./generated/ApplicationDocumentPage";
+import type { AgentTasksQuery } from "./generated/AgentTasksQuery";
+import type { AgentTaskQueryResult } from "./generated/AgentTaskQueryResult";
+import type { AgentTasksCommand } from "./generated/AgentTasksCommand";
+import type { AgentTaskCommandResult } from "./generated/AgentTaskCommandResult";
+import type { TestAgent } from "./generated/TestAgent";
+import type { AgentDiagnostic } from "./generated/AgentDiagnostic";
+import type { ReadAgentAsset } from "./generated/ReadAgentAsset";
 
 export function json(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue;
@@ -77,7 +81,7 @@ export class HostClient {
   }
   async request<T>(path: string, body?: unknown): Promise<T> {
     const method = (body as WorkbenchFrame | undefined)?.frame?.request?.method;
-    const reading = body === undefined || path === "/api/state/read" || path === "/api/r/probe" ||
+    const reading = body === undefined || path === "/api/state/read" || path === "/api/r/probe" || path === "/api/agents/tasks/query" ||
       (path === "/api/host" && ["query_snapshot", "get_operation", "subscribe"].includes(method ?? ""));
     const controller = reading ? new AbortController() : undefined;
     if (controller) this.reads.add(controller);
@@ -117,9 +121,14 @@ export class HostClient {
   agentConnection() { return this.request<WorkbenchAgentConnection>("/api/agent-connection"); }
   discoverAgent(request: DiscoverAgent) { return this.request<LocalAgent>("/api/agents/discover", request); }
   setupAgent(request: SetupAgent) { return this.request<LocalAgent>("/api/agents/setup", request); }
-  connectAgent(request: ConnectAgent) { return this.request<AgentClientSession>("/api/agents/connect", request); }
-  nativeAgentSessions() { return this.request<AgentClientSession[]>("/api/agents/sessions"); }
-  nativeAgentAction(request: AgentClientAction) { return this.request<AgentClientSession>("/api/agents/action", request); }
+  agentTaskQuery(request: AgentTasksQuery) { return this.request<AgentTaskQueryResult>("/api/agents/tasks/query", request); }
+  agentTaskCommand(request: AgentTasksCommand) { return this.request<AgentTaskCommandResult>("/api/agents/tasks/command", request); }
+  testAgent(request: TestAgent) { return this.request<AgentDiagnostic>("/api/agents/test", request); }
+  async agentAsset(request: ReadAgentAsset) {
+    const response = await fetch("/api/agents/tasks/asset", { method: "POST", headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
+    if (!response.ok) throw new Error((await response.json() as {error?: string}).error ?? "Attachment is unavailable.");
+    return response.blob();
+  }
   agentConfiguration(data: WorkbenchAgentConnection, format: AgentConfigurationFormat, masked: boolean) {
     const endpoint = new URL(data.endpoint);
     if (endpoint.origin !== location.origin || endpoint.pathname !== "/mcp" || endpoint.search || endpoint.hash ||

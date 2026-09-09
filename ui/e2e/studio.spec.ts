@@ -11,9 +11,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { AgentClientSession } from "../src/generated/AgentClientSession";
-import type { AgentClientAction } from "../src/generated/AgentClientAction";
-import type { ConnectAgent } from "../src/generated/ConnectAgent";
 import type { DiscoverAgent } from "../src/generated/DiscoverAgent";
 import type { LocalAgent } from "../src/generated/LocalAgent";
 import type { SetupAgent } from "../src/generated/SetupAgent";
@@ -36,6 +33,7 @@ function nativeAgentCatalog(request: DiscoverAgent, setup_required = false): Loc
     selected_model: request.model ?? (codex ? "native-balanced" : deepseek ? deepseekChatModel : "configured/flash"),
     selected_effort: codex ? request.model === "native-detailed" ? "medium" : "low" : null,
     discovery_ms: 150, error: null, setup_required,
+    capabilities: { resume: true, history: "native_context_history", images: true, embedded_context: true, modes: [], current_mode: null, models: [] },
   };
 }
 
@@ -1914,7 +1912,6 @@ test("Agent settings share the current Host, protect setup credentials and prese
   const errors: string[] = [];
   page.on("pageerror", e => errors.push(e.message));
   await page.route("**/api/agents/discover", route => route.fulfill({ json: nativeAgentCatalog(route.request().postDataJSON()) }));
-  await page.route("**/api/agents/sessions", route => route.fulfill({ json: [] }));
   await writeFile(join(directory, "中文项目", "02_explore.R"), "agent_draft <- 1\n");
   await page.goto(url);
   await openFile(page, "02_explore.R");
@@ -1925,6 +1922,7 @@ test("Agent settings share the current Host, protect setup credentials and prese
   const checkpointBefore = (await queryNative("operation.events_checkpoint")).data.sequence;
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(url).origin });
   await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await page.getByRole("button", { name: "Agent Settings", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(settings).toBeVisible();
   await settings.getByText("Advanced: manual MCP setup", { exact: true }).click();
@@ -1955,8 +1953,14 @@ test("Agent settings share the current Host, protect setup credentials and prese
   await expect(manual.getByRole("status")).toContainText("Workspace check copied");
   const check = await page.evaluate(() => navigator.clipboard.readText());
   const windowId = await page.evaluate(() => sessionStorage.getItem("rho-window-id"));
-  const windows = (await queryNative("application.windows")).data.windows;
-  const windowRef = windows.find((w: any) => w.window.window_id === windowId).window;
+  let windowRef: { window_id: string; incarnation: string } | undefined;
+  let afterWindow: string | null = null;
+  do {
+    const windows = (await queryNative("application.windows", { limit: 32, after_window_id: afterWindow })).data;
+    windowRef = windows.windows.find((w: any) => w.window.window_id === windowId)?.window;
+    afterWindow = windows.next_after_window_id;
+  } while (!windowRef && afterWindow);
+  expect(windowRef).toBeDefined();
   expect(check).toContain(JSON.stringify(windowRef));
   expect(check).not.toContain(token);
   const { McpClient } = await import("../../scripts/agent-interface/runtime.mjs");
@@ -1995,191 +1999,22 @@ test("Agent settings share the current Host, protect setup credentials and prese
   expect(errors).toEqual([]);
 });
 
-test("Native Agent settings select Codex, Kimi and DeepSeek models without copying setup", async ({ page }) => {
-  const errors: string[] = [], connections: ConnectAgent[] = [], actions: AgentClientAction[] = [];
-  const installations: SetupAgent[] = []; let deepseekInstalled = false;
-  const clients = new Map<string, AgentClientSession>();
-  const project = (await (await api("/api/info")).json()).project_root as string;
-  page.on("pageerror", e => errors.push(e.message));
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "clipboard", { value: {
-      writeText: () => { throw new Error("Native setup must not write the clipboard"); },
-      readText: () => { throw new Error("Native setup must not read the clipboard"); },
-    } });
-  });
-  await page.route("**/api/agents/discover", route => {
-    const request = route.request().postDataJSON() as DiscoverAgent;
-    expect(request.project_root).toBe(project);
-    return route.fulfill({ json: nativeAgentCatalog(request, request.provider === "deepseek" && !deepseekInstalled) });
-  });
-  await page.route("**/api/agents/setup", route => {
-    const request = route.request().postDataJSON() as SetupAgent;
-    expect(request).toEqual({ project_root: project, provider: "deepseek" });
-    installations.push(request); deepseekInstalled = true;
-    return route.fulfill({ json: nativeAgentCatalog({ ...request, model: null }) });
-  });
-  await page.route("**/api/agents/sessions", route => route.fulfill({ json: [...clients.values()] }));
-  await page.route("**/api/agents/connect", route => {
-    const request = route.request().postDataJSON() as ConnectAgent;
-    expect(request.project_root).toBe(project);
-    expect(route.request().headers()["x-rho-studio-window"]).toBe(request.window.window_id);
-    expect(request.window.incarnation).toBeTruthy();
-    connections.push(request);
-    const client: AgentClientSession = {
-      id: `fixture-${request.provider}`, provider: request.provider, native_session_id: `native-${request.provider}`,
-      project_root: project, window: request.window, model: request.model, effort: request.effort, state: "ready",
-      messages: [], activity: [], decisions: [], error: null, truncated: false, elapsed_ms: null, last_request_id: null,
-    };
-    clients.set(client.id, client);
-    return route.fulfill({ json: client });
-  });
-  await page.route("**/api/agents/action", route => {
-    const request = route.request().postDataJSON() as AgentClientAction;
-    expect(request.project_root).toBe(project);
-    expect(route.request().headers()["x-rho-studio-window"]).toBe(request.window.window_id);
-    const client = clients.get(request.session_id)!;
-    expect(client.window).toEqual(request.window);
-    actions.push(request);
-    switch (request.action.kind) {
-      case "test":
-        client.last_request_id = request.action.request_id;
-        client.state = "running";
-        client.messages = [{ role: "user", text: "Reply with exactly ok. Do not call tools or read files." }];
-        client.activity = ["Waiting for the native model"];
-        break;
-      case "prompt":
-        client.last_request_id = request.action.request_id;
-        client.state = "waiting_for_permission";
-        client.messages.push({ role: "user", text: request.action.text });
-        client.messages.push({ role: "assistant", text: "I will read the current workspace overview." });
-        client.decisions = [{ id: 42, title: "mcp__rho__rho_host_overview_v1", details: "Read this workspace overview", options: [{ id: "approve_once", label: "Allow once" }, { id: "reject_once", label: "Decline" }] }];
-        break;
-      case "decision":
-        expect(request.action).toEqual({ kind: "decision", id: 42, option: "approve_once" });
-        client.decisions = []; client.state = "running"; client.activity = ["Reading the current workspace"];
-        break;
-      case "disconnect": client.state = "disconnected"; break;
-      default: throw new Error(`Unexpected native action ${request.action.kind}`);
-    }
-    return route.fulfill({ json: client });
-  });
-  await page.goto(url);
-  await expect(page.locator(".console-status > span").first()).toHaveText("Ready");
-  const checkpoint = (await queryNative("operation.events_checkpoint")).data.sequence;
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+test("Native Agent settings use separate diagnostics and never expose daily chat", async ({ page }) => {
+  const diagnostics: any[] = [], installations: SetupAgent[] = [];
+  let installed = false;
+  await page.route("**/api/agents/discover", route => { const request = route.request().postDataJSON(); return route.fulfill({ json: nativeAgentCatalog(request, request.provider === "deepseek" && !installed) }); });
+  await page.route("**/api/agents/setup", route => { installations.push(route.request().postDataJSON()); installed = true; return route.fulfill({ json: nativeAgentCatalog({ ...installations.at(-1)!, model: null }) }); });
+  await page.route("**/api/agents/test", route => { const request = route.request().postDataJSON(); diagnostics.push(request); return route.fulfill({ json: { request_id: request.request_id, provider: request.provider, model: request.model, state: "succeeded", elapsed_ms: 12, response: "ok", error: null } }); });
+  await page.goto(url); await page.getByRole("button", { name: "Agents", exact: true }).click(); await page.getByRole("button", { name: "Agent Settings", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Settings", exact: true });
-  const codex = settings.getByRole("article", { name: "Codex connection", exact: true });
-  const kimi = settings.getByRole("article", { name: "Kimi CLI connection", exact: true });
-  const deepseek = settings.getByRole("article", { name: "DeepSeek Harness connection", exact: true });
+  const codex = settings.getByRole("article", { name: "Codex connection", exact: true }), kimi = settings.getByRole("article", { name: "Kimi Code connection", exact: true }), deepseek = settings.getByRole("article", { name: "DeepSeek Harness connection", exact: true });
   await expect(codex.getByRole("combobox", { name: "Codex model", exact: true })).toHaveValue("native-balanced");
-  await expect(kimi.getByRole("combobox", { name: "Kimi CLI model", exact: true })).toHaveValue("configured/flash");
-  await expect(kimi.getByRole("combobox", { name: /reasoning effort/ })).toHaveCount(0);
-  await expect(deepseek.getByRole("button", { name: "Install connection component", exact: true })).toBeEnabled();
-  await expect(deepseek.getByText("Adds an isolated DeepSeek ACP runtime for Rho. Keeps your existing dsh installation and settings.", { exact: true })).toBeVisible();
-  expect(installations).toEqual([]);
-  await expect(deepseek.getByRole("button", { name: "Test", exact: true })).toBeDisabled();
-  await deepseek.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "../target/studio-browser/agents-native-deepseek-setup.png" });
-  await page.setViewportSize({ width: 600, height: 760 });
-  await deepseek.scrollIntoViewIfNeeded();
-  expect(await settings.locator(".settings-main").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  await page.screenshot({ path: "../target/studio-browser/agents-native-deepseek-setup-compact.png" });
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await deepseek.getByRole("button", { name: "Install connection component", exact: true }).click();
-  await expect(deepseek.getByRole("button", { name: "Install connection component", exact: true })).toHaveCount(0);
-  expect(installations).toHaveLength(1);
-  await expect(deepseek.getByRole("combobox", { name: "DeepSeek Harness model", exact: true })).toHaveValue(deepseekChatModel);
-  await expect(deepseek.getByRole("combobox", { name: /reasoning effort/ })).toHaveCount(0);
-  await expect(deepseek.locator("option:checked")).toHaveText("DeepSeek Chat");
-  await expect(codex.getByText("From your CLI", { exact: true })).toBeVisible();
-  await expect(kimi.getByText("Moonshot · Local CLI · 0.41.0", { exact: true })).toBeVisible();
-  await expect(deepseek.getByText("DeepSeek · Local CLI · 0.1.0", { exact: true })).toBeVisible();
-  await expect(codex.getByRole("button", { name: "Connect Codex", exact: true })).toBeEnabled();
-  await expect(kimi.getByRole("button", { name: "Connect Kimi CLI", exact: true })).toBeEnabled();
-  await expect(deepseek.getByRole("button", { name: "Connect DeepSeek Harness", exact: true })).toBeEnabled();
-  await expect(settings.getByRole("button", { name: /Copy/ })).toHaveCount(0);
-  expect(connections).toHaveLength(0); expect(actions).toHaveLength(0);
-  await page.screenshot({ path: "../target/studio-browser/agents-native-models-normal.png" });
-  await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.screenshot({ path: "../target/studio-browser/agents-native-models-wide.png" });
-  await page.setViewportSize({ width: 600, height: 760 });
-  expect(await settings.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  expect(await settings.locator(".settings-main").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  await page.screenshot({ path: "../target/studio-browser/agents-native-models-compact.png" });
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await codex.getByRole("combobox", { name: "Codex model", exact: true }).selectOption("native-detailed");
-  await expect(codex.getByRole("combobox", { name: "Codex reasoning effort", exact: true })).toHaveValue("medium");
-  await codex.getByRole("combobox", { name: "Codex reasoning effort", exact: true }).selectOption("high");
-  await codex.getByRole("button", { name: "Test", exact: true }).click();
-  await expect(codex.getByRole("status")).toHaveText("Agent working");
-  expect(connections).toHaveLength(1);
-  expect(connections[0]).toMatchObject({ provider: "codex", model: "native-detailed", effort: "high", project_root: project });
-  expect(actions.map(r => r.action.kind)).toEqual(["test"]);
-  const codexClient = clients.get("fixture-codex")!;
-  codexClient.messages.push({ role: "assistant", text: "ok" }); codexClient.state = "ready"; codexClient.elapsed_ms = 1300;
-  await expect(codex.getByRole("status")).toHaveText("Session ready");
-  await expect(codex.locator(".native-message.assistant pre")).toHaveText("ok");
-  await expect(codex.getByText("Responded in 1.3s", { exact: true })).toBeVisible();
-  await kimi.getByRole("button", { name: "Connect Kimi CLI", exact: true }).click();
-  await expect(kimi.getByRole("status")).toHaveText("Session ready");
-  await kimi.getByRole("textbox", { name: "Ask about this workspace" }).fill("Read the current workspace overview.");
-  await kimi.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(kimi.getByRole("status")).toHaveText("Your Agent is waiting for permission");
-  await expect(kimi.getByRole("textbox", { name: "Ask about this workspace" })).toHaveValue("");
-  await expect(kimi.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
-  await expect(kimi.getByRole("button", { name: "Allow once", exact: true })).toBeVisible();
-  await expect(kimi.getByRole("button", { name: "Decline", exact: true })).toBeVisible();
-  await kimi.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "../target/studio-browser/agents-native-permission.png" });
-  await kimi.getByRole("button", { name: "Allow once", exact: true }).click();
-  await expect(kimi.getByRole("status")).toHaveText("Agent working");
-  const kimiClient = clients.get("fixture-kimi")!;
-  kimiClient.messages.push({ role: "assistant", text: "Workspace ready · 中文项目" }); kimiClient.state = "ready"; kimiClient.elapsed_ms = 2200;
-  await expect(kimi.getByRole("status")).toHaveText("Session ready");
-  await expect(kimi.locator(".native-message.assistant pre").last()).toHaveText("Workspace ready · 中文项目");
-  await page.screenshot({ path: "../target/studio-browser/agents-native-response.png" });
-  kimiClient.state = "uncertain"; kimiClient.error = "The native Agent did not confirm completion.";
-  await expect(kimi.getByRole("status")).toHaveText("Outcome not confirmed");
-  await expect(kimi.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
-  await expect(kimi.getByRole("button", { name: "Disconnect", exact: true })).toBeEnabled();
-  await kimi.getByRole("button", { name: "Disconnect", exact: true }).click();
-  await expect(kimi.getByRole("status")).toHaveText("Agent disconnected");
-  await expect(kimi.getByRole("alert")).toContainText("The native Agent did not confirm completion.");
-  await expect(kimi.locator(".native-message.assistant pre").last()).toHaveText("Workspace ready · 中文项目");
-  await expect(kimi.getByRole("textbox", { name: "Ask about this workspace" })).toBeDisabled();
-  await expect(kimi.getByRole("button", { name: "Connect Kimi CLI", exact: true })).toBeEnabled();
-  await kimi.getByText("Session details", { exact: true }).click();
-  await expect(kimi.getByText("native-kimi", { exact: true })).toBeVisible();
-  await deepseek.getByRole("combobox", { name: "DeepSeek Harness model", exact: true }).selectOption(deepseekReasonerModel);
-  await expect(deepseek.getByRole("combobox", { name: "DeepSeek Harness model", exact: true })).toHaveValue(deepseekReasonerModel);
-  await deepseek.getByRole("button", { name: "Test", exact: true }).click();
-  await expect(deepseek.getByRole("status")).toHaveText("Agent working");
-  expect(connections.at(-1)).toMatchObject({ provider: "deepseek", model: deepseekReasonerModel, effort: null, project_root: project });
-  const deepseekClient = clients.get("fixture-deepseek")!;
-  deepseekClient.messages.push({ role: "assistant", text: "ok" }); deepseekClient.state = "ready"; deepseekClient.elapsed_ms = 1100;
-  await expect(deepseek.getByRole("status")).toHaveText("Session ready");
-  await expect(deepseek.locator(".native-message.assistant small")).toHaveText("DeepSeek Harness");
-  await expect(deepseek.locator(".native-message.assistant pre")).toHaveText("ok");
-  await deepseek.getByRole("textbox", { name: "Ask about this workspace" }).fill("Read the current workspace overview.");
-  await deepseek.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(deepseek.getByRole("status")).toHaveText("Your Agent is waiting for permission");
-  await deepseek.getByRole("button", { name: "Allow once", exact: true }).click();
-  await expect(deepseek.getByRole("status")).toHaveText("Agent working");
-  deepseekClient.messages.push({ role: "assistant", text: "Workspace ready · 中文项目" }); deepseekClient.state = "ready"; deepseekClient.elapsed_ms = 1900;
-  await expect(deepseek.getByRole("status")).toHaveText("Session ready");
-  await expect(deepseek.locator(".native-message.assistant pre").last()).toHaveText("Workspace ready · 中文项目");
-  await deepseek.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "../target/studio-browser/agents-native-deepseek-response.png" });
-  await page.setViewportSize({ width: 600, height: 760 });
-  expect(await settings.locator(".settings-main").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  await deepseek.locator(".native-message.assistant pre").last().scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "../target/studio-browser/agents-native-deepseek-compact.png" });
-  await deepseek.getByRole("button", { name: "Disconnect", exact: true }).click();
-  await expect(deepseek.getByRole("status")).toHaveText("Agent disconnected");
-  const windowId = await page.evaluate(() => sessionStorage.getItem("rho-window-id"));
-  expect(connections.every(request => request.window.window_id === windowId)).toBe(true);
-  expect(actions.map(request => request.action.kind)).toEqual(["test", "prompt", "decision", "disconnect", "test", "prompt", "decision", "disconnect"]);
-  expect(JSON.stringify({ connections, actions })).not.toContain("Bearer");
-  expect((await queryNative("operation.events_checkpoint")).data.sequence).toBe(checkpoint);
-  expect(errors).toEqual([]);
+  await expect(kimi.getByRole("combobox", { name: "Kimi Code model", exact: true })).toHaveValue("configured/flash");
+  await expect(deepseek.getByRole("button", { name: "Install connection component", exact: true })).toBeEnabled(); expect(installations).toEqual([]); expect(diagnostics).toEqual([]);
+  await deepseek.getByRole("button", { name: "Install connection component", exact: true }).click(); await expect(deepseek.getByRole("combobox", { name: "DeepSeek Harness model", exact: true })).toHaveValue(deepseekChatModel);
+  await codex.getByRole("combobox", { name: "Codex model", exact: true }).selectOption("native-detailed"); await expect(codex.getByRole("combobox", { name: "Codex reasoning effort", exact: true })).toHaveValue("medium");
+  await codex.getByRole("button", { name: "Test", exact: true }).click(); await expect(codex.getByRole("status")).toContainText("Model responded");
+  expect(diagnostics[0]).toMatchObject({ provider: "codex", model: "native-detailed", observe_only: false }); expect(diagnostics[0]).not.toHaveProperty("session_id");
+  await expect(settings.getByRole("textbox", { name: "Ask about this workspace" })).toHaveCount(0); await expect(settings.getByRole("button", { name: /^Connect (Codex|Kimi Code|DeepSeek Harness)$/ })).toHaveCount(0);
+  await page.screenshot({ path: "../target/studio-browser/agents-diagnostic-settings.png" });
 });

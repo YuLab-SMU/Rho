@@ -2,6 +2,10 @@
 //! Deterministic clients of external Agent protocols. No planning, tool-selection
 //! loop, scientific execution or conversation database is implemented here.
 mod deepseek;
+mod observation;
+pub use observation::{NativeEvent, NativeEventPage};
+mod task_adapter;
+pub use task_adapter::*;
 #[cfg(all(test, unix))]
 mod protocol_tests;
 mod rpc;
@@ -197,6 +201,7 @@ pub async fn discover_agent(
         discovery_ms: 0,
         error: None,
         setup_required: false,
+        capabilities: Default::default(),
     };
     let Some(path) = executable(provider) else {
         result.error =
@@ -229,6 +234,8 @@ pub async fn discover_agent(
                 .as_str()
                 .map(str::to_owned);
             result.models = codex_models(&rpc).await?;
+            result.capabilities = task_adapter::capabilities(provider, &init, &Value::Null);
+            result.capabilities.models = result.models.clone();
             if result.selected_model.is_none() {
                 result.selected_model = result.models.first().map(|m| m.id.clone());
             }
@@ -262,6 +269,7 @@ pub async fn discover_agent(
             }
             (result.models, result.selected_model, result.selected_effort) =
                 acp_models(&data, provider);
+            result.capabilities = task_adapter::capabilities(provider, &init, &data);
             rpc.call("session/close", json!({"sessionId":session}), 5)
                 .await?;
         }

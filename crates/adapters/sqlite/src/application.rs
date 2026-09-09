@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use std::{path::Path, sync::Mutex, time::Duration};
 
 /// Local application state, never part of the scientific journal or outbox.
-pub struct ApplicationStore(Mutex<Connection>);
+pub struct ApplicationStore(pub(crate) Mutex<Connection>);
 
 impl ApplicationStore {
     pub fn open(path: &Path) -> Result<Self, String> {
@@ -46,6 +46,7 @@ impl ApplicationStore {
                 PRIMARY KEY(project,principal,receipt_key));",
             )
             .map_err(err)?;
+        crate::agent_tasks::initialize(&connection)?;
         Ok(Self(Mutex::new(connection)))
     }
 

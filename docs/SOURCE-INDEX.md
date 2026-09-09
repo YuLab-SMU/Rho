@@ -139,6 +139,7 @@ Checks:
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
 - `system.agent-harness`: `["node","scripts/test-agent-interface.mjs","--self-test"]`
+- `system.agent-tasks`: `["node","scripts/test-agent-task-recovery.mjs"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`
 - `system.client`: `["node","scripts/client.mjs","check"]`
 - `system.environment`: `["node","scripts/test-environment.mjs"]`

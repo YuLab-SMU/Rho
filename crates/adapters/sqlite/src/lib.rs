@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod agent_tasks;
 mod application;
 pub use application::ApplicationStore;
 

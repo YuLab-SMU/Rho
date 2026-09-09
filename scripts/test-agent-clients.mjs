@@ -27,7 +27,7 @@ Options:
 
 Uses installed, authenticated CLIs and their native model lists. Codex uses its
 configured default model. No model service is called without --real-model.
-The test creates a disposable project and Host, checks exact 'ok' replies and
+The test creates a disposable project and Host, checks two concurrent same-model tasks, exact replies, native continuation and
 request deduplication, and verifies Kimi/DeepSeek read Rho through native MCP.
 It never approves other tools, retries an uncertain prompt, or edits user config.
 CLI-native context still follows your existing CLI configuration. Build Rho first.
@@ -141,47 +141,48 @@ async function run(options) {
   };
   const bridge = params => api("/api/application/bridge", { project_root: project,
     frame: { id: String(++sequence), request: { method: "application_bridge", params } } });
-  const action = (client, value, cleanup = false) => api("/api/agents/action", {
-    project_root: project, window, session_id: client.id, action: value,
+  const query = query => api("/api/agents/tasks/query", { project_root: project, query });
+  const control = d => ({ task_id: d.summary.task.task_id, generation: d.summary.attachment.generation });
+  const command = (command, request_id = randomUUID(), cleanup = false) => api("/api/agents/tasks/command", {
+    project_root: project, window, request_id, command,
   }, cleanup ? 5000 : 15_000, cleanup);
-  const reply = client => {
-    const lastUser = client.messages.findLastIndex(message => message.role === "user");
-    return client.messages.slice(lastUser + 1).filter(message => message.role === "assistant").at(-1)?.text.trim() || "";
-  };
-  const settled = async (client, requestId, { overview = false } = {}) => {
+  const detail = async id => (await query({ kind: "get", task_id: id })).detail;
+  const events = async id => (await query({ kind: "events", task_id: id, after: 0, before: null, limit: 100 })).page.events;
+  const reply = async (id, requestId) => (await events(id)).filter(e => e.request_id === requestId && e.role === "assistant").at(-1)?.text.trim() || "";
+  const settled = async (id, requestId, { overview = false } = {}) => {
     const deadline = Date.now() + (overview ? 120_000 : 90_000);
     const decisions = new Set();
-    let lastReady, readySince = 0;
     while (Date.now() < deadline) {
       await pause(200);
-      client = await action(client, { kind: "read" });
-      assert.equal(client.last_request_id, requestId, "Native session lost the submitted request identity");
-      for (const decision of client.decisions) {
-        const permissionOption = client.provider === "deepseek" ? "allow-once" : "approve_once";
-        const overviewTool = client.provider === "deepseek"
+      const d = await detail(id);
+      for (const decision of d.summary.attachment.decisions) {
+        const provider = d.summary.task.provider;
+        const option = provider === "deepseek" ? "allow-once" : "approve_once";
+        const tool = provider === "deepseek"
           ? `mcp__rho__rho_host_overview_v1_${createHash("sha256").update("rho\0rho.host.overview.v1").digest("hex").slice(0, 12)}`
           : "mcp__rho__rho_host_overview_v1";
-        assert.ok(overview && options.allowOverview
-          && decision.title === overviewTool
-          && decision.options.some(option => option.id === permissionOption),
-        `Unexpected native permission request: ${decision.title}; no approval was sent`);
+        assert.ok(overview && options.allowOverview && decision.title === tool && decision.options.some(o => o.id === option),
+          `Unexpected native permission: ${decision.title}; no approval sent`);
         if (!decisions.has(decision.id)) {
           decisions.add(decision.id);
-          await action(client, { kind: "decision", id: decision.id, option: permissionOption });
-          report({ provider: client.provider, phase: "approved-once", tool: decision.title });
+          await command({ kind: "decision", control: control(d), decision_id: decision.id, option_id: option });
         }
       }
-      assert.ok(["running", "waiting_for_permission", "ready"].includes(client.state),
-        `Native task ${client.state}: ${safe(client.error || "No successful completion")}`);
-      // Native final deltas and the completion notification may arrive separately.
-      // Observe a stable final projection; never resubmit to obtain a missing answer.
-      if (client.state === "ready") {
-        const snapshot = JSON.stringify([client.messages, client.elapsed_ms, client.error]);
-        if (snapshot !== lastReady) { lastReady = snapshot; readySince = Date.now(); }
-        else if (Date.now() - readySince >= 600) return client;
-      } else { lastReady = undefined; readySince = 0; }
+      const { receipt } = await query({ kind: "receipt", request_id: requestId });
+      if (receipt && !["prepared", "submitted"].includes(receipt.status)) {
+        assert.equal(receipt.status, "succeeded", safe(receipt.error));
+        return detail(id);
+      }
     }
-    throw new Error(`Native ${overview ? "MCP task" : "model test"} timed out; request was not retried.`);
+    throw new Error("Native request timed out; the original request was not replayed.");
+  };
+  const submit = async (d, text, extra = {}) => {
+    d = (await command({ kind: "save_draft", control: control(d), version: d.draft.version,
+      content: { text, assets: d.draft.content.assets, context: [], ...extra } })).detail;
+    const requestId = randomUUID(), request = { kind: "send", control: control(d), draft_version: d.draft.version };
+    await command(request, requestId);
+    await command(request, requestId); // Simulated lost ACK: exact identity, no second native turn.
+    return { id: d.summary.task.task_id, requestId };
   };
 
   let failure;
@@ -228,45 +229,46 @@ async function run(options) {
       const effort = selected.efforts.includes(catalog.selected_effort) ? catalog.selected_effort : selected.default_effort;
       report({ provider, phase: "models", count: catalog.models.length, model: selected.id, ms: catalog.discovery_ms });
 
-      const started = Date.now();
-      let client = await api("/api/agents/connect", { request_id: randomUUID(), project_root: project,
-        window, provider, model: selected.id, effort }, 60_000);
-      clients.add(client.id);
-      assert.equal(client.state, "ready", safe(client.error));
-      report({ provider, phase: "connected", ms: Date.now() - started });
-      const requestId = randomUUID();
-      const test = { kind: "test", request_id: requestId };
-      await action(client, test);
-      client = await settled(client, requestId);
-      assert.equal(reply(client), "ok", `${provider} did not return the requested exact 'ok' reply`);
-      report({ provider, phase: "model-test", model: client.model, ms: client.elapsed_ms, reply: "ok" });
-
-      const projection = value => ({ messages: value.messages, elapsed_ms: value.elapsed_ms,
-        state: value.state, last_request_id: value.last_request_id });
-      assert.deepEqual(projection(await action(client, test)), projection(client), "Duplicate request changed the completed task");
-      await pause(800);
-      assert.deepEqual(projection(await action(client, { kind: "read" })), projection(client), "Duplicate request replayed a native task");
-      report({ provider, phase: "request-deduplication", passed: true });
-
-      if (provider === "kimi" || provider === "deepseek") {
-        const beforeOverview = await api("/api/agent-connection");
-        const served = new Map(beforeOverview.sessions.map(session => [session.connection_id, session.overview_served_at_ms]));
-        const overviewId = randomUUID();
-        await action(client, { kind: "prompt", request_id: overviewId,
-          text: "Use the configured rho MCP tools to read host.overview. Return only the final directory name of its project_root, as plain text. Do not use shell, edit files, configure anything, or run R." });
-        client = await settled(client, overviewId, { overview: true });
-        const observed = await api("/api/agent-connection");
-        const reads = observed.sessions.filter(session => session.overview_served_at_ms
-          && session.overview_served_at_ms !== served.get(session.connection_id));
-        assert.ok(reads.length > 0, `${provider} did not perform a new native Rho MCP overview read`);
-        // This is a transport smoke check. The observed native MCP read proves
-        // the connection; a short name avoids grading a long random temp path.
-        assert.equal(reply(client), path.basename(project), `${provider} did not return the temporary project directory name`);
-        report({ provider, phase: "native-mcp-overview", actualOverviewReads: reads.length,
-          project_name_matches: true, ms: client.elapsed_ms });
+      const tasks = [];
+      for (const word of ["alpha", "beta"]) {
+        const d = (await command({ kind: "create", provider, model: selected.id, effort })).detail;
+        assert.equal(d.summary.task.native_session_id, null);
+        clients.add(d.summary.task.task_id);
+        tasks.push({ detail: d, word });
       }
-      await action(client, { kind: "disconnect" });
-      clients.delete(client.id);
+      const submitted = await Promise.all(tasks.map(async t => ({ ...await submit(t.detail, `Reply with exactly ${t.word}. Do not use tools.`), word: t.word })));
+      await Promise.all(submitted.map(t => settled(t.id, t.requestId)));
+      const nativeIds = [];
+      for (const task of submitted) {
+        let d = await detail(task.id);
+        nativeIds.push(d.summary.task.native_session_id);
+        assert.equal(await reply(task.id, task.requestId), task.word);
+        const disconnected = await command({ kind: "disconnect", control: control(d) });
+        await settled(task.id, disconnected.receipt.request_id);
+        d = await detail(task.id);
+        const resumed = await command({ kind: "resume", control: control(d) });
+        d = await settled(task.id, resumed.receipt.request_id);
+        assert.equal(d.summary.task.native_session_id, nativeIds.at(-1));
+        assert.equal(d.summary.attachment.state, "ready");
+        report({ provider, phase: "parallel-task-and-native-resume", reply: task.word, sameNativeId: true });
+      }
+      assert.notEqual(nativeIds[0], nativeIds[1]);
+      if (options.allowOverview) {
+        const beforeOverview = await api("/api/agent-connection");
+        const served = new Map(beforeOverview.sessions.map(s => [s.connection_id, s.overview_served_at_ms]));
+        const task = await submit(await detail(submitted[0].id), "Use the configured rho MCP tools to read host.overview. Return only the final directory name of its project_root, as plain text. Do not use shell, edit files, configure anything, or run R.");
+        await settled(task.id, task.requestId, { overview: true });
+        const observed = await api("/api/agent-connection");
+        const reads = observed.sessions.filter(s => s.overview_served_at_ms && s.overview_served_at_ms !== served.get(s.connection_id));
+        assert.ok(reads.length > 0, "No new native MCP overview read");
+        assert.equal(await reply(task.id, task.requestId), path.basename(project));
+        report({ provider, phase: "resumed-native-mcp-overview", actualOverviewReads: reads.length, projectMatches: true });
+      }
+      for (const t of submitted) {
+        const d = await detail(t.id), r = await command({ kind: "disconnect", control: control(d) });
+        await settled(t.id, r.receipt.request_id); clients.delete(t.id);
+      }
+
     }
   } catch (error) {
     failure = error;
@@ -274,7 +276,7 @@ async function run(options) {
     clearInterval(heartbeat);
     clearTimeout(maximum);
     for (const id of clients) {
-      try { await action({ id }, { kind: "disconnect" }, true); }
+      try { const d = await detail(id); await command({ kind: "disconnect", control: control(d) }, randomUUID(), true); }
       catch { /* The owned Host's shutdown also closes its Agent clients. */ }
     }
     if (host.exitCode === null && host.signalCode === null && !hostError) {

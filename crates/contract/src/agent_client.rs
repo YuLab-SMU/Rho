@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentProvider {
     Codex,
@@ -28,6 +28,7 @@ pub struct LocalAgent {
     pub discovery_ms: u64,
     pub error: Option<String>,
     pub setup_required: bool,
+    pub capabilities: crate::AgentNativeCapabilities,
 }
 #[derive(Debug, Deserialize, TS)]
 #[serde(deny_unknown_fields)]

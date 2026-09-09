@@ -21,20 +21,24 @@ in [Status](STATUS.md); protocol descriptions here are not acceptance results.
 Agent integration is a thin boundary. Rho validates mechanical constraints and
 responds to requested operations; it does not infer a new goal, construct an Agent
 plan, run a competing behavior loop or introduce a second approval decision.
-Conversation content is not an authority source or a parallel Rho database.
+Conversation content is not a scientific authority source.
 Scientific requests use MCP. The optional local CLI client uses Codex app-server
 or Kimi/DeepSeek Harness ACP to discover native models, open a native session, submit a user turn
 and relay native output and permission choices. It supplies the current Host's
 MCP connection for that session without editing the CLI's user configuration.
 The CLI retains authentication, model execution, conversation history and Agent
-behavior. Rho retains only a bounded, ephemeral view of the native session;
-opening settings does not submit a model task. Scientific capabilities remain discoverable through
+behavior. ApplicationStore retains stable task identities, per-task CAS drafts,
+submission receipts and a bounded observation cache. The Host task service is its
+single writer. These records are separate from the scientific Operation journal;
+opening the panel only reads task metadata. Settings Test creates an independent
+diagnostic session, and only an explicit Test sends its minimal prompt. Scientific capabilities remain discoverable through
 the shared Host, with no Agent-specific handler bypass.
 
 Native client actions bind the project and synchronized Studio window. Connection
 and turn request identities survive lost HTTP acknowledgements; uncertainty does
 not authorize replay. Native permission requests are shown to the user and their
-selected native response is forwarded unchanged. Stopping or disconnecting the
+selected native response is forwarded unchanged. ACP options preserve their order
+up to a bounded 64-choice list; invalid/oversized lists fail explicitly. Stopping or disconnecting the
 Agent does not prove that already accepted scientific work stopped or rolled back.
 The local MCP credential is passed privately to the owned CLI process and excluded
 from browser session snapshots and diagnostic output.
@@ -47,6 +51,59 @@ native credential provider may convert the old format on startup. Only the copy
 may change; it is removed when the owned client closes. Native session, storage
 and attachment providers point at separate persistent component data. Rho does
 not import other products' profiles or implement a credential migration itself.
+
+## Native Agent tasks and continuation
+
+`AgentTask` binds project/principal, one runtime and one Rho-created native session.
+`AgentAttachment` is a short-lived connection with a controller window and generation.
+`AgentTaskDraft`, `AgentCommandReceipt` and `AgentTaskEvent` live in additive typed
+ApplicationStore tables. No abandoned store or external CLI session is imported.
+Native session IDs enter through the adapter, never arbitrary browser input.
+`/api/agents/tasks/query` performs bounded observations; `/api/agents/tasks/command`
+admits a task/window/generation-bound action. `/api/agents/test` is a separate
+idempotent diagnostic path. Discovery and explicit setup keep their existing routes.
+The old ephemeral connect/action/sessions HTTP routes are retired.
+
+Persist a request and input digest before starting native creation or submission.
+The same request identity/content returns its receipt; altered reuse is rejected.
+An unconfirmed outcome retains the submitted draft separately from subsequent edits.
+Receipt queries, rather than new submissions, reconcile missing acknowledgements.
+Only the operating window may edit or act. Idle takeover uses CAS; stopping takeover
+first freezes submissions and verifies native quiet. A detached or uncertain process
+must pass PID/start/executable/ownership-marker checks before any replacement writer.
+Disconnect is subject to that same proof. A resume cannot simply relabel an uncertain
+live transport as ready. Old-generation/session/turn/item events are fenced.
+
+Every active task owns a native process; at most eight connections share a Host.
+Host restart leaves attachments disconnected until explicit Resume. Codex uses the
+exact thread ID, verifies cwd/ID and native idle, and reads native turn/item pages.
+Kimi uses session/load with new explicit MCP settings; its native replay replaces
+the observed display generation and is labeled context history. Since Kimi 0.41
+ignores cwd on load, bounded exact-ID metadata (including an exact-root workspace
+alias) verifies containment first. DeepSeek uses session/resume; after interruption,
+resume → close → resume clears its persisted Inbox before new input. No native
+resume sends a prompt, replays a permission or changes an old scientific receipt.
+New input carries fresh project/window/R-session context and unresolved-turn notices.
+Agent continuation never restores R memory.
+
+Commit terminal states/receipts immediately; coalesce other observations at 100 ms.
+Only durable cursors are exposed. Cache at most 500 events / 1 MiB text per task and
+64 MiB per project, preferring eviction of inactive older observations. Task indexes,
+drafts, receipts and native histories are not evicted. Binary attachments are stored
+separately (8 MiB each, 32 MiB/64 attachments per task); they are not copied into the
+text cache. Studio reads summaries every second and visible history at 250 ms.
+Window-local selection, filters and reading positions use ApplicationPersistence,
+not layout configuration. Draft conflicts retain a local copy.
+
+Composer context sources use the existing read-only Host query owners. Files and
+editor selections retain hashes/captures; R objects retain native session/object
+references; plots retain authoritative MediaReference identities. Preview and send
+both validate scope. Plugin sources register search/preview/inclusion contracts
+through `AgentContextProvider`; no illustrative analysis plugin is installed.
+Native images and UTF-8 files are explicit inputs, not inferred output provenance.
+The native process receives a dedicated MCP-only bearer credential, which cannot
+access browser task-control endpoints. User credentials/global MCP settings stay
+with their native providers.
 
 ## Request paths
 

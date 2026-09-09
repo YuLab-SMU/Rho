@@ -192,27 +192,39 @@ are not delivery acknowledgements. A quiet open session can outlive its network
 connection, and closing it does not cancel accepted work. New project/R Hosts
 start fresh observations.
 
-Open **Agents** in the Studio app bar or **Session → Agent Settings…**. The settings
-page keeps the scientific workspace mounted. Installed Codex, Kimi and DeepSeek Harness CLIs expose
-their own model list and supported reasoning choices. Select a model and click
-**Connect**, or **Test** to connect and request a minimal `ok` response. Then enter
-a task in the connected card. The current project, window and Rho MCP connection
-are supplied to the native session; no configuration or prompt copying is needed.
+Open **Agents** in the Studio app bar, Panels menu or command palette. The singleton
+panel opens on the right, or joins the inspection group in a narrower window.
+**New task** selects a runtime; model and reasoning controls stay with the message
+input. Its first Send creates the native session. Each task has its own draft,
+model choice and connection. A running task accepts a next draft, with no send queue.
+Closing, moving or refreshing the panel does not stop the Agent.
 
-The CLI must already be installed and authenticated. Discovery reads native
-metadata without calling a model; a listed model can still be unavailable because
-of that provider's account, quota or network state. Errors are displayed in the
-card. **Rescan** refreshes local availability. Native tool permission requests
-remain native decisions and appear as buttons in the conversation. **Stop Agent**
-requests interruption; **Disconnect** closes the owned native client. Neither
-implies cancellation or rollback of work already accepted by Rho.
+Permission modes reflect the chosen Agent's actual catalog. Action-specific requests
+appear immediately above the input; their native options stay in order. Top-bar badges
+remain while the panel is closed. **+**, attachments and **@** add images, UTF-8 files
+or previewed component information. Choose the inclusion scope before adding it;
+changed or expired sources require another preview. Binary limits are 8 MiB per
+attachment and 32 MiB/64 attachments per task. Unsupported inputs get an explicit error.
 
-Codex uses app-server; Kimi and DeepSeek Harness use ACP. Settings and conversation history remain
-with the native CLI. Rho keeps a bounded live display and does not write the
-CLI's user configuration. New turns require the current synchronized window.
-After an uncertain response, inspect the retained native session instead of
-resubmitting the same task. A lost connection acknowledgement reuses its original
-request identity.
+All project windows share tasks; only the controlling window edits or sends.
+Use **Take over** for an idle task. If its operating window is gone while work is
+running, **Stop Agent and take over** waits for confirmed native quiet. Unconfirmed
+stops preserve the previous owner and block another writing connection.
+
+Host restart leaves tasks disconnected. **Resume** restores the same native session
+explicitly, refreshes its Host MCP configuration and sends no prompt. Read prior
+uncertain receipts before issuing a fresh instruction. Draft and history survive;
+R memory does not. Codex provides native history pages; Kimi replays native context
+history with possible omissions; DeepSeek shows the bounded Rho observation cache.
+**Session details** identifies the native session and history source. A missing
+native session/capability never causes automatic creation of a replacement.
+
+The gear opens **Agent Settings** for CLI discovery, model catalogs, explicit setup,
+manual MCP details and independent **Test** diagnostics. Test never uses a task's
+analysis session or adds a task. CLIs must already be installed/authenticated.
+Opening the Agent panel performs no discovery, installation or model request.
+**Stop Agent** and **Disconnect** concern native work only; they do not establish
+cancellation or rollback of scientific operations already accepted by Rho.
 
 For an older DeepSeek launcher without ACP, choose **Install connection component**
 once. Rho installs pinned official `@deepseek-ai/dsh` and `dsh-acp-app` packages

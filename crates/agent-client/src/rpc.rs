@@ -21,6 +21,16 @@ use tokio::{
 use tokio_util::codec::{FramedRead, LinesCodec};
 
 type Reply = oneshot::Sender<Result<Value, String>>;
+pub(crate) struct CallTicket {
+    id: u64,
+    method: String,
+    receiver: oneshot::Receiver<Result<Value, String>>,
+}
+struct PendingReply {
+    sender: Reply,
+    method: String,
+    session: Option<String>,
+}
 type DecisionReplies = HashMap<u64, (Value, HashMap<String, Value>)>;
 const MAX_TEXT: usize = 256 * 1024;
 // MCP allows 8 MiB replies. A native protocol envelope may JSON-escape the
@@ -36,7 +46,7 @@ pub(crate) struct Rpc {
     provider: AgentProvider,
     writer: AsyncMutex<Option<ChildStdin>>,
     child: AsyncMutex<Option<Child>>,
-    replies: Arc<Mutex<HashMap<u64, Reply>>>,
+    replies: Arc<Mutex<HashMap<u64, PendingReply>>>,
     decisions: Arc<Mutex<DecisionReplies>>,
     tool_calls: Mutex<Vec<(String, String, String)>>,
     assistant_boundary: AtomicBool,
@@ -44,6 +54,10 @@ pub(crate) struct Rpc {
     next: AtomicU64,
     closed: AtomicBool,
     pub buffer: Arc<Mutex<Buffer>>,
+    pub observer: Mutex<crate::observation::Observer>,
+    pub capabilities: Mutex<rho_contract::AgentNativeCapabilities>,
+    pub changes: tokio::sync::Notify,
+    pub owner_marker: String,
     secret: String,
     owned_home: Option<PathBuf>,
 }
@@ -65,6 +79,53 @@ pub(crate) fn bounded(text: &str, limit: usize) -> String {
     }
     text[..end].to_owned()
 }
+// Codex's protocol defines these decisions. Amendments are shown only when the
+// actual callback supplied the exact amendment; its order and payload are kept.
+fn codex_approval_options(params: &Value) -> Vec<(String, (String, Value))> {
+    let mut options = vec![
+        (
+            "accept".into(),
+            ("Allow once".into(), json!({"decision":"accept"})),
+        ),
+        (
+            "acceptForSession".into(),
+            (
+                "Allow for this session".into(),
+                json!({"decision":"acceptForSession"}),
+            ),
+        ),
+    ];
+    if let Some(amendment) = params["proposedExecpolicyAmendment"].as_array()
+        && !amendment.is_empty()
+        && amendment.len() <= 64
+        && amendment.iter().all(Value::is_string)
+    {
+        options.push(("execpolicy".into(), (format!("Allow commands starting with {}", amendment.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" ")), json!({"decision":{"acceptWithExecpolicyAmendment":{"execpolicy_amendment":amendment}}}))));
+    }
+    for (i, rule) in params["proposedNetworkPolicyAmendments"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(8)
+        .enumerate()
+    {
+        if let (Some(action @ ("allow" | "deny")), Some(host)) =
+            (rule["action"].as_str(), rule["host"].as_str())
+        {
+            options.push((format!("network-{i}"), (format!("{} {host} for future requests", if action == "allow" {"Allow"} else {"Deny"}), json!({"decision":{"applyNetworkPolicyAmendment":{"network_policy_amendment":rule}}}))));
+        }
+    }
+    options.push((
+        "decline".into(),
+        ("Decline".into(), json!({"decision":"decline"})),
+    ));
+    options.push((
+        "cancel".into(),
+        ("Stop this turn".into(), json!({"decision":"cancel"})),
+    ));
+    options
+}
+
 impl Rpc {
     pub async fn spawn(
         program: &Path,
@@ -90,7 +151,9 @@ impl Rpc {
             });
             command
         };
+        let owner_marker = uuid::Uuid::new_v4().to_string();
         command
+            .env("RHO_AGENT_TASK_OWNER", &owner_marker)
             .current_dir(root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -133,6 +196,10 @@ impl Rpc {
             })),
             secret: secret.to_owned(),
             owned_home: launch.map(|launch| launch.owned_home),
+            observer: Mutex::new(crate::observation::Observer::default()),
+            capabilities: Mutex::new(rho_contract::AgentNativeCapabilities::default()),
+            changes: tokio::sync::Notify::new(),
+            owner_marker,
         });
         let weak = Arc::downgrade(&rpc);
         tokio::spawn(async move {
@@ -164,14 +231,25 @@ impl Rpc {
                         } else {
                             Ok(value["result"].clone())
                         };
-                        let _ = reply.send(result);
+                        if reply.method == "turn/start" {
+                            if let Ok(value) = &result {
+                                let mut observer = rpc.observer.lock().unwrap();
+                                if observer.session == reply.session && observer.active {
+                                    observer.turn = value["turn"]["id"].as_str().map(str::to_owned);
+                                }
+                            }
+                            rpc.changes.notify_waiters();
+                        } else if reply.method == "session/prompt" {
+                            rpc.observer.lock().unwrap().finish();
+                        }
+                        let _ = reply.sender.send(result);
                     }
                 }
             }
             if let Some(rpc) = weak.upgrade() {
                 rpc.transport_closed(error);
                 for (_, reply) in rpc.replies.lock().unwrap().drain() {
-                    let _ = reply.send(Err(error.into()));
+                    let _ = reply.sender.send(Err(error.into()));
                 }
                 rpc.close().await;
             }
@@ -193,7 +271,7 @@ impl Rpc {
             return Err("Agent is disconnected".into());
         }
         let mut bytes = serde_json::to_vec(&value).map_err(|_| "Cannot encode Agent request")?;
-        if bytes.len() > 1024 * 1024 {
+        if bytes.len() > 16 * 1024 * 1024 {
             return Err("Agent request is too large".into());
         }
         bytes.push(b'\n');
@@ -210,9 +288,24 @@ impl Rpc {
             .await
     }
     pub async fn call(&self, method: &str, params: Value, seconds: u64) -> Result<Value, String> {
+        let ticket = self.begin_call(method, params).await?;
+        self.finish_call(ticket, seconds).await
+    }
+    pub async fn begin_call(&self, method: &str, params: Value) -> Result<CallTicket, String> {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
-        self.replies.lock().unwrap().insert(id, tx);
+        let session = params["threadId"]
+            .as_str()
+            .or_else(|| params["sessionId"].as_str())
+            .map(str::to_owned);
+        self.replies.lock().unwrap().insert(
+            id,
+            PendingReply {
+                sender: tx,
+                method: method.into(),
+                session,
+            },
+        );
         if let Err(error) = self
             .send(json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}))
             .await
@@ -220,13 +313,21 @@ impl Rpc {
             self.replies.lock().unwrap().remove(&id);
             return Err(error);
         }
-        let result = tokio::time::timeout(Duration::from_secs(seconds), rx).await;
-        self.replies.lock().unwrap().remove(&id);
+        Ok(CallTicket {
+            id,
+            method: method.into(),
+            receiver: rx,
+        })
+    }
+    pub async fn finish_call(&self, ticket: CallTicket, seconds: u64) -> Result<Value, String> {
+        let result = tokio::time::timeout(Duration::from_secs(seconds), ticket.receiver).await;
+        self.replies.lock().unwrap().remove(&ticket.id);
         match result {
             Ok(Ok(value)) => value,
             Ok(Err(_)) => Err("Agent transport closed".into()),
             Err(_) => Err(format!(
-                "Agent {method} timed out; the native outcome may still be pending"
+                "Agent {} timed out; the native outcome may still be pending",
+                ticket.method
             )),
         }
     }
@@ -234,6 +335,7 @@ impl Rpc {
         self.closed.load(Ordering::Acquire)
     }
     fn transport_closed(&self, error: &str) {
+        self.observer.lock().unwrap().finish();
         self.closed.store(true, Ordering::Release);
         let mut b = self.buffer.lock().unwrap();
         if let Some(s) = &mut b.session
@@ -245,14 +347,18 @@ impl Rpc {
         }
         self.decisions.lock().unwrap().clear();
         self.tool_calls.lock().unwrap().clear();
+        self.changes.notify_waiters();
     }
     pub fn complete(&self, error: Option<String>, interrupted: bool) {
+        self.observer.lock().unwrap().finish();
         let mut b = self.buffer.lock().unwrap();
         let elapsed = b.started.take().map(|t| t.elapsed().as_millis() as u64);
         if let Some(s) = &mut b.session {
             s.state = if self.is_closed() {
                 "disconnected"
-            } else if error.as_ref().is_some_and(|e| e.contains("timed out")) {
+            } else if error.as_ref().is_some_and(|e| {
+                e.contains("timed out") || e.starts_with("Submission outcome is uncertain;")
+            }) {
                 "uncertain"
             } else if error.is_some() {
                 "failed"
@@ -269,10 +375,31 @@ impl Rpc {
             s.decisions.clear();
         }
         self.decisions.lock().unwrap().clear();
+        self.changes.notify_waiters();
+    }
+    pub async fn process_id(&self) -> Option<u32> {
+        self.child.lock().await.as_ref().and_then(|p| p.id())
     }
     fn notification(&self, value: Value) {
         let method = value["method"].as_str().unwrap_or("");
         let p = &value["params"];
+        if !self.observer.lock().unwrap().accepts(self.provider, p) {
+            return;
+        }
+        self.observer
+            .lock()
+            .unwrap()
+            .observe(self.provider, method, p, |s| self.scrub(s));
+        if method == "session/update" && p["update"]["sessionUpdate"] == "current_mode_update" {
+            if let Some(mode) = p["update"]["currentModeId"].as_str() {
+                let mut caps = self.capabilities.lock().unwrap();
+                if caps.modes.iter().any(|m| m.id == mode) {
+                    caps.current_mode = Some(mode.to_owned());
+                }
+            }
+            self.changes.notify_waiters();
+            return;
+        }
         if method == "session/update" && p["update"]["sessionUpdate"] == "config_option_update" {
             if let Some(id) = p["sessionId"].as_str() {
                 let options = &p["update"]["configOptions"];
@@ -280,6 +407,11 @@ impl Rpc {
                     let mut config = self.acp_config.lock().unwrap();
                     if config.len() < 4 || config.contains_key(id) {
                         config.insert(id.to_owned(), options.clone());
+                        let models =
+                            crate::acp_models(&json!({"configOptions":options}), self.provider).0;
+                        if !models.is_empty() {
+                            self.capabilities.lock().unwrap().models = models;
+                        }
                     }
                 }
             }
@@ -397,6 +529,15 @@ impl Rpc {
     async fn server_request(&self, value: Value) {
         let method = value["method"].as_str().unwrap_or("");
         let params = &value["params"];
+        let allowed = {
+            let observer = self.observer.lock().unwrap();
+            observer.accepts(self.provider, params)
+                && (observer.session.is_none() || observer.active)
+        };
+        if !allowed {
+            let _ = self.send(json!({"jsonrpc":"2.0","id":value["id"],"error":{"code":-32602,"message":"Stale native session or turn"}})).await;
+            return;
+        }
         let mut options = Vec::new();
         let title;
         let mut details = String::new();
@@ -420,7 +561,27 @@ impl Rpc {
                 .unwrap_or("Agent requests permission")
                 .to_owned();
             details = observed.map(|call| call.2).unwrap_or_default();
-            for option in params["options"].as_array().into_iter().flatten().take(8) {
+            let native_options = params["options"].as_array();
+            let valid = native_options.is_some_and(|options| {
+                !options.is_empty()
+                    && options.len() <= 64
+                    && options.iter().all(|o| {
+                        o["optionId"]
+                            .as_str()
+                            .is_some_and(|id| !id.is_empty() && id.len() <= 512)
+                    })
+                    && options
+                        .iter()
+                        .filter_map(|o| o["optionId"].as_str())
+                        .collect::<std::collections::HashSet<_>>()
+                        .len()
+                        == options.len()
+            });
+            if !valid {
+                let _ = self.send(json!({"jsonrpc":"2.0","id":value["id"],"error":{"code":-32602,"message":"Native permission choices are invalid or exceed the 64-choice budget"}})).await;
+                return;
+            }
+            for option in native_options.into_iter().flatten() {
                 if let Some(id) = option["optionId"].as_str() {
                     options.push((
                         id.to_owned(),
@@ -439,13 +600,32 @@ impl Rpc {
                 .as_str()
                 .unwrap_or("Codex requests permission")
                 .to_owned();
-            options.push((
-                "accept".into(),
-                ("Allow once".into(), json!({"decision":"accept"})),
-            ));
+            options = codex_approval_options(params);
+            if let Some(root) = params["grantRoot"].as_str() {
+                details = format!("Write access: {root}");
+            }
+        } else if method == "item/permissions/requestApproval" && params["permissions"].is_object()
+        {
+            title = params["reason"]
+                .as_str()
+                .unwrap_or("Codex requests access")
+                .to_owned();
+            details = params["permissions"].to_string();
+            for (id, label, scope) in [
+                ("turn", "Allow for this turn", "turn"),
+                ("session", "Allow for this session", "session"),
+            ] {
+                options.push((
+                    id.into(),
+                    (
+                        label.into(),
+                        json!({"permissions":params["permissions"],"scope":scope}),
+                    ),
+                ));
+            }
             options.push((
                 "decline".into(),
-                ("Decline".into(), json!({"decision":"decline"})),
+                ("Decline".into(), json!({"permissions":{},"scope":"turn"})),
             ));
         } else {
             let _ = self.send(json!({"jsonrpc":"2.0","id":value["id"],"error":{"code":-32601,"message":"This client does not support the requested interaction"}})).await;
@@ -546,5 +726,31 @@ impl Rpc {
         if let Some(home) = &self.owned_home {
             let _ = std::fs::remove_dir_all(home);
         }
+    }
+}
+
+#[cfg(test)]
+mod approval_tests {
+    use super::*;
+    #[test]
+    fn codex_amendments_keep_native_payloads_and_basic_choices() {
+        let native = json!({"proposedExecpolicyAmendment":["git","status"],"proposedNetworkPolicyAmendments":[{"action":"deny","host":"example.test"}]});
+        let options = codex_approval_options(&native);
+        assert_eq!(
+            options.iter().map(|o| o.0.as_str()).collect::<Vec<_>>(),
+            vec![
+                "accept",
+                "acceptForSession",
+                "execpolicy",
+                "network-0",
+                "decline",
+                "cancel"
+            ]
+        );
+        assert_eq!(
+            options[2].1.1["decision"]["acceptWithExecpolicyAmendment"]["execpolicy_amendment"],
+            native["proposedExecpolicyAmendment"]
+        );
+        assert_eq!(codex_approval_options(&json!({})).len(), 4);
     }
 }

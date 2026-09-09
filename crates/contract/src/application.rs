@@ -81,6 +81,7 @@ pub enum ApplicationViewType {
     Viewer,
     Packages,
     Plots,
+    Agent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

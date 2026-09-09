@@ -17,6 +17,8 @@ import { PanelLayout } from "./layout-model";
 import { Navigation } from "./navigation";
 import { Agents } from "./agents";
 import { NativeAgents } from "./native-agents";
+import { AgentTasks } from "./agent-tasks";
+import { taskDraftCache, previewAgentAsset, releaseAgentAsset } from "./agent-task-adapter";
 import { copyAgentText } from "./agent-adapter";
 import { browserMedia } from "./media-adapter";
 import { mediaKey } from "./output-ports";
@@ -49,6 +51,7 @@ export class Studio {
   readonly application: ApplicationBridge;
   readonly agents: Agents;
   readonly nativeAgents: NativeAgents;
+  readonly agentTasks: AgentTasks;
   private readonly documentPersistence: PersistenceFragment;
   private readonly subscriptions: (() => void)[] = [];
   private stopped = false;
@@ -231,12 +234,18 @@ export class Studio {
       copy: copyAgentText, schedule: () => this.coordinator.wake("agents") });
     this.nativeAgents = new NativeAgents({ context: this.session.context,
       window: () => this.application.getSnapshot().online ? this.application.window : null,
-      discover: request => client.discoverAgent(request), connect: request => client.connectAgent(request),
+      discover: request => client.discoverAgent(request), test: request => client.testAgent(request),
       setup: request => client.setupAgent(request),
-      sessions: () => client.nativeAgentSessions(), action: request => client.nativeAgentAction(request),
       schedule: () => this.coordinator.wake("native-agents") });
+    this.agentTasks = new AgentTasks({ context: this.session.context, windowId,
+      window: () => this.application.getSnapshot().online ? this.application.window : null,
+      query: request => client.agentTaskQuery(request), command: request => client.agentTaskCommand(request),
+      discover: request => client.discoverAgent(request),
+      asset: async request => previewAgentAsset(await client.agentAsset(request)), releaseAsset: releaseAgentAsset,
+      ...taskDraftCache(windowId), changed: this.persistence.changed,
+      schedule: () => { this.coordinator.wake("agent-task-summary"); this.coordinator.wake("agent-task-events"); } });
 
-    for (const fragment of [this.operations, this.console, this.files, this.objects, this.packages, this.plots, this.layout])
+    for (const fragment of [this.operations, this.console, this.files, this.objects, this.packages, this.plots, this.layout, this.agentTasks])
       this.persistence.register(fragment);
     this.documentPersistence = { serialize: () => ({}),
       restorationKey: () => ({ active: this.documents.active, documents: this.documents.applicationDocuments().map((d) => [d.document_id, d.version, d.selection.version]) }),
@@ -251,6 +260,7 @@ export class Studio {
         this.operations.reset(); this.console.reset(); this.files.reset(); this.objects.reset(); this.packages.reset();
         this.documents.reset(); this.outputs.reset(); this.mediaCache.reset(); this.plots.reset(); this.layout.resetState(); this.navigation.reset();
         this.application.reset(); this.agents.reset(); this.nativeAgents.reset();
+        this.agentTasks.reset();
         this.persistence.prepareRestore();
       }),
       this.notifications.on("sessionChanged", () => {
@@ -269,6 +279,7 @@ export class Studio {
       this.notifications.on("viewsChanged", ({ activeViewIds }) => this.mediaCache.protect(this.plots.protectedMedia(activeViewIds))),
       this.notifications.on("viewsChanged", (event) => this.objects.viewsChanged(event)),
       this.notifications.on("viewsChanged", (event) => this.packages.viewsChanged(event)),
+      this.notifications.on("viewsChanged", (event) => this.agentTasks.viewsChanged(event)),
       this.plots.subscribe(() => this.mediaCache.protect(this.plots.protectedMedia(this.layout.getSnapshot().activeViewIds))),
     );
     const ready = (task: () => Promise<void | boolean>) => async () => {
@@ -290,6 +301,8 @@ export class Studio {
     this.coordinator.register("runtime", 2000, ready(() => this.session.refreshRuntime()));
     this.coordinator.register("agents", 2000, async () => { if (!this.stopped) await this.agents.observe(); });
     this.coordinator.register("native-agents", 500, async () => { if (!this.stopped) await this.nativeAgents.observe(); });
+    this.coordinator.register("agent-task-summary", 1000, async () => { if (!this.stopped) await this.agentTasks.observeSummary(); });
+    this.coordinator.register("agent-task-events", 250, async () => { if (!this.stopped) await this.agentTasks.observeEvents(); });
     this.coordinator.register("pending", 2000, ready(async () => {
       await this.operations.reconcilePending(); await this.operations.ensureReferences(this.console.operationIds());
     }));
@@ -306,6 +319,7 @@ export class Studio {
     if (!this.stopped) this.coordinator.start();
   }
   private async suspend() {
+    await this.agentTasks.flushAll();
     await this.application.flush();
     await this.persistence.flush();
     if (this.persistence.unsynced) throw new Error(this.persistence.syncError || "Drafts are not synced. The project was not switched.");
@@ -393,6 +407,7 @@ export class Studio {
     this.application.stop();
     this.agents.stop();
     this.nativeAgents.stop();
+    this.agentTasks.stop();
     this.stopped = true; this.lifecycle++; this.session.stop(); this.coordinator.stop(); this.client.stopReads(); this.persistence.stop(); this.preferences.stop();
     this.operations.stop(); this.console.stop(); this.documents.stop(); this.files.stop(); this.objects.stop(); this.packages.stop();
     this.outputs.stop(); this.mediaCache.stop(); this.plots.stop(); this.navigation.stop(); this.layout.stop();

@@ -6,6 +6,7 @@ import { FilesPanel, ObjectsPanel, ObjectViewer } from "./panels/resource-panels
 import { PackagesPanel } from "./panels/packages-panel";
 import { ConsolePanel } from "./panels/console-panel";
 import { PlotPanel } from "./panels/plot-panel";
+import { AgentPanel } from "./panels/agent-panel";
 
 const renderers: Record<BuiltinRenderer, (view: PanelInstance) => ReactNode> = {
   files: () => <FilesPanel />,
@@ -14,6 +15,7 @@ const renderers: Record<BuiltinRenderer, (view: PanelInstance) => ReactNode> = {
   objects: () => <ObjectsPanel />,
   packages: () => <PackagesPanel />,
   plots: (view) => <PlotPanel viewId={view.id} />,
+  agent: (view) => <AgentPanel viewId={view.id} />,
   document: (view) => <DocumentPanel documentId={view.id} />,
   viewer: (view) => <ObjectViewer name={String((view.config as { name?: string } | undefined)?.name ?? "")} viewId={view.id} />,
 };

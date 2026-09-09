@@ -13,6 +13,9 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  if(m.method==='session/prompt'){
   count++;pending=m.id;
   send({jsonrpc:'2.0',id:'permission-1',method:'session/request_permission',params:{toolCall:{title:'Read the fixture'},options:[{optionId:'yes',name:'Allow once',kind:'allow_once'},{optionId:'no',name:'Decline',kind:'reject_once'}]}});
+ }else if(m.method==='fixture/many-choices'){
+  send({jsonrpc:'2.0',id:'permission-many',method:'session/request_permission',params:{toolCall:{toolCallId:'tool-many',title:'Native choices'},options:Array.from({length:9},(_,i)=>({optionId:'option-'+i,name:'Choice '+i,kind:'allow_once'}))}});
+  send({jsonrpc:'2.0',id:m.id,result:{}});
  }else if(m.method==='fixture/config'){
   send({jsonrpc:'2.0',id:m.id,result:{}});
   setTimeout(()=>send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'native-1',update:{sessionUpdate:'config_option_update',configOptions:[{id:'model',currentValue:'configured',options:[{value:'builtin'},{value:'configured'}]}]}}}),30);
@@ -279,5 +282,49 @@ async fn repeated_empty_model_pages_fail_without_retrying_forever() {
         .await
         .unwrap();
     assert!(result.unwrap_err().contains("model-list cursor"));
+    client.close().await;
+}
+
+#[tokio::test]
+async fn native_permission_choices_are_not_silently_reduced_to_a_fixed_button_count() {
+    let (_dir, client) = fixture().await;
+    client
+        .rpc
+        .call("fixture/many-choices", json!({}), 2)
+        .await
+        .unwrap();
+    state(&client, "waiting_for_permission").await;
+    let decision = client.snapshot().decisions[0].clone();
+    assert_eq!(
+        decision
+            .options
+            .iter()
+            .map(|o| o.id.clone())
+            .collect::<Vec<_>>(),
+        (0..9).map(|i| format!("option-{i}")).collect::<Vec<_>>()
+    );
+    client.decide(decision.id, "option-8").await.unwrap();
+    client.close().await;
+}
+
+#[tokio::test]
+async fn native_submission_errors_without_admission_proof_remain_uncertain() {
+    let (_dir, client) = fixture().await;
+    client.rpc.complete(
+        Some("Submission outcome is uncertain; native internal error".into()),
+        false,
+    );
+    assert_eq!(client.snapshot().state, "uncertain");
+    assert!(
+        client
+            .prompt(
+                "do not replay",
+                false,
+                &uuid::Uuid::new_v4().to_string(),
+                window()
+            )
+            .await
+            .is_err()
+    );
     client.close().await;
 }

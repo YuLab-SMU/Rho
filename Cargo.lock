@@ -2102,9 +2102,13 @@ dependencies = [
 name = "rho-agent-client"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "base64 0.22.1",
  "futures",
  "rho-contract",
  "serde_json",
+ "sha2",
+ "sysinfo",
  "tempfile",
  "tokio",
  "tokio-util",
@@ -2194,6 +2198,7 @@ name = "rho-host"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "rho-adapter-skills",
  "rho-agent-client",
  "rho-application",
@@ -2218,6 +2223,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
+ "uuid",
 ]
 
 [[package]]

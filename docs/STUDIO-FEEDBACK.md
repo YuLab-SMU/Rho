@@ -258,8 +258,9 @@ further establishes their fixed location near the composer. Recovery
 and ownership need a concise state and a relevant action, with detailed evidence
 available on demand. Backend rules belong in the specification, not explanatory
 cards that users must read before working. Verify actual page membership when
-delivering a Paper link. The revised proposal is in Design section 13 and still
-requires user review; screenshot inspection does not approve its usability.
+delivering a Paper link. The revised interaction in Design section 13 received explicit user approval
+on 2026-09-09. Implementation and real-runtime evidence belong in Status;
+screenshot inspection alone does not establish usability.
 
 ### F12 — Permission and information controls belong around the composer
 

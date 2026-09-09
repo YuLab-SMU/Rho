@@ -735,13 +735,14 @@ status with Retry. A new Host starts fresh observations; restarted Workbenches
 need fresh address/credential configuration. Project-only Hosts can connect for
 available file/application capabilities with R unavailability explicit.
 
-## 13. Workspace Agent tasks — proposed for review
+## 13. Workspace Agent tasks — approved interaction
 
 The 2026-09-09 [Paper task-panel review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2)
-explores the user's first-version task plan. These editable state boards are
-**proposed, not approved or implemented**. Their messages, task states, models,
-scientific references and plot content are illustrative; they are not live evidence.
-Section 12 describes the existing settings experience until the task work ships.
+was approved by the user for implementation on 2026-09-09. Its fourteen editable
+boards define the first task-panel interaction. Example messages, runtime menus
+and scientific references remain illustrative; actual capability and acceptance
+evidence is recorded in Status. Section 12 retains configuration and manual MCP
+setup; daily conversations now belong to this panel.
 
 Following the user's F11 feedback, the revision removes the setup form, explanatory
 recovery cards and rules gallery. The main surface contains task navigation,
@@ -767,7 +768,7 @@ boards. Page membership was verified from both page roots.
 | A13 | Variable native permission options, feedback field and explicit response confirmation |
 | A14 | Attached-context preview with source, bounded sample and inclusion scope |
 
-The proposed single-instance **Agent** panel uses the Studio panel chrome, Inter,
+The approved single-instance **Agent** panel uses the Studio panel chrome, Inter,
 white content surfaces, restrained borders and the existing semantic colors.
 Top-bar **Agents**, Panels and the command palette open that same panel; its gear
 opens Agent Settings. First placement is on the right for windows at least 1100 px
@@ -883,3 +884,10 @@ Screenshot review covered the affected boards for spacing, type, contrast,
 alignment and clipping. This is static design inspection, not browser behavior, keyboard,
 scrolling, performance, native-resume or acceptance-test verification. Implementation
 must read Paper JSX/computed styles and validate the user's runtime scenarios.
+
+Implementation follows actual native capabilities: Kimi Code 0.41.0 supplies
+Default, Plan, Auto and YOLO modes, and its usual ACP permission request supplies
+Approve once, Approve for this session and Reject. The four-option feedback board
+does not add a fabricated feedback field to that protocol. Short inspection groups
+retain a 360 px Agent minimum; context pickers stay inside the panel and long
+input/permission content scrolls without losing access to Send/Stop.

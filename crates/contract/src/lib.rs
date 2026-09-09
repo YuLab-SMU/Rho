@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 mod agent_client;
 pub use agent_client::*;
+mod agent_task;
+pub use agent_task::*;
 
 mod query;
 pub use query::*;

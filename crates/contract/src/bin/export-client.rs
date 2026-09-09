@@ -22,6 +22,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ConnectAgent::export_all(&config)?;
     AgentClientAction::export_all(&config)?;
     AgentClientSession::export_all(&config)?;
+    AgentTasksQuery::export_all(&config)?;
+    AgentTasksCommand::export_all(&config)?;
+    AgentTaskQueryResult::export_all(&config)?;
+    AgentTaskCommandResult::export_all(&config)?;
+    TestAgent::export_all(&config)?;
+    AgentDiagnostic::export_all(&config)?;
+    ReadAgentAsset::export_all(&config)?;
     WorkbenchAgentConnection::export_all(&config)?;
     WorkbenchFrame::export_all(&config)?;
     SelectProject::export_all(&config)?;

@@ -2,125 +2,93 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
-## Next interface work: workspace Agent tasks
+## Workspace Agent tasks
 
-The user's first-version task plan now has fourteen editable
-[Paper review boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2):
-normal/right-docked and narrow/inspection-tab layouts, wide multi-task navigation,
-read-only ownership, native permissions, explicit resume, closed-panel reminders,
-direct composition for New task, and stop/takeover after window loss. F12 adds
-native permission-mode selection, pending requests fixed above the input,
-variable response options/feedback, @ component information, file/image attachments
-and plugin context channels with source/scope previews. These catalogs and plugin
-examples are illustrative; runtime mode control, multimodal input and plugin
-context-provider contracts are not implemented or verified by this design work.
-The revised proposal removes the setup form and instructional cards; permission
-controls stay in the composer area, while details are disclosed on demand. All fourteen boards
-were verified on the independent Agent page, and the general workspace page has
-only its original five boards. The proposed interaction is recorded in
-[Design section 13](RHO-DESIGN.md#13-workspace-agent-tasks--proposed-for-review).
-The revised boards received static screenshot inspection. **User review is pending; no
-task storage, panel or native-resume implementation is claimed.** The next step
-is to review these boards before substantial Studio implementation. Existing Hosts,
-R sessions and native settings were not changed. This design-only work adds no
-runtime acceptance evidence and does not supersede the native baseline below.
-Documentation verification passed: governance impact mapping, governance check,
-governance tests and `git diff --check`.
+The user approved the fourteen [Paper Agent boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2)
+and authorized the complete first-version implementation, using Kimi Code with
+`b-ai/glm-5.3-flash` (GLM 5.3 Flash, B.AI) for real development tests.
+The independent Agent page retains those boards; the general workspace page was
+not repurposed. [Design section 13](RHO-DESIGN.md#13-workspace-agent-tasks--approved-interaction)
+records the approved interaction and native-capability distinctions.
 
-## Current work: native Codex, Kimi and DeepSeek Harness
+The singleton dockable Agent panel now owns daily task chat, a wide task rail or
+narrow selector, per-task saved drafts/conflict copies, rename/archive, native
+permissions beside the composer, attachments and @ context previews. Settings
+retains discovery, explicit installation, models, manual MCP and independent Test.
+No CLI is scanned or model request sent merely by opening the panel. Window-local
+selection/reading state stays in ApplicationPersistence; R-session changes do not
+remove Agent tasks. Files/editor/R tables/plots use their existing read owners;
+plugins have a read-only information-source registration seam, not an installed
+illustrative analysis plugin.
 
-Studio's approved [Agent settings design](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/5-0)
-now supports Codex app-server, Kimi ACP and DeepSeek Harness ACP. The cards expose
-native model/reasoning choices, connect the current project and Studio window,
-and accept user tasks without configuration or prompt copying. They show native
-responses, tool activity, permissions, uncertainty and disconnected-session evidence.
-Manual MCP setup remains an advanced option. Rho does not add an Agent behavior loop.
+ApplicationStore has additive typed task/attachment/draft/receipt/event/asset tables.
+The Host task service owns admission and native lifetime, request deduplication,
+draft CAS, controller/generation fencing, eight-connection budgets and bounded
+observations. Receipts and terminal states persist immediately; durable cursors
+are distinct from in-flight native observations. A stopped/uncertain connection
+cannot bypass old-process proof through Disconnect or Resume. Native CLI history
+is never reconstructed from Rho's display cache or used to replay scientific work.
+Codex uses exact thread resume and native pages; Kimi uses verified exact-ID load
+and context replay; DeepSeek uses resume/close/resume after interruption to clear
+its native Inbox. User configuration and the disabled global Kimi rho MCP entry
+remain unchanged; each task receives a fresh explicit MCP connection.
 
-DeepSeek's installed user launcher was `0.1.1-rc.2`, which lacks ACP. **Install
-connection component** adds isolated official DSH/ACP packages pinned at
-`0.1.2-alpha.2` under Rho's application-data directory. It does not upgrade the
-user launcher or install during discovery. Each native launch copies only bounded
-`settings.yaml` and `.credentials.yaml` files into a private temporary home. This
-allows the newer native credential provider to convert its own copy without
-changing the original. Temporary copies are removed on close or cancellation;
-native conversation/attachment storage remains in a versioned component data area.
-Other products' profiles and `.env` files are not copied.
+Executed evidence in `target/agent-task-development/`:
 
-Three-provider discovery is serialized and does not retry indefinitely. DeepSeek
-can publish configured providers after its first session response; a bounded
-750 ms startup collection retains native `config_option_update` notifications
-even before a visible session exists. A separate keyless Host probe after this
-fix returned all 64 models in 1.80 s, including the configured 115 NewAPI model. Setup is
-explicit, has a three-minute installation deadline, and survives a lost HTTP
-acknowledgement through owned, idempotent installation. DeepSeek's grouped model
-options retain their opaque IDs while the UI displays native names. Permission
-frames that contain only a tool-call ID are associated with that native call's
-observed title/input. Tool activity separates progress speech from a subsequent
-assistant response without dropping either message.
+- `kimi-task-acceptance.log`: real Kimi 0.41.0 / B.AI GLM 5.3 Flash; two same-model
+  tasks return separate alpha/beta responses, duplicate request IDs do not replay,
+  both resume the same native ID, and the resumed Agent performs a new MCP overview
+  read of the correct disposable project. Original configuration hashes unchanged.
+- `kimi-recovery.log`, `codex-recovery.log`, `deepseek-recovery.log`: each real
+  runtime survives a forced, independent Host crash through explicit same-ID Resume.
+  The saved next draft and old uncertain receipt remain. Kimi/Codex identify a new
+  red-square image; DeepSeek accepts only the new instruction. All three actually
+  perform an MCP overview read through the new Host endpoint/credentials afterward.
+- `codex-task-acceptance.log`: real Codex / gpt-6-astra; two concurrent tasks,
+  exact separate responses, request deduplication and same-ID resume passed.
+- `deepseek-task-acceptance.log`: real DeepSeek / 115-newapi deepseek-v4-flash;
+  two same-model tasks, duplicate-request protection, same-ID resume and resumed
+  native MCP overview passed. Native configuration hashes remained unchanged.
+- `deepseek-native-inbox.log`: the installed lock-matched native Inbox implementation
+  restores input queued before a crash, persists its removal on clear, and claims
+  only a fresh instruction after another reconstruction. No model or user session
+  is used by this deterministic native-code test.
+- `fixture-recovery.log`: deterministic ACP crash/restart verifies no prompt during
+  resume, changed Host MCP address/credential fingerprint, original uncertainty and
+  image delivery. Native protocol tests cover Codex quiet/history/cursor rules,
+  Kimi replay/session fencing and DeepSeek queued-Inbox cleanup/failed-close refusal.
+- `chrome-final.log`: the full isolated Chrome suite passed **33/33**, including
+  normal/narrow/wide Agent layouts, native permission modes/options, archived-task
+  reminders while closed, two-window takeover, attachments, real R tables/plots,
+  independent diagnostics and existing editor/layout/scroll/execution regressions.
+- `frontend-tests.log`: **295 frontend tests** passed. Source ownership boundaries,
+  generated bindings/embedded assets, typecheck and strict workspace Clippy passed.
+- `task-service-final.log`: **10 focused Host task tests** passed, including plugin
+  source containment, stale ownership, stop/closing races and uncertain resume.
+- `workspace-tests.log`: **244 full-workspace Rust tests** passed; **7 conditional
+  external tests** were ignored, not counted as passes. The final native-client
+  run passed **25 tests**, including unconfirmed native submission errors.
+- Real R, MCP and Workbench checks passed, including MCP/Workbench with real R.
+  Environment, native-process recovery, local SSH/Slurm protocol, output-media,
+  vendor integrity, governance and Agent-harness self-tests passed. These local
+  protocol/self-tests do not claim remote-cluster or new scientific acceptance.
 
-Current verification:
+Live integration caught DeepSeek's lack of embedded-resource capability; text
+context now uses native text input with its source retained. Chrome review corrected
+file-kind filtering, the plot query name, constrained-picker clipping and a test's
+window-list pagination. Native progress commentary remains separate from the final
+answer; acceptance assertions now inspect the final native message.
 
-- Native Agent client: **14 Rust tests**; Workbench: **11 Rust tests**; frontend:
-  **288 unit tests**. Typecheck, generated bindings/assets, current binary, strict
-  affected Clippy/format, architecture and frontend ownership checks passed.
-- The focused Chrome Agent settings cases passed **2/2**, covering manual fallback
-  and all three native providers, explicit component setup, models/reasoning,
-  Test, native permission choices, direct tasks, disconnection, window scope and
-  zero clipboard setup. Normal and 600 px constrained DeepSeek setup/conversation
-  screenshots were inspected under `target/studio-browser/agents-native-*`.
-- First real DeepSeek run installed the component in 68.8 s, advertised 64 native
-  model choices, connected in 2.27 s and returned `ok` in 7.16 s using
-  `115-newapi/deepseek-v4-flash`. It then actually read the Rho overview and returned
-  the correct directory name. Its initial assertion failed because progress speech
-  and the final answer were concatenated. The protocol view and smoke test now
-  preserve that tool boundary. The final real trial **passed**: 2.10 s connection,
-  16.06 s `ok` response, and a verified native MCP overview with correct project
-  name in 27.40 s. Duplicate requests did not replay. Original native settings
-  and credential hashes were unchanged. Both logs are retained at
-  `target/agent-integration/deepseek-native-acceptance.log` and
-  `target/agent-integration/deepseek-native-final.log`.
-
-The earlier Codex live test (`gpt-6-astra`) connected in 1.49 s and replied `ok`
-in 4.61 s. Earlier Kimi tests established native MCP delivery, but the configured
-DeepSeek service also returned an incomplete long path and timed out on another
-read-only task. Those failures remain in `target/agent-integration/native-acceptance*`;
-full Kimi model acceptance is not passed and has not been silently retried here.
-Model/provider response quality remains distinct from protocol delivery and from
-the frozen scientific acceptance below.
-
-Kimi 0.41.0 startup exposed another MCP interoperability issue: generated Rust
-numeric-width formats caused Ajv warnings to overwrite the terminal UI. The MCP
-edge now omits these annotations from every input/output tool schema, including
-fixed aliases; it preserves constraints, literal data and original Host contracts.
-Verification passed: 11 MCP Rust tests, strict MCP Clippy, stdio MCP regression
-with and without real R, architecture and documentation-map checks. A keyless
-native Kimi ACP startup reproduced 1,224 warnings from the existing 64-tool live
-catalog and zero from the fixed 36-tool project-only catalog; independent Ajv
-compilation likewise changed from 1,396 warnings to zero. Real-R regression also
-checks all advertised schemas. No model prompt was sent. Evidence is under
-`target/agent-integration/kimi-schema-*`; the rebuilt binary is ready for future
-Host launches. Existing Hosts and their R memory/paused work remain unchanged.
-The running playground still serves the old schemas, so rebuilding alone did not
-fix normal Kimi startup. The stale global `rho` MCP entry is now disabled in place
-with `enabled: false`; its URL, credential and other fields remain in the original
-private Kimi user configuration. No credential was copied into a project. Actual
-Kimi TUI startup in the user's original working directory reproduced hundreds of
-warnings before this change and zero afterwards; `/mcp` confirms `rho disabled`.
-`kimi doctor` passes. A separate managed-provider refresh service error remains;
-the user's selected model configuration is unchanged and no model task was sent.
-Evidence is `target/agent-integration/kimi-terminal-activation.json`. This is an
-operational mitigation: Rho tools are unavailable through that disabled global
-entry. Re-enable it only after the corresponding Host runs the fixed binary;
-replacement requires checking its current work and restart authorization.
-
-Existing `target/experience/agent-playground`, `agent-direct-playground` and
-`agent-harness-playground` Hosts and R memory are preserved. Automatic approval
-rejected restarting the last instance because it already contained sample R
-objects; that restart did not run. A new independent `target/experience/deepseek-ready`
-project hosts the final build with the configured DeepSeek Harness model selected.
-Its sample data and script are available; existing R objects remain in the earlier
-instances. Private launch/runtime directories remain next to
-the projects. Inspect current process and work ownership before any replacement.
+Existing user Hosts and their R memory were not restarted. All new test Hosts use
+disposable projects. The older native integration remains the basis for explicit
+DeepSeek component setup (official 0.1.2-alpha.2) and manual MCP settings. Kimi's
+global rho MCP entry stays disabled; task-specific injection has independently
+passed real MCP reads. Build/runtime installation/publication remain separate;
+this work does not install or replace a user Host automatically. An independent
+trial project is available at `target/experience/agent-tasks-ready/study`, with a
+blank Kimi task set to GLM 5.3 Flash (B.AI). It was opened in the app browser without
+sending a model prompt. Its launch material stays in ignored local files; inspect
+that project's live Host before starting another instance.
 
 ## Agent interface acceptance baseline
 

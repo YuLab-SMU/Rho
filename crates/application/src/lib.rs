@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 //! Application owns window identity, synchronized resources, command receipts and
 //! execution associations. It never submits scientific work or reads native files.
+mod agent_tasks;
 mod execution;
+pub use agent_tasks::*;
 mod store;
 mod validation;
 pub use execution::{ApplicationExecutionAdmission, ApplicationOperationLookup};
