@@ -58,6 +58,11 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
   private now() { return this.ports.now?.() ?? Date.now(); }
   get window() { return (this.session ?? this.registeringSession)?.window ?? null; }
   get ready() { return this.initialized; }
+  /** Compare document identities only; observing sync status never captures or writes a draft. */
+  get draftsSynced() {
+    const local = this.ports.modules.documents().map(ref);
+    return this.acknowledged ? same(local, this.acknowledged.documents.map(ref)) : local.length === 0;
+  }
   /** Studio calls this immediately after persistent fragments restore, before
    * native/checkpoint waits. Edits retained by those fragments stay local. */
   prepareRestore(keep: RestoreKeep = {}) {

@@ -405,6 +405,9 @@ export class PanelLayout extends Model<LayoutSnapshot> {
       }
     }
     const parent = this.model.getNodeById(id)?.getParent();
+    const maximized = this.model.getMaximizedTabset();
+    if (maximized && parent instanceof TabSetNode && parent !== maximized)
+      this.model.doAction(Actions.maximizeToggle(maximized.getId()));
     if (parent instanceof TabSetNode && parent.getConfig()?.collapsed)
       this.collapse(parent);
   }

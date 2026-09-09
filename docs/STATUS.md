@@ -28,22 +28,47 @@ Documentation impact mapping, governance/index checks, governance self-tests and
 `git diff --check` passed. Source-area checks listed for concurrent edits were not
 claimed as part of this documentation-only investigation.
 
-## Shell navigation and status bar — design review pending
+## Shell navigation and configurable status bar
 
-The user finds the bottom status bar unattractive and reports the missing workspace
-sidebar. Four [Paper Shell boards S01–S04](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/8-0)
-propose a 48 px module rail with a 168 px labeled mode, a grouped 30 px status bar,
-runtime/project/draft disclosures, queue/input/error states and a 1024 × 800 shell.
-[Design section 15](RHO-DESIGN.md#15-shell-navigation-and-status--proposal-for-review)
-records the proposal; the sidebar interpretation and visual direction await user
-review. This does not supersede the approved section 10 dimensions yet.
+The user approved [Paper Shell S01–S04](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/8-0)
+and requested optional persistent CPU, memory and disk values. The implemented
+48/168 px navigation rail focuses/restores existing modules, offers multiple-view
+selection and retains Agent attention/settings entry points. Layout is available
+from the top bar. A 30 px footer separates R/queue/input state, user-pinned metrics
+and draft synchronization. Narrow windows retain all pinned metrics, using a
+second row below 700 px. Project paths live in the top project disclosure.
 
-All four Paper boards were reviewed through screenshots, including the 800 px
-status strip and full narrow shell. These are design fixtures, not live scientific
-results or browser acceptance. No application source, Host, R session or user layout
-was changed. Implementation and real interaction checks follow design review.
-Documentation impact mapping, governance/index checks, governance self-tests and
-`git diff --check` passed. No application tests were run for this design-only change.
+The shared Project query observes volume total/free/available space with `fs4` at
+the canonical project path. It does not scan files, enumerate other disks or start
+R. CPU/memory retain their actual Ark/R-process scope. Files and Session retain
+observation/error/freshness independently; missing or stale values stay unknown.
+Preferences merge against current shared settings. Draft sync now also checks the
+ApplicationBridge document acknowledgements, independently of disk-file saving.
+
+Validation passed: 327 frontend tests; all 15 Host project tests; 18 tests across
+Contract, Project and Git; generated client/asset consistency, typecheck, Rust
+formatting, architecture/frontend boundaries and fixtures, and documentation checks.
+All 40 existing Chrome scenarios passed in the full run; both new shell scenarios
+passed in a separate final run after correcting their temporary project's canonical
+path. These 42 cases cover keyboard controls, retained preferences/drafts, native
+input, disconnected metrics and 1920/1440/1024/800/600 px screenshots. Real-R HTTP
+and MCP checks passed. The broad Rust workspace suite was not rerun.
+
+A viewport test now awaits ResizeObserver geometry without weakening its bounds.
+The new shell cases use a separate temporary Host instead of exceeding the main
+suite's 32-window project budget. Native Host rejections that omit `result` retain
+their actual error message rather than being obscured as an invalid reply. The
+native disk test finishes in 0.10s after replacing slow whole-machine sampling
+with the direct filesystem call. Evidence: `target/shell-{frontend-final,rust-domain,
+project-tests,browser-verified,browser-isolated-final,workbench-real-r,mcp-real-r}.log`
+and `target/studio-browser/shell-*.png`.
+
+A separate preview at `target/experience/shell-review-5dR1zl/study` contains the
+synthetic `workspace-demo.R`, its live objects and plot. It uses refreshable assets;
+its browser is retained for user review with all three metrics pinned. Existing
+Hosts and R sessions were preserved. Inspect current processes before launching
+another Host. Native launch credentials remain in ignored local material.
+Further first-version visual/usability feedback remains open.
 
 ## Object priority and whole-vector viewing
 

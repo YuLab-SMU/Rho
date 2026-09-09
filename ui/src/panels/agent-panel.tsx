@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { useAgentTasks, useLayout, useNavigation } from "../context";
+import { useAgentTasks, useNavigation } from "../context";
 import { Icon } from "../icons";
 import { AgentMessageInput } from "./agent-message-input";
 import { agentBusy } from "../agent-tasks";
@@ -191,9 +191,4 @@ export function AgentPanel({ viewId }: { viewId: string }) {
     {state.error && <div className="at-error" role="alert"><span>{state.error}</span><button className="at-icon" aria-label="Dismiss Agent error" onClick={() => owner.clearError()}><Icon name="close" size={13} /></button></div>}
     {task ? <><TaskHeader task={task} /><Conversation task={task} /><Composer key={task.task.task_id} task={task} /></> : <div className="at-start"><Icon name="agent" size={28} /><h2>Work with an Agent</h2><NewTaskButton /><button onClick={() => navigation.setDialog("agents")}><Icon name="settings" />Agent Settings</button></div>}
   </main></div>;
-}
-export function AgentLauncher() {
-  const owner = useAgentTasks(), state = owner.getSnapshot(), layout = useLayout();
-  const pending = state.attention;
-  return <div className="at-launcher"><button className="bordered" onClick={() => layout.show("agent")}><Icon name="agent" />Agents</button>{state.permissions > 0 && <Menu.Root><Menu.Trigger asChild><button className="at-launcher-badge" aria-label={`${state.permissions} Agent permissions pending`}>{state.permissions}</button></Menu.Trigger><Menu.Portal><Menu.Content className="at-menu" align="end" sideOffset={6}>{pending.map(t => <Menu.Item className="at-menu-item" key={t.task.task_id} onSelect={() => { owner.select(t.task.task_id); layout.show("agent"); }}><Icon name="warning" /><span>{t.task.title}</span></Menu.Item>)}{!pending.length && <Menu.Item className="at-menu-item" onSelect={() => layout.show("agent")}>Open pending task</Menu.Item>}</Menu.Content></Menu.Portal></Menu.Root>}</div>;
 }

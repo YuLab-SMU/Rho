@@ -4,6 +4,19 @@ import { PanelLayout, defaultLayout } from "../src/layout-model";
 function fixture() {
   return { l: new PanelLayout() };
 }
+it("explicit module navigation reveals a collapsed view outside a maximized group", () => {
+  const { l } = fixture();
+  const files = l.model.getNodeById("files")!.getParent() as TabSetNode;
+  const editor = l.model.getNodeById("editor")!.getParent() as TabSetNode;
+  l.collapse(files); l.maximizeGroup(editor.getId());
+  expect(l.getSnapshot().activeViewIds).not.toContain("files");
+  l.show("files");
+  expect(l.model.getMaximizedTabset()).toBeUndefined();
+  expect(l.isCollapsed("files")).toBe(false);
+  expect(l.getSnapshot().activeViewIds).toContain("files");
+  const shown = l.serialize(); l.show("files");
+  expect(l.serialize()).toEqual(shown);
+});
 it("reclaims every closed group and reopens one view without resetting the workspace", () => {
   const { l } = fixture();
   for (const id of ["editor", "console", "objects", "plots", "files"])

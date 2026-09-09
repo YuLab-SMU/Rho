@@ -310,6 +310,7 @@ export class Studio {
     this.coordinator.register("objects", 2000, ready(async () => { await this.objects.observe(); return this.objects.needsObservation; }));
     this.coordinator.register("packages", 2000, ready(async () => { await this.packages.observe(); return this.packages.needsObservation; }));
     this.coordinator.register("files", 2000, ready(async () => { await this.files.observe(); return this.files.needsObservation; }));
+    this.coordinator.register("storage", 10000, ready(() => this.files.observeStorage()));
     this.coordinator.register("outputs", 250, ready(() => this.outputs.step()));
     this.coordinator.register("media", 250, ready(() => this.mediaCache.step()));
   }

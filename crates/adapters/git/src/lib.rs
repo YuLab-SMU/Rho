@@ -242,6 +242,29 @@ impl GitProject {
 
 #[async_trait]
 impl ProjectRuntime for GitProject {
+    async fn storage_status(&self) -> Result<rho_project::ProjectStorage, String> {
+        self.check_root()?;
+        let root = self.root.clone();
+        let project = self.identity.clone();
+        tokio::task::spawn_blocking(move || {
+            let stats = fs4::statvfs(&root).map_err(display)?;
+            if stats.total_space() == 0
+                || stats.available_space() > stats.total_space()
+                || stats.free_space() > stats.total_space()
+            {
+                return Err("Project disk capacity is unavailable".into());
+            }
+            Ok(rho_project::ProjectStorage {
+                project,
+                free_bytes: stats.free_space(),
+                total_bytes: stats.total_space(),
+                available_bytes: stats.available_space(),
+                observed_at_ms: now_ms(),
+            })
+        })
+        .await
+        .map_err(display)?
+    }
     async fn list_directory(
         &self,
         args: &rho_project::ListDirectoryArguments,

@@ -145,6 +145,11 @@ pub fn builtin_documentation(id: &str) -> CapabilityDocumentation {
             "Run configured native formatting tooling and return formatted text. It does not overwrite a document or project file; apply only against the captured document version.",
             json!({"code":"x<-1\n"}),
         ),
+        "project.storage_status" => (
+            "Observe project disk capacity",
+            "Read capacity and available space on the filesystem containing the canonical project root. This is volume usage, not project directory size or disk I/O. It does not scan files or start R.",
+            json!({}),
+        ),
         "project.snapshot" => (
             "Observe files and Git state",
             "Read current filesystem/Git observations for explicit project paths. Each file digest identifies observed bytes, not a global project revision.",

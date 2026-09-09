@@ -6,6 +6,7 @@ import "@fontsource/inter/latin-500.css";
 import "@fontsource/inter/latin-600.css";
 import "flexlayout-react/style/light.css";
 import "./style.css";
+import "./shell.css";
 import { AppShell } from "./app-shell";
 
 setNonce(
