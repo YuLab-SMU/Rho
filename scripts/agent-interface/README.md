@@ -15,7 +15,7 @@ Prerequisites are supplied, never installed or built by this test:
 ```sh
 node scripts/test-agent-interface.mjs --self-test
 node scripts/test-agent-interface.mjs --binary /absolute/rho --ark /absolute/ark --r-home /absolute/R --filter discovery --runs 1
-node scripts/test-agent-interface.mjs --binary /absolute/rho --ark /absolute/ark --r-home /absolute/R --final
+node scripts/test-agent-interface.mjs --binary /absolute/rho --ark /absolute/ark --r-home /absolute/R --final --concurrency 3
 ```
 
 `--final` requires a clean committed tree. It runs all ten core categories three times
@@ -23,6 +23,14 @@ node scripts/test-agent-interface.mjs --binary /absolute/rho --ark /absolute/ark
 (34 sessions total). A failure is retained and never replaced with a selected retry.
 Filters and smaller repetition counts are debug results, not final acceptance. Each
 invocation creates a new artifact directory under `target/agent-interface/acceptance`.
+
+`--concurrency 1..3` controls independent case workers and defaults to 1. It also
+applies to `--final`: all 34 cases still run, every failure is retained, and each
+case keeps its own project, Host, browser, Codex process, credentials and full
+80-call/1 MiB/ten-minute budget. Cleanup completes before a worker starts its next
+case. The manifest keeps the declared case order even when completion order differs;
+the native/Rho Skill comparison runs after both cases finish. Source and binaries
+must stay fixed until every worker has finished.
 
 | Category | Independent evidence and assertions |
 | --- | --- |

@@ -10,9 +10,11 @@ import {FixtureHost,exec,json,digest,discoverSkills,skillOverrides} from './agen
 import {RecordingProxy,assertOperationIdentities,assertConsumedEvidence} from './agent-interface/proxy.mjs';
 import {runAgent,EXPECTED_VERSION} from './agent-interface/agent.mjs';
 import {createScenario,CORE_CASES,ADDITIONAL_CASES} from './agent-interface/scenarios.mjs';
+import {parseConcurrency,runBoundedCases} from './agent-interface/worker-pool.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const option=(name,fallback)=>{const index=process.argv.indexOf(name);assert.ok(index<0||process.argv[index+1],`Missing ${name} value`);return index<0?fallback:process.argv[index+1];};
-if(process.argv.includes('--help')) {console.log(`Usage: node scripts/test-agent-interface.mjs --binary PATH --ark PATH --r-home PATH [--codex PATH] [--final]\n  --final: clean fixed tree, all ten cases x 3 plus native/Rho Skill equivalence and two adaptive cases; every run must pass\n  --filter category[,category] --runs N: debugging only; never acceptance\n  --evidence DIR: artifact parent (default target/agent-interface/acceptance)\n  --keep-fixtures: retain private temporary projects for debugging; default removes them\n  --list: list task categories without a model run\n  --self-test: validate harness parsers/assertions only; never acceptance\nRequires prebuilt current Rho+Ark, installed R, Chrome, UI node_modules, authenticated exact Codex CLI ${EXPECTED_VERSION}. Model is fixed gpt-6-astra/high. Does not build or install prerequisites.`);process.exit(0);}
+if(process.argv.includes('--help')) {console.log(`Usage: node scripts/test-agent-interface.mjs --binary PATH --ark PATH --r-home PATH [--codex PATH] [--final] [--concurrency 1..3]\n  --final: clean fixed tree, all ten cases x 3 plus native/Rho Skill equivalence and two adaptive cases; every run must pass\n  --filter category[,category] --runs N: debugging only; never acceptance\n  --concurrency N: 1..3 isolated case workers (default 1), including final acceptance\n  --evidence DIR: artifact parent (default target/agent-interface/acceptance)\n  --keep-fixtures: retain private temporary projects for debugging; default removes them\n  --list: list task categories without a model run\n  --self-test: validate harness parsers/assertions only; never acceptance\nRequires prebuilt current Rho+Ark, installed R, Chrome, UI node_modules, authenticated exact Codex CLI ${EXPECTED_VERSION}. Model is fixed gpt-6-astra/high. Does not build or install prerequisites.`);process.exit(0);}
+const concurrency=parseConcurrency(option('--concurrency','1'));
 if(process.argv.includes('--list')){console.log([...CORE_CASES,...ADDITIONAL_CASES].join('\n'));process.exit(0);}
 if(process.argv.includes('--self-test')){await import('./agent-interface/self-test.mjs');process.exit(0);}
 const filter=option('--filter',null)?.split(',');const runs=Number(option('--runs','3'));assert.ok(Number.isInteger(runs)&&runs>=1&&runs<=3,'runs must be 1..3');
@@ -24,17 +26,33 @@ const codexVersion=exec(codex,['--version']);assert.equal(codexVersion,EXPECTED_
 const commit=exec('git',['rev-parse','HEAD'],{cwd:root});const tree=exec('git',['rev-parse','HEAD^{tree}'],{cwd:root});const status=exec('git',['status','--porcelain'],{cwd:root});const sourceDiff=digest(exec('git',['diff','--binary','HEAD'],{cwd:root,maxBuffer:64*1024*1024}));if(final)assert.equal(status,'','Final acceptance requires a committed clean source tree');
 const artifactRoot=path.resolve(option('--evidence',path.join(root,'target/agent-interface/acceptance')));const evidence=path.join(artifactRoot,`${commit.slice(0,12)}-${Date.now()}-${randomUUID().slice(0,8)}`);fs.mkdirSync(evidence,{recursive:true,mode:0o700});
 const options={root,binary,ark,rHome,codex,codexVersion,chromeChannel:option('--chrome-channel','chrome')};
-const startManifest={schema_version:1,acceptance:final,started_at:new Date().toISOString(),commit,tree,source_status:status,source_diff_sha256:sourceDiff,model:'gpt-6-astra',reasoning_effort:'high',codex_version:codexVersion,limits:{tool_calls:80,text_return_utf8_bytes:1048576,wall_ms:600000},binaries:{rho:{path:binary,sha256:digest(fs.readFileSync(binary))},ark:{path:ark,sha256:digest(fs.readFileSync(ark))},codex:{path:codex,sha256:digest(fs.readFileSync(fs.realpathSync(codex)))},r_home:rHome},cases:[]};
+const startManifest={schema_version:1,acceptance:final,started_at:new Date().toISOString(),commit,tree,source_status:status,source_diff_sha256:sourceDiff,model:'gpt-6-astra',reasoning_effort:'high',codex_version:codexVersion,concurrency,limits:{tool_calls:80,text_return_utf8_bytes:1048576,wall_ms:600000},binaries:{rho:{path:binary,sha256:digest(fs.readFileSync(binary))},ark:{path:ark,sha256:digest(fs.readFileSync(ark))},codex:{path:codex,sha256:digest(fs.readFileSync(fs.realpathSync(codex)))},r_home:rHome},cases:[]};
 json(path.join(evidence,'manifest.json'),startManifest);console.log(`Evidence: ${evidence}`);
 const selected=[...CORE_CASES.flatMap(id=>Array.from({length:runs},(_,i)=>({id,repetition:i+1}))),...ADDITIONAL_CASES.map(id=>({id,repetition:1}))].filter(test=>!filter||filter.includes(test.id));assert.ok(selected.length,'No matching cases');
-let failures=0;
-for(const test of selected) {
-  const caseEvidence=path.join(evidence,`${test.id}-${test.repetition}`);fs.mkdirSync(caseEvidence,{mode:0o700});
-  const scientific=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-agent-science-')));const agentCwd=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-agent-isolated-')));assert.ok(!agentCwd.startsWith(root)&&!agentCwd.startsWith(scientific));
-  const scenario=createScenario(test.id,test.repetition,scientific,caseEvidence);const host=new FixtureHost({...options,evidence:caseEvidence},scientific);let proxy,agent,agentStartedAt;const result={...test,passed:false,evidence:caseEvidence,errors:[]};
-  console.log(`Starting ${test.id} ${test.repetition}/${CORE_CASES.includes(test.id)?runs:1}`);
-  const heartbeat=setInterval(()=>console.log(`Running ${test.id}-${test.repetition}: ${proxy?.calls.length??0} tool calls, ${proxy?.textBytes??0} text bytes`),45000);
+const completed=new Array(selected.length);
+const pool=await runBoundedCases(selected,concurrency,runCase,(outcome,index)=>{
+  const test=selected[index];
+  completed[index]=outcome.status==='fulfilled'?outcome.value:{...test,passed:false,evidence:path.join(evidence,`${test.id}-${test.repetition}`),errors:[outcome.reason?.stack??String(outcome.reason)]};
+  // Filesystem writes are synchronous. Every checkpoint is ordered by the
+  // declared cases even when different workers complete in another order.
+  startManifest.cases=completed.filter(Boolean);json(path.join(evidence,'manifest.json'),startManifest);
+});
+let failures=startManifest.cases.filter(result=>!result.passed).length;
+if(pool.reportingErrors.length){startManifest.reporting_errors=pool.reportingErrors.map(({index,error})=>({case_index:index,error:error.stack??String(error)}));failures+=pool.reportingErrors.length;}
+
+async function runCase(test) {
+  const caseEvidence=path.join(evidence,`${test.id}-${test.repetition}`);
+  let scientific,agentCwd,scenario,host,proxy,agent,agentStartedAt,heartbeat;
+  const result={...test,passed:false,evidence:caseEvidence,errors:[]};
   try {
+    fs.mkdirSync(caseEvidence,{mode:0o700});
+    scientific=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-agent-science-')));
+    agentCwd=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-agent-isolated-')));
+    assert.ok(!agentCwd.startsWith(root)&&!agentCwd.startsWith(scientific));
+    scenario=createScenario(test.id,test.repetition,scientific,caseEvidence);
+    host=new FixtureHost({...options,evidence:caseEvidence},scientific);
+    console.log(`Starting ${test.id} ${test.repetition}/${CORE_CASES.includes(test.id)?runs:1}`);
+    heartbeat=setInterval(()=>console.log(`Running ${test.id}-${test.repetition}: ${proxy?.calls.length??0} tool calls, ${proxy?.textBytes??0} text bytes`),45000);
     assert.equal(exec(codex,['--version']),codexVersion,'Codex version changed during the fixed-version evaluation');scenario.prepareSkills?.(agentCwd);
     const initialDiscovery=await discoverSkills(codex,agentCwd);
     const allowed=scenario.allowedSkillFiles.filter(file=>path.basename(file)==='SKILL.md');
@@ -69,20 +87,23 @@ for(const test of selected) {
     assert.ok(Date.now()<=agentStartedAt+600000,'original scientific completion exceeded the task window');
     result.canonical_facts=agent.report.facts.map(({key,value})=>({key,value:typeof scenario.expected[key]==='number'?Number(value):value})).sort((a,b)=>a.key.localeCompare(b.key));
     result.passed=true;
-  } catch(error) {failures++;result.errors.push(error.stack??String(error));console.error(`FAILED ${test.id}-${test.repetition}: ${error.message}`);}
+  } catch(error) {result.errors.push(error.stack??String(error));console.error(`FAILED ${test.id}-${test.repetition}: ${error.message}`);}
   finally {
     clearInterval(heartbeat);
-    await proxy?.close().catch(error=>result.errors.push(`proxy cleanup: ${error.message}`));
-    if(agent){agent.finalizeAccounting();captureRunStatistics(result,agent,proxy);if(agent.violations.length)result.errors.push(`Agent violations: ${JSON.stringify(agent.violations)}`);}
+    const cleanup=async(label,action)=>{try{await action();}catch(error){result.errors.push(`${label}: ${error.stack??String(error)}`);}};
+    await cleanup('proxy cleanup',()=>proxy?.close());
+    await cleanup('final accounting',()=>{if(agent){agent.finalizeAccounting();captureRunStatistics(result,agent,proxy);if(agent.violations.length)result.errors.push(`Agent violations: ${JSON.stringify(agent.violations)}`);}});
     if(proxy?.violations.length)result.errors.push(`Transport violations: ${JSON.stringify(proxy.violations)}`);
-    if(host.origin)await captureScientificHistory(host,caseEvidence).catch(error=>result.errors.push(`history capture: ${error.message}`));
-    await host.close().catch(error=>result.errors.push(`Host cleanup: ${error.message}`));
-    if(result.errors.length&&result.passed){result.passed=false;failures++;}
+    if(host?.origin)await cleanup('history capture',()=>captureScientificHistory(host,caseEvidence));
+    await cleanup('Host cleanup',()=>host?.close());
     if(process.argv.includes('--keep-fixtures'))result.private_fixture_roots={scientific,agent:agentCwd};
-    json(path.join(caseEvidence,'result.json'),result);startManifest.cases.push(result);json(path.join(evidence,'manifest.json'),startManifest);
-    if(!process.argv.includes('--keep-fixtures')){fs.rmSync(scientific,{recursive:true,force:true});fs.rmSync(agentCwd,{recursive:true,force:true});}
+    else await cleanup('fixture cleanup',()=>{if(scientific)fs.rmSync(scientific,{recursive:true,force:true});if(agentCwd)fs.rmSync(agentCwd,{recursive:true,force:true});});
+    if(result.errors.length)result.passed=false;
+    await cleanup('result persistence',()=>json(path.join(caseEvidence,'result.json'),result));
+    if(result.errors.length)result.passed=false;
   }
   console.log(`${result.passed?'PASS':'FAIL'} ${test.id}-${test.repetition}`);
+  return result;
 }
 let equivalence={checked:false};const native=startManifest.cases.find(c=>c.id==='skill_native');const rho=startManifest.cases.find(c=>c.id==='skill_rho');
 if(native&&rho){try{assert.ok(native.passed&&rho.passed);assert.deepEqual(native.skill_resources,rho.skill_resources,'Native and Rho must read byte-identical standard Skill resources');assert.deepEqual(native.canonical_facts,rho.canonical_facts,'Native and Rho standard method results must agree');equivalence={checked:true,passed:true};}catch(error){failures++;equivalence={checked:true,passed:false,error:error.message};}}

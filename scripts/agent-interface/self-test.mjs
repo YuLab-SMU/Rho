@@ -7,6 +7,7 @@ import {parseRpc,digest} from './runtime.mjs';
 import {nativeReadPath} from './agent.mjs';
 import {RecordingProxy,operationRecord,textResponseBytes,explicitReadTaskAction,assertOperationIdentities,assertConsumedEvidence} from './proxy.mjs';
 import {createScenario,CORE_CASES,ADDITIONAL_CASES,FINAL_SCHEMA,availableModuleList,numeric,assertSkillResourceRead,assertSuccessfulAnalysis,acceptedInputReplies,assertSavedCapture,assertImageProvenance} from './scenarios.mjs';
+import {parseConcurrency,runBoundedCases} from './worker-pool.mjs';
 assert.deepEqual(parseRpc('data: {"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n\n'),[{jsonrpc:'2.0',id:1,result:{ok:true}}]);
 assert.deepEqual(parseRpc('{"id":2,"result":null}'),[{id:2,result:null}]);
 assert.equal(digest('α🙂'),digest(Buffer.from('α🙂','utf8')));
@@ -106,4 +107,31 @@ assert.equal(explicitReadTaskAction('discovery','rho.workspace.respond_input.v1'
 assert.equal(explicitReadTaskAction('selected_draft','rho.application.bind_method.v1',{}),false);
 assert.equal(explicitReadTaskAction('recovery_disconnect','rho.application.control.v1',{action:{kind:'run_file'}}),true);
 assert.equal(explicitReadTaskAction('recovery_disconnect','rho.application.control.v1',{action:{kind:'edit_document'}}),false);
+
+assert.equal(parseConcurrency(),1);assert.equal(parseConcurrency('3'),3);
+for(const value of ['0','4','-1','1.5','invalid',''])assert.throws(()=>parseConcurrency(value));
+const cases=[...CORE_CASES.flatMap(id=>[1,2,3].map(repetition=>({id,repetition}))),...ADDITIONAL_CASES.map(id=>({id,repetition:1}))];
+const gates=Array.from({length:3},()=>{let release;const promise=new Promise(resolve=>{release=resolve;});return {promise,release};});
+const started=[],closed=new Set(),completion=[],checkpoints=[],ordered=new Array(cases.length);let active=0,maximum=0;
+const pooled=runBoundedCases(cases,3,async(test,index)=>{
+  started.push(index);active++;maximum=Math.max(maximum,active);
+  try {if(index<3)await gates[index].promise;else await Promise.resolve();if(index===4)throw new Error('case fixture failure');return {...test,index};}
+  finally {closed.add(index);active--;}
+},(outcome,index)=>{
+  assert.ok(closed.has(index),'worker must await per-case cleanup before publishing its result');
+  completion.push(index);ordered[index]=outcome;checkpoints.push(ordered.flatMap((result,i)=>result?[i]:[]));
+  if(index===6)throw new Error('manifest checkpoint fixture failure');
+});
+assert.deepEqual(started,[0,1,2]);assert.equal(active,3);
+gates[2].release();await new Promise(resolve=>setImmediate(resolve));
+assert.equal(completion[0],2);assert.equal(started.length,34,'a case/reporting failure must not abandon later selected cases');
+gates[1].release();gates[0].release();const pool=await pooled;
+assert.equal(maximum,3);assert.equal(active,0);assert.equal(closed.size,34);assert.equal(pool.outcomes.length,34);
+assert.equal(pool.outcomes[4].status,'rejected');assert.deepEqual(pool.reportingErrors.map(error=>error.index),[6]);
+for(let index=0;index<34;index++)if(index!==4)assert.deepEqual(pool.outcomes[index].value,{...cases[index],index});
+for(const indices of checkpoints)assert.deepEqual(indices,[...indices].sort((a,b)=>a-b),'manifest checkpoints retain declared case order');
+let sequential=0;const serial=await runBoundedCases([0,1,2],1,async index=>{assert.equal(index,sequential);await Promise.resolve();return sequential++;});
+assert.deepEqual(serial.outcomes.map(result=>result.value),[0,1,2]);
+assert.deepEqual((await runBoundedCases([],3,()=>assert.fail('empty pool executed work'))).outcomes,[]);
+await assert.rejects(()=>runBoundedCases([0],4,()=>assert.fail('invalid concurrency executed work')));
 console.log('Harness parser and assertion checks passed. No Agent acceptance runs executed.');
