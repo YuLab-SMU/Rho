@@ -15,7 +15,7 @@ use rho_host::NextHost;
 use rmcp::{
     ErrorData, RoleServer, ServerHandler, ServiceExt,
     model::{
-        CallToolRequestParams, CallToolResult, ClientJsonRpcMessage, Implementation,
+        CallToolRequestParams, CallToolResult, ClientJsonRpcMessage, Content, Implementation,
         ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo,
         ServerJsonRpcMessage, Tool, ToolAnnotations,
     },
@@ -97,7 +97,10 @@ impl McpEdge {
                 let input = if query || control {
                     capability.input_schema.clone()
                 } else {
-                    command_schema(capability.input_schema.clone())?
+                    command_schema(
+                        capability.input_schema.clone(),
+                        capability.capability.id == "workspace.run_r",
+                    )?
                 };
                 let output = if query {
                     rho_contract::query_result_schema(capability.output_schema.clone())
@@ -225,7 +228,11 @@ impl McpEdge {
                 let input: CommandArguments =
                     serde_json::from_value(args).map_err(invalid_operation)?;
                 HostRequest::Invoke(rho_contract::InvokeRequest {
-                    return_after_acceptance: input.return_after_acceptance,
+                    return_after_acceptance: Some(
+                        input
+                            .return_after_acceptance
+                            .unwrap_or(capability.id == "workspace.run_r"),
+                    ),
                     invocation: Invocation {
                         client_request_id: input.client_request_id,
                         capability: capability.clone(),
@@ -381,7 +388,7 @@ impl ServerHandler for McpEdge {
             match quota.try_acquire() {
                 Ok(permit) => Some(permit),
                 Err(_) => {
-                    return Ok(CallToolResult::structured_error(
+                    return Ok(tool_error(
                         json!({"error":"MCP in-flight limit reached; request not accepted","diagnostic":OperationError::HostBusy.diagnostic()}),
                     ));
                 }
@@ -393,9 +400,9 @@ impl ServerHandler for McpEdge {
         if matches!(entry.route, Route::View) {
             return Ok(match self.native_view(args).await {
                 Ok(result) => result,
-                Err(error) => CallToolResult::structured_error(
-                    json!({"error":error.to_string(),"diagnostic":error.diagnostic()}),
-                ),
+                Err(error) => {
+                    tool_error(json!({"error":error.to_string(),"diagnostic":error.diagnostic()}))
+                }
             });
         }
         let result = match self.route(&entry.route, args).await {
@@ -411,9 +418,9 @@ impl ServerHandler for McpEdge {
                     CallToolResult::structured(json!({"result":value}))
                 }
             }
-            Err(error) => CallToolResult::structured_error(
-                json!({"error":error.to_string(),"diagnostic":error.diagnostic()}),
-            ),
+            Err(error) => {
+                tool_error(json!({"error":error.to_string(),"diagnostic":error.diagnostic()}))
+            }
         };
         if serde_json::to_vec(&result)
             .map_err(|error| ErrorData::internal_error(error.to_string(), None))?
@@ -472,7 +479,13 @@ fn result_schema(mut inner: Value) -> Value {
     }
     schema
 }
-fn command_schema(mut arguments: Value) -> Result<Value, String> {
+fn tool_error(error: Value) -> CallToolResult {
+    // Rejections are not owner results. structuredContent would be validated
+    // against the successful owner's outputSchema and mask this diagnostic in
+    // clients such as Kimi's MCP SDK. Keep the original error model-readable.
+    CallToolResult::error(vec![Content::text(error.to_string())])
+}
+fn command_schema(mut arguments: Value, accepted: bool) -> Result<Value, String> {
     let definitions = arguments
         .as_object_mut()
         .ok_or("capability argument schema is not an object")?
@@ -480,7 +493,7 @@ fn command_schema(mut arguments: Value) -> Result<Value, String> {
     let mut schema = json!({"type":"object", "properties":{
         "client_request_id":{"type":"string","minLength":1,"maxLength":160},
         "arguments":arguments,
-        "return_after_acceptance":{"type":"boolean","default":false},
+        "return_after_acceptance":{"type":"boolean","default":accepted,"description":"When true, return the durable operation receipt promptly. Acceptance does not mean running or completion. Read operation.get and workspace.console_state to distinguish execution, queued work, paused queue and input. Never resubmit accepted work."},
         "preconditions":{"type":"array","maxItems":32,"items":schema_for!(Precondition).to_value(),"default":[]}
     }, "required":["client_request_id","arguments"], "additionalProperties":false});
     if let Some(definitions) = definitions {
@@ -564,6 +577,38 @@ fn invalid_operation(error: impl std::fmt::Display) -> OperationError {
 #[cfg(test)]
 mod port_contract_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn rejected_tool_arguments_reach_the_client_without_a_false_output_schema() {
+        let (_directory, host) = host().await;
+        let edge = McpEdge::local(host.clone()).unwrap();
+        let (server_io, client_io) = tokio::io::duplex(64 * 1024);
+        let server =
+            tokio::spawn(async move { edge.serve(server_io).await.unwrap().waiting().await });
+        let client = ().serve(client_io).await.unwrap();
+        let reply = client.call_tool(CallToolRequestParams::new("rho.workspace.run_r.v1").with_arguments(
+            json!({"client_request_id":"invalid-run","arguments":{"code":"1+1","output_mode":"all"}}).as_object().unwrap().clone()
+        )).await.unwrap();
+        assert_eq!(reply.is_error, Some(true));
+        assert!(
+            reply.structured_content.is_none(),
+            "a rejected call is not an owner result matching outputSchema"
+        );
+        let text = serde_json::to_string(&reply.content).unwrap();
+        assert!(
+            text.contains("all") && text.contains("/output_mode"),
+            "{text}"
+        );
+        assert!(text.contains("diagnostic"), "{text}");
+        assert!(
+            host.outbox(&NextHost::local_context(), 0, 100)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        client.cancel().await.unwrap();
+        server.await.unwrap().unwrap();
+    }
 
     async fn host() -> (tempfile::TempDir, Arc<NextHost>) {
         let directory = tempfile::tempdir().unwrap();
@@ -686,7 +731,7 @@ mod port_contract_tests {
         let record = call(
             &edge,
             "rho.workspace.run_r.v1",
-            json!({"client_request_id":"one-run","arguments":{"code":"1 + 1"}}),
+            json!({"client_request_id":"one-run","arguments":{"code":"1 + 1"},"return_after_acceptance":false}),
         )
         .await
         .unwrap();

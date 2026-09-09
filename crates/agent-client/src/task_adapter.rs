@@ -568,10 +568,11 @@ impl NativeAgentSession for Connection {
             }
         };
         tokio::spawn(async move {
-            let result = client
-                .rpc
-                .finish_call(ticket, if codex { 30 } else { 600 })
-                .await;
+            let result = if codex {
+                client.rpc.finish_call(ticket, 30).await
+            } else {
+                client.rpc.finish_prompt(ticket).await
+            };
             match result {
                 Ok(value) if codex => {
                     let turn = value["turn"]["id"].as_str().map(str::to_owned);

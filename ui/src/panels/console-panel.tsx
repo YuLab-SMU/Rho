@@ -577,7 +577,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
       )}
       {consoleModel.consoleState?.pause && (
         <div className="queue-notice">
-          {consoleModel.consoleState.pause.reason}
+          <span>{consoleModel.consoleState.pause.operation_id ? "R queue paused after a run stopped." : "R queue paused."}{consoleModel.consoleState.pending.length > 0 && ` ${consoleModel.consoleState.pending.length} waiting.`}</span>
           {consoleModel.consoleState.pause.operation_id && (
             <button
               onClick={() => {
@@ -587,7 +587,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
                 void operations.reviewOperation(id);
               }}
             >
-              Inspect Stopped Run
+              View run result
             </button>
           )}
           <button

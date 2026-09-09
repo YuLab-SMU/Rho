@@ -52,6 +52,11 @@ export class Plots extends Model<PlotsSnapshot> {
     for (const [id, view] of Object.entries(this.views))
       if (view.follow && !view.pinned && (view.selected !== selected || view.seen !== media.length)) {
         this.views[id] = immutable({ ...view, selected, seen: media.length }); changed = true;
+      } else if (view.selected) {
+        // A verified Agent selection can arrive before the media index. Once
+        // indexed, the selected image is already seen, not a new unread plot.
+        const seen = media.findIndex(reference => mediaKey(reference) === view.selected) + 1;
+        if (seen > view.seen) { this.views[id] = immutable({ ...view, seen }); changed = true; }
       }
     if (changed) this.changed();
   }

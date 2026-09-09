@@ -79,6 +79,29 @@ pub(crate) fn bounded(text: &str, limit: usize) -> String {
     }
     text[..end].to_owned()
 }
+fn acp_details(tool: &Value, scrub: impl Fn(&str) -> String) -> String {
+    let mut parts = Vec::new();
+    for part in tool["content"].as_array().into_iter().flatten().take(16) {
+        match part["type"].as_str() {
+            Some("content") if part["content"]["type"] == "text" => {
+                if let Some(text) = part["content"]["text"].as_str() {
+                    parts.push(bounded(&scrub(text), 2000));
+                }
+            }
+            Some("diff") => parts.push(format!(
+                "{}\nBefore:\n{}\nAfter:\n{}",
+                bounded(
+                    &scrub(part["path"].as_str().unwrap_or("Proposed edit")),
+                    512
+                ),
+                bounded(&scrub(part["oldText"].as_str().unwrap_or("")), 700),
+                bounded(&scrub(part["newText"].as_str().unwrap_or("")), 1200)
+            )),
+            _ => {}
+        }
+    }
+    bounded(&parts.join("\n"), 2000)
+}
 // Codex's protocol defines these decisions. Amendments are shown only when the
 // actual callback supplied the exact amendment; its order and payload are kept.
 fn codex_approval_options(params: &Value) -> Vec<(String, (String, Value))> {
@@ -331,6 +354,15 @@ impl Rpc {
             )),
         }
     }
+    /// ACP's prompt response is the end of a turn, not an acknowledgement.
+    /// A turn may include long inference, tools and human permission waits.
+    /// Keep its correlation until the native reply or transport closure; Stop
+    /// remains available through the independent cancellation notification.
+    pub async fn finish_prompt(&self, ticket: CallTicket) -> Result<Value, String> {
+        let result = ticket.receiver.await;
+        self.replies.lock().unwrap().remove(&ticket.id);
+        result.unwrap_or_else(|_| Err("Agent transport closed".into()))
+    }
     pub fn is_closed(&self) -> bool {
         self.closed.load(Ordering::Acquire)
     }
@@ -469,7 +501,12 @@ impl Rpc {
                             let details = if update.get("rawInput").is_some() {
                                 bounded(&self.scrub(&update["rawInput"].to_string()), 2000)
                             } else {
-                                old.map(|v| v.2).unwrap_or_default()
+                                let content = acp_details(update, |text| self.scrub(text));
+                                if content.is_empty() {
+                                    old.map(|v| v.2).unwrap_or_default()
+                                } else {
+                                    self.scrub(&content)
+                                }
                             };
                             calls.retain(|(key, _, _)| key != id);
                             if calls.len() >= 32 {
@@ -560,7 +597,14 @@ impl Rpc {
                 })
                 .unwrap_or("Agent requests permission")
                 .to_owned();
-            details = observed.map(|call| call.2).unwrap_or_default();
+            details = acp_details(&params["toolCall"], |text| self.scrub(text));
+            if let Some(observed) = observed.filter(|call| !call.2.is_empty() && call.2 != details)
+            {
+                if !details.is_empty() {
+                    details.push('\n');
+                }
+                details.push_str(&observed.2);
+            }
             let native_options = params["options"].as_array();
             let valid = native_options.is_some_and(|options| {
                 !options.is_empty()
@@ -732,6 +776,14 @@ impl Rpc {
 #[cfg(test)]
 mod approval_tests {
     use super::*;
+    #[test]
+    fn permission_excerpts_redact_before_truncating_a_credential() {
+        let secret = "#test-secret-that-crosses-the-excerpt-boundary";
+        let tool = json!({"content":[{"type":"content","content":{"type":"text","text":format!("{}{secret}", "x".repeat(1990))}}]});
+        let details = acp_details(&tool, |text| text.replace(secret, "<private-token>"));
+        assert!(details.len() <= 2000);
+        assert!(!details.contains("#test"));
+    }
     #[test]
     fn codex_amendments_keep_native_payloads_and_basic_choices() {
         let native = json!({"proposedExecpolicyAmendment":["git","status"],"proposedNetworkPolicyAmendments":[{"action":"deny","host":"example.test"}]});

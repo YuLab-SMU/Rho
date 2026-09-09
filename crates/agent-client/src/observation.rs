@@ -56,6 +56,7 @@ impl Observer {
         self.last_message = None;
         self.message("user", text, None, false);
         self.last_message = None;
+        self.activity("working");
     }
     pub fn finish(&mut self) {
         if self.completed_turns.len() >= 256 {
@@ -115,6 +116,19 @@ impl Observer {
                 .unwrap_or_default()
                 .as_millis() as u64,
         }
+    }
+    fn activity(&mut self, phase: &str) {
+        if !self.active || self.replaying {
+            return;
+        }
+        let mut event = self.event(
+            format!("activity:{}", self.request.as_deref().unwrap_or("")),
+            "activity",
+            String::new(),
+            None,
+        );
+        event.status = Some(phase.into());
+        self.push(event);
     }
     fn message(&mut self, role: &str, text: &str, item: Option<&str>, append: bool) {
         if text.is_empty() {
@@ -211,6 +225,7 @@ impl Observer {
         }
         if provider == AgentProvider::Codex && method == "item/agentMessage/delta" {
             if self.turn.is_some() {
+                self.activity("responding");
                 self.message(
                     "assistant",
                     &scrub(p["delta"].as_str().unwrap_or("")),
@@ -220,10 +235,21 @@ impl Observer {
             }
             return;
         }
+        if provider == AgentProvider::Codex
+            && matches!(
+                method,
+                "item/reasoning/textDelta" | "item/reasoning/summaryTextDelta"
+            )
+        {
+            self.last_message = None;
+            self.activity("thinking");
+            return;
+        }
         if provider == AgentProvider::Codex && matches!(method, "item/started" | "item/completed") {
             let item = &p["item"];
             let kind = item["type"].as_str().unwrap_or("");
             if kind == "agentMessage" && method == "item/completed" {
+                self.activity("working");
                 self.message(
                     "assistant",
                     &scrub(item["text"].as_str().unwrap_or("")),
@@ -233,6 +259,13 @@ impl Observer {
                 return;
             }
             if matches!(kind, "agentMessage" | "userMessage" | "reasoning") {
+                if kind == "reasoning" {
+                    self.activity(if method == "item/started" {
+                        "thinking"
+                    } else {
+                        "working"
+                    });
+                }
                 return;
             }
             let Some(id) = item["id"].as_str() else {
@@ -260,6 +293,11 @@ impl Observer {
                 .into(),
             );
             self.push(event);
+            self.activity(if method == "item/started" {
+                "tool"
+            } else {
+                "working"
+            });
             return;
         }
         if method != "session/update" {
@@ -267,12 +305,21 @@ impl Observer {
         }
         let u = &p["update"];
         match u["sessionUpdate"].as_str().unwrap_or("") {
-            "agent_message_chunk" => self.message(
-                "assistant",
-                &scrub(u["content"]["text"].as_str().unwrap_or("")),
-                None,
-                true,
-            ),
+            "agent_message_chunk" => {
+                self.activity("responding");
+                self.message(
+                    "assistant",
+                    &scrub(u["content"]["text"].as_str().unwrap_or("")),
+                    None,
+                    true,
+                );
+            }
+            "agent_thought_chunk" => {
+                // Observe the native phase, never cache or redisplay private
+                // reasoning text as conversation or future model memory.
+                self.last_message = None;
+                self.activity("thinking");
+            }
             "user_message_chunk" if self.replaying => {
                 self.last_message = None;
                 let text = scrub(u["content"]["text"].as_str().unwrap_or(""));
@@ -315,7 +362,9 @@ impl Observer {
                 if let Some(old) = old {
                     event.at_ms = old.at_ms;
                 }
+                let finished = matches!(event.status.as_deref(), Some("completed" | "failed"));
                 self.push(event);
+                self.activity(if finished { "working" } else { "tool" });
             }
             _ => {}
         }
@@ -326,6 +375,48 @@ impl Observer {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn thought_activity_is_bounded_private_and_never_replayed() {
+        let mut o = Observer::default();
+        o.bind("s", false);
+        o.begin("r", "hello");
+        let thought = json!({"sessionId":"s","update":{"sessionUpdate":"agent_thought_chunk","content":{"text":"private reasoning"}}});
+        for _ in 0..600 {
+            o.observe(
+                AgentProvider::Kimi,
+                "session/update",
+                &thought,
+                str::to_owned,
+            );
+        }
+        let page = o.page(0);
+        assert_eq!(page.events.len(), 2);
+        assert_eq!(
+            page.events.last().unwrap().status.as_deref(),
+            Some("thinking")
+        );
+        assert!(
+            page.events
+                .iter()
+                .all(|e| !e.text.contains("private reasoning"))
+        );
+        o.finish();
+        o.observe(
+            AgentProvider::Kimi,
+            "session/update",
+            &thought,
+            str::to_owned,
+        );
+        assert_eq!(o.page(0).cursor, page.cursor);
+        o.bind("s", true);
+        o.observe(
+            AgentProvider::Kimi,
+            "session/update",
+            &thought,
+            str::to_owned,
+        );
+        assert_eq!(o.page(0).cursor, page.cursor);
+    }
     #[test]
     fn observer_rejects_other_sessions_and_completed_codex_turns() {
         let mut o = Observer::default();
@@ -346,13 +437,13 @@ mod tests {
             o.observe(AgentProvider::Kimi,"session/update",&json!({"sessionId":"s","update":{"sessionUpdate":"agent_message_chunk","content":{"text":text}}}),str::to_owned);
         }
         let page = o.page(0);
-        assert_eq!(page.events.len(), 2);
-        assert_eq!(page.events[1].text, "ab");
+        assert_eq!(page.events.len(), 3);
+        assert_eq!(page.events.last().unwrap().text, "ab");
         let cursor = page.cursor;
         o.observe(AgentProvider::Kimi,"session/update",&json!({"sessionId":"s","update":{"sessionUpdate":"tool_call","toolCallId":"native-tool","title":"Read"}}),str::to_owned);
         o.observe(AgentProvider::Kimi,"session/update",&json!({"sessionId":"s","update":{"sessionUpdate":"agent_message_chunk","content":{"text":"done"}}}),str::to_owned);
-        assert_eq!(o.page(cursor).events.len(), 2);
-        assert_eq!(o.page(0).events.len(), 4);
+        assert_eq!(o.page(cursor).events.len(), 3);
+        assert_eq!(o.page(0).events.len(), 5);
     }
 }
 
@@ -367,7 +458,13 @@ mod native_status_test {
         o.turn = Some("turn".into());
         o.observe(AgentProvider::Codex,"item/completed",&serde_json::json!({"threadId":"thread","turnId":"turn","item":{"id":"item","type":"commandExecution","command":"fixture","status":"failed"}}),str::to_owned);
         assert_eq!(
-            o.page(0).events.last().unwrap().status.as_deref(),
+            o.page(0)
+                .events
+                .iter()
+                .find(|e| e.kind == "tool")
+                .unwrap()
+                .status
+                .as_deref(),
             Some("failed")
         );
     }

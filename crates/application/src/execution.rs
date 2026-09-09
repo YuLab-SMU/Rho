@@ -687,17 +687,23 @@ fn text_patch(path: &str, before: Option<&str>, after: &str) -> Result<String, A
             "the captured file is already empty; use project.read_text to verify its unchanged digest",
         ));
     }
-    let prefix = old
+    let mut prefix = old
         .iter()
         .zip(new.iter())
         .take_while(|(a, b)| a == b)
         .count();
-    let suffix = old[prefix..]
+    let mut suffix = old[prefix..]
         .iter()
         .rev()
         .zip(new[prefix..].iter().rev())
         .take_while(|(a, b)| a == b)
         .count();
+    // An unchanged nonempty capture still uses the existing verified Project
+    // action. Replace one identical line with real surrounding context.
+    if prefix == old.len() && prefix == new.len() {
+        prefix = 0;
+        suffix = old.len().saturating_sub(1);
+    }
     let start = prefix.saturating_sub(3);
     let end_old = (old.len() - suffix + 3).min(old.len());
     let end_new = (new.len() - suffix + 3).min(new.len());
@@ -717,12 +723,20 @@ fn text_patch(path: &str, before: Option<&str>, after: &str) -> Result<String, A
             patch.push_str("\n\\ No newline at end of file\n");
         }
     };
-    // Replacing even identical captured lines yields a verifiable Project action.
-    for line in &old[start..end_old] {
+    // Git requires actual context around a partial hunk. Replacing every line
+    // in the hunk, including unchanged context, makes an interior edit look like
+    // a zero-context patch and fail even when the file's digest is unchanged.
+    for line in &old[start..prefix] {
+        add(&mut patch, ' ', line);
+    }
+    for line in &old[prefix..old.len() - suffix] {
         add(&mut patch, '-', line);
     }
-    for line in &new[start..end_new] {
+    for line in &new[prefix..new.len() - suffix] {
         add(&mut patch, '+', line);
+    }
+    for line in &old[old.len() - suffix..end_old] {
+        add(&mut patch, ' ', line);
     }
     if patch.len() > 200 * 1024 {
         return Err(ApplicationError::Budget(
@@ -736,6 +750,58 @@ fn text_patch(path: &str, before: Option<&str>, after: &str) -> Result<String, A
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn captured_partial_saves_apply_with_git_and_preserve_exact_bytes() {
+        use std::{
+            fs,
+            io::Write,
+            process::{Command, Stdio},
+        };
+        let baseline = "# ggtree 简单示意树\nlibrary(ggtree)\nlibrary(ape)\n\nset.seed(2026)\ntr <- 1\np <- 2\nprint(p)\n# retained\n";
+        let long = (0..100)
+            .map(|n| format!("x{n} <- {n}\r\n"))
+            .collect::<String>();
+        let cases = vec![
+            (
+                baseline.to_owned(),
+                baseline.replace("library(ape)\n", "library(ape)\nlibrary(ggplot2)\n"),
+            ),
+            (long.clone(), long.replace("x50 <- 50", "x50 <- 7")),
+            (baseline.to_owned(), baseline.replace("p <- 2\n", "")),
+            (
+                "\u{feff}甲\r\n乙\r\n丙".into(),
+                "\u{feff}甲\r\n新\r\n丙".into(),
+            ),
+            (baseline.to_owned(), baseline.to_owned()),
+            ("last".into(), "last\nmore".into()),
+        ];
+        for (before, after) in cases {
+            let dir = tempfile::tempdir().unwrap();
+            let path = "分析.R";
+            fs::write(dir.path().join(path), &before).unwrap();
+            let patch = text_patch(path, Some(&before), &after).unwrap();
+            let mut git = Command::new("git")
+                .args(["apply", "-"])
+                .current_dir(dir.path())
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            git.stdin
+                .take()
+                .unwrap()
+                .write_all(patch.as_bytes())
+                .unwrap();
+            let output = git.wait_with_output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{patch}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert_eq!(fs::read(dir.path().join(path)).unwrap(), after.as_bytes());
+        }
+    }
     #[test]
     fn patch_is_small_for_a_late_edit_and_preserves_no_final_newline() {
         let before = (0..10_000)

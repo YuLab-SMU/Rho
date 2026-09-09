@@ -13,10 +13,13 @@ import type { AgentContextSelection } from "../generated/AgentContextSelection";
 import type { AgentContextPreview } from "../generated/AgentContextPreview";
 import type { AgentTaskEvent } from "../generated/AgentTaskEvent";
 import "../agent-panel.css";
+import { AgentActivity } from "./agent-activity";
 
 const providers: Record<AgentProvider, string> = { codex: "Codex", kimi: "Kimi Code", deepseek: "DeepSeek Harness" };
 const statusLabel: Record<string, string> = { draft: "Draft", ready: "Ready", running: "Running", waiting_for_permission: "Needs permission", connecting: "Connecting", resuming: "Resuming", stopping: "Stopping", disconnected: "Disconnected", uncertain: "Needs review", interrupted: "Stopped", failed: "Failed" };
-const toolTitle = (text: string) => text.startsWith("mcp__rho__rho_") ? `Rho · ${text.slice(14).replace(/_v\d+(?:_\w+)?$/, "").replaceAll("_", " ")}` : text;
+const rhoToolTitles: Record<string, string> = { workspace_run_r: "Submit R code", workspace_packages: "Inspect R packages", workspace_console_state: "Check R queue", workspace_resume_queue: "Continue queued R runs", workspace_list_outputs: "Find run outputs", output_view: "Inspect figure", application_context: "Read workspace context", application_windows: "Find workspace window", application_control: "Update workspace", application_command_status: "Check workspace action", operation_get: "Check run result", operation_list_recent: "Find original run" };
+const toolStatusLabels: Record<string, string> = { in_progress: "Running", running: "Running", pending: "Pending", completed: "Done", failed: "Failed" };
+const toolTitle = (text: string) => { if (!text.startsWith("mcp__rho__rho_")) return text; const key = text.slice(14).replace(/_v\d+(?:_\w+)?$/, ""); return rhoToolTitles[key] ?? `Rho · ${key.replaceAll("_", " ")}`; };
 function Down() { return <span className="at-down"><Icon name="chevron" size={12} /></span>; }
 function TaskState({ task }: { task: AgentTaskSummary }) {
   const state = task.attachment.state;
@@ -85,7 +88,7 @@ function EventInputs({ taskId, event }: { taskId: string; event: AgentTaskEvent 
 }
 function EventView({ event, taskId }: { event: AgentTaskEvent; taskId: string }) {
   if (event.kind === "context") return <details className="at-tool at-context-event"><summary><Icon name="link" size={14} />Workspace context</summary><pre>{event.text}</pre></details>;
-  if (event.kind === "tool") return <div className={`at-tool at-tool-${event.status ?? "running"}`}><Icon name={event.status === "completed" ? "check" : event.status === "failed" ? "warning" : "clock"} size={14} /><span>{toolTitle(event.text)}</span><small>{event.status}</small></div>;
+  if (event.kind === "tool") return <div className={`at-tool at-tool-${event.status ?? "running"}`}><Icon name={event.status === "completed" ? "check" : event.status === "failed" ? "warning" : "clock"} size={14} /><span>{toolTitle(event.text)}</span><small>{toolStatusLabels[event.status ?? ""] ?? event.status}</small></div>;
   return <div className={`at-message at-message-${event.role}`}><small>{event.role === "user" ? "You" : "Agent"}</small><div className="at-message-text">{event.text}</div>{event.status === "truncated" && <small>Message excerpt</small>}<EventInputs taskId={taskId} event={event} /></div>;
 }
 function Conversation({ task }: { task: AgentTaskSummary }) {
@@ -95,8 +98,9 @@ function Conversation({ task }: { task: AgentTaskSummary }) {
   return <div className="at-conversation" ref={scroll} aria-label="Agent conversation" onScroll={() => { const e = scroll.current; if (e && !restoring.current) owner.setPosition(id, { scrollTop: e.scrollTop, following: e.scrollHeight - e.scrollTop - e.clientHeight < 48 }); }}>
     {(state.earlier.get(id) || state.historyGap.get(id) || task.history_gap) && <div className="at-history-note">{state.earlier.get(id) || owner.canReadNativeHistory(id) ? <button onClick={() => void owner.olderHistory(id)}>{state.earlier.get(id) ? "Load earlier messages" : "Read native history"}<Down /></button> : "Earlier messages unavailable in this cache"}</div>}
     {events.some(e => e.source === "native_history") && <div className="at-history-source">{task.task.provider === "kimi" ? "Native context history" : "Native history"}</div>}
-    {events.map(event => <EventView key={event.event_id} event={event} taskId={id} />)}
-    {!events.length && <div className="at-empty-conversation">{agentBusy(task.attachment.state) ? <><Icon name="clock" />{statusLabel[task.attachment.state]}…</> : "What would you like to work on?"}</div>}
+    {events.filter(event => event.kind !== "activity").map(event => <EventView key={event.event_id} event={event} taskId={id} />)}
+    <AgentActivity task={task} events={events} now={state.observedAt} pending={state.pending.some(p => p.taskId === id && p.kind === "send")} />
+    {!events.length && !agentBusy(task.attachment.state) && !state.pending.some(p => p.taskId === id && p.kind === "send") && <div className="at-empty-conversation">What would you like to work on?</div>}
   </div>;
 }
 function AssetCard({ taskId, asset, removable, onPreview }: { taskId: string; asset: AgentAsset; removable: boolean; onPreview(): void }) {
@@ -130,6 +134,7 @@ function Composer({ task }: { task: AgentTaskSummary }) {
   const modes = task.attachment.capabilities.modes, currentMode = task.attachment.capabilities.current_mode ?? task.task.mode;
   const mode = modes.find(m => m.id === currentMode), decisions = task.attachment.decisions, decision = decisions[Math.min(decisionIndex, Math.max(0, decisions.length - 1))];
   const pendingSend = state.pending.some(p => p.taskId === id && p.kind === "send");
+  const previousTurns = detail?.receipts.filter(r => ["uncertain", "interrupted"].includes(r.status)) ?? [];
   const canSend = !composing && editable && owner.connected && !busy && !pendingSend && !local?.conflict && !["disconnected", "uncertain"].includes(task.attachment.state) && (!!content.text.trim() || !!content.assets.length || !!content.context.length);
   useEffect(() => { setMenu(null); setSearch(""); setAssetId(null); setLocalError(""); setDecisionIndex(0); }, [id]);
   useEffect(() => { if (menu !== "context") return; owner.clearContext(true); const timer = setTimeout(() => { void owner.searchContext(source, search); }, 160); return () => clearTimeout(timer); }, [menu, search, source]);
@@ -139,9 +144,9 @@ function Composer({ task }: { task: AgentTaskSummary }) {
   async function preview(selection: AgentContextSelection) { setMenu("preview"); await owner.previewContext(selection); }
   const selectedAsset = detail?.assets.find(a => a.asset_id === assetId), assetPreview = assetId ? state.previews.get(`${id}:${assetId}`) : null;
   return <div className="at-composer-region" ref={region}>
-    {task.unconfirmed > 0 && <details className="at-review"><summary><Icon name="warning" size={14} />Previous turn needs review</summary>{detail?.receipts.filter(r => ["uncertain", "interrupted"].includes(r.status)).map(r => <div key={r.request_id}><strong>{r.status}</strong><p>{r.error}</p>{r.submitted_draft && <><pre>{r.submitted_draft.text}</pre><button className="at-button" disabled={!editable} onClick={() => owner.restoreSubmitted(id, r.submitted_draft!)}>Use retained draft</button></>}</div>)}</details>}
+    {task.unconfirmed > 0 && <details className="at-review"><summary><Icon name="warning" size={14} />{previousTurns.length > 0 && previousTurns.every(r => r.status === "interrupted") ? "Earlier turn stopped" : "Previous turn needs review"}</summary>{previousTurns.map(r => <div key={r.request_id}><strong>{r.status}</strong><p>{r.error}</p>{r.submitted_draft && <><pre>{r.submitted_draft.text}</pre><button className="at-button" disabled={!editable} onClick={() => owner.restoreSubmitted(id, r.submitted_draft!)}>Use retained draft</button></>}</div>)}</details>}
     {decision && <section className="at-permission" aria-label="Pending Agent permission"><div className="at-permission-title"><strong>{toolTitle(decision.title)}</strong>{decisions.length > 1 && <select aria-label="Pending permission" value={Math.min(decisionIndex, decisions.length - 1)} onChange={e => setDecisionIndex(Number(e.target.value))}>{decisions.map((d, i) => <option key={d.id} value={i}>{i + 1} of {decisions.length}</option>)}</select>}</div>
-      {decision.details && <pre>{decision.details}</pre>}<div className="at-permission-options">{decision.options.map(option => <button key={option.id} className="at-button" disabled={!editable || !owner.connected || owner.hasPending(id, "decision")} onClick={() => void owner.reply(id, task.attachment.generation, decision.id, option.id)}>{option.label}</button>)}</div>
+      {decision.details && <details className="at-permission-details" key={decision.id}><summary>View request</summary><pre>{decision.details}</pre></details>}<div className="at-permission-options">{decision.options.map(option => <button key={option.id} className="at-button" disabled={!editable || !owner.connected || owner.hasPending(id, "decision")} onClick={() => void owner.reply(id, task.attachment.generation, decision.id, option.id)}>{option.label}</button>)}</div>
     </section>}
     {local?.conflict && <details className="at-conflict"><summary><Icon name="warning" size={14} />Local draft copy kept</summary><pre>{local.conflict.text}</pre><div><button className="at-button" disabled={!editable} onClick={() => owner.useLocalCopy(id)}>Use local copy</button><button className="at-button" onClick={() => owner.useSavedDraft(id)}>View saved draft</button></div></details>}
     <div className={`at-composer${editable ? "" : " readonly"}`} onDragOver={e => { if (editable && owner.connected && e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={e => { e.preventDefault(); if (owner.connected) void attach(e.dataTransfer.files); }}>

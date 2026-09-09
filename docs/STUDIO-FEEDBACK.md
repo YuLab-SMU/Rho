@@ -40,6 +40,22 @@ The proposed cross-product principles for interpreting this feedback are in
 
 ## User feedback
 
+### F14 — Agent activity and workspace results must form a coherent experience
+
+**Reported experience (2026-09-09):** A simple ggtree request spent long periods
+showing only the user's message or a completed tool. Tool failures and a paused-R
+queue notice were hard to interpret; the Agent appeared unaware of the workspace
+components. A PNG appeared in Files while Plots remained empty, and the Agent task
+ended with an uncertain timeout. The user did not experience a completed analysis.
+
+**Required experience:** User input, connection, native inference, tools, queue
+state and completion need continuous, truthful feedback near the conversation.
+The Agent should use Editor, Console, Objects and Plots through their real owners
+and verify the visible result. Correctable tool errors must reach the Agent with
+their actual cause; acceptance, running and a paused queue must remain distinct.
+An arbitrary client deadline must not hide a native final response. Tests must
+exercise a real analysis and visible result, not only a short greeting.
+
 ### F01 — Components cannot be removed
 
 **Reported experience:** The user cannot remove a component.

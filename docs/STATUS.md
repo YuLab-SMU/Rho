@@ -52,6 +52,56 @@ now has a distinct accessible label from the New task action. Evidence is in
 trial Host/page is preserved. A separate `target/experience/agent-ime-review/ime-test`
 workspace uses refreshable development assets for testing the corrected client.
 
+## Agent activity and real-analysis integration
+
+The user's ggtree trial exposed failures beyond panel presentation. The recorded
+connection took about two seconds; native thinking then continued without a visible
+phase. Rho's fixed 600-second ACP prompt deadline stopped observing a native turn
+that completed after about 729 seconds. The final response was lost. An invalid
+`output_mode: all` was obscured by an incompatible MCP structured-error envelope.
+A subsequent corrected R submission waited behind a failed-run pause and hit the
+native MCP request timeout. The original successful R operation saved a PNG but
+did not emit a Plots artifact; the native final message incorrectly claimed it did.
+
+Implemented: bounded native phase observations and an animated conversation status,
+including quiet time, driven by existing Coordinator observations; ACP prompt
+correlation until native completion/transport closure; readable MCP rejections;
+typed R output modes; default R acceptance receipts with queue-state read links;
+live Studio context and document/media guidance in native input. Structured
+window/document/action/media identities are expanded in the tool schema after a
+real GLM run repeatedly encoded reference-only parameters as strings. Native
+permission callback content/diffs are retained, not just the tool title.
+
+Real Kimi/GLM analysis also reproduced a captured-save bug: a partial Rust-generated
+patch encoded unchanged context as removed/added lines and Git rejected it despite
+the correct file digest. Captured saves now emit real unified-diff context. The
+regression applies start/interior/deletion/unchanged/Unicode/CRLF/no-final-newline
+edits through Git and checks exact bytes. The external Agent remains responsible
+for its R code; failed scientific operations retain their actual outcomes.
+
+Verified with Kimi Code 0.41.0 and `b-ai/glm-5.3-flash`: the same native session
+resumed after upgrading the disposable Host, retained the corrected Editor draft,
+saved and ran it successfully, read the real image through MCP, explicitly selected
+it in Plots and returned a final response with a succeeded submission receipt.
+The 800×600 PNG is retained by its producing R operation; the original failed runs
+and intentionally interrupted turn retain their actual statuses. Refresh preserved
+the saved script, selected image and conversation. Native image inspection rejected
+an incomplete reference; the Agent corrected it using the full owner reference.
+This validates recovery and completion, not error-free model-generated R code.
+
+Checks passed: 250 Rust workspace tests (seven opt-in cases skipped), all five
+real-R cases plus the real CLI/session runner, 303 frontend tests, 37 isolated Chrome
+scenarios, real-R MCP acceptance/paused-queue recovery, native task crash/resume
+fixtures, generated bindings/client checks, architecture/frontend boundaries,
+governance and vendor integrity. All nine focused Chrome cases passed after the
+permission-detail disclosure and selected-plot unread-count fixes; 29 native-client
+tests passed after the final permission-excerpt redaction review. Evidence logs
+and the verified preview `ggtree-final.png` are in `target/agent-task-development/`.
+The configured Kimi global Rho MCP entry remains disabled; existing user Hosts were
+preserved. Only owned disposable Hosts were restarted. Actual provider thinking
+latency remains variable; it is now visible rather than converted into a false
+terminal timeout.
+
 ## Parent-region docking refinement
 
 The 2026-09-09 follow-up identified an unreachable/unclear parent docking path:

@@ -793,6 +793,15 @@ an explicit running/waiting status; there is no second-turn send queue. Read-onl
 views show the saved draft without editable controls. Local conflicts retain a
 separate copy. An old acknowledgement cannot erase later edits.
 
+Following the real-use review on 2026-09-09, the conversation keeps a small animated
+activity row from Send through native completion, including gaps between tools.
+Connecting, restoring, native thinking, responding, tools and waiting for permission
+are distinct observed states. Quiet intervals show elapsed time without inventing
+progress or treating silence as failure. Reduced-motion preferences remove the
+animation. Reasoning text is not copied into the transcript. A saved image is not
+presented as a Plots result until the media owner confirms it; the Agent receives
+the live Studio context and existing component commands to make its work visible.
+
 **New task** opens a small runtime menu. Selecting a runtime creates the task/draft
 with its remembered model defaults and opens the empty conversation. The user can
 adjust model/reasoning in the composer before sending; there is no separate setup

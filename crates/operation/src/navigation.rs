@@ -76,6 +76,13 @@ impl CapabilityRegistry {
         }
         let uncertain = record.status == OperationStatus::Uncertain;
         if record.operation.domain == "workspace" {
+            if !record.status.is_terminal() || record.status == OperationStatus::Failed {
+                if let Some(read) = self.read_link(
+                    context, "workspace.console_state",
+                    "Check whether this run is executing, queued, paused after an error, or waiting for input; acceptance alone does not mean execution started",
+                    json!({}),
+                )? { reads.push(read); }
+            }
             for (capability, purpose) in [
                 (
                     "workspace.output_events",
@@ -180,7 +187,7 @@ impl CapabilityRegistry {
         }
         let mut diagnostics = vec![];
         let (code, continuation, message) = match record.status {
-            OperationStatus::Accepted => (DiagnosticCode::Busy, DiagnosticContinuation::ReadAgain, "Recorded lifecycle status is accepted; no terminal result has been committed.".into()),
+            OperationStatus::Accepted => (DiagnosticCode::Busy, DiagnosticContinuation::ReadAgain, "The request is accepted, not necessarily running. For R work, inspect workspace.console_state for a queued run, pause or input request; waiting alone does not clear a queue pause. Do not resubmit.".into()),
             OperationStatus::Running => (DiagnosticCode::Busy, DiagnosticContinuation::ReadAgain, "Recorded lifecycle status is running; no terminal result has been committed.".into()),
             OperationStatus::Reconciling => (DiagnosticCode::Busy, DiagnosticContinuation::ReadAgain, "The owner is checking native evidence for this operation.".into()),
             OperationStatus::Failed => (DiagnosticCode::ExecutionFailed, DiagnosticContinuation::InspectOriginal, record.error.clone().unwrap_or_else(|| "The owner reported execution failure; inspect original evidence before deciding on another action.".into())),

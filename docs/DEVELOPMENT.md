@@ -79,6 +79,14 @@ Native/transport verification:
 | `test-deepseek-inbox.mjs` | Checks the installed, lock-matched native Inbox replay/clear implementation with a disposable journal; no provider calls or session scan |
 | `test-agent-task-recovery.mjs` | Disposable Host crash, explicit same-ID resume, retained draft/uncertain receipt, refreshed MCP and images; local ACP fixture by default, `--real-kimi`, `--real-codex`, `--real-deepseek` use the documented configured development models and verify fresh MCP delivery |
 
+Interactive Agent acceptance needs a disposable analysis project outside the Rho
+checkout's ancestry, so the native Agent does not inherit repository-development
+AGENTS.md instructions. Use a real analysis, verify its captured Editor script,
+original R operation and retained Plots media in the same live window. A successful
+greeting does not establish this integration. `test-mcp.mjs --real-r` also covers
+model-readable invalid arguments and prompt acceptance behind a failed-run queue
+pause, including duplicate-request identity and explicit queue recovery.
+
 These scripts live in `scripts/`. R tests accept `RHO_ARK` and `RHO_R_HOME` where
 applicable. Ignored or unavailable external-runtime checks are not passes.
 Playwright uses isolated Chrome and disposable projects; build the current client

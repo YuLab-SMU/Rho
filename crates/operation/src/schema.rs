@@ -182,9 +182,9 @@ impl CapabilitySchemas {
         })
     }
     pub(crate) fn input(&self, value: &Value) -> Result<(), OperationError> {
-        self.input
-            .validate(value)
-            .map_err(|error| OperationError::InvalidInput(error.to_string()))
+        self.input.validate(value).map_err(|error| {
+            OperationError::InvalidInput(format!("{}: {error}", error.instance_path()))
+        })
     }
     pub(crate) fn output(&self, value: &Value) -> Result<(), OperationError> {
         self.output.validate(value).map_err(|error| {

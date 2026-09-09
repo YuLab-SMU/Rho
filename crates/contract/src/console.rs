@@ -87,13 +87,19 @@ pub struct QueueControlArguments {
     pub pause_id: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum RunROutputMode {
+    Console,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct RunRArguments {
     #[schemars(length(min = 1))]
     pub code: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output_mode: Option<String>,
+    pub output_mode: Option<RunROutputMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<RunSource>,
 }

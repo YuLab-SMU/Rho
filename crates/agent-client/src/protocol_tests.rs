@@ -24,6 +24,9 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
   send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'native-1',update:{sessionUpdate:'tool_call',toolCallId:'tool-0',title:'Overview',status:'completed'}}});
   send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'native-1',update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'study'}}}});
   send({jsonrpc:'2.0',id:m.id,result:{}});
+ }else if(m.method==='fixture/permission-content'){
+  send({jsonrpc:'2.0',id:'permission-content',method:'session/request_permission',params:{toolCall:{toolCallId:'tool-content',title:'Update analysis',content:[{type:'content',content:{type:'text',text:'Requesting approval to update fixture-private-token'}},{type:'diff',path:'analysis.R',oldText:'x <- 1',newText:'x <- 2'}]},options:[{optionId:'once',name:'Approve once',kind:'allow_once'},{optionId:'session',name:'Approve for this session',kind:'allow_always'},{optionId:'reject',name:'Reject',kind:'reject_once'}]}});
+  send({jsonrpc:'2.0',id:m.id,result:{}});
  }else if(m.method==='fixture/correlated'){
   send({jsonrpc:'2.0',method:'session/update',params:{sessionId:'native-1',update:{sessionUpdate:'tool_call',toolCallId:'tool-1',title:'Read Rho overview',rawInput:{scope:'fixture'},status:'pending'}}});
   send({jsonrpc:'2.0',id:'permission-2',method:'session/request_permission',params:{toolCall:{toolCallId:'tool-1'},options:[{optionId:'allow-once',name:'Allow once',kind:'allow_once'},{optionId:'reject-once',name:'Reject once',kind:'reject_once'}]}});
@@ -154,6 +157,38 @@ async fn native_permission_streaming_redaction_and_lost_ack_retries_preserve_one
     );
     client.close().await;
     assert_eq!(client.snapshot().state, "disconnected");
+}
+#[tokio::test]
+async fn acp_permission_callback_content_and_diff_are_visible_without_prior_raw_input() {
+    let (_dir, client) = fixture().await;
+    client
+        .rpc
+        .call("fixture/permission-content", json!({}), 2)
+        .await
+        .unwrap();
+    state(&client, "waiting_for_permission").await;
+    let snapshot = client.snapshot();
+    let decision = &snapshot.decisions[0];
+    assert!(
+        decision
+            .details
+            .contains("Requesting approval to update <private-token>")
+    );
+    assert!(
+        decision
+            .details
+            .contains("analysis.R\nBefore:\nx <- 1\nAfter:\nx <- 2")
+    );
+    assert!(!decision.details.contains("fixture-private-token"));
+    assert_eq!(
+        decision
+            .options
+            .iter()
+            .map(|o| o.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["once", "session", "reject"]
+    );
+    client.close().await;
 }
 #[tokio::test]
 async fn acp_permission_without_title_uses_its_observed_tool_call() {

@@ -6,12 +6,14 @@ async fn fixture() -> (tempfile::TempDir, Arc<Rpc>) {
     let dir = tempfile::tempdir().unwrap();
     let program = dir.path().join("fixture");
     fs::write(&program,r#"#!/usr/bin/env node
-const readline=require('node:readline');let calls=[],inbox=['old queued input'],stopped=false,refuse=false;
+const readline=require('node:readline');let calls=[],inbox=['old queued input'],stopped=false,refuse=false,held=null,hold=false;
 const send=(m,result)=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\n');
 readline.createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line),p=m.params||{};calls.push({method:m.method,params:p});
 if(m.method==='session/close'){if(refuse){process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,error:{code:-32000,message:'close unconfirmed'}})+'\n');return;}inbox=[];send(m,{});}
 else if(m.method==='session/resume'||m.method==='session/load')send(m,{sessionId:p.sessionId});
-else if(m.method==='session/prompt')send(m,{executed:[...inbox,p.prompt],stopReason:'end_turn'});
+else if(m.method==='session/prompt'){if(hold)held=m;else send(m,{executed:[...inbox,p.prompt],stopReason:'end_turn'});}
+else if(m.method==='fixture/hold'){hold=true;send(m,{});}
+else if(m.method==='fixture/release'){send(held,{stopReason:'end_turn'});send(m,{});held=null;}
 else if(m.method==='turn/interrupt'){stopped=true;send(m,{});}
 else if(m.method==='thread/read')send(m,{thread:{id:p.threadId,status:{type:stopped?'idle':'active'}}});
 else if(m.method==='thread/turns/list')send(m,{data:[{id:'turn-1',startedAt:10,status:'completed',items:[{id:'item-1',type:'agentMessage',text:'restored answer'}]}],nextCursor:p.cursor==='loop'?'loop':p.cursor?null:'older'});
@@ -25,6 +27,38 @@ else send(m,{});
         .await
         .unwrap();
     (dir, rpc)
+}
+#[tokio::test]
+async fn acp_prompt_keeps_its_reply_past_ten_minutes_and_closure_releases_waiter() {
+    let (_dir, rpc) = fixture().await;
+    rpc.call("fixture/hold", json!({}), 2).await.unwrap();
+    let ticket = rpc
+        .begin_call("session/prompt", json!({"sessionId":"s","prompt":[]}))
+        .await
+        .unwrap();
+    rpc.call("fixture/calls", json!({}), 2).await.unwrap();
+    let waiting_rpc = rpc.clone();
+    let waiting = tokio::spawn(async move { waiting_rpc.finish_prompt(ticket).await });
+    tokio::time::pause();
+    tokio::time::advance(std::time::Duration::from_secs(601)).await;
+    assert!(
+        !waiting.is_finished(),
+        "a tool/permission wait must not detach the native turn"
+    );
+    tokio::time::resume();
+    rpc.call("fixture/release", json!({}), 2).await.unwrap();
+    assert_eq!(waiting.await.unwrap().unwrap()["stopReason"], "end_turn");
+    let ticket = rpc
+        .begin_call("session/prompt", json!({"sessionId":"s","prompt":[]}))
+        .await
+        .unwrap();
+    rpc.close().await;
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_secs(2), rpc.finish_prompt(ticket))
+            .await
+            .unwrap()
+            .is_err()
+    );
 }
 #[tokio::test]
 async fn deepseek_crash_inbox_is_cleared_before_new_input_and_keeps_exact_identity() {

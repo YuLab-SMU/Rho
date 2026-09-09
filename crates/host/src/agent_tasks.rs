@@ -1225,6 +1225,22 @@ impl AgentTaskService {
             )
             .await
             .map_err(|e| TaskFailure::before(e.to_string()))?;
+        let studio = match host
+            .dispatch(
+                context,
+                HostRequest::QuerySnapshot(QueryRequest {
+                    capability: CapabilityRef {
+                        id: "application.context".into(),
+                        version: 1,
+                    },
+                    arguments: json!({"window":task.attachment.controller,"limit":16}),
+                }),
+            )
+            .await
+        {
+            Ok(snapshot) => snapshot,
+            Err(error) => json!({"status":"unavailable","reason":error.to_string()}),
+        };
         let unconfirmed = self
             .owner
             .store
@@ -1234,7 +1250,11 @@ impl AgentTaskService {
             .map(|r| json!({"request_id":r.request_id,"status":r.status}))
             .take(32)
             .collect::<Vec<_>>();
-        parts.push(NativeInput::Resource{uri:"rho://connection-context".into(),mime_type:"application/json".into(),text:json!({"project":scope.project,"window":task.attachment.controller,"workspace":overview["data"],"previous_unconfirmed_requests":unconfirmed}).to_string()});
+        parts.push(NativeInput::Resource{uri:"rho://connection-context".into(),mime_type:"application/json".into(),text:json!({
+            "project":scope.project,"window":task.attachment.controller,"workspace":overview["data"],"studio":studio,
+            "working_in_rho":"You are working with the user in a live scientific workspace. Pass structured Rho identities (window, document, reference, selection) and application actions as JSON objects, never JSON-encoded strings. Editor, Console, Objects and Plots are shared working surfaces available through Rho's application and scientific tools. For an analysis script, create or edit a document in the supplied Studio window and run its captured version with application.control so the user can see and keep the code. Read application.context for current versions; check application.command_status for the original action's save/run receipts. Use the live R Workspace for R execution. Display a plot with print(p) on Rho's R device; ggsave alone writes a file and does not populate Plots. Verify workspace.list_outputs/output.view, then application.control select_plot with the actual operation/sequence to show a retained figure. Do not claim a component contains a result without owner evidence. If Studio is unavailable, retain code in the project and describe that limitation. Accepted R work may be queued or paused: inspect workspace.console_state instead of sleeping or resubmitting. An R error can pause the queue; inspect the failed run, then explicitly resume the observed pause when continuing intended work is appropriate. You own the analysis and tool choices; Rho supplies execution and presentation capabilities.",
+            "previous_unconfirmed_requests":unconfirmed
+        }).to_string()});
         for id in &draft.content.assets {
             let (asset, bytes) = self
                 .owner

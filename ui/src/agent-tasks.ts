@@ -30,6 +30,7 @@ interface Pending {
 }
 interface ReadingPosition { scrollTop: number; following: boolean }
 interface AgentTaskSnapshot {
+  observedAt: number;
   tasks: readonly AgentTaskSummary[]; attention: readonly AgentTaskSummary[]; selected: string | null; archived: boolean; next: string | null;
   details: ReadonlyMap<string, AgentTaskDetail>; drafts: ReadonlyMap<string, Readonly<LocalDraft>>;
   events: ReadonlyMap<string, readonly AgentTaskEvent[]>; pending: readonly Pending[];
@@ -42,6 +43,7 @@ interface AgentTaskSnapshot {
 
 /** Persistent task client, independent of R-session and panel lifetime. */
 export class AgentTasks extends Model<AgentTaskSnapshot> {
+  private observedAt = Date.now();
   private tasks: AgentTaskSummary[] = [];
   private attention: readonly AgentTaskSummary[] = [];
   private selected: string | null = null;
@@ -74,7 +76,7 @@ export class AgentTasks extends Model<AgentTaskSnapshot> {
   private previews = new Map<string, AgentAssetPreview>(); private assetFlights = new Set<string>();
   constructor(private ports: AgentTaskPorts) { super(); }
   protected readSnapshot(): AgentTaskSnapshot {
-    return { tasks: Object.freeze([...this.tasks]), attention: this.attention, selected: this.selected, archived: this.archived, next: this.next,
+    return { observedAt: this.observedAt, tasks: Object.freeze([...this.tasks]), attention: this.attention, selected: this.selected, archived: this.archived, next: this.next,
       details: readonlyMap(this.details), drafts: readonlyMap(new Map([...this.drafts].map(([id, d]) => [id, immutable(clone(d))]))),
       events: readonlyMap(this.events), pending: immutable(clone([...this.pending.values()])), catalogs: Object.freeze({ ...this.catalogs }),
       running: this.running, permissions: this.permissions, loading: this.summaryFlight, error: this.error, creating: this.creating,
@@ -169,7 +171,8 @@ export class AgentTasks extends Model<AgentTaskSnapshot> {
       for (const [id, local] of this.drafts) if (local.dirty && !local.conflict && this.canEdit(id) && !this.hasPending(id, "save_draft") && !this.saving.has(id)) this.queueSave(id);
       for (const id of active) if (id !== this.selected) await this.loadDetail(id);
       if (this.historyVisible && this.selected) await this.loadDetail(this.selected);
-      if (before !== JSON.stringify([this.tasks, this.attention, this.running, this.permissions, this.selected])) this.publish();
+      this.observedAt = Date.now();
+      if ((this.historyVisible && this.selected && agentBusy(this.summary(this.selected)?.attachment.state ?? "")) || before !== JSON.stringify([this.tasks, this.attention, this.running, this.permissions, this.selected])) this.publish();
     } catch (e) { if (this.guard(scope.project, generation)) { this.error = message(e); this.publish(); } }
     finally { if (generation === this.generation) this.summaryFlight = false; }
   }

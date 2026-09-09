@@ -62,15 +62,13 @@ impl ValidateRun for RunRArguments {
                 "workspace.run_r code contains NUL".to_string(),
             ));
         }
-        if self.output_mode.as_deref().is_some_and(|m| m != "console")
-            || self.source.as_ref().is_some_and(|s| {
-                s.view_id.len() > 160
-                    || s.label.len() > 1024
-                    || !["console", "line", "selection", "file"].contains(&s.kind.as_str())
-            })
-        {
+        if self.source.as_ref().is_some_and(|s| {
+            s.view_id.len() > 160
+                || s.label.len() > 1024
+                || !["console", "line", "selection", "file"].contains(&s.kind.as_str())
+        }) {
             return Err(OperationError::InvalidInput(
-                "Invalid Console mode or source".into(),
+                "Invalid run source: kind must be console, line, selection or file; view_id is limited to 160 bytes and label to 1024 bytes".into(),
             ));
         }
         Ok(())

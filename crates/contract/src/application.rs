@@ -6,6 +6,7 @@ use ts_rs::TS;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
+#[schemars(inline)]
 pub struct ApplicationWindowRef {
     pub window_id: String,
     pub incarnation: String,
@@ -37,6 +38,7 @@ pub struct ApplicationSelection {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
+#[schemars(inline)]
 pub struct ApplicationDocumentRef {
     pub document_id: String,
     pub document_version: String,
@@ -95,6 +97,7 @@ pub struct ApplicationView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
+#[schemars(inline)]
 pub struct ApplicationObjectSelection {
     pub name: String,
     pub object_ref: Option<String>,
@@ -112,6 +115,7 @@ pub struct ApplicationPackageSelection {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
+#[schemars(inline)]
 pub struct ApplicationPlotSelection {
     pub operation_id: OperationId,
     pub sequence: u64,
@@ -221,6 +225,7 @@ pub struct ApplicationTextEdit {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[schemars(inline)]
 pub enum ApplicationAction {
     OpenView {
         view_type: ApplicationViewType,

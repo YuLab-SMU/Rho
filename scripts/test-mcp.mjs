@@ -134,9 +134,30 @@ try {
   assert.deepEqual((await peer.call("rho.events.poll", { limit: 1000 }).result).structuredContent.result, beforeInjection);
 
   if (realR) {
-    const executed = (await peer.call("rho.workspace.run_r.v1", { client_request_id: "mcp-real-r", arguments: { code: "x <- 21; x * 2" } }).result).structuredContent.result;
+    const executed = (await peer.call("rho.workspace.run_r.v1", { client_request_id: "mcp-real-r", return_after_acceptance: false, arguments: { code: "x <- 21; x * 2" } }).result).structuredContent.result;
     assert.equal(executed.status, "succeeded", JSON.stringify(executed));
     assert.equal(executed.output.value, 42);
+    // A correctable input error must remain model-readable, not be replaced by
+    // outputSchema validation. A paused queue must acknowledge new work promptly.
+    const invalidMode = await peer.call("rho.workspace.run_r.v1", {client_request_id:"invalid-mode",arguments:{code:"1",output_mode:"all"}}).result;
+    assert.equal(invalidMode.isError,true);assert.equal(invalidMode.structuredContent,undefined);
+    assert.match(JSON.stringify(invalidMode.content),/output_mode/);
+    const failed = await peer.call("rho.workspace.run_r.v1",{client_request_id:"pause-error",return_after_acceptance:false,arguments:{code:"stop('expected queue recovery fixture')"}}).result;
+    assert.equal(failed.structuredContent.result.status,"failed");
+    const paused = (await peer.call("rho.workspace.console_state.v1",{}).result).structuredContent.result.data;
+    assert.ok(paused.pause);
+    const retryInput={client_request_id:"after-error",arguments:{code:"queue_recovered <- TRUE"}};
+    const admitted=(await deadline(peer.call("rho.workspace.run_r.v1",retryInput).result,3000,"paused R work did not return acceptance")).structuredContent.result;
+    assert.equal(admitted.status,"accepted");
+    assert.ok(admitted.next_reads.some(r=>r.capability.id==="workspace.console_state"));
+    const duplicate=(await peer.call("rho.workspace.run_r.v1",retryInput).result).structuredContent.result;
+    assert.equal(duplicate.operation.operation_id,admitted.operation.operation_id);
+    await peer.call("rho.workspace.resume_queue.v1",{client_request_id:"resume-after-error",arguments:{session_id:paused.session_id,pause_id:paused.pause.id}}).result;
+    for(let attempt=0;attempt<100;attempt++){
+      const result=(await peer.call("rho.operation.get",{operation_id:admitted.operation.operation_id}).result).structuredContent.result;
+      if(result.status==="succeeded")break;
+      assert.notEqual(result.status,"failed");assert.ok(attempt<99);await new Promise(r=>setTimeout(r,20));
+    }
     assert.ok(tools.some(tool=>tool.name==="rho.workspace.respond_input"));
     const inputRun=(await peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-stdin",return_after_acceptance:true,arguments:{code:"mcp_answer <- readline('MCP answer: '); stopifnot(mcp_answer == 'verified')",output_mode:"console"}}).result).structuredContent.result;
     assert.equal(inputRun.status,"accepted");
@@ -157,8 +178,8 @@ try {
       await new Promise(resolve=>setTimeout(resolve,20));
     }
     // Observations and stdin remain available while all 32 terminal-wait calls are occupied.
-    const waitingCalls=[peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-full-input",arguments:{code:"readline('Full queue: ')",output_mode:"console"}}).result];
-    for(let i=0;i<31;i++)waitingCalls.push(peer.call("rho.workspace.run_r.v1",{client_request_id:`mcp-full-${i}`,arguments:{code:"invisible(1)"}}).result);
+    const waitingCalls=[peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-full-input",return_after_acceptance:false,arguments:{code:"readline('Full queue: ')",output_mode:"console"}}).result];
+    for(let i=0;i<31;i++)waitingCalls.push(peer.call("rho.workspace.run_r.v1",{client_request_id:`mcp-full-${i}`,return_after_acceptance:false,arguments:{code:"invisible(1)"}}).result);
     let full;
     for(let attempt=0;attempt<100;attempt++){
       const reply=await peer.call("rho.workspace.console_state.v1",{}).result;assert.notEqual(reply.isError,true,JSON.stringify(reply));

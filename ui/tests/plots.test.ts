@@ -45,6 +45,10 @@ it("retains the exact selected evidence while its Outputs history page is still 
   expect(f.plots.selectedEvidence()?.operation_id).toBe("queried-original");
   f.media([observed]);
   expect(f.plots.selectedEvidence()).toEqual(observed);
+  expect(f.plots.view("plots").seen).toBe(1);
+  f.media([observed, reference("newer")]);
+  expect(f.plots.view("plots").seen).toBe(1);
+  expect(f.plots.selectedEvidence()).toEqual(observed);
   f.plots.reset();
   expect(f.plots.selectedEvidence()).toBeNull();
 });

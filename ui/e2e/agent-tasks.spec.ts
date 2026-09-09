@@ -16,9 +16,22 @@ async function nativeCalls(){try{return (await readFile(log,'utf8')).trim().spli
 async function openAgent(page:import('@playwright/test').Page){await page.goto(url);await page.getByRole('button',{name:'Agents',exact:true}).click();await expect(page.getByLabel('Agent panel',{exact:true})).toBeVisible();}
 async function newTask(page:import('@playwright/test').Page){const panel=page.getByLabel('Agent panel',{exact:true}),action=panel.locator('button[aria-label="New task"]:visible').first();await action.click();await page.getByRole('menuitem',{name:'Kimi Code',exact:true}).click();await expect(action).toBeEnabled();await expect(panel.getByRole('textbox',{name:'Agent message',exact:true})).toBeEditable();return panel;}
 
+test('Agent activity bridges sending, native thinking and tool gaps in a constrained panel', async ({page}) => {
+ await page.setViewportSize({width:1100,height:800});await openAgent(page);const panel=await newTask(page),input=panel.getByRole('textbox',{name:'Agent message',exact:true});
+ let release!:()=>void;const held=new Promise<void>(r=>release=r);
+ await page.route('**/api/agents/tasks/command',async route=>{if(route.request().postDataJSON().command.kind==='send')await held;await route.continue();});
+ await input.fill('activity phases');await panel.getByRole('button',{name:'Send message',exact:true}).click();
+ const status=panel.getByRole('status',{name:'Agent activity'});await expect(status).toContainText('Sending message');release();
+ await expect(status).toContainText('Thinking');await expect(panel).not.toContainText('private fixture reasoning');
+ await page.screenshot({path:'../target/studio-browser/agent-live-thinking.png'});
+ await expect(status).toContainText('Using tools');await input.fill('Next draft stays editable');
+ await expect(status).toContainText('Working');await page.screenshot({path:'../target/studio-browser/agent-tool-gap.png'});
+ await expect(panel.getByText('Activity finished',{exact:true})).toBeVisible();await expect(status).toHaveCount(0);await expect(input).toHaveValue('Next draft stays editable');
+});
+
 test('workspace Agent opens without CLI discovery; task drafts survive close, refresh and running work',async({page})=>{
- page.on('dialog',d=>void d.accept());const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openAgent(page);
- expect(await nativeCalls()).toEqual([]);const panel=await newTask(page);const input=panel.getByRole('textbox',{name:'Agent message',exact:true});await input.fill('saved task draft');await expect(panel.locator('.at-draft-status')).toHaveText('Draft saved');
+ page.on('dialog',d=>void d.accept());const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));const before=await nativeCalls();await openAgent(page);
+ expect(await nativeCalls()).toEqual(before);const panel=await newTask(page);const input=panel.getByRole('textbox',{name:'Agent message',exact:true});await input.fill('saved task draft');await expect(panel.locator('.at-draft-status')).toHaveText('Draft saved');
  const box=await panel.boundingBox();expect(box!.x).toBeGreaterThan(650);expect(box!.width).toBeGreaterThan(280);expect(box!.width).toBeLessThan(620);
  await page.reload();await expect(input).toHaveValue('saved task draft');await input.fill('slow task keeps running');await panel.getByRole('button',{name:'Send message',exact:true}).click();await expect(panel.getByRole('button',{name:'Stop Agent',exact:true})).toBeVisible();
  await input.fill('next draft while running');await page.getByRole('tab',{name:'Agent',exact:true}).locator('.flexlayout__tab_button_trailing').click();await expect(panel).toHaveCount(0);await pause(2200);
@@ -29,6 +42,7 @@ test('workspace Agent opens without CLI discovery; task drafts survive close, re
 test('native modes and permission responses remain at the composer with independent task state',async({page})=>{
  await openAgent(page);const panel=await newTask(page),input=panel.getByRole('textbox',{name:'Agent message',exact:true});await input.fill('please request permission');await panel.getByRole('button',{name:'Send message',exact:true}).click();
  const request=panel.getByRole('region',{name:'Pending Agent permission'});await expect(request).toBeVisible();await expect(request.getByRole('button').filter({hasText:/Approve|Reject/})).toHaveCount(3);
+ await expect(request.locator('pre')).not.toBeVisible();await request.getByText('View request',{exact:true}).click();await expect(request.locator('pre')).toContainText('notes.txt');await request.getByText('View request',{exact:true}).click();
  const permissionBox=await request.boundingBox(),composerBox=await panel.locator('.at-composer').boundingBox();expect(permissionBox!.y+permissionBox!.height).toBeLessThanOrEqual(composerBox!.y);expect(composerBox!.y-permissionBox!.y-permissionBox!.height).toBeLessThan(20);
  await input.fill('a separate next draft');await page.screenshot({path:'../target/studio-browser/agent-tasks-permission.png'});
  await panel.getByRole('button',{name:'Task actions',exact:true}).click();await page.getByRole('menuitem',{name:'Archive',exact:true}).click();await expect(panel.getByText('· Archived',{exact:true})).toBeVisible();

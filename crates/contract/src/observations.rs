@@ -44,6 +44,7 @@ pub struct OperationEventsCheckpoint {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
+#[schemars(inline)]
 pub struct MediaReference {
     pub operation_id: OperationId,
     pub sequence: u64,

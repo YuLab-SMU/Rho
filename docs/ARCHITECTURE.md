@@ -86,6 +86,16 @@ resume sends a prompt, replays a permission or changes an old scientific receipt
 New input carries fresh project/window/R-session context and unresolved-turn notices.
 Agent continuation never restores R memory.
 
+ACP `session/prompt` resolves at native turn completion, including inference, tools
+and permission waits; it is not a short acknowledgement. Retain that correlated
+reply until native completion or transport closure, with explicit Stop available.
+Do not detach a live turn after a fixed total duration. Native thinking signals
+produce bounded phase observations, not retained reasoning text. Phase observations
+are fenced and persisted like other observations and are never model memory.
+New input also carries a bounded live Studio context (or its unavailable reason)
+and the existing document/execution/media entry points. Components remain owned by
+their current modules; the Agent decides how to use them.
+
 Commit terminal states/receipts immediately; coalesce other observations at 100 ms.
 Only durable cursors are exposed. Cache at most 500 events / 1 MiB text per task and
 64 MiB per project, preferring eviction of inactive older observations. Task indexes,
@@ -94,6 +104,10 @@ separately (8 MiB each, 32 MiB/64 attachments per task); they are not copied int
 text cache. Studio reads summaries every second and visible history at 250 ms.
 Window-local selection, filters and reading positions use ApplicationPersistence,
 not layout configuration. Draft conflicts retain a local copy.
+
+Native permission callback text/diffs and streamed tool input provide bounded,
+credential-scrubbed request details. Preserve native option identities and order;
+Studio discloses details at the composer without inventing an approval policy.
 
 Composer context sources use the existing read-only Host query owners. Files and
 editor selections retain hashes/captures; R objects retain native session/object
@@ -104,6 +118,14 @@ Native images and UTF-8 files are explicit inputs, not inferred output provenanc
 The native process receives a dedicated MCP-only bearer credential, which cannot
 access browser task-control endpoints. User credentials/global MCP settings stay
 with their native providers.
+
+MCP `workspace.run_r` submissions default to `return_after_acceptance=true`, using the existing
+gateway acceptance path. An explicit false still requests the terminal result.
+Nonterminal/failed Workspace records link to `workspace.console_state` so a paused
+queue is distinguishable from a running operation. Rejections use MCP error content
+without falsely claiming a structured owner result; native clients must receive the
+original diagnostic instead of an output-schema error. Failed committed operations
+still return their schema-valid record with `isError=true`.
 
 ## Request paths
 
