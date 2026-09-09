@@ -84,7 +84,25 @@ const sockets = [];
 let marker, oversized;
 try {
   await initialize(peer);
-  const tools = (await peer.request("tools/list", {}).result).tools;
+  const tools = [];
+  let cursor;
+  do {
+    const page = await peer.request("tools/list", cursor ? { cursor } : {}).result;
+    tools.push(...page.tools);
+    cursor = page.nextCursor;
+  } while (cursor);
+  function portableFormats(schema, tool) {
+    if (!schema || typeof schema !== "object") return;
+    assert.ok(typeof schema.format !== "string" || !/^(?:u?int(?:8|16|32|64|128)?|float|double)$/.test(schema.format),
+      `${tool}: Rust numeric format ${schema.format} is not portable JSON Schema`);
+    for (const [key, child] of Object.entries(schema)) {
+      if (!["const", "enum", "examples", "default"].includes(key)) portableFormats(child, tool);
+    }
+  }
+  for (const tool of tools) {
+    portableFormats(tool.inputSchema, tool.name);
+    portableFormats(tool.outputSchema, tool.name);
+  }
   assert.ok(tools.some((tool) => tool.name === "rho.project.apply_patch.v1"));
   const queryTool = tools.find((tool) => tool.name === "rho.project.snapshot.v1");
   assert.equal(queryTool.annotations.readOnlyHint, true);

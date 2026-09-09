@@ -2,7 +2,9 @@
 mod connections;
 pub use connections::McpConnections;
 mod resources;
+mod schema;
 use rho_host::OperationError;
+use schema::object;
 
 use futures::StreamExt;
 use rho_contract::{
@@ -22,7 +24,7 @@ use rmcp::{
 };
 use schemars::schema_for;
 use serde::Deserialize;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -460,12 +462,6 @@ pub async fn serve(
     host.drain().await;
     result
 }
-fn object(value: Value) -> Result<Map<String, Value>, String> {
-    value
-        .as_object()
-        .cloned()
-        .ok_or_else(|| "tool schema is not an object".into())
-}
 fn result_schema(mut inner: Value) -> Value {
     let definitions = inner
         .as_object_mut()
@@ -625,7 +621,7 @@ mod port_contract_tests {
             let descriptor = &described["data"]["descriptor"];
             assert_eq!(
                 serde_json::to_value(&alias).unwrap()["inputSchema"],
-                descriptor["input_schema"]
+                Value::Object(object(descriptor["input_schema"].clone()).unwrap())
             );
             let expected_payload = if let Some(field) = field {
                 rho_contract::project_payload_schema(&descriptor["output_schema"], field).unwrap()
@@ -633,7 +629,10 @@ mod port_contract_tests {
                 descriptor["output_schema"].clone()
             };
             let actual = serde_json::to_value(&alias).unwrap()["outputSchema"].clone();
-            assert_eq!(actual, result_schema(expected_payload));
+            assert_eq!(
+                actual,
+                Value::Object(object(result_schema(expected_payload)).unwrap())
+            );
             if field.is_none() {
                 assert_eq!(alias.output_schema, versioned.output_schema);
             }

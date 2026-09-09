@@ -157,6 +157,10 @@ target/debug/rho --database /absolute/path/to/state.sqlite \
 ```
 
 Capability tools are derived from the registry as `rho.<capability>.v<version>`.
+MCP schemas omit Rust numeric-width `format` annotations (such as `uint16` and
+`uint64`) that JSON Schema clients can report as unknown. Types, numeric bounds,
+references and required fields are preserved; Host validation uses the original
+capability contracts. This avoids schema-warning floods during Kimi startup.
 Query and application-control tools accept their capability arguments directly.
 Scientific operation tools accept:
 

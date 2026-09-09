@@ -63,6 +63,24 @@ full Kimi model acceptance is not passed and has not been silently retried here.
 Model/provider response quality remains distinct from protocol delivery and from
 the frozen scientific acceptance below.
 
+Kimi 0.41.0 startup exposed another MCP interoperability issue: generated Rust
+numeric-width formats caused Ajv warnings to overwrite the terminal UI. The MCP
+edge now omits these annotations from every input/output tool schema, including
+fixed aliases; it preserves constraints, literal data and original Host contracts.
+Verification passed: 11 MCP Rust tests, strict MCP Clippy, stdio MCP regression
+with and without real R, architecture and documentation-map checks. A keyless
+native Kimi ACP startup reproduced 1,224 warnings from the existing 64-tool live
+catalog and zero from the fixed 36-tool project-only catalog; independent Ajv
+compilation likewise changed from 1,396 warnings to zero. Real-R regression also
+checks all advertised schemas. No model prompt was sent. Evidence is under
+`target/agent-integration/kimi-schema-*`; the rebuilt binary is ready for future
+Host launches. Existing Hosts and their R memory/paused work remain unchanged.
+Kimi's global Rho entry still points at the earlier playground. A proposed move
+to project-only configuration was rejected by automatic approval because it would
+copy the access credential into that project; no configuration change ran. Applying
+that move requires explicit user consent; replacing a live Host separately requires
+checking its current work and restart authorization.
+
 Existing `target/experience/agent-playground`, `agent-direct-playground` and
 `agent-harness-playground` Hosts and R memory are preserved. Automatic approval
 rejected restarting the last instance because it already contained sample R
