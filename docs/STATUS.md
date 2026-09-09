@@ -75,11 +75,18 @@ compilation likewise changed from 1,396 warnings to zero. Real-R regression also
 checks all advertised schemas. No model prompt was sent. Evidence is under
 `target/agent-integration/kimi-schema-*`; the rebuilt binary is ready for future
 Host launches. Existing Hosts and their R memory/paused work remain unchanged.
-Kimi's global Rho entry still points at the earlier playground. A proposed move
-to project-only configuration was rejected by automatic approval because it would
-copy the access credential into that project; no configuration change ran. Applying
-that move requires explicit user consent; replacing a live Host separately requires
-checking its current work and restart authorization.
+The running playground still serves the old schemas, so rebuilding alone did not
+fix normal Kimi startup. The stale global `rho` MCP entry is now disabled in place
+with `enabled: false`; its URL, credential and other fields remain in the original
+private Kimi user configuration. No credential was copied into a project. Actual
+Kimi TUI startup in the user's original working directory reproduced hundreds of
+warnings before this change and zero afterwards; `/mcp` confirms `rho disabled`.
+`kimi doctor` passes. A separate managed-provider refresh service error remains;
+the user's selected model configuration is unchanged and no model task was sent.
+Evidence is `target/agent-integration/kimi-terminal-activation.json`. This is an
+operational mitigation: Rho tools are unavailable through that disabled global
+entry. Re-enable it only after the corresponding Host runs the fixed binary;
+replacement requires checking its current work and restart authorization.
 
 Existing `target/experience/agent-playground`, `agent-direct-playground` and
 `agent-harness-playground` Hosts and R memory are preserved. Automatic approval
