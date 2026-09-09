@@ -1,17 +1,59 @@
 # Native code tools. Inputs are text, never eval'ed or written back to a project.
+rho_help_exact_files <- function(path) {
+  root <- normalizePath(path, winslash = "/", mustWork = TRUE)
+  names <- c("help/AnIndex", "help/aliases.rds", paste0("help/", basename(path), c(".rdx", ".rdb")))
+  bytes <- 0
+  lapply(names, function(name) {
+    file <- file.path(path, name)
+    if (!file.exists(file)) return(list(path = name, digest = "absent"))
+    canonical <- normalizePath(file, winslash = "/", mustWork = TRUE)
+    if (!startsWith(canonical, paste0(root, "/"))) rho_object_error("content_changed", "Help database escaped its selected package copy.")
+    info <- file.info(file)
+    if (is.na(info$size) || info$isdir) rho_object_error("unavailable", "Help resource is not a readable regular file.")
+    bytes <<- bytes + info$size
+    if (bytes > 64 * 1024 * 1024) rho_object_error("budget_exhausted", "Selected help metadata/database exceeds 64 MiB.")
+    list(path = name, digest = paste0("md5:", unname(rho_readonly_binding("tools", "md5sum")(file)), ":", canonical))
+  })
+}
+
+rho_help_exact_entry <- function(path, topic) {
+  # find.package() deliberately substitutes .Library for base/recommended names
+  # such as stats, even with lib.loc. Resolve the observed copy's static aliases
+  # directly instead of letting that global selection override the caller.
+  aliases <- file.path(path, "help", "AnIndex")
+  keys <- character()
+  if (file.exists(aliases)) {
+    for (line in readLines(aliases, warn = FALSE, encoding = "UTF-8")) {
+      fields <- strsplit(line, "\t", fixed = TRUE)[[1L]]
+      if (length(fields) == 2L && identical(fields[[1L]], topic)) keys <- c(keys, fields[[2L]])
+    }
+  } else if (file.exists(aliases <- file.path(path, "help", "aliases.rds"))) {
+    values <- readRDS(aliases)
+    if (!is.character(values) || is.object(values) || isS4(values)) rho_object_error("unavailable", "Native help aliases must be a plain named character vector.")
+    keys <- .subset(values, which(names(values) == topic))
+  }
+  keys <- unique(unname(keys))
+  if (!length(keys)) return(character())
+  if (length(keys) != 1L || is.na(keys) || !nzchar(keys) || keys %in% c(".", "..") ||
+      grepl("[/\\\\]", keys) || grepl("[[:cntrl:]]", keys)) rho_object_error("unavailable", "Exact help alias is ambiguous or has an invalid database key.")
+  file.path(path, "help", keys)
+}
+
 rho_help <- function(payload) {
   # Help is an explicit Operation; dispatch already revoked object observations.
   if (base::is.null(base::.Internal(getRegisteredNamespace("tools")))) base::loadNamespace("tools")
   exact <- !is.null(payload$library_path)
   path <- NULL
   identities <- NULL
+  help_identities <- NULL
   if (exact) {
     copy <- rho_package_exact_copy(payload)
     path <- copy$path
     identities <- rho_package_index_files(path)
     if (!is.null(payload$expected_index_files) && !identical(identities, payload$expected_index_files)) rho_object_error("content_changed", "Package index files changed before help rendering.")
+    help_identities <- rho_help_exact_files(path)
   }
-  entry <- utils::help(payload$topic, package = payload$package,
+  entry <- if (exact) rho_help_exact_entry(path, payload$topic) else utils::help(payload$topic, package = payload$package,
                        lib.loc = if (exact) payload$library_path else NULL,
                        help_type = "text", try.all.packages = FALSE)
   if (!length(entry)) {
@@ -26,6 +68,7 @@ rho_help <- function(payload) {
     rd, stages = character(), options = list(underline_titles = FALSE)
   )), collapse = "\n")
   if (exact && !identical(identities, rho_package_index_files(path))) rho_object_error("content_changed", "Package index files changed during help rendering.")
+  if (exact && !identical(help_identities, rho_help_exact_files(path))) rho_object_error("content_changed", "Selected help metadata/database changed during rendering.")
   if (nchar(text, type = "bytes") > 16 * 1024 * 1024) rho_object_error("budget_exhausted", "Rendered help exceeds the 16 MiB text artifact limit; no partial document was stored.")
   list(topic = payload$topic, package = payload$package, library_path = payload$library_path,
        found = TRUE, text = text, preview = substr(text, 1L, payload$max_chars),

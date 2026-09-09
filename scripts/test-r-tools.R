@@ -55,3 +55,52 @@ for (action in c("lint", "format")) {
             grepl("no package was installed", absent$error, fixed = TRUE))
 }
 message("Native R help/lintr/styler checks passed, including no evaluation, no project configuration, bounds and missing dependencies.")
+
+# R's find.package() special-cases base/recommended packages and ignores lib.loc.
+# Exact-copy help must use the observed copy, including its own static aliases.
+local({
+  directory <- tempfile("rho-exact-help-"); dir.create(directory)
+  previous <- .libPaths()
+  on.exit({ .libPaths(previous); unlink(directory, recursive = TRUE) }, add = TRUE)
+  libraries <- file.path(directory, c("alpha", "beta"))
+  for (i in seq_along(libraries)) {
+    dir.create(libraries[[i]])
+    stopifnot(file.copy(find.package("stats"), libraries[[i]], recursive = TRUE))
+    copy <- file.path(libraries[[i]], "stats")
+    description <- read.dcf(file.path(copy, "DESCRIPTION"))
+    description[1L, "Version"] <- paste0(i, ".0")
+    write.dcf(description, file.path(copy, "DESCRIPTION"))
+    topic <- if (i == 1L) "lm" else "glm"
+    cat(paste0("rho_copy_only\t", topic, "\n"), file = file.path(copy, "help", "AnIndex"), append = TRUE)
+    aliases <- readRDS(file.path(copy, "help", "aliases.rds"))
+    aliases["rho_copy_only"] <- topic
+    saveRDS(aliases, file.path(copy, "help", "aliases.rds"))
+  }
+  libraries <- normalizePath(libraries, winslash = "/")
+  .libPaths(c(libraries, previous))
+  before <- sort(loadedNamespaces())
+  observation <- bridge$rho_packages(list(mode = "installed", filter = "", limit = 200L, offset = 0L, grouped = FALSE, package_name = "stats", observation_id = NULL))
+  results <- lapply(libraries, function(library) {
+    payload <- list(topic = "rho_copy_only", package = "stats", max_chars = 100L,
+                    library_path = library, observation_id = observation$observation_id,
+                    expected_index_files = bridge$rho_package_index_files(file.path(library, "stats")))
+    answer <- dispatch("help", payload)
+    stopifnot(answer$outcome == "succeeded", answer$value$found,
+              identical(answer$value$library_path, library), !answer$value$truncated)
+    answer$value$text
+  })
+  stopifnot(grepl("Fitting Linear Models", results[[1L]], fixed = TRUE),
+            grepl("Fitting Generalized Linear Models", results[[2L]], fixed = TRUE),
+            !identical(results[[1L]], results[[2L]]), identical(before, sort(loadedNamespaces())))
+  # No outside database may be read through a symlink in an otherwise valid copy.
+  if (.Platform$OS.type == "unix") {
+    database <- file.path(libraries[[2L]], "stats", "help", "stats.rdb")
+    outside <- file.path(directory, "outside.rdb")
+    stopifnot(file.copy(database, outside), file.remove(database), file.symlink(outside, database))
+    rejected <- dispatch("help", list(topic = "rho_copy_only", package = "stats", max_chars = 100L,
+      library_path = libraries[[2L]], observation_id = observation$observation_id,
+      expected_index_files = bridge$rho_package_index_files(file.path(libraries[[2L]], "stats"))))
+    stopifnot(rejected$outcome == "failed", grepl("content_changed", rejected$error, fixed = TRUE))
+  }
+})
+message("Exact copied-stats help aliases/databases verified without package installation or namespace loading.")
