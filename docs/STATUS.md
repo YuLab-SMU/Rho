@@ -2,6 +2,22 @@
 
 Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
+## Object priority and vector-view follow-up
+
+The user found the implemented directory too focused on Type/Size and the palette
+viewer too focused on individual strings. Directory field reordering is currently
+absent; the dedicated data grid's column controls are a separate feature.
+Four new editable [Paper boards O07–O10](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0)
+propose content-first summaries, configurable columns, whole-palette viewing/copying,
+and range-based vector browsing with explicit copy scope. All four were checked
+through screenshots and verified to belong to the Objects page. The 320 px view,
+transparent/missing/non-color entries and the original `green` value are included.
+
+This follow-up is a design proposal awaiting review, not a runtime change.
+F16 and the follow-up subsection of Design section 14 contain the rationale and
+interaction details. The existing R Host, unsaved script and running components
+were not changed. Documentation governance and scoped whitespace checks passed.
+
 ## Object viewers and directional collapse
 
 The user authorized implementation of the six [Objects Paper boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0)

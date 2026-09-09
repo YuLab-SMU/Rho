@@ -345,6 +345,21 @@ Startup view reconciliation must not treat restoring membership as an explicit
 request to expand each group. Check both side columns and stacked panels with
 real geometry, undo, drafts and existing R memory intact.
 
+### F16 — Object information priority and vector viewing remain impractical
+
+**User feedback (2026-09-09):** The Objects directory's Type, Size and
+Value/content fields cannot be reordered. The user finds the design attractive,
+but the information order does not adequately reflect real analysis priorities.
+They also find palette inspection impractical: a five-element character vector
+is treated as individually paged text, with repeated character/byte/line details.
+Column management in the dedicated data grid does not cover these directory fields.
+
+The follow-up Paper boards O07–O10 propose content-first summaries, configurable
+field order/visibility/width, complete small-palette overviews and vector-level
+copying. Single-item details are secondary; long vectors use explicit ranges and
+retain missing/non-color positions. These remain proposals pending review. Current
+runtime behavior and previous verification remain separate in Status.
+
 ## Workflow reference: a country development analysis
 
 The supplied tutorial follows a complete project using gapminder: import, clean,

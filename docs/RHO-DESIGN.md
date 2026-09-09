@@ -969,3 +969,45 @@ clear scientific page caches; changed/expired references cannot merge with old
 pagination or complete a stale copy. Refresh opens fresh evidence. User Hosts
 must not be restarted merely to deliver new view code without preserving the
 existing restart boundary. Current verification and remaining limits are in Status.
+
+
+### Follow-up proposal: information priority and whole-vector viewing
+
+The 2026-09-09 F16 review adds O07–O10 to the same
+[Objects Paper page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/7-0).
+These four boards are a new proposal, not covered by the original six-board
+implementation acceptance and not yet implemented.
+
+- O07 defaults to Name, Content and a secondary Type field. Content answers the
+  immediate question: scalar value, table dimensions, array shape, function
+  signature, palette sequence or known container composition. Size is initially
+  integrated into the summary. Showing Size separately moves that information
+  into its column without repeating it in Content.
+- O08 makes Content, Size and Type reorderable, resizable and independently
+  hideable. Name remains visible and first. Header dragging has a keyboard-usable
+  alternative through ordered field controls. Order, visibility and widths are
+  retained per view, with reset. Compact panels use summary rows while respecting
+  visibility preferences; returning to a wide view restores the chosen columns.
+- O09 shows all five known palette values together, in original order, in both
+  inline and dedicated views. A strip or tile arrangement compares colors; original
+  strings and an original R vector remain available. Selecting a color adds a
+  compact original/rendered-color detail, not a full text page. Copy vector is
+  distinct from Copy color. Hex conversion is an explicitly chosen copy format;
+  original strings such as `green` are preserved by the default copy action.
+- O10 treats long vectors as ranges. It distinguishes selected/shown/full-vector
+  copy scope; whole-vector copying obtains complete values before publishing the
+  clipboard result and retains the existing budget/error boundaries. Short string
+  vectors appear together without automatic item selection or expanded text
+  details. Text inspection stays available through an explicit item action.
+
+A palette must be supported by observed values, not inferred from its variable
+name or four sample entries. Complete small vectors may show all values when
+available within the owner budget. Partial or mixed vectors are not silently
+classified as complete palettes. Explicit color view keeps NA, transparency,
+non-color values and their original positions visible. Copies retain order,
+names and NA semantics. A requested hex copy cannot silently drop non-color items.
+Changing a view's field order or color arrangement does not mutate the R object.
+
+Review O07's default hierarchy and O09's whole-vector workflow before revising
+the running components. Static screenshot checks cover the new boards' layout;
+they do not establish interaction, keyboard, copy or native-data acceptance.
