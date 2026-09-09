@@ -27,7 +27,7 @@ assert.equal(operationRecord('rho.operation.request_cancellation.v1',{accepted:t
 numeric(new Map([['estimate','6.0']]),'estimate',6);
 numeric(new Map([['estimate','6e0']]),'estimate',6);
 for(const value of ['', 'NaN', 'six', '6 units', '6.1'])assert.throws(()=>numeric(new Map([['estimate',value]]),'estimate',6));
-const op=(id,request)=>({operation:{operation_id:id,client_request_id:request,caller:{kind:'agent',id:'agent'},principal:{kind:'human',id:'principal'},idempotency_scope:'/project',capability:{id:'workspace.run_r',version:1},normalized_arguments:{code:'same legitimate verification'}},status:'succeeded'});
+const op=(id,request)=>({operation:{operation_id:id,client_request_id:request,domain:'workspace',target:{kind:'workspace',identity:'native'},caller:{kind:'agent',id:'agent'},principal:{kind:'human',id:'principal'},idempotency_scope:'/project',capability:{id:'workspace.run_r',version:1},normalized_arguments:{code:'same legitimate verification'}},status:'succeeded',outcome:'succeeded',output:{value:1},error:null,recovery:null,cancellation_requested:false,updated_at_ms:1});
 assertOperationIdentities([op('one','first'),op('two','second')]);
 assert.throws(()=>assertOperationIdentities([op('one','same'),op('two','same')]));
 const receipt=(operation)=>({window:{window_id:'w',incarnation:'i'},request_id:'request',save:{operation_id:operation}});
@@ -52,6 +52,16 @@ const evidence=[response('rho.workspace.run_r.v1',{},op('one','calculation'))];
 assertConsumedEvidence(report,evidence);
 assert.throws(()=>assertConsumedEvidence({...report,operation_ids:['fabricated']},evidence));
 assert.throws(()=>assertConsumedEvidence({...report,facts:[{key:'estimate',evidence:['unseen identifier']}]},evidence));
+for(const status of ['failed','uncertain']){
+  const original={...op(`original-${status}`,'request'),status,outcome:status,error:'native failure',recovery:{kind:'owner_contract_violation',candidate:{result:{operation_id:'uncommitted-fake'}}}};
+  original.operation.normalized_arguments={operation_id:'caller-supplied-fake'};
+  const observed=[response('rho.workspace.run_r.v1',{},original,true)];
+  const cited={facts:[{key:'recovery',value:status,evidence:[original.operation.operation_id]}],operation_ids:[original.operation.operation_id]};
+  assertConsumedEvidence(cited,observed);
+  for(const fake of ['uncommitted-fake','caller-supplied-fake'])assert.throws(()=>assertConsumedEvidence({...cited,operation_ids:[fake]},observed));
+  assert.throws(()=>assertConsumedEvidence(cited,[response('rho.workspace.run_r.v1',{}, {operation:{operation_id:original.operation.operation_id},error:'argument echo'},true)]));
+  assert.throws(()=>assertConsumedEvidence(cited,[{...observed[0],result:{isError:true,structuredContent:{error:'not a record',data:{operation_id:original.operation.operation_id}}}}]));
+}
 const replies={responses:[response('rho.workspace.respond_input.v1',{operation_id:'one'},null,true),response('rho.workspace.respond_input',{operation_id:'one'},{submitted:true})]};
 assert.equal(acceptedInputReplies(replies,'one').length,1);
 assert.equal(acceptedInputReplies(replies,'other').length,0);

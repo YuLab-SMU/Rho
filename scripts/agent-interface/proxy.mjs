@@ -154,13 +154,31 @@ export function consumedIdentities(responses) {
     if(Array.isArray(value)){for(const item of value)visit(item);return;}
     if(!value||typeof value!=='object')return;
     for(const [key,item] of Object.entries(value)){
+      // Arguments/examples and uncommitted candidate bodies are data, not
+      // proof that a referenced native resource exists.
+      if(['arguments','normalized_arguments','preconditions','documentation','input_schema','output_schema','recovery_schema','candidate','next_reads'].includes(key))continue;
       if(keys.test(key)&&typeof item==='string'&&item.length>=3)identities.add(item);
       if(key==='operation_id'&&typeof item==='string')operationIds.add(item);
       visit(item);
     }
   }
-  for(const response of responses)if(!response.error&&!response.result?.isError)visit(response.result?.structuredContent?.result??response.result);
+  for(const response of responses){
+    const value=response.result?.structuredContent?.result,record=operationRecord(response.call?.rpc?.params?.name,value);
+    if(authoritativeOperationRecord(record))visit(record);
+    else if(!response.error&&!response.result?.isError)visit(value??response.result);
+  }
   return {identities,operationIds};
+}
+
+function authoritativeOperationRecord(record) {
+  const operation=record?.operation;
+  return !!operation&&typeof operation.operation_id==='string'&&typeof operation.client_request_id==='string'&&
+    typeof operation.domain==='string'&&typeof operation.target?.kind==='string'&&typeof operation.target.identity==='string'&&
+    typeof operation.caller?.kind==='string'&&typeof operation.caller.id==='string'&&
+    typeof operation.capability?.id==='string'&&Number.isInteger(operation.capability.version)&&operation.capability.version>0&&
+    ['accepted','running','reconciling','succeeded','failed','cancelled','uncertain'].includes(record.status)&&
+    ['outcome','output','error','recovery','cancellation_requested','updated_at_ms'].every(key=>Object.hasOwn(record,key))&&
+    typeof record.cancellation_requested==='boolean'&&Number.isFinite(record.updated_at_ms);
 }
 
 export function assertConsumedEvidence(report,responses,nativeSkillReads=[]) {
