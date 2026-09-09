@@ -164,22 +164,14 @@ pub(super) async fn apply_r(
     };
     if let Some(root) = root {
         match hosting.profile.open(&root).await {
-            Ok(host) => {
-                hosting.selected = Some(SelectedHost {
-                    host: Arc::new(host),
-                    root,
-                })
-            }
+            Ok(host) => hosting.selected = Some(SelectedHost::new(Arc::new(host), root)),
             Err(error) => {
                 hosting.r_configuration.error = Some(format!(
                     "R startup failed; previous session memory has ended. {error}"
                 ));
                 hosting.profile.runtime = RuntimeConfiguration::Project;
                 if let Ok(host) = hosting.profile.open(&root).await {
-                    hosting.selected = Some(SelectedHost {
-                        host: Arc::new(host),
-                        root,
-                    });
+                    hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
                 }
             }
         }

@@ -55,6 +55,18 @@ HTTP hosting endpoints still manage project/R selection; they do not create
 another scientific operation flow. CLI/session and official MCP use the same
 composition root.
 
+Workbench connection diagnostics are ephemeral transport observations owned by
+the selected Host's MCP edge registry. They retain up to 64 recent protocol
+sessions and 16 live window-context references per session, with explicit
+truncation. The active-session count includes open sessions omitted from bounded
+detail. Client names are bounded self-reported labels, never authority. Successful
+overview/context responses record only their times and native window references;
+they do not prove delivery, Agent comprehension or scientific correctness.
+The authenticated hosting read does not start R, create an Operation, retain
+credentials/conversations/results or recover work. Replacing the selected Host
+creates a fresh registry; closing a protocol session retains bounded evidence
+without claiming cancellation of accepted scientific work.
+
 ### Discovery and contracts
 
 `host.overview`, `host.catalog` and `host.describe` use the shared registry.

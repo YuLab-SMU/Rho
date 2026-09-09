@@ -222,6 +222,10 @@ try {
   assert.equal(publicShell.headers.get("cache-control"), "no-store");
   assert.ok(!(await publicShell.text()).includes(token));
   assert.equal((await fetch(new URL("/api/info", url))).status, 401);
+  assert.equal((await fetch(new URL("/api/agent-connection", url))).status, 401);
+  assert.equal((await fetch(new URL("/api/agent-connection", url), {
+    headers: { ...headers, Origin: "https://foreign.example" },
+  })).status, 403);
   assert.equal((await fetch(new URL("/mcp", url))).status, 401);
   assert.equal(
     (
@@ -252,6 +256,12 @@ try {
   const empty = await api("/api/info");
   assert.equal(empty.project_root, null);
   assert.deepEqual(empty.capabilities, []);
+  const noProjectConnection = await api("/api/agent-connection");
+  assert.equal(noProjectConnection.project_root, null);
+  assert.equal(noProjectConnection.active_sessions, 0);
+  assert.deepEqual(noProjectConnection.sessions, []);
+  assert.equal(noProjectConnection.endpoint, `${url.origin}/mcp`);
+  assert.ok(!JSON.stringify(noProjectConnection).includes(token));
   selectedRoot = (await api("/api/project", { project_root: project }))
     .project_root;
   assert.equal(selectedRoot, fs.realpathSync(project));
@@ -330,6 +340,9 @@ try {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(bridgeFrame("application_bridge", { kind: "renew", session: registration.data.session })),
   }).then(r => r.status), 401);
   assert.deepEqual(await history(), applicationBaseline, "Application draft synchronization must not write scientific history");
+  const beforeMcp = await api("/api/agent-connection");
+  assert.equal(beforeMcp.active_sessions, 0, "Studio and connected CLI reads are not MCP connections");
+  assert.deepEqual(beforeMcp.sessions, []);
   const hello = await mcp("initialize", {
     protocolVersion: "2025-11-25",
     capabilities: {},
@@ -358,6 +371,23 @@ try {
       assert.ok(!reply.isError, JSON.stringify(reply));
       return reply.structuredContent.result;
     });
+  const initializedConnection = await api("/api/agent-connection");
+  assert.equal(initializedConnection.active_sessions, 1);
+  assert.equal(initializedConnection.sessions.length, 1);
+  assert.equal(initializedConnection.sessions[0].client_reported_name, "workbench-fixture");
+  assert.equal(initializedConnection.sessions[0].overview_served_at_ms, null);
+  assert.deepEqual(initializedConnection.sessions[0].window_contexts, []);
+  assert.ok(!JSON.stringify(initializedConnection).includes(sessionId), "Private MCP transport ID is not exposed");
+  await call("rho.host.overview.v1", {});
+  await bridge({ kind: "renew", session: registration.data.session });
+  await call("rho.application.context.v1", { window: registration.data.session.window, limit: 1 });
+  const servedConnection = await api("/api/agent-connection");
+  assert.equal(servedConnection.project_root, selectedRoot);
+  assert.ok(servedConnection.sessions[0].overview_served_at_ms);
+  assert.deepEqual(servedConnection.sessions[0].window_contexts[0].window, registration.data.session.window);
+  assert.ok(servedConnection.sessions[0].window_contexts[0].served_at_ms);
+  assert.ok(!JSON.stringify(servedConnection).includes(token));
+  assert.deepEqual(await history(), applicationBaseline, "Connection observations must not create scientific operations");
   const fromAgent = await call("rho.process.run_local.v1", {
     client_request_id: "agent-http",
     arguments: {
@@ -445,6 +475,15 @@ try {
   assert.equal(detached.status, 202);
   await detached.body?.cancel();
   sessionId = undefined;
+  const closedConnection = await deadline((async () => {
+    for (;;) {
+      const observed = await api("/api/agent-connection");
+      if (observed.active_sessions === 0) return observed;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  })(), 5000, "MCP connection closure was not observed");
+  assert.ok(closedConnection.sessions[0].closed_at_ms);
+  assert.ok(closedConnection.sessions[0].overview_served_at_ms, "Closing a connection retains bounded evidence");
   const effect = path.join(project, "after-http-disconnect.txt");
   const detachedStarted = new Promise((resolve) =>
     marker.once("connection", (socket) => {
@@ -521,6 +560,10 @@ try {
   assert.deepEqual(await host("invoke", detachedInput), saved);
   const changed = await api("/api/project", { project_root: other });
   assert.equal(changed.project_root, fs.realpathSync(other));
+  const replacedConnection = await api("/api/agent-connection");
+  assert.equal(replacedConnection.project_root, changed.project_root);
+  assert.equal(replacedConnection.active_sessions, 0);
+  assert.deepEqual(replacedConnection.sessions, [], "A replacement Host must not inherit old connection evidence");
   const stale = await fetch(new URL("/api/host", url), {
     method: "POST",
     headers,
@@ -542,7 +585,7 @@ try {
     null,
   ]);
   console.log(
-    `Verified local HTTP boundary, project selection/switch fence, pure queries, shared UI/MCP principal, cancellation and disconnect commit${realR ? ", plus actual Ark/R and Environment observations" : ""}.`,
+    `Verified local HTTP boundary, Host-scoped MCP connection observations, project selection/switch fence, pure queries, shared UI/MCP principal, cancellation and disconnect commit${realR ? ", plus actual Ark/R and Environment observations" : ""}.`,
   );
 } finally {
   watcher.close();

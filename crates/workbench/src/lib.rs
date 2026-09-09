@@ -35,6 +35,17 @@ const MAX_REPLY: usize = 8 * 1024 * 1024;
 struct SelectedHost {
     host: Arc<NextHost>,
     root: PathBuf,
+    connections: Arc<rho_mcp::McpConnections>,
+}
+
+impl SelectedHost {
+    fn new(host: Arc<NextHost>, root: PathBuf) -> Self {
+        Self {
+            host,
+            root,
+            connections: Arc::default(),
+        }
+    }
 }
 
 struct Hosting {
@@ -120,6 +131,30 @@ async fn info(State(state): State<AppState>) -> Response {
     Json(state.hosting.read().await.info()).into_response()
 }
 
+async fn agent_connection(State(state): State<AppState>) -> Response {
+    let hosting = state.hosting.read().await;
+    let observation = hosting.selected.as_ref().map_or_else(
+        || rho_mcp::McpConnections::default().snapshot(),
+        |selected| selected.connections.snapshot(),
+    );
+    Json(rho_contract::WorkbenchAgentConnection {
+        project_root: hosting
+            .selected
+            .as_ref()
+            .map(|selected| selected.root.to_string_lossy().into_owned()),
+        endpoint: format!("{}/mcp", state.origin),
+        suggested_server_name: format!(
+            "rho_{}",
+            state.authority.rsplit(':').next().unwrap_or("local")
+        ),
+        observed_at_ms: observation.observed_at_ms,
+        active_sessions: observation.active_sessions,
+        sessions: observation.sessions,
+        history_truncated: observation.history_truncated,
+    })
+    .into_response()
+}
+
 fn project_root(path: &str) -> Result<PathBuf, String> {
     if path.is_empty() || path.len() > 4096 || !Path::new(path).is_absolute() {
         return Err("select an absolute local project directory".into());
@@ -181,10 +216,7 @@ async fn select_project(
     hosting.profile = profile;
     match reserved.open().await {
         Ok(host) => {
-            hosting.selected = Some(SelectedHost {
-                host: Arc::new(host),
-                root,
-            });
+            hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
             Json(hosting.info()).into_response()
         }
         Err(error) => {
@@ -194,10 +226,7 @@ async fn select_project(
             hosting.profile.runtime = rho_host::RuntimeConfiguration::Project;
             match hosting.profile.open(&root).await {
                 Ok(host) => {
-                    hosting.selected = Some(SelectedHost {
-                        host: Arc::new(host),
-                        root,
-                    });
+                    hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
                     Json(hosting.info()).into_response()
                 }
                 Err(error) => failure(
@@ -378,7 +407,9 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
                 .selected
                 .as_ref()
                 .ok_or_else(|| std::io::Error::other("select a project first"))?;
-            McpEdge::local(host.host.clone()).map_err(std::io::Error::other)
+            McpEdge::local(host.host.clone())
+                .map(|edge| edge.observe_connections(&host.connections))
+                .map_err(std::io::Error::other)
         },
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default()
@@ -392,6 +423,7 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/app.js", get(javascript))
         .route("/style.css", get(stylesheet))
         .route("/api/info", get(info))
+        .route("/api/agent-connection", get(agent_connection))
         .route("/api/project", post(select_project))
         .route("/api/r", get(settings::read_r).post(settings::apply_r))
         .route("/api/r/probe", post(settings::probe))
@@ -455,6 +487,7 @@ pub async fn serve_with_assets(
                 }
             }),
             root,
+            connections: Arc::default(),
         })
     } else {
         None
@@ -550,7 +583,7 @@ mod tests {
                     error: None,
                 },
                 profile,
-                selected: Some(SelectedHost { host, root }),
+                selected: Some(SelectedHost::new(host, root)),
             })),
             authority: "127.0.0.1:10001".into(),
             origin: "http://127.0.0.1:10001".into(),

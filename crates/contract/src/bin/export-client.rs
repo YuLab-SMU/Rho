@@ -16,6 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Invocation::export_all(&config)?;
     MediaPage::export_all(&config)?;
     WorkbenchInfo::export_all(&config)?;
+    WorkbenchAgentConnection::export_all(&config)?;
     WorkbenchFrame::export_all(&config)?;
     SelectProject::export_all(&config)?;
     SessionReply::export_all(&config)?;

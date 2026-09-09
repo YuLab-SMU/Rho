@@ -1,4 +1,6 @@
 #![forbid(unsafe_code)]
+mod connections;
+pub use connections::McpConnections;
 mod resources;
 use rho_host::OperationError;
 
@@ -15,7 +17,7 @@ use rmcp::{
         ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo,
         ServerJsonRpcMessage, Tool, ToolAnnotations,
     },
-    service::RequestContext,
+    service::{NotificationContext, RequestContext},
     transport::async_rw::JsonRpcMessageCodec,
 };
 use schemars::schema_for;
@@ -58,6 +60,7 @@ struct Entry {
 pub struct McpEdge {
     host: Arc<NextHost>,
     context: CallContext,
+    connection: Option<connections::ConnectionObservation>,
     entries: BTreeMap<String, Entry>,
     in_flight: Semaphore,
     observations: Semaphore,
@@ -187,6 +190,7 @@ impl McpEdge {
         Ok(Self {
             host,
             context,
+            connection: None,
             entries,
             in_flight: Semaphore::new(32),
             observations: Semaphore::new(16),
@@ -201,6 +205,17 @@ impl McpEdge {
         };
         context.connection_id = format!("mcp:{}", std::process::id());
         Self::new(host, context)
+    }
+    /// Observes transport activity without changing the caller or Host path.
+    pub fn observe_connections(mut self, connections: &Arc<McpConnections>) -> Self {
+        self.connection = Some(connections.observe());
+        self
+    }
+
+    fn observe_request(&self) {
+        if let Some(connection) = &self.connection {
+            connection.request();
+        }
     }
     async fn route(&self, route: &Route, args: Value) -> Result<Value, OperationError> {
         let request = match route {
@@ -251,6 +266,20 @@ impl McpEdge {
     }
 }
 impl ServerHandler for McpEdge {
+    async fn on_initialized(&self, context: NotificationContext<RoleServer>) {
+        if let Some(connection) = &self.connection {
+            let peer = context.peer.peer_info();
+            connection.initialized(
+                peer.as_ref().map(|p| p.client_info.name.as_str()),
+                peer.as_ref().map(|p| p.client_info.version.as_str()),
+            );
+        }
+    }
+
+    async fn ping(&self, _: RequestContext<RoleServer>) -> Result<(), ErrorData> {
+        self.observe_request();
+        Ok(())
+    }
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
             .with_server_info(Implementation::new("rho", env!("CARGO_PKG_VERSION")))
@@ -264,6 +293,7 @@ impl ServerHandler for McpEdge {
         request: Option<PaginatedRequestParams>,
         _: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
+        self.observe_request();
         let offset = request
             .and_then(|request| request.cursor)
             .map(|cursor| cursor.parse::<usize>())
@@ -303,6 +333,7 @@ impl ServerHandler for McpEdge {
         _: Option<PaginatedRequestParams>,
         _: RequestContext<RoleServer>,
     ) -> Result<rmcp::model::ListResourceTemplatesResult, ErrorData> {
+        self.observe_request();
         if !self.context.scopes.contains("workspace.read") {
             return Ok(rmcp::model::ListResourceTemplatesResult::default());
         }
@@ -313,6 +344,7 @@ impl ServerHandler for McpEdge {
         request: rmcp::model::ReadResourceRequestParams,
         _: RequestContext<RoleServer>,
     ) -> Result<rmcp::model::ReadResourceResult, ErrorData> {
+        self.observe_request();
         let _permit = self
             .observations
             .try_acquire()
@@ -331,6 +363,7 @@ impl ServerHandler for McpEdge {
         request: CallToolRequestParams,
         _: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
+        self.observe_request();
         let Some(entry) = self.entries.get(request.name.as_ref()) else {
             return Err(ErrorData::invalid_params("unknown Rho tool", None));
         };
@@ -388,6 +421,13 @@ impl ServerHandler for McpEdge {
             return Ok(CallToolResult::structured_error(
                 json!({"error":"result exceeds the MCP reply bound; use a smaller page or the supplied continuation", "stored_result_unchanged":true,"diagnostic":OperationError::BudgetExceeded("MCP reply exceeds 8 MiB".into()).diagnostic()}),
             ));
+        }
+        if let (Some(connection), Route::Capability(capability, CapabilityKind::Query)) =
+            (&self.connection, &entry.route)
+            && result.is_error != Some(true)
+            && let Some(content) = &result.structured_content
+        {
+            connection.served(&capability.id, &content["result"]);
         }
         Ok(result)
     }

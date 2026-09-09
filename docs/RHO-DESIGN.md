@@ -648,6 +648,36 @@ Unrecorded provenance displays **Not recorded**. Project links stay separate fro
 installation provenance. Repository URLs must omit embedded credentials. Inspection
 does not load packages, invoke a package manager, change repositories or install.
 
+## 12. Agent connection experience — proposed
+
+The user requested a daily Codex connection workflow on 2026-09-09. The
+[Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/4-0)
+contains first connection, observed connection, and narrow/recovery states.
+This interaction is awaiting user review; it is not an implemented Studio feature.
+
+The proposal adds **Connect Agent** to the app bar and command menu. A compact
+**Connect Codex** dialog identifies the project, R availability, current window
+and unsaved document before showing setup. It offers a Codex user configuration
+for this Workbench and a read-only connection-check prompt carrying the actual
+project/window references. Configuration contains a private credential; display
+it masked by default and copy it only on an explicit action. Do not write user
+configuration, start an Agent, install Skills or start R merely to open this dialog.
+
+Keep configuration copied, MCP session initialized, and successful overview/window
+responses distinct. A server-side response observation is not a model-consumption
+acknowledgement or proof of scientific correctness. Client name/version are
+self-reported display metadata. Show the last observed request and exact window
+incarnation; another window's response does not verify this window. Multiple
+clients remain separate, with bounded history labeled if truncated.
+
+Closing the dialog leaves accepted work and the connection unchanged. Protocol
+session closure does not imply R work stopped; network loss can leave a protocol
+session open. Unreachable hosting shows an unavailable/stale state and Retry;
+never present the previous response as a fresh connection check. A new Host starts
+with no inherited connection observations. Workbench restarts require fresh address
+and credential configuration. Project-only Hosts may still connect for available
+file/application capabilities, with R unavailability explicit.
+
 Documentation basis: [renv package sources](https://rstudio.github.io/renv/articles/package-sources.html),
 [remotes source types](https://remotes.r-lib.org/),
 [R-universe repositories](https://docs.r-universe.dev/install/dependencies.html),

@@ -178,6 +178,17 @@ The local MCP actor and human caller share the OS user's principal while retaini
 separate actor identity. Tool arguments and client initialization names do not
 grant authority. The Agent platform owns conversation and permission behavior.
 
+Authenticated `GET /api/agent-connection` reports the selected project's MCP
+endpoint, a port-qualified suggested Codex server name, observation time, open
+protocol-session count and bounded recent sessions. It returns no bearer token or
+private MCP session ID. Ordinary Studio/CLI reads do not count as Agent sessions.
+Rows include client-reported name/version, the last request time, protocol closure,
+and successful overview/live-window response times. Those response observations
+are not delivery acknowledgements. A quiet open session can outlive its network
+connection, and closing it does not cancel accepted work. New project/R Hosts
+start fresh observations. The proposed Studio setup dialog is in
+[Design section 12](RHO-DESIGN.md#12-agent-connection-experience--proposed).
+
 ## Discover and investigate through the shared Host
 
 Use `host.overview` for project, session, execution and window summaries;

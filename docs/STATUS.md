@@ -1,14 +1,42 @@
 # Rho: current state and focus
 
-Updated: 2026-09-08. This is the single current status summary. Git retains history.
+Updated: 2026-09-09. This is the single current status summary. Git retains history.
 
-## Agent interface delivery
+## Current work: daily Codex connection
+
+The user requested a daily Agent connection experience. Three
+[Paper review boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/4-0)
+cover initial Codex setup, observed connection evidence, and narrow/recovery states.
+The UI is awaiting user review under AGENTS.md; no Connect Agent dialog has been
+implemented. The proposed interaction contract is in Design section 12.
+
+The independent backend now exposes authenticated `GET /api/agent-connection`.
+It returns the current endpoint and bounded MCP session observations, including
+client-reported labels, initialization/closure and successful overview/live-window
+response times. It stores no tokens, conversation or scientific results. Records
+belong to the selected Host and reset on replacement; an open protocol session is
+not proof of an active Agent task. Existing caller identities and scientific ports
+are preserved. Codex user configuration has not been changed.
+
+Current checks: MCP 9 tests, Workbench 8 tests, frontend 270 tests, Rust-to-client
+generation/build/check, architecture and frontend boundaries, 24 boundary fixtures,
+governance and Agent-harness self-test passed. Affected MCP/Workbench all-target
+Clippy with warnings denied and workspace formatting checks passed.
+`node scripts/test-workbench.mjs`
+and its `--real-r` variant passed actual HTTP/MCP initialization, scoped overview
+and window observations, credential exclusion, query purity, session closure,
+Host replacement, cancellation and disconnected-work checks. The latter used
+actual Ark/R and Environment observations. These are checks of the current work,
+not a rerun of the frozen 34-session independent Codex acceptance below.
+
+## Agent interface acceptance baseline
 
 The Agent interface and standard Skills delivery is implemented and verified.
 The frozen runtime/harness acceptance version is
-`4bcd30903b55568844b20fb93589294b1a8c5f9d`. Subsequent changes package evidence,
-map its tests into CI/governance, and update this status; they do not change the
-verified scientific runtime, client assets or acceptance harness.
+`4bcd30903b55568844b20fb93589294b1a8c5f9d`. Evidence-packaging changes through
+`a3f08a6` did not change that verified scientific runtime, client assets or
+acceptance harness. The connection work above extends the current transport;
+the frozen acceptance remains evidence for its recorded baseline only.
 
 Shared Host discovery, concrete capability/result/recovery contracts, diagnostics
 and read navigation cover the existing scientific owners. Objects and text use
@@ -63,7 +91,7 @@ Command logs are under `target/agent-interface`; visual reviews are under
 attempts, sanitizes credentials in text/nested traces and records source/archive
 hashes. Its tests and CI mapping are separate from scientific acceptance.
 
-Verified Rho binary SHA256:
+Frozen acceptance binary SHA256:
 `c1b0157931004efa6af2fd76f8b9c6eab2f58bb08211877d8ce67a074f2dad91`.
 
 ## Operational boundaries
