@@ -126,8 +126,10 @@ Sources:
 - `scripts/check-architecture.mjs`
 - `scripts/client.mjs`
 - `scripts/fixtures/**`
+- `scripts/pack-agent-evidence.py`
 - `scripts/test-*.R`
 - `scripts/test-*.mjs`
+- `scripts/test-pack-agent-evidence.py`
 - `scripts/vendor-jet.mjs`
 - `scripts/verify-*.mjs`
 - `vendor/**`
@@ -140,6 +142,7 @@ Checks:
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`
 - `system.client`: `["node","scripts/client.mjs","check"]`
 - `system.environment`: `["node","scripts/test-environment.mjs"]`
+- `system.evidence-pack`: `["python3","scripts/test-pack-agent-evidence.py"]`
 - `system.mcp`: `["node","scripts/test-mcp.mjs"]`
 - `system.mcp-real-r`: `["node","scripts/test-mcp.mjs","--real-r"]`
 - `system.output-media`: `["node","scripts/test-output-media.mjs"]`

@@ -2,125 +2,84 @@
 
 Updated: 2026-09-08. This is the single current status summary. Git retains history.
 
-## Current delivery
+## Agent interface delivery
 
-The Agent interface and standard Skills integration is being implemented against
-baseline `fce14b29bc6e5c79af79ea7b942342ac2fa3e7f2`. This delivery is **in progress**;
-component tests below do not establish full browser or independent-Agent acceptance.
-The user authorized staged gpt-6-astra subagents, isolated acceptance instances and
-commits. Existing user Hosts, R memory, installation and publication are untouched.
+The Agent interface and standard Skills delivery is implemented and verified.
+The frozen runtime/harness acceptance version is
+`4bcd30903b55568844b20fb93589294b1a8c5f9d`. Subsequent changes package evidence,
+map its tests into CI/governance, and update this status; they do not change the
+verified scientific runtime, client assets or acceptance harness.
 
-The integration contains shared overview/catalog/describe queries, concrete
-capability payload schemas and diagnostics; version-bound object and file readers;
-static package indexes and retained help text; shared verified originals and MCP
-native image/resources; an Application owner, SQLite CAS receipts and a resident
-Studio bridge; standard/local and launcher-attested Skill sources and explicit
-method bindings. Operation result/recovery validation and original-record reads
-retain contract-fault evidence atomically in the scientific journal. Oversized
-uncommitted candidates have digest-bound chunk reads. Source presence is not acceptance.
-Standalone CLI queries now use a query-only observer without writer leases,
-runtime startup or journal recovery. The connected CLI uses a private launch-URL
-file and the existing Workbench Host for native queries and application controls.
+Shared Host discovery, concrete capability/result/recovery contracts, diagnostics
+and read navigation cover the existing scientific owners. Objects and text use
+bounded version-bound reads; package indexes bind exact installed copies; help
+renders once from the selected database into retained text. Output reads share
+verified originals, bounded native image previews, crops and resource chunks.
 
-Application commands retain explicit window/incarnation/resource identities.
-Scientific captures preserve original Agent identity through the existing gateway.
-An unchanged empty-file Save uses a Project digest observation and a verification
-receipt with no invented OperationId. Environment configuration/tool observations
-are established by explicit startup/operations; subsequent queries use those
-stamped observations and bounded current static metadata. Retention inspection
-reads native process markers without starting R or signalling processes.
+Application owns window identities, synchronized drafts/context, CAS receipts and
+immutable scientific captures. The resident Studio bridge preserves concurrent
+input and startup view choices. Saving/running retains the original caller through
+the existing OperationGateway. Standalone CLI queries do not start R, acquire a
+writer lease or recover operations; connected CLI requests use the existing Host.
 
-## Executed checks in this delivery
+Standard `.agents/skills` and launcher-attested native sources retain their original
+resource bytes, enablement and source identities. Read receipts and explicit method
+bindings are application metadata. Skills do not grant authority or run an Agent
+loop. Native queries do not reload deliberately unloaded inspection/JSON providers.
 
-- Pre-change Rust workspace default tests and frontend baseline (226 tests) passed.
-- Integrated Rust contracts/application/SQLite/Skills checks passed: Application
-  16, SQLite 13, shared contract 4 and Skills source 8 tests at that integration
-  point. Host Skills integration subsequently passed all three tests.
-- Operation registry/gateway hardening and atomic evidence retention passed all
-  19 Operation and 15 SQLite tests, including oversized candidates and rollback.
-- Direct native R object, static package-index and code-tool scripts passed,
-  including 10,001 object bindings and hostile/lazy/active-binding fixtures.
-- The client now uses progressive object observations and explicit directory/search
-  continuation. Frontend lane tests reached 254 passing tests, with frontend
-  boundaries and 24 boundary fixtures passing. Integration generation and the
-  current client build passed; final client checking remains required.
-- All ten Workspace tests, including media authority and PNG/JPEG/SVG/crop/text,
-  passed. The full Rust run had 166 passes, two failures and seven explicit external
-  checks left to run. The obsolete path-search test now verifies all 205 unique
-  paths across pages and all 14 Project integration tests pass. The native absence
-  fixture now uses a real marked child without relaxing production uncertainty;
-  its six native-environment tests and all 20 Application tests subsequently passed.
-- Shared discovery tests passed permission-before-pagination, stale visibility
-  cursors, unavailable modules, exact descriptor identity and reply byte bounds.
-- Registered cancellation/stdin/event ports and their existing projections passed
-  seven Host and three MCP checks. A schema-definition collision was fixed by
-  isolating payload namespaces, preserving conflicting shapes and literal data.
-  Typed Project text diagnostics and native text checks passed integration tests.
-- Real Ark/R verification passed all five explicitly enabled tests and persistent
-  CLI/session checks. Native MCP image/crop/original-digest/help-text verification
-  passed on the bare image tool; the new equivalent versioned route still needs
-  its expanded transport rerun. Basic Workbench HTTP checks passed, including an
-  exact 512 KiB draft plus base on the dedicated bridge endpoint and its limits.
-- Integration frontend tests now pass 270 tests. Chrome's first full run passed
-  22/26; explicit window resume, per-window draft expectations and current object
-  read routes passed focused rechecks. A native IME commit-key replay was observed
-  in repeated Chrome runs and fixed; five consecutive checks now verify both no
-  accidental execution and a successful subsequent intentional Enter. Startup
-  restoration was subsequently fixed to preserve user edits and view choices
-  before/during asynchronous reads. The complete Chrome suite now passes all
-  26 cases; normal, wide and compact screenshots were inspected. The measured
-  typing p95 was 34.4 ms and frame p95 16.8 ms in the fixed Gapminder scenario.
-- Whole-workspace Rust checks reached 193 passing tests and one observer fixture
-  failure; the fixture incorrectly read the typed record wrapper, was fixed with
-  explicit identity assertions, and all 12 observer/CLI tests now pass. A complete
-  rerun on the final tree remains required. Strict whole-workspace Clippy passed
-  before the connected CLI addition; final lint checking remains required.
-- Full Environment, real MCP, real Workbench, native process recovery, local
-  SSH/Slurm protocol and Jet checks passed. The native session evidence fix keeps
-  unobservable same-family processes protected. Connected CLI queries, a real
-  process invocation and repeatable pending application admission also passed the
-  actual Workbench HTTP test. No live remote-cluster acceptance is claimed.
-- Rust whole-workspace type checking and one client generate/build cycle passed
-  at intermediate integration points. The following client check correctly
-  rejected stale ObjectReadPage bindings after root identity fields were added.
-  Final generate/build/check and whole-tree checks remain required.
-- Exact local Codex `/Users/xiayh/.npm-global/bin/codex` 0.153.4 preflight with
-  gpt-6-astra/high succeeded. The independent-Agent harness self-tests and native
-  Skill discovery checks passed. Two real discovery debug runs returned supported
-  facts with zero channel/identity violations, but failed stale harness assumptions
-  about module names/tool sequence and then separately timed availability. Those
-  oracles were corrected. Five core debug categories have since passed: discovery,
-  large objects, deep values, selected drafts and file search/change. All failed
-  attempts remain. Package help exposed a client preauthorization setting, now
-  corrected only for the isolated Rho MCP server while retaining its file sandbox.
-  The harness is being strengthened for capture/image provenance, late results,
-  exact original identities and complete tool-attempt accounting before further
-  model runs. No final 34-run acceptance is claimed.
+## Verified evidence
 
-Logs and the detailed local working plan are under `target/agent-interface/`.
-The acceptance runner retains all attempts, counters, actual token usage and
-artifacts; final acceptance requires 30 core runs plus four Skill/adaptation runs
-on one clean fixed version. Skipped prerequisites and failed attempts are not passes.
+- Rust workspace: 199 default tests passed. All seven separately enabled real-R
+  and Environment tests passed through the native verification scripts; none was
+  counted as passed while ignored. Strict whole-workspace Clippy passed.
+- Frontend: 270 tests and 24 ownership/boundary fixtures passed. Generated DTOs,
+  embedded assets and the current binary were checked together.
+- Chrome: all 26 cases passed. Normal, wide and constrained screenshots were
+  inspected. The fixed Gapminder load case measured typing p95 34.4 ms and frame
+  p95 16.8 ms; additional views did not duplicate shared reads.
+- Real Workbench/MCP, exact help, native image/resources, pak/renv realization,
+  installer cancellation, retention/quarantine/restore/purge, lost-commit recovery,
+  restart binding, CLI connection/query purity, process recovery, local SSH/Slurm
+  protocol fixtures, architecture/governance and Jet checks passed. The original
+  user R library was unchanged. No live remote-cluster acceptance is claimed.
+- Independent Codex: **30/30 core runs and 4/4 Skills/adaptation runs passed**, with
+  zero violations/failures, exact native/Rho method equivalence, and unchanged
+  source/binary hashes. Model `gpt-6-astra`, reasoning `high`, Codex 0.153.4.
+  Each run stayed within 80 calls, 1 MiB text and ten minutes. Maximum observed:
+  30 calls, 524,698 text bytes and 197,407 ms. Images were metered separately.
 
-## Remaining verification and resume
+The formal run retained 614 hashed artifacts (58,627,766 bytes) and took 16m55s
+with three independent workers. Totals: 382 model tool attempts, 380 matched MCP
+deliveries, 4,060,795 text bytes and 136,584 image bytes. Actual usage fields:
+10,820,205 input tokens; 9,443,328 cached input; 46,945 output; 1,822 reasoning output.
 
-Finish source/permission/pagination reviews and integration fixes, update generated
-DTOs/assets, then run the affected and full Rust, frontend, governance, dependency,
-Jet, real-R, Environment, process/remote-protocol, Workbench/MCP and Chrome checks.
-Run the complete independent Codex suite on the final fixed tree and preserve its
-manifest and all failed attempts. Architecture and operator documentation must be
-updated to the actual delivered protocol before final acceptance is declared.
+The authoritative formal result is
+`target/agent-interface/acceptance/4bcd30903b55-1788916155502-8ec26ea9/manifest.json`.
+It records `acceptance=true`, `passed=true`, `fixed_tree=true`, all 34 results,
+resource equivalence, original operation identities and the artifact inventory.
+All earlier failed attempts remain under `target/agent-interface/acceptance`.
+Command logs are under `target/agent-interface`; visual reviews are under
+`target/studio-browser`. The evidence packer preserves originals, includes failed
+attempts, sanitizes credentials in text/nested traces and records source/archive
+hashes. Its tests and CI mapping are separate from scientific acceptance.
 
-All Cargo invocations, including generation and script-internal builds, are serial.
-Build the current `target/debug/rho` before browser/native transport acceptance.
-Use disposable projects and inspect live ownership before starting a Host. Do not
-reuse an old PID, port or launch token. Existing review material remains at
-`target/calm-precision-project` and `target/calm-precision-run/next.sqlite` with its
-sibling application store; it is not a destructive test fixture.
+Verified Rho binary SHA256:
+`c1b0157931004efa6af2fd76f8b9c6eab2f58bb08211877d8ce67a074f2dad91`.
+
+## Operational boundaries
+
+Existing user Hosts, R memory and configuration were preserved. All acceptance
+instances were disposable. No product installation, signing or publication was
+performed. Read [Operations](OPERATIONS.md) before starting another Host; inspect
+current ownership and processes rather than reusing old PIDs, ports or tokens.
+All Cargo invocations remain serial; build and verify from the integration checkout.
+
+Native session evidence covers the managed fork/exec helper family. Unobservable
+same-family processes and missing original evidence stay protected; independent
+service-manager jobs and rollback of arbitrary external effects are not implied.
 
 The approved Packages interaction remains in
 [Paper](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0).
-Current scope remains one local R session. Multiple runtimes/R-version switching,
-plugin execution, package-management UI, abandoned-data migration, product
-installation and publication remain deferred. The new acceptance harness is test
-tooling, not a product Agent behavior loop.
+Multiple runtimes/R-version switching, plugin execution, package-management UI,
+abandoned-data migration, product installation and publication remain deferred.
+The external acceptance runner is test tooling, not a product Agent behavior loop.

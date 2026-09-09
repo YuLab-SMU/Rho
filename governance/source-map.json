@@ -151,6 +151,12 @@
         "node",
         "scripts/test-output-media.mjs"
       ]
+    },
+    "system.evidence-pack": {
+      "command": [
+        "python3",
+        "scripts/test-pack-agent-evidence.py"
+      ]
     }
   },
   "areas": {
@@ -189,7 +195,9 @@
         ".gitattributes",
         "docs/ARCHITECTURE.md",
         "scripts/agent-interface/**",
-        ".agents/skills/**"
+        ".agents/skills/**",
+        "scripts/pack-agent-evidence.py",
+        "scripts/test-pack-agent-evidence.py"
       ],
       "checks": [
         "docs.index",
@@ -208,7 +216,8 @@
         "system.vendor",
         "system.vendor-tests",
         "system.agent-harness",
-        "system.output-media"
+        "system.output-media",
+        "system.evidence-pack"
       ]
     },
     "development-tools": {
