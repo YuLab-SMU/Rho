@@ -5,10 +5,12 @@ mod discovery;
 mod observer;
 mod port_contracts;
 pub use observer::QueryObserver;
-mod skills;
-mod instances;
 mod instance_router;
-pub use instances::{InstanceLauncher, PreparedInstanceLaunch, LaunchedInstance};
+mod instances;
+mod skills;
+pub use instances::{
+    InstanceLauncher, LaunchedInstance, PreparedInstanceLaunch, RuntimeInstanceHold,
+};
 
 mod config;
 mod r_configuration;
@@ -25,7 +27,6 @@ use ownership::ProjectLease;
 mod records;
 mod usage;
 pub use environment::REnvironmentConfig;
-use environment::selected_environment;
 use records::JournalRecords;
 use rho_environment::{
     ENVIRONMENT_READ_SCOPE, ENVIRONMENT_WRITE_SCOPE, EnvironmentAction, EnvironmentHandler,
@@ -154,7 +155,7 @@ struct HostRuntime {
     output_owner: Option<Arc<rho_workspace::WorkspaceOutputHandler>>,
     skills: Option<Arc<rho_skills::SkillOwner>>,
     method_binding_gate: tokio::sync::Mutex<()>,
-    _project_lease: Option<ProjectLease>,
+    _project_lease: Option<Arc<ProjectLease>>,
 }
 
 #[derive(Default)]
@@ -230,11 +231,24 @@ impl NextHost {
             launcher: Arc::new(instances::ArkInstanceLauncher {
                 project: PathBuf::from(project.root()),
                 data_root: database.parent().unwrap_or(Path::new(".")).join("runtime"),
-                environment_root: database.parent().unwrap_or(Path::new(".")).join("environment"),
-                execution_timeout: std::time::Duration::from_secs(600), journal: journal.clone(),
+                environment_root: database
+                    .parent()
+                    .unwrap_or(Path::new("."))
+                    .join("environment"),
+                execution_timeout: std::time::Duration::from_secs(600),
+                journal: journal.clone(),
             }),
-            app_store: Arc::new(ApplicationStore::open(&database.parent().unwrap_or(Path::new(".")).join("runtime-preferences.sqlite")).map_err(OperationError::Storage)?),
-            initial: None, auto_continue: false,
+            app_store: Arc::new(
+                ApplicationStore::open(
+                    &database
+                        .parent()
+                        .unwrap_or(Path::new("."))
+                        .join("runtime-preferences.sqlite"),
+                )
+                .map_err(OperationError::Storage)?,
+            ),
+            initial: None,
+            auto_continue: false,
         };
         Self::compose(
             journal,
@@ -330,8 +344,15 @@ impl NextHost {
                 }
                 let workspace = if let Some(instances) = &self.runtime.instances {
                     instances.workspace_for_native(&reply.session_id)
-                } else { self.runtime.workspace.clone() };
-                workspace.ok_or_else(|| OperationError::StaleSession("The input's original R session is no longer available".into()))?
+                } else {
+                    self.runtime.workspace.clone()
+                };
+                workspace
+                    .ok_or_else(|| {
+                        OperationError::StaleSession(
+                            "The input's original R session is no longer available".into(),
+                        )
+                    })?
                     .respond_input(reply)
                     .map_err(OperationError::InvalidInput)?;
                 let result =
@@ -515,6 +536,7 @@ impl NextHost {
             remote,
             lease,
             None,
+            true,
         )
         .await
     }
@@ -526,6 +548,7 @@ impl NextHost {
         remote: Option<SshConfig>,
         lease: ProjectLease,
         host_skills: Option<&Path>,
+        auto_continue: bool,
     ) -> Result<Self, OperationError> {
         config.project_root = lease.root().to_owned();
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
@@ -580,17 +603,40 @@ impl NextHost {
         );
         let managed = ManagedInstances {
             launcher: Arc::new(instances::ArkInstanceLauncher {
-                project: config.project_root.clone(), data_root: config.data_root.clone(), environment_root,
-                execution_timeout: config.execution_timeout, journal: journal.clone(),
+                project: config.project_root.clone(),
+                data_root: config.data_root.clone(),
+                environment_root,
+                execution_timeout: config.execution_timeout,
+                journal: journal.clone(),
             }),
-            app_store: Arc::new(ApplicationStore::open(&database.parent().unwrap_or(Path::new(".")).join("runtime-preferences.sqlite")).map_err(OperationError::Storage)?),
+            app_store: Arc::new(
+                ApplicationStore::open(
+                    &database
+                        .parent()
+                        .unwrap_or(Path::new("."))
+                        .join("runtime-preferences.sqlite"),
+                )
+                .map_err(OperationError::Storage)?,
+            ),
             initial: Some(rho_contract::RuntimeLaunchBinding {
-                r_executable: config.r_home.join("bin").join(if cfg!(windows) {"R.exe"} else {"R"}).to_string_lossy().into_owned(),
+                r_executable: config
+                    .r_home
+                    .join("bin")
+                    .join(if cfg!(windows) { "R.exe" } else { "R" })
+                    .to_string_lossy()
+                    .into_owned(),
                 ark_executable: config.executable.to_string_lossy().into_owned(),
                 environment_realization_id: realization_id.map(str::to_owned),
-                library_path: config.library_path.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                library_path: config
+                    .library_path
+                    .as_ref()
+                    .map(|path| path.to_string_lossy().into_owned()),
+                checkpoint_helper_path: config
+                    .checkpoint_helper_path
+                    .as_ref()
+                    .map(|path| path.to_string_lossy().into_owned()),
             }),
-            auto_continue: true,
+            auto_continue,
         };
         Self::compose(
             journal,
@@ -725,15 +771,30 @@ impl NextHost {
             remote,
             project_lease,
         } = domains;
+        let project_lease = project_lease.map(Arc::new);
         let output_project = project.as_ref().map(|p| p.root().to_string());
-        let auto_continue = managed.as_ref().is_some_and(|managed| managed.auto_continue);
-        let instance_owner = managed.map(|managed| {
-            instances::InstanceOwner::open(
-                output_project.clone().ok_or_else(|| OperationError::Contract("Managed instances require a project".into()))?,
-                application_store.clone().ok_or_else(|| OperationError::Contract("Managed instances require application storage".into()))?,
-                managed.app_store, journal.clone(), managed.launcher, managed.initial,
-            )
-        }).transpose()?;
+        let auto_continue = managed
+            .as_ref()
+            .is_some_and(|managed| managed.auto_continue);
+        let instance_owner = managed
+            .map(|managed| {
+                instances::InstanceOwner::open(
+                    output_project.clone().ok_or_else(|| {
+                        OperationError::Contract("Managed instances require a project".into())
+                    })?,
+                    application_store.clone().ok_or_else(|| {
+                        OperationError::Contract(
+                            "Managed instances require application storage".into(),
+                        )
+                    })?,
+                    managed.app_store,
+                    journal.clone(),
+                    managed.launcher,
+                    managed.initial,
+                    project_lease.clone(),
+                )
+            })
+            .transpose()?;
         let application_owner =
             application_store
                 .zip(output_project.clone())
@@ -771,7 +832,9 @@ impl NextHost {
         }
         let discovery =
             discovery::DiscoveryOwner::new(output_project.clone(), targets, runtime.clone());
-        if let Some(owner) = &instance_owner { discovery.bind_instances(owner); }
+        if let Some(owner) = &instance_owner {
+            discovery.bind_instances(owner);
+        }
         let skill_owner = if let Some(app) = &application_owner {
             Some(skills::compose(
                 output_project.as_deref().unwrap(),
@@ -836,11 +899,14 @@ impl NextHost {
         }
         let has_workspace = runtime.is_some() || instance_owner.is_some();
         let usage = if let Some(owner) = &instance_owner {
-            Some(Arc::new(usage::InstancesUsage(owner.clone())) as Arc<dyn rho_environment::EnvironmentUsage>)
-        } else { runtime.as_ref().map(|runtime| {
-            Arc::new(usage::WorkspaceUsage(runtime.clone()))
-                as Arc<dyn rho_environment::EnvironmentUsage>
-        }) };
+            Some(Arc::new(usage::InstancesUsage(owner.clone()))
+                as Arc<dyn rho_environment::EnvironmentUsage>)
+        } else {
+            runtime.as_ref().map(|runtime| {
+                Arc::new(usage::WorkspaceUsage(runtime.clone()))
+                    as Arc<dyn rho_environment::EnvironmentUsage>
+            })
+        };
         let mut workspace_owner = None;
         if let Some(owner) = &instance_owner {
             instances::register_lifecycle(&mut registry, owner.clone())?;
@@ -936,10 +1002,14 @@ impl NextHost {
             registry.register(Arc::new(ProjectPatchHandler::new(owner)))?;
         }
         if let Some(environment) = environment {
-            let owner = Arc::new(
+            let mut owner =
                 EnvironmentOwner::new(environment, records, lane, active_library, has_workspace)
-                    .with_usage(usage),
-            );
+                    .with_usage(usage);
+            if let Some(instances) = &instance_owner {
+                let instances = instances.clone();
+                owner = owner.with_active_library_resolver(Arc::new(move || instances.active_library()));
+            }
+            let owner = Arc::new(owner);
             for action in [
                 EnvironmentAction::Plan,
                 EnvironmentAction::Realize,
@@ -980,9 +1050,16 @@ impl NextHost {
                 .with_project_scope(output_project),
         );
         event_port.bind(&gateway);
-        if let Some(owner) = &instance_owner { owner.bind(&gateway); }
+        if let Some(owner) = &instance_owner {
+            let probe = application_owner
+                .clone()
+                .map(instances::InstanceOwner::window_probe);
+            owner.bind(&gateway, probe);
+        }
         let recovered_on_open = gateway.recover_incomplete().await?;
-        if auto_continue && let Some(owner) = &instance_owner { owner.continue_default().await?; }
+        if auto_continue && let Some(owner) = &instance_owner {
+            owner.continue_default().await?;
+        }
         Ok(Self {
             runtime: Arc::new(HostRuntime {
                 gateway,
@@ -1003,6 +1080,23 @@ impl NextHost {
 
     pub fn capabilities(&self) -> Vec<CapabilityDescriptor> {
         self.runtime.gateway.registry_descriptors()
+    }
+    /// Used by an already authorized active Agent turn to retain its captured target.
+    /// A connection that is only idle must not acquire this hold.
+    pub fn hold_runtime_instance(
+        &self,
+        instance: &str,
+        native: &str,
+        reference: &str,
+        label: &str,
+    ) -> Result<RuntimeInstanceHold, OperationError> {
+        self.runtime
+            .instances
+            .as_ref()
+            .ok_or_else(|| {
+                OperationError::Unavailable("Managed R instances are unavailable".into())
+            })?
+            .acquire_hold(instance, native, reference, label)
     }
 
     /// Shared discovery/tool visibility; target-specific authority is checked
@@ -1172,7 +1266,9 @@ impl NextHost {
 
     /// The caller must first stop accepting new work through every edge.
     pub async fn drain(&self) {
-        if let Some(instances) = &self.runtime.instances { instances.begin_shutdown(); }
+        if let Some(instances) = &self.runtime.instances {
+            instances.begin_shutdown();
+        }
         if let Some(workspace) = &self.runtime.workspace {
             workspace.begin_shutdown();
         }
@@ -1274,11 +1370,17 @@ fn protected_project_paths(database: &Path) -> Result<Vec<std::path::PathBuf>, O
     let database = database
         .canonicalize()
         .map_err(|e| OperationError::Storage(e.to_string()))?;
-    let mut excluded = vec![database.clone(), application.clone()];
-    for suffix in ["-journal", "-wal", "-shm"] {
-        let mut path = application.as_os_str().to_os_string();
-        path.push(suffix);
-        excluded.push(path.into());
+    let preferences = application
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join("runtime-preferences.sqlite");
+    let mut excluded = vec![database.clone(), application.clone(), preferences.clone()];
+    for store in [application, preferences] {
+        for suffix in ["-journal", "-wal", "-shm"] {
+            let mut path = store.as_os_str().to_os_string();
+            path.push(suffix);
+            excluded.push(path.into());
+        }
     }
     for suffix in [".host.lock", "-journal", "-wal", "-shm"] {
         let mut path = database.as_os_str().to_os_string();

@@ -93,6 +93,12 @@ pub struct ApplicationView {
     pub view_type: ApplicationViewType,
     pub document_id: Option<String>,
     pub active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub workspace_instance_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub native_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
@@ -102,6 +108,9 @@ pub struct ApplicationObjectSelection {
     pub name: String,
     pub object_ref: Option<String>,
     pub native_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub workspace_instance_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
@@ -111,6 +120,9 @@ pub struct ApplicationPackageSelection {
     pub copy_id: String,
     pub observation_id: String,
     pub native_session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub workspace_instance_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

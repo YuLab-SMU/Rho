@@ -172,6 +172,13 @@ pub(crate) fn validate_context(
     if let Some(session) = &context.native_session_id {
         validate_id(session)?;
     }
+    for view in &context.views {
+        if let Some(instance) = &view.workspace_instance_id { validate_id(instance)?; }
+        if let Some(native) = &view.native_session_id {
+            validate_id(native)?;
+            if view.workspace_instance_id.is_none() { return Err(invalid("A native view must name its logical R instance")); }
+        }
+    }
     if let Some(instance) = &context.workspace_instance_id {
         validate_id(instance)?;
     }
@@ -191,7 +198,8 @@ fn validate_object(
         return Err(invalid("object name must be 1..1024 UTF-8 bytes"));
     }
     validate_id(&selection.native_session_id)?;
-    if context.native_session_id.as_ref() != Some(&selection.native_session_id) {
+    if !selection_session_matches(context, selection.workspace_instance_id.as_deref(), &selection.native_session_id,
+        &[ApplicationViewType::Objects, ApplicationViewType::Viewer])? {
         return Err(ApplicationError::Conflict);
     }
     if let Some(reference) = &selection.object_ref {
@@ -213,10 +221,23 @@ fn validate_package(
     {
         return Err(invalid("package observation/copy identity is invalid"));
     }
-    if context.native_session_id.as_ref() != Some(&selection.native_session_id) {
+    if !selection_session_matches(context, selection.workspace_instance_id.as_deref(), &selection.native_session_id,
+        &[ApplicationViewType::Packages])? {
         return Err(ApplicationError::Conflict);
     }
     Ok(())
+}
+fn selection_session_matches(context:&ApplicationContextState, instance:Option<&str>, native:&str,
+    view_types:&[ApplicationViewType])->Result<bool,ApplicationError>{
+    if let Some(id)=instance {validate_id(id)?;}
+    if instance.is_none() || instance==context.workspace_instance_id.as_deref(){
+        return Ok(context.native_session_id.as_deref()==Some(native));
+    }
+    // Pinned views explicitly describe another R instance. This is application
+    // selection metadata; subsequent scientific reads still validate the native
+    // owner and observation reference, never a current-tab inference.
+    Ok(context.views.iter().any(|view|view_types.contains(&view.view_type)
+        && view.workspace_instance_id.as_deref()==instance && view.native_session_id.as_deref()==Some(native)))
 }
 pub(crate) fn validate_action(
     action: &ApplicationAction,

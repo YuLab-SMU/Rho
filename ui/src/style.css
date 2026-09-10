@@ -454,6 +454,17 @@ kbd {
 .menu [data-highlighted] {
   background: var(--color-accent-soft);
 }
+.session-target { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.session-target-label { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-target-menu { width: 340px; padding: 8px; border-radius: var(--radius-panel); }
+.session-target-menu .session-target-row { display: flex; align-items: center; gap: 12px; padding: 12px 8px; border-radius: var(--radius-control); }
+.session-target-menu .session-target-row[data-selected="true"] { background: var(--color-accent-soft); }
+.session-target-check { width: 20px; flex-shrink: 0; color: var(--color-accent); }
+.session-target-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-target-name small { font-weight: 400; font-size: 13px; line-height: 21px; color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-target-state { width: 64px; flex-shrink: 0; text-align: right; font-size: 13px; line-height: 18px; color: var(--color-muted); }
+.session-target-state.is-live { color: var(--color-success); }
+.session-target-state.is-attention { color: var(--color-warning); }
 .flexlayout__layout {
   --flexlayout-font-family: var(--font-ui);
   --flexlayout-font-size: 13px;

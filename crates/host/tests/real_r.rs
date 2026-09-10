@@ -7,12 +7,20 @@ fn request(id: &str, code: &str) -> Invocation {
     Invocation {
         client_request_id: id.into(),
         capability: CapabilityRef::new("workspace.run_r", 1).unwrap(),
-        arguments: json!({"code":code}),
+        arguments: json!({"workspace_instance_id":"main","code":code}),
         preconditions: Vec::new(),
     }
 }
 
-fn query(id: &str, arguments: serde_json::Value) -> QueryRequest {
+fn query(id: &str, mut arguments: serde_json::Value) -> QueryRequest {
+    if id.starts_with("workspace.")
+        && !matches!(
+            id,
+            "workspace.list_outputs" | "workspace.read_output" | "workspace.output_events"
+        )
+    {
+        arguments["workspace_instance_id"] = json!("main");
+    }
     QueryRequest {
         capability: CapabilityRef::new(id, 1).unwrap(),
         arguments,
@@ -32,16 +40,20 @@ async fn real_r_tools_use_native_libraries_and_the_shared_operation_path() {
             data_root: directory.path().join("runtime"),
             execution_timeout: Duration::from_secs(30),
             library_path: None,
+            checkpoint_helper_path: None,
         },
     )
     .await
     .unwrap();
     let context = NextHost::local_context();
-    let tool = |id: &str, capability: &str, arguments| Invocation {
-        client_request_id: id.into(),
-        capability: CapabilityRef::new(capability, 1).unwrap(),
-        arguments,
-        preconditions: Vec::new(),
+    let tool = |id: &str, capability: &str, mut arguments: serde_json::Value| {
+        arguments["workspace_instance_id"] = json!("main");
+        Invocation {
+            client_request_id: id.into(),
+            capability: CapabilityRef::new(capability, 1).unwrap(),
+            arguments,
+            preconditions: Vec::new(),
+        }
     };
     let help_request = tool("help", "workspace.help", json!({"topic":"mean"}));
     let mut denied = context.clone();
@@ -158,6 +170,7 @@ async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
         data_root: directory.path().join("runtime"),
         execution_timeout: Duration::from_secs(30),
         library_path: None,
+        checkpoint_helper_path: None,
     };
     let host = Arc::new(
         NextHost::open_ark(directory.path().join("next.sqlite"), config)
@@ -263,14 +276,16 @@ async fn real_r_preserves_session_reports_errors_and_observes_cancellation() {
     .unwrap();
     assert_eq!(packages_busy.status, QueryStatus::Busy);
 
-    let project_busy = host
+    // A running instance blocks its own observations only; project files stay
+    // readable so the editor and Files panel keep working during a long run.
+    let project_during_run = host
         .query_snapshot(&context, query("project.snapshot", json!({})))
         .await
         .unwrap();
-    assert_eq!(
-        project_busy.status,
+    assert_ne!(
+        project_during_run.status,
         QueryStatus::Busy,
-        "R and Project must share the same write lane"
+        "one running R instance must not block project file observations"
     );
     assert!(busy.data.is_none());
     assert_eq!(
@@ -355,6 +370,7 @@ async fn real_workspace_queries_are_bounded_and_do_not_force_bindings_or_record_
         data_root: directory.path().join("runtime"),
         execution_timeout: Duration::from_secs(30),
         library_path: None,
+        checkpoint_helper_path: None,
     };
     let host = NextHost::open_ark(directory.path().join("next.sqlite"), config)
         .await
@@ -566,19 +582,13 @@ async fn real_workspace_queries_are_bounded_and_do_not_force_bindings_or_record_
 async fn resume_console(host: &NextHost, id: &str) {
     let context = NextHost::local_context();
     let state = host
-        .query_snapshot(
-            &context,
-            rho_contract::QueryRequest {
-                capability: CapabilityRef::new("workspace.console_state", 1).unwrap(),
-                arguments: json!({}),
-            },
-        )
+        .query_snapshot(&context, query("workspace.console_state", json!({})))
         .await
         .unwrap()
         .data
         .unwrap();
     if !state["pause"].is_null() {
-        let result=host.invoke(&context,Invocation{client_request_id:format!("resume-{id}"),capability:CapabilityRef::new("workspace.resume_queue",1).unwrap(),arguments:json!({"session_id":state["session_id"],"pause_id":state["pause"]["id"]}),preconditions:vec![]}).await.unwrap();
+        let result=host.invoke(&context,Invocation{client_request_id:format!("resume-{id}"),capability:CapabilityRef::new("workspace.resume_queue",1).unwrap(),arguments:json!({"workspace_instance_id":"main","session_id":state["session_id"],"pause_id":state["pause"]["id"]}),preconditions:vec![]}).await.unwrap();
         assert_eq!(result.status, OperationStatus::Succeeded);
     }
 }
@@ -597,6 +607,7 @@ async fn real_console_prints_each_expression_and_answers_native_stdin_once() {
             data_root: directory.path().join("runtime"),
             execution_timeout: Duration::from_secs(5),
             library_path: None,
+            checkpoint_helper_path: None,
         },
     )
     .await
@@ -713,11 +724,21 @@ async fn real_console_prints_each_expression_and_answers_native_stdin_once() {
     let offline = NextHost::open_project(&database, directory.path())
         .await
         .unwrap();
+    // The reopened Host publishes the instance contract but holds no live R, so
+    // reading a saved original stays a pure bounded query.
+    let offline_instances = offline
+        .query_snapshot(&context, query("runtime.instances", json!({"limit":50})))
+        .await
+        .unwrap()
+        .data
+        .unwrap();
     assert!(
-        !offline
-            .capabilities()
+        offline_instances["instances"]
+            .as_array()
+            .unwrap()
             .iter()
-            .any(|c| c.capability.id == "workspace.run_r")
+            .all(|instance| instance["native_session_id"].is_null()),
+        "reading saved output must not relaunch R: {offline_instances}"
     );
     let bytes = offline
         .query_snapshot(
@@ -746,6 +767,7 @@ async fn host_shutdown_interrupts_unanswerable_stdin_without_abandoning_the_comm
             data_root: directory.path().join("runtime"),
             execution_timeout: Duration::from_secs(5),
             library_path: None,
+            checkpoint_helper_path: None,
         },
     )
     .await

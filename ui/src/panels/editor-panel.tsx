@@ -28,6 +28,7 @@ import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { rSupport, isR } from "../r-language";
 import { useDocuments, useObjectCompletions, useOperations, usePreferences, useSession, useNavigation } from "../context";
 import { Modal } from "../primitives";
+import { SessionTargetPicker } from "./session-target";
 import type { DocumentSnapshot } from "../documents";
 
 export function EditorHub() {
@@ -235,6 +236,7 @@ export function DocumentPanel({ documentId }: { documentId: string }) {
   return (
     <section className="panel document-panel" data-document-id={d.id}>
       <div className="editor-toolbar">
+        <SessionTargetPicker />
         <button
           className="primary"
           aria-label={

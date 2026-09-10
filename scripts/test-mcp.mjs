@@ -134,36 +134,38 @@ try {
   assert.deepEqual((await peer.call("rho.events.poll", { limit: 1000 }).result).structuredContent.result, beforeInjection);
 
   if (realR) {
-    const executed = (await peer.call("rho.workspace.run_r.v1", { client_request_id: "mcp-real-r", return_after_acceptance: false, arguments: { code: "x <- 21; x * 2" } }).result).structuredContent.result;
+    // A managed Host routes every live R request to an explicit instance.
+    const instance = "main";
+    const executed = (await peer.call("rho.workspace.run_r.v1", { client_request_id: "mcp-real-r", return_after_acceptance: false, arguments: { workspace_instance_id: instance, code: "x <- 21; x * 2" } }).result).structuredContent.result;
     assert.equal(executed.status, "succeeded", JSON.stringify(executed));
     assert.equal(executed.output.value, 42);
     // A correctable input error must remain model-readable, not be replaced by
     // outputSchema validation. A paused queue must acknowledge new work promptly.
-    const invalidMode = await peer.call("rho.workspace.run_r.v1", {client_request_id:"invalid-mode",arguments:{code:"1",output_mode:"all"}}).result;
+    const invalidMode = await peer.call("rho.workspace.run_r.v1", {client_request_id:"invalid-mode",arguments:{workspace_instance_id:instance,code:"1",output_mode:"all"}}).result;
     assert.equal(invalidMode.isError,true);assert.equal(invalidMode.structuredContent,undefined);
     assert.match(JSON.stringify(invalidMode.content),/output_mode/);
-    const failed = await peer.call("rho.workspace.run_r.v1",{client_request_id:"pause-error",return_after_acceptance:false,arguments:{code:"stop('expected queue recovery fixture')"}}).result;
+    const failed = await peer.call("rho.workspace.run_r.v1",{client_request_id:"pause-error",return_after_acceptance:false,arguments:{workspace_instance_id:instance,code:"stop('expected queue recovery fixture')"}}).result;
     assert.equal(failed.structuredContent.result.status,"failed");
-    const paused = (await peer.call("rho.workspace.console_state.v1",{}).result).structuredContent.result.data;
+    const paused = (await peer.call("rho.workspace.console_state.v1",{workspace_instance_id:instance}).result).structuredContent.result.data;
     assert.ok(paused.pause);
-    const retryInput={client_request_id:"after-error",arguments:{code:"queue_recovered <- TRUE"}};
+    const retryInput={client_request_id:"after-error",arguments:{workspace_instance_id:instance,code:"queue_recovered <- TRUE"}};
     const admitted=(await deadline(peer.call("rho.workspace.run_r.v1",retryInput).result,3000,"paused R work did not return acceptance")).structuredContent.result;
     assert.equal(admitted.status,"accepted");
     assert.ok(admitted.next_reads.some(r=>r.capability.id==="workspace.console_state"));
     const duplicate=(await peer.call("rho.workspace.run_r.v1",retryInput).result).structuredContent.result;
     assert.equal(duplicate.operation.operation_id,admitted.operation.operation_id);
-    await peer.call("rho.workspace.resume_queue.v1",{client_request_id:"resume-after-error",arguments:{session_id:paused.session_id,pause_id:paused.pause.id}}).result;
+    await peer.call("rho.workspace.resume_queue.v1",{client_request_id:"resume-after-error",arguments:{workspace_instance_id:instance,session_id:paused.session_id,pause_id:paused.pause.id}}).result;
     for(let attempt=0;attempt<100;attempt++){
       const result=(await peer.call("rho.operation.get",{operation_id:admitted.operation.operation_id}).result).structuredContent.result;
       if(result.status==="succeeded")break;
       assert.notEqual(result.status,"failed");assert.ok(attempt<99);await new Promise(r=>setTimeout(r,20));
     }
     assert.ok(tools.some(tool=>tool.name==="rho.workspace.respond_input"));
-    const inputRun=(await peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-stdin",return_after_acceptance:true,arguments:{code:"mcp_answer <- readline('MCP answer: '); stopifnot(mcp_answer == 'verified')",output_mode:"console"}}).result).structuredContent.result;
+    const inputRun=(await peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-stdin",return_after_acceptance:true,arguments:{workspace_instance_id:instance,code:"mcp_answer <- readline('MCP answer: '); stopifnot(mcp_answer == 'verified')",output_mode:"console"}}).result).structuredContent.result;
     assert.equal(inputRun.status,"accepted");
     let pendingInput;
     for(let attempt=0;attempt<100;attempt++){
-      const state=(await peer.call("rho.workspace.console_state.v1",{}).result).structuredContent.result.data;
+      const state=(await peer.call("rho.workspace.console_state.v1",{workspace_instance_id:instance}).result).structuredContent.result.data;
       if(state.input){pendingInput=state.input;break;}
       await new Promise(resolve=>setTimeout(resolve,20));
     }
@@ -178,11 +180,11 @@ try {
       await new Promise(resolve=>setTimeout(resolve,20));
     }
     // Observations and stdin remain available while all 32 terminal-wait calls are occupied.
-    const waitingCalls=[peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-full-input",return_after_acceptance:false,arguments:{code:"readline('Full queue: ')",output_mode:"console"}}).result];
-    for(let i=0;i<31;i++)waitingCalls.push(peer.call("rho.workspace.run_r.v1",{client_request_id:`mcp-full-${i}`,return_after_acceptance:false,arguments:{code:"invisible(1)"}}).result);
+    const waitingCalls=[peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-full-input",return_after_acceptance:false,arguments:{workspace_instance_id:instance,code:"readline('Full queue: ')",output_mode:"console"}}).result];
+    for(let i=0;i<31;i++)waitingCalls.push(peer.call("rho.workspace.run_r.v1",{client_request_id:`mcp-full-${i}`,return_after_acceptance:false,arguments:{workspace_instance_id:instance,code:"invisible(1)"}}).result);
     let full;
     for(let attempt=0;attempt<100;attempt++){
-      const reply=await peer.call("rho.workspace.console_state.v1",{}).result;assert.notEqual(reply.isError,true,JSON.stringify(reply));
+      const reply=await peer.call("rho.workspace.console_state.v1",{workspace_instance_id:instance}).result;assert.notEqual(reply.isError,true,JSON.stringify(reply));
       full=reply.structuredContent.result.data;if(full.input&&full.pending.length===31)break;
       assert.ok(attempt<99,"all pending calls were accepted");await new Promise(resolve=>setTimeout(resolve,20));
     }
@@ -191,12 +193,12 @@ try {
     for (const capability of ["help", "lint", "format"]) {
       assert.ok(tools.some((tool) => tool.name === `rho.workspace.${capability}.v1`));
     }
-    const help = (await peer.call("rho.workspace.help.v1", { client_request_id: "mcp-help", arguments: { topic: "mean" } }).result).structuredContent.result;
+    const help = (await peer.call("rho.workspace.help.v1", { client_request_id: "mcp-help", arguments: { workspace_instance_id: instance, topic: "mean" } }).result).structuredContent.result;
     assert.equal(help.status, "succeeded", JSON.stringify(help));
     assert.equal(help.output.value.found, true);
     assert.equal(help.operation.target.identity, executed.operation.target.identity);
     const history = (await peer.call("rho.events.poll", { limit: 1000 }).result).structuredContent.result;
-    const inspected = (await peer.call("rho.workspace.inspect_object.v1", { name: "x", max_items: 3 }).result).structuredContent.result;
+    const inspected = (await peer.call("rho.workspace.inspect_object.v1", { workspace_instance_id: instance, name: "x", max_items: 3 }).result).structuredContent.result;
     assert.deepEqual(inspected.data.preview, [21]);
     assert.deepEqual((await peer.call("rho.events.poll", { limit: 1000 }).result).structuredContent.result, history);
     const realized = (await peer.call("rho.environment.realize.v1", { client_request_id: "mcp-realize-human-plan",

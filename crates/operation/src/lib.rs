@@ -337,6 +337,7 @@ impl ExecutionLease for () {}
 #[derive(Debug, Clone)]
 pub struct OperationRecordFilter {
     pub capability: CapabilityRef,
+    pub secondary_capability: Option<CapabilityRef>,
     pub workspace_instance_id: Option<String>,
     pub continuation_lineage_id: Option<String>,
 }

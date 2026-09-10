@@ -10,6 +10,7 @@ pub(crate) fn read(journal: &SqliteOperationJournal, scope: &str, caller: &Calle
     args: &RecentOperationsArguments, filter: &OperationRecordFilter) -> Result<RecentOperations, OperationError> {
     rho_operation::validate_recent_arguments(args)?;
     filter.capability.validate()?;
+    if let Some(capability) = &filter.secondary_capability { capability.validate()?; }
     for id in [&filter.workspace_instance_id, &filter.continuation_lineage_id].into_iter().flatten() {
         if id.is_empty() || id.len() > 160 || id.chars().any(char::is_control) {
             return Err(OperationError::InvalidInput("invalid record identity filter".into()));
@@ -22,7 +23,8 @@ pub(crate) fn read(journal: &SqliteOperationJournal, scope: &str, caller: &Calle
          FROM operations op WHERE {OPERATION_VISIBILITY}
             AND op.rowid < ?4 AND (?5 IS NULL OR op.client_request_id=?5)
             AND (?6 IS NULL OR op.operation_id=?6)
-            AND op.capability_id=?8 AND op.capability_version=?9
+            AND ((op.capability_id=?8 AND op.capability_version=?9)
+                OR (?12 IS NOT NULL AND op.capability_id=?12 AND op.capability_version=?13))
             AND (?10 IS NULL OR json_extract(op.output_json,'$.workspace_instance_id')=?10)
             AND (?11 IS NULL OR json_extract(op.output_json,'$.continuation_lineage_id')=?11)
          ORDER BY op.rowid DESC LIMIT ?7"
@@ -31,7 +33,8 @@ pub(crate) fn read(journal: &SqliteOperationJournal, scope: &str, caller: &Calle
         args.before_cursor.unwrap_or(i64::MAX as u64) as i64, args.client_request_id,
         args.operation_id.as_ref().map(OperationId::as_str), args.limit + 1,
         filter.capability.id, filter.capability.version, filter.workspace_instance_id,
-        filter.continuation_lineage_id]).map_err(storage)?;
+        filter.continuation_lineage_id, filter.secondary_capability.as_ref().map(|c|c.id.as_str()),
+        filter.secondary_capability.as_ref().map(|c|c.version)]).map_err(storage)?;
     let mut operations = Vec::new();
     while let Some(row) = rows.next().map_err(storage)? {
         let status: String = row.get(5).map_err(storage)?;

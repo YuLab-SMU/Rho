@@ -1713,7 +1713,7 @@ mod tests {
                 "continuation_lineage_id": if index == 221 {"old"} else {"current"},
             })), 3).await.unwrap();
         }
-        let filter = rho_operation::OperationRecordFilter { capability:checkpoint,
+        let filter = rho_operation::OperationRecordFilter { capability:checkpoint, secondary_capability:None,
             workspace_instance_id:Some("main".into()), continuation_lineage_id:Some("current".into()) };
         let mut args = rho_contract::RecentOperationsArguments {
             before_cursor:None, client_request_id:None, operation_id:None, limit:2,

@@ -4,7 +4,9 @@ mod connection;
 mod session;
 
 use clap::{Parser, Subcommand};
-use rho_contract::{CapabilityRef, Invocation, OperationId, Precondition, QueryRequest};
+use rho_contract::{
+    CapabilityRef, Invocation, MAIN_WORKSPACE_INSTANCE, OperationId, Precondition, QueryRequest,
+};
 use rho_host::{HostProfile, NextHost, RUN_R_CAPABILITY_ID, RuntimeConfiguration, SshConfig};
 use serde_json::json;
 
@@ -23,6 +25,9 @@ struct Cli {
     ark: Option<PathBuf>,
     #[arg(long)]
     r_home: Option<PathBuf>,
+    /// Prepared, verified Rho recovery component for this R installation.
+    #[arg(long)]
+    checkpoint_helper: Option<PathBuf>,
     #[arg(long)]
     rscript: Option<PathBuf>,
     /// Bind a verified Environment realization when starting a new Ark session.
@@ -59,6 +64,7 @@ impl Cli {
                     .clone()
                     .ok_or("--r-home is required with --ark")?,
                 environment: self.environment.clone(),
+                checkpoint_helper_path: self.checkpoint_helper.clone(),
             }
         } else if matches!(self.command, Command::Workbench { .. }) && self.r_home.is_some() {
             RuntimeConfiguration::Ark {
@@ -68,6 +74,7 @@ impl Cli {
                     .unwrap_or_default(),
                 r_home: self.r_home.clone().unwrap(),
                 environment: None,
+                checkpoint_helper_path: self.checkpoint_helper.clone(),
             }
         } else if let Some(rscript) = &self.rscript {
             RuntimeConfiguration::Environment {
@@ -116,6 +123,11 @@ enum Command {
     Invoke {
         #[arg(long)]
         client_request_id: String,
+        /// Fixed logical R instance for --code. A standalone managed Host defaults
+        /// to Main; --connect-url-file needs this explicitly. Generic --arguments
+        /// carries its own target.
+        #[arg(long, requires = "code")]
+        workspace_instance: Option<String>,
         #[arg(
             long,
             required_unless_present = "arguments",
@@ -209,6 +221,7 @@ async fn run() -> Result<(), CliFailure> {
         if cli.demo
             || cli.ark.is_some()
             || cli.r_home.is_some()
+            || cli.checkpoint_helper.is_some()
             || cli.rscript.is_some()
             || cli.environment.is_some()
             || cli.remote_host.is_some()
@@ -283,6 +296,7 @@ async fn run() -> Result<(), CliFailure> {
         if cli.demo
             || cli.ark.is_some()
             || cli.r_home.is_some()
+            || cli.checkpoint_helper.is_some()
             || cli.rscript.is_some()
             || cli.environment.is_some()
             || cli.remote_host.is_some()
@@ -333,7 +347,7 @@ async fn run() -> Result<(), CliFailure> {
             let host = active_host.expect("invoke opens one Host");
             let invocation =
                 prepared_invocation.expect("invoke uses its prepared original parameters");
-            let record = host.invoke(&context, invocation).await?;
+            let record = host.invoke(&context, targeted(&host, invocation)).await?;
             print_json(&json!({
                 "ok": true,
                 "runtime": if cli.demo { "deterministic_fake" } else if cli.ark.is_some() { "ark" } else if cli.rscript.is_some() { "environment" } else { "project" },
@@ -373,6 +387,7 @@ async fn run() -> Result<(), CliFailure> {
 fn invocation(command: &Command) -> Result<Invocation, CliFailure> {
     let Command::Invoke {
         client_request_id,
+        workspace_instance,
         code,
         arguments,
         capability,
@@ -392,11 +407,14 @@ fn invocation(command: &Command) -> Result<Invocation, CliFailure> {
             expected: json!(session),
         });
     }
-    let arguments = if let Some(arguments) = arguments {
+    let mut arguments = if let Some(arguments) = arguments {
         serde_json::from_str(arguments).map_err(|e| e.to_string())?
     } else {
         json!({"code":code.as_ref().ok_or("--code or --arguments is required")?})
     };
+    if let Some(instance) = workspace_instance {
+        arguments["workspace_instance_id"] = json!(instance);
+    }
     let invocation = Invocation {
         client_request_id: client_request_id.clone(),
         capability: CapabilityRef::new(capability, *capability_version)
@@ -406,6 +424,29 @@ fn invocation(command: &Command) -> Result<Invocation, CliFailure> {
     };
     invocation.validate().map_err(|e| e.to_string())?;
     Ok(invocation)
+}
+
+/// A managed Host routes live R work to an explicit instance. The one-shot invoke
+/// names the Host's default instead of making the caller repeat it, and only where
+/// the published contract actually requires a target.
+fn targeted(host: &NextHost, mut invocation: Invocation) -> Invocation {
+    let requires_instance = host
+        .capabilities()
+        .iter()
+        .find(|descriptor| descriptor.capability == invocation.capability)
+        .is_some_and(|descriptor| {
+            descriptor.input_schema["required"]
+                .as_array()
+                .is_some_and(|required| {
+                    required
+                        .iter()
+                        .any(|name| name == "workspace_instance_id")
+                })
+        });
+    if requires_instance && invocation.arguments.get("workspace_instance_id").is_none() {
+        invocation.arguments["workspace_instance_id"] = json!(MAIN_WORKSPACE_INSTANCE);
+    }
+    invocation
 }
 
 fn print_json(value: &serde_json::Value) -> Result<(), String> {

@@ -38,15 +38,37 @@ function fixture() {
   return { session, ports };
 }
 
-it("publishes canonical project identity and native-session changes with monotonically increasing epochs", async () => {
+it("keeps the project epoch stable while native epochs advance within an instance", async () => {
   const f = fixture(), projects = vi.fn(), sessions = vi.fn();
-  f.ports.notifications.on("projectChanged", projects); f.ports.notifications.on("sessionChanged", sessions);
+  f.ports.notifications.on("projectChanged", projects); f.ports.notifications.on("instanceChanged", sessions);
   await f.session.start(); const initial = f.session.epoch;
   await f.session.refreshRuntime();
   f.ports.query.mockResolvedValueOnce(runtime("native-b")); await f.session.refreshRuntime();
-  expect(f.session.epoch).toBeGreaterThan(initial); expect(f.session.context().session).toBe("native-b");
+  expect(f.session.epoch).toBe(initial); expect(f.session.context().nativeEpoch).toBe(2); expect(f.session.context().session).toBe("native-b");
   expect(projects).toHaveBeenCalledExactlyOnceWith({ epoch: initial, project: "/a" });
   expect(sessions.mock.calls.map(([value]) => value.session)).toEqual(["native-a", "native-b"]);
+});
+
+it("observes R instances independently and selection does not emit a Host-wide session change", async () => {
+  const f = fixture(), globalChange = vi.fn(); await f.session.start(); const epoch = f.session.epoch;
+  f.ports.notifications.on("sessionChanged", globalChange);
+  f.ports.query.mockImplementation(async (_project, _capability, args) => runtime((args as { workspace_instance_id: string }).workspace_instance_id === "scratch" ? "r-scratch" : "r-main"));
+  await Promise.all([f.session.refreshRuntime("main"), f.session.refreshRuntime("scratch")]);
+  const main = f.session.contextFor("main"), mainRuntime = f.session.runtimeFor("main");
+  f.session.selectInstance("scratch"); expect(f.session.context().session).toBe("r-scratch");
+  f.session.observeInstanceIdentity("scratch", "r-scratch-new");
+  f.ports.query.mockResolvedValueOnce(runtime("r-scratch-new")); await f.session.refreshRuntime("scratch");
+  expect(f.session.contextFor("main")).toEqual(main); expect(f.session.runtimeFor("main")).toBe(mainRuntime);
+  expect(f.session.contextFor("scratch").nativeEpoch).toBe(2); expect(f.session.epoch).toBe(epoch);
+  expect(globalChange).not.toHaveBeenCalled();
+});
+
+it("a late native read cannot replace the identity announced by a lifecycle result", async () => {
+  const f = fixture(); await f.session.start(); const pending = deferred<QuerySnapshot>();
+  f.session.observeInstanceIdentity("scratch", "r-before"); f.ports.query.mockReturnValueOnce(pending.promise);
+  const reading = f.session.refreshRuntime("scratch"); f.session.observeInstanceIdentity("scratch", "r-after");
+  pending.resolve(runtime("r-before")); await reading;
+  expect(f.session.contextFor("scratch").session).toBe("r-after"); expect(f.session.runtimeFor("scratch")).toBeNull();
 });
 
 it.each(["R configuration", "recent projects"])("keeps Host health independent of failed %s startup reads", async (failure) => {

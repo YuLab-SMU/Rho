@@ -11,6 +11,8 @@ export const digest = bytes => `sha256:${createHash('sha256').update(bytes).dige
 export const json = (file, value) => fs.writeFileSync(file, JSON.stringify(value, null, 2), {mode:0o600});
 export const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 export const terminal = record => ['succeeded','failed','cancelled','uncertain','rejected'].includes(record?.status);
+// A managed Host routes every live R request to an explicit instance.
+const INSTANCE='main',INSTANCE_FREE=['workspace.list_outputs','workspace.read_output','workspace.output_events'];
 export async function until(read, predicate, label, timeout=45000) {
   const deadline=Date.now()+timeout; let last;
   do { last=await read(); if(predicate(last)) return last; await delay(100); } while(Date.now()<deadline);
@@ -65,15 +67,15 @@ export class FixtureHost {
     const value=await response.json();assert.ok(response.ok,JSON.stringify(value));return value;
   }
   async port(method,params,windowId) {const reply=await this.api(method==='application_bridge'?'/api/application/bridge':'/api/host',{project_root:this.project,frame:{id:randomUUID(),request:{method,params}}},windowId);assert.equal(reply.ok,true,JSON.stringify(reply));return reply.result;}
-  query(id,arguments_={}) {return this.port('query_snapshot',{capability:{id,version:1},arguments:arguments_});}
+  query(id,arguments_={}) {return this.port('query_snapshot',{capability:{id,version:1},arguments:{...(id.startsWith('workspace.')&&!INSTANCE_FREE.includes(id)?{workspace_instance_id:INSTANCE}:{}),...arguments_}});}
   async run(code,{id=`fixture-${randomUUID()}`,accepted=false,expect='succeeded'}={}) {
-    const record=await this.port('invoke',{client_request_id:id,capability:{id:'workspace.run_r',version:1},arguments:{code,output_mode:'console'},preconditions:[],...(accepted?{return_after_acceptance:true}:{})});
+    const record=await this.port('invoke',{client_request_id:id,capability:{id:'workspace.run_r',version:1},arguments:{workspace_instance_id:INSTANCE,code,output_mode:'console'},preconditions:[],...(accepted?{return_after_acceptance:true}:{})});
     this.seedRecords.push(record.operation.operation_id);
     if(!accepted)assert.equal(record.status,expect,JSON.stringify(record));return record;
   }
   async resumeFixtureQueue() {
     const state=(await this.query('workspace.console_state')).data;if(!state.pause)return;
-    const record=await this.port('invoke',{client_request_id:`fixture-resume-${randomUUID()}`,capability:{id:'workspace.resume_queue',version:1},arguments:{session_id:state.session_id,pause_id:state.pause.id},preconditions:[]});
+    const record=await this.port('invoke',{client_request_id:`fixture-resume-${randomUUID()}`,capability:{id:'workspace.resume_queue',version:1},arguments:{workspace_instance_id:INSTANCE,session_id:state.session_id,pause_id:state.pause.id},preconditions:[]});
     this.seedRecords.push(record.operation.operation_id);assert.equal(record.status,'succeeded');
   }
   async runWithLostAcknowledgement(code,id) {
@@ -84,7 +86,7 @@ export class FixtureHost {
     const gated=`writeLines('started',${JSON.stringify(started)}); while(!file.exists(${JSON.stringify(released)})) Sys.sleep(0.05); unlink(c(${JSON.stringify(started)},${JSON.stringify(released)})); ${code}`;
     const originalSession=this.mcp.session;
     try {
-      const body={jsonrpc:'2.0',id:++this.mcp.sequence,method:'tools/call',params:{name:'rho.workspace.run_r.v1',arguments:{client_request_id:id,arguments:{code:gated,output_mode:'console'},preconditions:[],return_after_acceptance:true}}};
+      const body={jsonrpc:'2.0',id:++this.mcp.sequence,method:'tools/call',params:{name:'rho.workspace.run_r.v1',arguments:{client_request_id:id,arguments:{workspace_instance_id:INSTANCE,code:gated,output_mode:'console'},preconditions:[],return_after_acceptance:true}}};
       const response=await fetch(`${this.origin}/mcp`,{method:'POST',headers:{authorization:`Bearer ${this.token}`,accept:'application/json, text/event-stream','content-type':'application/json','mcp-session-id':originalSession},body:JSON.stringify(body),signal:AbortSignal.timeout(60000)});
       assert.ok(response.ok);await until(()=>fs.existsSync(started),Boolean,'accepted native work must enter its execution gate');
       const page=(await this.query('operation.list_recent',{client_request_id:id,limit:2})).data;

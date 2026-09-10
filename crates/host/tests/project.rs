@@ -747,11 +747,20 @@ async fn checkpoint_closes_initialization_race_with_bounded_events_and_full_hist
         initial.target.identity,
         root.canonicalize().unwrap().to_str().unwrap()
     );
-    assert!(
-        !host
-            .capabilities()
-            .iter()
-            .any(|item| item.capability.id == "workspace.run_r")
+    let instances = host
+        .query_snapshot(
+            &context,
+            QueryRequest {
+                capability: CapabilityRef::new("runtime.instances", 1).unwrap(),
+                arguments: json!({"limit":1}),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        instances.data.unwrap()["total"],
+        0,
+        "A files-only Host exposes instance management without starting R"
     );
     let mut restricted = context.clone();
     restricted.scopes.remove("operation.read");

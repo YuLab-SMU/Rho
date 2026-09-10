@@ -75,7 +75,7 @@ impl EnvironmentOwner {
         self.material_source(&input.operation_id, caller).await
     }
     async fn reference_paths(&self) -> Result<Vec<String>, String> {
-        let mut paths = self.active_library.iter().cloned().collect::<Vec<_>>();
+        let mut paths = self.active_library().into_iter().collect::<Vec<_>>();
         if let Some(usage) = &self.usage {
             paths.extend(usage.protected_paths().await?);
         } else if self.has_workspace {

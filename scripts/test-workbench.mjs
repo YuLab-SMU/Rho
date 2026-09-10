@@ -404,10 +404,12 @@ try {
     fromAgent,
   );
   if (realR) {
+    // A managed Host routes every live R request to an explicit instance.
+    const instance = "main";
     const input = {
       client_request_id: "ui-real-r",
       capability: { id: "workspace.run_r", version: 1 },
-      arguments: { code: "x <- 21; x * 2" },
+      arguments: { code: "x <- 21; x * 2", workspace_instance_id: instance },
       preconditions: [],
     };
     const record = await host("invoke", input);
@@ -416,6 +418,7 @@ try {
     assert.deepEqual(await host("invoke", input), record);
     const queriedBefore = await history();
     const object = await call("rho.workspace.inspect_object.v1", {
+      workspace_instance_id: instance,
       name: "x",
       max_items: 3,
     });

@@ -732,6 +732,25 @@ fn captured_run_keeps_its_instance_when_the_window_selects_another_session() {
     assert!(matches!(owner.begin_execution(&actor(false), &request, 10).unwrap(),
         ApplicationExecutionAdmission::Observe { .. }));
 }
+
+#[test]
+fn pinned_inspection_names_its_instance_without_retargeting_execution() {
+    let mut context=ApplicationContextState {
+        version:"context-pinned".into(), label:"study".into(),
+        native_session_id:Some("native-main".into()), workspace_instance_id:Some("main".into()),
+        views:vec![ApplicationView {view_id:"objects-scratch".into(),view_type:ApplicationViewType::Objects,
+            document_id:None,active:true,workspace_instance_id:Some("scratch".into()),native_session_id:Some("native-scratch".into())}],
+        selected_object:Some(ApplicationObjectSelection {name:"data".into(),object_ref:Some("object-1".into()),
+            native_session_id:"native-scratch".into(),workspace_instance_id:Some("scratch".into())}),
+        ..Default::default()
+    };
+    validation::validate_context(&context,&[]).unwrap();
+    assert_eq!(context.workspace_instance_id.as_deref(),Some("main"));
+    context.views[0].native_session_id=Some("native-new-scratch".into());
+    assert!(validation::validate_context(&context,&[]).is_err());
+    context.views.clear();
+    assert!(validation::validate_context(&context,&[]).is_err());
+}
 #[test]
 fn draft_and_base_pages_have_separate_hashes_and_utf8_boundaries() {
     let owner = owner();
@@ -1306,6 +1325,7 @@ fn native_read_controls_require_the_original_actor_scope_before_a_bridge_command
             "workspace.read",
             ApplicationAction::SelectObject {
                 selection: ApplicationObjectSelection {
+                    workspace_instance_id: None,
                     name: "x".into(),
                     object_ref: Some("object_1".into()),
                     native_session_id: "R-session-1".into(),
@@ -1317,6 +1337,7 @@ fn native_read_controls_require_the_original_actor_scope_before_a_bridge_command
             "workspace.read",
             ApplicationAction::SelectPackage {
                 selection: ApplicationPackageSelection {
+                    workspace_instance_id: None,
                     package: "stats".into(),
                     copy_id: "/library\nstats\n4.6".into(),
                     observation_id: "packages_1".into(),
@@ -1428,4 +1449,26 @@ fn application_owned_edits_and_creation_do_not_require_native_read_authority() {
             ApplicationCommandState::Pending
         );
     }
+}
+
+/// The runtime idle-release policy treats this one fact as its safety condition for
+/// ending an unattended session, so its scope and expiry are load-bearing.
+#[test]
+fn window_liveness_is_principal_scoped_and_expires() {
+    let owner = owner();
+    assert!(!owner.any_window_online(&actor(false), 0).unwrap());
+    register(&owner, "a", 0);
+    assert!(owner.any_window_online(&actor(false), 1).unwrap());
+    assert!(
+        !owner
+            .any_window_online(&actor(false), OFFLINE_AFTER_MS + 1)
+            .unwrap(),
+        "a window that stopped renewing is not online"
+    );
+    let mut other = actor(false);
+    other.principal.as_mut().unwrap().id = "other".into();
+    assert!(
+        !owner.any_window_online(&other, 1).unwrap(),
+        "another principal's window is not attendance for this session"
+    );
 }

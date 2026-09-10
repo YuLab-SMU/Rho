@@ -1208,3 +1208,267 @@ restart blockers, preserved environment binding and failed startup. Normal and
 constrained layouts need keyboard/focus/scroll checks. Paper screenshots establish
 composition only; the four existing frontend suites run during this investigation
 establish a model baseline, not acceptance of these new interactions.
+
+## 17. Sessions and recovery — approved interaction
+
+The user authorized implementation of [Paper R04–R10](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/9-0)
+on 2026-09-10, on the page `Runtime · 会话与运行管理探索`. Section 16's R01–R03
+remain proposals. All versions, metrics, object counts, copies and failures on these
+boards are illustrative fixtures; every displayed value comes from an observation.
+Paper screenshots establish composition only. Normal, wide and constrained widths
+still need keyboard, focus, scroll and real-content checks in a browser against real
+R before this is called accepted.
+
+| Board | Paper node | Covers |
+| --- | --- | --- |
+| R04 单会话安静 / 多会话目标明确 | `BUS-0` | Daily entry, execution target, pinned views, first-run notice |
+| R05 会话管理 / 运行与隔离 | `BY9-0` | Session Overview, Runs and paused queue |
+| R06 恢复副本 / 覆盖范围与保留 | `C1M-0` | Copy history, object coverage, reasons, pinning, storage |
+| R07 自动继续 / 部分恢复与环境不匹配 | `C4N-0` | Restoring, partial restore, environment mismatch, disconnect |
+| R08 重启、停止与退出 / 一次集中确认 | `C8D-0` | Restart, Stop and Quit consequence panels |
+| R09 高级设置 / 清楚的默认值与继承 | `CB4-0` | App → Project → Session per-field inheritance |
+| R10 窄窗口 / 新建会话与状态边界 | `CEQ-0` | 600 px hierarchy, 320 px popover, new-session dialog |
+
+### Language and terminology
+
+Product-authored UI is English. Ordinary users meet three ideas only: the current
+session, the work in progress and the latest recovery copy. The product surface says
+`Recovery copies`; checkpoint, format version and native-session identity stay in
+technical details. File save, draft synchronization and object recovery copies are
+reported separately — never one vague global `Saved`.
+
+### Shared measurements
+
+Boards are 1440 px wide with 32 px padding and 24 px column gaps, and reuse the
+existing `--color-*` and spacing tokens. Body text is Inter 14/20, secondary notes
+13/21 in `--color-muted`, status badges 13/18 colored and non-wrapping, page titles
+24/32 at weight 600, card section headings 16–18 px at weight 600. Buttons are
+`7px 12px` padding with a 4 px radius and a 1 px border, rendering 36 px tall;
+primary uses `--color-accent` with `--color-surface` text, secondary uses
+`--color-surface` with `--color-border`. Cards are `--color-surface` with a 1 px
+`--color-border` and an 8 px radius; inset info boxes are `--color-subtle` with a
+4 px radius and 16 px padding; soft notices are `--color-accent-soft` with a 6 px
+radius; a selected row is `--color-accent-soft` with a 4 px radius. Code is Menlo
+13 px at 26 px leading in the editor and 24 px leading for a captured snippet.
+Recurring widths: session target menu 340 px, its status column a fixed 64 px
+right-aligned, session list 256 px, recovery-copy list 310 px, settings navigation
+214 px, main content padding 24 px. Below 720 px the layout becomes a single-column
+hierarchy.
+
+### R04 — one session stays quiet, several sessions make the target explicit
+
+With a single session the target selector is hidden. The editor card shows the
+project name, the file tab, `▷ Run`, the code and a status row carrying a colored
+dot, `R 4.5.2 ⌃`, `Ready` and the encoding. The first time a recovery copy is
+created, one soft notice appears: `Rho keeps recovery copies on this Mac.` with
+`Continue where you left off.`, a `Settings` link and a dismiss `×`. It is shown
+once; routine automatic saving never raises a message, and copy time and unprotected
+objects are read on demand inside the R popover.
+
+With several sessions the header adds `2 live sessions`, and a secondary `● Main ▾`
+button sits immediately before `▷ Run`. Its 340 px popover is headed
+`RUN IN SESSION` and lists each session as a check cell, a name with
+`R 4.5.2 · study-lock` beneath it, and a 64 px right-aligned status badge
+(`Ready` and `Running` in `--color-success`, `Stopped` in `--color-muted`). The
+selected row uses `--color-accent-soft`. A footer row offers `＋ New session…` and a
+`→` to the management page. The status row then names the target, `Main ⌃`, and
+reports other sessions on the right, `Scratch · Running`.
+
+Choosing a `Stopped` session first continues that session and only then accepts the
+run. An independently pinned Console always uses its own target; R version and
+dependency environment never change implicitly because the user moved between panels.
+Every run record keeps the session it was submitted to, and switching or closing a
+panel does not change background computation. A pinned-views card states
+`Views follow Main` with `Console · Objects · Packages`, beside
+`Console · Scratch` with `Pinned to Scratch · Unpin`.
+
+### R05 — session management gives version, environment and runs an owner
+
+`R Sessions` is a management page that returns to the workspace, preserving editor
+and Console drafts and selection behind it. Its header carries `＋ New session…` and
+`Back to workspace`. A 256 px `THIS PROJECT` list shows each session as a colored
+dot, name, R version and status badge. The detail column shows the session name at
+24/32 with its status badge, then the tabs `Overview`, `Runs`, `Recovery copies`,
+`Details`.
+
+Overview leads with purpose and actionable state, as 210 px label columns:
+`R installation` → `R 4.5.2 · arm64`, `Dependency environment` →
+`study-lock · Verified`, `Objects` → `90 objects · Open Objects →`. A recovery row
+reads `Recovery copy · Today, 10:42` with `87 of 90 objects · 3 need attention` and
+a `Review coverage →` link. Actions are `Open Console`, `Save recovery copy`,
+`Restart R…` and `More ▾`, where `More ▾` holds exactly `Rename`, `Stop session…`
+and `Session settings`. The page states plainly:
+`Changing R or the dependency environment creates a new session.` Paths and native
+identifiers belong in Details, not Overview.
+
+Runs separates the run from the queue, because they are two facts. The header shows
+`Scratch · Runs` with `● Running`, `2 waiting · Queue paused` and `Resume queue`. A
+360 px `--color-accent-soft` queue column lists the current file with
+`Running · 2m 14s` and each waiting file with `Waiting · Queue paused`. The current
+run column names its provenance, `fit-model.R · Run File · Scratch`, shows the
+captured code in an inset block, and offers `Open Console`, `Interrupt this run` and
+a `Captured code & details ▾` disclosure. Creating a session only uses already
+installed and available R and environments; it never installs dependencies from
+Packages.
+
+### R06 — a copy answers what can be restored and what is still unprotected
+
+`Main · Recovery copies` offers `Save recovery copy` and `Settings`. A 310 px
+`RECENT COPIES` list shows each copy as a time at weight 600, a check cell when
+selected, `87 of 90 objects · 468 MiB` and a badge such as `Automatic · Latest`,
+`Automatic` or `Manual · Pinned`. The detail column gives the time at 24/32 with a
+`Latest` badge, two summary figures — `87 objects saved` with
+`468 MiB · Automatic`, and `3 not protected` in `--color-warning` with
+`See object coverage below` — then provenance as `SAVED WITH` → `R 4.5.2 · arm64`
+and `DEPENDENCY ENVIRONMENT` → `study-lock · Match available`.
+
+`Object coverage` lists each unprotected object in three columns: a 150 px Menlo
+name, the reason, and a 198 px next step. `db` / `Live database connection` /
+`Reconnect from code` and `atlas` / `External file not captured` /
+`Keep source file available` keep a muted next step; `raw_counts` /
+`6.4 GiB · Exceeds automatic limit` / `Save selected objects…` stays an accent
+action. Actions are `Restore in new session…`, `Pin copy` and a
+`Technical details ▾` disclosure, with the note
+`Restoring creates a separate session. Main stays available.` A storage footer
+reports `Project recovery storage` as `1.8 GiB of 10 GiB · 3 copies · 1 pinned` with
+`Manage storage…`.
+
+Viewing the list must not evaluate objects. Coverage is not reproducibility: a copy
+records the object scope, R and dependency environment as they were at save time, and
+connections, external data and oversized objects are listed explicitly. Automatic
+saving waits for idle and coalesces requests; insufficient space is summarized once;
+pinned copies and the only valid recovery source are never purged automatically.
+
+### R07 — continuing is the default, only a real choice interrupts
+
+Four states, each a card with a 20/28 title and a status badge.
+
+`Opening Main` with `Restoring…` lists progress rows, each a 24 px icon cell beside a
+label and note: `Checked for an existing session` / `No live R process found`,
+`Matched R and dependency environment` / `R 4.5.2 · study-lock`, and `Restoring objects`
+/ `Recovery copy · Today, 10:42`. Its footer says `Files and drafts are ready to use.`
+beside `Cancel restore`. While restoring, only that session's run entry point is
+locked; editing and other sessions stay usable. No unmeasured percentage is shown and
+no script is re-executed.
+
+A successful partial restore shows `Main` with `● Ready` and exactly one dismissible
+non-modal notice: `87 objects restored from 10:42.` with
+`3 objects weren't restored.` and a `Review` link. Objects then list name and value,
+such as `samples` / `2,700 rows × 8 columns` and `model` /
+`Linear model · 4 coefficients`. The missing objects and their source copy stay
+queryable under Recovery copies. Restoring returns to the copy's timestamp and does
+not imply later unsaved computation was recovered.
+
+`Validation needs attention` with `Stopped` explains
+`The recovery copy needs an environment that isn't available.` and lists
+`Saved with` → `R 4.4.3 · arm64`, `Environment` → `release-2025 · Not found`,
+`Latest copy` → `Yesterday, 18:20 · 84 objects`. Actions are
+`Choose matching environment…` and `Start empty`, with
+`Your recovery copy stays available. Nothing has been installed.` `Start empty`
+explicitly begins with empty memory and cannot overwrite or delete the original copy.
+Compatibility differences and manual cross-environment import are handled in details;
+there is no global switch that bypasses the checks long term.
+
+`Connection lost` with `Main` reports `Last seen: Running · 10:48:12`,
+`fit-model.R · 2m 14s at last observation` and
+`R may still be running. New submissions are paused.`, then offers `Check connection`
+and `View last known run`, noting that an unconfirmed outcome means checking the
+original request before submitting again. A disconnect is not a stop.
+
+### R08 — three verbs, three consequences, one panel
+
+Each dialog states its consequence once, in a single panel that keeps reporting
+results; chained confirmations are avoided. Without a stop confirmation, never claim
+the session ended.
+
+`Restart Main?` — `Start a fresh R process with empty memory.` An inset box reports
+`R AND ENVIRONMENT`, `R 4.5.2 · study-lock`, `✓ Recovery copy saved · 10:52` and
+`87 of 90 objects · 468 MiB`. A warning names `3 objects won't be protected`, lists
+`db, atlas, raw_counts` and links `Review object coverage →`. The note reads
+`Files, synchronized drafts and recorded outputs remain. Objects will not be restored automatically after this restart.`
+Actions are `Restart with empty memory` and `Cancel`.
+
+`Stop Scratch?` — `Stop this R process and free its memory.` An inset box shows
+`● Ready`, `12 objects · Latest copy at 10:45` and `R 4.5.2 · study-lock`, with a
+checkbox `Save a fresh recovery copy first` and the note
+`The session, files and recovery copies remain. When you open Scratch again, Rho continues from its latest usable copy.`
+Actions are `Save and stop Scratch` and `Keep running`.
+
+`Quit Workbench?` — `2 local R sessions are open in study.` One inset box per
+session: `Main` with `Ready` and `87 of 90 objects protected · 10:52`; `Scratch` with
+`Running`, `fit-model.R · 2m 14s · 2 waiting` and `View run →`. The note reads
+`Stopping sessions interrupts active work and cancels waiting runs. Rho saves supported objects before each process stops.`
+Actions are `Keep running in background`, then `Stop sessions and quit`, with `Cancel`
+as a quiet centered text row. Closing a window only disconnects that view and never
+stops the process; reopening reconnects first. Quit addresses managed local sessions
+and must not mistake a remote job for finished work.
+
+### R09 — advanced settings explain every effective value
+
+`Settings` shows a 214 px navigation — `General`, `Appearance`,
+`Runtime & recovery`, `R installations`, `Agents` — and a main column titled
+`Runtime & recovery`. A scope breadcrumb, `App defaults › Project · study › Session · Main`,
+makes the edited scope explicit, with
+`Editing Main. Each setting inherits from study unless you override it.`
+
+Inheritance is per field, never a whole-configuration replacement. Each section
+header carries a source badge such as `Inherited · App default`. `Recovery behavior`
+offers four modes as radio rows: `Save and continue automatically` with
+`Reconnect to a live session, or restore a copy in its matching environment.`;
+`Save recovery copies; start empty` with
+`Keep recovery copies available for manual restoration.`; `Manual copies only` with
+`Create copies when you choose Save recovery copy. New processes start empty.`; and
+`Off` with `Do not create or automatically restore copies for this session.`
+`Object selection` offers `Include` with `Only supported object graphs are eligible.`
+and an `All supported objects ▾` control, plus `Exclude object names` with
+`Excluded names take priority over the include list.`
+
+`Performance & storage` is headed `Foreground work first` and lists each setting as
+label, value and source: `Idle before automatic save` / `30 seconds ▾` /
+`App default`; `Minimum interval · App default: 5 minutes` / `10 minutes ▾` /
+`Session override · Reset`; `Maximum automatic payload` / `2 GiB ▾` / `App default`;
+`Project recovery storage` / `10 GiB ▾` / `Project setting · Edit`. A source that is
+overridden shows an accent `Reset` that restores the inherited value. Then
+`Pinned copies and the last usable recovery copy are kept. When space is full, automatic saving pauses.`
+
+An `Advanced limits` disclosure carries the badge `App defaults` and reports
+`Capture target: 2s · Global storage: 50 GiB · Keep 2 GiB free` and
+`History: 5 recent copies + 7 days · Maximum 4 R processes · Idle release: Off`.
+Finally `Recovery data on this Mac` states
+`Copies may contain sensitive values. Turning recovery off keeps existing copies.`
+with `Manage stored copies…`. The footer notes
+`Changes apply to future saves and openings.` beside `Cancel` and `Save settings`.
+The project storage cap belongs to the whole project and cannot be enlarged by a
+single session. These are initial product defaults that must pass performance
+acceptance before release; the automatic capture budget is never described as
+interrupting any object instantly.
+
+### R10 — narrow widths keep a clear path, a new session asks only what is needed
+
+At 600 px the management page becomes list → detail → Back. Its header is
+`‹ R Sessions`, the session name and `×`; the tab row keeps all four tabs with the
+active one in accent. A copy detail shows `‹ All copies` with a `Latest` badge, the
+time at 22/30, `87 saved · 3 not protected` at 16/24 with
+`R 4.5.2 · study-lock · 468 MiB`, then `Not protected` and each object with its
+reason. A sticky action row keeps `Restore in new session…` and `More ▾` reachable
+while the body scrolls independently. `Back` preserves the copy selection and scroll
+position. Narrower still, buttons stack vertically and names may wrap.
+
+The `New R session` dialog asks only for `Session name`, `R installation`
+(`Same as Main · R 4.5.2 ▾`) and `Dependency environment` (`study-lock · Verified ▾`),
+then offers `Starts with empty memory` with
+`Or restore a recovery copy into a new session.` and a `Choose copy…` link, a
+checkbox `Use as execution target when ready`, and a footer noting
+`Recovery: inherited from study` beside `Cancel` and `Create session`. The R and
+environment pickers list only installed, verifiable combinations; when nothing
+matches they show the reason and a configuration entry point. The execution target
+switches only after the launch handshake succeeds, and a failure keeps the previous
+target.
+
+A 320 px status popover still carries its full actions: `Scratch` with
+`Input needed`, `Open Console to answer.` and an `Open Console` button. Waiting for
+input is never overwritten by queue status, and closing the popover does not affect
+R. Acceptance covers Esc closing a popover and returning focus to its trigger,
+keyboard selection of sessions and buttons, blur never submitting, closing the
+management page preserving editor and Console drafts, and restore or launch status
+affecting only the target session.

@@ -1,6 +1,6 @@
 use rho_contract::{
     CallContext, CapabilityKind, CapabilityRef, HostCatalog, HostDescription, HostOverview,
-    QueryRequest, QuerySnapshot, QueryStatus,
+    Invocation, QueryRequest, QuerySnapshot, QueryStatus,
 };
 use rho_host::{NextHost, OperationError};
 use serde_json::{Value, json};
@@ -71,11 +71,45 @@ async fn project_discovery_is_bounded_permission_filtered_and_does_not_create_sc
             .unwrap()
             .available
     );
+    // The instance contract is published before any R runs; liveness is reported
+    // by host.overview above and enforced again when an execution is admitted.
     assert!(
-        !host
-            .capabilities()
+        host.capabilities()
             .iter()
             .any(|d| d.capability.id == "workspace.run_r")
+    );
+    let rejected = host
+        .invoke(
+            &context,
+            Invocation {
+                client_request_id: "discovery-without-a-live-instance".into(),
+                capability: CapabilityRef::new("workspace.run_r", 1).unwrap(),
+                arguments: json!({"workspace_instance_id":"main","code":"1"}),
+                preconditions: vec![],
+            },
+        )
+        .await;
+    // A missing target is rejected explicitly; the host never guesses an R to start.
+    assert!(
+        rejected.is_err(),
+        "execution without a running R instance must be rejected"
+    );
+    let after_attempt: HostOverview = serde_json::from_value(
+        query(&host, &context, "host.overview", json!({}))
+            .await
+            .unwrap()
+            .data
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        !after_attempt
+            .modules
+            .iter()
+            .find(|module| module.module == "session")
+            .unwrap()
+            .available,
+        "a rejected execution must not start a runtime"
     );
     let mut reader = context.clone();
     reader.scopes = BTreeSet::from(["project.read".into()]);

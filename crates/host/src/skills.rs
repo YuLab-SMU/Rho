@@ -98,11 +98,21 @@ pub(crate) fn validate_manifest_for_project(
 /// Candidates include future SQLite sidecars. Adapters retain lexical and resolved exclusions.
 pub(crate) fn protected_path_candidates(database: &Path) -> Vec<PathBuf> {
     let application = database.with_extension("studio.sqlite");
-    let mut paths = vec![database.to_path_buf(), application.clone()];
-    for suffix in ["-journal", "-wal", "-shm"] {
-        let mut path = application.as_os_str().to_os_string();
-        path.push(suffix);
-        paths.push(path.into());
+    let preferences = database
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join("runtime-preferences.sqlite");
+    let mut paths = vec![
+        database.to_path_buf(),
+        application.clone(),
+        preferences.clone(),
+    ];
+    for store in [application, preferences] {
+        for suffix in ["-journal", "-wal", "-shm"] {
+            let mut path = store.as_os_str().to_os_string();
+            path.push(suffix);
+            paths.push(path.into());
+        }
     }
     let mut journals = vec![database.to_path_buf()];
     if let Ok(canonical) = database.canonicalize() {

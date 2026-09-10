@@ -47,6 +47,8 @@
 .statusbar { height: 30px; min-height: 30px; padding: 0 10px 0 14px; gap: 10px; color: var(--color-muted); font-size: 12px; line-height: 18px; }
 .statusbar button { height: 28px; min-height: 28px; padding: 0 4px; border-radius: 4px; color: inherit; }
 .status-runtime { gap: 7px; flex-shrink: 0; color: var(--color-text) !important; }
+/* The target session name is information, not decoration, so narrow widths truncate it. */
+.status-session { display: inline-block; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .status-divider { width: 1px; height: 12px; background: var(--color-border); flex-shrink: 0; }
 .status-work { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
 .status-execution, .status-queue { flex-shrink: 0; }

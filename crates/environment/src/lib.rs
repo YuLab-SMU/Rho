@@ -79,11 +79,16 @@ pub trait EnvironmentRuntime: Send + Sync {
     ) -> Result<MaterialChange, HandlerError>;
 }
 
+/// Resolves the library an Environment observation should use when the caller does
+/// not name a realization. A managed Host binds one library per R instance, so this
+/// is read at observation time rather than captured at composition.
+pub type ActiveLibrary = Arc<dyn Fn() -> Option<String> + Send + Sync>;
+
 pub struct EnvironmentOwner {
     pub runtime: Arc<dyn EnvironmentRuntime>,
     records: Arc<dyn OperationRecords>,
     lane: Arc<Mutex<()>>,
-    active_library: Option<String>,
+    active_library: Option<ActiveLibrary>,
     has_workspace: bool,
     usage: Option<Arc<dyn EnvironmentUsage>>,
 }
@@ -99,10 +104,20 @@ impl EnvironmentOwner {
             runtime,
             records,
             lane,
-            active_library,
+            active_library: active_library.map(|path| {
+                let resolver: ActiveLibrary = Arc::new(move || Some(path.clone()));
+                resolver
+            }),
             has_workspace,
             usage: None,
         }
+    }
+    pub fn with_active_library_resolver(mut self, resolver: ActiveLibrary) -> Self {
+        self.active_library = Some(resolver);
+        self
+    }
+    fn active_library(&self) -> Option<String> {
+        self.active_library.as_ref().and_then(|resolve| resolve())
     }
     pub fn with_usage(mut self, usage: Option<Arc<dyn EnvironmentUsage>>) -> Self {
         self.usage = usage;
@@ -507,7 +522,7 @@ impl QueryHandler for EnvironmentObserveHandler {
             .map_err(invalid)?;
             Some(receipt.library_path)
         } else {
-            self.owner.active_library.clone()
+            self.owner.active_library()
         };
         match self
             .owner
@@ -516,7 +531,7 @@ impl QueryHandler for EnvironmentObserveHandler {
             .await
         {
             Ok(mut data) => {
-                data.active_workspace_library = self.owner.active_library.clone();
+                data.active_workspace_library = self.owner.active_library();
                 reply.observed_at_ms = data.inventory_observed_at_ms;
                 reply.notices.extend(data.notices.clone());
                 reply.status = QueryStatus::Ready;

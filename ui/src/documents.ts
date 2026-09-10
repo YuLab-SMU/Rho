@@ -410,7 +410,7 @@ export class Documents extends Model<DocumentsSnapshot> {
     d.error = error === null ? "" : message(error); this.changed(d, false);
   }
   async attempt(ref: DocumentRef, work: () => Promise<unknown>) {
-    const d = this.resolve(ref), guard = this.guard(d, "action", true);
+    const d = this.resolve(ref), guard = this.guard(d, "action");
     d.error = ""; this.changed(d, false);
     try { await work(); } catch (error) { if (guard.current()) this.setError(ref, error); }
   }
@@ -536,13 +536,15 @@ export class Documents extends Model<DocumentsSnapshot> {
   async runFile(ref: DocumentRef, captured = this.resolve(ref).raw, target = this.resolve(ref).draft.path, overwrite = false) {
     const d = this.resolve(ref);
     if (!this.canRunFile(ref, captured)) throw new Error("Run File is currently unavailable.");
-    const guard = this.guard(d, "run", true);
+    const runtimeTarget = this.ports.captureTarget?.(), guard = this.guard(d, "run", runtimeTarget === undefined);
     d.runningFile = true; this.changed(d, false);
     try {
       const saved = await this.save(ref, captured, target, overwrite);
       guard.assert();
       if (!this.ports.context().connected) throw new Error("Disconnected. The saved code was not submitted.");
-      await this.ports.run(saved, { view_id: d.draft.id, label: target ?? d.name, kind: "file" });
+      const source = { view_id: d.draft.id, label: target ?? d.name, kind: "file" };
+      if (runtimeTarget) await this.ports.run(saved, source, runtimeTarget);
+      else await this.ports.run(saved, source);
       guard.assert();
     } finally { if (guard.current()) { d.runningFile = false; this.changed(d, false); } }
   }
@@ -554,7 +556,7 @@ export class Documents extends Model<DocumentsSnapshot> {
   }
   async format(ref: DocumentRef) {
     if (!this.canRun(ref) || this.ports.queueing()) return;
-    const d = this.resolve(ref), guard = this.guard(d, "format", true), captured = d.state.doc.toString();
+    const d = this.resolve(ref), guard = this.guard(d, "format"), captured = d.state.doc.toString();
     if (bytes(captured).length > 64 * 1024) throw new Error("Formatting input exceeds 64 KiB. Your text is retained.");
     const record = await this.ports.invoke("workspace.format", { code: captured });
     guard.assert();

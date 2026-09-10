@@ -25,21 +25,26 @@ interface SessionSnapshot {
   info: WorkbenchInfo | null; r: RConfiguration | null; runtime: RuntimeStatus | null;
   project: string | null; epoch: number; connected: boolean; error: string;
   runtimeError: string; recent: readonly string[]; switching: boolean; ready: boolean;
+  workspaceInstanceId: string; nativeEpoch: number;
 }
 
 export class Session extends Model<SessionSnapshot> {
   private _info: WorkbenchInfo | null = null;
   private _r: RConfiguration | null = null;
-  private _runtime: RuntimeStatus | null = null;
+  private selectedInstance = "main";
+  private nativeRuntimes = new Map<string, RuntimeStatus>();
+  private nativeExpectations = new Map<string, string | null>();
+  private nativeEpochs = new Map<string, number>();
+  private nativeErrors = new Map<string, string>();
+  private nativeRequests = new Map<string, number>();
+  private instanceViews = new Map<string, Session>();
   private _epoch = 0;
   private _connected = false;
   private _error = "";
-  private _runtimeError = "";
   private _recent: string[] = [];
   private _switching = false;
   private _ready = false;
   private stopped = true;
-  private runtimeRequest = 0;
   private healthRequest = 0;
   private configRequest = 0;
   private configurationRequest = 0;
@@ -47,10 +52,16 @@ export class Session extends Model<SessionSnapshot> {
   private hostMismatch = false;
   private mismatchMessage = "";
   constructor(private ports: SessionPorts) { super(); }
+  private get _runtime() { return this.nativeRuntimes.get(this.selectedInstance) ?? null; }
+  private set _runtime(value: RuntimeStatus | null) {
+    if (value) this.nativeRuntimes.set(this.selectedInstance, value);
+    else { this.nativeRuntimes.clear(); this.nativeExpectations.clear(); this.nativeEpochs.clear(); this.nativeErrors.clear(); this.nativeRequests.clear(); }
+  }
   protected readSnapshot(): SessionSnapshot {
     return { info: this._info, r: this._r, runtime: this._runtime, project: this.project,
       epoch: this._epoch, connected: this._connected, error: this.error, runtimeError: this._runtimeError,
-      recent: Object.freeze([...this._recent]), switching: this._switching, ready: this._ready };
+      recent: Object.freeze([...this._recent]), switching: this._switching, ready: this._ready,
+      workspaceInstanceId: this.selectedInstance, nativeEpoch: this.nativeEpochs.get(this.selectedInstance) ?? 0 };
   }
   get info() { return this._info; }
   get r() { return this._r; }
@@ -62,9 +73,53 @@ export class Session extends Model<SessionSnapshot> {
   get recent() { return this.getSnapshot().recent; }
   get switching() { return this._switching; }
   get ready() { return this._ready; }
+  get workspaceInstanceId() { return this.selectedInstance; }
+  private get _runtimeError() { return this.nativeErrors.get(this.selectedInstance) ?? ""; }
+  runtimeFor(id: string) { return this.nativeRuntimes.get(id) ?? null; }
+  /** View-scoped projection. Host configuration and project lifecycle still have one owner. */
+  forInstance(id: string): Session {
+    const existing = this.instanceViews.get(id); if (existing) return existing;
+    let previous: Readonly<SessionSnapshot> | undefined, snapshot: Readonly<SessionSnapshot>;
+    const getSnapshot = () => {
+      const current = this.getSnapshot();
+      if (current !== previous) { previous = current; snapshot = Object.freeze({ ...current, runtime: this.runtimeFor(id),
+        runtimeError: this.nativeErrors.get(id) ?? "", workspaceInstanceId: id, nativeEpoch: this.nativeEpochs.get(id) ?? 0 }); }
+      return snapshot;
+    };
+    const view = new Proxy(this, { get: (owner, property) => {
+      if (property === "runtime") return owner.runtimeFor(id);
+      if (property === "workspaceInstanceId") return id;
+      if (property === "context") return () => owner.contextFor(id);
+      if (property === "getSnapshot") return getSnapshot;
+      if (property === "refreshRuntime") return () => owner.refreshRuntime(id);
+      const value = Reflect.get(owner, property, owner); return typeof value === "function" ? value.bind(owner) : value;
+    } });
+    this.instanceViews.set(id, view); return view;
+  }
+  selectInstance(id: string | null) {
+    const selected = id ?? "main";
+    if (selected === this.selectedInstance) return;
+    this.selectedInstance = selected; this.publish();
+  }
+  observeInstanceIdentity(id: string, native: string | null) {
+    const before = this.nativeExpectations.get(id) ?? this.nativeRuntimes.get(id)?.session_id ?? null;
+    this.nativeExpectations.set(id, native);
+    if (before === native) return;
+    this.nativeRuntimes.delete(id); this.nativeErrors.delete(id);
+    this.announceNativeChange(id, native);
+  }
+  private announceNativeChange(id: string, native: string | null) {
+    if (id === this.selectedInstance) this.configurationDirty = true;
+    const nativeEpoch = (this.nativeEpochs.get(id) ?? 0) + 1;
+    this.nativeEpochs.set(id, nativeEpoch);
+    this.ports.notifications.send("instanceChanged", { epoch: this._epoch, project: this.project, workspaceInstanceId: id, session: native, nativeEpoch });
+    this.publish();
+  }
   setReady(ready: boolean) { this._ready = ready; this.publish(); }
-  context = (): RequestContext => ({ epoch: this._epoch, project: this.project,
-    session: this._runtime?.session_id ?? null, runtimeState: this._runtime?.state ?? null,
+  context = (): RequestContext => this.contextFor(this.selectedInstance);
+  contextFor = (id: string): RequestContext => ({ epoch: this._epoch, project: this.project,
+    workspaceInstanceId: id, nativeEpoch: this.nativeEpochs.get(id) ?? 0,
+    session: this.nativeRuntimes.get(id)?.session_id ?? this.nativeExpectations.get(id) ?? null, runtimeState: this.nativeRuntimes.get(id)?.state ?? null,
     connected: this._connected, ready: this._ready, capabilities: this.hostMismatch ? [] : this._info?.capabilities.map((c) => c.capability.id) ?? [] });
   reportError(error: string) { this._error = error; this.publish(); }
   dismissError() { this.reportError(""); }
@@ -147,7 +202,7 @@ export class Session extends Model<SessionSnapshot> {
   private async refreshConfiguration(healthRequest?: number) {
     const scope = this.context(), request = ++this.configurationRequest;
     const current = () => request === this.configurationRequest && !this.stopped && !this._switching && !this.hostMismatch &&
-      (healthRequest === undefined || healthRequest === this.healthRequest) && sameScope(scope, this.context());
+      (healthRequest === undefined || healthRequest === this.healthRequest) && sameScope(scope, this.context(), true);
     try {
       const r = await this.ports.rConfiguration();
       if (!current()) return;
@@ -158,25 +213,26 @@ export class Session extends Model<SessionSnapshot> {
       throw error;
     }
   }
-  async refreshRuntime() {
-    const scope = this.context(), request = ++this.runtimeRequest;
+  async refreshRuntime(id = this.selectedInstance) {
+    const scope = this.contextFor(id), request = (this.nativeRequests.get(id) ?? 0) + 1;
+    this.nativeRequests.set(id, request);
+    const expected = this.nativeExpectations.get(id);
     if (!scope.project || !scope.capabilities.includes("workspace.runtime_status")) return;
-    const current = () => request === this.runtimeRequest && !this.stopped && sameScope(scope, this.context());
+    const current = () => request === this.nativeRequests.get(id) && !this.stopped && sameScope(scope, this.contextFor(id)) && this.nativeExpectations.get(id) === expected;
     try {
-      const result = await this.ports.query(scope.project, "workspace.runtime_status");
+      const result = await this.ports.query(scope.project, "workspace.runtime_status", { workspace_instance_id: id });
       if (!current()) return;
       if (result.status !== "ready" || !result.data) throw new Error(result.notices.join("\n") || `Runtime ${result.status}`);
       const runtime = result.data as RuntimeStatus;
       if (typeof runtime.session_id !== "string" || typeof runtime.state !== "string") throw new Error("Invalid runtime observation");
-      const changed = this._runtime?.session_id !== runtime.session_id;
-      if (this._runtime && changed) this._epoch++;
+      if (expected !== undefined && runtime.session_id !== expected) throw new Error("The native R observation no longer matches this logical session");
+      const changed = (this.nativeExpectations.get(id) ?? this.nativeRuntimes.get(id)?.session_id) !== runtime.session_id;
       if (changed) this.configurationDirty = true;
-      this._runtime = immutable(runtime);
-      this._runtimeError = "";
-      if (changed) this.ports.notifications.send("sessionChanged", { epoch: this._epoch, project: this.project, session: runtime.session_id });
+      if (changed) this.announceNativeChange(id, runtime.session_id);
+      this.nativeRuntimes.set(id, immutable(runtime)); this.nativeErrors.delete(id);
       this.publish();
     } catch (error) {
-      if (current()) { this._runtimeError = message(error); this.publish(); }
+      if (current()) { this.nativeErrors.set(id, message(error)); this.publish(); }
       throw error;
     }
   }

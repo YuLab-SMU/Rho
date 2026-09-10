@@ -141,7 +141,7 @@ fn checked_executable(path: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-async fn bounded_command(program: &Path, args: &[&str]) -> Result<String, String> {
+pub(crate) async fn bounded_command(program: &Path, args: &[&str]) -> Result<String, String> {
     let mut command = Command::new(program);
     command
         .args(args)

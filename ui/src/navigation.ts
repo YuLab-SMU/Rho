@@ -9,6 +9,7 @@ export type Dialog = "project" | "settings" | "agents" | "commands" | "conflict"
 interface NavigationPorts {
   context(): RequestContext;
   show(component: BuiltinPanel, id?: string, name?: string, config?: unknown): void;
+  bindView?(viewId: string, workspaceInstanceId: string): void;
   openDocument(path: string, bytes?: number): Promise<unknown>;
   createDocument(): unknown;
   locatePlot(reference: MediaReference): void;
@@ -34,7 +35,11 @@ export class Navigation extends Model<{ dialog: Dialog }> {
     try { await this.ports.openDocument(path, bytes); }
     catch (error) { if (generation === this.generation && sameScope(scope, this.ports.context())) this.ports.reportError(error instanceof Error ? error.message : String(error)); }
   }
-  openObject(name: string, path: import("./generated/ObjectPathElement").ObjectPathElement[] = []) { this.ports.show("viewer", `object:${name}${path.length ? ":" + JSON.stringify(path) : ""}`, name + path.map(x => x.kind === "index" ? `[[${x.index}]]` : `$${x.name}`).join(""), { name, path }); }
+  openObject(name: string, path: import("./generated/ObjectPathElement").ObjectPathElement[] = [], workspaceInstanceId = this.ports.context().workspaceInstanceId) {
+    const id = workspaceInstanceId ? `object:${JSON.stringify([workspaceInstanceId, name, path])}` : `object:${name}${path.length ? ":" + JSON.stringify(path) : ""}`;
+    if (workspaceInstanceId) this.ports.bindView?.(id, workspaceInstanceId);
+    this.ports.show("viewer", id, name + path.map(x => x.kind === "index" ? `[[${x.index}]]` : `$${x.name}`).join(""), { name, path, workspaceInstanceId });
+  }
   locatePlot(reference: MediaReference) { this.ports.locatePlot(reference); }
   documentCommand(id: string, action: DocumentAction) {
     const listeners = this.documentListeners.get(id);

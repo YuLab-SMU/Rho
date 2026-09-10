@@ -84,6 +84,18 @@ it("coalesces equal native demands, serializes different observations, and leave
   second.resolve(snapshot); await packages;
 });
 
+it("a slow native read in Main never blocks Scratch while Main stays serial", async () => {
+  const runtime = coordinator(), held = deferred<QuerySnapshot>();
+  const read = vi.fn(async (_project: string, capability: string, args: unknown) =>
+    capability === "workspace.read_object" && (args as { workspace_instance_id: string }).workspace_instance_id === "main" ? held.promise : snapshot);
+  const query = runtime.query(read), first = query("/study", "workspace.read_object", { workspace_instance_id: "main" });
+  const waiting = query("/study", "workspace.packages", { workspace_instance_id: "main" });
+  await query("/study", "workspace.packages", { workspace_instance_id: "scratch" });
+  expect(read.mock.calls.map(([, capability, args]) => [capability, (args as { workspace_instance_id: string }).workspace_instance_id]))
+    .toEqual([["workspace.read_object", "main"], ["workspace.packages", "scratch"]]);
+  held.resolve(snapshot); await Promise.all([first, waiting]); expect(read).toHaveBeenCalledTimes(3);
+});
+
 it("keeps the 250 ms control cadence when reads have nonzero latency", async () => {
   const runtime = coordinator(), starts: number[] = [];
   runtime.register("control", 250, async () => {
@@ -118,7 +130,7 @@ it("drops stopped queued observations and rejects new reads until explicitly res
   runtime.startReads();
   const resumed = query("/b", "workspace.snapshot");
   await microtasks();
-  expect(read).toHaveBeenCalledTimes(1);
+  expect(read).toHaveBeenCalledTimes(2);
   pending.resolve(snapshot); await active; await cancelled; await resumed;
   expect(read.mock.calls).toEqual([["/a", "workspace.snapshot", {}], ["/b", "workspace.snapshot", {}]]);
 });

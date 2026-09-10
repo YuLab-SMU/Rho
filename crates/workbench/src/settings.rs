@@ -75,10 +75,15 @@ pub(super) async fn configure_startup(
                 RuntimeConfiguration::Ark { environment, .. } => environment.clone(),
                 _ => None,
             };
+            let checkpoint_helper_path = match &profile.runtime {
+                RuntimeConfiguration::Ark { checkpoint_helper_path, .. } => checkpoint_helper_path.clone(),
+                _ => None,
+            };
             profile.runtime = RuntimeConfiguration::Ark {
                 executable: PathBuf::from(&probe.selection.ark),
                 r_home: PathBuf::from(probe.r_home.as_ref().unwrap()),
                 environment,
+                checkpoint_helper_path,
             };
             None
         } else {
@@ -119,7 +124,23 @@ pub(super) async fn apply_r(
             "Host has active requests; R was not changed",
         );
     };
-    if let Some(selected) = &hosting.selected {
+    // A managed Host owns one R binding per instance. This endpoint selects the
+    // default R for sessions created afterwards; it never ends running work.
+    let managed = hosting.selected.as_ref().is_some_and(|selected| {
+        selected
+            .host
+            .capabilities()
+            .iter()
+            .any(|capability| capability.capability.id == "runtime.instances")
+    });
+    if managed {
+        if request.end_session {
+            return failure(
+                StatusCode::CONFLICT,
+                "A running R session is stopped individually in R Sessions; the default R was not changed",
+            );
+        }
+    } else if let Some(selected) = &hosting.selected {
         if !request.end_session {
             return failure(
                 StatusCode::CONFLICT,
@@ -150,14 +171,17 @@ pub(super) async fn apply_r(
         return failure(StatusCode::CONFLICT, error);
     }
     let root = hosting.selected.as_ref().map(|s| s.root.clone());
-    if let Some(old) = hosting.selected.take() {
-        old.host.drain().await;
-        drop(old);
+    if !managed {
+        if let Some(old) = hosting.selected.take() {
+            old.host.drain().await;
+            drop(old);
+        }
     }
     hosting.profile.runtime = RuntimeConfiguration::Ark {
         executable: PathBuf::from(&candidate.selection.ark),
         r_home: PathBuf::from(candidate.r_home.as_ref().unwrap()),
         environment: None,
+        checkpoint_helper_path: None,
     };
     hosting.r_configuration = RConfiguration {
         source: "saved".into(),
@@ -165,16 +189,18 @@ pub(super) async fn apply_r(
         candidates: discover_r(),
         error: None,
     };
-    if let Some(root) = root {
-        match hosting.profile.open(&root).await {
-            Ok(host) => hosting.selected = Some(SelectedHost::new(Arc::new(host), root)),
-            Err(error) => {
-                hosting.r_configuration.error = Some(format!(
-                    "R startup failed; previous session memory has ended. {error}"
-                ));
-                hosting.profile.runtime = RuntimeConfiguration::Project;
-                if let Ok(host) = hosting.profile.open(&root).await {
-                    hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
+    if !managed {
+        if let Some(root) = root {
+            match hosting.profile.open(&root).await {
+                Ok(host) => hosting.selected = Some(SelectedHost::new(Arc::new(host), root)),
+                Err(error) => {
+                    hosting.r_configuration.error = Some(format!(
+                        "R startup failed; previous session memory has ended. {error}"
+                    ));
+                    hosting.profile.runtime = RuntimeConfiguration::Project;
+                    if let Ok(host) = hosting.profile.open(&root).await {
+                        hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
+                    }
                 }
             }
         }

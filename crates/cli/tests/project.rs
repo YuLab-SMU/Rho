@@ -56,12 +56,34 @@ fn project_only_cli_applies_and_reads_files_without_starting_r() {
     let mut line = String::new();
     reader.read_line(&mut line).unwrap();
     let ready: Value = serde_json::from_str(&line).unwrap();
+    // The instance contract is published up front; liveness is a separate observation.
     assert!(
-        !ready["capabilities"]
+        ready["capabilities"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|entry| entry["capability"]["id"] == "workspace.run_r")
+            .any(|entry| entry["capability"]["id"] == "runtime.instances")
+    );
+    writeln!(
+        input,
+        "{}",
+        json!({"id":"instances","request":{"method":"query_snapshot","params":{
+            "capability":{"id":"runtime.instances","version":1},"arguments":{"limit":50}
+        }}})
+    )
+    .unwrap();
+    input.flush().unwrap();
+    line.clear();
+    reader.read_line(&mut line).unwrap();
+    let instances: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(instances["result"]["status"], "ready");
+    assert!(
+        instances["result"]["data"]["instances"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|instance| instance["native_session_id"].is_null()),
+        "a project-only CLI session must not start R: {instances}"
     );
     writeln!(
         input,

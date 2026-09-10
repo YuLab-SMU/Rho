@@ -24,6 +24,15 @@ run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test
   "--locked", "--no-run"], { env, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
   "--locked", "--", "--ignored", "--nocapture"], { env, stdio: "inherit", timeout: 120_000 });
+// The two-installation case in this file needs RHO_ALT_* and stays opt-in.
+const checkpointHelper = run("node", ["scripts/test-r-checkpoints.mjs", "--print-library"], { env }).trim();
+const instanceEnv = { ...env, RHO_CHECKPOINT_HELPER: checkpointHelper };
+run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "runtime_instances",
+  "--locked", "--no-run"], { env: instanceEnv, stdio: "inherit" });
+run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "runtime_instances",
+  "--locked", "--", "--ignored", "--nocapture",
+  "real_instances_restore_and_clean_restart_without_cross_session_effects"],
+  { env: instanceEnv, stdio: "inherit", timeout: 300_000 });
 run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-cli", "--locked"], { stdio: "inherit" });
 const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--locked"]));
 const binary = path.join(metadata.target_directory, "debug", `rho${extension}`);

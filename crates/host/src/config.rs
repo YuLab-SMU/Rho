@@ -15,6 +15,7 @@ pub enum RuntimeConfiguration {
         executable: PathBuf,
         r_home: PathBuf,
         environment: Option<String>,
+        checkpoint_helper_path: Option<PathBuf>,
     },
 }
 
@@ -56,6 +57,10 @@ impl HostProfile {
     pub async fn open(&self, project: &Path) -> Result<NextHost, String> {
         self.reserve(project)?.open().await
     }
+    /// Workbench restores its selected logical instance before asking R to continue.
+    pub async fn open_deferred(&self, project: &Path) -> Result<NextHost, String> {
+        self.reserve(project)?.open_deferred().await
+    }
 
     pub fn reserve(&self, project: &Path) -> Result<ReservedHost, String> {
         crate::skills::validate_manifest_for_project(
@@ -73,6 +78,12 @@ impl HostProfile {
 
 impl ReservedHost {
     pub async fn open(self) -> Result<NextHost, String> {
+        self.open_with_startup(true).await
+    }
+    pub async fn open_deferred(self) -> Result<NextHost, String> {
+        self.open_with_startup(false).await
+    }
+    async fn open_with_startup(self, auto_continue: bool) -> Result<NextHost, String> {
         let Self { profile, lease } = self;
         let project = lease.root().to_owned();
         let data = profile.database.parent().unwrap_or(Path::new("."));
@@ -105,6 +116,7 @@ impl ReservedHost {
                 executable,
                 r_home,
                 environment,
+                checkpoint_helper_path,
             } => {
                 NextHost::open_ark_reserved(
                     &profile.database,
@@ -115,11 +127,13 @@ impl ReservedHost {
                         data_root: data.join("runtime"),
                         execution_timeout: Duration::from_secs(600),
                         library_path: None,
+                        checkpoint_helper_path: checkpoint_helper_path.clone(),
                     },
                     environment.as_deref(),
                     profile.remote.clone(),
                     lease,
                     profile.host_skills.as_deref(),
+                    auto_continue,
                 )
                 .await
             }

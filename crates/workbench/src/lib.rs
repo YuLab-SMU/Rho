@@ -223,7 +223,7 @@ async fn select_project(
         drop(old);
     }
     hosting.profile = profile;
-    match reserved.open().await {
+    match reserved.open_deferred().await {
         Ok(host) => {
             hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
             Json(hosting.info()).into_response()
@@ -233,7 +233,7 @@ async fn select_project(
                 "R startup failed; previous session memory has ended. {error}"
             ));
             hosting.profile.runtime = rho_host::RuntimeConfiguration::Project;
-            match hosting.profile.open(&root).await {
+            match hosting.profile.open_deferred(&root).await {
                 Ok(host) => {
                     hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
                     Json(hosting.info()).into_response()
@@ -500,12 +500,12 @@ pub async fn serve_with_assets(
     let selected = if let Some(project) = project {
         let root = project_root(&project.to_string_lossy())?;
         Some(SelectedHost {
-            host: Arc::new(match profile.open(&root).await {
+            host: Arc::new(match profile.open_deferred(&root).await {
                 Ok(host) => host,
                 Err(error) => {
                     r_configuration.error = Some(format!("R startup failed: {error}"));
                     profile.runtime = rho_host::RuntimeConfiguration::Project;
-                    profile.open(&root).await?
+                    profile.open_deferred(&root).await?
                 }
             }),
             root,
@@ -932,7 +932,7 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn r_selection_validates_before_teardown_and_reports_startup_failure() {
+    async fn default_r_selection_validates_without_replacing_a_managed_host() {
         use std::os::unix::fs::PermissionsExt;
         let (temp, state, app) = fixture().await;
         let r = temp.path().join("R");
@@ -955,61 +955,65 @@ mod tests {
             Arc::downgrade(&hosting.selected.as_ref().unwrap().host)
         };
         let invalid =
-            json!({"selection":{"executable":"/missing/rho-test-R","ark":ark},"end_session":true});
+            json!({"selection":{"executable":"/missing/rho-test-R","ark":ark},"end_session":false});
         assert_eq!(
             request(&app, "/api/r", Some(invalid)).await.status(),
             StatusCode::BAD_REQUEST
         );
         assert!(current.upgrade().is_some());
-        assert_eq!(
-            request(
-                &app,
-                "/api/r",
-                Some(json!({"selection":selection,"end_session":false}))
-            )
-            .await
-            .status(),
-            StatusCode::CONFLICT
-        );
+        // Ending a session stays an explicit per-instance action; choosing the
+        // default R never ends live memory, attached MCP edge or not.
         let edge = {
             let hosting = state.hosting.read().await;
             McpEdge::local(hosting.selected.as_ref().unwrap().host.clone()).unwrap()
         };
-        assert_eq!(
-            request(
-                &app,
-                "/api/r",
-                Some(json!({"selection":selection,"end_session":true}))
-            )
-            .await
-            .status(),
-            StatusCode::CONFLICT
+        let ending = json!({"selection":selection,"end_session":true});
+        let refused = json_body(request(&app, "/api/r", Some(ending.clone())).await).await;
+        assert!(
+            refused["error"].as_str().unwrap().contains("R Sessions"),
+            "{refused}"
         );
         assert!(current.upgrade().is_some());
         drop(edge);
-        // Probe succeeds, actual runtime startup fails (no Rscript/bridge at this R home).
-        let failed = json_body(
+        let refused = json_body(request(&app, "/api/r", Some(ending)).await).await;
+        assert!(
+            refused["error"].as_str().unwrap().contains("R Sessions"),
+            "{refused}"
+        );
+        assert!(current.upgrade().is_some());
+        // The default R is recorded for sessions created afterwards; the managed
+        // Host and every running instance are left exactly as they were.
+        let saved = json_body(
             request(
                 &app,
                 "/api/r",
-                Some(json!({"selection":selection,"end_session":true})),
+                Some(json!({"selection":selection,"end_session":false})),
             )
             .await,
         )
         .await;
-        assert!(failed["error"].as_str().unwrap().contains("startup failed"));
-        assert!(current.upgrade().is_none());
-        let info = json_body(request(&app, "/api/info", None).await).await;
-        assert_eq!(info["runtime"], "project");
-        assert!(info["project_root"].is_string());
+        assert_eq!(saved["source"], "saved");
+        assert!(saved["current"]["usable"].as_bool().unwrap());
         assert!(
-            !info["capabilities"]
-                .as_array()
+            saved["current"]["selection"]["executable"]
+                .as_str()
                 .unwrap()
-                .iter()
-                .any(|c| c["capability"]["id"] == "workspace.run_r")
+                .ends_with("/R"),
+            "the recorded default R is the selected one: {saved}"
         );
-        // Missing bridge dependency never tears down this file-only host.
+        assert!(current.upgrade().is_some());
+        let info = json_body(request(&app, "/api/info", None).await).await;
+        assert!(info["project_root"].is_string());
+        let capabilities = info["capabilities"].as_array().unwrap();
+        for id in ["runtime.instances", "workspace.run_r"] {
+            assert!(
+                capabilities
+                    .iter()
+                    .any(|c| c["capability"]["id"] == id),
+                "the managed contract stays published: {id}"
+            );
+        }
+        // Missing bridge dependency is rejected before anything is recorded.
         std::fs::write(
             &r,
             format!(
@@ -1022,12 +1026,13 @@ mod tests {
             request(
                 &app,
                 "/api/r",
-                Some(json!({"selection":selection,"end_session":true}))
+                Some(json!({"selection":selection,"end_session":false}))
             )
             .await
             .status(),
             StatusCode::BAD_REQUEST
         );
         assert!(state.hosting.read().await.selected.is_some());
+        assert!(current.upgrade().is_some());
     }
 }

@@ -43,6 +43,12 @@
         "scripts/test-real-r.mjs"
       ]
     },
+    "system.r-checkpoints": {
+      "command": [
+        "node",
+        "scripts/test-r-checkpoints.mjs"
+      ]
+    },
     "system.environment": {
       "command": [
         "node",
@@ -212,6 +218,7 @@
         "system.rust",
         "system.client",
         "system.real-r",
+        "system.r-checkpoints",
         "system.environment",
         "system.process-recovery",
         "system.remote-protocol",

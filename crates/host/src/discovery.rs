@@ -59,7 +59,11 @@ impl DiscoveryOwner {
     ) -> Vec<ModuleAvailability> {
         [
             ("session", "workspace.read", "No connected R runtime"),
-            ("runtime", "workspace.read", "No runtime manager is composed"),
+            (
+                "runtime",
+                "workspace.read",
+                "No runtime manager is composed",
+            ),
             (
                 "operations",
                 "operation.read",
@@ -247,8 +251,16 @@ impl DiscoveryOwner {
             if !visible.iter().any(|d| d.capability.id == id) {
                 continue;
             }
-            if id.starts_with("workspace.") && let Some(instances) = self.instances.get().and_then(Weak::upgrade) {
-                let Some(instance_id) = instances.list(&RuntimeInstancesArguments { after_instance_id: None, limit: 1 })?.default_workspace_instance_id else { continue; };
+            if id.starts_with("workspace.")
+                && let Some(instances) = self.instances.get().and_then(Weak::upgrade)
+            {
+                let instance_id = instances
+                    .list(&RuntimeInstancesArguments {
+                        after_instance_id: None,
+                        limit: 1,
+                    })?
+                    .default_workspace_instance_id
+                    .unwrap_or_else(|| MAIN_WORKSPACE_INSTANCE.into());
                 args["workspace_instance_id"] = json!(instance_id);
             }
             let snapshot = match gateway
@@ -357,7 +369,9 @@ impl DiscoveryOwner {
         }
         let mut targets = vec![];
         let mut observed_targets = self.targets.clone();
-        if let Some(instances) = self.instances.get().and_then(Weak::upgrade) { observed_targets.extend(instances.targets()); }
+        if let Some(instances) = self.instances.get().and_then(Weak::upgrade) {
+            observed_targets.extend(instances.targets());
+        }
         for target in &observed_targets {
             if rho_skills::SkillCapabilityPort::target_is_current(self, context, target)
                 .await
@@ -415,7 +429,9 @@ impl rho_skills::SkillCapabilityPort for DiscoveryOwner {
             }
             _ => false,
         };
-        if target.kind == "workspace" && let Some(instances) = self.instances.get().and_then(Weak::upgrade) {
+        if target.kind == "workspace"
+            && let Some(instances) = self.instances.get().and_then(Weak::upgrade)
+        {
             return Ok(allowed && instances.targets().contains(target));
         }
         let live = target.kind != "workspace"

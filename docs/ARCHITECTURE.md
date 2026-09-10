@@ -334,12 +334,15 @@ and an exclusive journal writer lock. A second database cannot create a second H
 for the same project. Lock-file existence does not prove liveness. Accepted work
 retains the Host and project lease after an edge disconnects.
 
-Host-managed Workspace, Project, Environment and process operations share the
-appropriate execution lane. External editors/processes are not locked by it.
-MCP sessions retain their selected Host; active work and MCP references prevent
-project/R switching. A new project lease is reserved before ending the old session.
-R candidates are validated before teardown; failed restart reports unavailable R
-and preserves file access where possible, without claiming memory was restored.
+Host-managed Project, Environment and process operations share the Host execution
+lane. Each managed R instance owns a separate lane, so a running instance blocks
+only its own executions and observations; it never holds project file reads or
+another instance. External editors/processes are not locked by any lane. MCP
+sessions retain their selected Host; active work and MCP references prevent project
+switching. A new project lease is reserved before ending the old session. Selecting
+R records the default used by sessions created afterwards and never replaces a
+managed Host or its running instances; a failed candidate is rejected before
+anything is recorded, preserving file access without claiming memory was restored.
 
 ## Persistence and recovery
 
@@ -555,58 +558,98 @@ FlexLayout containment with allow/reject fixtures. CI runs it with frontend unit
 Visual approval and scientific/interactive evidence remain separate from these
 structural checks; see [Design](RHO-DESIGN.md) and [Status](STATUS.md).
 
-## Future multiple-runtime support — direction only
+## Multiple R instances and recovery copies
 
-The user accepted this extension direction on 2026-09-08 and deferred implementation.
-The current Host and Studio still own one live R session. Existing module boundaries
-provide a foundation for multiple runtimes; they do not establish implemented or
-verified multi-session or multi-version support. This section records the boundaries
-future work must preserve, not new capabilities or a delivery commitment.
+The user accepted this extension direction on 2026-09-08. The instance foundation,
+native object-graph recovery copies and automatic protection are now implemented in
+the Host; the Studio surface for them is not. This section states the ownership and
+routing rules those capabilities must keep, and separates what was verified from what
+remains direction.
 
 ### Identities and ownership
 
 | Identity | Meaning |
 | --- | --- |
 | Runtime definition | Selected interpreter installation and adapter, including actual paths, version and architecture |
-| Environment | Dependency realization and library configuration bound to a launch |
+| Environment binding | Dependency realization and library configuration bound to a launch |
 | Workspace instance | Logical analysis session to which views and execution targets bind |
 | Native session | One actual process lifetime; restart always creates a new identity |
 
-One project Host should own multiple Workspace instances under the existing project
-lease. Host owns instance creation, shutdown, restart, health and resource limits;
-each Workspace owner owns its execution queue, stdin, objects and package observations.
-Project files, Environment management and the Operation journal retain their current
-owners. Do not create competing Hosts or independent scientific journals for the
-same project merely to obtain additional R processes.
+One project Host owns multiple Workspace instances under the existing project lease
+and the existing scientific journal. Host owns instance creation, shutdown, restart,
+health and resource limits; each Workspace owner owns its execution queue, stdin,
+objects and package observations. Project files, Environment management and the
+Operation journal retain their original owners. Competing Hosts or independent
+scientific journals for the same project are not a way to obtain more R processes.
 
-Each R instance runs in a separate native process. Multiple instances may use the
-same installation or different R versions. Bind the selected R/Ark paths, R_HOME,
-environment, library paths, working directory and connection/log directories per
-launch, and verify the actual runtime through a startup handshake. Validate each
-version/environment combination; do not assume a writable package library is safe
-to share across R versions. An environment in use remains protected from cleanup.
+Each R instance runs in a separate native process. Instances may share one
+installation or bind different R versions. The selected R/Ark paths, R_HOME,
+environment realization, library path and checkpoint helper are bound per launch, and
+the actual runtime is verified through a startup handshake. A version/environment
+combination is validated at launch; a writable package library is not assumed safe to
+share across R versions.
 
 ### Routing, concurrency and views
 
-- Every execution, query, cancellation and stdin reply must resolve an explicit
+- Every execution, query, cancellation and stdin reply resolves an explicit
   Workspace instance and the relevant native-session precondition through the
-  shared Host ports. UI selection is not an authority for an already submitted
-  request. Editor execution captures its target with its code; MCP targets are
-  explicit and do not follow whichever Console the user currently selects.
-- Execution remains serial within one R instance and can proceed concurrently
-  across instances. Replace the current shared execution/observation lane with
-  instance-specific lanes and resource-appropriate project coordination. Stopping
-  or blocking one instance must not stop another instance's execution or controls.
+  shared Host ports. A missing or stale target is rejected; the Host never infers
+  whichever R a window happens to select. UI selection is not an authority for an
+  already submitted request. Editor execution captures its target with its code;
+  MCP targets are explicit.
+- Execution is serial within one instance and concurrent across instances. Each
+  instance owns its execution/observation lane, so stopping or blocking one does not
+  stop another instance's execution or controls, and project file observations stay
+  available during a run. Blockers name their target and reason.
 - Console, Objects and Packages models and caches are scoped to their instance.
   Views may follow a selected instance or remain pinned. Files/Documents stay
   project-owned; Plots may compare outputs across instances while retaining their
   producing operation and session identities. Switching a view does not restart R.
-- Extend typed notifications, observations and lifecycle fences with instance
-  identity. An instance's execution invalidates its own live observations; shared
-  file effects also invalidate relevant project observations. Preserve project and
-  principal visibility, event replay and deduplication through the common journal.
+- Typed notifications, observations and lifecycle fences carry instance identity. An
+  instance's execution invalidates its own live observations; shared file effects
+  also invalidate relevant project observations. Project and principal visibility,
+  event replay and deduplication remain on the common journal.
 
-### Data and recovery boundaries
+### Recovery copies
+
+A recovery copy stores object state, not a process image: one capture boundary
+holding the user object graph with its shared references, plus the source project,
+logical instance, native session, continuation lineage, R/platform/serialization
+versions, required packages, environment fingerprint, coverage report, size and
+integrity hash. Calling stacks, live connections, queued code, stdin answers and
+Agent instructions are not captured and not replayed.
+
+The native classifier inspects object internals rather than names or outer classes.
+It never forces a promise, triggers an active binding or calls an unknown
+serialization extension; external pointers, connections, unknown ALTREP and external
+file storage are excluded explicitly, and a root object containing an unsupported
+part is excluded whole rather than truncated or partly nulled. Shared-reference groups
+are captured in one serialization graph, not as separate files per object.
+
+Data streams to a private staging file, then flushes, hashes and publishes atomically
+on the same filesystem. The manifest is committed through the Operation journal, and
+only a successful commit makes a copy the latest. Copies live in protected local
+storage: not the project's public `.RData`, not Git, not an upload. Retention keeps
+the newest usable copy, the last complete copy, pinned copies and any copy in use for
+recovery, within the project and global storage budgets and the free-space reserve.
+Redundant automatic copies are pruned only after a complete enumeration, so an
+interrupted listing cannot destroy the only recovery source.
+
+Restore runs in a fresh candidate process and is published only after it verifies;
+the original instance is unchanged on failure. A clean restart begins a new
+continuation lineage, and automatic recovery selects only the newest usable copy
+within the current lineage: it never splices same-named objects from different points
+in time or silently falls back to older data.
+
+Automatic protection is scheduled by the Host on an idle tick through the instance's
+own maintenance lane. It starts only when no user work is waiting, yields to a new
+user execution, and an in-flight capture is cancelled cooperatively rather than by
+killing R. Insufficient space, an exceeded budget or an unsupported object never
+pauses the scientific queue. The optional idle-release policy ends an unattended
+instance only after complete protection, and never when window liveness cannot be
+observed.
+
+### Data boundaries
 
 R memory is private to each native session. Cross-instance data transfer must be
 explicit, with source identity, format and compatibility checks; equal object names
@@ -615,19 +658,33 @@ collisions. Arbitrary R code can still write shared project files, so managed re
 coordination is not a guarantee against all concurrent native writes or a rollback
 mechanism.
 
-Persist instance definitions and view bindings with drafts and history. Reconnecting
+Instance definitions and view bindings persist with drafts and history. Reconnecting
 to a live instance and starting a replacement process are distinct actions. Restart
-may retain the logical instance but must fence old responses and requests with a new
-native-session identity; it does not restore R memory or replay unconfirmed code.
+retains the logical instance but fences old responses and requests with a new
+native-session identity; it does not restore R memory or replay unconfirmed code, and
+it does not reload the objects a clean restart cleared.
 
-Future delivery should establish same-version multiple R sessions first, then verify
-multiple R versions with their bound environments. Remote and other-language runtimes
-can subsequently implement the shared lifecycle/execution/output contracts and expose
-their own inspection capabilities; R package semantics are not a universal runtime
-contract. Acceptance must exercise simultaneous runs, independent cancellation and
-stdin, cross-instance cache isolation, restart fencing, shared-file conflicts and
-version/environment identity before claiming these capabilities. Package installation
-and runtime acquisition remain separate from read-only package inspection.
+### Verified and not verified
+
+Verified: instance routing and explicit-target rejection, independent queues and
+cancellation, clean-restart lineage, failed preflight preserving the original runtime,
+settings inheritance with narrower scopes unable to raise global limits,
+recovery-copy publish/integrity/lease rules, catalog pagination and storage
+reservation, real-R capture and cold restore of shared aliases, cycles, hidden and
+Unicode values, factors and time classes, fitted models, sparse and in-memory SCE
+objects, RNG state and options, and real-R multi-instance restore with clean restart
+and no cross-session effects.
+
+Not verified or not built: the Studio surface for sessions, recovery copies and
+advanced settings; the editor-input and added-wait latency thresholds; multi-platform,
+long-run and destructive-failure acceptance; binding two genuinely different R
+installations in one project, which needs a second R and stays opt-in; and protection
+of an Environment realization referenced by an instance or a recovery copy.
+
+Remote interactive runtimes, cross-language process recovery, automatic environment
+installation and lossless recovery of arbitrary external resources remain out of
+scope. Package installation and runtime acquisition remain separate from read-only
+package inspection.
 
 ## Source map and dependency direction
 

@@ -1,6 +1,6 @@
 import { Model, immutable, readonlyMap, readonlySet } from "./shared/model";
-import { json, message, sameScope, terminal } from "./shared/ports";
-import type { QueryPort, RequestContext } from "./shared/ports";
+import { json, message, operationWorkspaceInstance, sameScope, terminal } from "./shared/ports";
+import type { QueryPort, RequestContext, RuntimeTarget } from "./shared/ports";
 import type { Notifications } from "./shared/events";
 import type { OperationRecord } from "./generated/OperationRecord";
 import type { OperationSummary } from "./generated/OperationSummary";
@@ -14,12 +14,13 @@ import type { OutboxRecord } from "./generated/OutboxRecord";
 export interface PendingRequest { invocation: Invocation; operationId?: string; ignored?: boolean; error?: string }
 interface OperationsPorts {
   context(): RequestContext;
+  contextFor?(workspaceInstanceId: string): RequestContext;
   query: QueryPort;
   subscribe(project: string, after: number): Promise<OutboxRecord[]>;
   getOperation(project: string, id: string): Promise<OperationRecord | null>;
   invoke(project: string, invocation: Invocation, accepted?: boolean): Promise<OperationRecord>;
   cancel(project: string, id: string, pending?: boolean): Promise<unknown>;
-  execution(): ConsoleState | null;
+  execution(workspaceInstanceId?: string): ConsoleState | null;
   changed(): void;
   flush(): Promise<void>;
   unsynced(): boolean;
@@ -48,6 +49,7 @@ export class Operations extends Model<OperationsSnapshot> {
   private stopped = false;
   private consuming = false;
   private historyLoading: Promise<void> | null = null;
+  private views = new Map<string, Operations>();
   constructor(private ports: OperationsPorts) { super(); }
   protected readSnapshot(): OperationsSnapshot {
     return { records: readonlyMap(this.recordsMap), summaries: readonlyMap(this.summariesMap),
@@ -65,11 +67,46 @@ export class Operations extends Model<OperationsSnapshot> {
   getSummary = (id: string) => this.summariesMap.get(id);
   get busy() { return this.pendingRequests.some((p) => !p.error && !p.ignored) || [...this.recordsMap.values()].some((r) => !terminal(r.status)); }
   get canRun() {
-    const context = this.ports.context();
-    return !!context.project && context.connected && context.ready !== false && ["idle", "busy"].includes(context.runtimeState ?? "") &&
-      (this.ports.execution()?.pending.length ?? 0) < 32 && context.capabilities.includes("workspace.run_r");
+    return this.canRunIn();
   }
-  get queueing() { const state = this.ports.execution(); return !!state?.current || !!state?.pause || !!state?.pending.length || this.ports.context().runtimeState === "busy"; }
+  canRunIn(id?: string) {
+    const context = id && this.ports.contextFor ? this.ports.contextFor(id) : this.ports.context();
+    return !!context.project && context.connected && context.ready !== false && ["idle", "busy"].includes(context.runtimeState ?? "") &&
+      (this.ports.execution(id)?.pending.length ?? 0) < 32 && context.capabilities.includes("workspace.run_r");
+  }
+  get queueing() { return this.queueingIn(); }
+  queueingIn(id?: string) { const state = this.ports.execution(id), scope = id && this.ports.contextFor ? this.ports.contextFor(id) : this.ports.context();
+    return !!state?.current || !!state?.pause || !!state?.pending.length || scope.runtimeState === "busy"; }
+  /** A read/command projection of this owner, with no independent records or request identities. */
+  forInstance(id: string): Operations {
+    const existing = this.views.get(id); if (existing) return existing;
+    let previous: Readonly<OperationsSnapshot> | undefined, snapshot: Readonly<OperationsSnapshot>;
+    const belongs = (record: OperationRecord) => operationWorkspaceInstance(record) === id || (id === "main" && operationWorkspaceInstance(record) === undefined);
+    const getSnapshot = () => {
+      const current = this.getSnapshot();
+      if (previous !== current) {
+        previous = current;
+        snapshot = Object.freeze({ ...current, records: readonlyMap(new Map([...current.records].filter(([, record]) => belongs(record)))),
+          pending: Object.freeze(current.pending.filter((pending) => {
+            const args = pending.invocation.arguments;
+            const target = args && typeof args === "object" && !Array.isArray(args) ? args.workspace_instance_id : undefined;
+            return target === id || (target === undefined && id === "main");
+          })), canRun: this.canRunIn(id), queueing: this.queueingIn(id) });
+      }
+      return snapshot;
+    };
+    const view = new Proxy(this, { get: (owner, property) => {
+      if (property === "getSnapshot") return getSnapshot;
+      if (property === "records" || property === "pending") return getSnapshot()[property];
+      if (property === "canRun") return owner.canRunIn(id);
+      if (property === "queueing") return owner.queueingIn(id);
+      if (property === "cancel") return (operationId?: string, pending = false) => owner.cancel(operationId, pending, id);
+      if (property === "run") return (code: string, source?: RunSource, target?: RuntimeTarget) => owner.run(code, source, target, id);
+      const value = Reflect.get(owner, property, owner);
+      return typeof value === "function" ? value.bind(owner) : value;
+    } });
+    this.views.set(id, view); return view;
+  }
   refreshAdmission() { this.publish(); }
   serialize() { return { pending: this.pendingRequests }; }
   restore(value: unknown) {
@@ -154,7 +191,8 @@ export class Operations extends Model<OperationsSnapshot> {
       this.summariesMap.set(summary.operation_id, immutable(summary));
       const record = this.recordsMap.get(summary.operation_id);
       if (record) this.ports.notifications.send("operationChanged", { epoch: scope.epoch, project: scope.project,
-        operationId: summary.operation_id, capability: record.operation.capability.id, status: record.status, cursor: summary.cursor });
+        operationId: summary.operation_id, capability: record.operation.capability.id, status: record.status, cursor: summary.cursor,
+        workspaceInstanceId: operationWorkspaceInstance(record) });
     }
     if (changed) this.publish();
     return data;
@@ -219,7 +257,8 @@ export class Operations extends Model<OperationsSnapshot> {
     }
     if (!previous || JSON.stringify(previous) !== JSON.stringify(record)) {
       this.ports.notifications.send("operationChanged", { epoch: scope.epoch, project: scope.project!, operationId: id,
-        capability: record.operation.capability.id, status: record.status, cursor: this.summariesMap.get(id)?.cursor ?? null });
+        capability: record.operation.capability.id, status: record.status, cursor: this.summariesMap.get(id)?.cursor ?? null,
+        workspaceInstanceId: operationWorkspaceInstance(record) });
       this.publish();
     } else if (pending) this.publish();
   }
@@ -320,19 +359,24 @@ export class Operations extends Model<OperationsSnapshot> {
       throw error;
     }
   }
-  async run(code: string, source: RunSource = { view_id: "console", label: "Console", kind: "console" }) {
-    if (!this.canRun || !code.trim()) throw new Error((this.ports.execution()?.pending.length ?? 0) >= 32 ? "Queue full (32 pending runs). Your input is retained." : "R is unavailable. Your input is retained.");
+  async run(code: string, source: RunSource = { view_id: "console", label: "Console", kind: "console" }, target?: RuntimeTarget, instanceId?: string) {
+    instanceId = target?.workspaceInstanceId ?? instanceId ?? this.ports.context().workspaceInstanceId;
+    const scope = instanceId && this.ports.contextFor ? this.ports.contextFor(instanceId) : this.ports.context();
+    if (!this.canRunIn(instanceId) || !code.trim()) throw new Error((this.ports.execution(instanceId)?.pending.length ?? 0) >= 32 ? "Queue full (32 pending runs). Your input is retained." : "R is unavailable. Your input is retained.");
     if (code.includes("\0")) throw new Error("R code cannot contain NUL.");
-    const session = this.ports.execution()?.session_id ?? this.ports.context().session;
-    const record = await this.invoke("workspace.run_r", { code, output_mode: "console", source },
+    if (target && target.nativeSessionId !== scope.session) throw new Error("The captured R session changed. The saved code was not submitted.");
+    const session = target?.nativeSessionId ?? this.ports.execution(instanceId)?.session_id ?? scope.session;
+    const record = await this.invoke("workspace.run_r", { code, output_mode: "console", source, ...(instanceId ? { workspace_instance_id: instanceId } : {}) },
       session ? [{ kind: "workspace.session", subject: "active", expected: session }] : []);
     if (record.status === "failed" && record.output === null) throw new Error(record.error ?? "Run was rejected");
     return record;
   }
   reviewOperation(id: string) { return this.ensureOperation(id); }
-  async cancel(id?: string, onlyPending = false) {
+  async cancel(id?: string, onlyPending = false, workspaceInstanceId?: string) {
     const scope = this.ports.context();
-    id ??= this.ports.execution()?.current?.operation_id ?? [...this.recordsMap.values()].find((r) => r.status === "running")?.operation.operation_id;
+    const target = workspaceInstanceId ?? scope.workspaceInstanceId;
+    id ??= this.ports.execution(target)?.current?.operation_id ?? [...this.recordsMap.values()].find((r) => r.status === "running" && r.operation.capability.id === "workspace.run_r" &&
+      (target ? operationWorkspaceInstance(r) === target : r.operation.target.identity === scope.session))?.operation.operation_id;
     if (scope.project && id) await this.ports.cancel(scope.project, id, onlyPending);
   }
   stop() { this.stopped = true; this.generation++; this.loading.clear(); this.consuming = false; }

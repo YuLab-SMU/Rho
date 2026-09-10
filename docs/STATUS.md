@@ -1,32 +1,90 @@
 # Rho: current state and focus
 
-Updated: 2026-09-09. This is the single current status summary. Git retains history.
+Updated: 2026-09-10. This is the single current status summary. Git retains history.
 
-## Runtime management — investigation and design proposal
+## Multiple R sessions and recovery copies
 
-The user requested code investigation and interaction exploration. [Design section
-16](RHO-DESIGN.md#16-runtime-management--investigation-and-interaction-proposal)
-records the implementation map and [Paper Runtime R01–R03](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/9-0):
-daily R disclosure/session overview, readable runs/queue, and restart/recovery.
-The proposal awaits design review; no runtime implementation was authorized here.
+The instance foundation, native object-graph recovery copies and automatic protection
+are implemented and verified; the Studio surface is partly built.
+[Design section 17](RHO-DESIGN.md#17-sessions-and-recovery--approved-interaction)
+records the approved Paper R04–R10 interaction and
+[Architecture](ARCHITECTURE.md#multiple-r-instances-and-recovery-copies) records the
+ownership, routing and recovery rules. Section 16's R01–R03 remain proposals.
 
-The current Host has one live R Workspace, with separate Environment, process,
-remote-job and native Agent ownership. A useful first slice can reuse the current
-Session/Console/Operations models. Restart needs additional hosting support:
-readable blockers, native preconditions/lost-acknowledgement handling and preservation
-of the bound Environment; existing Apply R replaces the Host and clears that binding.
-Multiple R instances and Environment-management UI remain subsequent scoped work.
+Implemented: a Host instance registry under the existing project lease and journal,
+with four distinct identities and per-instance process, queue, stdin, lane,
+observations and lifecycle state; instance lifecycle capabilities and explicit
+`workspace_instance_id` routing that rejects a missing target instead of guessing one;
+native capture of shared-reference graphs and cycles with explicit exclusions, byte
+and time budgets, atomic publish and a journal-committed manifest; idle automatic
+protection that yields to user execution and cancels cooperatively; retention, storage
+reservation and pruning; restore into a fresh candidate process; and the
+App → Project → Session policy hierarchy, where a scope write replaces that scope's
+override set, so omitting a field is how it resets to the inherited value. The
+optional idle release ends an unattended session only after complete protection, and
+never when window liveness cannot be observed.
 
-The four existing Session, RuntimeCoordinator, Operations and Console model suites
-passed: **85 tests**. All three Paper boards were reviewed through screenshots;
-R03 was fitted to its content. These are model-baseline and static-design checks,
-not a new live-R, browser, remote-cluster or visual-acceptance result. Concurrent
-Shell/storage source edits were observed and preserved. This investigation changed
-only design/feedback/status documentation and Paper; it did not launch or restart
-a Host, operate R, change a user layout or install anything.
-Documentation impact mapping, governance/index checks, governance self-tests and
-`git diff --check` passed. Source-area checks listed for concurrent edits were not
-claimed as part of this documentation-only investigation.
+Two edges changed meaning. Selecting R in Workbench settings now records the default
+used by sessions created afterwards and never drains or replaces a managed Host, so
+running sessions keep their binding and memory; asking it to end a session is refused
+and points at stopping that session individually. A running instance no longer holds
+project file observations, because each instance owns its lane.
+
+Studio renders the approved daily entry: the status-bar R disclosure names the target
+session, reports its latest recovery copy and lists the other sessions with their
+state, and the editor toolbar carries a `Run in session` picker beside Run, hidden
+while the project has one session and continuing a stopped session when chosen.
+
+### Verified
+
+Passed with real R, using the pinned Ark 0.1.252 build beside the integration checkout
+and the installed R home: `scripts/test-r-checkpoints.mjs`, including cold restore of
+shared aliases, cycles, hidden and Unicode values, factors and time classes, fitted
+models, sparse and in-memory SCE objects, RNG state and options, and no artifact
+published after a fractional budget was exhausted; `scripts/test-real-r.mjs`, now
+including the real-R multi-instance restore and clean-restart case; and
+`scripts/test-environment.mjs`.
+
+Also passed: `cargo test --workspace --locked -- --test-threads=1` (275 tests),
+`npm run generate`, `build`, `check` and `typecheck --prefix ui`,
+`npm run test --prefix ui` (356 tests), `scripts/governance.mjs check|generate|impact`,
+`test-governance.mjs`, `check-architecture.mjs`, `vendor-jet.mjs check`,
+`test-vendor-jet.mjs`, `check-frontend-boundaries.mjs`,
+`test-frontend-boundaries.mjs`, `test-mcp.mjs` with and without `--real-r`,
+`test-workbench.mjs` with and without `--real-r`, `test-output-media.mjs`,
+`test-process-recovery.mjs`, `test-remote-protocol.mjs`,
+`test-agent-task-recovery.mjs`, `test-agent-interface.mjs --self-test` and
+`test-pack-agent-evidence.py`.
+
+`scripts/test-r-checkpoints.mjs` is now the governance check `system.r-checkpoints`,
+and `scripts/test-real-r.mjs` now runs the real-R multi-instance acceptance.
+
+### Unresolved
+
+- Not built: the `R Sessions` management page (R05/R06), the restoring, partial
+  restore, environment-mismatch and disconnect states (R07), the restart, stop and
+  quit panels (R08), the advanced `Runtime & recovery` settings (R09), and the
+  narrow-width layouts and new-session dialog (R10).
+- Not run: `npm run test:browser --prefix ui`. The new status disclosure and target
+  picker have no browser or real-R visual acceptance at normal, wide and constrained
+  widths. The picker's subtitle reads `Managed environment` because no environment
+  name is published, while R05 shows a named environment.
+- Not measured: the editor-input and added-wait latency thresholds, multi-platform and
+  long-run behaviour, and destructive-failure acceptance.
+- Binding two genuinely different R installations stays opt-in and unexercised; it
+  needs `RHO_ALT_*`.
+- `rho --connect-url-file invoke --code` needs an explicit `--workspace-instance`; a
+  connected Host publishes no contract the CLI can read to default it.
+- Real-model Agent acceptance now depends on the Agent supplying
+  `workspace_instance_id`, which the augmented tool schema publishes.
+- An Environment realization referenced by an instance or a recovery copy is protected
+  from cleanup, but that protection has no dedicated test.
+
+### Restart paths
+
+The work lives in the registered worktree `.worktrees/runtime-recovery` on
+`codex/runtime-recovery`, on top of `a4c127da`. Real workbench runs belong in the
+integration checkout, not in this worktree.
 
 ## Shell navigation and configurable status bar
 

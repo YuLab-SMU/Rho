@@ -15,11 +15,18 @@ export interface RequestContext {
   readonly connected: boolean;
   readonly ready?: boolean;
   readonly capabilities: readonly string[];
+  readonly workspaceInstanceId?: string;
+  readonly nativeEpoch?: number;
+}
+export interface RuntimeTarget {
+  readonly workspaceInstanceId: string;
+  readonly nativeSessionId: string;
+  readonly continuationLineageId: string;
 }
 export type QueryPort = (project: string, id: string, args?: unknown) => Promise<QuerySnapshot>;
 export function sameScope(before: RequestContext, now: RequestContext, native = false) {
   return before.epoch === now.epoch && before.project === now.project &&
-    (!native || before.session === now.session);
+    (!native || (before.session === now.session && before.workspaceInstanceId === now.workspaceInstanceId && before.nativeEpoch === now.nativeEpoch));
 }
 export interface OperationReadPort {
   getRecord(id: string): OperationRecord | undefined;
@@ -31,7 +38,7 @@ export interface OperationReadPort {
 }
 export interface OperationCommands {
   invoke(id: string, args: unknown, preconditions?: Precondition[]): Promise<OperationRecord>;
-  run(code: string, source?: RunSource): Promise<OperationRecord>;
+  run(code: string, source?: RunSource, target?: RuntimeTarget): Promise<OperationRecord>;
 }
 export interface PersistenceFragment {
   serialize(): Record<string, unknown>;
@@ -43,3 +50,8 @@ export const terminal = (status: string) =>
   ["succeeded", "failed", "cancelled", "uncertain"].includes(status);
 export const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 export const json = (value: unknown): JsonValue => JSON.parse(JSON.stringify(value)) as JsonValue;
+export function operationWorkspaceInstance(record: OperationRecord): string | undefined {
+  const args = record.operation.normalized_arguments;
+  const id = args && typeof args === "object" && !Array.isArray(args) ? args.workspace_instance_id : undefined;
+  return typeof id === "string" ? id : undefined;
+}

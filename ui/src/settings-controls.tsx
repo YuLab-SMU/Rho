@@ -18,6 +18,8 @@ export function SettingsControls({ section = "all" }: { section?: "all" | "edito
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const mounted = useRef(true), request = useRef(0);
+  // A Host that publishes instance lifecycle owns one R binding per session.
+  const managed = session.context().capabilities.includes("runtime.instances");
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; request.current++; };
@@ -152,7 +154,7 @@ export function SettingsControls({ section = "all" }: { section?: "all" | "edito
           ))}
         </div>
       )}
-      {session.project && (
+      {session.project && !managed && (
         <label className="checkbox">
           <input
             type="checkbox"
@@ -162,12 +164,18 @@ export function SettingsControls({ section = "all" }: { section?: "all" | "edito
           End the current R session and restart
         </label>
       )}
+      {managed && (
+        <p className="muted">
+          Running R sessions keep their own R. This becomes the default for sessions
+          started afterwards.
+        </p>
+      )}
       <button
         className="primary"
-        disabled={busy || !probe?.usable || (!!session.project && !confirmed)}
+        disabled={busy || !probe?.usable || (!!session.project && !managed && !confirmed)}
         onClick={() => void apply()}
       >
-        Apply and Start R
+        {managed ? "Save Default R" : "Apply and Start R"}
       </button>
       </>}
       {error && (

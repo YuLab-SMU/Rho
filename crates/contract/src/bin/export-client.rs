@@ -12,11 +12,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     CancelOperation::export_all(&config)?;
     RunRArguments::export_all(&config)?;
     RuntimeInstances::export_all(&config)?;
+    RuntimeInstancesArguments::export_all(&config)?;
+    RuntimeProtectionStatus::export_all(&config)?;
     RuntimeInstanceArguments::export_all(&config)?;
     CreateRuntimeInstance::export_all(&config)?;
     ContinueRuntimeInstance::export_all(&config)?;
     StopRuntimeInstance::export_all(&config)?;
     RestartRuntimeInstance::export_all(&config)?;
+    RestoreRuntimeInstance::export_all(&config)?;
+    RenameRuntimeInstance::export_all(&config)?;
+    ConfigureRuntimeInstance::export_all(&config)?;
     RuntimeSettingsArguments::export_all(&config)?;
     UpdateRuntimeSettings::export_all(&config)?;
     RuntimeSettings::export_all(&config)?;
@@ -28,6 +33,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     CheckpointRestoreReport::export_all(&config)?;
     CheckpointControlReport::export_all(&config)?;
     CheckpointRecovery::export_all(&config)?;
+    CheckpointReconcileArguments::export_all(&config)?;
+    CheckpointReconcileReport::export_all(&config)?;
     SearchFilesArguments::export_all(&config)?;
     FileSearchResult::export_all(&config)?;
     Invocation::export_all(&config)?;

@@ -7,7 +7,9 @@ pub(crate) struct WorkspaceUsage(pub Arc<dyn WorkspaceRuntime>);
 pub(crate) struct InstancesUsage(pub Arc<crate::instances::InstanceOwner>);
 #[async_trait]
 impl EnvironmentUsage for InstancesUsage {
-    async fn protected_paths(&self) -> Result<Vec<String>, String> { self.0.protected_libraries().await }
+    async fn protected_paths(&self) -> Result<Vec<String>, String> {
+        self.0.protected_libraries().await
+    }
 }
 #[async_trait]
 impl EnvironmentUsage for WorkspaceUsage {

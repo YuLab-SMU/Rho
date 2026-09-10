@@ -148,6 +148,7 @@ Checks:
 - `system.mcp-real-r`: `["node","scripts/test-mcp.mjs","--real-r"]`
 - `system.output-media`: `["node","scripts/test-output-media.mjs"]`
 - `system.process-recovery`: `["node","scripts/test-process-recovery.mjs"]`
+- `system.r-checkpoints`: `["node","scripts/test-r-checkpoints.mjs"]`
 - `system.real-r`: `["node","scripts/test-real-r.mjs"]`
 - `system.remote-protocol`: `["node","scripts/test-remote-protocol.mjs"]`
 - `system.rust`: `["cargo","test","--workspace","--locked","--","--test-threads=1"]`

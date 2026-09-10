@@ -29,11 +29,14 @@ export async function verifySession(binary, args) {
     waiting.set(id, { resolve, reject, timer });
     child.stdin.write(JSON.stringify({ id, request: { method, params } }) + "\n");
   });
+  // A managed Host routes every live R request to an explicit instance.
+  const instance = "main";
   const invoke = (id, code) => request(id, "invoke", {
-    client_request_id: id, capability: { id: "workspace.run_r", version: 1 }, arguments: { code },
+    client_request_id: id, capability: { id: "workspace.run_r", version: 1 },
+    arguments: { workspace_instance_id: instance, code },
   });
   const query = (id, capability, args) => request(id, "query_snapshot", {
-    capability: { id: capability, version: 1 }, arguments: args,
+    capability: { id: capability, version: 1 }, arguments: { workspace_instance_id: instance, ...args },
   });
   const watchdog = setTimeout(() => child.kill(), 60_000);
   let marker;

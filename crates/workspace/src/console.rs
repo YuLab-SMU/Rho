@@ -33,6 +33,12 @@ impl Default for ConsoleQueue {
     }
 }
 impl ConsoleQueue {
+    pub(super) fn pause_uncertain_maintenance(&self,operation:&Operation) {
+        let mut data=self.data.lock().unwrap_or_else(|e|e.into_inner());
+        data.principals.insert(operation.operation_id.clone(),operation.principal().clone());
+        Self::pause_locked(&mut data,Some(operation.operation_id.clone()),"Checkpoint native outcome or final commit is unconfirmed. Inspect the original operation before resuming.");
+        drop(data);self.signal();
+    }
     pub(super) fn try_acquire_maintenance(&self, lane: Arc<tokio::sync::Mutex<()>>) -> Result<OwnedMutexGuard<()>, HandlerError> {
         let data=self.data.lock().unwrap_or_else(|e|e.into_inner());
         if data.closing || data.controls_pending>0 || data.current.is_some() || data.reserved.is_some() || !data.pending.is_empty() || data.pause.is_some() {

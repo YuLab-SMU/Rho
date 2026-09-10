@@ -12,7 +12,9 @@ export interface ConsoleView {
   anchor: number; head: number;
 }
 class DraftView extends Model<ConsoleView> {
-  readonly identity = Object.freeze({});
+  private identityValue = Object.freeze({});
+  get identity() { return this.identityValue; }
+  nativeChanged() { this.identityValue = Object.freeze({}); this.publish(); }
   private value: ConsoleView;
   constructor(value?: Partial<ConsoleView>) { super(); this.value = { input: "", hiddenBefore: 0, scrollTop: 0, follow: true, anchor: 0, head: 0, ...value }; }
   protected readSnapshot() { return { ...this.value }; }
@@ -78,7 +80,7 @@ export class Console extends Model<ConsoleSnapshot> {
     this.publish();
   }
   reset() { this.generation++; this.stopped = false; this.state = null; this.error = ""; this.refreshing = null; this.publish(); }
-  resetSession() { this.reset(); }
+  resetSession() { this.reset(); for (const view of this.views.values()) view.nativeChanged(); }
   async refresh() {
     if (this.refreshing) return this.refreshing;
     const scope = this.ports.context(), generation = this.generation, request = ++this.request;

@@ -5,6 +5,7 @@ import type { RunSource } from "./generated/RunSource";
 
 export type { RequestContext as ResourceIdentity } from "./shared/ports";
 import type { RequestContext as ResourceIdentity } from "./shared/ports";
+import type { RuntimeTarget } from "./shared/ports";
 export interface ResourcePorts {
   context(): ResourceIdentity;
   query(project: string, capability: string, args?: unknown): Promise<QuerySnapshot>;
@@ -15,7 +16,8 @@ export interface DocumentPorts extends ResourcePorts {
   canRun(): boolean;
   queueing(): boolean;
   invoke(capability: string, args: unknown, preconditions?: Precondition[]): Promise<OperationRecord>;
-  run(code: string, source: RunSource): Promise<OperationRecord>;
+  run(code: string, source: RunSource, target?: RuntimeTarget): Promise<OperationRecord>;
+  captureTarget?(): RuntimeTarget;
   openDocument(id: string, name: string): void;
   renameDocument(id: string, name: string): void;
   closeDocument(id: string): void;

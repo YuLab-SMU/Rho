@@ -131,10 +131,16 @@ impl WorkspaceRuntimeError {
 pub trait WorkspaceRuntime: Send + Sync {
     fn checkpoint_available(&self) -> bool { false }
     fn checkpoint_archive_only(&self) -> bool { false }
+    fn process_identity(&self) -> Option<rho_contract::RuntimeProcessIdentity> { None }
+    fn installation_identity(&self) -> Option<rho_contract::RuntimeInstallationIdentity> { None }
+    async fn native_process_alive(&self) -> Result<Option<bool>, WorkspaceRuntimeError> { Ok(None) }
     async fn shutdown(&self) -> Result<(), WorkspaceRuntimeError> { Err(WorkspaceRuntimeError::before_effect("Confirmed native shutdown unavailable")) }
     async fn checkpoint_capture(&self, _operation: &Operation, _args: &rho_contract::CheckpointCaptureArguments, _cancellation: tokio::sync::watch::Receiver<bool>) -> Result<CheckpointArtifact, WorkspaceRuntimeError> {
         Err(WorkspaceRuntimeError::before_effect("Native checkpoint provider unavailable"))
     }
+    async fn checkpoint_artifact_lease(&self, _id:&rho_contract::OperationId)->Result<Box<dyn CheckpointArtifactLease>,WorkspaceRuntimeError>{Ok(Box::new(()))}
+    async fn checkpoint_original_manifest(&self, _id: &rho_contract::OperationId) -> Result<Option<rho_contract::CheckpointManifest>,WorkspaceRuntimeError> { Ok(None) }
+    async fn checkpoint_adopt(&self, _source: &rho_contract::CheckpointManifest, _adopted: &rho_contract::CheckpointManifest) -> Result<(),WorkspaceRuntimeError> { Err(WorkspaceRuntimeError::before_effect("Checkpoint adoption unavailable")) }
     async fn checkpoint_publish(&self, _manifest: &rho_contract::CheckpointManifest) -> Result<(), WorkspaceRuntimeError> {
         Err(WorkspaceRuntimeError::before_effect("Checkpoint storage unavailable"))
     }
@@ -146,7 +152,7 @@ pub trait WorkspaceRuntime: Send + Sync {
     fn checkpoint_remove_payload(&self, _checkpoint: &rho_contract::OperationId) -> Result<(), String> { Err("Checkpoint storage unavailable".into()) }
     async fn checkpoint_present(&self, _manifest: &rho_contract::CheckpointManifest) -> Result<bool, WorkspaceRuntimeError> { Ok(false) }
     async fn checkpoint_verify(&self, _manifest: &rho_contract::CheckpointManifest) -> Result<bool, WorkspaceRuntimeError> { Ok(false) }
-    async fn checkpoint_restore(&self, _operation: &Operation, _manifest: &rho_contract::CheckpointManifest, _cancellation: tokio::sync::watch::Receiver<bool>) -> Result<Vec<String>, WorkspaceRuntimeError> {
+    async fn checkpoint_restore(&self, _operation: &Operation, _manifest: &rho_contract::CheckpointManifest, _cancellation: tokio::sync::watch::Receiver<bool>) -> Result<rho_contract::CheckpointNativeRestoreReport, WorkspaceRuntimeError> {
         Err(WorkspaceRuntimeError::before_effect("Native checkpoint restore unavailable"))
     }
 
@@ -172,6 +178,7 @@ pub trait WorkspaceRuntime: Send + Sync {
     ) -> Result<rho_contract::OutputPage, String> {
         Err("output content is unavailable".into())
     }
+    fn execution_state(&self) -> String { self.runtime_status().state }
     fn runtime_status(&self) -> rho_contract::RuntimeStatus {
         rho_contract::RuntimeStatus {
             session_id: self.session_id().into(),

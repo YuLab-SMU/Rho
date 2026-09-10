@@ -55,6 +55,23 @@ function fixture() {
   cleanup.push(() => { operations.stop(); operations.dispose(); notifications.dispose(); });
   return { operations, ports, records, events, setScope: (patch: Partial<RequestContext>) => { scope = { ...scope, ...patch }; } };
 }
+
+it("instance projections share original records but scope history, run admission and cancellation", async () => {
+  const f = fixture();
+  Object.assign(f.ports, { contextFor: (id: string) => ({ ...f.ports.context(), workspaceInstanceId: id, session: `r-${id}`, runtimeState: "idle" }),
+    execution: (id?: string) => ({ session_id: `r-${id ?? "main"}`, current: { operation_id: id === "scratch" ? "op-2" : "op-1" }, pending: [], pause: null, input: null }) });
+  for (const [n, id] of [[1, "main"], [2, "scratch"]] as const) {
+    const value = record(n); value.operation.normalized_arguments = { code: `x <- ${n}`, workspace_instance_id: id };
+    f.records.set(value.operation.operation_id, value);
+  }
+  await f.operations.loadRecent(); const main = f.operations.forInstance("main"), scratch = f.operations.forInstance("scratch");
+  expect([...main.records.keys()]).toEqual(["op-1"]); expect([...scratch.records.keys()]).toEqual(["op-2"]);
+  expect(scratch.records.get("op-2")).toBe(f.operations.records.get("op-2"));
+  await scratch.cancel(); expect(f.ports.cancel).toHaveBeenCalledWith("/a", "op-2", false);
+  await scratch.run("x <- 3");
+  expect(f.ports.invoke.mock.calls.at(-1)![1]).toMatchObject({ arguments: { workspace_instance_id: "scratch", code: "x <- 3" },
+    preconditions: [{ kind: "workspace.session", subject: "active", expected: "r-scratch" }] });
+});
 async function baseline(f: ReturnType<typeof fixture>) { await f.operations.beginBaseline(); f.operations.finishBaseline(); }
 
 it("captures checkpoint before baseline reads and fills the operation inserted during initialization", async () => {

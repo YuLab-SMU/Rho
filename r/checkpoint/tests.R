@@ -24,7 +24,7 @@ local({
   alias_scope$b <- alias_scope$a
   alias_scan <- .Call(bridge$rho_checkpoint_provider$roots,alias_scope,300,10,NULL)
   stopifnot(all(alias_scan[[3L]]))
-  file <- tempfile()
+  file <- tempfile("检查点-α-")
   values <- scan[[2L]][keep]
   .Call(bridge$rho_checkpoint_provider$write, values, file, 1024^2, 10)
   restored <- readRDS(file)
@@ -35,5 +35,15 @@ local({
   rejected <- try(.Call(bridge$rho_checkpoint_provider$write, values, too_small, 16, 10), silent=TRUE)
   stopifnot(inherits(rejected,"try-error"))
   unlink(too_small)
+  repeated <- new.env(parent=emptyenv());repeated$text <- rep("same",200000)
+  repeated_scan <- .Call(bridge$rho_checkpoint_provider$roots,repeated,4*1024^2,2,NULL)
+  stopifnot(all(repeated_scan[[3L]]))
+  original_inventory <- bridge$rho_checkpoint_inventory
+  bridge$rho_checkpoint_inventory <- function() {Sys.sleep(0.11);"fixture-inventory"}
+  fractional_path <- tempfile("fractional-budget-")
+  fractional <- try(bridge$rho_checkpoint_capture(list(path=fractional_path,project_root=getwd(),max_bytes=1024^2,max_seconds=0.1,include_names=NULL,exclude_names=list(),include_patterns=list(),exclude_patterns=list())),silent=TRUE)
+  bridge$rho_checkpoint_inventory <- original_inventory
+  stopifnot(inherits(fractional,"try-error"),grepl("time budget",as.character(fractional),fixed=TRUE),!file.exists(fractional_path))
+  cat("PASS: fractional 0.1 second budget includes metadata observation; no artifact published after exhaustion\n")
   cat("PASS: shared roots, cycles, compact sequences, Unicode, passive binding exclusions, unknown ALTREP, byte limit\n")
 })

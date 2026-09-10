@@ -2,4 +2,4 @@
 import type { CheckpointSkippedBinding } from "./CheckpointSkippedBinding";
 import type { OperationId } from "./OperationId";
 
-export type CheckpointRestoreReport = { checkpoint_id: OperationId, native_session_id: string, restored_names: Array<string>, skipped: Array<CheckpointSkippedBinding>, validation: string, };
+export type CheckpointRestoreReport = { initialized_namespaces: Array<string>, notices: Array<string>, checkpoint_id: OperationId, native_session_id: string, restored_names: Array<string>, skipped: Array<CheckpointSkippedBinding>, validation: string, };

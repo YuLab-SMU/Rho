@@ -42,10 +42,16 @@ are not installed automatically. Optional Ark acquisition scripts live under
 `scripts/bootstrap-ark-*`; they retain upstream notices and return an executable
 path to configure explicitly.
 
-Changing R requires an explicit acknowledgement that session memory ends. Invalid
-candidates do not tear down the existing session. Active requests/work and attached
-MCP sessions prevent switching. Failed startup retains its diagnostic and provides
-a project without R where possible; it does not restore the ended memory.
+A managed project Host owns one R binding per session, so selecting R here records
+the default used by sessions created afterwards. It never drains or replaces the
+running Host; running sessions keep their own binding and memory. Asking this
+endpoint to end a session is refused and points at stopping that session
+individually. An invalid candidate is rejected by probe before anything is recorded.
+
+A Host without managed instances keeps the older behaviour: changing R requires an
+explicit acknowledgement that session memory ends, active requests/work and attached
+MCP sessions prevent switching, and failed startup retains its diagnostic while
+providing a project without R where possible; it does not restore the ended memory.
 
 CLI `invoke`, `session` and stdio `mcp` use explicit runtime flags. Omitting R flags
 there selects Project/Process-only hosting; `--rscript /path/to/Rscript` adds

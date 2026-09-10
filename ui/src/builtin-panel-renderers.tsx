@@ -7,6 +7,7 @@ import { PackagesPanel } from "./panels/packages-panel";
 import { ConsolePanel } from "./panels/console-panel";
 import { PlotPanel } from "./panels/plot-panel";
 import { AgentPanel } from "./panels/agent-panel";
+import { withRuntimeView } from "./context";
 
 const renderers: Record<BuiltinRenderer, (view: PanelInstance) => ReactNode> = {
   files: () => <FilesPanel />,
@@ -21,5 +22,5 @@ const renderers: Record<BuiltinRenderer, (view: PanelInstance) => ReactNode> = {
 };
 
 export function renderBuiltinPanel(view: PanelInstance): ReactNode {
-  return renderers[builtinPanels[view.component].renderer](view);
+  return withRuntimeView(view.id, renderers[builtinPanels[view.component].renderer](view));
 }

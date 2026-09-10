@@ -6,7 +6,10 @@ use std::{
     time::Duration,
 };
 
-fn invocation(id: &str, capability: &str, args: Value) -> Invocation {
+fn invocation(id: &str, capability: &str, mut args: Value) -> Invocation {
+    if capability.starts_with("workspace.") {
+        args["workspace_instance_id"] = json!("main");
+    }
     Invocation {
         client_request_id: id.into(),
         capability: CapabilityRef::new(capability, 1).unwrap(),
@@ -67,6 +70,7 @@ fn ark_config(project: &Path, data: &Path, r_home: &Path) -> ArkConfig {
         data_root: data.join("runtime"),
         execution_timeout: Duration::from_secs(30),
         library_path: None,
+        checkpoint_helper_path: None,
     }
 }
 

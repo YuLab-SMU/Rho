@@ -49,6 +49,8 @@ pub mod port_controls;
 pub use port_controls::*;
 pub mod instances;
 pub use instances::*;
+mod recovery_protection;
+pub use recovery_protection::*;
 
 use std::collections::BTreeSet;
 

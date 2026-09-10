@@ -14,7 +14,7 @@ interface Task {
 export interface TaskState { readonly inFlight: boolean; readonly error: string; readonly failures: number }
 const backoff = [500, 1000, 2000, 5000];
 
-/** One clock, independent fault domains, and one serialized native observation lane. */
+/** One clock and a separate serialized native observation lane per project/instance. */
 export class RuntimeCoordinator extends Model<{ tasks: Readonly<Record<string, TaskState>> }> {
   private tasks = new Map<string, Task>();
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -22,7 +22,7 @@ export class RuntimeCoordinator extends Model<{ tasks: Readonly<Record<string, T
   private acceptingReads = true;
   private generation = 0;
   private reads = new Map<string, Promise<QuerySnapshot>>();
-  private tail: Promise<unknown> = Promise.resolve();
+  private tails = new Map<string, Promise<unknown>>();
   protected readSnapshot() {
     return { tasks: Object.freeze(Object.fromEntries([...this.tasks].map(([id, t]) =>
       [id, Object.freeze({ inFlight: t.inFlight, error: t.error, failures: t.failures })]))) };
@@ -31,6 +31,7 @@ export class RuntimeCoordinator extends Model<{ tasks: Readonly<Record<string, T
     if (this.tasks.has(id)) throw new Error(`Duplicate runtime task: ${id}`);
     this.tasks.set(id, { interval, run, due: 0, inFlight: false, failures: 0, error: "" });
   }
+  unregister(id: string) { this.tasks.delete(id); this.publish(); }
   startReads() { this.acceptingReads = true; }
   start() { this.startReads(); this.stopped = false; this.wake(); }
   wake(id?: string) {
@@ -47,27 +48,27 @@ export class RuntimeCoordinator extends Model<{ tasks: Readonly<Record<string, T
       const startedAt = Date.now();
       task.inFlight = true;
       void Promise.resolve().then(() => {
-        if (this.stopped || generation !== this.generation) return;
+        if (this.stopped || generation !== this.generation || ![...this.tasks.values()].includes(task)) return;
         return task.run();
       }).then((backlog) => {
-        if (generation !== this.generation) return;
+        if (generation !== this.generation || ![...this.tasks.values()].includes(task)) return;
         task.error = "";
         task.failures = 0;
         task.due = backlog ? 0 : startedAt + task.interval;
       }, (error: unknown) => {
-        if (generation !== this.generation) return;
+        if (generation !== this.generation || ![...this.tasks.values()].includes(task)) return;
         task.error = message(error);
         task.failures++;
         task.due = Date.now() + backoff[Math.min(task.failures - 1, backoff.length - 1)];
       }).finally(() => {
-        if (generation !== this.generation) return;
+        if (generation !== this.generation || ![...this.tasks.values()].includes(task)) return;
         task.inFlight = false;
         this.publish();
       });
     }
     this.timer = setTimeout(() => this.tick(), 250);
   }
-  /** Duplicate resource demands share a promise. Native reads never overlap. */
+  /** Duplicate demands coalesce; another R instance never waits for this instance's read. */
   query(read: QueryPort): QueryPort {
     return (project, id, args = {}) => {
       if (!this.acceptingReads) return Promise.reject(new Error("Client stopped reading"));
@@ -77,14 +78,17 @@ export class RuntimeCoordinator extends Model<{ tasks: Readonly<Record<string, T
       const existing = this.reads.get(key);
       if (existing) return existing;
       const generation = this.generation;
-      const task = this.tail.catch(() => {}).then(() => {
+      const instanceId = args && typeof args === "object" && !Array.isArray(args) ? (args as { workspace_instance_id?: string }).workspace_instance_id : undefined;
+      const lane = JSON.stringify([project, instanceId ?? "main"]);
+      const task = (this.tails.get(lane) ?? Promise.resolve()).catch(() => {}).then(() => {
         if (!this.acceptingReads || generation !== this.generation) throw new Error("Observation cancelled after client lifecycle changed");
         return read(project, id, args);
       });
-      this.tail = task;
+      this.tails.set(lane, task);
       this.reads.set(key, task);
       void task.finally(() => {
         if (this.reads.get(key) === task) this.reads.delete(key);
+        if (this.tails.get(lane) === task) this.tails.delete(lane);
       }).catch(() => {});
       return task;
     };

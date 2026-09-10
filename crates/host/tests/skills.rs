@@ -61,11 +61,14 @@ async fn project_only_host_shares_skill_queries_receipts_and_binding_control() {
     .unwrap();
     assert_eq!(listed.skills.len(), 1);
     let skill = &listed.skills[0];
+    let instances = query(&host, "runtime.instances", json!({"limit":50})).await;
     assert!(
-        !host
-            .capabilities()
+        instances["instances"]
+            .as_array()
+            .unwrap()
             .iter()
-            .any(|c| c.capability.id == "workspace.run_r")
+            .all(|instance| instance["native_session_id"].is_null()),
+        "a project-only host must not start R: {instances}"
     );
     let text:SkillReadPage=serde_json::from_value(query(&host,"skill.read",json!({"working_directory":".","skill_ref":skill.skill_ref,"expected_digest":skill.skill_digest,"external_task_ref":"host-fixture-task","limit_bytes":65536})).await).unwrap();
     assert!(text.complete);

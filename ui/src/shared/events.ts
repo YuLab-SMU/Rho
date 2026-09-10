@@ -3,10 +3,12 @@ import type { MediaReference } from "../generated/MediaReference";
 export interface OperationChange {
   epoch: number; project: string; operationId: string; capability: string;
   status: string; cursor: number | null;
+  workspaceInstanceId?: string;
 }
 export interface DomainEvents {
   projectChanged: { epoch: number; project: string | null };
   sessionChanged: { epoch: number; project: string | null; session: string | null };
+  instanceChanged: { epoch: number; project: string | null; workspaceInstanceId: string; session: string | null; nativeEpoch: number };
   operationChanged: OperationChange;
   outputAppended: { epoch: number; project: string; operationId: string; media?: readonly MediaReference[] };
   fileSaved: { epoch: number; project: string; path: string; hash: string };

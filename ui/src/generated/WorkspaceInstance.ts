@@ -4,9 +4,10 @@ import type { RuntimeInstallationIdentity } from "./RuntimeInstallationIdentity"
 import type { RuntimeInstanceState } from "./RuntimeInstanceState";
 import type { RuntimeLaunchBinding } from "./RuntimeLaunchBinding";
 import type { RuntimeLifecycleBlocker } from "./RuntimeLifecycleBlocker";
+import type { RuntimeProtectionStatus } from "./RuntimeProtectionStatus";
 
 export type WorkspaceInstance = { workspace_instance_id: string, name: string, binding: RuntimeLaunchBinding, installation: RuntimeInstallationIdentity | null, native_session_id: string | null,
 /**
  * A clean restart changes this even when no objects have been created yet.
  */
-continuation_lineage_id: string, state: RuntimeInstanceState, policy: RuntimeEffectivePolicy, blockers: Array<RuntimeLifecycleBlocker>, last_error: string | null, last_lifecycle_operation_id: string | null, };
+continuation_lineage_id: string, state: RuntimeInstanceState, policy: RuntimeEffectivePolicy, blockers: Array<RuntimeLifecycleBlocker>, last_error: string | null, last_lifecycle_operation_id: string | null, protection: RuntimeProtectionStatus, };

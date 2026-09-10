@@ -149,6 +149,21 @@ impl ApplicationOwner {
             document_count: self.store.documents(scope, &window.window.window_id)?.len(),
         })
     }
+    /// Whether any Studio window of this project is online right now. The runtime
+    /// idle-release policy needs this one fact without paging the window catalog.
+    pub fn any_window_online(
+        &self,
+        context: &CallContext,
+        now: u64,
+    ) -> Result<bool, ApplicationError> {
+        let _lock = self.lock()?;
+        let scope = self.scope(context)?;
+        Ok(self
+            .store
+            .windows(&scope)?
+            .iter()
+            .any(|window| self.online(window, now)))
+    }
     pub fn windows(
         &self,
         context: &CallContext,

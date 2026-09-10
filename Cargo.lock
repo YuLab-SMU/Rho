@@ -2211,6 +2211,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
+ "fs4",
  "rho-adapter-skills",
  "rho-agent-client",
  "rho-application",

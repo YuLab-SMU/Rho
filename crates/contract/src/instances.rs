@@ -15,6 +15,8 @@ pub struct RuntimeLaunchBinding {
     pub environment_realization_id: Option<String>,
     #[serde(default)]
     pub library_path: Option<String>,
+    #[serde(default)]
+    pub checkpoint_helper_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
@@ -23,6 +25,14 @@ pub struct RuntimeInstallationIdentity {
     pub r_home: String,
     pub r_version: String,
     pub platform: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeProcessIdentity {
+    pub native_session_id: String,
+    pub pid: u32,
+    pub start_time: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
@@ -36,7 +46,10 @@ pub enum RuntimeContinuationMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
-pub enum CheckpointObjectSelection { AllEligible, Selected }
+pub enum CheckpointObjectSelection {
+    AllEligible,
+    Selected,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
@@ -66,7 +79,10 @@ impl Default for RuntimePolicy {
         Self {
             mode: RuntimeContinuationMode::AutoContinue,
             object_selection: CheckpointObjectSelection::AllEligible,
-            include_names: vec![], exclude_names: vec![], include_patterns: vec![], exclude_patterns: vec![],
+            include_names: vec![],
+            exclude_names: vec![],
+            include_patterns: vec![],
+            exclude_patterns: vec![],
             idle_delay_seconds: 30,
             automatic_interval_seconds: 300,
             automatic_payload_limit_bytes: 2 * 1024 * 1024 * 1024,
@@ -82,7 +98,9 @@ impl Default for RuntimePolicy {
     }
 }
 
-/// Missing values inherit; changing defaults does not rewrite explicit choices.
+/// An update replaces this scope's whole override set: a missing field inherits,
+/// so omitting one is how it is reset to the inherited value. Writing a narrower
+/// scope never rewrites an explicit choice already stored in a wider one.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct RuntimePolicyOverrides {
@@ -111,14 +129,32 @@ impl RuntimePolicyOverrides {
         macro_rules! inherit {
             ($($field:ident),+ $(,)?) => { $(if let Some(value) = self.$field { policy.$field = value; })+ };
         }
-        inherit!(mode, object_selection, idle_delay_seconds, automatic_interval_seconds,
-            automatic_payload_limit_bytes, capture_budget_ms, recent_checkpoints,
-            daily_retention_days, project_storage_limit_bytes, global_storage_limit_bytes,
-            minimum_free_bytes, max_running_instances);
-        if let Some(value) = &self.include_names { policy.include_names = value.clone(); }
-        if let Some(value) = &self.exclude_names { policy.exclude_names = value.clone(); }
-        if let Some(value) = &self.include_patterns { policy.include_patterns = value.clone(); }
-        if let Some(value) = &self.exclude_patterns { policy.exclude_patterns = value.clone(); }
+        inherit!(
+            mode,
+            object_selection,
+            idle_delay_seconds,
+            automatic_interval_seconds,
+            automatic_payload_limit_bytes,
+            capture_budget_ms,
+            recent_checkpoints,
+            daily_retention_days,
+            project_storage_limit_bytes,
+            global_storage_limit_bytes,
+            minimum_free_bytes,
+            max_running_instances
+        );
+        if let Some(value) = &self.include_names {
+            policy.include_names = value.clone();
+        }
+        if let Some(value) = &self.exclude_names {
+            policy.exclude_names = value.clone();
+        }
+        if let Some(value) = &self.include_patterns {
+            policy.include_patterns = value.clone();
+        }
+        if let Some(value) = &self.exclude_patterns {
+            policy.exclude_patterns = value.clone();
+        }
         if let Some(seconds) = self.idle_stop_without_windows_seconds {
             policy.idle_stop_without_windows_seconds = (seconds > 0).then_some(seconds);
         }
@@ -168,6 +204,7 @@ pub struct WorkspaceInstance {
     pub blockers: Vec<RuntimeLifecycleBlocker>,
     pub last_error: Option<String>,
     pub last_lifecycle_operation_id: Option<String>,
+    pub protection: crate::RuntimeProtectionStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
@@ -187,7 +224,9 @@ pub struct RuntimeInstancesArguments {
     #[serde(default = "default_instance_page")]
     pub limit: u32,
 }
-fn default_instance_page() -> u32 { 50 }
+fn default_instance_page() -> u32 {
+    50
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
@@ -205,7 +244,9 @@ pub struct CreateRuntimeInstance {
     #[serde(default)]
     pub policy: RuntimePolicyOverrides,
 }
-fn default_start() -> bool { true }
+fn default_start() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
@@ -251,9 +292,21 @@ pub struct RenameRuntimeInstance {
     pub name: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ConfigureRuntimeInstance {
+    pub workspace_instance_id: String,
+    pub expected_continuation_lineage_id: String,
+    pub binding: RuntimeLaunchBinding,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
-pub enum RuntimeSettingsScope { App, Project, Instance }
+pub enum RuntimeSettingsScope {
+    App,
+    Project,
+    Instance,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]

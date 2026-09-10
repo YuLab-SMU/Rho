@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 mod outputs;
 mod checkpoints;
-pub use checkpoints::CheckpointArchiveRuntime;
+pub use checkpoints::{CheckpointArchiveRuntime, verify_checkpoint_helper, recorded_process_alive};
 pub use outputs::OutputStore;
 
 use async_trait::async_trait;
@@ -61,6 +61,8 @@ struct ActiveInput {
 pub struct ArkRuntime {
     checkpoints: checkpoints::CheckpointStore,
     checkpoint_ready: bool,
+    native_process: Option<(u32,u64)>,
+    installation: Option<rho_contract::RuntimeInstallationIdentity>,
     client: Mutex<Option<Arc<Client>>>,
     session_id: String,
     project_root: String,
@@ -143,11 +145,14 @@ impl ArkRuntime {
         .map_err(|_| "Ark startup timed out".to_string())?
         .map_err(|error| error.to_string())?;
         drop(boot);
-        let helper = config.checkpoint_helper_path.as_ref().map(|p|checkpoints::verify_helper(p,&config.r_home)).transpose()?;
+        let native_process=match client.child_pid(){Some(pid)=>checkpoints::process_start(pid).await.map_err(|e|e.message)?.map(|start|(pid,start)),None=>None};
+        let helper = config.checkpoint_helper_path.as_ref().map(|p|checkpoints::verify_checkpoint_helper(p,&config.r_home)).transpose()?;
         let checkpoint_store = checkpoints::CheckpointStore::new(&config.data_root,&project)?;
-        let runtime = Self {
+        let mut runtime = Self {
             checkpoints:checkpoint_store,
             checkpoint_ready:helper.is_some(),
+            native_process,
+            installation:None,
             client: Mutex::new(Some(Arc::new(client))),
             session_id,
             project_root: project.to_string_lossy().into_owned(),
@@ -174,8 +179,10 @@ impl ArkRuntime {
             let manifest_path=path.parent().unwrap().join("manifest.json");
             format!("m <- jsonlite::fromJSON({}); if (!identical(as.character(getRversion()),m$r_version) || !identical(R.version$platform,m$platform)) stop('Checkpoint native provider ABI differs'); e$rho_checkpoint_initialize({});",quote(&manifest_path.to_string_lossy()).unwrap(),quote(&path.to_string_lossy()).unwrap())
         }).unwrap_or_default();
+        let handshake=runtime.data_root.join("installation-handshake.json");
+        let handshake_code=format!("jsonlite::write_json(list(r_home=normalizePath(R.home(),winslash='/',mustWork=TRUE),r_version=as.character(getRversion()),platform=R.version$platform),{},auto_unbox=TRUE);",quote(&handshake.to_string_lossy())?);
         let bootstrap = format!(
-            "local({{ requireNamespace('jsonlite'); requireNamespace('tools'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); {library_setup} {helper_setup} invisible(TRUE) }})",
+            "local({{ requireNamespace('jsonlite'); requireNamespace('tools'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); {library_setup} {helper_setup} {handshake_code} invisible(TRUE) }})",
             quote(&format!(
                 "{BRIDGE}\n{QUERIES}\n{PACKAGES}\n{OBJECTS}\n{PACKAGE_INDEX}\n{TOOLS}\n{CHECKPOINTS}"
             ))?,
@@ -188,6 +195,11 @@ impl ArkRuntime {
         if let Some(error) = bootstrap_output.protocol_error {
             return Err(format!("Ark bridge initialization failed: {error}"));
         }
+        let bytes=std::fs::read(&handshake).map_err(|e|e.to_string())?;
+        if bytes.len()>8192{return Err("Native R installation handshake exceeded limit".into());}
+        let installation:rho_contract::RuntimeInstallationIdentity=serde_json::from_slice(&bytes).map_err(|e|e.to_string())?;
+        if Path::new(&installation.r_home).canonicalize().map_err(|e|e.to_string())? != config.r_home.canonicalize().map_err(|e|e.to_string())? {return Err("Ark loaded a different R installation from its launch binding".into());}
+        runtime.installation=Some(installation);
         Ok(runtime)
     }
 
@@ -433,8 +445,17 @@ struct BridgeRequest<'a> {
 #[async_trait]
 impl WorkspaceRuntime for ArkRuntime {
     fn checkpoint_available(&self)->bool { self.checkpoint_ready }
+    fn process_identity(&self)->Option<rho_contract::RuntimeProcessIdentity>{self.native_process.map(|(pid,start_time)|rho_contract::RuntimeProcessIdentity {native_session_id:self.session_id.clone(),pid,start_time})}
+    fn installation_identity(&self)->Option<rho_contract::RuntimeInstallationIdentity>{self.installation.clone()}
     async fn shutdown(&self)->Result<(),WorkspaceRuntimeError>{self.shutdown_confirmed().await}
+    async fn native_process_alive(&self)->Result<Option<bool>,WorkspaceRuntimeError>{
+        let Some((pid,start))=self.native_process else{return Ok(None)};
+        Ok(Some(checkpoints::process_start(pid).await?==Some(start)))
+    }
     async fn checkpoint_capture(&self,op:&Operation,args:&rho_contract::CheckpointCaptureArguments,cancel:watch::Receiver<bool>)->Result<rho_workspace::CheckpointArtifact,WorkspaceRuntimeError>{self.capture_checkpoint(op,args,cancel).await}
+    async fn checkpoint_artifact_lease(&self,id:&rho_contract::OperationId)->Result<Box<dyn rho_workspace::CheckpointArtifactLease>,WorkspaceRuntimeError>{Ok(self.checkpoints.artifact_lease(id).await)}
+    async fn checkpoint_original_manifest(&self,id:&rho_contract::OperationId)->Result<Option<rho_contract::CheckpointManifest>,WorkspaceRuntimeError>{self.checkpoints.original_manifest(id).map_err(before)}
+    async fn checkpoint_adopt(&self,source:&rho_contract::CheckpointManifest,adopted:&rho_contract::CheckpointManifest)->Result<(),WorkspaceRuntimeError>{let store=self.checkpoints.clone();let source=source.clone();let adopted=adopted.clone();tokio::task::spawn_blocking(move||store.adopt(&source,&adopted)).await.map_err(before)?.map_err(before)}
     async fn checkpoint_publish(&self,manifest:&rho_contract::CheckpointManifest)->Result<(),WorkspaceRuntimeError>{self.publish_checkpoint(manifest)}
     async fn checkpoint_candidates(&self)->Result<Vec<rho_contract::CheckpointManifest>,WorkspaceRuntimeError>{let store=self.checkpoints.clone();tokio::task::spawn_blocking(move||store.candidates()).await.map_err(before)?.map_err(before)}
     async fn checkpoint_control_evidence(&self,id:&rho_contract::OperationId)->Result<Vec<rho_workspace::CheckpointControlEvidence>,WorkspaceRuntimeError>{self.checkpoints.controls(id).map_err(before)}
@@ -442,7 +463,7 @@ impl WorkspaceRuntime for ArkRuntime {
     fn checkpoint_remove_payload(&self,id:&rho_contract::OperationId)->Result<(),String>{self.remove_checkpoint_payload(id)}
     async fn checkpoint_present(&self,manifest:&rho_contract::CheckpointManifest)->Result<bool,WorkspaceRuntimeError>{self.checkpoints.present(manifest).map_err(before)}
     async fn checkpoint_verify(&self,manifest:&rho_contract::CheckpointManifest)->Result<bool,WorkspaceRuntimeError>{let store=self.checkpoints.clone();let manifest=manifest.clone();tokio::task::spawn_blocking(move||store.verify(&manifest)).await.map_err(before)?.map_err(before)}
-    async fn checkpoint_restore(&self,op:&Operation,manifest:&rho_contract::CheckpointManifest,cancel:watch::Receiver<bool>)->Result<Vec<String>,WorkspaceRuntimeError>{self.restore_checkpoint(op,manifest,cancel).await}
+    async fn checkpoint_restore(&self,op:&Operation,manifest:&rho_contract::CheckpointManifest,cancel:watch::Receiver<bool>)->Result<rho_contract::CheckpointNativeRestoreReport,WorkspaceRuntimeError>{self.restore_checkpoint(op,manifest,cancel).await}
 
     fn begin_shutdown(&self) {
         self.closing
@@ -527,6 +548,13 @@ impl WorkspaceRuntime for ArkRuntime {
         args: &rho_contract::ReadOutputArguments,
     ) -> Result<rho_contract::OutputPage, String> {
         self.outputs.read(args)
+    }
+    fn execution_state(&self)->String {
+        let client=self.client.lock().unwrap_or_else(|e|e.into_inner());
+        match client.as_ref() {
+            None=>"unavailable",
+            Some(client)=>match *client.watch_status().borrow(){KernelStatus::Starting=>"starting",KernelStatus::Idle=>"idle",KernelStatus::Busy=>"busy",KernelStatus::Exited=>"unavailable"},
+        }.into()
     }
     fn runtime_status(&self) -> rho_contract::RuntimeStatus {
         let (state, pid) = match self.client() {

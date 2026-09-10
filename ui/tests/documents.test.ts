@@ -94,6 +94,19 @@ describe("document byte and save discipline", () => {
     expect(run).toHaveBeenCalledWith("x <- 2\n", { view_id: d().id, kind: "file", label: "中文 文件.R" });
     expect(d().raw).toBe("x <- 999\n"); expect(d().dirty).toBe(true);
   });
+  it("captures the R destination before saving and preserves it when the user selects another session", async () => {
+    const f = fixture(); f.documents.replace(f.d(), "x <- 2\n");
+    const target = Object.freeze({ workspaceInstanceId: "main", nativeSessionId: "r-main", continuationLineageId: "lineage-main" });
+    f.ports.captureTarget = () => target;
+    f.scope({ workspaceInstanceId: "main", session: "r-main", nativeEpoch: 1 });
+    f.invoke.mockImplementation(async () => {
+      f.scope({ workspaceInstanceId: "scratch", session: "r-scratch", nativeEpoch: 1 });
+      return saved(await sha256("x <- 2\n"));
+    });
+    await f.documents.runFile(f.d());
+    expect(f.run).toHaveBeenCalledWith("x <- 2\n", expect.objectContaining({ kind: "file" }), target);
+    expect(f.d().runningFile).toBe(false); expect(f.d().dirty).toBe(false);
+  });
   it("keeps concurrent edits when formatting returns and offers the captured comparison", async () => {
     const { documents, d, invoke } = fixture("x=1");
     invoke.mockImplementation(async () => {

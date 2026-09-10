@@ -22,6 +22,7 @@ async fn a_project_has_one_host_even_when_database_paths_differ() {
         data_root: temporary.path().join("must-not-create-runtime"),
         execution_timeout: Duration::from_secs(10),
         library_path: None,
+        checkpoint_helper_path: None,
     };
     assert!(matches!(
         NextHost::open_ark(&second_database, ark).await,
