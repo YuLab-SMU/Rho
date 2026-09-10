@@ -37,6 +37,12 @@ A workspace operation record's console-state next read now carries the instance 
 from that record's own normalized arguments; the published link was otherwise rejected
 and the Console showed a contract error instead of the run's output.
 
+Continuation takes an explicit `start_empty` choice, which is the remedy its refusal
+names and which begins a new generation exactly like a clean restart, so abandoned
+objects cannot be resurrected automatically. A candidate process launched only to
+restore into is ended when restoration turns out to be impossible; it was previously
+left alive, where it blocked that remedy and was then orphaned at exit.
+
 Studio renders the approved daily entry: the status-bar R disclosure names the target
 session, reports its latest recovery copy and lists the other sessions with their
 state, and the editor toolbar carries a `Run in session` picker beside Run, hidden
@@ -54,7 +60,9 @@ including the real-R multi-instance restore and clean-restart case; and
 
 Also passed: `cargo test --workspace --locked -- --test-threads=1` (275 tests),
 `npm run generate`, `build`, `check` and `typecheck --prefix ui`,
-`npm run test --prefix ui` (356 tests), `scripts/governance.mjs check|generate|impact`,
+`npm run test --prefix ui` (356 tests), `npm run test:browser --prefix ui`
+(42 Playwright specs, with Ark and the recovery component beside the built binary),
+`scripts/governance.mjs check|generate|impact`,
 `test-governance.mjs`, `check-architecture.mjs`, `vendor-jet.mjs check`,
 `test-vendor-jet.mjs`, `check-frontend-boundaries.mjs`,
 `test-frontend-boundaries.mjs`, `test-mcp.mjs` with and without `--real-r`,
@@ -62,6 +70,13 @@ Also passed: `cargo test --workspace --locked -- --test-threads=1` (275 tests),
 `test-process-recovery.mjs`, `test-remote-protocol.mjs`,
 `test-agent-task-recovery.mjs`, `test-agent-interface.mjs --self-test` and
 `test-pack-agent-evidence.py`.
+
+The whole recovery loop was also verified by hand against a real launched Workbench:
+with the native component installed beside Ark, `capture_available` is true, an
+explicit capture reported `complete_eligible_graph` with two objects and none skipped,
+SIGINT ended the Host, and the reopened Host auto-continued into a **new native session
+inside the same continuation lineage** with the objects genuinely present again
+(`length(a) == 5`, `nrow(b) == 3`, `identical(b$y, letters[1:3])` true).
 
 `scripts/test-r-checkpoints.mjs` is now the governance check `system.r-checkpoints`,
 and `scripts/test-real-r.mjs` now runs the real-R multi-instance acceptance.
@@ -76,25 +91,17 @@ and `scripts/test-real-r.mjs` now runs the real-R multi-instance acceptance.
   restore, environment-mismatch and disconnect states (R07), the restart, stop and
   quit panels (R08), the advanced `Runtime & recovery` settings (R09), and the
   narrow-width layouts and new-session dialog (R10).
-- `npm run test:browser --prefix ui` passes 40 of 42 specs once an `ark` sits beside
-  the built binary. The two failures are both host-restart specs, and both report the
-  same cause: `capture_available` is false, the previous session had activity, so no
-  recovery copy exists in its lineage, and auto-continue correctly refuses with
-  `recovery_required` rather than silently starting empty. The specs still expect the
-  pre-instance behaviour where a restart just brought R back.
-- Nothing delivers the native checkpoint component to where a launched Workbench looks
-  for it — `<ark directory>/recovery-components/<r_version>-<platform>/`, or an
-  explicit `--checkpoint-helper`. `scripts/test-r-checkpoints.mjs` builds it under
-  `target/rho-checkpoint/`, which no launch path reads. So in ordinary use no recovery
-  copy is ever written, and every restart after activity lands in `Needs attention`.
-  This is the highest-priority gap before recovery can be claimed as working.
-- The refusal tells the user to "start an empty session or select an earlier recovery
-  point", but `ContinueRuntimeInstance` carries only the instance and its lineage, so
-  the contract offers no way to start empty. R07's `Start empty` button needs it.
-- The new status disclosure and target picker have no browser or real-R visual
-  acceptance at normal, wide and constrained widths. The picker's subtitle reads
-  `Managed environment` because no environment name is published, while R05 shows a
-  named environment.
+- The native recovery component is acquired per machine by an explicit operator
+  command (`scripts/bootstrap-recovery-component.mjs`) and is not part of any
+  packaging or first-run path, so a freshly installed Rho writes no recovery copies
+  until someone builds it for that R. Nothing gates the bootstrap script, and the
+  capture → restart → auto-restore loop in a launched Workbench was verified by hand
+  once rather than by an automated check.
+- The browser suite drives a single session, so the multi-session surfaces — the
+  target picker, the other-sessions list and the recovery-copy rows in the status
+  disclosure — have no automated coverage and no visual acceptance at normal, wide
+  and constrained widths. The picker's subtitle reads `Managed environment` because
+  no environment name is published, while R05 shows a named environment.
 - Not measured: the editor-input and added-wait latency thresholds, multi-platform and
   long-run behaviour, and destructive-failure acceptance.
 - Binding two genuinely different R installations stays opt-in and unexercised; it

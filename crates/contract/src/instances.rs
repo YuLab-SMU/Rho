@@ -253,6 +253,10 @@ fn default_start() -> bool {
 pub struct ContinueRuntimeInstance {
     pub workspace_instance_id: String,
     pub expected_continuation_lineage_id: String,
+    /// Begin an empty generation instead of restoring. Never inferred: automatic
+    /// continuation refuses when the objects it would need are not recoverable.
+    #[serde(default)]
+    pub start_empty: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]

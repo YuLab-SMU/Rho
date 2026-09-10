@@ -271,10 +271,10 @@ export class RuntimeSessions extends Model<RuntimeSessionsSnapshot> {
   createInstance(name: string, binding: RuntimeLaunchBinding, options: { start?: boolean; selectWhenReady?: boolean; policy?: Partial<RuntimePolicyOverrides> } = {}) {
     return this.command("runtime.create_instance", { name, binding, start: options.start ?? true, policy: options.policy ?? {} }, undefined, options.selectWhenReady ?? true);
   }
-  continueInstance(id: string) {
+  continueInstance(id: string, startEmpty = false) {
     const value = this.instancesValue.get(id);
     if (!value) throw new Error("Inspect the R session before continuing it");
-    return this.command("runtime.continue_instance", { workspace_instance_id: id, expected_continuation_lineage_id: value.continuation_lineage_id }, id);
+    return this.command("runtime.continue_instance", { workspace_instance_id: id, expected_continuation_lineage_id: value.continuation_lineage_id, start_empty: startEmpty }, id);
   }
   stopInstance(target: RuntimeTarget, discardUnsavedObjects = false) {
     return this.command("runtime.stop_instance", { workspace_instance_id: target.workspaceInstanceId,

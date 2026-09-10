@@ -21,6 +21,7 @@ Sources:
 - `runtime/**`
 - `scripts/bootstrap-ark-*.ps1`
 - `scripts/bootstrap-ark-*.sh`
+- `scripts/bootstrap-recovery-component.mjs`
 - `scripts/test-bootstrap-ark-*.sh`
 
 Checks:

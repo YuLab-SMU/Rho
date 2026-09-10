@@ -1686,7 +1686,11 @@ impl InstanceOwner {
                     ));
                 }
             } else if stored.activity > 0 {
-                return Err(OperationError::Unavailable("The previous session had activity but no available checkpoint in this continuation lineage. Start an empty session or select an earlier recovery point explicitly".into()));
+                // This candidate was launched only to restore into it and was never
+                // published for analysis, so keeping it alive would only block the
+                // explicit remedy this refusal is about to offer.
+                self.release_candidate(&stored.id, &live).await;
+                return Err(OperationError::Unavailable("The previous session had activity but no available checkpoint in this continuation lineage. Continue with start_empty to begin an empty session, or restore an earlier recovery point explicitly".into()));
             }
         }
         self.change_state(
@@ -1696,6 +1700,22 @@ impl InstanceOwner {
             restoration_notice,
         )?;
         self.instance(&stored.id)
+    }
+    /// End a candidate that was launched only to restore into it. Its receipt is
+    /// cleared only once termination is confirmed, so an uncertain stop still leaves
+    /// the evidence a later Host must check before starting a replacement.
+    async fn release_candidate(&self, id: &str, live: &InstanceLive) {
+        let stopped = live.runtime.shutdown().await.is_ok();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(slot) = state.instances.get_mut(id) {
+            slot.live = None;
+            slot.maintenance = None;
+            if stopped {
+                slot.stored.process = None;
+                slot.stored.launch_unconfirmed = false;
+            }
+        }
+        let _ = self.persist_locked(&mut state);
     }
     async fn create(
         &self,
@@ -1857,7 +1877,10 @@ impl InstanceOwner {
             return Err(error);
         }
         let mode = self.settings(Some(&stored.id))?.effective.value.mode;
-        if mode != RuntimeContinuationMode::AutoContinue {
+        // Starting empty begins a new generation exactly like a clean restart: the
+        // abandoned objects stay historical and only an explicit restore can return them.
+        let empty = args.start_empty || mode != RuntimeContinuationMode::AutoContinue;
+        if empty {
             stored.lineage = format!("lineage_{}", operation.operation_id.as_str());
             stored.activity = 0;
             let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -1872,12 +1895,7 @@ impl InstanceOwner {
             None,
         )?;
         let result = self
-            .launch_candidate(
-                operation,
-                &stored,
-                prepared,
-                mode == RuntimeContinuationMode::AutoContinue,
-            )
+            .launch_candidate(operation, &stored, prepared, !empty)
             .await;
         if let Err(error) = &result {
             self.change_state(
@@ -3191,6 +3209,44 @@ mod tests {
         assert_eq!(drained.state, RuntimeInstanceState::Stopped);
         assert!(drained.native_session_id.is_none());
         assert_eq!(launcher.launches.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn automatic_continuation_refuses_to_abandon_objects_it_cannot_restore() {
+        let (_temp, host, _) = fixture().await;
+        let ran = invoke(&host, "run", "workspace.run_r", json!({"workspace_instance_id":"main","code":"x <- 1"})).await;
+        assert_eq!(ran.status, OperationStatus::Succeeded, "{:?}", ran.error);
+        let before = main(&host);
+        let stopped = invoke(&host, "stop", "runtime.stop_instance", json!({"workspace_instance_id":"main","expected_native_session_id":before.native_session_id.unwrap(),"discard_unsaved_objects":true})).await;
+        assert_eq!(stopped.status, OperationStatus::Succeeded, "{:?}", stopped.error);
+        // This fixture runtime reports no native capture, so the objects are gone and
+        // continuing must say so instead of quietly presenting an empty session.
+        let refused = invoke(&host, "continue", "runtime.continue_instance", json!({"workspace_instance_id":"main","expected_continuation_lineage_id":before.continuation_lineage_id})).await;
+        assert_eq!(refused.status, OperationStatus::Failed);
+        assert!(
+            refused.error.unwrap().contains("start_empty"),
+            "the refusal must name the explicit remedy"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_explicit_empty_start_opens_a_new_continuation_generation() {
+        let (_temp, host, _) = fixture().await;
+        let ran = invoke(&host, "run", "workspace.run_r", json!({"workspace_instance_id":"main","code":"x <- 1"})).await;
+        assert_eq!(ran.status, OperationStatus::Succeeded, "{:?}", ran.error);
+        let before = main(&host);
+        let stopped = invoke(&host, "stop", "runtime.stop_instance", json!({"workspace_instance_id":"main","expected_native_session_id":before.native_session_id.unwrap(),"discard_unsaved_objects":true})).await;
+        assert_eq!(stopped.status, OperationStatus::Succeeded, "{:?}", stopped.error);
+        let empty = invoke(&host, "start-empty", "runtime.continue_instance", json!({"workspace_instance_id":"main","expected_continuation_lineage_id":before.continuation_lineage_id,"start_empty":true})).await;
+        assert_eq!(empty.status, OperationStatus::Succeeded, "{:?}", empty.error);
+        let after = main(&host);
+        assert_eq!(after.state, RuntimeInstanceState::Ready);
+        assert_ne!(
+            after.continuation_lineage_id, before.continuation_lineage_id,
+            "an empty start must not inherit the generation it abandoned"
+        );
+        let resumed = invoke(&host, "run-after-empty", "workspace.run_r", json!({"workspace_instance_id":"main","code":"1 + 1"})).await;
+        assert_eq!(resumed.status, OperationStatus::Succeeded, "{:?}", resumed.error);
     }
 
     #[tokio::test]

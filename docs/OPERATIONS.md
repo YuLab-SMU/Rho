@@ -44,6 +44,17 @@ are not installed automatically. Optional Ark acquisition scripts live under
 `scripts/bootstrap-ark-*`; they retain upstream notices and return an executable
 path to configure explicitly.
 
+Recovery copies need one more explicit acquisition: the private native component
+built for the exact R that will use it. A launched Workbench discovers it at
+`<ark directory>/recovery-components/<r_version>-<platform>/`, or accepts an absolute
+path through `--checkpoint-helper`. Install it with
+`node scripts/bootstrap-recovery-component.mjs --ark /absolute/path/to/ark [--r /absolute/path/to/R]`,
+which builds through `scripts/test-r-checkpoints.mjs`, rewrites the manifest to the
+installed location and publishes the component last so a partial copy is never
+loadable. Without it no recovery copy is written, so a session that had activity
+returns as `Needs attention` instead of continuing. Opening a catalog or capturing a
+copy never invokes a compiler or installs anything.
+
 A managed project Host owns one R binding per session, so selecting R here records
 the default used by sessions created afterwards. It never drains or replaces the
 running Host; running sessions keep their own binding and memory. Asking this

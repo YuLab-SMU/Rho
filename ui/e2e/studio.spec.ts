@@ -84,6 +84,16 @@ test.beforeAll(async () => {
   await mkdir(join(directory, "中文项目"));
   await startHost();
 });
+test.beforeEach(async () => {
+  // The suite shares one Host and the restart specs leave Main in recovery on purpose,
+  // because automatic continuation refuses to abandon unrestorable objects. Make that
+  // choice here instead of letting one spec's outcome decide the next one's.
+  const catalog = await queryNative("runtime.instances", { limit: 10 });
+  const main = catalog.data?.instances?.find(
+    (instance: { workspace_instance_id: string }) => instance.workspace_instance_id === "main",
+  );
+  if (main && main.state !== "ready") await continueEmpty();
+});
 test.afterAll(async () => {
   await stopHost();
   if (directory) await rm(directory, { recursive: true, force: true });
@@ -112,6 +122,13 @@ async function openFile(page: import("@playwright/test").Page, path: string) {
     .click();
 }
 test.afterEach(async () => {
+  // A session that is not ready has no queue to resume; the restart specs leave Main
+  // in recovery on purpose, so cleanup must not fail a spec that already passed.
+  const catalog = await queryNative("runtime.instances", { limit: 10 });
+  const main = catalog.data?.instances?.find(
+    (instance: { workspace_instance_id: string }) => instance.workspace_instance_id === "main",
+  );
+  if (main?.state !== "ready") return;
   const state = (await queryNative("workspace.console_state")).data;
   if (state?.pause) {
     await api("/api/host", {
@@ -535,6 +552,39 @@ async function queryNative(id: string, args: unknown = {}) {
   return reply.result;
 }
 
+// A restarted Host leaves Main in recovery when the previous session had activity
+// that no recovery copy covers; continuing it empty is an explicit choice.
+async function continueEmpty() {
+  const info = await (await api("/api/info")).json();
+  const catalog = await queryNative("runtime.instances", { limit: 10 });
+  const main = catalog.data.instances.find(
+    (instance: { workspace_instance_id: string }) => instance.workspace_instance_id === "main",
+  );
+  expect(main, JSON.stringify(catalog.data.instances)).toBeTruthy();
+  const response = await api("/api/host", {
+    project_root: info.project_root,
+    frame: {
+      id: crypto.randomUUID(),
+      request: {
+        method: "invoke",
+        params: {
+          client_request_id: crypto.randomUUID(),
+          capability: { id: "runtime.continue_instance", version: 1 },
+          arguments: {
+            workspace_instance_id: "main",
+            expected_continuation_lineage_id: main.continuation_lineage_id,
+            start_empty: true,
+          },
+          preconditions: [],
+        },
+      },
+    },
+  });
+  const reply = await response.json();
+  expect(reply.ok, reply.error).toBe(true);
+  expect(reply.result.status, JSON.stringify(reply.result.error)).toBe("succeeded");
+}
+
 test("R configuration records the default without replacing a managed session", async ({
   page,
 }) => {
@@ -605,6 +655,7 @@ test("development assets refresh without ending the R session", async ({
   );
   await stopHost();
   await startHost(["--dev-assets", assets]);
+  await continueEmpty();
   await page.goto(url);
   await page
     .getByRole("textbox", { name: "Console Input" })

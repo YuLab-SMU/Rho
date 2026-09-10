@@ -63,6 +63,6 @@ it("names the execution target and continues a stopped session chosen from it", 
   expect(model.selectedId).toBe("validation");
   // Choosing a stopped session continues it, so the next Run has a live target.
   expect(invoke).toHaveBeenCalledExactlyOnceWith("runtime.continue_instance",
-    { workspace_instance_id: "validation", expected_continuation_lineage_id: "lineage-validation" });
+    { workspace_instance_id: "validation", expected_continuation_lineage_id: "lineage-validation", start_empty: false });
   expect(state.errors).toEqual([]);
 });
