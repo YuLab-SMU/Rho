@@ -124,6 +124,7 @@ test.afterEach(async () => {
             client_request_id: crypto.randomUUID(),
             capability: { id: "workspace.resume_queue", version: 1 },
             arguments: {
+              workspace_instance_id: "main",
               session_id: state.session_id,
               pause_id: state.pause.id,
             },
@@ -509,25 +510,32 @@ async function api(path: string, body?: unknown) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
+// A managed Host routes every live R request to an explicit instance.
+const INSTANCE_FREE = ["workspace.list_outputs", "workspace.read_output", "workspace.output_events"];
+function nativeArguments(id: string, args: unknown) {
+  return id.startsWith("workspace.") && !INSTANCE_FREE.includes(id)
+    ? { workspace_instance_id: "main", ...(args as object) }
+    : args;
+}
 async function queryNative(id: string, args: unknown = {}) {
   const info = await (await api("/api/info")).json();
-  return (
-    await (
-      await api("/api/host", {
-        project_root: info.project_root,
-        frame: {
-          id: crypto.randomUUID(),
-          request: {
-            method: "query_snapshot",
-            params: { capability: { id, version: 1 }, arguments: args },
-          },
-        },
-      })
-    ).json()
-  ).result;
+  const response = await api("/api/host", {
+    project_root: info.project_root,
+    frame: {
+      id: crypto.randomUUID(),
+      request: {
+        method: "query_snapshot",
+        params: { capability: { id, version: 1 }, arguments: nativeArguments(id, args) },
+      },
+    },
+  });
+  expect(response.ok).toBe(true);
+  const reply = await response.json();
+  expect(reply.ok, reply.error).toBe(true);
+  return reply.result;
 }
 
-test("R configuration rejects active requests and MCP sessions, then explicitly restarts", async ({
+test("R configuration records the default without replacing a managed session", async ({
   page,
 }) => {
   await page.goto(url);
@@ -542,61 +550,7 @@ test("R configuration rejects active requests and MCP sessions, then explicitly 
       .locator(".console-transcript")
       .getByText("switch fence started", { exact: true }),
   ).toBeVisible({ timeout: 2500 });
-  expect(
-    (
-      await api("/api/r", {
-        selection: config.current.selection,
-        end_session: true,
-      })
-    ).status,
-  ).toBe(409);
-  await expect
-    .poll(
-      async () => (await queryNative("workspace.console_state")).data.current,
-    )
-    .toBeNull();
-  const parsed = new URL(url),
-    authorization =
-      "Bearer " + new URLSearchParams(parsed.hash.slice(1)).get("token");
-  const headers = {
-    Authorization: authorization,
-    "Content-Type": "application/json",
-    Accept: "application/json, text/event-stream",
-  };
-  const initialize = await fetch(parsed.origin + "/mcp", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "2025-11-25",
-        capabilities: {},
-        clientInfo: { name: "studio-test", version: "1" },
-      },
-    }),
-  });
-  expect(initialize.ok).toBe(true);
-  const session = initialize.headers.get("mcp-session-id");
-  expect(session).toBeTruthy();
-  await initialize.body?.cancel();
-  expect(
-    (
-      await api("/api/r", {
-        selection: config.current.selection,
-        end_session: true,
-      })
-    ).status,
-  ).toBe(409);
-  await fetch(parsed.origin + "/mcp", {
-    method: "DELETE",
-    headers: {
-      ...headers,
-      "mcp-session-id": session!,
-      "MCP-Protocol-Version": "2025-11-25",
-    },
-  });
+  // An unusable candidate is rejected by probe before anything is recorded.
   expect(
     (
       await api("/api/r", {
@@ -604,23 +558,36 @@ test("R configuration rejects active requests and MCP sessions, then explicitly 
           ...config.current.selection,
           executable: "/missing/studio-R",
         },
-        end_session: true,
+        end_session: false,
       })
     ).status,
   ).toBe(400);
-  expect((await queryNative("workspace.runtime_status")).data.session_id).toBe(
-    before.data.session_id,
-  );
-  const changed = await (
+  // Ending a session is an explicit per-instance action, never a side effect of
+  // choosing the default R, and running work does not change that answer.
+  const refused = await (
     await api("/api/r", {
       selection: config.current.selection,
       end_session: true,
     })
   ).json();
+  expect(refused.error).toContain("R Sessions");
+  // Recording the default leaves the running session and its memory untouched.
+  const changed = await (
+    await api("/api/r", {
+      selection: config.current.selection,
+      end_session: false,
+    })
+  ).json();
   expect(changed.error).toBeNull();
-  expect(
-    (await queryNative("workspace.runtime_status")).data.session_id,
-  ).not.toBe(before.data.session_id);
+  expect(changed.source).toBe("saved");
+  expect((await queryNative("workspace.runtime_status")).data.session_id).toBe(
+    before.data.session_id,
+  );
+  await expect
+    .poll(
+      async () => (await queryNative("workspace.console_state")).data.current,
+    )
+    .toBeNull();
 });
 
 test("development assets refresh without ending the R session", async ({
@@ -922,7 +889,7 @@ async function invokeNative(code: string, accepted = false) {
         params: {
           client_request_id: crypto.randomUUID(),
           capability: { id: "workspace.run_r", version: 1 },
-          arguments: { code, output_mode: "console" },
+          arguments: { workspace_instance_id: "main", code, output_mode: "console" },
           preconditions: [],
           return_after_acceptance: accepted,
         },

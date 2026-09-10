@@ -78,6 +78,8 @@ Native/transport verification:
 | Script | Scope and prerequisites |
 | --- | --- |
 | `test-real-r.mjs` | Installed Ark and R with jsonlite, rlang, lintr and styler; real R, progressive object/package queries, non-forcing inspections, cancellation and code tools |
+| `test-r-checkpoints.mjs` | Installed R with jsonlite; builds the private native checkpoint component for that R, then exercises the classifier and a capture/cold-restore round trip in disposable `--vanilla` processes. `--print-library` prints the component path for `RHO_CHECKPOINT_HELPER` |
+| `npm run test:browser --prefix ui` | Current `cargo build --locked` binary, installed R, and an `ark` **beside that binary**. The specs launch the workbench without R flags, so R comes from discovery, which looks next to the running executable and then on PATH. With no ark the Studio opens with no R and most specs fail on disabled run controls instead of naming the missing prerequisite |
 | `test-workbench.mjs`, `test-mcp.mjs` | Real local transports; add `--real-r` for Ark/R and Environment observations |
 | `test-environment.mjs` | R/Ark with pak, renv, ps and jsonlite; installs small local fixtures into temporary libraries, checks user-library preservation and recovery |
 | `test-process-recovery.mjs` | R-free native process crash/reconciliation |

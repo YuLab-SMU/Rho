@@ -225,6 +225,9 @@ async fn select_project(
     hosting.profile = profile;
     match reserved.open_deferred().await {
         Ok(host) => {
+            // Opening the project makes files and drafts available; attaching its
+            // default R session is a separate lifecycle action.
+            let _ = host.continue_default_instance().await;
             hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
             Json(hosting.info()).into_response()
         }
@@ -499,15 +502,19 @@ pub async fn serve_with_assets(
         .transpose()?;
     let selected = if let Some(project) = project {
         let root = project_root(&project.to_string_lossy())?;
+        let host = match profile.open_deferred(&root).await {
+            Ok(host) => host,
+            Err(error) => {
+                r_configuration.error = Some(format!("R startup failed: {error}"));
+                profile.runtime = rho_host::RuntimeConfiguration::Project;
+                profile.open_deferred(&root).await?
+            }
+        };
+        // Opening the project makes files and drafts available; attaching its
+        // default R session is a separate lifecycle action.
+        let _ = host.continue_default_instance().await;
         Some(SelectedHost {
-            host: Arc::new(match profile.open_deferred(&root).await {
-                Ok(host) => host,
-                Err(error) => {
-                    r_configuration.error = Some(format!("R startup failed: {error}"));
-                    profile.runtime = rho_host::RuntimeConfiguration::Project;
-                    profile.open_deferred(&root).await?
-                }
-            }),
+            host: Arc::new(host),
             root,
             connections: Arc::default(),
             agents: Arc::default(),

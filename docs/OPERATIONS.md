@@ -25,8 +25,10 @@ target/debug/rho --database /absolute/path/to/state.sqlite \
 Global flags precede the subcommand. `--url-file` must name a new file; otherwise
 the private URL is printed to stdout. The server listens on `127.0.0.1` using an
 ephemeral port, or the workbench's explicit `--port`. Keep the launch token private.
-Unix URL files use mode 0600. Ctrl-C stops the server and drains accepted work;
-closing a browser page does not cancel it.
+Unix URL files use mode 0600. Ctrl-C stops the server, drains accepted work and then
+ends the R processes this Host started; an exiting Host cannot leave them reachable,
+and they are not reattached by a later one. Closing a browser page cancels nothing and
+leaves R running.
 
 ## Select R
 

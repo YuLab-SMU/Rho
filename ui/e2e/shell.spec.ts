@@ -25,9 +25,13 @@ async function api(path: string, body?: unknown) {
   const parsed = new URL(url), token = new URLSearchParams(parsed.hash.slice(1)).get("token");
   return fetch(parsed.origin + path, { method: body === undefined ? "GET" : "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 }
+// A managed Host routes every live R request to an explicit instance.
+const INSTANCE_FREE = ["workspace.list_outputs", "workspace.read_output", "workspace.output_events"];
+const nativeArguments = (id: string, args: unknown) => id.startsWith("workspace.") && !INSTANCE_FREE.includes(id)
+  ? { workspace_instance_id: "main", ...(args as object) } : args;
 async function queryNative(id: string, args: unknown = {}) {
   const info = await (await api("/api/info")).json();
-  const response = await api("/api/host", { project_root: info.project_root, frame: { id: crypto.randomUUID(), request: { method: "query_snapshot", params: { capability: { id, version: 1 }, arguments: args } } } });
+  const response = await api("/api/host", { project_root: info.project_root, frame: { id: crypto.randomUUID(), request: { method: "query_snapshot", params: { capability: { id, version: 1 }, arguments: nativeArguments(id, args) } } } });
   expect(response.ok).toBe(true);
   const reply = await response.json();
   expect(reply.ok, reply.error).toBe(true);

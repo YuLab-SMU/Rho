@@ -30,6 +30,13 @@ running sessions keep their binding and memory; asking it to end a session is re
 and points at stopping that session individually. A running instance no longer holds
 project file observations, because each instance owns its lane.
 
+A deferred open deliberately leaves R stopped, so the Workbench now performs the
+continuation as its own lifecycle action after opening or switching to a project.
+Without it the Studio served a stopped session and every run control stayed disabled.
+A workspace operation record's console-state next read now carries the instance taken
+from that record's own normalized arguments; the published link was otherwise rejected
+and the Console showed a contract error instead of the run's output.
+
 Studio renders the approved daily entry: the status-bar R disclosure names the target
 session, reports its latest recovery copy and lists the other sessions with their
 state, and the editor toolbar carries a `Run in session` picker beside Run, hidden
@@ -61,14 +68,33 @@ and `scripts/test-real-r.mjs` now runs the real-R multi-instance acceptance.
 
 ### Unresolved
 
+- First run with no R configured at launch: the project Host has no Main instance,
+  and recording a default R deliberately does not create one, so R only becomes
+  available after a restart. The approved configuration entry (R04/R10) has to create
+  the session explicitly; until it exists this path needs a restart.
 - Not built: the `R Sessions` management page (R05/R06), the restoring, partial
   restore, environment-mismatch and disconnect states (R07), the restart, stop and
   quit panels (R08), the advanced `Runtime & recovery` settings (R09), and the
   narrow-width layouts and new-session dialog (R10).
-- Not run: `npm run test:browser --prefix ui`. The new status disclosure and target
-  picker have no browser or real-R visual acceptance at normal, wide and constrained
-  widths. The picker's subtitle reads `Managed environment` because no environment
-  name is published, while R05 shows a named environment.
+- `npm run test:browser --prefix ui` passes 40 of 42 specs once an `ark` sits beside
+  the built binary. The two failures are both host-restart specs, and both report the
+  same cause: `capture_available` is false, the previous session had activity, so no
+  recovery copy exists in its lineage, and auto-continue correctly refuses with
+  `recovery_required` rather than silently starting empty. The specs still expect the
+  pre-instance behaviour where a restart just brought R back.
+- Nothing delivers the native checkpoint component to where a launched Workbench looks
+  for it — `<ark directory>/recovery-components/<r_version>-<platform>/`, or an
+  explicit `--checkpoint-helper`. `scripts/test-r-checkpoints.mjs` builds it under
+  `target/rho-checkpoint/`, which no launch path reads. So in ordinary use no recovery
+  copy is ever written, and every restart after activity lands in `Needs attention`.
+  This is the highest-priority gap before recovery can be claimed as working.
+- The refusal tells the user to "start an empty session or select an earlier recovery
+  point", but `ContinueRuntimeInstance` carries only the instance and its lineage, so
+  the contract offers no way to start empty. R07's `Start empty` button needs it.
+- The new status disclosure and target picker have no browser or real-R visual
+  acceptance at normal, wide and constrained widths. The picker's subtitle reads
+  `Managed environment` because no environment name is published, while R05 shows a
+  named environment.
 - Not measured: the editor-input and added-wait latency thresholds, multi-platform and
   long-run behaviour, and destructive-failure acceptance.
 - Binding two genuinely different R installations stays opt-in and unexercised; it
@@ -77,6 +103,11 @@ and `scripts/test-real-r.mjs` now runs the real-R multi-instance acceptance.
   connected Host publishes no contract the CLI can read to default it.
 - Real-model Agent acceptance now depends on the Agent supplying
   `workspace_instance_id`, which the augmented tool schema publishes.
+- An exiting Host now ends the R processes it started instead of orphaning them, but
+  it does not capture a fresh recovery copy first, so objects created since the latest
+  automatic copy are lost on Ctrl-C or server shutdown. R08's `Quit Workbench…` panel
+  has to save supported objects before each process stops, on top of the explicit
+  per-session stop that already does this.
 - An Environment realization referenced by an instance or a recovery copy is protected
   from cleanup, but that protection has no dedicated test.
 

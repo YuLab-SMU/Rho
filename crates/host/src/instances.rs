@@ -912,6 +912,49 @@ impl InstanceOwner {
             }
         }
     }
+    /// An exiting Host owns the R processes it started. Leaving them running strands
+    /// the project: the recorded receipt correctly blocks a replacement, and an
+    /// orphaned native process can never be reattached. Receipts are cleared only
+    /// where termination was confirmed, so an uncertain stop keeps its evidence.
+    pub(crate) async fn shutdown_instances(&self) {
+        let live: Vec<(String, Arc<InstanceLive>)> = {
+            let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            state
+                .instances
+                .iter()
+                .filter_map(|(id, slot)| Some((id.clone(), slot.live.clone()?)))
+                .collect()
+        };
+        for (id, live) in live {
+            // A confirmed stop is refused while an observation or execution lease still
+            // references the native client, so give transient leases a bounded moment
+            // to drain instead of stranding the instance in RecoveryRequired.
+            let mut stopped = false;
+            for _ in 0..50 {
+                match live.runtime.shutdown().await {
+                    Ok(()) => {
+                        stopped = true;
+                        break;
+                    }
+                    Err(error) if error.effect_may_have_occurred => break,
+                    Err(_) => tokio::time::sleep(Duration::from_millis(100)).await,
+                }
+            }
+            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(slot) = state.instances.get_mut(&id) {
+                slot.live = None;
+                slot.maintenance = None;
+                if stopped {
+                    slot.stored.process = None;
+                    slot.stored.launch_unconfirmed = false;
+                    slot.stored.state = RuntimeInstanceState::Stopped;
+                } else {
+                    slot.stored.state = RuntimeInstanceState::RecoveryRequired;
+                }
+            }
+            let _ = self.persist_locked(&mut state);
+        }
+    }
     /// The library bound to the project's default instance. A managed Host has no
     /// single workspace library, so the Environment owner resolves it on observation.
     pub(crate) fn active_library(&self) -> Option<String> {
@@ -3135,6 +3178,19 @@ mod tests {
             assert_eq!(main(&host).state, RuntimeInstanceState::Ready);
         }
         assert!(main(&host).native_session_id.is_some());
+    }
+
+    #[tokio::test]
+    async fn draining_a_host_ends_the_r_processes_it_started() {
+        let (_temp, host, launcher) = fixture().await;
+        assert_eq!(main(&host).state, RuntimeInstanceState::Ready);
+        host.drain().await;
+        // Termination was confirmed, so the receipt is gone and a later Host continues
+        // normally instead of refusing to replace a process it believes is alive.
+        let drained = main(&host);
+        assert_eq!(drained.state, RuntimeInstanceState::Stopped);
+        assert!(drained.native_session_id.is_none());
+        assert_eq!(launcher.launches.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

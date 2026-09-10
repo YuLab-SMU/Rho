@@ -1081,6 +1081,16 @@ impl NextHost {
     pub fn capabilities(&self) -> Vec<CapabilityDescriptor> {
         self.runtime.gateway.registry_descriptors()
     }
+    /// Continue the project's default R instance. A deferred open makes files,
+    /// drafts and history available without starting R; attaching the default
+    /// session is this separate lifecycle action, and a failed continuation leaves
+    /// the project usable.
+    pub async fn continue_default_instance(&self) -> Result<(), OperationError> {
+        match &self.runtime.instances {
+            Some(owner) => owner.continue_default().await,
+            None => Ok(()),
+        }
+    }
     /// Used by an already authorized active Agent turn to retain its captured target.
     /// A connection that is only idle must not acquire this hold.
     pub fn hold_runtime_instance(
@@ -1274,6 +1284,11 @@ impl NextHost {
         }
         self.tasks.close();
         self.tasks.wait().await;
+        // Accepted work has drained. The native adapter has no drop teardown, so an
+        // exiting Host must end the R processes it started rather than orphan them.
+        if let Some(instances) = &self.runtime.instances {
+            instances.shutdown_instances().await;
+        }
     }
 
     pub async fn request_cancellation(

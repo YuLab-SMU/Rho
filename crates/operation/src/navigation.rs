@@ -76,11 +76,22 @@ impl CapabilityRegistry {
         }
         let uncertain = record.status == OperationStatus::Uncertain;
         if record.operation.domain == "workspace" {
+            // The record is the authority on which logical R instance produced it; a
+            // routed observation must name that same instance, never a current selection.
+            let instance = record
+                .operation
+                .normalized_arguments
+                .get("workspace_instance_id")
+                .cloned();
             if !record.status.is_terminal() || record.status == OperationStatus::Failed {
+                let mut arguments = json!({});
+                if let Some(instance) = &instance {
+                    arguments["workspace_instance_id"] = instance.clone();
+                }
                 if let Some(read) = self.read_link(
                     context, "workspace.console_state",
                     "Check whether this run is executing, queued, paused after an error, or waiting for input; acceptance alone does not mean execution started",
-                    json!({}),
+                    arguments,
                 )? { reads.push(read); }
             }
             for (capability, purpose) in [

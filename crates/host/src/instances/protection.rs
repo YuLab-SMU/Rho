@@ -150,7 +150,10 @@ impl InstanceOwner {
         let ids:BTreeSet<_>=candidates.iter().map(|(id,_,_,_)|id.clone()).collect();
         quiet.retain(|id,_|ids.contains(id));
         unattended.retain(|id,_|ids.contains(id));
-        self.idle_release(unattended,&candidates).await;
+        // A session this tick released must not also be asked for a recovery copy.
+        let released=self.idle_release(unattended,&candidates).await;
+        let mut candidates=candidates;
+        candidates.retain(|(id,_,_,_)|!released.contains(id));
         for (id,lineage,activity,live) in candidates {
             if !live.checkpoint.capture_available() || live.runtime.execution_state()!="idle"{quiet.remove(&id);continue;}
             let entry=quiet.entry(id.clone()).or_insert_with(||(live.runtime.session_id().into(),activity,Instant::now()));
@@ -194,8 +197,9 @@ impl InstanceOwner {
     /// Optional advanced policy: end a session nobody is watching, and only once
     /// its objects are completely protected. Anything uncertain keeps it running,
     /// because ending live R memory cannot be undone.
-    async fn idle_release(&self,unattended:&mut BTreeMap<String,(String,u64,Instant)>,candidates:&[(String,String,u64,Arc<InstanceLive>)]){
-        if self.windows_online(){unattended.clear();return;}
+    async fn idle_release(&self,unattended:&mut BTreeMap<String,(String,u64,Instant)>,candidates:&[(String,String,u64,Arc<InstanceLive>)])->BTreeSet<String>{
+        let mut released=BTreeSet::new();
+        if self.windows_online(){unattended.clear();return released;}
         for (id,_lineage,activity,live) in candidates {
             let session=live.runtime.session_id().to_string();
             let Ok(policy)=self.settings(Some(id)).map(|s|s.effective.value)else{unattended.remove(id);continue};
@@ -219,9 +223,10 @@ impl InstanceOwner {
                 capability:CapabilityRef::new("runtime.stop_instance",1).unwrap(),
                 arguments:json!({"workspace_instance_id":id,"expected_native_session_id":session,"discard_unsaved_objects":false}),
                 preconditions:vec![]}).await;
-            if result.is_ok_and(|record|record.outcome==Some(OperationOutcome::Succeeded)){unattended.remove(id);}
+            if result.is_ok_and(|record|record.outcome==Some(OperationOutcome::Succeeded)){unattended.remove(id);released.insert(id.clone());}
             else{unattended.insert(id.clone(),(session,*activity,Instant::now()));}
         }
+        released
     }
 
     async fn prune_copies(&self,id:&str,live:&InstanceLive,policy:&RuntimePolicy,at_ms:i64){
