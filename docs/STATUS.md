@@ -83,6 +83,21 @@ and `scripts/test-real-r.mjs` now runs the real-R multi-instance acceptance.
 
 ### Unresolved
 
+- Observed in a real two-session Workbench: a fitted model with a factor predictor is
+  excluded whole from a recovery copy as `unknown_altrep_provider`
+  (`lm(value ~ condition, samples)` skipped), while a numeric-only model on `mtcars`
+  (`lm(mpg ~ wt)`) is saved and a data frame holding `1:24` is saved. The exclusion is
+  therefore not about models or compact sequences in general. `r/checkpoint/roundtrip.R`
+  only exercises numeric-only `lm`/`glm` on `mtcars`, so its reported lm/glm pass does
+  not generalize, and the first-batch requirement that common models pass real save and
+  restore before entering the automatic support list is not met for factor terms.
+  Factor predictors are ordinary in scientific R, so this needs a real answer before
+  recovery can be offered as dependable.
+- The instance catalog is keyed by instance id, so a created session (`instance_op_…`)
+  sorts before `main`. The target picker and the other-sessions list therefore show
+  Scratch above Main, while R04 and R05 show the default session first. Client-side
+  reordering cannot fix this across pages; the catalog itself has to put the default
+  instance first.
 - First run with no R configured at launch: the project Host has no Main instance,
   and recording a default R deliberately does not create one, so R only becomes
   available after a restart. The approved configuration entry (R04/R10) has to create
