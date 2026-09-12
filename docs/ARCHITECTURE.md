@@ -1,7 +1,7 @@
 # Rho architecture
 
-**Rho owns the operable scientific workspace. External Agents own conversation
-and behavior.** Human and Agent requests reach the same domain owners and return
+**Rho's scientific owners manage the operable workspace. External platforms or
+the optional component assistant own Agent behavior.** Human and Agent requests reach the same domain owners and return
 the same underlying facts. Current delivery and verification progress are recorded
 in [Status](STATUS.md); protocol descriptions here are not acceptance results.
 
@@ -10,19 +10,23 @@ in [Status](STATUS.md); protocol descriptions here are not acceptance results.
 | Owner | Responsibility |
 | --- | --- |
 | External Agent platform | Conversation/session lifecycle, intent, planning, tool choice, model/provider settings, permission decisions and continuation |
+| Optional component assistant | Rig-driven model/tool execution within a user-initiated Application scope; engine dependencies stay in `rho-agents` |
 | Host | Compose domains and adapters, own runtime lifetime, bind trusted local context and expose shared ports |
 | Operation foundation | Capability registration, schema/scope validation, idempotency, state transitions and atomic commit discipline |
 | Scientific domains | Interpret observations, validate domain preconditions and describe results and effects |
-| Application | Window/context identities, synchronized documents, application commands, captures, method bindings and receipts |
+| Application | Window/context identities, synchronized documents, application commands, captures, method bindings, assistant authorization and durable application receipts |
 | Skills | Discover methods through declared sources, preserve resource identities and resolve explicit application bindings |
 | Native adapters | Interact with R, files, Git, package tools, OS processes, SSH and Slurm |
 | Studio | Present state and user controls; retain documents and layout independently of panel mounts |
 
-Agent integration is a thin boundary. Rho validates mechanical constraints and
-responds to requested operations; it does not infer a new goal, construct an Agent
-plan, run a competing behavior loop or introduce a second approval decision.
+Agent integration is a thin boundary. Scientific owners validate mechanical
+constraints and respond to requested operations; they do not infer goals, plan
+Agent work, call models or introduce a second approval decision. The optional
+component assistant uses Rig's existing driver in `rho-agents`, with explicit
+model configuration and a user-initiated bounded request.
 Conversation content is not a scientific authority source.
-Scientific requests use MCP. The optional local CLI client uses Codex app-server
+External scientific requests use MCP; built-in tools use the same Host gateways
+directly. The optional local CLI client uses Codex app-server
 or Kimi/DeepSeek Harness ACP to discover native models, open a native session, submit a user turn
 and relay native output and permission choices. It supplies the current Host's
 MCP connection for that session without editing the CLI's user configuration.
@@ -51,6 +55,36 @@ native credential provider may convert the old format on startup. Only the copy
 may change; it is removed when the owned client closes. Native session, storage
 and attachment providers point at separate persistent component data. Rho does
 not import other products' profiles or implement a credential migration itself.
+
+## Component assistant records and authority
+
+Application owns component conversations, CAS drafts/controllers, fixed run inputs,
+model configuration references, tool intents and bounded events. They use additive
+ApplicationStore tables separate from native Agent tasks and the science journal.
+The engine never opens SQLite or calls an R adapter. Host composes the engine and
+its narrow tool access port; all scientific reads/writes still use their real owner.
+Current implementation and unimplemented integration stages are in Status.
+
+A user request binds its project/principal, window incarnation, profile, model
+configuration and native targets. Explain grants no writes; Edit binds named
+documents/files; Run requires an explicit R instance and native session. Profiles
+cannot turn package or environment explanation into installation or lifecycle
+changes. Application control is checked by action, document version and destination.
+The same already-authorized action does not ask for another approval. Query text,
+Skills and model output cannot enlarge authority or select credentials.
+
+Persist each request before scheduling and each tool intent before dispatch. Stable
+request IDs cross lost acknowledgements; reusing an ID with different content fails.
+Mutation deduplication also includes normalized action/target/preconditions within
+the run, independent of provider call IDs. Original owner results and unresolved
+intents remain durable even when text events are pruned. Receiving a tool result
+does not imply scientific success. Stop fences later calls; accepted scientific
+work retains its original identities and cancellation/reconciliation semantics.
+
+Settings persist only non-secret configuration and explicit environment/session
+credential references. Remote endpoints require HTTPS; loopback HTTP is explicit.
+Endpoint credentials in URLs are rejected. A disabled or unconfigured assistant
+does not dispatch models. Content telemetry is disabled and reasoning is not stored.
 
 ## Native Agent tasks and continuation
 
@@ -711,6 +745,7 @@ package inspection.
 | `crates/adapters/` | SQLite, Git, R, package, process and SSH/Slurm implementations |
 | `crates/host` | Concrete composition and runtime configuration |
 | `crates/agent-client` | Bounded native Codex app-server / Kimi and DeepSeek ACP clients; no scientific handlers or Agent behavior loop |
+| `crates/agents` | Optional Rig integration; only Application/contract ports, no scientific owners or native adapter dependencies |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
 | `r/bridge`, `r/environment` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |
@@ -753,6 +788,7 @@ rechecked init-session services from the owned fork/exec family; missing origina
 evidence, same-family uncertainty and positive ownership conflicts remain explicit
 failures. This proof covers managed helpers, not independently delegated service
 manager jobs or rollback of external effects.
-Credentials remain with their existing provider; Rho does not create an Agent
-credential or approval store. See [PRIVACY.md](../PRIVACY.md) and
+Native CLI credentials remain with their provider. Component assistants use
+explicit credential references or Host-memory keys, never a persisted raw key or
+another approval store. See [PRIVACY.md](../PRIVACY.md) and
 [SECURITY.md](../SECURITY.md) for data handling and reporting.

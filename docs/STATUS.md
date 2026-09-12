@@ -47,9 +47,40 @@ generation/checks and governance regression tests. The latest deterministic run 
 `target/component-agent-probe/2026-09-12T18-24-02.967Z/`. The full Rust/Studio/R
 regression suite has not been rerun for this isolated experiment.
 
-Next: P1's Application contracts/repository,
-scope admission, model configuration, execution ports and Host wiring. Update the
-external-only architecture rule as part of that integration. Seven component
+P1's Application foundation now includes typed component contracts and additive
+SQLite conversation, run, tool, event and settings tables. A live Application window
+issues the actor; admission rechecks its incarnation and liveness. Runs fix the
+model configuration and authorized profile/document/session scope. Request reuse,
+CAS conflicts, model/tool budgets, two running slots and eight waiting slots are
+enforced before admitting work. Configuration accepts only explicit credential
+references and validated endpoints. The architecture rules now describe the
+authorized optional Rig boundary without moving planning into scientific owners.
+
+Tool intents are transactional with run counters. Semantic mutation duplicates
+retain the original native request identity; new provider-call aliases are durable
+and consume budget. Exact repeated calls retain their receipt, while changed reuse
+fails. Stop blocks subsequent calls and preserves late owner receipts. Bounded
+events expose only committed cursors and report history gaps; pruning does not
+remove tool receipts. These are application semantics, not yet a Host dispatch path.
+
+Foundation validation passed **65 Rust tests**: 13 new real-SQLite admission cases
+plus the 52 existing Contract/Application/SQLite cases. Coverage includes reopening,
+scope isolation, transaction rollback on injected intent failure, duplicate-call
+aliases and budgets, fixed model binding, old-Host rejection, stop/late receipts,
+event pruning and draft edits concurrent with streaming. Draft CAS has its own
+version; model events cannot invalidate it. The alias budget regression failed
+before the correction and then passed. Generated DTOs, client build and generated
+client/type checks passed. Evidence: `target/component-foundation-*.log`.
+
+Strict Clippy is not clean at the baseline: `CheckpointReconcileReport` and
+`HostRequest` trigger `large_enum_variant`, and an existing SQLite test triggers
+`manual_range_contains`. The same diagnostics were reproduced from the unmodified
+`8d1e3da9` sources in an isolated copy, then that copy was removed. Focused Clippy
+passes with only those two lint categories allowed; no blanket warning suppression
+was added to source. Baseline evidence is `target/component-clippy-baseline*.log`.
+
+Next: complete P1's execution ports, credential resolution, Rig service and Host
+wiring. The new admission APIs are not exposed in Studio yet. Seven component
 profiles, real R tool routing, mutation recovery, Paper B01–B06 review, Studio UI
 and full acceptance remain outstanding. Existing Hosts and native R memory are
 preserved; inspect live state before any real workbench launch/replacement.

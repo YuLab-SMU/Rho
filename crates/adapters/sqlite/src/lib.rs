@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 mod agent_tasks;
+mod component_agents;
 mod application;
 pub use application::ApplicationStore;
 mod runtime_instances;

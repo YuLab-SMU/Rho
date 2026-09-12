@@ -61,7 +61,7 @@ storage. Check ordinary/wide/constrained layouts and copying, not only snapshots
 | Client types and embedded assets | Generate, build, then check as above |
 | Studio interaction and real local R | `npm run test:browser --prefix ui` |
 | Rust architecture/dependency ownership | `node scripts/check-architecture.mjs` |
-| Component Agent engine feasibility | `node scripts/test-component-agents.mjs`; isolated Rig HTTP/SSE checks, no live scientific dispatch |
+| Component Agent foundation | `node scripts/test-component-agents.mjs`; Rig HTTP/SSE and real-SQLite admission checks, no live scientific dispatch |
 | Frontend ownership and dependency boundaries | `npm run check:boundaries --prefix ui` and `npm run test:boundaries --prefix ui` |
 | Vendored Jet snapshot / verifier | `node scripts/vendor-jet.mjs check` and `node scripts/test-vendor-jet.mjs` |
 | Documentation/map only | `node scripts/governance.mjs check` and `node scripts/test-governance.mjs` |

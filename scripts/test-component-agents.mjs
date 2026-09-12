@@ -1,4 +1,4 @@
-// P0 protocol evidence only. Host integration acceptance is added in later phases.
+// Engine protocol and Application admission evidence. Live Host acceptance is separate.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -26,6 +26,7 @@ async function run(label, command, echo = true) {
   assert.equal(code, 0, `${label} failed; evidence: ${directory}`);
 }
 await run("protocol", ["cargo", "test", "-p", "rho-agents", "--locked"]);
+await run("application", ["cargo", "test", "-p", "rho-sqlite", "--test", "component_agents", "--locked"]);
 await run("boundaries", ["node", "scripts/test-architecture.mjs"]);
 await run("dependencies", ["cargo", "tree", "-p", "rho-agents", "--locked", "--edges", "normal", "--prefix", "none"], false);
 const dependencies = fs.readFileSync(path.join(directory, "dependencies.log"), "utf8");
@@ -33,7 +34,7 @@ for (const forbidden of ["sqlx", "rig-sqlite", "lancedb", "fastembed", "ort", "d
   assert.ok(!new RegExp(`^${forbidden} v`, "m").test(dependencies), `Unexpected active integration: ${forbidden}`);
 }
 if (real) await run("real-model", ["cargo", "run", "-p", "rho-agents", "--example", "provider_probe", "--locked"]);
-const summary = { phase: "P0", fakeProtocol: "passed", realModel: real ? "passed" : "not_run",
+const summary = { phase: "P0/P1-foundation", fakeProtocol: "passed", applicationAdmission: "passed", realModel: real ? "passed" : "not_run",
   liveScientificIntegration: "not_run", evidence: directory };
 fs.writeFileSync(path.join(directory, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
 console.log(JSON.stringify(summary));

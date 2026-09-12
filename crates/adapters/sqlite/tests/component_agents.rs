@@ -1,0 +1,868 @@
+use rho_application::*;
+use rho_contract::*;
+use rho_sqlite::ApplicationStore;
+use serde_json::json;
+use std::sync::Arc;
+
+struct Fixture {
+    _directory: tempfile::TempDir,
+    path: std::path::PathBuf,
+    store: Arc<ApplicationStore>,
+    application: ApplicationOwner,
+    owner: ComponentAgentOwner,
+    context: CallContext,
+    actor: ComponentActor,
+}
+impl Fixture {
+    fn new() -> Self {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("application.sqlite");
+        let store = Arc::new(ApplicationStore::open(&path).unwrap());
+        let application = ApplicationOwner::new("/project".into(), store.clone());
+        let owner = ComponentAgentOwner::new(store.clone(), "component-host".into());
+        let context = CallContext {
+            caller: CallerIdentity {
+                kind: CallerKind::Human,
+                id: "local".into(),
+            },
+            principal: None,
+            scopes: Default::default(),
+            connection_id: "studio:one".into(),
+            correlation_id: None,
+            causation_id: None,
+            trace_parent: None,
+        };
+        let actor = actor(&application, &context, "window", 1);
+        Self {
+            _directory: directory,
+            path,
+            store,
+            application,
+            owner,
+            context,
+            actor,
+        }
+    }
+    fn configure(&self) -> u64 {
+        self.owner
+            .configure(
+                &self.actor,
+                &ComponentModelSettings {
+                    version: 0,
+                    enabled: true,
+                    connection: Some(model()),
+                },
+                2,
+            )
+            .unwrap()
+            .version
+    }
+    fn request(
+        &self,
+        conversation: &str,
+        profile: ComponentAgentProfile,
+        mode: ComponentAgentMode,
+    ) -> ComponentAgentStart {
+        let conversation = self
+            .owner
+            .create(&self.actor, conversation, profile, 2)
+            .unwrap();
+        ComponentAgentStart {
+            request_id: format!("start-{}", conversation.conversation_id),
+            conversation_id: conversation.conversation_id,
+            conversation_version: conversation.version,
+            window: self.actor.window().clone(),
+            model_settings_version: 1,
+            text: "Explain this fixture".into(),
+            grant: ComponentAgentGrant {
+                mode,
+                session: Some(ComponentAgentSession {
+                    workspace_instance_id: "main".into(),
+                    session_id: "native-one".into(),
+                }),
+                documents: vec![],
+                files: vec![],
+            },
+            sources: vec![],
+        }
+    }
+    fn running(&self, profile: ComponentAgentProfile, mode: ComponentAgentMode) -> String {
+        self.configure();
+        let request = self.request("conversation", profile, mode);
+        let run = self.owner.start(&self.actor, request, 3).unwrap().run;
+        self.owner
+            .claim(self.actor.scope(), &run.run.run_id, 4)
+            .unwrap();
+        self.owner
+            .begin_model_call(self.actor.scope(), &run.run.run_id, 5)
+            .unwrap();
+        run.run.run_id
+    }
+}
+fn actor(
+    application: &ApplicationOwner,
+    context: &CallContext,
+    id: &str,
+    now: u64,
+) -> ComponentActor {
+    let ApplicationBridgeReply::Registered(registered) = application
+        .bridge(
+            context,
+            ApplicationBridgeRequest::Register {
+                window_id: id.into(),
+                incarnation: format!("{id}-life"),
+                label: id.into(),
+                previous_session: None,
+            },
+            now,
+        )
+        .unwrap()
+    else {
+        panic!()
+    };
+    application
+        .component_actor(context, &registered.session.window, now)
+        .unwrap()
+}
+fn model() -> ComponentModelConnection {
+    ComponentModelConnection {
+        protocol: ComponentModelProtocol::Anthropic,
+        base_url: "https://model.example".into(),
+        model: "fixture".into(),
+        credential: ComponentCredentialRef::Environment {
+            name: "RHO_TEST_KEY".into(),
+        },
+    }
+}
+fn query() -> ComponentToolAction {
+    ComponentToolAction::Query(QueryRequest {
+        capability: CapabilityRef::new("workspace.list_objects", 1).unwrap(),
+        arguments: json!({"workspace_instance_id":"main"}),
+    })
+}
+fn mutation() -> ComponentToolAction {
+    ComponentToolAction::Invoke(Invocation {
+        client_request_id: "model-supplied-request".into(),
+        capability: CapabilityRef::new("workspace.run_r", 1).unwrap(),
+        arguments: json!({"workspace_instance_id":"main","code":"counter <- counter + 1"}),
+        preconditions: vec![Precondition {
+            kind: "workspace.session".into(),
+            subject: "active".into(),
+            expected: json!("native-one"),
+        }],
+    })
+}
+
+#[test]
+fn run_identity_survives_reopen_and_changed_reuse_is_rejected() {
+    let f = Fixture::new();
+    f.configure();
+    let request = f.request(
+        "conversation",
+        ComponentAgentProfile::Objects,
+        ComponentAgentMode::Explain,
+    );
+    let first = f.owner.start(&f.actor, request.clone(), 3).unwrap();
+    assert!(!first.repeated);
+    let repeated = f.owner.start(&f.actor, request.clone(), 4).unwrap();
+    assert!(repeated.repeated);
+    assert_eq!(first.run.run.run_id, repeated.run.run.run_id);
+    let mut changed = request.clone();
+    changed.text = "Run instead".into();
+    assert!(matches!(
+        f.owner.start(&f.actor, changed, 5),
+        Err(ApplicationError::RequestConflict)
+    ));
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    let stored = reopened
+        .component_run_by_request(f.actor.scope(), &request.request_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.run.run_id, first.run.run.run_id);
+    assert_eq!(stored.run.model.model, "fixture");
+    assert!(stored.run.input_tokens.is_none());
+    let other = ApplicationScope {
+        project: "/other".into(),
+        principal: f.actor.scope().principal.clone(),
+    };
+    assert!(
+        reopened
+            .component_run_by_request(&other, &request.request_id)
+            .unwrap()
+            .is_none()
+    );
+    let other = ApplicationScope {
+        project: "/project".into(),
+        principal: "other".into(),
+    };
+    assert!(
+        reopened
+            .component_run(&other, &first.run.run.run_id)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn configuration_is_explicit_cas_and_cannot_store_embedded_secrets() {
+    let f = Fixture::new();
+    let request = f.request(
+        "conversation",
+        ComponentAgentProfile::Objects,
+        ComponentAgentMode::Explain,
+    );
+    assert!(f.owner.start(&f.actor, request.clone(), 3).is_err());
+    assert!(
+        f.store
+            .component_run_by_request(f.actor.scope(), &request.request_id)
+            .unwrap()
+            .is_none()
+    );
+    f.configure();
+    assert!(matches!(
+        f.owner.configure(
+            &f.actor,
+            &ComponentModelSettings {
+                version: 0,
+                enabled: false,
+                connection: None
+            },
+            4
+        ),
+        Err(ApplicationError::Conflict)
+    ));
+    for endpoint in [
+        "http://remote.example",
+        "https://user:secret@model.example",
+        "https://model.example?api_key=secret",
+        "https://model.example#secret",
+        "file:///tmp/model",
+        "http://localhost.evil",
+    ] {
+        let mut connection = model();
+        connection.base_url = endpoint.into();
+        assert!(validate_component_model(&connection).is_err(), "{endpoint}");
+    }
+    for endpoint in [
+        "http://127.0.0.1:8000/v1",
+        "http://[::1]:8000",
+        "https://model.example/v1",
+    ] {
+        let mut connection = model();
+        connection.base_url = endpoint.into();
+        validate_component_model(&connection).unwrap();
+    }
+    let bytes = serde_json::to_vec(&f.store.component_settings(f.actor.scope()).unwrap()).unwrap();
+    assert!(String::from_utf8(bytes).unwrap().contains("RHO_TEST_KEY"));
+    assert!(
+        serde_json::from_value::<ComponentModelSettings>(
+            json!({"version":0,"enabled":true,"connection":null,"api_key":"secret"})
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn cross_window_and_expired_actor_cannot_change_draft_or_stop_run() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let other = actor(&f.application, &f.context, "other-window", 6);
+    assert!(matches!(
+        f.owner.stop(&other, &run, 7),
+        Err(ApplicationError::Conflict)
+    ));
+    let conversation = f
+        .store
+        .component_conversation(f.actor.scope(), "conversation")
+        .unwrap()
+        .unwrap();
+    assert!(
+        f.owner
+            .save_draft(
+                &other,
+                "conversation",
+                conversation.draft_version,
+                "forged".into(),
+                7
+            )
+            .is_err()
+    );
+    f.owner
+        .save_draft(
+            &f.actor,
+            "conversation",
+            conversation.draft_version,
+            "later user input".into(),
+            7,
+        )
+        .unwrap();
+    assert!(matches!(
+        f.owner.save_draft(
+            &f.actor,
+            "conversation",
+            conversation.draft_version,
+            "stale overwrite".into(),
+            8
+        ),
+        Err(ApplicationError::Conflict)
+    ));
+    assert!(matches!(
+        f.owner.stop(&f.actor, &run, 20_000),
+        Err(ApplicationError::Offline)
+    ));
+    assert_eq!(
+        f.store
+            .component_conversation(f.actor.scope(), "conversation")
+            .unwrap()
+            .unwrap()
+            .draft,
+        "later user input"
+    );
+}
+
+#[test]
+fn tool_intent_is_durable_and_repeated_mutation_returns_original_identity() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let first = f
+        .owner
+        .admit_tool(f.actor.scope(), &run, 1, "call-one", mutation(), 6)
+        .unwrap();
+    assert!(!first.repeated);
+    assert_ne!(
+        first.tool.receipt.client_request_id,
+        "model-supplied-request"
+    );
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    assert_eq!(
+        reopened
+            .component_tools(f.actor.scope(), &run)
+            .unwrap()
+            .len(),
+        1
+    );
+    let repeated = f
+        .owner
+        .admit_tool(f.actor.scope(), &run, 1, "new-provider-call", mutation(), 7)
+        .unwrap();
+    assert!(repeated.repeated);
+    assert_eq!(
+        repeated.tool.receipt.receipt_id,
+        first.tool.receipt.receipt_id
+    );
+    let mut altered = mutation();
+    if let ComponentToolAction::Invoke(i) = &mut altered {
+        i.arguments["code"] = json!("different_code()");
+    }
+    assert!(matches!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "call-one", altered, 8),
+        Err(ApplicationError::RequestConflict)
+    ));
+    let state = f
+        .store
+        .component_run(f.actor.scope(), &run)
+        .unwrap()
+        .unwrap();
+    assert_eq!(state.run.tool_calls, 2);
+}
+
+#[test]
+fn forged_tools_session_and_document_permissions_have_no_receipts() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Objects, ComponentAgentMode::Explain);
+    assert!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "forged", mutation(), 6)
+            .is_err()
+    );
+    let mut wrong = query();
+    if let ComponentToolAction::Query(q) = &mut wrong {
+        q.arguments["workspace_instance_id"] = json!("another-session");
+    }
+    assert!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "wrong-session", wrong, 6)
+            .is_err()
+    );
+    let mut install = query();
+    if let ComponentToolAction::Query(q) = &mut install {
+        q.capability.id = "environment.realize".into();
+    }
+    assert!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "install", install, 6)
+            .is_err()
+    );
+    assert!(
+        f.store
+            .component_tools(f.actor.scope(), &run)
+            .unwrap()
+            .is_empty()
+    );
+    let f = Fixture::new();
+    f.configure();
+    let mut request = f.request(
+        "document",
+        ComponentAgentProfile::Documents,
+        ComponentAgentMode::Edit,
+    );
+    let document = ApplicationDocumentRef {
+        document_id: "script".into(),
+        document_version: "v1".into(),
+        selection_version: "s1".into(),
+    };
+    request.grant.documents = vec![ComponentDocumentGrant {
+        document: document.clone(),
+        allow_save: false,
+        path: Some("script.R".into()),
+    }];
+    let run = f.owner.start(&f.actor, request, 3).unwrap().run.run.run_id;
+    f.owner.claim(f.actor.scope(), &run, 4).unwrap();
+    f.owner.begin_model_call(f.actor.scope(), &run, 5).unwrap();
+    for action in [
+        ApplicationAction::Save {
+            document: document.clone(),
+            target_path: None,
+        },
+        ApplicationAction::RunFile {
+            document: document.clone(),
+            target_path: None,
+        },
+        ApplicationAction::EditDocument {
+            document: ApplicationDocumentRef {
+                document_version: "v2".into(),
+                ..document.clone()
+            },
+            edits: vec![],
+        },
+    ] {
+        let action = ComponentToolAction::Control(ApplicationCommandRequest {
+            window: f.actor.window().clone(),
+            request_id: "forged".into(),
+            action,
+        });
+        assert!(
+            f.owner
+                .admit_tool(f.actor.scope(), &run, 1, "call", action, 6)
+                .is_err()
+        );
+    }
+    assert!(
+        f.store
+            .component_tools(f.actor.scope(), &run)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn stop_fences_model_and_tool_calls_but_preserves_late_owner_receipt() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let tool = f
+        .owner
+        .admit_tool(f.actor.scope(), &run, 1, "call", mutation(), 6)
+        .unwrap()
+        .tool;
+    f.owner.stop(&f.actor, &run, 7).unwrap();
+    assert!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "late-call", mutation(), 8)
+            .is_err()
+    );
+    assert!(f.owner.begin_model_call(f.actor.scope(), &run, 8).is_err());
+    assert!(
+        f.owner
+            .finish(
+                f.actor.scope(),
+                &run,
+                ComponentAgentRunState::Completed,
+                None,
+                9
+            )
+            .is_err()
+    );
+    let op = OperationId::new("native-operation").unwrap();
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &run,
+            &tool.receipt.receipt_id,
+            ComponentToolUpdate::Accepted {
+                operation_id: Some(op.clone()),
+                application_request_id: None,
+            },
+            9,
+        )
+        .unwrap();
+    let result = json!({"status":"uncertain","operation_id":op});
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &run,
+            &tool.receipt.receipt_id,
+            ComponentToolUpdate::Resolved {
+                result: result.clone(),
+                evidence: vec![],
+            },
+            10,
+        )
+        .unwrap();
+    f.owner
+        .finish(
+            f.actor.scope(),
+            &run,
+            ComponentAgentRunState::Stopped,
+            Some("Model stopped; native operation remains uncertain".into()),
+            11,
+        )
+        .unwrap();
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    let retained = reopened.component_tools(f.actor.scope(), &run).unwrap();
+    assert_eq!(retained[0].receipt.result, Some(result));
+    assert_eq!(
+        reopened
+            .component_run(f.actor.scope(), &run)
+            .unwrap()
+            .unwrap()
+            .run
+            .state,
+        ComponentAgentRunState::Stopped
+    );
+}
+
+#[test]
+fn disable_and_budgets_fail_before_admitting_new_work() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Objects, ComponentAgentMode::Explain);
+    for i in 0..8 {
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, &format!("call-{i}"), query(), 6)
+            .unwrap();
+    }
+    assert!(matches!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "over-budget", query(), 6),
+        Err(ApplicationError::Budget(_))
+    ));
+    for _ in 0..3 {
+        f.owner.begin_model_call(f.actor.scope(), &run, 7).unwrap();
+    }
+    assert!(matches!(
+        f.owner.begin_model_call(f.actor.scope(), &run, 8),
+        Err(ApplicationError::Budget(_))
+    ));
+    let mut settings = f.store.component_settings(f.actor.scope()).unwrap();
+    settings.enabled = false;
+    f.owner.configure(&f.actor, &settings, 8).unwrap();
+    assert!(f.owner.begin_model_call(f.actor.scope(), &run, 9).is_err());
+    assert!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 4, "disabled", query(), 9)
+            .is_err()
+    );
+}
+
+#[test]
+fn event_pruning_keeps_durable_tool_receipts_and_reports_a_history_gap() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Objects, ComponentAgentMode::Explain);
+    let tool = f
+        .owner
+        .admit_tool(f.actor.scope(), &run, 1, "call", query(), 6)
+        .unwrap()
+        .tool;
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &run,
+            &tool.receipt.receipt_id,
+            ComponentToolUpdate::Resolved {
+                result: json!({"status":"busy","data":null,"completeness":"partial"}),
+                evidence: vec![],
+            },
+            7,
+        )
+        .unwrap();
+    for _ in 0..505 {
+        f.owner
+            .append_text(f.actor.scope(), &run, "A bounded observation".into(), 8)
+            .unwrap();
+    }
+    f.owner
+        .finish(
+            f.actor.scope(),
+            &run,
+            ComponentAgentRunState::Completed,
+            None,
+            9,
+        )
+        .unwrap();
+    let page = f
+        .store
+        .component_events(f.actor.scope(), &run, 0, 128)
+        .unwrap();
+    assert!(page.history_gap);
+    assert_eq!(page.events.len(), 128);
+    let mut cursor = page.cursor;
+    let mut count = page.events.len();
+    loop {
+        let page = f
+            .store
+            .component_events(f.actor.scope(), &run, cursor, 128)
+            .unwrap();
+        if page.events.is_empty() {
+            break;
+        }
+        assert!(!page.history_gap);
+        cursor = page.cursor;
+        count += page.events.len();
+    }
+    assert_eq!(count, MAX_COMPONENT_EVENTS);
+    assert_eq!(cursor, 507);
+    assert_eq!(
+        f.store
+            .component_tools(f.actor.scope(), &run)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn separate_owner_instances_enforce_atomic_conversation_cas_and_running_quota() {
+    let f = Fixture::new();
+    f.configure();
+    let mut runs = vec![];
+    for i in 0..3 {
+        let request = f.request(
+            &format!("conversation-{i}"),
+            ComponentAgentProfile::Objects,
+            ComponentAgentMode::Explain,
+        );
+        runs.push(f.owner.start(&f.actor, request, 3).unwrap().run.run.run_id);
+    }
+    let other = ComponentAgentOwner::new(
+        Arc::new(ApplicationStore::open(&f.path).unwrap()),
+        "component-host".into(),
+    );
+    f.owner.claim(f.actor.scope(), &runs[0], 4).unwrap();
+    other.claim(f.actor.scope(), &runs[1], 4).unwrap();
+    assert!(matches!(
+        other.claim(f.actor.scope(), &runs[2], 4),
+        Err(ApplicationError::Budget(_))
+    ));
+    let conversation = f
+        .store
+        .component_conversation(f.actor.scope(), "conversation-0")
+        .unwrap()
+        .unwrap();
+    f.owner
+        .save_draft(
+            &f.actor,
+            "conversation-0",
+            conversation.draft_version,
+            "first writer".into(),
+            5,
+        )
+        .unwrap();
+    assert!(matches!(
+        other.save_draft(
+            &f.actor,
+            "conversation-0",
+            conversation.draft_version,
+            "lost writer".into(),
+            5
+        ),
+        Err(ApplicationError::Conflict)
+    ));
+    assert_eq!(
+        f.store
+            .component_conversation(f.actor.scope(), "conversation-0")
+            .unwrap()
+            .unwrap()
+            .draft,
+        "first writer"
+    );
+}
+
+#[test]
+fn repeated_mutation_call_aliases_are_durable_and_consume_the_tool_budget() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let original = f
+        .owner
+        .admit_tool(f.actor.scope(), &run, 1, "call-0", mutation(), 6)
+        .unwrap();
+    for i in 1..16 {
+        let repeated = f
+            .owner
+            .admit_tool(
+                f.actor.scope(),
+                &run,
+                1,
+                &format!("call-{i}"),
+                mutation(),
+                6,
+            )
+            .unwrap();
+        assert!(repeated.repeated);
+        assert_eq!(
+            original.tool.receipt.receipt_id,
+            repeated.tool.receipt.receipt_id
+        );
+    }
+    assert!(matches!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "call-16", mutation(), 6),
+        Err(ApplicationError::Budget(_))
+    ));
+    let reopened = ComponentAgentOwner::new(
+        Arc::new(ApplicationStore::open(&f.path).unwrap()),
+        "component-host".into(),
+    );
+    let mut changed = mutation();
+    if let ComponentToolAction::Invoke(i) = &mut changed {
+        i.arguments["code"] = json!("second_write()");
+    }
+    assert!(matches!(
+        reopened.admit_tool(f.actor.scope(), &run, 1, "call-15", changed, 7),
+        Err(ApplicationError::RequestConflict)
+    ));
+    assert_eq!(
+        f.store
+            .component_tools(f.actor.scope(), &run)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        f.store
+            .component_run(f.actor.scope(), &run)
+            .unwrap()
+            .unwrap()
+            .run
+            .tool_calls,
+        16
+    );
+}
+
+#[test]
+fn failed_intent_transaction_rolls_back_run_counter_and_conversation_version() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let before = f
+        .store
+        .component_conversation(f.actor.scope(), "conversation")
+        .unwrap()
+        .unwrap()
+        .version;
+    let connection = rusqlite::Connection::open(&f.path).unwrap();
+    connection.execute_batch("CREATE TRIGGER reject_component_intent BEFORE INSERT ON component_agent_tools BEGIN SELECT RAISE(ABORT,'fixture store failure'); END;").unwrap();
+    assert!(matches!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "failed-call", mutation(), 6),
+        Err(ApplicationError::Storage(_))
+    ));
+    assert!(
+        f.store
+            .component_tools(f.actor.scope(), &run)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        f.store
+            .component_conversation(f.actor.scope(), "conversation")
+            .unwrap()
+            .unwrap()
+            .version,
+        before
+    );
+    assert_eq!(
+        f.store
+            .component_run(f.actor.scope(), &run)
+            .unwrap()
+            .unwrap()
+            .run
+            .tool_calls,
+        0
+    );
+    connection
+        .execute_batch("DROP TRIGGER reject_component_intent")
+        .unwrap();
+    assert!(
+        !f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "failed-call", mutation(), 7)
+            .unwrap()
+            .repeated
+    );
+}
+
+#[test]
+fn accepted_model_scope_is_fixed_and_new_host_cannot_dispatch_an_old_run() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let mut settings = f.store.component_settings(f.actor.scope()).unwrap();
+    settings.connection.as_mut().unwrap().model = "later-model".into();
+    f.owner.configure(&f.actor, &settings, 6).unwrap();
+    assert_eq!(
+        f.store
+            .component_run(f.actor.scope(), &run)
+            .unwrap()
+            .unwrap()
+            .run
+            .model
+            .model,
+        "fixture"
+    );
+    let new_host = ComponentAgentOwner::new(f.store.clone(), "replacement-host".into());
+    assert!(new_host.begin_model_call(f.actor.scope(), &run, 7).is_err());
+    assert!(
+        new_host
+            .admit_tool(f.actor.scope(), &run, 1, "old-run", mutation(), 7)
+            .is_err()
+    );
+    assert!(
+        f.store
+            .component_tools(f.actor.scope(), &run)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn streaming_observations_do_not_invalidate_the_users_draft_version() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Objects, ComponentAgentMode::Explain);
+    let observed = f
+        .store
+        .component_conversation(f.actor.scope(), "conversation")
+        .unwrap()
+        .unwrap();
+    f.owner
+        .append_text(
+            f.actor.scope(),
+            &run,
+            "model text arriving while the user types".into(),
+            6,
+        )
+        .unwrap();
+    f.owner
+        .save_draft(
+            &f.actor,
+            "conversation",
+            observed.draft_version,
+            "new user draft".into(),
+            7,
+        )
+        .unwrap();
+    let current = f
+        .store
+        .component_conversation(f.actor.scope(), "conversation")
+        .unwrap()
+        .unwrap();
+    assert_eq!(current.draft, "new user draft");
+    assert_eq!(current.draft_version, observed.draft_version + 1);
+    assert!(current.version > observed.version + 1);
+}

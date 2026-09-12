@@ -1,0 +1,253 @@
+//! Component assistant application records. No engine types or scientific state machine.
+use crate::{
+    AgentContextSelection, ApplicationDocumentRef, ApplicationWindowRef, MediaReference,
+    OperationId,
+};
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentAgentProfile {
+    Objects,
+    Packages,
+    Plots,
+    Documents,
+    Workspace,
+    Project,
+    Environment,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentAgentMode {
+    Explain,
+    Edit,
+    Run,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentAgentSession {
+    pub workspace_instance_id: String,
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentDocumentGrant {
+    pub document: ApplicationDocumentRef,
+    pub allow_save: bool,
+    /// Exact project-relative destination; Save As cannot expand this scope.
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentFileGrant {
+    pub path: String,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentAgentGrant {
+    pub mode: ComponentAgentMode,
+    pub session: Option<ComponentAgentSession>,
+    pub documents: Vec<ComponentDocumentGrant>,
+    pub files: Vec<ComponentFileGrant>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentModelProtocol {
+    Anthropic,
+    OpenaiCompletions,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ComponentCredentialRef {
+    Environment { name: String },
+    Session { key_id: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentModelConnection {
+    pub protocol: ComponentModelProtocol,
+    pub base_url: String,
+    pub model: String,
+    pub credential: ComponentCredentialRef,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentModelSettings {
+    pub version: u64,
+    pub enabled: bool,
+    pub connection: Option<ComponentModelConnection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentAgentConversation {
+    pub conversation_id: String,
+    pub version: u64,
+    /// User draft CAS is independent of streaming run/event updates.
+    pub draft_version: u64,
+    pub controller: ApplicationWindowRef,
+    pub profile: ComponentAgentProfile,
+    pub draft: String,
+    pub active_run_id: Option<String>,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentAgentStart {
+    pub request_id: String,
+    pub conversation_id: String,
+    pub conversation_version: u64,
+    pub window: ApplicationWindowRef,
+    pub model_settings_version: u64,
+    pub text: String,
+    pub grant: ComponentAgentGrant,
+    pub sources: Vec<AgentContextSelection>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentAgentRunState {
+    Queued,
+    Running,
+    WaitingForR,
+    NeedsInput,
+    Stopping,
+    Completed,
+    Stopped,
+    Failed,
+    Interrupted,
+}
+impl ComponentAgentRunState {
+    pub fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Completed | Self::Stopped | Self::Failed | Self::Interrupted
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentAgentBudget {
+    pub model_calls: u32,
+    pub tool_calls: u32,
+    pub context_bytes: u32,
+    pub tool_result_bytes: u32,
+    pub output_tokens: u32,
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentAgentRun {
+    pub run_id: String,
+    pub request: ComponentAgentStart,
+    pub profile: ComponentAgentProfile,
+    pub state: ComponentAgentRunState,
+    /// Fixed configuration for this run. Contains references, never credentials.
+    pub model: ComponentModelConnection,
+    pub budget: ComponentAgentBudget,
+    pub model_calls: u32,
+    pub tool_calls: u32,
+    pub tool_result_bytes: u32,
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub event_cursor: u64,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentToolPhase {
+    Intent,
+    Accepted,
+    Resolved,
+    Uncertain,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ComponentAgentEvidence {
+    Operation {
+        operation_id: OperationId,
+    },
+    Media {
+        reference: MediaReference,
+    },
+    Document {
+        document: ApplicationDocumentRef,
+    },
+    File {
+        path: String,
+        sha256: String,
+    },
+    Observation {
+        capability: String,
+        reference: serde_json::Value,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentToolReceipt {
+    pub receipt_id: String,
+    pub run_id: String,
+    pub model_call: u32,
+    pub tool_call_id: String,
+    pub capability: String,
+    pub arguments_digest: String,
+    pub action_digest: String,
+    pub client_request_id: String,
+    pub mutation: bool,
+    pub phase: ComponentToolPhase,
+    pub operation_id: Option<OperationId>,
+    pub application_request_id: Option<String>,
+    pub result: Option<serde_json::Value>,
+    pub evidence: Vec<ComponentAgentEvidence>,
+    pub updated_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ComponentAgentEventContent {
+    Text {
+        text: String,
+    },
+    State {
+        state: ComponentAgentRunState,
+        reason: Option<String>,
+    },
+    Tool {
+        receipt_id: String,
+        phase: ComponentToolPhase,
+    },
+    Evidence {
+        reference: ComponentAgentEvidence,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentAgentEvent {
+    pub run_id: String,
+    pub sequence: u64,
+    pub created_at_ms: u64,
+    pub content: ComponentAgentEventContent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentAgentEventPage {
+    pub events: Vec<ComponentAgentEvent>,
+    pub cursor: u64,
+    pub history_gap: bool,
+}

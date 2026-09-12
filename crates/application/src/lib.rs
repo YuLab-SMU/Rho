@@ -2,6 +2,8 @@
 //! Application owns window identity, synchronized resources, command receipts and
 //! execution associations. It never submits scientific work or reads native files.
 mod agent_tasks;
+mod component_agents;
+pub use component_agents::*;
 mod execution;
 pub use agent_tasks::*;
 mod store;

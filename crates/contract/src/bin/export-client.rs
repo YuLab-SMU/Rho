@@ -50,6 +50,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     AgentTasksCommand::export_all(&config)?;
     AgentTaskQueryResult::export_all(&config)?;
     AgentTaskCommandResult::export_all(&config)?;
+    ComponentModelSettings::export_all(&config)?;
+    ComponentAgentConversation::export_all(&config)?;
+    ComponentAgentRun::export_all(&config)?;
+    ComponentToolReceipt::export_all(&config)?;
+    ComponentAgentEventPage::export_all(&config)?;
     TestAgent::export_all(&config)?;
     AgentDiagnostic::export_all(&config)?;
     ReadAgentAsset::export_all(&config)?;
