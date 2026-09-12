@@ -2,6 +2,19 @@
 
 Updated: 2026-09-12. This is the single current status summary. Git retains history.
 
+## Built-in component Agent planning
+
+The user requested a concrete plan for component assistants using an existing
+Agent engine. The [working proposal](BUILTIN-AGENT-PLAN.md) selects Rig's driver,
+maps seven component profiles to current owners, and specifies file-level changes,
+authorization, durable tool receipts, recovery, Paper review and staged acceptance.
+It is based on source inspection at `3f0d2d70` and current Rig 0.42 documentation.
+No Rig dependency, model request or production behavior has been added. The existing
+external-Agent boundary remains the implemented architecture; changing it is an
+explicit first implementation step. Continue with the plan's P0 feasibility work.
+Documentation generation, governance validation and governance regression tests
+passed. This is documentation-only evidence; no new runtime acceptance is claimed.
+
 ## Multiple R sessions and recovery copies
 
 The instance foundation, recovery copies, automatic protection and approved Studio

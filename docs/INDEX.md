@@ -10,6 +10,7 @@ Generated from `governance/registry.json`. Edit the JSON source and regenerate.
 
 ## `documentation`
 
+- [Built-in component Agent implementation proposal](<BUILTIN-AGENT-PLAN.md>) — `BUILTIN-AGENT-PLAN`
 - [Documentation map](<README.md>) — `DOCS`
 - [Rho product design philosophy (proposed foundation)](<RHO-DESIGN.md>) — `RHO-DESIGN`
 - [Scenario plugin design research (no implementation scope)](<SCENARIO-PLUGINS.md>) — `SCENARIO-PLUGINS`
