@@ -1306,6 +1306,9 @@ test("Chrome native IME composition never submits code on the commit key", async
   // Wait through its rendering turn before asserting absence of submission.
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   expect(runs).toBe(0);
+  // Make the next Enter an explicit separate gesture. Frame timing alone can
+  // leave it inside Chrome's first post-composition commit-key guard.
+  await input.press("ArrowRight");
   await input.press("Enter");
   await expect.poll(() => runs).toBe(1);
   await expect(input).toHaveText("");

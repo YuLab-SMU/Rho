@@ -291,6 +291,18 @@ impl WorkspaceCheckpointOwner {
             .await?
             .manifest)
     }
+    /// Internal retention observation: deleted copies are absent; unavailable bytes
+    /// still retain their references until an explicit deletion is committed.
+    pub async fn retained_manifest_for(
+        &self,
+        context: &CallContext,
+        manifest: CheckpointManifest,
+    ) -> Result<Option<CheckpointManifest>, OperationError> {
+        Ok(self
+            .entry(context, manifest, &self.instance, None)
+            .await?
+            .map(|entry| entry.manifest))
+    }
     async fn required_from(
         &self,
         context: &CallContext,

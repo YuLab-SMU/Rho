@@ -33,6 +33,8 @@ run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test
   "--locked", "--", "--ignored", "--nocapture",
   "real_instances_restore_and_clean_restart_without_cross_session_effects"],
   { env: instanceEnv, stdio: "inherit", timeout: 300_000 });
+run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--lib", "--locked",
+  "recovery_copy_protects_its_library", "--", "--ignored", "--nocapture"], { env: instanceEnv, stdio: "inherit", timeout: 120_000 });
 run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-cli", "--locked"], { stdio: "inherit" });
 const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--locked"]));
 const binary = path.join(metadata.target_directory, "debug", `rho${extension}`);

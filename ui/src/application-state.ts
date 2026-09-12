@@ -146,6 +146,7 @@ export class ApplicationPersistence extends Model<SyncState> {
 export interface EditorPreferences {
   editorFontSize: number; indentWidth: number;
   sidebarExpanded: boolean; statusCpu: boolean; statusMemory: boolean; statusDisk: boolean;
+  recoveryNoticeSeen: boolean;
 }
 function normalizePreferences(value: unknown): EditorPreferences {
   const data = value as Partial<EditorPreferences> | null;
@@ -154,10 +155,11 @@ function normalizePreferences(value: unknown): EditorPreferences {
     indentWidth: [2, 4, 8].includes(data?.indentWidth ?? 0) ? data!.indentWidth! : 4,
     sidebarExpanded: data?.sidebarExpanded === true,
     statusCpu: data?.statusCpu === true, statusMemory: data?.statusMemory === true, statusDisk: data?.statusDisk === true,
+    recoveryNoticeSeen: data?.recoveryNoticeSeen === true,
   };
 }
 export class Preferences extends Model<EditorPreferences> {
-  private value: EditorPreferences = { editorFontSize: 14, indentWidth: 4, sidebarExpanded: false, statusCpu: false, statusMemory: false, statusDisk: false };
+  private value: EditorPreferences = { editorFontSize: 14, indentWidth: 4, sidebarExpanded: false, statusCpu: false, statusMemory: false, statusDisk: false, recoveryNoticeSeen: false };
   private tail = Promise.resolve();
   private generation = 0;
   constructor(private port: StatePort) { super(); }
@@ -182,7 +184,7 @@ export class Preferences extends Model<EditorPreferences> {
       const value = { ...normalizePreferences(latest.value), ...patch };
       if (![12, 14, 16, 18].includes(value.editorFontSize) || ![2, 4, 8].includes(value.indentWidth))
         throw new Error("Invalid editor preferences");
-      if ([value.sidebarExpanded, value.statusCpu, value.statusMemory, value.statusDisk].some(v => typeof v !== "boolean"))
+      if ([value.sidebarExpanded, value.statusCpu, value.statusMemory, value.statusDisk, value.recoveryNoticeSeen].some(v => typeof v !== "boolean"))
         throw new Error("Invalid workspace preferences");
       const state = await this.port.writeState(null, { ...latest, value });
       if (generation !== this.generation) return;

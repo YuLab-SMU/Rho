@@ -14,6 +14,8 @@ import type { DocumentAction, Dialog } from "./navigation";
 import { SettingsDialog } from "./settings-controls";
 import { SettingsPage } from "./settings-page";
 import { WorkspaceSidebar, WorkspaceStatusBar, ProjectMenu } from "./panels/shell-panels";
+import { RuntimeSessionsPage, WorkspaceRecoveryNotices } from "./runtime-page";
+import { NewSessionDialog, QuitWorkbenchDialog } from "./runtime-dialogs";
 
 function ProjectDialog({ onClose }: { onClose: () => void }) {
   const session = useSession(),
@@ -87,6 +89,7 @@ export function AppShell() {
   const session = useSession(), operations = useOperations(), consoleModel = useConsole(),
     documents = useDocuments(), persistence = usePersistence(), layout = useLayout(), navigation = useNavigation();
   const dialog = navigation.getSnapshot().dialog;
+  const managed = session.context().capabilities.includes("runtime.instances");
   const setDialog = (value: Dialog) => navigation.setDialog(value);
   const layoutState = layout.getSnapshot();
   const [filePath, setFilePath] = useState(""),
@@ -217,6 +220,10 @@ export function AppShell() {
       enabled: () => true,
       run: () => setDialog("settings"),
     },
+    { id: "session.manage", label: "R Sessions…", group: "Session", enabled: () => !!session.project && managed, run: () => navigation.openSessions() },
+    { id: "session.new", label: "New R session…", group: "Session", enabled: () => session.ready && managed, run: () => setDialog("new-session") },
+    { id: "session.recovery-settings", label: "Runtime & recovery…", group: "Session", enabled: () => !!session.project && managed, run: () => setDialog("runtime-settings") },
+    { id: "file.quit", label: "Quit Workbench…", group: "File", enabled: () => !!session.project && managed, run: () => setDialog("quit") },
   ];
   useEffect(() => {
     mounted.current = true;
@@ -317,6 +324,7 @@ export function AppShell() {
           <Icon name="search" /> <kbd>⌘ K</kbd>
         </button>
       </header>
+      {session.project && managed && <WorkspaceRecoveryNotices />}
       <div className="work-area">
         <WorkspaceSidebar />
         {session.project && !session.ready ? (
@@ -413,6 +421,10 @@ export function AppShell() {
         <ProjectDialog onClose={() => setDialog(null)} />
       )}
       {dialog === "agents" && <SettingsPage onClose={() => setDialog(null)} />}
+      {session.project && managed && <RuntimeSessionsPage key={session.project} open={dialog === "sessions"} onClose={() => setDialog(null)} />}
+      {dialog === "new-session" && <NewSessionDialog onClose={() => setDialog(null)} />}
+      {dialog === "quit" && <QuitWorkbenchDialog onClose={() => setDialog(null)} />}
+      {dialog === "runtime-settings" && <SettingsPage initialSection="recovery" onClose={() => setDialog(null)} />}
       {dialog === "settings" && (
         <SettingsDialog onClose={() => setDialog(null)} />
       )}

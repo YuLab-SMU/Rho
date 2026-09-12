@@ -38,7 +38,10 @@ const FLAGS = ["--ark", "--r", "--help", "-h"];
 for (let index = 0; index < argv.length; index += 1) {
   const argument = argv[index];
   if (!FLAGS.includes(argument)) fail(`Unknown argument: ${argument}\n\n${USAGE}`);
-  if (argument === "--ark" || argument === "--r") index += 1;
+  if (argument === "--ark" || argument === "--r") {
+    if (!argv[index + 1] || argv[index + 1].startsWith("--")) fail(`${argument} requires a path.\n\n${USAGE}`);
+    index += 1;
+  }
 }
 const ark = flag("--ark") ?? process.env.RHO_ARK;
 if (!ark) fail(`--ark is required.\n\n${USAGE}`);

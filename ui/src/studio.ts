@@ -79,6 +79,7 @@ export class Studio {
       ...state, query, notifications: this.notifications,
       info: client.info.bind(client), rConfiguration: client.rConfiguration.bind(client),
       selectProject: client.selectProject.bind(client), probeR: client.probeR.bind(client), applyR: client.applyR.bind(client),
+      quitWorkbench: client.quitWorkbench.bind(client),
       transition: { before: () => this.suspend(), after: (changed) => this.initialize(changed), failed: () => this.resumeAfterFailure() },
     });
     const windowId = options.applicationIdentity?.windowId ?? client.windowId;
@@ -95,6 +96,7 @@ export class Studio {
     this.runtimeSessions = new RuntimeSessions({ context: this.session.context, query,
       commands: { invoke: this.operations.invoke.bind(this.operations) }, changed: this.persistence.changed,
       schedule: () => this.coordinator.wake("runtime-sessions"),
+      stopWork: (id) => this.workspaceFor(id).console.stopWork(),
       selectionChanged: (id) => { this.session.selectInstance(id); this.workspaceFor(id ?? "main"); this.operations.refreshAdmission(); },
       instanceObserved: (_previous, current) => { this.workspaceFor(current.workspace_instance_id);
         this.session.observeInstanceIdentity(current.workspace_instance_id, current.native_session_id); },

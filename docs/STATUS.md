@@ -1,143 +1,115 @@
 # Rho: current state and focus
 
-Updated: 2026-09-10. This is the single current status summary. Git retains history.
+Updated: 2026-09-12. This is the single current status summary. Git retains history.
 
 ## Multiple R sessions and recovery copies
 
-The instance foundation, native object-graph recovery copies and automatic protection
-are implemented and verified; the Studio surface is partly built.
-[Design section 17](RHO-DESIGN.md#17-sessions-and-recovery--approved-interaction)
-records the approved Paper R04–R10 interaction and
-[Architecture](ARCHITECTURE.md#multiple-r-instances-and-recovery-copies) records the
-ownership, routing and recovery rules. Section 16's R01–R03 remain proposals.
+The instance foundation, recovery copies, automatic protection and approved Studio
+R04–R10 surfaces are implemented. [Design section 17](RHO-DESIGN.md#17-sessions-and-recovery--approved-interaction)
+records the authorized interaction; [Architecture](ARCHITECTURE.md#multiple-r-instances-and-recovery-copies)
+records ownership and safety boundaries. R01–R03 remain proposals.
 
-Implemented: a Host instance registry under the existing project lease and journal,
-with four distinct identities and per-instance process, queue, stdin, lane,
-observations and lifecycle state; instance lifecycle capabilities and explicit
-`workspace_instance_id` routing that rejects a missing target instead of guessing one;
-native capture of shared-reference graphs and cycles with explicit exclusions, byte
-and time budgets, atomic publish and a journal-committed manifest; idle automatic
-protection that yields to user execution and cancels cooperatively; retention, storage
-reservation and pruning; restore into a fresh candidate process; and the
-App → Project → Session policy hierarchy, where a scope write replaces that scope's
-override set, so omitting a field is how it resets to the inherited value. The
-optional idle release ends an unattended session only after complete protection, and
-never when window liveness cannot be observed.
+R Sessions now has Overview, Runs, Recovery copies and Details, with Main first across
+catalog pages, separate inspection and execution targets, scoped Console/Objects
+navigation, view pinning, stopped-session continuation and installed-R session creation.
+The management page preserves editor and Console drafts; narrow layouts provide
+list/detail/Back navigation. Copy details read the immutable full manifest when the
+catalog shortened its object-name previews. Counts use the owner's totals.
 
-Two edges changed meaning. Selecting R in Workbench settings now records the default
-used by sessions created afterwards and never drains or replaces a managed Host, so
-running sessions keep their binding and memory; asking it to end a session is refused
-and points at stopping that session individually. A running instance no longer holds
-project file observations, because each instance owns its lane.
+The recovery states explain opening, partial restoration, validation failure and
+connection loss. Notices refer to the actual restore operation and source copy;
+saving a partial copy does not imply anything was restored. Dismissals persist with
+window preferences. A first-copy notice is shown once. Selecting an alternative
+installed R/environment for a separate restoration still requires matching version,
+architecture and native package validation.
 
-A deferred open deliberately leaves R stopped, so the Workbench now performs the
-continuation as its own lifecycle action after opening or switching to a project.
-Without it the Studio served a stopped session and every run control stayed disabled.
-A workspace operation record's console-state next read now carries the instance taken
-from that record's own normalized arguments; the published link was otherwise rejected
-and the Console showed a contract error instead of the run's output.
+Restart, Stop and Quit report consequences and operation results in one panel.
+Restart creates empty memory in a new continuation lineage. A failed or partial
+protection step leaves R open until remaining loss is explicitly accepted. Quit
+synchronizes drafts, cancels waiting work, observes active cancellation, saves supported
+objects, confirms local R termination and then requests Host shutdown. Closing a view
+alone leaves R running. Host shutdown refuses live or unconfirmed process receipts and
+fences later launches. Opening/restore cancellation forwards to the original child,
+waits for the launch handshake and confirms candidate termination before reporting
+cancellation. Ordinary in-flight reads drain behind a stop fence; consumer holds and
+scientific operations remain blockers.
 
-Continuation takes an explicit `start_empty` choice, which is the remedy its refusal
-names and which begins a new generation exactly like a clean restart, so abandoned
-objects cannot be resurrected automatically. A candidate process launched only to
-restore into is ended when restoration turns out to be impossible; it was previously
-left alive, where it blocked that remedy and was then orphaned at exit.
+Runtime & recovery settings expose App → Project → Session inheritance per field,
+Reset, object inclusion/exclusion, performance/storage controls and advanced limits.
+Server defaults and project storage accounting are published by the settings owner;
+the UI does not duplicate default constants. Recording default R does not replace any
+live R binding. An empty Host can create a session explicitly from the new-session
+entry after R is configured.
 
-Studio renders the approved daily entry: the status-bar R disclosure names the target
-session, reports its latest recovery copy and lists the other sessions with their
-state, and the editor toolbar carries a `Run in session` picker beside Run, hidden
-while the project has one session and continuing a stopped session when chosen.
+The factor-predictor model exclusion is fixed: R's base `deferred_string` ALTREP is
+accepted after recursively classifying its storage. A test-only foreign provider
+verifies unknown ALTREP roots and nested graphs remain excluded without invoking
+length, data or serialization callbacks. Cold processes verify predictions for both
+character/factor predictor lm/glm, alongside existing aliases/cycles, Unicode/hidden
+values, factors/time, sparse/SCE values, RNG/options and unevaluated nested promises.
 
-### Verified
+Environment retention now follows committed recovery manifests even when all R
+sessions are stopped. The added real-R regression first reproduced the missing
+reference, then passed after the fix; explicit deletion releases that old copy's
+library reference. Incomplete bookkeeping blocks cleanup instead of discarding an
+unknown dependency. Component delivery validates explicit R arguments and is exercised
+in an isolated install layout with matching manifest paths and byte hashes.
 
-Passed with real R, using the pinned Ark 0.1.252 build beside the integration checkout
-and the installed R home: `scripts/test-r-checkpoints.mjs`, including cold restore of
-shared aliases, cycles, hidden and Unicode values, factors and time classes, fitted
-models, sparse and in-memory SCE objects, RNG state and options, and no artifact
-published after a fractional budget was exhausted; `scripts/test-real-r.mjs`, now
-including the real-R multi-instance restore and clean-restart case; and
-`scripts/test-environment.mjs`.
+### Current verification
 
-Also passed: `cargo test --workspace --locked -- --test-threads=1` (275 tests),
-`npm run generate`, `build`, `check` and `typecheck --prefix ui`,
-`npm run test --prefix ui` (356 tests), `npm run test:browser --prefix ui`
-(42 Playwright specs, with Ark and the recovery component beside the built binary),
-`scripts/governance.mjs check|generate|impact`,
-`test-governance.mjs`, `check-architecture.mjs`, `vendor-jet.mjs check`,
-`test-vendor-jet.mjs`, `check-frontend-boundaries.mjs`,
-`test-frontend-boundaries.mjs`, `test-mcp.mjs` with and without `--real-r`,
-`test-workbench.mjs` with and without `--real-r`, `test-output-media.mjs`,
-`test-process-recovery.mjs`, `test-remote-protocol.mjs`,
-`test-agent-task-recovery.mjs`, `test-agent-interface.mjs --self-test` and
-`test-pack-agent-evidence.py`.
+- Full serial Rust workspace: **284 passed**, **10 opt-in cases ignored**, not counted
+  as passes. An unchanged Agent protocol fixture timed out once during the first run;
+  its focused rerun and the full serial rerun passed without changing Agent code.
+- Frontend: **362 tests passed**; typecheck, generated DTOs/client build, architecture,
+  frontend boundaries and all 24 boundary fixtures, vendor integrity and fixtures passed.
+- Full Chrome suite: **46/46 passed**, including four new real scenarios: isolated multi-session recovery and empty
+  restart; session creation and per-field settings reset; full coverage beyond a
+  truncated catalog; and active/queued cancellation followed by save, Quit, Host reopen
+  and automatic recovery. They acquire a component beside a temporary Ark and launch
+  through normal discovery, with no explicit helper override. Editor/Console drafts
+  and keyboard target selection are checked. Screenshots cover 600/1024/1440/1920 px.
+  The fixed load case measured input p95 **34 ms** and frame p95 **16.7 ms**.
+- `scripts/test-r-checkpoints.mjs` passed, including foreign-provider exclusions,
+  numeric/factor models and isolated component delivery. The recovery-library test
+  passed both retained-reference and deletion assertions. The real-R, Environment,
+  MCP, Workbench, output-media, process/remote protocol, Agent recovery/harness and
+  evidence-pack checks also passed.
 
-The whole recovery loop was also verified by hand against a real launched Workbench:
-with the native component installed beside Ark, `capture_available` is true, an
-explicit capture reported `complete_eligible_graph` with two objects and none skipped,
-SIGINT ended the Host, and the reopened Host auto-continued into a **new native session
-inside the same continuation lineage** with the objects genuinely present again
-(`length(a) == 5`, `nrow(b) == 3`, `identical(b$y, letters[1:3])` true).
+The final review corrected two concurrent-update cases: Quit flushes document and
+view-state owners in acknowledgement order before checking synchronization; whole-vector
+copy waits through transient busy periods on its original reference. Recovery capture,
+pinning and deletion do not invalidate object/package observations. Actual scientific
+execution still invalidates them. HTTP size checks retain the 413 assertion using
+100-continue, MCP media checks explicitly await completion, and the IME fixture uses a
+separate deliberate key gesture instead of depending on frame timing.
 
-`scripts/test-r-checkpoints.mjs` is now the governance check `system.r-checkpoints`,
-and `scripts/test-real-r.mjs` now runs the real-R multi-instance acceptance.
+Evidence for this continuation is in `target/runtime-final-*.log` and the check
+manifest `target/runtime-final-checks.json`; screenshots are
+`target/studio-browser/runtime-*.png`. Functional evidence does not replace further
+user feedback on the interaction.
 
-### Unresolved
+### Remaining release boundaries
 
-- Observed in a real two-session Workbench: a fitted model with a factor predictor is
-  excluded whole from a recovery copy as `unknown_altrep_provider`
-  (`lm(value ~ condition, samples)` skipped), while a numeric-only model on `mtcars`
-  (`lm(mpg ~ wt)`) is saved and a data frame holding `1:24` is saved. The exclusion is
-  therefore not about models or compact sequences in general. `r/checkpoint/roundtrip.R`
-  only exercises numeric-only `lm`/`glm` on `mtcars`, so its reported lm/glm pass does
-  not generalize, and the first-batch requirement that common models pass real save and
-  restore before entering the automatic support list is not met for factor terms.
-  Factor predictors are ordinary in scientific R, so this needs a real answer before
-  recovery can be offered as dependable.
-- The instance catalog is keyed by instance id, so a created session (`instance_op_…`)
-  sorts before `main`. The target picker and the other-sessions list therefore show
-  Scratch above Main, while R04 and R05 show the default session first. Client-side
-  reordering cannot fix this across pages; the catalog itself has to put the default
-  instance first.
-- First run with no R configured at launch: the project Host has no Main instance,
-  and recording a default R deliberately does not create one, so R only becomes
-  available after a restart. The approved configuration entry (R04/R10) has to create
-  the session explicitly; until it exists this path needs a restart.
-- Not built: the `R Sessions` management page (R05/R06), the restoring, partial
-  restore, environment-mismatch and disconnect states (R07), the restart, stop and
-  quit panels (R08), the advanced `Runtime & recovery` settings (R09), and the
-  narrow-width layouts and new-session dialog (R10).
-- The native recovery component is acquired per machine by an explicit operator
-  command (`scripts/bootstrap-recovery-component.mjs`) and is not part of any
-  packaging or first-run path, so a freshly installed Rho writes no recovery copies
-  until someone builds it for that R. Nothing gates the bootstrap script, and the
-  capture → restart → auto-restore loop in a launched Workbench was verified by hand
-  once rather than by an automated check.
-- The browser suite drives a single session, so the multi-session surfaces — the
-  target picker, the other-sessions list and the recovery-copy rows in the status
-  disclosure — have no automated coverage and no visual acceptance at normal, wide
-  and constrained widths. The picker's subtitle reads `Managed environment` because
-  no environment name is published, while R05 shows a named environment.
-- Not measured: the editor-input and added-wait latency thresholds, multi-platform and
-  long-run behaviour, and destructive-failure acceptance.
-- Binding two genuinely different R installations stays opt-in and unexercised; it
-  needs `RHO_ALT_*`.
-- `rho --connect-url-file invoke --code` needs an explicit `--workspace-instance`; a
-  connected Host publishes no contract the CLI can read to default it.
-- Real-model Agent acceptance now depends on the Agent supplying
-  `workspace_instance_id`, which the augmented tool schema publishes.
-- An exiting Host now ends the R processes it started instead of orphaning them, but
-  it does not capture a fresh recovery copy first, so objects created since the latest
-  automatic copy are lost on Ctrl-C or server shutdown. R08's `Quit Workbench…` panel
-  has to save supported objects before each process stops, on top of the explicit
-  per-session stop that already does this.
-- An Environment realization referenced by an instance or a recovery copy is protected
-  from cleanup, but that protection has no dedicated test.
+- The native component is still an explicit per-machine acquisition and has not been
+  added to a signed packaging or first-run installer. Opening R or browsing copies
+  never invokes a compiler or installs packages.
+- Two genuinely different R installations require `RHO_ALT_*` and remain opt-in.
+  Cross-platform, long-run/destructive-failure and added-wait latency acceptance have
+  not been established by these local tests. No release-wide performance claim is made.
+- Environment receipts have no user-facing display name, so the interface uses a
+  generic description and keeps the exact receipt/path in Details.
+- Raw Ctrl-C/server termination ends owned R processes without guaranteeing a fresh
+  object copy. The explicit Quit panel is the protected shutdown path.
+- Connected CLI and Agent requests require `workspace_instance_id`; no implicit
+  target is guessed. A new real-model Agent acceptance run is separate from the
+  deterministic protocol/bridge checks.
 
 ### Restart paths
 
-The work lives in the registered worktree `.worktrees/runtime-recovery` on
-`codex/runtime-recovery`, on top of `a4c127da`. Real workbench runs belong in the
-integration checkout, not in this worktree.
+This continuation uses `.worktrees/runtime-recovery` on `codex/runtime-recovery`.
+Inspect current processes before any real integration launch. Existing user Hosts and
+R memory have not been restarted. New browser and native tests use disposable projects.
+No application installation, signing or publication has been performed.
 
 ## Shell navigation and configurable status bar
 
@@ -526,6 +498,6 @@ service-manager jobs and rollback of arbitrary external effects are not implied.
 
 The approved Packages interaction remains in
 [Paper](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0).
-Multiple runtimes/R-version switching, plugin execution, package-management UI,
+Cross-version import, plugin execution, package-management UI,
 abandoned-data migration, product installation and publication remain deferred.
 The external acceptance runner is test tooling, not a product Agent behavior loop.

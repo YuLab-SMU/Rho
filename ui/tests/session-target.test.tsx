@@ -14,6 +14,8 @@ vi.mock("../src/context", () => ({
     return owner;
   },
   useSession: () => ({ reportError: (text: string) => void state.errors.push(text) }),
+  useNavigation: () => ({ setDialog: vi.fn(), openSessions: vi.fn() }),
+  useInstanceConsole: () => ({ consoleState: null }),
 }));
 afterEach(() => { cleanup(); state.owner?.stop(); state.owner = null; state.errors = []; vi.restoreAllMocks(); });
 

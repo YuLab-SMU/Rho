@@ -409,6 +409,7 @@ async fn stylesheet(State(state): State<AppState>) -> Response {
 }
 
 fn router(state: AppState, shutdown: CancellationToken) -> Router {
+    let quit_signal = shutdown.clone();
     let hosting = state.hosting.clone();
     let mcp = StreamableHttpService::new(
         move || {
@@ -435,6 +436,31 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/app.js", get(javascript))
         .route("/style.css", get(stylesheet))
         .route("/api/info", get(info))
+        .route(
+            "/api/quit",
+            post(
+                move |State(state): State<AppState>, Json(request): Json<SelectProject>| {
+                    let quit_signal = quit_signal.clone();
+                    async move {
+                        let hosting = state.hosting.write().await;
+                        let Some(selected) = &hosting.selected else {
+                            return failure(StatusCode::CONFLICT, "No project is selected");
+                        };
+                        if selected.root.as_path() != Path::new(&request.project_root) {
+                            return failure(
+                                StatusCode::CONFLICT,
+                                "Project changed; review the current Workbench before quitting",
+                            );
+                        }
+                        if let Err(error) = selected.host.prepare_workbench_quit().await {
+                            return failure(StatusCode::CONFLICT, error.to_string());
+                        }
+                        quit_signal.cancel();
+                        Json(serde_json::json!({"quitting":true})).into_response()
+                    }
+                },
+            ),
+        )
         .route("/api/agent-connection", get(agent_connection))
         .route("/api/agents/discover", post(agents::discover))
         .route("/api/agents/setup", post(agents::setup))
@@ -581,7 +607,7 @@ pub async fn serve_with_assets(
     }
     let result = axum::serve(listener, app)
         .with_graceful_shutdown(async move {
-            let _ = tokio::signal::ctrl_c().await;
+            tokio::select! { _ = tokio::signal::ctrl_c() => (), _ = shutdown.cancelled() => () }
             shutdown.cancel();
         })
         .await;
@@ -663,6 +689,26 @@ mod tests {
     }
     async fn frame(state: &AppState, method: &str, params: Value) -> Value {
         json!({"project_root":state.hosting.read().await.info().project_root, "frame":{"id":"request","request":{"method":method,"params":params}}})
+    }
+
+    #[tokio::test]
+    async fn explicit_quit_requires_the_reviewed_project_and_signals_only_after_host_acceptance() {
+        let (_temp, state, _) = fixture().await;
+        let signal = CancellationToken::new();
+        let app = router(state.clone(), signal.clone());
+        let wrong = request(
+            &app,
+            "/api/quit",
+            Some(json!({"project_root":"/different-project"})),
+        )
+        .await;
+        assert_eq!(wrong.status(), StatusCode::CONFLICT);
+        assert!(!signal.is_cancelled());
+        let root = state.hosting.read().await.info().project_root;
+        let result = request(&app, "/api/quit", Some(json!({"project_root":root}))).await;
+        assert_eq!(result.status(), StatusCode::OK);
+        assert_eq!(json_body(result).await["quitting"], true);
+        assert!(signal.is_cancelled());
     }
 
     #[tokio::test]
@@ -1014,9 +1060,7 @@ mod tests {
         let capabilities = info["capabilities"].as_array().unwrap();
         for id in ["runtime.instances", "workspace.run_r"] {
             assert!(
-                capabilities
-                    .iter()
-                    .any(|c| c["capability"]["id"] == id),
+                capabilities.iter().any(|c| c["capability"]["id"] == id),
                 "the managed contract stays published: {id}"
             );
         }

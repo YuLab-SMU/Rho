@@ -299,6 +299,8 @@ pub(crate) struct InstanceOwner {
     launcher: Arc<dyn InstanceLauncher>,
     state: Mutex<State>,
     transition: Arc<tokio::sync::Mutex<()>>,
+    native_reads_changed: tokio::sync::Notify,
+    opening_cancellations: Mutex<BTreeMap<OperationId, tokio::sync::watch::Receiver<bool>>>,
     gateway: OnceLock<Weak<OperationGateway>>,
     windows_online: OnceLock<WindowProbe>,
     _project_lease: Option<Arc<crate::ProjectLease>>,
@@ -410,6 +412,8 @@ impl InstanceOwner {
                 shutdown: false,
             }),
             transition: Arc::new(tokio::sync::Mutex::new(())),
+            native_reads_changed: tokio::sync::Notify::new(),
+            opening_cancellations: Mutex::new(BTreeMap::new()),
             gateway: OnceLock::new(),
             windows_online: OnceLock::new(),
             _project_lease: project_lease,
@@ -458,13 +462,9 @@ impl InstanceOwner {
     /// Fail-safe: an unobservable window is treated as a window that is watching,
     /// so idle release never ends a session it cannot prove is unattended.
     fn windows_online(&self) -> bool {
-        self.windows_online
-            .get()
-            .is_none_or(|probe| probe())
+        self.windows_online.get().is_none_or(|probe| probe())
     }
-    pub(crate) fn window_probe(
-        application: Arc<rho_application::ApplicationOwner>,
-    ) -> WindowProbe {
+    pub(crate) fn window_probe(application: Arc<rho_application::ApplicationOwner>) -> WindowProbe {
         Arc::new(move || {
             let Ok(now) = now() else { return true };
             application
@@ -539,6 +539,12 @@ impl InstanceOwner {
         local_value.apply_to(&mut value);
         validate_policy(&value)?;
         Ok(RuntimeSettings {
+            defaults: RuntimePolicy::default(),
+            project_storage_bytes: self
+                .app_store
+                .runtime_storage_usage(&self.project)
+                .map_err(storage_error)?
+                .0,
             effective: RuntimeEffectivePolicy {
                 value,
                 app: app_value,
@@ -612,7 +618,7 @@ impl InstanceOwner {
         if let Some(id) = &args.after_instance_id {
             validate_id(id)?;
         }
-        let ids: Vec<_> = self
+        let mut ids: Vec<_> = self
             .state
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -620,13 +626,17 @@ impl InstanceOwner {
             .keys()
             .cloned()
             .collect();
+        // Main leads the public catalog. The same composite order applies to
+        // continuation cursors, including a page ending at Main.
+        let key = |id: &str| (id != MAIN_WORKSPACE_INSTANCE, id.to_owned());
+        ids.sort_by_key(|id| key(id));
         let mut instances = Vec::new();
         let mut bytes = 0;
         let mut more = false;
         for id in ids.iter().filter(|id| {
             args.after_instance_id
                 .as_ref()
-                .is_none_or(|after| *id > after)
+                .is_none_or(|after| key(id) > key(after))
         }) {
             let instance = self.instance(id)?;
             let cost = serde_json::to_vec(&instance).map_err(storage_error)?.len();
@@ -880,6 +890,11 @@ impl InstanceOwner {
             .instances
             .get_mut(id)
             .ok_or_else(|| OperationError::NotFound(format!("R instance {id}")))?;
+        if slot.stored.state == RuntimeInstanceState::Stopping {
+            return Err(OperationError::Unavailable(
+                "This R session is stopping; its last observation remains available".into(),
+            ));
+        }
         if slot.stored.state != RuntimeInstanceState::Ready
             && !capability.starts_with("workspace.checkpoint")
             && capability != "workspace.runtime_status"
@@ -911,6 +926,24 @@ impl InstanceOwner {
                 live.workspace.begin_shutdown();
             }
         }
+    }
+    pub(crate) async fn seal_stopped_sessions(&self) -> Result<(), OperationError> {
+        let _transition = self.transition.clone().lock_owned().await;
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if !state.requests.is_empty()
+            || state.instances.values().any(|slot| {
+                slot.live.is_some()
+                    || slot.stored.process.is_some()
+                    || slot.stored.launch_unconfirmed
+            })
+        {
+            return Err(OperationError::Unavailable(
+                "Stop all local R sessions and confirm their termination before quitting Workbench"
+                    .into(),
+            ));
+        }
+        state.shutdown = true;
+        Ok(())
     }
     /// An exiting Host owns the R processes it started. Leaving them running strands
     /// the project: the recorded receipt correctly blocks a replacement, and an
@@ -966,7 +999,7 @@ impl InstanceOwner {
             .and_then(|slot| slot.stored.binding.library_path.clone())
     }
     pub(crate) async fn protected_libraries(&self) -> Result<Vec<String>, String> {
-        let (runtimes, bindings): (Vec<_>, Vec<_>) = {
+        let (runtimes, mut bindings): (Vec<_>, Vec<_>) = {
             let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
             (
                 state
@@ -989,6 +1022,62 @@ impl InstanceOwner {
                 ))
                 .await?,
             );
+        }
+        // Stored recovery points keep their original libraries even after every R
+        // process stopped or an instance was rebound. Reservation identities avoid
+        // an unbounded filesystem scan and the Workspace owner verifies retention.
+        let mut after = None;
+        for page_index in 0..20 {
+            let page =
+                self.app_store
+                    .runtime_storage_records(&self.project, after.as_deref(), 200)?;
+            for (id, _, bytes, reserved) in &page {
+                if *bytes == 0 && !reserved {
+                    continue;
+                }
+                let record = self
+                    .journal
+                    .get(&OperationId::new(id).map_err(|e| e.to_string())?)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .ok_or("A recovery storage reservation has no original operation")?;
+                if record.status != OperationStatus::Succeeded {
+                    return Err("Recovery storage still has an unconfirmed capture; its environment references cannot be discarded".into());
+                }
+                let manifest: CheckpointManifest = serde_json::from_value(
+                    record
+                        .output
+                        .clone()
+                        .ok_or("Recovery storage has no committed manifest")?,
+                )
+                .map_err(|e| e.to_string())?;
+                let archive = self
+                    .archive(&manifest.workspace_instance_id)
+                    .map_err(|e| e.to_string())?;
+                // Cleanup protects all retained references. This internal context is
+                // bound to each original principal; no other principal's data is exposed.
+                if let Some(manifest) = archive
+                    .checkpoint
+                    .retained_manifest_for(&Self::internal_context(&record.operation), manifest)
+                    .await
+                    .map_err(|e| e.to_string())?
+                {
+                    paths.extend(manifest.report.library_paths);
+                    if let Some(binding) = manifest.runtime_binding {
+                        bindings.push(binding);
+                    }
+                }
+            }
+            if page.len() < 200 {
+                break;
+            }
+            if page_index == 19 {
+                return Err(
+                    "Recovery reference observation reached its bound; cleanup remains blocked"
+                        .into(),
+                );
+            }
+            after = page.last().map(|row| row.0.clone());
         }
         // Dormant logical sessions still need their recorded dependency realization to continue.
         for binding in bindings {
@@ -1166,6 +1255,7 @@ impl RequestHold {
                 if let Some(slot) = state.instances.get_mut(&id) {
                     slot.query_count = slot.query_count.saturating_sub(1);
                 }
+                owner.native_reads_changed.notify_one();
             }
             None => (),
         }
@@ -1476,6 +1566,14 @@ impl InstanceOwner {
         Ok(())
     }
     fn require_quiet(&self, id: &str, expected: &str) -> Result<(), OperationError> {
+        self.require_idle(id, expected, false)
+    }
+    fn require_idle(
+        &self,
+        id: &str,
+        expected: &str,
+        allow_reads: bool,
+    ) -> Result<(), OperationError> {
         let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let slot = state
             .instances
@@ -1487,7 +1585,10 @@ impl InstanceOwner {
                 "Expected {expected}; this logical instance now has a different native session"
             )));
         }
-        let blockers = Self::blockers_locked(&state, id);
+        let blockers: Vec<_> = Self::blockers_locked(&state, id)
+            .into_iter()
+            .filter(|blocker| !allow_reads || blocker.kind != "observation")
+            .collect();
         if !blockers.is_empty() {
             return Err(OperationError::Unavailable(format!(
                 "The session is in use: {}; inspect runtime.instance for its owners",
@@ -1516,7 +1617,10 @@ impl InstanceOwner {
                 "The target native R session changed".into(),
             ));
         }
-        if !Self::blockers_locked(&state, id).is_empty() {
+        if Self::blockers_locked(&state, id)
+            .iter()
+            .any(|blocker| blocker.kind != "observation")
+        {
             return Err(OperationError::Unavailable(
                 "This R session is still in use; inspect runtime.instance for its blockers".into(),
             ));
@@ -1529,6 +1633,32 @@ impl InstanceOwner {
         slot.stored.last_error = None;
         self.persist_locked(&mut state)?;
         Ok(previous)
+    }
+    async fn drain_native_reads(&self, id: &str) -> Result<(), OperationError> {
+        // Stopping fences new readers. Await actual release of already admitted
+        // reads, rather than making routine UI refreshes randomly reject a stop.
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let changed = self.native_reads_changed.notified();
+                let count = self
+                    .state
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .instances
+                    .get(id)
+                    .map_or(0, |slot| slot.query_count);
+                if count == 0 {
+                    break;
+                }
+                changed.await;
+            }
+        })
+        .await
+        .map_err(|_| {
+            OperationError::Unavailable(
+                "A native observation did not finish; this R session remains open".into(),
+            )
+        })
     }
     fn internal_context(operation: &Operation) -> CallContext {
         CallContext {
@@ -1560,9 +1690,45 @@ impl InstanceOwner {
             arguments,
             preconditions: vec![],
         };
-        self.gateway()?
-            .invoke(&Self::internal_context(parent), request)
-            .await
+        let cancellation = self
+            .opening_cancellations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&parent.operation_id)
+            .cloned();
+        let gateway = self.gateway()?;
+        let context = Self::internal_context(parent);
+        let Some(mut cancellation) = cancellation else {
+            return gateway.invoke(&context, request).await;
+        };
+        let (accepted, receipt) = tokio::sync::oneshot::channel();
+        let invocation = gateway.invoke_notifying(&context, request, Some(accepted));
+        tokio::pin!(invocation);
+        let forward = async {
+            if let Ok(record) = receipt.await {
+                wait_cancellation(&mut cancellation).await;
+                // Continue observing the exact child after forwarding cancellation.
+                let _ = gateway
+                    .request_cancellation(&context, &record.operation.operation_id)
+                    .await;
+            }
+        };
+        tokio::select! { result = &mut invocation => result, _ = forward => invocation.await }
+    }
+    fn check_opening(&self, operation: &Operation) -> Result<(), OperationError> {
+        let cancelled = self
+            .opening_cancellations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&operation.operation_id)
+            .is_some_and(|receiver| *receiver.borrow());
+        if cancelled {
+            Err(OperationError::Unavailable(
+                "Opening cancelled; the original recovery copy is retained".into(),
+            ))
+        } else {
+            Ok(())
+        }
     }
     async fn protect_before_stop(
         &self,
@@ -1651,6 +1817,7 @@ impl InstanceOwner {
             slot.maintenance = Some(operation.operation_id.clone());
             self.persist_locked(&mut state)?;
         }
+        self.check_opening(operation)?;
         let mut restoration_notice = None;
         if restore {
             let context = Self::internal_context(operation);
@@ -1693,6 +1860,7 @@ impl InstanceOwner {
                 return Err(OperationError::Unavailable("The previous session had activity but no available checkpoint in this continuation lineage. Continue with start_empty to begin an empty session, or restore an earlier recovery point explicitly".into()));
             }
         }
+        self.check_opening(operation)?;
         self.change_state(
             &stored.id,
             RuntimeInstanceState::Ready,
@@ -1704,7 +1872,7 @@ impl InstanceOwner {
     /// End a candidate that was launched only to restore into it. Its receipt is
     /// cleared only once termination is confirmed, so an uncertain stop still leaves
     /// the evidence a later Host must check before starting a replacement.
-    async fn release_candidate(&self, id: &str, live: &InstanceLive) {
+    async fn release_candidate(&self, id: &str, live: &InstanceLive) -> bool {
         let stopped = live.runtime.shutdown().await.is_ok();
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(slot) = state.instances.get_mut(id) {
@@ -1715,7 +1883,7 @@ impl InstanceOwner {
                 slot.stored.launch_unconfirmed = false;
             }
         }
-        let _ = self.persist_locked(&mut state);
+        stopped && self.persist_locked(&mut state).is_ok()
     }
     async fn create(
         &self,
@@ -1723,6 +1891,7 @@ impl InstanceOwner {
         arguments: CreateRuntimeInstance,
     ) -> Result<WorkspaceInstance, OperationError> {
         let prepared = self.launcher.prepare(&arguments.binding).await?;
+        self.check_opening(operation)?;
         let id = format!("instance_{}", operation.operation_id.as_str());
         validate_id(&id)?;
         let stored = StoredInstance {
@@ -1808,6 +1977,9 @@ impl InstanceOwner {
             if stored.state == RuntimeInstanceState::Ready
                 && existing.runtime.runtime_status().state != "unavailable"
             {
+                if args.start_empty {
+                    return Err(OperationError::Unavailable("R is already running. Review Restart with empty memory instead of treating a live session as an empty opening".into()));
+                }
                 return self.instance(&stored.id);
             }
             match existing.runtime.native_process_alive().await.map_err(|error| OperationError::Unavailable(error.message))? {
@@ -1921,6 +2093,15 @@ impl InstanceOwner {
             &args.expected_native_session_id,
             &operation.operation_id,
         )?;
+        if let Err(error) = self.drain_native_reads(&args.workspace_instance_id).await {
+            self.change_state(
+                &args.workspace_instance_id,
+                prior,
+                &operation.operation_id,
+                Some(error.to_string()),
+            )?;
+            return Err(error);
+        }
         if let Err(error) = self
             .protect_before_stop(
                 operation,
@@ -1997,9 +2178,10 @@ impl InstanceOwner {
         operation: &Operation,
         args: RestartRuntimeInstance,
     ) -> Result<WorkspaceInstance, OperationError> {
-        self.require_quiet(
+        self.require_idle(
             &args.workspace_instance_id,
             &args.expected_native_session_id,
+            true,
         )?;
         let stored = self.stored_instance(&args.workspace_instance_id)?;
         let prepared = self.launcher.prepare(&stored.binding).await?;
@@ -2079,8 +2261,9 @@ impl InstanceOwner {
                 "The recovery point does not belong to the named source instance",
             ));
         }
-        let original_binding = manifest.runtime_binding.as_ref().ok_or_else(|| OperationError::Unavailable("This checkpoint has no verified launch binding; choose a runtime explicitly before importing its objects".into()))?;
+        let original_binding = args.binding.as_ref().or(manifest.runtime_binding.as_ref()).ok_or_else(|| OperationError::Unavailable("This checkpoint has no verified launch binding; choose a runtime explicitly before importing its objects".into()))?;
         let prepared = self.launcher.prepare(original_binding).await?;
+        self.check_opening(operation)?;
         if prepared.installation.r_version != manifest.report.r_version
             || prepared.installation.platform != manifest.report.platform
         {
@@ -2123,11 +2306,13 @@ impl InstanceOwner {
             let launched = self.launcher.launch(prepared).await?;
             let live = self.make_live(launched.runtime, &stored)?;
             { let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner()); let slot = state.instances.get_mut(&id).unwrap(); slot.stored.process = live.runtime.process_identity(); slot.live = Some(live.clone()); self.persist_locked(&mut state)?; }
+            self.check_opening(operation)?;
             let result = self.child_operation(operation, "import", &id, "workspace.checkpoint_restore", json!({
                 "expected_session":live.runtime.session_id(), "checkpoint_id":manifest.checkpoint_id,
                 "source_workspace_instance_id":source.id, "source_continuation_lineage_id":manifest.continuation_lineage_id,
             })).await?;
             if result.status != OperationStatus::Succeeded { return Err(OperationError::Unavailable(format!("The recovery candidate is retained for inspection. {}", result.error.unwrap_or_else(|| "Objects were not restored".into())))); }
+            self.check_opening(operation)?;
             self.change_state(&id, RuntimeInstanceState::Ready, &operation.operation_id, None)?;
             self.instance(&id)
         }.await;
@@ -2457,7 +2642,14 @@ fn lifecycle_descriptor(id: &str) -> CapabilityDescriptor {
         } else {
             RetryClass::ReconcileFirst
         },
-        cancellation: CancellationClass::Unsupported,
+        cancellation: if matches!(
+            id,
+            "runtime.create_instance" | "runtime.continue_instance" | "runtime.restore_instance"
+        ) {
+            CancellationClass::Cooperative
+        } else {
+            CancellationClass::Unsupported
+        },
     }
 }
 
@@ -2497,11 +2689,104 @@ impl OperationHandler for InstanceOperation {
     async fn acquire_execution(
         &self,
         _operation: &Operation,
-        _cancellation: tokio::sync::watch::Receiver<bool>,
+        mut cancellation: tokio::sync::watch::Receiver<bool>,
     ) -> Result<Box<dyn ExecutionLease>, HandlerError> {
-        Ok(Box::new(LifecycleLease {
-            _guard: self.owner.transition.clone().lock_owned().await,
-        }))
+        let guard = tokio::select! {
+            guard = self.owner.transition.clone().lock_owned() => guard,
+            _ = wait_cancellation(&mut cancellation) => return Err(HandlerError::cancelled("Opening cancelled before lifecycle admission", None)),
+        };
+        if self
+            .owner
+            .state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .shutdown
+        {
+            return Err(before("The Host is stopping"));
+        }
+        Ok(Box::new(LifecycleLease { _guard: guard }))
+    }
+    async fn execute_controlled(
+        &self,
+        operation: &Operation,
+        cancellation: tokio::sync::watch::Receiver<bool>,
+    ) -> Result<CommitPlan, HandlerError> {
+        if *cancellation.borrow() {
+            return Ok(CommitPlan::cancelled_before_start());
+        }
+        self.owner
+            .opening_cancellations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(operation.operation_id.clone(), cancellation.clone());
+        let result = self.execute(operation).await;
+        self.owner
+            .opening_cancellations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&operation.operation_id);
+        // A cancellation request arriving after publication cannot revoke success.
+        if !*cancellation.borrow()
+            || result
+                .as_ref()
+                .is_ok_and(|plan| plan.outcome == OperationOutcome::Succeeded)
+        {
+            return result;
+        }
+        if result
+            .as_ref()
+            .is_err_and(|error| error.effect_boundary == EffectBoundary::MayHaveOccurred)
+        {
+            return result;
+        }
+        let id = operation
+            .normalized_arguments
+            .get("workspace_instance_id")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("instance_{}", operation.operation_id.as_str()));
+        let candidate = {
+            let state = self.owner.state.lock().unwrap_or_else(|e| e.into_inner());
+            state
+                .instances
+                .get(&id)
+                .filter(|slot| {
+                    slot.stored.last_operation.as_deref() == Some(operation.operation_id.as_str())
+                        && slot.stored.state != RuntimeInstanceState::Ready
+                })
+                .map(|slot| (slot.live.clone(), slot.stored.launch_unconfirmed))
+        };
+        if let Some((live, unconfirmed)) = candidate {
+            if live.is_none() && unconfirmed {
+                return Err(HandlerError::after_possible_effect(
+                    "Opening cancellation cannot confirm the original launch ended",
+                    Some(json!({"workspace_instance_id":id,"automatic_reexecution":false})),
+                ));
+            }
+            if let Some(live) = live
+                && !self.owner.release_candidate(&id, &live).await
+            {
+                return Err(HandlerError::after_possible_effect(
+                    "Restore cancellation requested, but candidate termination is unconfirmed",
+                    Some(json!({"workspace_instance_id":id,"automatic_reexecution":false})),
+                ));
+            }
+            self.owner
+                .change_state(
+                    &id,
+                    RuntimeInstanceState::Stopped,
+                    &operation.operation_id,
+                    Some("Opening cancelled; the original recovery copy is retained".into()),
+                )
+                .map_err(before)?;
+            let mut plan = CommitPlan::succeeded(
+                serde_json::to_value(self.owner.instance(&id).map_err(before)?).map_err(before)?,
+            );
+            plan.outcome = OperationOutcome::Cancelled;
+            plan.error = Some("Opening cancelled; candidate termination confirmed".into());
+            return Ok(plan);
+        }
+        Ok(CommitPlan::cancelled_before_start())
     }
     async fn execute(&self, operation: &Operation) -> Result<CommitPlan, HandlerError> {
         let args = operation.normalized_arguments.clone();
@@ -2694,7 +2979,10 @@ fn normalize_lifecycle(id: &str, value: &Value) -> Result<Value, OperationError>
     {
         validate_id(id)?;
     }
-    if let Some(binding) = normalized.get("binding") {
+    if let Some(binding) = normalized
+        .get("binding")
+        .filter(|binding| !binding.is_null())
+    {
         validate_binding(&serde_json::from_value(binding.clone()).map_err(invalid)?)?;
     }
     if let Some(id) = normalized
@@ -2723,6 +3011,9 @@ mod tests {
         root: String,
         launches: AtomicUsize,
         fail_prepare: AtomicBool,
+        block_launch: AtomicBool,
+        launch_started: tokio::sync::Notify,
+        launch_release: tokio::sync::Notify,
         original_alive: AtomicUsize,
         started: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
@@ -2781,6 +3072,10 @@ mod tests {
             &self,
             prepared: PreparedInstanceLaunch,
         ) -> Result<LaunchedInstance, OperationError> {
+            if self.block_launch.load(Ordering::SeqCst) {
+                self.launch_started.notify_one();
+                self.launch_release.notified().await;
+            }
             Ok(LaunchedInstance {
                 installation: prepared.installation,
                 runtime: Arc::new(FixtureRuntime {
@@ -2895,6 +3190,9 @@ mod tests {
             root: root.to_string_lossy().into_owned(),
             launches: AtomicUsize::new(0),
             fail_prepare: AtomicBool::new(false),
+            block_launch: AtomicBool::new(false),
+            launch_started: tokio::sync::Notify::new(),
+            launch_release: tokio::sync::Notify::new(),
             original_alive: AtomicUsize::new(0),
             started: Arc::new(tokio::sync::Notify::new()),
             release: Arc::new(tokio::sync::Notify::new()),
@@ -2991,6 +3289,243 @@ mod tests {
             .unwrap();
         assert_eq!(page.data.unwrap()["total"], 1);
         assert_eq!(launcher.launches.load(Ordering::SeqCst), before);
+    }
+
+    #[tokio::test]
+    async fn instance_catalog_keeps_main_first_across_page_boundaries() {
+        let (_temp, host, launcher) = fixture().await;
+        let created = invoke(
+            &host,
+            "catalog-new",
+            "runtime.create_instance",
+            json!({"name":"Scratch","binding":binding(),"start":false}),
+        )
+        .await;
+        assert_eq!(created.status, OperationStatus::Succeeded);
+        let scratch: WorkspaceInstance = serde_json::from_value(created.output.unwrap()).unwrap();
+        assert!(scratch.workspace_instance_id.as_str() < "main");
+        let owner = host.runtime.instances.as_ref().unwrap();
+        let launches = launcher.launches.load(Ordering::SeqCst);
+        let first = owner
+            .list(&RuntimeInstancesArguments {
+                after_instance_id: None,
+                limit: 1,
+            })
+            .unwrap();
+        assert_eq!(first.instances[0].workspace_instance_id, "main");
+        assert_eq!(first.next_after_instance_id.as_deref(), Some("main"));
+        let second = owner
+            .list(&RuntimeInstancesArguments {
+                after_instance_id: first.next_after_instance_id,
+                limit: 1,
+            })
+            .unwrap();
+        assert_eq!(
+            second.instances[0].workspace_instance_id,
+            scratch.workspace_instance_id
+        );
+        assert!(second.next_after_instance_id.is_none());
+        assert_eq!(
+            second.default_workspace_instance_id.as_deref(),
+            Some("main")
+        );
+        assert_eq!(second.total, 2);
+        assert!(
+            owner
+                .list(&RuntimeInstancesArguments {
+                    after_instance_id: Some(scratch.workspace_instance_id),
+                    limit: 1
+                })
+                .unwrap()
+                .instances
+                .is_empty()
+        );
+        assert_eq!(launcher.launches.load(Ordering::SeqCst), launches);
+    }
+
+    #[tokio::test]
+    async fn stopping_fences_new_native_reads_and_waits_for_the_original_read() {
+        let (_temp, host, _) = fixture().await;
+        let owner = host.runtime.instances.as_ref().unwrap().clone();
+        let original = main(&host);
+        let (_, hold) = owner.admit_query("main", "workspace.snapshot").unwrap();
+        let previous = owner
+            .begin_stop(
+                "main",
+                original.native_session_id.as_ref().unwrap(),
+                &OperationId::new("stop-read-test").unwrap(),
+            )
+            .unwrap();
+        assert_eq!(previous, RuntimeInstanceState::Ready);
+        assert!(owner.admit_query("main", "workspace.snapshot").is_err());
+        assert!(
+            owner
+                .admit_query("main", "workspace.runtime_status")
+                .is_err()
+        );
+        let mut draining = Box::pin(owner.drain_native_reads("main"));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut draining)
+                .await
+                .is_err()
+        );
+        drop(hold);
+        tokio::time::timeout(Duration::from_secs(1), draining)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(main(&host).native_session_id, original.native_session_id);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires RHO_ARK, RHO_R_HOME and RHO_CHECKPOINT_HELPER; uses an isolated real R"]
+    async fn recovery_copy_protects_its_library_after_all_sessions_stop() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        let retained = root.join("saved-library");
+        std::fs::create_dir(&retained).unwrap();
+        let host = NextHost::open_ark(
+            &root.join("records.sqlite"),
+            ArkConfig {
+                executable: std::env::var_os("RHO_ARK").expect("RHO_ARK").into(),
+                r_home: std::env::var_os("RHO_R_HOME").expect("RHO_R_HOME").into(),
+                checkpoint_helper_path: Some(
+                    std::env::var_os("RHO_CHECKPOINT_HELPER")
+                        .expect("RHO_CHECKPOINT_HELPER")
+                        .into(),
+                ),
+                project_root: root.clone(),
+                data_root: root.join("runtime"),
+                execution_timeout: Duration::from_secs(30),
+                library_path: None,
+            },
+        )
+        .await
+        .unwrap();
+        let before = main(&host);
+        let code = format!(
+            ".libPaths(c({},.libPaths())); kept <- 1L",
+            serde_json::to_string(&retained).unwrap()
+        );
+        assert_eq!(
+            invoke(
+                &host,
+                "library-seed",
+                "workspace.run_r",
+                json!({"workspace_instance_id":"main","code":code})
+            )
+            .await
+            .status,
+            OperationStatus::Succeeded
+        );
+        let copy = invoke(&host,"library-copy","workspace.checkpoint_capture",json!({"workspace_instance_id":"main","expected_session":before.native_session_id,"max_bytes":1048576,"max_seconds":10})).await;
+        assert_eq!(copy.status, OperationStatus::Succeeded, "{copy:?}");
+        let stopped = invoke(&host,"library-stop","runtime.stop_instance",json!({"workspace_instance_id":"main","expected_native_session_id":before.native_session_id,"discard_unsaved_objects":true})).await;
+        assert_eq!(stopped.status, OperationStatus::Succeeded, "{stopped:?}");
+        let owner = host.runtime.instances.as_ref().unwrap();
+        let retained_path = retained.to_string_lossy().into_owned();
+        assert!(
+            owner
+                .protected_libraries()
+                .await
+                .unwrap()
+                .contains(&retained_path)
+        );
+        let continued = invoke(&host,"library-empty","runtime.continue_instance",json!({"workspace_instance_id":"main","expected_continuation_lineage_id":before.continuation_lineage_id,"start_empty":true})).await;
+        assert_eq!(
+            continued.status,
+            OperationStatus::Succeeded,
+            "{continued:?}"
+        );
+        let native = main(&host).native_session_id;
+        let newer = invoke(&host,"library-new-copy","workspace.checkpoint_capture",json!({"workspace_instance_id":"main","expected_session":native,"max_bytes":1048576,"max_seconds":10})).await;
+        assert_eq!(newer.status, OperationStatus::Succeeded, "{newer:?}");
+        assert_eq!(invoke(&host,"library-stop-again","runtime.stop_instance",json!({"workspace_instance_id":"main","expected_native_session_id":native,"discard_unsaved_objects":true})).await.status,OperationStatus::Succeeded);
+        let deleted = invoke(
+            &host,
+            "library-delete-old",
+            "workspace.checkpoint_delete",
+            json!({"workspace_instance_id":"main","checkpoint_id":copy.operation.operation_id}),
+        )
+        .await;
+        assert_eq!(deleted.status, OperationStatus::Succeeded, "{deleted:?}");
+        assert!(
+            !owner
+                .protected_libraries()
+                .await
+                .unwrap()
+                .contains(&retained_path)
+        );
+    }
+
+    #[tokio::test]
+    async fn quitting_refuses_live_sessions_and_fences_a_later_launch() {
+        let (_temp, host, _) = fixture().await;
+        assert!(host.prepare_workbench_quit().await.is_err());
+        let original = main(&host);
+        let stopped = invoke(&host, "quit-stop", "runtime.stop_instance", json!({"workspace_instance_id":"main","expected_native_session_id":original.native_session_id,"discard_unsaved_objects":true})).await;
+        assert_eq!(stopped.status, OperationStatus::Succeeded);
+        host.prepare_workbench_quit().await.unwrap();
+        let restarted = invoke(&host, "quit-no-start", "runtime.continue_instance", json!({"workspace_instance_id":"main","expected_continuation_lineage_id":original.continuation_lineage_id})).await;
+        assert_eq!(restarted.status, OperationStatus::Failed);
+        assert!(main(&host).native_session_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn cancelling_opening_waits_for_the_native_handshake_and_confirms_candidate_stop() {
+        let (_temp, host, launcher) = fixture().await;
+        let main_before = main(&host);
+        launcher.block_launch.store(true, Ordering::SeqCst);
+        let task_host = host.clone();
+        let opening = tokio::spawn(async move {
+            invoke(
+                &task_host,
+                "cancel-new",
+                "runtime.create_instance",
+                json!({"name":"Cancelled","binding":binding(),"start":true}),
+            )
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(2), launcher.launch_started.notified())
+            .await
+            .unwrap();
+        let owner = host.runtime.instances.as_ref().unwrap();
+        let candidate = owner
+            .list(&RuntimeInstancesArguments {
+                after_instance_id: Some("main".into()),
+                limit: 1,
+            })
+            .unwrap()
+            .instances
+            .remove(0);
+        let operation_id =
+            OperationId::new(candidate.last_lifecycle_operation_id.unwrap()).unwrap();
+        host.request_cancellation(&NextHost::local_context(), &operation_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            owner
+                .instance(&candidate.workspace_instance_id)
+                .unwrap()
+                .state,
+            RuntimeInstanceState::Starting
+        );
+        assert!(!opening.is_finished());
+        launcher.launch_release.notify_one();
+        let result = tokio::time::timeout(Duration::from_secs(2), opening)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.status, OperationStatus::Cancelled, "{result:?}");
+        let stopped = owner.instance(&candidate.workspace_instance_id).unwrap();
+        assert_eq!(stopped.state, RuntimeInstanceState::Stopped);
+        assert!(stopped.native_session_id.is_none());
+        let stored = owner
+            .stored_instance(&candidate.workspace_instance_id)
+            .unwrap();
+        assert!(stored.process.is_none());
+        assert!(!stored.launch_unconfirmed);
+        assert_eq!(main(&host).native_session_id, main_before.native_session_id);
     }
 
     #[tokio::test]
@@ -3137,14 +3672,29 @@ mod tests {
     async fn omitted_settings_reset_to_the_inherited_value() {
         let (_temp, host, _) = fixture().await;
         let project = invoke(&host, "project-policy", "runtime.update_settings", json!({"scope":"project","workspace_instance_id":null,"expected_version":null,"overrides":{"automatic_interval_seconds":600,"idle_delay_seconds":45}})).await;
-        assert_eq!(project.status, OperationStatus::Succeeded, "{:?}", project.error);
+        assert_eq!(
+            project.status,
+            OperationStatus::Succeeded,
+            "{:?}",
+            project.error
+        );
         let instance = invoke(&host, "instance-policy", "runtime.update_settings", json!({"scope":"instance","workspace_instance_id":"main","expected_version":null,"overrides":{"idle_delay_seconds":90}})).await;
-        assert_eq!(instance.status, OperationStatus::Succeeded, "{:?}", instance.error);
+        assert_eq!(
+            instance.status,
+            OperationStatus::Succeeded,
+            "{:?}",
+            instance.error
+        );
         assert_eq!(main(&host).policy.value.idle_delay_seconds, 90);
         assert_eq!(main(&host).policy.project.idle_delay_seconds, Some(45));
         let version = instance.output.clone().unwrap()["instance_version"].clone();
         let reset = invoke(&host, "instance-reset", "runtime.update_settings", json!({"scope":"instance","workspace_instance_id":"main","expected_version":version,"overrides":{}})).await;
-        assert_eq!(reset.status, OperationStatus::Succeeded, "{:?}", reset.error);
+        assert_eq!(
+            reset.status,
+            OperationStatus::Succeeded,
+            "{:?}",
+            reset.error
+        );
         assert_eq!(main(&host).policy.instance.idle_delay_seconds, None);
         // The reset field falls back to the project override; the untouched
         // project setting is not disturbed by an instance-scope write.
@@ -3169,7 +3719,12 @@ mod tests {
     async fn idle_release_stops_an_unattended_session_only_when_nothing_is_unprotected() {
         let (_temp, host, launcher) = fixture().await;
         let enabled = invoke(&host, "idle-release", "runtime.update_settings", json!({"scope":"project","workspace_instance_id":null,"expected_version":null,"overrides":{"idle_stop_without_windows_seconds":1}})).await;
-        assert_eq!(enabled.status, OperationStatus::Succeeded, "{:?}", enabled.error);
+        assert_eq!(
+            enabled.status,
+            OperationStatus::Succeeded,
+            "{:?}",
+            enabled.error
+        );
         let mut released = false;
         for _ in 0..12 {
             tokio::time::sleep(Duration::from_millis(500)).await;
@@ -3178,17 +3733,35 @@ mod tests {
                 break;
             }
         }
-        assert!(released, "an unattended session holding nothing is released");
-        assert_eq!(launcher.launches.load(Ordering::SeqCst), 1, "releasing never relaunches");
+        assert!(
+            released,
+            "an unattended session holding nothing is released"
+        );
+        assert_eq!(
+            launcher.launches.load(Ordering::SeqCst),
+            1,
+            "releasing never relaunches"
+        );
     }
 
     #[tokio::test]
     async fn idle_release_keeps_a_session_with_unprotected_objects() {
         let (_temp, host, _) = fixture().await;
-        let ran = invoke(&host, "run", "workspace.run_r", json!({"workspace_instance_id":"main","code":"x <- 1"})).await;
+        let ran = invoke(
+            &host,
+            "run",
+            "workspace.run_r",
+            json!({"workspace_instance_id":"main","code":"x <- 1"}),
+        )
+        .await;
         assert_eq!(ran.status, OperationStatus::Succeeded, "{:?}", ran.error);
         let enabled = invoke(&host, "idle-release", "runtime.update_settings", json!({"scope":"project","workspace_instance_id":null,"expected_version":null,"overrides":{"idle_stop_without_windows_seconds":1}})).await;
-        assert_eq!(enabled.status, OperationStatus::Succeeded, "{:?}", enabled.error);
+        assert_eq!(
+            enabled.status,
+            OperationStatus::Succeeded,
+            "{:?}",
+            enabled.error
+        );
         // This fixture runtime reports no native capture, so the created objects
         // can never be protected; the session must survive being unattended.
         for _ in 0..8 {
@@ -3214,11 +3787,22 @@ mod tests {
     #[tokio::test]
     async fn automatic_continuation_refuses_to_abandon_objects_it_cannot_restore() {
         let (_temp, host, _) = fixture().await;
-        let ran = invoke(&host, "run", "workspace.run_r", json!({"workspace_instance_id":"main","code":"x <- 1"})).await;
+        let ran = invoke(
+            &host,
+            "run",
+            "workspace.run_r",
+            json!({"workspace_instance_id":"main","code":"x <- 1"}),
+        )
+        .await;
         assert_eq!(ran.status, OperationStatus::Succeeded, "{:?}", ran.error);
         let before = main(&host);
         let stopped = invoke(&host, "stop", "runtime.stop_instance", json!({"workspace_instance_id":"main","expected_native_session_id":before.native_session_id.unwrap(),"discard_unsaved_objects":true})).await;
-        assert_eq!(stopped.status, OperationStatus::Succeeded, "{:?}", stopped.error);
+        assert_eq!(
+            stopped.status,
+            OperationStatus::Succeeded,
+            "{:?}",
+            stopped.error
+        );
         // This fixture runtime reports no native capture, so the objects are gone and
         // continuing must say so instead of quietly presenting an empty session.
         let refused = invoke(&host, "continue", "runtime.continue_instance", json!({"workspace_instance_id":"main","expected_continuation_lineage_id":before.continuation_lineage_id})).await;
@@ -3230,23 +3814,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn empty_opening_cannot_claim_success_against_an_already_running_session() {
+        let (_temp, host, _) = fixture().await;
+        let original = main(&host);
+        let result = invoke(&host,"empty-already-live","runtime.continue_instance",json!({"workspace_instance_id":"main","expected_continuation_lineage_id":original.continuation_lineage_id,"start_empty":true})).await;
+        assert_eq!(result.status, OperationStatus::Failed);
+        assert_eq!(main(&host).native_session_id, original.native_session_id);
+        assert_eq!(
+            main(&host).continuation_lineage_id,
+            original.continuation_lineage_id
+        );
+    }
+
+    #[tokio::test]
     async fn an_explicit_empty_start_opens_a_new_continuation_generation() {
         let (_temp, host, _) = fixture().await;
-        let ran = invoke(&host, "run", "workspace.run_r", json!({"workspace_instance_id":"main","code":"x <- 1"})).await;
+        let ran = invoke(
+            &host,
+            "run",
+            "workspace.run_r",
+            json!({"workspace_instance_id":"main","code":"x <- 1"}),
+        )
+        .await;
         assert_eq!(ran.status, OperationStatus::Succeeded, "{:?}", ran.error);
         let before = main(&host);
         let stopped = invoke(&host, "stop", "runtime.stop_instance", json!({"workspace_instance_id":"main","expected_native_session_id":before.native_session_id.unwrap(),"discard_unsaved_objects":true})).await;
-        assert_eq!(stopped.status, OperationStatus::Succeeded, "{:?}", stopped.error);
+        assert_eq!(
+            stopped.status,
+            OperationStatus::Succeeded,
+            "{:?}",
+            stopped.error
+        );
         let empty = invoke(&host, "start-empty", "runtime.continue_instance", json!({"workspace_instance_id":"main","expected_continuation_lineage_id":before.continuation_lineage_id,"start_empty":true})).await;
-        assert_eq!(empty.status, OperationStatus::Succeeded, "{:?}", empty.error);
+        assert_eq!(
+            empty.status,
+            OperationStatus::Succeeded,
+            "{:?}",
+            empty.error
+        );
         let after = main(&host);
         assert_eq!(after.state, RuntimeInstanceState::Ready);
         assert_ne!(
             after.continuation_lineage_id, before.continuation_lineage_id,
             "an empty start must not inherit the generation it abandoned"
         );
-        let resumed = invoke(&host, "run-after-empty", "workspace.run_r", json!({"workspace_instance_id":"main","code":"1 + 1"})).await;
-        assert_eq!(resumed.status, OperationStatus::Succeeded, "{:?}", resumed.error);
+        let resumed = invoke(
+            &host,
+            "run-after-empty",
+            "workspace.run_r",
+            json!({"workspace_instance_id":"main","code":"1 + 1"}),
+        )
+        .await;
+        assert_eq!(
+            resumed.status,
+            OperationStatus::Succeeded,
+            "{:?}",
+            resumed.error
+        );
     }
 
     #[tokio::test]

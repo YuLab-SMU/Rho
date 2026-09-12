@@ -330,9 +330,22 @@ try {
   assert.equal(control.completed_at_ms, null);
   assert.equal(control.actor.kind, "human");
   assert.deepEqual(JSON.parse(run(binary, ["--connect-url-file", urlFile, "request", "--json", JSON.stringify(controlFrame)])).result, control);
-  assert.equal(await fetch(new URL("/api/host", url), {
-    method: "POST", headers: bridgeHeaders, body: JSON.stringify(bridgeFrame("application_bridge", largeSync)),
-  }).then(r => r.status), 413);
+  const oversizedBody = JSON.stringify(bridgeFrame("application_bridge", largeSync));
+  // The bound can reject Content-Length before reading bytes. Waiting for Continue
+  // avoids racing a still-writing fetch body against the server closing the socket;
+  // this still requires an actual 413, never an accepted connection-reset fallback.
+  const oversizedStatus = await new Promise((resolve, reject) => {
+    const request = httpRequest(new URL("/api/host", url), {
+      method: "POST", headers: { ...bridgeHeaders, "Content-Length": Buffer.byteLength(oversizedBody), Expect: "100-continue" },
+    }, response => {
+      response.resume(); response.once("end", () => { resolve(response.statusCode); request.destroy(); });
+    });
+    request.once("error", reject);
+    request.setTimeout(10000, () => request.destroy(new Error("Oversized request did not receive a response")));
+    request.once("continue", () => request.end(oversizedBody));
+    request.flushHeaders();
+  });
+  assert.equal(oversizedStatus, 413);
   assert.equal(await fetch(new URL("/api/application/bridge", url), {
     method: "POST", headers: bridgeHeaders, body: JSON.stringify(bridgeFrame("query_snapshot", { capability: { id: "project.snapshot", version: 1 }, arguments: {} })),
   }).then(r => r.status), 400);

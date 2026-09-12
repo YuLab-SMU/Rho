@@ -158,3 +158,32 @@ it('copy rejects a changed observation and does not read while R is busy', async
   await expect(f.owner.collectVector('x', [], { reference: 'ref-x' })).rejects.toThrow('busy');
   expect(f.query).toHaveBeenCalledTimes(calls);
 });
+
+it('an in-progress whole copy waits through background capture without changing its reference', async () => {
+  const f = fixture(); await f.owner.observe(); f.owner.inspect('x'); await f.owner.observe(); await f.owner.observe();
+  const m = metadata('value', 201);
+  f.query.mockImplementation(async (_project, _capability, args) => {
+    const start = Number(args.start ?? 1), count = start === 1 ? 200 : 1;
+    if (start === 1) f.scope({ runtimeState: 'busy' });
+    return ready({ ...page('x', 'ref-x', 'values', m), start, values: Array.from({ length: count }, () => page('x').values[0]), next_start: start === 1 ? 201 : null });
+  });
+  const copying = f.owner.collectVector('x', [], { reference: 'ref-x' });
+  await f.owner.observe();
+  for (let i = 0; i < 500; i++) await Promise.resolve();
+  const count = f.query.mock.calls.length;
+  f.owner.operationChanged({ epoch: 1, project: '/project', operationId: 'save', capability: 'workspace.checkpoint_capture', status: 'succeeded', cursor: 1 });
+  await f.owner.observe(); expect(f.query).toHaveBeenCalledTimes(count);
+  expect(f.owner.applicationSelection?.object_ref).toBe('ref-x');
+  f.scope({ runtimeState: 'idle' });
+  const result = await settleCopy(f, copying); expect(result.values).toHaveLength(201);
+});
+
+it('a busy native detail keeps its original pending request and cancellation can release it', async () => {
+  const f = fixture(); await f.owner.observe(); f.owner.inspect('x'); await f.owner.observe(); await f.owner.observe();
+  let cancelled = false;
+  const reading = f.owner.readPage('x', { kind: 'values', start: 1, limit: 1 }, { cancelled: () => cancelled });
+  f.query.mockResolvedValueOnce({ ...ready(null), status: 'busy' }); await f.owner.observe();
+  let settled = false; const done = reading.catch(error => { settled = true; return error; });
+  await Promise.resolve(); expect(settled).toBe(false);
+  cancelled = true; await f.owner.observe(); expect((await done).message).toContain('cancelled');
+});

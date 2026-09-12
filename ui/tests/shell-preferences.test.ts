@@ -12,7 +12,7 @@ it("retains individually selected metrics and sidebar mode through reload and un
   await Promise.all([owner.setPreferences({ statusCpu: true }), owner.setPreferences({ statusDisk: true }), owner.setPreferences({ sidebarExpanded: true })]);
   await owner.setPreferences({ editorFontSize: 18 });
   const reloaded = new Preferences(port); await reloaded.restore();
-  expect(reloaded.getSnapshot()).toEqual({ editorFontSize: 18, indentWidth: 2, sidebarExpanded: true, statusCpu: true, statusMemory: false, statusDisk: true });
+  expect(reloaded.getSnapshot()).toEqual({ editorFontSize: 18, indentWidth: 2, sidebarExpanded: true, statusCpu: true, statusMemory: false, statusDisk: true, recoveryNoticeSeen: false });
   port.writeState.mockRejectedValueOnce(new Error("disk full")); await expect(reloaded.setPreferences({ statusCpu: false })).rejects.toThrow("disk full");
   expect(reloaded.getSnapshot().statusCpu).toBe(true);
   await reloaded.setPreferences({ statusCpu: false }); expect(reloaded.getSnapshot().statusCpu).toBe(false);

@@ -1007,7 +1007,8 @@ impl NextHost {
                     .with_usage(usage);
             if let Some(instances) = &instance_owner {
                 let instances = instances.clone();
-                owner = owner.with_active_library_resolver(Arc::new(move || instances.active_library()));
+                owner = owner
+                    .with_active_library_resolver(Arc::new(move || instances.active_library()));
             }
             let owner = Arc::new(owner);
             for action in [
@@ -1272,6 +1273,24 @@ impl NextHost {
     /// Hosting lifecycle only: keep accepted work alive after an edge disconnects.
     pub fn is_idle(&self) -> bool {
         self.tasks.is_empty()
+    }
+
+    /// The caller must first stop accepting new work through every edge.
+    pub async fn prepare_workbench_quit(&self) -> Result<(), OperationError> {
+        if !self.is_idle() {
+            return Err(OperationError::Unavailable(
+                "Accepted work is still running; inspect its original operations before quitting"
+                    .into(),
+            ));
+        }
+        if let Some(instances) = &self.runtime.instances {
+            instances.seal_stopped_sessions().await?;
+        } else if self.runtime.workspace.is_some() {
+            return Err(OperationError::Unavailable(
+                "This Host does not expose individually stoppable R sessions".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// The caller must first stop accepting new work through every edge.

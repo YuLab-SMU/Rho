@@ -7,6 +7,7 @@ import { builtinPanels } from "../builtin-panels";
 import { useAgentTasks, useApplication, useConsole, useDocuments, useFiles, useLayout, useNavigation, useOperations, usePersistence, usePreferences, useRuntimeSessions, useSession } from "../context";
 import { message } from "../shared/ports";
 import type { EditorPreferences } from "../application-state";
+import { SessionActivityLabel } from "./session-target";
 import type { WorkspaceInstance } from "../generated/WorkspaceInstance";
 
 function Tip({ label, children }: { label: string; children: ReactElement }) {
@@ -61,11 +62,14 @@ export function formatBytes(bytes: number | null | undefined) {
 export function WorkspaceStatusBar() {
   const session = useSession(), consoleOwner = useConsole(), operations = useOperations(), files = useFiles(), preferences = usePreferences(), persistence = usePersistence(), documents = useDocuments(), navigation = useNavigation(), application = useApplication();
   const [open, setOpen] = useState(false), now = Date.now();
+  const runtimeSessions = useRuntimeSessions(), rs = runtimeSessions.getSnapshot();
+  const selectedInstance = rs.selectedId ? rs.instances.get(rs.selectedId) ?? null : null;
+  const rVersion = selectedInstance?.installation?.r_version ?? (runtimeSessions.supported ? null : session.r?.current?.version);
   const prefs = preferences.getSnapshot(), ss = session.getSnapshot(), fs = files.getSnapshot(), cs = consoleOwner.getSnapshot();
   const runtime = ss.runtime, runtimeFresh = ss.connected && !!runtime && !ss.runtimeError && now - runtime.observed_at_ms < 10000;
   const queue = cs.state?.session_id === runtime?.session_id && runtimeFresh && !cs.error ? cs.state : null;
   const input = queue?.input, record = queue?.current ? operations.records.get(queue.current.operation_id) : undefined;
-  const status = !ss.connected ? "Connection lost" : !session.r?.current ? "Not configured" : !runtime ? "Not started" : !runtimeFresh ? "R state unknown" : input ? "Waiting for R input" : runtime.state === "busy" || record?.status === "running" ? "Running" : queue?.current ? "Queued" : runtime.state === "idle" ? "Idle" : runtime.state === "starting" ? "Starting R" : "Unavailable";
+  const status = !ss.connected ? "Connection lost" : !selectedInstance && !session.r?.current ? "Not configured" : !runtime ? "Not started" : !runtimeFresh ? "R state unknown" : input ? "Waiting for R input" : runtime.state === "busy" || record?.status === "running" ? "Running" : queue?.current ? "Queued" : runtime.state === "idle" ? "Idle" : runtime.state === "starting" ? "Starting R" : "Unavailable";
   const showConsole = () => { const source = queue?.current?.source; navigation.showPanel("console", source?.kind === "console" ? source.view_id : "console", source?.kind === "console" ? source.label : "Console"); };
   const process = runtimeFresh ? runtime?.processes[0] : null;
   const cpu = process?.cpu_percent == null || !Number.isFinite(process.cpu_percent) ? "Unknown" : `${process.cpu_percent.toFixed(1)}%`;
@@ -86,26 +90,24 @@ export function WorkspaceStatusBar() {
   const retrySync = () => void persistence.flush().then(() => application.flush()).catch(e => session.reportError(message(e)));
   const elapsed = record?.status === "running" ? Math.max(0, Math.floor((now - record.updated_at_ms) / 1000)) : null;
   const freshText = (time: number) => `Observed ${Math.max(0, Math.floor((now - time) / 1000))}s ago`;
-  const runtimeSessions = useRuntimeSessions(), rs = runtimeSessions.getSnapshot();
   const sessions = rs.catalogIds.map(id => rs.instances.get(id)).filter((value): value is WorkspaceInstance => !!value);
-  const selectedInstance = rs.selectedId ? rs.instances.get(rs.selectedId) ?? null : null;
   const otherSessions = sessions.filter(instance => instance.workspace_instance_id !== rs.selectedId);
   const protection = selectedInstance?.protection ?? null;
-  const sessionWord = (state: WorkspaceInstance["state"]) => state === "ready" ? "Ready" : state === "starting" ? "Starting R" : state === "stopping" ? "Stopping" : state === "recovery_required" ? "Needs attention" : state === "failed" ? "Failed" : "Stopped";
   // Product copy is English regardless of the browser locale.
   const copyTime = (ms: number) => new Date(ms).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   // Without native change tracking there is no honest count of objects created
   // since a copy, so the summary says only that R has been active since.
   const copySummary = protection === null ? null : protection.latest_checkpoint_id === null ? "No copy yet"
     : `${protection.saved_at_ms === null ? "Saved" : copyTime(protection.saved_at_ms)} · ${protection.saved_objects ?? 0} objects${protection.skipped_objects ? ` · ${protection.skipped_objects} need${protection.skipped_objects === 1 ? "s" : ""} attention` : ""}`;
-  const selectSession = (id: string) => { try { runtimeSessions.select(id); } catch (error) { session.reportError(message(error)); } };
+  const selectSession = (id: string) => { try { runtimeSessions.select(id); if (runtimeSessions.getInstance(id)?.state === "stopped") void runtimeSessions.continueInstance(id).catch(error => session.reportError(message(error))); } catch (error) { session.reportError(message(error)); } };
   return <footer className="statusbar" aria-label="Workspace status">
-    <Menu.Root open={open} onOpenChange={setOpen}><Menu.Trigger className="status-runtime" aria-label="Runtime and status bar options"><i className={`dot${runtimeFresh && ["idle", "busy"].includes(runtime?.state ?? "") ? "" : " offline"}`} /><span>{sessions.length > 1 ? <><span className="status-session">{selectedInstance?.name ?? "Session"}</span>{" · "}</> : <span className="status-local">Local </span>}R{session.r?.current?.version ? ` ${session.r.current.version}` : ""}</span><Icon name="chevron" size={12} /></Menu.Trigger><Menu.Portal><Menu.Content className="menu shell-menu runtime-menu" side="top" align="start" sideOffset={8} collisionPadding={8}>
-      <Menu.Label className="shell-menu-heading"><span>{sessions.length > 1 && selectedInstance ? `${selectedInstance.name} · R` : "Local R"} {session.r?.current?.version}</span><span className="muted">{status}</span></Menu.Label>
+    <Menu.Root open={open} onOpenChange={setOpen}><Menu.Trigger className="status-runtime" aria-label="Runtime and status bar options"><i className={`dot${runtimeFresh && ["idle", "busy"].includes(runtime?.state ?? "") ? "" : " offline"}`} /><span>{sessions.length > 1 ? <><span className="status-session">{selectedInstance?.name ?? "Session"}</span>{" · "}</> : <span className="status-local">Local </span>}R{rVersion ? ` ${rVersion}` : ""}</span><Icon name="chevron" size={12} /></Menu.Trigger><Menu.Portal><Menu.Content className="menu shell-menu runtime-menu" side="top" align="start" sideOffset={8} collisionPadding={8}>
+      <Menu.Label className="shell-menu-heading"><span>{sessions.length > 1 && selectedInstance ? `${selectedInstance.name} · R` : "Local R"} {rVersion}</span><span className="muted">{status}</span></Menu.Label>
       <div className="shell-runtime-facts">{metrics.map(metric => <div key={metric.key} title={metric.detail}><span>{metric.label}</span><strong>{metric.value}</strong></div>)}{disk && <><div><span>Used / capacity</span><strong>{formatBytes(disk.total_bytes - disk.free_bytes)} / {formatBytes(disk.total_bytes)}</strong></div><div><span>Available space</span><strong>{formatBytes(disk.available_bytes)}</strong></div></>}</div>
       <div className="shell-observation-note">{runtime ? `${runtimeFresh ? "" : "Last R observation · "}${freshText(runtime.observed_at_ms)}` : "No R observation"}{ss.runtimeError && ` · ${ss.runtimeError}`}<br />{fs.storage ? `${diskFresh ? "Disk · " : "Last disk observation · "}${freshText(fs.storage.observed_at_ms)}` : diskSupported ? fs.storageError || "Disk observation pending" : "Disk capacity unavailable from this Host"}</div>
       {selectedInstance && <><Menu.Separator className="shell-menu-separator" /><Menu.Label className="shell-menu-label">Session</Menu.Label><div className="shell-runtime-facts"><div><span>Target</span><strong>{selectedInstance.name}</strong></div>{copySummary && <div><span>Recovery copy</span><strong>{copySummary}</strong></div>}{protection?.activity_since_copy && <div><span>Since the copy</span><strong>R activity</strong></div>}{rs.stale && <div><span>Session catalog</span><strong>Refreshing…</strong></div>}</div>{rs.errors.get(selectedInstance.workspace_instance_id) && <div className="shell-observation-note">{rs.errors.get(selectedInstance.workspace_instance_id)}</div>}</>}
-      {otherSessions.length > 0 && <><Menu.Separator className="shell-menu-separator" /><Menu.Label className="shell-menu-label">Other sessions</Menu.Label>{otherSessions.map(instance => <Menu.Item key={instance.workspace_instance_id} disabled={!session.ready} onSelect={() => selectSession(instance.workspace_instance_id)}><span className="menu-check">{instance.state === "ready" && <i className="dot" />}</span><span className="shell-view-name">{instance.name}</span><small>{sessionWord(instance.state)}</small></Menu.Item>)}<div className="shell-observation-note">Switching affects work submitted afterwards, not work already accepted.</div></>}
+      {otherSessions.length > 0 && <><Menu.Separator className="shell-menu-separator" /><Menu.Label className="shell-menu-label">Other sessions</Menu.Label>{otherSessions.map(instance => <Menu.Item key={instance.workspace_instance_id} disabled={!session.ready} onSelect={() => selectSession(instance.workspace_instance_id)}><span className="menu-check">{instance.state === "ready" && <i className="dot" />}</span><span className="shell-view-name">{instance.name}</span><small><SessionActivityLabel instance={instance} /></small></Menu.Item>)}<div className="shell-observation-note">Switching affects work submitted afterwards, not work already accepted.</div></>}
+      {runtimeSessions.supported && <><Menu.Separator className="shell-menu-separator" /><Menu.Item onSelect={() => navigation.openSessions(rs.selectedId)}>R Sessions…</Menu.Item><Menu.Item onSelect={() => navigation.setDialog("new-session")}>New R session…</Menu.Item></>}
       <Menu.Separator className="shell-menu-separator" /><Menu.Label className="shell-menu-label">Keep visible in status bar</Menu.Label>
       {metrics.map(metric => <Menu.CheckboxItem key={metric.key} checked={prefs[metric.key]} onCheckedChange={value => setMetric(metric.key, value)} onSelect={event => event.preventDefault()} title={metric.detail}><span className="menu-check"><Menu.ItemIndicator><Icon name="check" size={14} /></Menu.ItemIndicator></span><span>{metric.label}</span></Menu.CheckboxItem>)}
       <Menu.Separator className="shell-menu-separator" /><Menu.Item disabled={!session.ready} onSelect={showConsole}><Icon name="terminal" />Open Console{queue?.pending.length ? ` · ${queue.pending.length} queued` : ""}</Menu.Item><Menu.Item onSelect={() => navigation.setDialog("settings")}>R settings…</Menu.Item>

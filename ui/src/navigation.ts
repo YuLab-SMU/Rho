@@ -5,7 +5,8 @@ import { sameScope } from "./shared/ports";
 import type { RequestContext } from "./shared/ports";
 
 export type DocumentAction = "save" | "runFile" | "runSelection" | "undo";
-export type Dialog = "project" | "settings" | "agents" | "commands" | "conflict" | "open-file" | null;
+export type Dialog = "project" | "settings" | "agents" | "commands" | "conflict" | "open-file" | "sessions" | "new-session" | "runtime-settings" | "quit" | null;
+export type RuntimeTab = "overview" | "runs" | "copies" | "details";
 interface NavigationPorts {
   context(): RequestContext;
   show(component: BuiltinPanel, id?: string, name?: string, config?: unknown): void;
@@ -22,9 +23,13 @@ export class Navigation extends Model<{ dialog: Dialog }> {
   private documentListeners = new Map<string, Set<(action: DocumentAction) => void>>();
   private pending = new Map<string, DocumentAction>();
   private generation = 0;
+  runtimePage: { instanceId: string | null; tab: RuntimeTab } = { instanceId: null, tab: "overview" };
   constructor(private ports: NavigationPorts) { super(); }
   protected readSnapshot() { return { dialog: this.dialog }; }
   setDialog(dialog: Dialog) { this.dialog = dialog; this.publish(); }
+  openSessions(instanceId: string | null = null, tab: RuntimeTab = "overview") {
+    this.runtimePage = { instanceId, tab }; this.setDialog("sessions");
+  }
   openFile() { this.setDialog("open-file"); }
   openSettings() { this.setDialog("settings"); }
   openPanels() { this.setDialog("commands"); }
@@ -58,6 +63,6 @@ export class Navigation extends Model<{ dialog: Dialog }> {
     });
     return () => { listeners.delete(listener); };
   }
-  reset() { this.generation++; this.pending.clear(); this.setDialog(null); }
+  reset() { this.generation++; this.pending.clear(); this.runtimePage = { instanceId: null, tab: "overview" }; this.setDialog(null); }
   stop() { this.generation++; this.documentListeners.clear(); this.pending.clear(); this.dispose(); }
 }

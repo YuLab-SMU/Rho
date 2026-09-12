@@ -24,7 +24,7 @@ interface ObjectsSnapshot {
 }
 interface ObservedReference { reference: string; metadata: ObjectMetadata | null; observedAt: number | null; expiresAt: number; validated: boolean }
 export type ObjectPageRequest = Partial<Omit<ReadObjectArguments, "expected_session" | "object_ref">> & { kind: ObjectReadKind };
-interface DetailRequest { key: string; name: string; reference: string; options: ObjectPageRequest; resolve(page: ObjectReadPage): void; reject(error: Error): void; promise: Promise<ObjectReadPage> }
+interface DetailRequest { key: string; name: string; reference: string; options: ObjectPageRequest; resolve(page: ObjectReadPage): void; reject(error: Error): void; promise: Promise<ObjectReadPage>; cancelled?: () => boolean }
 type ObjectRead = { kind: "detail"; detail: DetailRequest; name: string; reference: string } | { kind: "directory"; reference: string | null; offset: number } | { kind: "observe"; name: string } | { kind: "read"; name: string; reference: string; readKind: ObjectReadKind };
 const capabilities = ["workspace.list_objects", "workspace.observe_object", "workspace.read_object"];
 const previewKind = (metadata: ObjectMetadata | null): ObjectReadKind => metadata?.supported_reads.includes("table") ? "table" : metadata?.supported_reads.includes("values") ? "values" : metadata?.supported_reads.includes("children") ? "children" : "structure";
@@ -90,9 +90,9 @@ export class Objects extends Model<ObjectsSnapshot> {
   }
   metadata(name: string) { return this.references.get(name)?.metadata ?? this.indexMetadata.get(name) ?? null; }
   get version() { return this.invalidation; }
-  readPage(name: string, options: ObjectPageRequest): Promise<ObjectReadPage> {
+  readPage(name: string, options: ObjectPageRequest, continuation?: { cancelled?: () => boolean }): Promise<ObjectReadPage> {
     const scope = this.ports.context(), ref = this.references.get(name);
-    if (!scope.connected || scope.runtimeState !== "idle") return Promise.reject(new Error("R is busy or disconnected. The previous observation is retained."));
+    if (!scope.connected || (scope.runtimeState !== "idle" && !(continuation && scope.runtimeState === "busy"))) return Promise.reject(new Error("R is busy or disconnected. The previous observation is retained."));
     if (!ref?.validated || Date.now() >= ref.expiresAt) return Promise.reject(new Error("Refresh this object to read a current observation."));
     const key = JSON.stringify([ref.reference, options]);
     const cached = this.pages.get(key); if (cached) return Promise.resolve(cached);
@@ -100,7 +100,7 @@ export class Objects extends Model<ObjectsSnapshot> {
     if (this.details.size >= 64) return Promise.reject(new Error("Too many object pages requested. Narrow the view."));
     let resolve!: DetailRequest["resolve"], reject!: DetailRequest["reject"];
     const promise = new Promise<ObjectReadPage>((yes, no) => { resolve = yes; reject = no; });
-    this.details.set(key, { key, name, reference: ref.reference, options, resolve, reject, promise });
+    this.details.set(key, { key, name, reference: ref.reference, options, resolve, reject, promise, cancelled: continuation?.cancelled });
     this.ports.schedule(); return promise;
   }
   summaryValues(name: string): readonly ObjectScalar[] {
@@ -114,16 +114,17 @@ export class Objects extends Model<ObjectsSnapshot> {
     reference: string; basis?: "values" | "levels"; range?: { start: number; count: number }; cancelled?: () => boolean;
   }): Promise<CollectedVector> {
     const scope = { ...this.ports.context() }, revision = this.revision, invalidation = this.invalidation;
+    if (!scope.connected || scope.runtimeState !== "idle") throw new Error("R is busy or disconnected. The previous observation is retained.");
     let bytes = 0;
     const check = () => {
       const ref = this.references.get(name);
       if (options.cancelled?.()) throw new Error("Copy cancelled.");
-      if (!this.ports.context().connected || this.ports.context().runtimeState !== "idle") throw new Error("R is busy or disconnected. The previous observation is retained.");
+      if (!this.ports.context().connected) throw new Error("R is disconnected. The previous observation is retained.");
       if (this.stopped || revision !== this.revision || invalidation !== this.invalidation || !sameScope(scope, this.ports.context(), true) || !ref?.validated || ref.reference !== options.reference || Date.now() >= ref.expiresAt)
         throw new Error("The object observation changed. Refresh before copying again.");
     };
     const read = async (request: ObjectPageRequest) => {
-      check(); const page = await this.readPage(name, { ...request, path }); check();
+      check(); const page = await this.readPage(name, { ...request, path }, { cancelled: options.cancelled }); check();
       if (page.object_ref !== options.reference) throw new Error("The object changed during copy.");
       if (page.kind !== request.kind || page.start !== (request.start ?? 1)) throw new Error("The requested copy range is unavailable.");
       return page;
@@ -224,6 +225,7 @@ export class Objects extends Model<ObjectsSnapshot> {
   }
   stop() { this.clearPages(); this.stopped = true; this.revision++; this.inFlight = null; this.demands.clear(); this.pending.clear(); this.retryRead = null; this.publish(); this.dispose(); }
   operationChanged(event: OperationChange) {
+    if (["workspace.checkpoint_capture", "workspace.checkpoint_pin", "workspace.checkpoint_delete", "workspace.checkpoint_reconcile"].includes(event.capability)) return;
     const scope = this.ports.context();
     if (event.epoch === scope.epoch && event.project === scope.project && event.capability.startsWith("workspace.") && (event.status === "running" || terminal(event.status))) this.invalidate();
   }
@@ -274,6 +276,12 @@ export class Objects extends Model<ObjectsSnapshot> {
       reference.validated = false; this.blocked.add(name); this.pending.delete(name);
       const previous = this.previews.get(name); if (previous) this.previews.set(name, Object.freeze({ ...previous, stale: true, notice: "The observation reference expired. Refresh this preview to read it again." })); changed = true;
     }
+    for (const [key, detail] of this.details) {
+      if (detail.cancelled?.() || !this.references.get(detail.name)?.validated || !this.ports.context().connected) {
+        this.details.delete(key); detail.reject(new Error(detail.cancelled?.() ? "Copy cancelled." : "The object observation expired or disconnected. Refresh before copying again."));
+        if (this.retryRead?.kind === "detail" && this.retryRead.detail.key === key) this.retryRead = null;
+      }
+    }
     if (changed) { this.publish(); this.ports.changed(); }
   }
   private request(): ObjectRead | null {
@@ -306,7 +314,10 @@ export class Objects extends Model<ObjectsSnapshot> {
       if (result.status !== "ready" || !result.data) {
         this.error = result.notices.join("\n") || `Objects ${result.status}.`; this.staleValue = true;
         const permanent = result.diagnostics?.some((d) => ["observation_expired", "content_changed", "budget_exceeded", "stale_session", "invalid_input", "not_found"].includes(d.code));
-        if (request.kind === "detail") { request.detail.reject(new Error(this.error)); this.details.delete(request.detail.key); if (permanent) this.block(request); }
+        if (request.kind === "detail") {
+          if (!permanent && result.status === "busy") this.retryRead = request;
+          else { request.detail.reject(new Error(this.error)); this.details.delete(request.detail.key); if (permanent) this.block(request); }
+        }
         else if (permanent) this.block(request); else this.retryRead = request; return;
       }
       if (request.kind === "directory") {

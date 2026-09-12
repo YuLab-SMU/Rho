@@ -140,6 +140,25 @@ export class Console extends Model<ConsoleSnapshot> {
     if (!this.stopped && generation === this.generation && sameScope(scope, this.ports.context(), true)) this.ports.schedule();
     if (errors.length) throw new Error(`Some entries changed state or could not be cancelled: ${errors.join("; ")}`);
   }
+  async stopWork() {
+    await this.refresh();
+    const scope = this.ports.context(), generation = this.generation, current = this.state?.current;
+    await this.cancelPending();
+    if (current) await this.ports.cancel(current.operation_id, false);
+    // The coordinator keeps observing the same queue. A cancellation receipt alone
+    // is not proof that its original run ended.
+    await new Promise<void>((resolve, reject) => {
+      let unsubscribe = () => {};
+      const finish = (error?: string) => { clearTimeout(timer); unsubscribe(); error ? reject(new Error(error)) : resolve(); };
+      const check = () => {
+        if (generation !== this.generation || !sameScope(scope, this.ports.context(), true)) return finish("The R session changed while stopping work");
+        if (this.error) return finish(this.error);
+        if (this.state && !this.state.current && !this.state.pending.length) finish();
+      };
+      const timer = setTimeout(() => finish("Active work has not confirmed it ended. Check its original run before stopping the session."), 30000);
+      unsubscribe = this.subscribe(check); this.ports.schedule(); check();
+    });
+  }
   async respond(value: string) {
     const scope = this.ports.context(), input = this.state?.input, generation = this.generation;
     if (!scope.project || !input || input.submitted) return;

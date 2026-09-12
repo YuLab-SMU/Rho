@@ -286,6 +286,10 @@ pub struct RestoreRuntimeInstance {
     pub source_workspace_instance_id: String,
     pub checkpoint_id: crate::OperationId,
     pub name: String,
+    /// Optional installed replacement; version, platform and native restore checks
+    /// still apply. This never authorizes cross-environment import.
+    #[serde(default)]
+    pub binding: Option<RuntimeLaunchBinding>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
@@ -330,6 +334,10 @@ pub struct UpdateRuntimeSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct RuntimeSettings {
+    /// Product defaults let each scope explain inheritance without client constants.
+    pub defaults: RuntimePolicy,
+    /// Accounted bytes in this project's recovery storage, including reservations.
+    pub project_storage_bytes: u64,
     pub effective: RuntimeEffectivePolicy,
     pub app_version: Option<String>,
     pub project_version: Option<String>,

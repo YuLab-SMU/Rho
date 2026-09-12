@@ -33,7 +33,7 @@ function fixture(delay: "runtime" | "plot" | "persistence" | null = null) {
     previousBridgeSession: () => undefined, rememberBridgeSession: vi.fn(), stopReads: vi.fn(),
     info: vi.fn(async () => ({ project_root: "/project", runtime: "R", capabilities: [{ capability: { id: "workspace.runtime_status", version: 1 } }] })),
     rConfiguration: vi.fn(async () => ({ source: "fixture", current: null, candidates: [], error: null })),
-    selectProject: vi.fn(), probeR: vi.fn(), applyR: vi.fn(), invoke: vi.fn(), cancel: vi.fn(), respondInput: vi.fn(),
+    selectProject: vi.fn(), probeR: vi.fn(), applyR: vi.fn(), invoke: vi.fn(), cancel: vi.fn(), respondInput: vi.fn(), quitWorkbench: vi.fn(),
     subscribe: vi.fn(async () => []), getOperation: vi.fn(async () => null), applicationExecute: vi.fn(), applicationStatus: vi.fn(), applicationReadDocument: vi.fn(),
     readState: vi.fn(async (_project: string | null, key: string): Promise<ApplicationState> => {
       if (delay === "persistence" && key.startsWith("studio.")) { entered.resolve(); await release.promise; }

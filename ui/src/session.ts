@@ -15,6 +15,7 @@ interface SessionPorts {
   selectProject(path: string): Promise<WorkbenchInfo>;
   probeR(selection: RSelection): Promise<RProbe>;
   applyR(selection: RSelection, endSession: boolean): Promise<RConfiguration>;
+  quitWorkbench?(project: string): Promise<{ quitting: boolean }>;
   query: QueryPort;
   readState(project: string | null, key: string): Promise<ApplicationState>;
   writeState(project: string | null, state: ApplicationState): Promise<ApplicationState>;
@@ -123,6 +124,12 @@ export class Session extends Model<SessionSnapshot> {
     connected: this._connected, ready: this._ready, capabilities: this.hostMismatch ? [] : this._info?.capabilities.map((c) => c.capability.id) ?? [] });
   reportError(error: string) { this._error = error; this.publish(); }
   dismissError() { this.reportError(""); }
+  async quitWorkbench() {
+    if (!this.project || !this.ports.quitWorkbench) throw new Error("Quit is unavailable for this Workbench");
+    const result = await this.ports.quitWorkbench(this.project);
+    if (!result.quitting) throw new Error("Workbench shutdown was not confirmed");
+    this.stopped = true; this._connected = false; this._ready = false; this.publish();
+  }
   async start() {
     this.stopped = false;
     const epoch = ++this._epoch;

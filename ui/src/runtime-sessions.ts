@@ -39,6 +39,7 @@ export interface RuntimeSessionsSnapshot {
   readonly loading: ReadonlySet<string>;
   readonly commands: ReadonlySet<string>;
   readonly errors: ReadonlyMap<string, string>;
+  readonly dismissedRecoveryNotices: ReadonlySet<string>;
 }
 
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -89,13 +90,14 @@ export class RuntimeSessions extends Model<RuntimeSessionsSnapshot> {
   private sequence = 0;
   private selectionVersion = 0;
   private stopped = false;
+  private dismissedRecoveryNotices = new Set<string>();
   constructor(private readonly ports: RuntimeSessionsPorts) { super(); }
 
   protected readSnapshot(): RuntimeSessionsSnapshot {
     return { instances: readonlyMap(this.instancesValue), catalogIds: Object.freeze([...this.ids]), selectedId: this.selectedValue,
       defaultId: this.defaultValue, total: this.totalValue, next: this.nextValue, stale: this.dirty, observedAt: this.observedValue,
       viewTargets: readonlyMap(this.pins), recovery: readonlyMap(this.recoveryValue), settings: readonlyMap(this.settingsValue),
-      loading: readonlySet(new Set(this.reads.keys())), commands: readonlySet(this.activeCommands), errors: readonlyMap(this.errorsValue) };
+      loading: readonlySet(new Set(this.reads.keys())), commands: readonlySet(this.activeCommands), errors: readonlyMap(this.errorsValue), dismissedRecoveryNotices: readonlySet(this.dismissedRecoveryNotices) };
   }
   get selectedId() { return this.selectedValue; }
   get supported() { return this.ports.context().capabilities.includes("runtime.instances"); }
@@ -105,6 +107,10 @@ export class RuntimeSessions extends Model<RuntimeSessionsSnapshot> {
   recoveryFor(id: string) { return this.recoveryValue.get(id) ?? null; }
   settingsFor(id: string | null) { return this.settingsValue.get(settingsKey(id)) ?? null; }
   targetForView(viewId: string) { return this.pins.get(viewId) ?? this.selectedValue; }
+  dismissRecoveryNotice(native: string) {
+    this.dismissedRecoveryNotices = new Set([...this.dismissedRecoveryNotices, native].slice(-256));
+    this.ports.changed(); this.publish();
+  }
 
   select(id: string) {
     if (!this.instancesValue.has(id)) throw new Error("Inspect the R session before selecting it");
@@ -129,12 +135,13 @@ export class RuntimeSessions extends Model<RuntimeSessionsSnapshot> {
       continuationLineageId: value.continuation_lineage_id });
   }
   serialize() {
-    return { runtimeSessions: { selectedWorkspaceInstanceId: this.selectedValue, viewTargets: Object.fromEntries(this.pins) } };
+    return { runtimeSessions: { selectedWorkspaceInstanceId: this.selectedValue, viewTargets: Object.fromEntries(this.pins), dismissedRecoveryNotices: [...this.dismissedRecoveryNotices] } };
   }
   restore(value: unknown) {
     this.reset();
     const data = object(value) && object(value.runtimeSessions) ? value.runtimeSessions : null;
     if (identity(data?.selectedWorkspaceInstanceId)) this.selectedValue = data.selectedWorkspaceInstanceId;
+    if (Array.isArray(data?.dismissedRecoveryNotices)) this.dismissedRecoveryNotices = new Set(data.dismissedRecoveryNotices.filter(identity).slice(-256));
     if (object(data?.viewTargets)) for (const [view, id] of Object.entries(data.viewTargets).slice(0, 256))
       if (identity(view) && identity(id)) this.pins.set(view, id);
     this.ports.selectionChanged?.(this.selectedValue);
@@ -144,7 +151,7 @@ export class RuntimeSessions extends Model<RuntimeSessionsSnapshot> {
     this.generation++; this.selectionVersion++; this.stopped = false;
     this.instancesValue.clear(); this.instanceStamps.clear(); this.ids = []; this.selectedValue = null;
     this.defaultValue = null; this.totalValue = null; this.nextValue = null; this.observedValue = null;
-    this.pins.clear(); this.recoveryValue.clear(); this.recoveryVersions.clear(); this.recoveryEpoch++; this.settingsValue.clear(); this.reads.clear();
+    this.pins.clear(); this.dismissedRecoveryNotices.clear(); this.recoveryValue.clear(); this.recoveryVersions.clear(); this.recoveryEpoch++; this.settingsValue.clear(); this.reads.clear();
     this.activeCommands.clear(); this.errorsValue.clear(); this.dirty = true; this.invalidation++; this.publish();
     this.ports.selectionChanged?.(null);
   }
@@ -201,7 +208,10 @@ export class RuntimeSessions extends Model<RuntimeSessionsSnapshot> {
         !(page.default_workspace_instance_id === null || identity(page.default_workspace_instance_id)) ||
         !(page.next_after_instance_id === null || identity(page.next_after_instance_id))) throw new Error("Invalid R session catalog page");
       const values = page.instances.map((entry) => instance(entry)), ids = values.map((entry) => entry.workspace_instance_id);
-      if (new Set(ids).size !== ids.length || ids.some((id) => cursor !== null && id <= cursor) ||
+      const defaultId = page.default_workspace_instance_id;
+      const follows = (id: string, before: string) => id !== before && id !== defaultId && (before === defaultId || id > before);
+      if (new Set(ids).size !== ids.length || (older && defaultId !== this.defaultValue) ||
+        ids.some((id, index) => (index > 0 && !follows(id, ids[index - 1]!)) || (cursor !== null && !follows(id, cursor))) ||
         (page.next_after_instance_id !== null && (!ids.length || page.next_after_instance_id !== ids.at(-1))))
         throw new Error("R session catalog cursor did not advance");
       for (const value of values) this.acceptInstance(value, stamp);
@@ -271,32 +281,41 @@ export class RuntimeSessions extends Model<RuntimeSessionsSnapshot> {
   createInstance(name: string, binding: RuntimeLaunchBinding, options: { start?: boolean; selectWhenReady?: boolean; policy?: Partial<RuntimePolicyOverrides> } = {}) {
     return this.command("runtime.create_instance", { name, binding, start: options.start ?? true, policy: options.policy ?? {} }, undefined, options.selectWhenReady ?? true);
   }
-  continueInstance(id: string, startEmpty = false) {
+  async continueInstance(id: string, startEmpty = false) {
     const value = this.instancesValue.get(id);
     if (!value) throw new Error("Inspect the R session before continuing it");
+    if (startEmpty && value.state === "recovery_required" && value.native_session_id) {
+      const stopped = await this.stopInstance({ workspaceInstanceId: id, nativeSessionId: value.native_session_id, continuationLineageId: value.continuation_lineage_id }, true);
+      if (stopped.status !== "succeeded") return stopped;
+    }
     return this.command("runtime.continue_instance", { workspace_instance_id: id, expected_continuation_lineage_id: value.continuation_lineage_id, start_empty: startEmpty }, id);
   }
   stopInstance(target: RuntimeTarget, discardUnsavedObjects = false) {
     return this.command("runtime.stop_instance", { workspace_instance_id: target.workspaceInstanceId,
       expected_native_session_id: target.nativeSessionId, discard_unsaved_objects: discardUnsavedObjects }, target.workspaceInstanceId);
   }
+  async stopForQuit(target: RuntimeTarget, discardUnsavedObjects = false) {
+    if (!this.ports.stopWork) throw new Error("This Host cannot observe queue shutdown");
+    await this.ports.stopWork(target.workspaceInstanceId);
+    return this.stopInstance(target, discardUnsavedObjects);
+  }
   restartInstance(target: RuntimeTarget, discardUnsavedObjects = false) {
     return this.command("runtime.restart_instance", { workspace_instance_id: target.workspaceInstanceId,
       expected_native_session_id: target.nativeSessionId, clean: true, discard_unsaved_objects: discardUnsavedObjects }, target.workspaceInstanceId);
   }
-  renameInstance(id: string, name: string) {
+  renameInstance(id: string, name: string, expectedName?: string) {
     const value = this.instancesValue.get(id);
     if (!value) throw new Error("Inspect the R session before renaming it");
-    return this.command("runtime.rename_instance", { workspace_instance_id: id, expected_name: value.name, name }, id);
+    return this.command("runtime.rename_instance", { workspace_instance_id: id, expected_name: expectedName ?? value.name, name }, id);
   }
-  restoreInNewSession(id: string, checkpointId: string, name: string, selectWhenReady = true) {
-    return this.command("runtime.restore_instance", { source_workspace_instance_id: id, checkpoint_id: checkpointId, name }, undefined, selectWhenReady);
+  restoreInNewSession(id: string, checkpointId: string, name: string, selectWhenReady = true, binding?: RuntimeLaunchBinding) {
+    return this.command("runtime.restore_instance", { source_workspace_instance_id: id, checkpoint_id: checkpointId, name, ...(binding ? { binding } : {}) }, undefined, selectWhenReady);
   }
   captureCheckpoint(target: RuntimeTarget, options: Partial<Omit<CheckpointCaptureArguments, "expected_session" | "automatic">> = {}) {
     const policy = this.getInstance(target.workspaceInstanceId)?.policy.value;
     return this.command("workspace.checkpoint_capture", workspaceArguments(target.workspaceInstanceId,
       { include_names: policy?.object_selection === "selected" ? policy.include_names : null,
-        exclude_names: policy?.exclude_names ?? [], include_patterns: policy?.include_patterns ?? [], exclude_patterns: policy?.exclude_patterns ?? [],
+        exclude_names: policy?.exclude_names ?? [], include_patterns: policy?.object_selection === "selected" ? policy.include_patterns : [], exclude_patterns: policy?.exclude_patterns ?? [],
         max_bytes: policy?.automatic_payload_limit_bytes ?? 2 * 1024 ** 3,
         max_seconds: Math.max(1, Math.ceil((policy?.capture_budget_ms ?? 2000) / 1000)),
         ...options, expected_session: target.nativeSessionId, automatic: false }), target.workspaceInstanceId);
@@ -307,12 +326,13 @@ export class RuntimeSessions extends Model<RuntimeSessionsSnapshot> {
   deleteCheckpoint(id: string, checkpointId: string) {
     return this.command("workspace.checkpoint_delete", workspaceArguments(id, { checkpoint_id: checkpointId }), id);
   }
-  async updateSettings(scope: RuntimeSettingsScope, id: string | null, overrides: Partial<RuntimePolicyOverrides>) {
+  async updateSettings(scope: RuntimeSettingsScope, id: string | null, overrides: Partial<RuntimePolicyOverrides>, observedVersion?: string | null) {
     const settings = this.settingsFor(id);
     if (!settings || (scope === "instance" && id === null)) throw new Error("Read this scope’s settings before changing them");
     const context = this.ports.context(), generation = this.generation;
     const record = await this.command("runtime.update_settings", { scope, workspace_instance_id: scope === "instance" ? id : null,
-      expected_version: settings[`${scope}_version`], overrides: { ...settings.effective[scope], ...overrides } }, scope === "instance" ? id! : `settings:${scope}`);
+      expected_version: observedVersion === undefined ? settings[`${scope}_version`] : observedVersion,
+      overrides: { ...settings.effective[scope], ...overrides } }, scope === "instance" ? id! : `settings:${scope}`);
     if (record.status === "succeeded" && this.current(context, generation)) {
       try { await this.refreshSettings(id); } catch { /* A failed follow-up read cannot revoke the original write receipt. */ }
     }

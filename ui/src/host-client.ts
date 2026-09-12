@@ -149,6 +149,7 @@ export class HostClient {
   rConfiguration() {
     return this.request<RConfiguration>("/api/r");
   }
+  quitWorkbench(project_root: string) { return this.request<{ quitting: boolean }>("/api/quit", { project_root }); }
   probeR(selection: RSelection) {
     return this.request<RProbe>("/api/r/probe", selection);
   }

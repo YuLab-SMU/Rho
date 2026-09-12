@@ -2,6 +2,9 @@ bridge <- new.env(parent = baseenv())
 sys.source("r/bridge/checkpoint.R", bridge)
 bridge$rho_checkpoint_initialize(Sys.getenv("RHO_CHECKPOINT_TEST_LIBRARY"))
 local({
+  fixture <- dyn.load(Sys.getenv("RHO_CHECKPOINT_ALTREP_FIXTURE"))
+  make_fixture <- getNativeSymbolInfo("make_fixture",fixture)$address
+  access_count <- getNativeSymbolInfo("access_count",fixture)$address
   scope <- new.env(parent = emptyenv())
   shared <- new.env(parent = emptyenv()); shared$value <- 5L; shared$self <- shared
   scope$one <- shared; scope$two <- shared
@@ -15,10 +18,15 @@ local({
   scope$unsafe <- list(unsafe)
   scope$foreign <- new("externalptr")
   scope$deferred <- as.character(1:10)
+  scope$unknown <- .Call(make_fixture)
+  scope$nested_unknown <- list(value=scope$unknown)
+  .Call(access_count,TRUE)
   scan <- .Call(bridge$rho_checkpoint_provider$roots, scope, 1024^2, 10, NULL)
   names <- scan[[1L]]; keep <- scan[[3L]]
-  stopifnot(counter == 0L, all(c("one", "two", "data", "unicode") %in% names[keep]),
-            all(c("active", "lazy", "unsafe", "foreign", "deferred") %in% names[!keep]))
+  stopifnot(counter == 0L, .Call(access_count,FALSE) == 0L,
+            all(c("one", "two", "data", "unicode", "deferred") %in% names[keep]),
+            all(c("active", "lazy", "unsafe", "foreign", "unknown", "nested_unknown") %in% names[!keep]),
+            all(scan[[4L]][names %in% c("unknown","nested_unknown")] == "unknown_altrep_provider"))
   alias_scope <- new.env(parent=emptyenv())
   alias_scope$a <- new.env(parent=emptyenv()); alias_scope$a$raw <- raw(100)
   alias_scope$b <- alias_scope$a
@@ -29,7 +37,9 @@ local({
   .Call(bridge$rho_checkpoint_provider$write, values, file, 1024^2, 10)
   restored <- readRDS(file)
   stopifnot(identical(restored$one, restored$two), identical(restored$one, restored$one$self),
-            identical(restored$data, scope$data), identical(restored$unicode, scope$unicode), counter == 0L)
+            identical(restored$data, scope$data), identical(restored$unicode, scope$unicode),
+            identical(restored$deferred, as.character(seq_len(10))), counter == 0L,
+            .Call(access_count,FALSE) == 0L)
   unlink(file)
   too_small <- tempfile()
   rejected <- try(.Call(bridge$rho_checkpoint_provider$write, values, too_small, 16, 10), silent=TRUE)

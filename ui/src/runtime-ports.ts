@@ -11,6 +11,7 @@ export interface RuntimeSessionsPorts {
   schedule(): void;
   instanceObserved?(previous: WorkspaceInstance | null, current: WorkspaceInstance): void;
   selectionChanged?(id: string | null): void;
+  stopWork?(id: string): Promise<void>;
 }
 
 /** Capture before awaiting a save, admission or transport acknowledgement. */

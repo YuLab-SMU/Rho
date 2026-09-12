@@ -4,6 +4,7 @@ import { useAgents, useDocuments, useNavigation, useSession } from "./context";
 import { Icon } from "./icons";
 import { SettingsControls } from "./settings-controls";
 import { NativeAgentSettings } from "./native-agent-settings";
+import { RuntimeSettingsControls } from "./runtime-settings";
 import type { AgentConfigurationFormat } from "./agent-ports";
 import type { McpSessionObservation } from "./generated/McpSessionObservation";
 import "./agent-settings.css";
@@ -11,7 +12,7 @@ import "./agent-settings.css";
 const basename = (path: string | null) => path?.split(/[\\/]/).filter(Boolean).at(-1) ?? "No project selected";
 const time = (value: number | null) => value === null ? "Not observed" : new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const codexClient = (value: string | null) => !!value && /(^|[-_ /])codex($|[-_ /])/i.test(value);
-type Section = "general" | "editor" | "runtime" | "agents";
+type Section = "general" | "editor" | "runtime" | "recovery" | "agents";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <div className="agent-field"><span className="agent-label">{label}</span><div className="agent-field-value">{children}</div></div>;
@@ -113,13 +114,14 @@ function AgentSettings() {
   </>;
 }
 
-export function SettingsPage({ onClose }: { onClose: () => void }) {
-  const [section, setSection] = useState<Section>("agents"), session = useSession(), navigation = useNavigation();
+export function SettingsPage({ onClose, initialSection = "agents" }: { onClose: () => void; initialSection?: Section }) {
+  const [section, setSection] = useState<Section>(initialSection), session = useSession(), navigation = useNavigation();
   const opener = useRef(document.activeElement as HTMLElement | null);
   const sections = [
     { id: "general", name: "General", icon: "settings", description: "Your local scientific workspace." },
     { id: "editor", name: "Editor", icon: "code", description: "Make scripts comfortable to read and edit." },
     { id: "runtime", name: "R session", icon: "terminal", description: "Use an installed R and Ark runtime." },
+    { id: "recovery", name: "Runtime & recovery", icon: "terminal", description: "Choose how R sessions save and continue." },
     { id: "agents", name: "Agents", icon: "agent", description: "Connect the agent you use to your scientific workspace." },
   ] as const;
   const current = sections.find(s => s.id === section)!;
@@ -127,7 +129,7 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
     <header className="settings-chrome"><strong className="settings-wordmark">rho</strong><span className="settings-divider" /><span className="settings-project" title={session.project ?? undefined}>{basename(session.project)}</span><Dialog.Close className="settings-back"><Icon name="back" />Back to workspace</Dialog.Close></header>
     <nav className="settings-sidebar" aria-label="Settings sections"><Dialog.Title className="settings-nav-title">Settings</Dialog.Title>{sections.map(s => <button key={s.id} aria-current={section === s.id ? "page" : undefined} onClick={() => setSection(s.id)}><Icon name={s.icon} size={18} />{s.name}</button>)}</nav>
     <main className="settings-main"><div className="settings-inner"><div className="settings-heading"><h2>{current.name}</h2><Dialog.Description>{current.description}</Dialog.Description></div>
-      {section === "agents" ? <AgentSettings /> : section === "general" ? <div className="agent-options"><Field label="Project"><Icon name="folder" /><span className="agent-value">{basename(session.project)}</span></Field><p className="agent-caption break-path">{session.project}</p><button className="agent-secondary" onClick={() => navigation.setDialog("project")}>Open project</button></div> : <SettingsControls key={`${section}:${session.epoch}`} section={section} />}
+      {section === "agents" ? <AgentSettings /> : section === "recovery" ? <RuntimeSettingsControls /> : section === "general" ? <div className="agent-options"><Field label="Project"><Icon name="folder" /><span className="agent-value">{basename(session.project)}</span></Field><p className="agent-caption break-path">{session.project}</p><button className="agent-secondary" onClick={() => navigation.setDialog("project")}>Open project</button></div> : <SettingsControls key={`${section}:${session.epoch}`} section={section} />}
     </div></main>
   </Dialog.Content></Dialog.Portal></Dialog.Root>;
 }

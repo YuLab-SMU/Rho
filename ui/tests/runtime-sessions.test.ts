@@ -70,7 +70,7 @@ it("persists only selected and pinned logical identities and never silently reta
   await expect(f.model.initialize()).rejects.toThrow();
   expect(f.model.selectedId).toBe("missing"); expect(f.model.targetForView("console:fixed")).toBe("scratch");
   expect(() => f.model.captureTarget()).toThrow("not ready");
-  expect(f.model.serialize()).toEqual({ runtimeSessions: { selectedWorkspaceInstanceId: "missing", viewTargets: { "console:fixed": "scratch" } } });
+  expect(f.model.serialize()).toEqual({ runtimeSessions: { selectedWorkspaceInstanceId: "missing", viewTargets: { "console:fixed": "scratch" }, dismissedRecoveryNotices: [] } });
   expect(f.ports.commands.invoke).not.toHaveBeenCalled();
 });
 
@@ -99,6 +99,20 @@ it("late catalog reads cannot roll back a newer native session observation", asy
   f.instances.set("main", session("main", "r-main-new")); await f.model.refreshInstance("main");
   held.resolve(observed({ instances: [session("main")], total: 1, default_workspace_instance_id: "main", next_after_instance_id: null })); await reading;
   expect(f.model.selected?.native_session_id).toBe("r-main-new");
+});
+
+it("accepts created identifiers after Main across pages and refuses a repeated default", async () => {
+  const f = fixture();
+  f.ports.query.mockResolvedValueOnce(observed({ instances: [session("main")], total: 3, default_workspace_instance_id: "main", next_after_instance_id: "main" }));
+  await f.model.refreshInstances();
+  f.ports.query.mockResolvedValueOnce(observed({ instances: [session("instance_op_a")], total: 3, default_workspace_instance_id: "main", next_after_instance_id: "instance_op_a" }));
+  await f.model.refreshInstances(true);
+  expect(f.model.getSnapshot().catalogIds).toEqual(["main", "instance_op_a"]);
+  f.ports.query.mockResolvedValueOnce(observed({ instances: [session("main")], total: 3, default_workspace_instance_id: "main", next_after_instance_id: null }));
+  await expect(f.model.refreshInstances(true)).rejects.toThrow("cursor");
+  f.ports.query.mockResolvedValueOnce(observed({ instances: [session("instance_op_b")], total: 3, default_workspace_instance_id: "main", next_after_instance_id: null }));
+  await f.model.refreshInstances(true);
+  expect(f.model.getSnapshot().catalogIds).toEqual(["main", "instance_op_a", "instance_op_b"]);
 });
 
 it("project changes and reset fence catalog and recovery replies", async () => {
@@ -146,6 +160,13 @@ it("restart uses the reviewed native identity and always creates empty memory", 
   f.model.select("scratch"); const result = await f.model.restartInstance(target);
   expect(f.ports.commands.invoke).toHaveBeenCalledExactlyOnceWith("runtime.restart_instance", { workspace_instance_id: "main", expected_native_session_id: "r-main", clean: true, discard_unsaved_objects: false });
   expect(result.operation.client_request_id).toBe("original-request"); expect(f.model.selectedId).toBe("scratch");
+});
+
+it("all-supported manual capture ignores dormant include filters while exclusions still apply", async () => {
+  const f = fixture();
+  Object.assign(f.instances.get("main")!.policy.value, { object_selection: "all_eligible", include_names: ["old_selection"], include_patterns: ["old_*"], exclude_names: ["db"] });
+  await f.model.initialize(); await f.model.captureCheckpoint(f.model.captureTarget());
+  expect(f.ports.commands.invoke).toHaveBeenCalledWith("workspace.checkpoint_capture", expect.objectContaining({ include_names: null, include_patterns: [], exclude_names: ["db"] }));
 });
 
 it("a lifecycle error is never retried and overlapping commands for the same instance are rejected", async () => {

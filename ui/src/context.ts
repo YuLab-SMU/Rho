@@ -17,6 +17,11 @@ function useModule<T extends { subscribe(listener: () => void): () => void; getS
   return owner;
 }
 export const useRuntimeSessions = () => useModule(studio.runtimeSessions);
+// Management pages inspect an explicit instance without changing the run target.
+export const useInstanceSession = (id: string) => useModule(studio.session.forInstance(id));
+export const useInstanceConsole = (id: string) => useModule(studio.workspaceFor(id).console);
+export const useInstanceOperations = (id: string) => useModule(studio.operations.forInstance(id));
+export const useInstanceObjects = (id: string) => useModule(studio.workspaceFor(id).objects);
 export const useSession = () => { const { view, id } = useRuntimeBinding(); return useModule(view ? studio.session.forInstance(id) : studio.session); };
 export const useAgents = () => useModule(studio.agents);
 export const useNativeAgents = () => useModule(studio.nativeAgents);

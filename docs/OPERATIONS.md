@@ -71,6 +71,39 @@ there selects Project/Process-only hosting; `--rscript /path/to/Rscript` adds
 Environment capabilities without live R. `--demo` is a test-only fake runtime and
 is not accepted by the workbench.
 
+## Manage R sessions and recovery copies
+
+Open **Session → R Sessions…**, or use the R status disclosure. Selecting a row
+inspects that session without changing the execution target. Overview opens scoped
+Console/Objects views; Runs separates active work from its waiting queue. A view can
+follow the execution target or be pinned to one session. Closing management preserves
+editor and Console drafts. Below 720 px, use the session list, detail and Back path.
+
+**New R session…** uses an installed R and an existing environment, verifies the
+launch, and changes the target only when ready. It also works after saving a default
+R on a Host opened without a session; a Host restart is unnecessary. Choosing a
+stopped execution target continues it before accepting new R work.
+
+Recovery copies show exact counts, full object coverage from the original operation,
+pinning and storage. **Restore in new session…** leaves the source session available.
+An explicitly chosen matching installation still undergoes version, architecture
+and package/environment validation. Unsupported graphs remain excluded. R's base
+`deferred_string` storage is supported, including ordinary character/factor predictor
+models; an unknown provider is not called during classification.
+
+**Runtime & recovery** edits App, Project or Session settings per field. Reset removes
+that scope's override and reveals the inherited value. Turning recovery off retains
+existing copies. A session cannot raise a project or global storage limit.
+
+**Restart R…** starts empty memory in the same binding and a new continuation lineage.
+**Stop session…** normally saves a fresh copy first; partial coverage remains visible
+and requires an explicit loss choice. **Quit Workbench…** first synchronizes drafts,
+cancels waiting runs, waits for active work to end, saves supported objects and confirms
+local R termination. A stopped Workbench can reopen and auto-continue its saved work.
+Closing the window alone leaves the Host and R running. Raw Ctrl-C/server termination
+still drains native processes without guaranteeing a fresh copy; use the Quit panel
+when current object protection is required.
+
 ## Work with scripts and outputs
 
 | Action | Current behavior |

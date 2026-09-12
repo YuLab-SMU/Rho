@@ -664,22 +664,36 @@ retains the logical instance but fences old responses and requests with a new
 native-session identity; it does not restore R memory or replay unconfirmed code, and
 it does not reload the objects a clean restart cleared.
 
-### Verified and not verified
+### Lifecycle and observation boundaries
 
-Verified: instance routing and explicit-target rejection, independent queues and
-cancellation, clean-restart lineage, failed preflight preserving the original runtime,
-settings inheritance with narrower scopes unable to raise global limits,
-recovery-copy publish/integrity/lease rules, catalog pagination and storage
-reservation, real-R capture and cold restore of shared aliases, cycles, hidden and
-Unicode values, factors and time classes, fitted models, sparse and in-memory SCE
-objects, RNG state and options, and real-R multi-instance restore with clean restart
-and no cross-session effects.
+A stop fences new native readers before awaiting already admitted reads. Active
+operations and explicit consumer holds remain blockers. Opening and restoration
+forward cooperative cancellation to their original child operations, await the
+native handshake, and retain uncertainty until candidate termination is confirmed.
+A cancellation request received after successful publication does not revoke success.
 
-Not verified or not built: the Studio surface for sessions, recovery copies and
-advanced settings; the editor-input and added-wait latency thresholds; multi-platform,
-long-run and destructive-failure acceptance; binding two genuinely different R
-installations in one project, which needs a second R and stays opt-in; and protection
-of an Environment realization referenced by an instance or a recovery copy.
+Recovery catalogs carry exact counts and bounded name previews; full coverage comes
+from the immutable original operation. Restore notices use that original operation
+and its source copy, never the presence of a later partial capture. An explicitly
+selected replacement installation must still match the saved R version, architecture
+and native package/environment validation; this is not a compatibility bypass.
+
+Recovery capture and metadata controls do not invalidate object/package observations.
+An in-progress multi-page copy may wait for native idleness on the same reference;
+scientific invalidation, expiry, disconnect or cancellation rejects it before clipboard
+publication. Waiting for a read never starts R or reruns scientific code.
+
+Environment retention follows original committed recovery manifests, including when
+all sessions are stopped. Deleted copies release references; incomplete bookkeeping
+blocks cleanup rather than guessing the references disappeared. Settings observations
+publish server defaults and project storage accounting so UI inheritance and storage
+figures do not depend on client constants.
+
+Quit stops local work through the existing per-session owners and confirms their
+termination. Workbench accepts its hosting-only quit request only for the reviewed
+project after every local native receipt is clear, and then fences new launches.
+Closing a browser view does not invoke this path. Current executed evidence and
+release limits are recorded in [Status](STATUS.md).
 
 Remote interactive runtimes, cross-language process recovery, automatic environment
 installation and lossless recovery of arbitrary external resources remain out of

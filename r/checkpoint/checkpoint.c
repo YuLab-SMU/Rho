@@ -51,15 +51,20 @@ static int visit(Graph *g, SEXP x, int depth) {
         SEXP cls = ALTREP_CLASS(x);
         if (cls != compact_integer && cls != compact_real) {
             SEXP info=ATTRIB(cls);
-            int wrapper=0;
+            int base_altrep=0;
             if (TYPEOF(info)==LISTSXP && TYPEOF(CAR(info))==SYMSXP && TYPEOF(CDR(info))==LISTSXP && TYPEOF(CAR(CDR(info)))==SYMSXP && !strcmp(CHAR(PRINTNAME(CAR(CDR(info)))),"base")) {
                 const char *name=CHAR(PRINTNAME(CAR(info)));
-                wrapper=(TYPEOF(x)==REALSXP&&!strcmp(name,"wrap_real")) || (TYPEOF(x)==INTSXP&&!strcmp(name,"wrap_integer")) || (TYPEOF(x)==LGLSXP&&!strcmp(name,"wrap_logical")) || (TYPEOF(x)==STRSXP&&!strcmp(name,"wrap_string")) || (TYPEOF(x)==RAWSXP&&!strcmp(name,"wrap_raw")) || (TYPEOF(x)==CPLXSXP&&!strcmp(name,"wrap_complex"));
+                base_altrep=(TYPEOF(x)==REALSXP&&!strcmp(name,"wrap_real")) || (TYPEOF(x)==INTSXP&&!strcmp(name,"wrap_integer")) || (TYPEOF(x)==LGLSXP&&!strcmp(name,"wrap_logical")) || (TYPEOF(x)==STRSXP&&!strcmp(name,"wrap_string")) || (TYPEOF(x)==RAWSXP&&!strcmp(name,"wrap_raw")) || (TYPEOF(x)==CPLXSXP&&!strcmp(name,"wrap_complex"))
+                    /* Base deferred conversions also serialize to an immutable
+                     * materialized value. Fitted models with factor terms carry one
+                     * in their residual/fitted/effects names, so excluding it would
+                     * make an ordinary model unrecoverable. */
+                    || (TYPEOF(x)==STRSXP&&!strcmp(name,"deferred_string"));
             }
-            if (!wrapper) {g->reason="unknown_altrep_provider";return 0;}
-            /* Base wrappers preserve immutable shared storage. Inspect their actual
-             * payload before allowing their base serializer; foreign nested ALTREP
-             * remains excluded and no wrapper accessor is called here. */
+            if (!base_altrep) {g->reason="unknown_altrep_provider";return 0;}
+            /* A base ALTREP serializes to an immutable value. Inspect its actual
+             * payload before allowing its base serializer; foreign nested ALTREP
+             * remains excluded and no provider accessor is called here. */
             return visit(g,R_altrep_data1(x),depth+1) && visit(g,R_altrep_data2(x),depth+1) && visit(g,ATTRIB(x),depth+1);
         }
         g->bytes += (double)XLENGTH(x) * (TYPEOF(x) == INTSXP ? 4 : 8);

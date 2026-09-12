@@ -15,8 +15,13 @@ local({
     assign("rho_user_result",42L,.GlobalEnv)
     assign("linear_model",eval(quote(lm(mpg~wt,data=mtcars)),.GlobalEnv),.GlobalEnv)
     assign("general_model",eval(quote(glm(vs~mpg,data=mtcars,family=binomial())),.GlobalEnv),.GlobalEnv)
+    assign("factor_samples",data.frame(id=1:24,condition=rep(c("control","treated"),each=12),value=c(seq(4.0,6.2,by=0.2),seq(6.4,8.6,by=0.2))),.GlobalEnv)
+    assign("factor_lm",eval(quote(lm(value~condition,data=factor_samples)),.GlobalEnv),.GlobalEnv)
+    assign("factor_glm",eval(quote(glm(value~condition,data=transform(factor_samples,condition=factor(condition)),family=gaussian())),.GlobalEnv),.GlobalEnv)
     assign("expected_lm",unname(predict(get("linear_model",.GlobalEnv))),.GlobalEnv)
     assign("expected_glm",unname(predict(get("general_model",.GlobalEnv),type="response")),.GlobalEnv)
+    assign("expected_factor_lm",unname(predict(get("factor_lm",.GlobalEnv))),.GlobalEnv)
+    assign("expected_factor_glm",unname(predict(get("factor_glm",.GlobalEnv),type="response")),.GlobalEnv)
     assign("promise_hits",0L,.GlobalEnv)
     lazy_box <- new.env(parent=baseenv())
     delayedAssign("later",{assign("promise_hits",get("promise_hits",.GlobalEnv)+1L,.GlobalEnv);42L},eval.env=new.env(parent=baseenv()),assign.env=lazy_box)
@@ -51,6 +56,12 @@ local({
     stopifnot(get("promise_hits",.GlobalEnv)==0L)
     stopifnot(get("lazy_box",.GlobalEnv)$later==42L,get("promise_hits",.GlobalEnv)==1L)
     stopifnot(identical(unname(predict(get("linear_model",.GlobalEnv))),get("expected_lm",.GlobalEnv)),identical(unname(predict(get("general_model",.GlobalEnv),type="response")),get("expected_glm",.GlobalEnv)))
+    stopifnot(identical(unname(predict(get("factor_lm",.GlobalEnv))),get("expected_factor_lm",.GlobalEnv)),
+              identical(unname(predict(get("factor_glm",.GlobalEnv),type="response")),get("expected_factor_glm",.GlobalEnv)),
+              inherits(get("factor_lm",.GlobalEnv),"lm"),inherits(get("factor_glm",.GlobalEnv),"glm"),
+              identical(get("factor_lm",.GlobalEnv)$xlevels$condition,c("control","treated")),
+              is.factor(get("factor_glm",.GlobalEnv)$model$condition),
+              identical(get("factor_samples",.GlobalEnv)$condition,rep(c("control","treated"),each=12)))
     stopifnot(inherits(get("linear_model",.GlobalEnv),"lm"),inherits(get("general_model",.GlobalEnv),"glm"),identical(levels(get("factor_value",.GlobalEnv)),c("low","high","unused")),identical(attr(get("time_value",.GlobalEnv),"tzone"),"America/New_York"))
     if(exists("sparse_matrix",.GlobalEnv,inherits=FALSE)) {
       expected_sparse <- matrix(0,3,4);expected_sparse[1,1]<-2;expected_sparse[2,3]<-4
@@ -58,6 +69,6 @@ local({
     }
     if(exists("sce",.GlobalEnv,inherits=FALSE)) stopifnot(identical(SummarizedExperiment::assay(get("sce",.GlobalEnv),"counts"),matrix(1:6,2)))
     if(exists("tree",.GlobalEnv,inherits=FALSE)) stopifnot(inherits(get("tree",.GlobalEnv),"phylo"))
-    cat("PASS: cold restore preserves graph aliases, lm/glm predictions, sparse/SCE values, factors/time, RNG/options, Unicode/hidden values and nested promises; mismatches/nonempty target rejected\n")
+    cat("PASS: cold restore preserves graph aliases, numeric/factor-predictor lm/glm predictions, sparse/SCE values, factors/time, RNG/options, Unicode/hidden values and nested promises; mismatches/nonempty target rejected\n")
   }
 })

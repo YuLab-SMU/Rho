@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, copyFileSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
 const root = resolve(import.meta.dirname, '..');
 const r = process.env.RHO_CHECKPOINT_R || 'R';
 function run(args, cwd = root) {
@@ -25,7 +26,10 @@ if (printLibrary) console.log(library);
 else console.log(`Built verified native provider: ${library}`);
 const buildOnly = process.argv.includes('--build-only') || printLibrary;
 if (!buildOnly) {
-  const output = spawnSync(r,['--vanilla','--slave','-f',join(root,'r/checkpoint/tests.R')],{cwd:root,encoding:'utf8',env:{...process.env,RHO_CHECKPOINT_TEST_LIBRARY:library}});
+  copyFileSync(join(root,'r/checkpoint/altrep-fixture.c'),join(directory,'altrep-fixture.c'));
+  const fixtureLibrary = join(directory,`rho_altrep_fixture${info.extension}`);
+  run(['CMD','SHLIB','altrep-fixture.c','-o',fixtureLibrary],directory);
+  const output = spawnSync(r,['--vanilla','--slave','-f',join(root,'r/checkpoint/tests.R')],{cwd:root,encoding:'utf8',env:{...process.env,RHO_CHECKPOINT_TEST_LIBRARY:library,RHO_CHECKPOINT_ALTREP_FIXTURE:fixtureLibrary}});
   process.stdout.write(output.stdout); process.stderr.write(output.stderr);
   if (output.status !== 0) process.exit(output.status || 1);
 }
@@ -39,4 +43,22 @@ if (!buildOnly) {
       if (result.status!==0) process.exit(result.status||1);
     }
   } finally { rmSync(fixture,{recursive:true,force:true}); }
+}
+
+if (!buildOnly) {
+  const delivery = mkdtempSync(join(root,'target','checkpoint-delivery-'));
+  try {
+    const ark = join(delivery,'ark'); writeFileSync(ark,'test-only path; never executed');
+    const bootstrap = join(root,'scripts/bootstrap-recovery-component.mjs');
+    const missing = spawnSync(process.execPath,[bootstrap,'--ark',ark,'--r'],{encoding:'utf8'});
+    assert.notEqual(missing.status,0); assert.match(missing.stderr,/--r requires a path/);
+    const installed = spawnSync(process.execPath,[bootstrap,'--ark',ark,'--r',info.r_executable],{cwd:root,encoding:'utf8'});
+    assert.equal(installed.status,0,installed.stderr);
+    const manifestPath = join(delivery,'recovery-components',`${info.r_version}-${info.platform}`,'manifest.json');
+    const manifest = JSON.parse(readFileSync(manifestPath,'utf8'));
+    assert.equal(manifest.r_home,info.r_home);
+    assert.equal(manifest.library,join(delivery,'recovery-components',`${info.r_version}-${info.platform}`,`rho_checkpoint${info.extension}`));
+    assert.equal(manifest.sha256,`sha256:${createHash('sha256').update(readFileSync(manifest.library)).digest('hex')}`);
+    console.log('PASS: explicit delivery writes a matching installed manifest and bytes; missing R selection is rejected');
+  } finally { rmSync(delivery,{recursive:true,force:true}); }
 }

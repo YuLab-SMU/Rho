@@ -1,12 +1,15 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Icon } from "../icons";
-import { useRuntimeSessions, useSession } from "../context";
+import { useInstanceConsole, useNavigation, useRuntimeSessions, useSession } from "../context";
+import { sessionState } from "../runtime-presentation";
 import { message } from "../shared/ports";
 import type { WorkspaceInstance } from "../generated/WorkspaceInstance";
 
-const stateWord = (state: WorkspaceInstance["state"]) =>
-  state === "ready" ? "Ready" : state === "starting" ? "Starting" : state === "stopping" ? "Stopping"
-    : state === "recovery_required" ? "Needs attention" : state === "failed" ? "Failed" : "Stopped";
+export function SessionActivityLabel({ instance }: { instance: WorkspaceInstance }) {
+  const console = useInstanceConsole(instance.workspace_instance_id), session = useSession();
+  const queue = console.consoleState?.session_id === instance.native_session_id ? console.consoleState : null;
+  return <>{sessionState(instance, queue, session.connected)}</>;
+}
 const stateTone = (state: WorkspaceInstance["state"]) =>
   state === "ready" ? " is-live" : state === "recovery_required" || state === "failed" ? " is-attention" : "";
 
@@ -21,7 +24,7 @@ const subtitle = (instance: WorkspaceInstance) => {
  * afterwards; accepted work keeps the target it was captured with.
  */
 export function SessionTargetPicker() {
-  const session = useSession(), runtimeSessions = useRuntimeSessions();
+  const session = useSession(), runtimeSessions = useRuntimeSessions(), navigation = useNavigation();
   const rs = runtimeSessions.getSnapshot();
   const sessions = rs.catalogIds.map((id) => rs.instances.get(id)).filter((value): value is WorkspaceInstance => !!value);
   if (sessions.length < 2) return null;
@@ -55,10 +58,13 @@ export function SessionTargetPicker() {
             >
               <span className="session-target-check">{instance.workspace_instance_id === rs.selectedId ? "✓" : ""}</span>
               <span className="session-target-name">{instance.name}<small>{subtitle(instance)}</small></span>
-              <span className={`session-target-state${stateTone(instance.state)}`}>{stateWord(instance.state)}</span>
+              <span className={`session-target-state${stateTone(instance.state)}`}><SessionActivityLabel instance={instance} /></span>
             </Menu.Item>
           ))}
           {rs.stale && <div className="shell-observation-note">Refreshing the session catalog…</div>}
+          <Menu.Separator className="shell-menu-separator" />
+          <Menu.Item onSelect={() => navigation.setDialog("new-session")}>＋ New session…</Menu.Item>
+          <Menu.Item onSelect={() => navigation.openSessions(rs.selectedId)}>R Sessions →</Menu.Item>
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>

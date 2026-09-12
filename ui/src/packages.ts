@@ -187,6 +187,7 @@ export class Packages extends Model<PackagesSnapshot> {
     if (visible && this.needsObservation) this.ports.schedule();
   }
   operationChanged(event: OperationChange) {
+    if (["workspace.checkpoint_capture", "workspace.checkpoint_pin", "workspace.checkpoint_delete", "workspace.checkpoint_reconcile"].includes(event.capability)) return;
     const scope = this.ports.context();
     if (event.epoch === scope.epoch && event.project === scope.project && event.capability.startsWith("workspace.") && terminal(event.status)) this.invalidate();
   }
