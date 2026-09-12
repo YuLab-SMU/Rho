@@ -143,7 +143,9 @@ Checks:
 - `system.agent-harness`: `["node","scripts/test-agent-interface.mjs","--self-test"]`
 - `system.agent-tasks`: `["node","scripts/test-agent-task-recovery.mjs"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`
+- `system.architecture-tests`: `["node","scripts/test-architecture.mjs"]`
 - `system.client`: `["node","scripts/client.mjs","check"]`
+- `system.component-agents`: `["node","scripts/test-component-agents.mjs"]`
 - `system.environment`: `["node","scripts/test-environment.mjs"]`
 - `system.evidence-pack`: `["python3","scripts/test-pack-agent-evidence.py"]`
 - `system.mcp`: `["node","scripts/test-mcp.mjs"]`

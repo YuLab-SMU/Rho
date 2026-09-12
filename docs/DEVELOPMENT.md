@@ -61,6 +61,7 @@ storage. Check ordinary/wide/constrained layouts and copying, not only snapshots
 | Client types and embedded assets | Generate, build, then check as above |
 | Studio interaction and real local R | `npm run test:browser --prefix ui` |
 | Rust architecture/dependency ownership | `node scripts/check-architecture.mjs` |
+| Component Agent engine feasibility | `node scripts/test-component-agents.mjs`; isolated Rig HTTP/SSE checks, no live scientific dispatch |
 | Frontend ownership and dependency boundaries | `npm run check:boundaries --prefix ui` and `npm run test:boundaries --prefix ui` |
 | Vendored Jet snapshot / verifier | `node scripts/vendor-jet.mjs check` and `node scripts/test-vendor-jet.mjs` |
 | Documentation/map only | `node scripts/governance.mjs check` and `node scripts/test-governance.mjs` |
@@ -72,6 +73,16 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked -- --test-threads=1
 ```
+
+The component Agent diagnostic's explicit `--real-model` option uses only a
+synthetic tool and image. Set `RHO_COMPONENT_MODEL_BASE_URL`,
+`RHO_COMPONENT_MODEL_ID`, `RHO_COMPONENT_MODEL_PROTOCOL` (`anthropic` or
+`openai_completions`) and `RHO_COMPONENT_MODEL_KEY_ENV` naming an environment
+variable already containing the credential. Never put the credential in a tracked
+file. HTTPS is required except for explicit loopback HTTP. It does not read native
+CLI authentication or project data. Logs and a scope-labeled summary are retained
+under `target/component-agent-probe/`; absence of `--real-model` means real model
+testing was not run. This P0 diagnostic does not replace Host/R acceptance.
 
 Native/transport verification:
 

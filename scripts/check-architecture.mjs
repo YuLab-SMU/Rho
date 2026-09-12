@@ -4,6 +4,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+export function assertAgentEngineBoundary(pkg) {
+  for (const dep of pkg.dependencies) {
+    assert.ok(!(dep.name === "rig" || dep.name.startsWith("rig-")) || pkg.name === "rho-agents",
+      `${pkg.name} imports the component Agent engine outside rho-agents`);
+  }
+}
 const metadata = JSON.parse(execFileSync("cargo", [
   "metadata", "--manifest-path", path.join(root, "Cargo.toml"),
   "--format-version", "1", "--no-deps", "--offline",
@@ -18,6 +24,7 @@ const allowed = {
   "rho-contract": [],
   "rho-operation": ["rho-contract"],
   "rho-application": ["rho-contract"],
+  "rho-agents": ["rho-application", "rho-contract"],
   "rho-skills": ["rho-contract", "rho-operation"],
   "rho-adapter-skills": ["rho-contract", "rho-operation", "rho-skills"],
   "rho-workspace": ["rho-contract", "rho-operation"],
@@ -37,6 +44,7 @@ const allowed = {
   "rho-cli": ["rho-contract", "rho-host", "rho-mcp", "rho-workbench"],
 };
 for (const pkg of metadata.packages) {
+  assertAgentEngineBoundary(pkg);
   assert.ok(Object.hasOwn(allowed, pkg.name), `Unclassified production owner: ${pkg.name}`);
   for (const dep of pkg.dependencies) {
     if (dep.path) {

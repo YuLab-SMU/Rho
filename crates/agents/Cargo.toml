@@ -1,0 +1,21 @@
+[package]
+name = "rho-agents"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rig = { version = "=0.42.0", default-features = false, features = ["agent", "rustls"] }
+futures.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+tempfile.workspace = true
+jsonschema.workspace = true
+tokio = { workspace = true, features = ["net"] }

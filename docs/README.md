@@ -16,9 +16,10 @@ Start with the current product and the work being improved. Each page has one jo
 current product commitments. The [page index](INDEX.md) and
 [source/check index](SOURCE-INDEX.md) are generated navigation aids.
 
-The working [built-in component Agent plan](BUILTIN-AGENT-PLAN.md) proposes a Rig
-integration and a bounded extension to the external-Agent-only rule. It is not
-implemented behavior or approval of a new Studio interaction.
+The [built-in component Agent plan](BUILTIN-AGENT-PLAN.md) defines the authorized
+Rig integration and bounded extension to the external-Agent-only rule. The isolated
+P0 engine experiment is implemented; Host integration and new Studio interactions
+are still pending. See Status for executed evidence and the next phase.
 
 ## Maintenance
 

@@ -2,18 +2,57 @@
 
 Updated: 2026-09-12. This is the single current status summary. Git retains history.
 
-## Built-in component Agent planning
+## Built-in component Agent implementation
 
-The user requested a concrete plan for component assistants using an existing
-Agent engine. The [working proposal](BUILTIN-AGENT-PLAN.md) selects Rig's driver,
-maps seven component profiles to current owners, and specifies file-level changes,
-authorization, durable tool receipts, recovery, Paper review and staged acceptance.
-It is based on source inspection at `3f0d2d70` and current Rig 0.42 documentation.
-No Rig dependency, model request or production behavior has been added. The existing
-external-Agent boundary remains the implemented architecture; changing it is an
-explicit first implementation step. Continue with the plan's P0 feasibility work.
-Documentation generation, governance validation and governance regression tests
-passed. This is documentation-only evidence; no new runtime acceptance is claimed.
+The user authorized the [implementation plan](BUILTIN-AGENT-PLAN.md). P0 now has an
+isolated `rho-agents` crate with Rig's published `0.42.0` facade, disabling defaults
+and enabling only `agent` and `rustls`. It is not yet connected to Host or Studio.
+The actual driver entry point is `agent.runner(...)`; the older `prompt(...)`
+convenience returns a different type. No custom model/tool loop was introduced.
+
+Ten HTTP/SSE protocol tests pass using the real Rig driver and a disposable fake
+provider. They cover fragmented tool arguments, serial batch correlation, awaited
+intent persistence, private ToolContext/result metadata, complete partial-observation
+envelopes, invalid/forged parameters, unknown tools, separate model/tool budgets,
+provider errors, image encoding, idle construction and cancellation while no token
+arrives. Cancellation also fences dispatch after a durable intent. The experiment's
+serial per-run call slot is not a production receipt store; P1 must replace the
+temporary-file gate with Application-owned durable admission and owner receipts.
+
+The explicitly authorized `115-newapi` service with `deepseek-v4.1-flash` passed a
+real **Anthropic Messages** synthetic tool-plus-image probe: two model calls, one
+tool call, and the expected marker plus correctly identified red image. The first
+text arrived at 765 ms and total time was 1,402 ms in this single run. Credentials
+were passed only to the diagnostic process through an environment reference.
+This establishes that endpoint/protocol's basic compatibility, not scientific
+correctness, local inference support, performance guarantees or 27-case acceptance.
+Evidence: `target/component-agent-probe/2026-09-12T18-20-24.034Z/`.
+
+`node scripts/test-component-agents.mjs` reproduces deterministic checks; its explicit
+`--real-model` option runs the synthetic configured-service probe. The architecture
+checker now rejects Rig dependencies outside `rho-agents`, with allow/reject fixtures.
+The resolved normal graph has 139 package/version nodes including this crate; the
+optional integrations present in Cargo.lock are not enabled. No active sqlx,
+Rig SQLite/memory, vector database, embedded model or new MCP dependency was found.
+All pre-existing locked package versions remain present. There are 31 new active
+package/version nodes relative to the previous lock (400 additional locked nodes,
+mostly inactive optional resolution). The optimized standalone diagnostic is
+9,629,040 bytes; its SHA-256 and dependency counts are in
+`target/component-agent-build-evidence.json`. This is the diagnostic's size, not an
+estimated increase to the shipped Rho binary; Host does not link it yet.
+
+P0 validation also passed the focused Clippy run with warnings denied, package
+format check, optimized diagnostic build, architecture fixtures, documentation
+generation/checks and governance regression tests. The latest deterministic run is
+`target/component-agent-probe/2026-09-12T18-24-02.967Z/`. The full Rust/Studio/R
+regression suite has not been rerun for this isolated experiment.
+
+Next: P1's Application contracts/repository,
+scope admission, model configuration, execution ports and Host wiring. Update the
+external-only architecture rule as part of that integration. Seven component
+profiles, real R tool routing, mutation recovery, Paper B01–B06 review, Studio UI
+and full acceptance remain outstanding. Existing Hosts and native R memory are
+preserved; inspect live state before any real workbench launch/replacement.
 
 ## Multiple R sessions and recovery copies
 
