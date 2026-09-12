@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 mod agent_tasks;
+mod component_agents;
 mod agents;
 mod settings;
 
@@ -82,6 +83,7 @@ struct AppState {
     authorization: String,
     native_mcp_authorization: String,
     task_agents: Arc<rho_host::AgentTaskService>,
+    component_agents: Arc<rho_host::ComponentAgentService>,
     calls: Arc<Semaphore>,
     observations: Arc<Semaphore>,
     application: Arc<rho_host::ApplicationStore>,
@@ -197,6 +199,7 @@ async fn select_project(
         if !selected.host.is_idle()
             || Arc::strong_count(&selected.host) != 1
             || state.task_agents.has_live().await
+            || state.component_agents.has_live().await
         {
             return failure(
                 StatusCode::CONFLICT,
@@ -455,6 +458,7 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
                         if let Err(error) = selected.host.prepare_workbench_quit().await {
                             return failure(StatusCode::CONFLICT, error.to_string());
                         }
+                        state.component_agents.close().await;
                         quit_signal.cancel();
                         Json(serde_json::json!({"quitting":true})).into_response()
                     }
@@ -467,6 +471,9 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/agents/test", post(agent_tasks::test))
         .route("/api/agents/tasks/query", post(agent_tasks::query))
         .route("/api/agents/tasks/asset", post(agent_tasks::asset))
+        .route("/api/agents/components/query", post(component_agents::query))
+        .route("/api/agents/components/command", post(component_agents::command))
+        .route("/api/agents/components/credential", post(component_agents::credential))
         .route("/api/project", post(select_project))
         .route("/api/r", get(settings::read_r).post(settings::apply_r))
         .route("/api/r/probe", post(settings::probe))
@@ -578,6 +585,7 @@ pub async fn serve_with_assets(
             uuid::Uuid::new_v4().simple()
         ),
         task_agents: rho_host::AgentTaskService::new(application.clone()),
+        component_agents: rho_host::ComponentAgentService::new(application.clone()),
         calls: Arc::new(Semaphore::new(32)),
         observations: Arc::new(Semaphore::new(16)),
         application,
@@ -586,6 +594,7 @@ pub async fn serve_with_assets(
     };
     let shutdown = CancellationToken::new();
     let task_agents = state.task_agents.clone();
+    let component_agents = state.component_agents.clone();
     let app = router(state, shutdown.clone());
     if let Some(path) = url_file {
         let mut options = std::fs::OpenOptions::new();
@@ -612,6 +621,7 @@ pub async fn serve_with_assets(
         })
         .await;
     task_agents.close().await;
+    component_agents.close().await;
     if let Some(selected) = &hosting.read().await.selected {
         selected.host.drain().await;
     }
@@ -656,6 +666,7 @@ mod tests {
             authorization: "Bearer fixture-only".into(),
             native_mcp_authorization: "Bearer native-fixture-only".into(),
             task_agents: rho_host::AgentTaskService::new(application.clone()),
+            component_agents: rho_host::ComponentAgentService::new(application.clone()),
             calls: Arc::new(Semaphore::new(32)),
             observations: Arc::new(Semaphore::new(16)),
             application,
@@ -741,6 +752,24 @@ mod tests {
                 .is_idle()
         );
     }
+    #[tokio::test]
+    async fn component_routes_reject_mcp_credentials_wrong_projects_and_missing_window_headers() {
+        let (_temp,state,app)=fixture().await;
+        let root=state.hosting.read().await.info().project_root;
+        for path in ["/api/agents/components/query","/api/agents/components/command","/api/agents/components/credential"] {
+            let response=app.clone().oneshot(Request::builder().method("POST").uri(path)
+                .header(header::HOST,"127.0.0.1:10001").header(header::AUTHORIZATION,"Bearer native-fixture-only")
+                .header(header::CONTENT_TYPE,"application/json").body(Body::from("{}")).unwrap()).await.unwrap();
+            assert_eq!(response.status(),StatusCode::UNAUTHORIZED);
+        }
+        let response=request(&app,"/api/agents/components/query",Some(json!({"project_root":"/other","query":{"kind":"settings"}}))).await;
+        assert_eq!(response.status(),StatusCode::CONFLICT);
+        let response=request(&app,"/api/agents/components/query",Some(json!({"project_root":root,"query":{"kind":"settings"}}))).await;
+        assert_eq!(response.status(),StatusCode::OK);assert_eq!(json_body(response).await["settings"]["enabled"],false);
+        let response=request(&app,"/api/agents/components/command",Some(json!({"project_root":root,"window":{"window_id":"unregistered","incarnation":"unregistered"},"command":{"kind":"create","conversation_id":"example","profile":"objects"}}))).await;
+        assert_eq!(response.status(),StatusCode::FORBIDDEN);assert!(!state.component_agents.has_live().await);
+    }
+
     #[tokio::test]
     async fn local_boundary_rejects_foreign_host_origin_and_missing_token() {
         let (_temp, _state, app) = fixture().await;

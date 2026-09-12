@@ -4,86 +4,82 @@ Updated: 2026-09-12. This is the single current status summary. Git retains hist
 
 ## Built-in component Agent implementation
 
-The user authorized the [implementation plan](BUILTIN-AGENT-PLAN.md). P0 now has an
-isolated `rho-agents` crate with Rig's published `0.42.0` facade, disabling defaults
-and enabling only `agent` and `rustls`. It is not yet connected to Host or Studio.
-The actual driver entry point is `agent.runner(...)`; the older `prompt(...)`
-convenience returns a different type. No custom model/tool loop was introduced.
+The user authorized the [implementation plan](BUILTIN-AGENT-PLAN.md). P0 and the
+P1 backend are implemented: `rho-agents` uses the pinned Rig 0.42 driver through
+engine-neutral Application ports; Host composes the service and shared query
+access. Rig dependencies stay inside `rho-agents`. No custom inference/tool loop,
+native Agent-provider variant or second scientific gateway was introduced.
 
-Ten HTTP/SSE protocol tests pass using the real Rig driver and a disposable fake
-provider. They cover fragmented tool arguments, serial batch correlation, awaited
-intent persistence, private ToolContext/result metadata, complete partial-observation
-envelopes, invalid/forged parameters, unknown tools, separate model/tool budgets,
-provider errors, image encoding, idle construction and cancellation while no token
-arrives. Cancellation also fences dispatch after a durable intent. The experiment's
-serial per-run call slot is not a production receipt store; P1 must replace the
-temporary-file gate with Application-owned durable admission and owner receipts.
+Application owns typed conversations, independent draft CAS, fixed run inputs and
+model references, durable tool intents/results, usage and bounded events in additive
+SQLite tables. A live authenticated window issues the actor. Admission rechecks
+scope, window incarnation, versions, model enablement, budgets and concurrent slots.
+Mutation call aliases preserve the original native request identity and consume
+budget; exact retries return the original receipt. Streaming observations do not
+invalidate the user's draft version. Event pruning retains tool receipts and reports
+history gaps. Original Contract/Application/SQLite behavior passed its 52 tests;
+13 new admission tests cover these component records and injected write failure.
 
-The explicitly authorized `115-newapi` service with `deepseek-v4.1-flash` passed a
-real **Anthropic Messages** synthetic tool-plus-image probe: two model calls, one
-tool call, and the expected marker plus correctly identified red image. The first
-text arrived at 765 ms and total time was 1,402 ms in this single run. Credentials
-were passed only to the diagnostic process through an environment reference.
-This establishes that endpoint/protocol's basic compatibility, not scientific
-correctness, local inference support, performance guarantees or 27-case acceptance.
-Evidence: `target/component-agent-probe/2026-09-12T18-20-24.034Z/`.
+The Host service now runs **Explain without attached sources**. It derives tools
+from the actual registry, resolves local schema references, hides and injects window
+and R-session fields, and validates both model and native schemas. It reloads each
+persisted action before dispatch and rejects an altered ticket. Queries retain the
+full owner snapshot, including partial/busy/unavailable states. Native session holds
+are scoped to a query; the current project and principal are preserved. Model
+selection is fixed for each run. Edit/Run and attached-context expansion remain
+explicitly unavailable until their subsequent vertical phases are connected.
 
-`node scripts/test-component-agents.mjs` reproduces deterministic checks; its explicit
-`--real-model` option runs the synthetic configured-service probe. The architecture
-checker now rejects Rig dependencies outside `rho-agents`, with allow/reject fixtures.
-The resolved normal graph has 139 package/version nodes including this crate; the
-optional integrations present in Cargo.lock are not enabled. No active sqlx,
-Rig SQLite/memory, vector database, embedded model or new MCP dependency was found.
-All pre-existing locked package versions remain present. There are 31 new active
-package/version nodes relative to the previous lock (400 additional locked nodes,
-mostly inactive optional resolution). The optimized standalone diagnostic is
-9,629,040 bytes; its SHA-256 and dependency counts are in
-`target/component-agent-build-evidence.json`. This is the diagnostic's size, not an
-estimated increase to the shipped Rho binary; Host does not link it yet.
+`/api/agents/components/query`, `/command` and the separate transient `/credential`
+route use the existing browser authentication and window checks. The MCP-only
+credential cannot access them. Settings persist only environment/session references;
+raw session keys stay in Host memory. HTTP clients are lazy and shared, with explicit
+HTTPS/loopback policy, no automatic redirects/retries and a 120-second request limit.
+No credential or native CLI configuration is discovered implicitly. Stop/Disable
+fence model and tool admission; model waits can be dropped without waiting for a
+token. Final acknowledgement is serialized with Stop. Quit closes the service and
+active runs prevent project switching. Accepted science will need its separate
+cancellation/reconciliation path when writes are enabled in P3/P4.
 
-P0 validation also passed the focused Clippy run with warnings denied, package
-format check, optimized diagnostic build, architecture fixtures, documentation
-generation/checks and governance regression tests. The latest deterministic run is
-`target/component-agent-probe/2026-09-12T18-24-02.967Z/`. The full Rust/Studio/R
-regression suite has not been rerun for this isolated experiment.
+### Current component evidence
 
-P1's Application foundation now includes typed component contracts and additive
-SQLite conversation, run, tool, event and settings tables. A live Application window
-issues the actor; admission rechecks its incarnation and liveness. Runs fix the
-model configuration and authorized profile/document/session scope. Request reuse,
-CAS conflicts, model/tool budgets, two running slots and eight waiting slots are
-enforced before admitting work. Configuration accepts only explicit credential
-references and validated endpoints. The architecture rules now describe the
-authorized optional Rig boundary without moving planning into scientific owners.
+- **40 focused tests passed:** ten Rig HTTP/SSE protocol cases, thirteen real-SQLite
+  admission cases, six Host integration cases and eleven Workbench cases. The Host
+  tests compare actual project-file tool results against direct queries field by
+  field, reject forged windows and altered tickets, test silent-provider Stop and
+  reject redirects. HTTP checks reject MCP credentials and wrong project/window
+  commands. These tests do not establish real-R or UI acceptance.
+- The authorized `115-newapi` / `deepseek-v4.1-flash` service passed the earlier
+  Anthropic synthetic tool/image probe and the new **real Host project-read probe**.
+  The latter read an unseen random marker through the Project owner and returned it
+  exactly; duplicate start kept one run. It used two model calls and one tool call,
+  reported 8,487 input / 183 output tokens, and took 2,262 ms in that single attempt.
+  Evidence: `target/component-real-host.log`. This is not a throughput guarantee or
+  the plan's 27-case scientific acceptance.
+- Generated Rust/TypeScript contracts, client build/check and architecture fixtures
+  passed. The main `cargo build --locked` and CLI help smoke also passed; the
+  current binary was built without replacing an existing user Host. Deterministic logs are under
+  `target/component-agent-probe/2026-09-12T19-45-29.342Z/` and
+  `target/component-{engine,http}-*.log`. No new Studio interaction is implemented.
+- Strict Clippy has baseline failures: two large wire enums, one existing SQLite
+  range test, and three existing session-protection style diagnostics. The relevant
+  pre-change failures were reproduced from isolated Git source copies, which were
+  then removed. The selected engine/application/Host/Workbench run passes with only
+  the two reproduced Host style categories allowed. No source-wide warning
+  suppression was added. See `target/component-*-clippy*.log`.
 
-Tool intents are transactional with run counters. Semantic mutation duplicates
-retain the original native request identity; new provider-call aliases are durable
-and consume budget. Exact repeated calls retain their receipt, while changed reuse
-fails. Stop blocks subsequent calls and preserves late owner receipts. Bounded
-events expose only committed cursors and report history gaps; pruning does not
-remove tool receipts. These are application semantics, not yet a Host dispatch path.
+P0's optimized standalone diagnostic was 9,629,040 bytes, with 31 new active
+package/version nodes relative to its previous lock; its hash and counts remain in
+`target/component-agent-build-evidence.json`. That is a diagnostic measurement, not
+the shipped Rho size increase. The active engine graph excludes vector stores,
+embedded inference, Rig SQLite/memory and a replacement MCP dependency.
 
-Foundation validation passed **65 Rust tests**: 13 new real-SQLite admission cases
-plus the 52 existing Contract/Application/SQLite cases. Coverage includes reopening,
-scope isolation, transaction rollback on injected intent failure, duplicate-call
-aliases and budgets, fixed model binding, old-Host rejection, stop/late receipts,
-event pruning and draft edits concurrent with streaming. Draft CAS has its own
-version; model events cannot invalidate it. The alias budget regression failed
-before the correction and then passed. Generated DTOs, client build and generated
-client/type checks passed. Evidence: `target/component-foundation-*.log`.
-
-Strict Clippy is not clean at the baseline: `CheckpointReconcileReport` and
-`HostRequest` trigger `large_enum_variant`, and an existing SQLite test triggers
-`manual_range_contains`. The same diagnostics were reproduced from the unmodified
-`8d1e3da9` sources in an isolated copy, then that copy was removed. Focused Clippy
-passes with only those two lint categories allowed; no blanket warning suppression
-was added to source. Baseline evidence is `target/component-clippy-baseline*.log`.
-
-Next: complete P1's execution ports, credential resolution, Rig service and Host
-wiring. The new admission APIs are not exposed in Studio yet. Seven component
-profiles, real R tool routing, mutation recovery, Paper B01–B06 review, Studio UI
-and full acceptance remain outstanding. Existing Hosts and native R memory are
-preserved; inspect live state before any real workbench launch/replacement.
+Next: P2's validated component sources, actual R Objects/Packages/Plots and verified
+image delivery, plus Paper B01–B06 review before UI implementation. P3 authorized
+writes and seven usable entrances, P4 recovery/continuation/terminal-store failure
+handling and resource stress, and P5 complete regression/real-model/performance
+acceptance remain outstanding. The current real checks use disposable projects;
+existing user Hosts, R memory and drafts are preserved. Inspect live state before
+any workbench replacement. No installation, signing or publication was performed.
 
 ## Multiple R sessions and recovery copies
 

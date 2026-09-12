@@ -5950,9 +5950,13 @@ dependencies = [
 name = "rho-agents"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "futures",
  "jsonschema",
+ "reqwest 0.13.5",
+ "rho-application",
+ "rho-contract",
  "rig",
  "serde_json",
  "tempfile",
@@ -5965,12 +5969,14 @@ dependencies = [
 name = "rho-application"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "rho-contract",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "thiserror 2.0.20",
+ "tokio-util",
  "url",
  "uuid",
 ]
@@ -6047,10 +6053,13 @@ name = "rho-host"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "base64 0.22.1",
  "fs4",
+ "jsonschema",
  "rho-adapter-skills",
  "rho-agent-client",
+ "rho-agents",
  "rho-application",
  "rho-contract",
  "rho-environment",

@@ -65,6 +65,21 @@ The engine never opens SQLite or calls an R adapter. Host composes the engine an
 its narrow tool access port; all scientific reads/writes still use their real owner.
 Current implementation and unimplemented integration stages are in Status.
 
+`ComponentAgentEngine` and `ComponentRunPort` are Application interfaces; the Rig
+implementation stays in `rho-agents` and the port implementation stays in Host.
+Model-facing schemas are derived from current descriptors without modifying the
+registry. Host-bound identity fields are removed from that schema, injected from
+the accepted run, then validated against the original native schema. Dispatch
+reloads the original intent and refuses altered tickets. Owner observations retain
+their status, completeness, timestamp and continuation rather than only their data.
+
+Browser-only component query/command routes observe and admit these application
+records. A separate transient credential endpoint returns a reference and never
+places key material in pending commands or synchronized drafts. Shared lazy HTTP
+clients do not follow redirects or automatically retry model requests. Model work
+retains its Host lifetime; native science and its receipts outlive dropped model
+waits. Service closure participates in Workbench shutdown.
+
 A user request binds its project/principal, window incarnation, profile, model
 configuration and native targets. Explain grants no writes; Edit binds named
 documents/files; Run requires an explicit R instance and native session. Profiles

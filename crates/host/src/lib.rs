@@ -17,6 +17,8 @@ mod r_configuration;
 pub use r_configuration::{default_database, discover_r, probe_r};
 pub use rho_sqlite::ApplicationStore;
 mod agent_tasks;
+mod component_agents;
+pub use component_agents::ComponentAgentService;
 pub use agent_tasks::AgentTaskService;
 mod agent_context;
 pub use agent_context::{AgentContextProvider, AgentContextReader};

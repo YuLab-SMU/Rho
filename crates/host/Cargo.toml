@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+rho-agents = { path = "../agents" }
+jsonschema.workspace = true
 rho-agent-client = { path = "../agent-client" }
 async-trait.workspace = true
 rho-contract = { path = "../contract" }
@@ -35,6 +37,7 @@ uuid.workspace = true
 fs4 = { version = "1", default-features = false, features = ["sync"] }
 
 [dev-dependencies]
+axum.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["net"] }

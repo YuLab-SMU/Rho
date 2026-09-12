@@ -251,3 +251,79 @@ pub struct ComponentAgentEventPage {
     pub cursor: u64,
     pub history_gap: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentAgentsQuery {
+    pub project_root: String,
+    pub query: ComponentAgentQuery,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ComponentAgentQuery {
+    Settings,
+    Conversations {
+        after: Option<String>,
+        limit: u32,
+    },
+    Conversation {
+        conversation_id: String,
+    },
+    Run {
+        run_id: String,
+    },
+    Request {
+        request_id: String,
+    },
+    Tools {
+        run_id: String,
+    },
+    Events {
+        run_id: String,
+        after: u64,
+        limit: u32,
+    },
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentAgentsCommand {
+    pub project_root: String,
+    pub window: ApplicationWindowRef,
+    pub command: ComponentAgentCommand,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ComponentAgentCommand {
+    Create {
+        conversation_id: String,
+        profile: ComponentAgentProfile,
+    },
+    SaveDraft {
+        draft: ComponentAgentDraftUpdate,
+    },
+    Start {
+        request: ComponentAgentStart,
+    },
+    Stop {
+        run_id: String,
+    },
+    Configure {
+        settings: ComponentModelSettings,
+    },
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentAgentDraftUpdate {
+    pub conversation_id: String,
+    pub draft_version: u64,
+    pub text: String,
+}
+
+/// A separate transient endpoint prevents credentials entering pending command/draft records.
+#[derive(Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentSessionCredential {
+    pub project_root: String,
+    pub window: ApplicationWindowRef,
+    pub key: String,
+}

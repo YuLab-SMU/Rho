@@ -6,7 +6,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
+mod engine;
 mod policy;
+pub use engine::*;
 pub use policy::{component_query_allowed, validate_component_grant, validate_component_model};
 
 pub const MAX_COMPONENT_CONVERSATIONS: usize = 4096;
@@ -896,5 +898,45 @@ impl ComponentAgentOwner {
             content: ComponentAgentEventContent::Text { text },
         };
         self.save(scope, conversation, Some(&run), &[], &[event], now)
+    }
+
+    pub fn record_usage(
+        &self,
+        scope: &ApplicationScope,
+        run_id: &str,
+        input_tokens: Option<u64>,
+        output_tokens: Option<u64>,
+        now: u64,
+    ) -> Result<(), ApplicationError> {
+        let _guard = self.gate.lock().map_err(storage)?;
+        let (conversation, mut run) = self.active(scope, run_id, now)?;
+        run.run.input_tokens = input_tokens;
+        run.run.output_tokens = output_tokens;
+        run.run.updated_at_ms = now;
+        self.save(scope, conversation, Some(&run), &[], &[], now)
+    }
+
+    pub fn check_tool_dispatch(
+        &self,
+        scope: &ApplicationScope,
+        run_id: &str,
+        receipt_id: &str,
+        now: u64,
+    ) -> Result<(), ApplicationError> {
+        let _guard = self.gate.lock().map_err(storage)?;
+        let (_, run) = self.active(scope, run_id, now)?;
+        if run.run.state != ComponentAgentRunState::Running
+            || !self.store.component_settings(scope)?.enabled
+        {
+            return Err(ApplicationError::Conflict);
+        }
+        let tools = self.store.component_tools(scope, run_id)?;
+        if tools.iter().any(|t| {
+            t.receipt.receipt_id == receipt_id && t.receipt.phase == ComponentToolPhase::Intent
+        }) {
+            Ok(())
+        } else {
+            Err(ApplicationError::Conflict)
+        }
     }
 }

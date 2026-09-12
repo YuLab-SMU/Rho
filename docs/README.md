@@ -17,9 +17,10 @@ current product commitments. The [page index](INDEX.md) and
 [source/check index](SOURCE-INDEX.md) are generated navigation aids.
 
 The [built-in component Agent plan](BUILTIN-AGENT-PLAN.md) defines the authorized
-Rig integration and bounded extension to the external-Agent-only rule. The isolated
-P0 engine experiment is implemented; Host integration and new Studio interactions
-are still pending. See Status for executed evidence and the next phase.
+Rig integration and bounded extension to the external-Agent-only rule. The P0
+experiment and P1 backend query integration are implemented; component context,
+authorized writes and the reviewed Studio interaction are still being completed.
+See Status for executed evidence and the next phase.
 
 ## Maintenance
 

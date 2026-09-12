@@ -1,4 +1,4 @@
-// Engine protocol and Application admission evidence. Live Host acceptance is separate.
+// Engine, Application and Host query evidence. Real R acceptance remains separate.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -27,14 +27,18 @@ async function run(label, command, echo = true) {
 }
 await run("protocol", ["cargo", "test", "-p", "rho-agents", "--locked"]);
 await run("application", ["cargo", "test", "-p", "rho-sqlite", "--test", "component_agents", "--locked"]);
+await run("host", ["cargo", "test", "-p", "rho-host", "--test", "component_agents", "--locked"]);
 await run("boundaries", ["node", "scripts/test-architecture.mjs"]);
 await run("dependencies", ["cargo", "tree", "-p", "rho-agents", "--locked", "--edges", "normal", "--prefix", "none"], false);
 const dependencies = fs.readFileSync(path.join(directory, "dependencies.log"), "utf8");
 for (const forbidden of ["sqlx", "rig-sqlite", "lancedb", "fastembed", "ort", "datafusion", "rig-memory", "rmcp"]) {
   assert.ok(!new RegExp(`^${forbidden} v`, "m").test(dependencies), `Unexpected active integration: ${forbidden}`);
 }
-if (real) await run("real-model", ["cargo", "run", "-p", "rho-agents", "--example", "provider_probe", "--locked"]);
-const summary = { phase: "P0/P1-foundation", fakeProtocol: "passed", applicationAdmission: "passed", realModel: real ? "passed" : "not_run",
-  liveScientificIntegration: "not_run", evidence: directory };
+if (real) {
+  await run("real-model", ["cargo", "run", "-p", "rho-agents", "--example", "provider_probe", "--locked"]);
+  await run("real-host", ["cargo", "run", "-p", "rho-host", "--example", "component_agent_probe", "--locked"]);
+}
+const summary = { phase: "P1-read-only-integration", fakeProtocol: "passed", applicationAdmission: "passed", hostQueryIntegration: "passed", realModel: real ? "passed" : "not_run",
+  realProjectRead: real ? "passed" : "not_run", realRIntegration: "not_run", evidence: directory };
 fs.writeFileSync(path.join(directory, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
 console.log(JSON.stringify(summary));
