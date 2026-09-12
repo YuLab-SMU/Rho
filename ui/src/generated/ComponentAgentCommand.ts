@@ -4,4 +4,4 @@ import type { ComponentAgentProfile } from "./ComponentAgentProfile";
 import type { ComponentAgentStart } from "./ComponentAgentStart";
 import type { ComponentModelSettings } from "./ComponentModelSettings";
 
-export type ComponentAgentCommand = { "kind": "create", conversation_id: string, profile: ComponentAgentProfile, } | { "kind": "save_draft", draft: ComponentAgentDraftUpdate, } | { "kind": "start", request: ComponentAgentStart, } | { "kind": "stop", run_id: string, } | { "kind": "configure", settings: ComponentModelSettings, };
+export type ComponentAgentCommand = { "kind": "stop_test", request_id: string, } | { "kind": "create", conversation_id: string, profile: ComponentAgentProfile, } | { "kind": "save_draft", draft: ComponentAgentDraftUpdate, } | { "kind": "start", request: ComponentAgentStart, } | { "kind": "stop", run_id: string, } | { "kind": "configure", settings: ComponentModelSettings, };

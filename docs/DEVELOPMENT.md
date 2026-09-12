@@ -92,6 +92,9 @@ Packages and native plot context with the configured model. The deterministic
 source/byte checks are in `cargo test -p rho-host --test component_sources_real_r
 --locked -- --ignored` with the same R environment. These tests do not install
 packages or reuse an existing user's R process.
+The real-source probe first runs the explicit synthetic connection/tool and image
+diagnostics. Image context requires a passed image diagnostic matching the current
+model configuration; a changed model does not inherit that result.
 
 Native/transport verification:
 

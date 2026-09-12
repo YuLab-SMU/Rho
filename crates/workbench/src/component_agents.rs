@@ -53,6 +53,12 @@ pub(super) async fn query(
     let project = &request.project_root;
     let service = &state.component_agents;
     let result = match request.query {
+        ComponentAgentQuery::Diagnostics => service
+            .diagnostics(host, &context, project)
+            .map(|v| json!({"diagnostics":v})),
+        ComponentAgentQuery::Diagnostic { request_id } => service
+            .diagnostic(host, &context, project, &request_id)
+            .map(|v| json!({"diagnostic":v})),
         ComponentAgentQuery::Settings => service
             .settings(host, &context, project)
             .map(|v| json!({"settings":v})),
@@ -105,6 +111,10 @@ pub(super) async fn command(
     let window = &request.window;
     let service = &state.component_agents;
     let result = match request.command {
+        ComponentAgentCommand::StopTest { request_id } => service
+            .stop_test(host, &context, project, window, &request_id)
+            .await
+            .map(|v| json!({"diagnostic":v})),
         ComponentAgentCommand::Create {
             conversation_id,
             profile,
@@ -167,6 +177,55 @@ pub(super) async fn credential(
         request.key,
     ) {
         Ok(reference) => Json(json!({"credential":reference})).into_response(),
+        Err(error) => failure(StatusCode::CONFLICT, error.to_string()),
+    }
+}
+
+pub(super) async fn search_sources(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<ComponentSourceSearch>,
+) -> Response {
+    if !owns_window(&headers, &request.window) {
+        return failure(
+            StatusCode::FORBIDDEN,
+            "Source search belongs to another window",
+        );
+    }
+    let hosting = state.hosting.read().await;
+    let Some(selected) = &hosting.selected else {
+        return failure(StatusCode::CONFLICT, "Select a project first");
+    };
+    match state
+        .component_agents
+        .search_sources(&selected.host, &NextHost::local_context(), request)
+        .await
+    {
+        Ok(result) => Json(result).into_response(),
+        Err(error) => failure(StatusCode::CONFLICT, error.to_string()),
+    }
+}
+pub(super) async fn test_model(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<ComponentModelTestRequest>,
+) -> Response {
+    if !owns_window(&headers, &request.window) {
+        return failure(
+            StatusCode::FORBIDDEN,
+            "Model test belongs to another window",
+        );
+    }
+    let hosting = state.hosting.read().await;
+    let Some(selected) = &hosting.selected else {
+        return failure(StatusCode::CONFLICT, "Select a project first");
+    };
+    match state
+        .component_agents
+        .test_model(selected.host.clone(), NextHost::local_context(), request)
+        .await
+    {
+        Ok(result) => Json(json!({"diagnostic":result})).into_response(),
         Err(error) => failure(StatusCode::CONFLICT, error.to_string()),
     }
 }

@@ -475,6 +475,8 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/agents/components/command", post(component_agents::command))
         .route("/api/agents/components/credential", post(component_agents::credential))
         .route("/api/agents/components/context", post(component_agents::preview_source))
+        .route("/api/agents/components/context/search", post(component_agents::search_sources))
+        .route("/api/agents/components/test", post(component_agents::test_model))
         .route("/api/project", post(select_project))
         .route("/api/r", get(settings::read_r).post(settings::apply_r))
         .route("/api/r/probe", post(settings::probe))
@@ -757,7 +759,7 @@ mod tests {
     async fn component_routes_reject_mcp_credentials_wrong_projects_and_missing_window_headers() {
         let (_temp,state,app)=fixture().await;
         let root=state.hosting.read().await.info().project_root;
-        for path in ["/api/agents/components/query","/api/agents/components/command","/api/agents/components/credential","/api/agents/components/context"] {
+        for path in ["/api/agents/components/query","/api/agents/components/command","/api/agents/components/credential","/api/agents/components/context","/api/agents/components/context/search","/api/agents/components/test"] {
             let response=app.clone().oneshot(Request::builder().method("POST").uri(path)
                 .header(header::HOST,"127.0.0.1:10001").header(header::AUTHORIZATION,"Bearer native-fixture-only")
                 .header(header::CONTENT_TYPE,"application/json").body(Body::from("{}")).unwrap()).await.unwrap();

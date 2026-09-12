@@ -127,6 +127,21 @@ pub struct ComponentWrite<'a> {
 }
 
 pub trait ComponentAgentRepository: Send + Sync {
+    fn component_diagnostic(
+        &self,
+        scope: &ApplicationScope,
+        request_id: &str,
+    ) -> Result<Option<ComponentModelDiagnostic>, ApplicationError>;
+    fn component_diagnostics(
+        &self,
+        scope: &ApplicationScope,
+    ) -> Result<Vec<ComponentModelDiagnostic>, ApplicationError>;
+    fn write_component_diagnostic(
+        &self,
+        scope: &ApplicationScope,
+        expected: Option<u64>,
+        diagnostic: &ComponentModelDiagnostic,
+    ) -> Result<(), ApplicationError>;
     fn component_conversation(
         &self,
         scope: &ApplicationScope,
@@ -257,6 +272,84 @@ fn budget(mode: ComponentAgentMode) -> ComponentAgentBudget {
 }
 
 impl ComponentAgentOwner {
+    pub fn begin_model_test(
+        &self,
+        actor: &ComponentActor,
+        request: &ComponentModelTestRequest,
+        now: u64,
+    ) -> Result<(ComponentModelDiagnostic, bool), ApplicationError> {
+        let _guard = self.gate.lock().map_err(storage)?;
+        actor.validate(now)?;
+        id(&request.request_id)?;
+        if request.window != actor.window || request.project_root != actor.scope.project {
+            return Err(ApplicationError::Conflict);
+        }
+        if let Some(previous) = self
+            .store
+            .component_diagnostic(&actor.scope, &request.request_id)?
+        {
+            if previous.window != request.window
+                || previous.kind != request.kind
+                || previous.model_settings_version != request.model_settings_version
+            {
+                return Err(ApplicationError::RequestConflict);
+            }
+            return Ok((previous, true));
+        }
+        let settings = self.store.component_settings(&actor.scope)?;
+        if settings.version != request.model_settings_version {
+            return Err(ApplicationError::Conflict);
+        }
+        let model = settings
+            .connection
+            .ok_or_else(|| invalid("Configure a model before testing"))?;
+        validate_component_model(&model)?;
+        let diagnostic = ComponentModelDiagnostic {
+            request_id: request.request_id.clone(),
+            version: 1,
+            window: request.window.clone(),
+            model_settings_version: settings.version,
+            connection_digest: component_digest(&model)?,
+            model,
+            kind: request.kind,
+            state: ComponentModelTestState::Queued,
+            created_at_ms: now,
+            updated_at_ms: now,
+            detail: None,
+        };
+        self.store
+            .write_component_diagnostic(&actor.scope, None, &diagnostic)?;
+        Ok((diagnostic, false))
+    }
+    pub fn update_model_test(
+        &self,
+        scope: &ApplicationScope,
+        request_id: &str,
+        state: ComponentModelTestState,
+        detail: Option<String>,
+        now: u64,
+    ) -> Result<ComponentModelDiagnostic, ApplicationError> {
+        let _guard = self.gate.lock().map_err(storage)?;
+        let mut diagnostic = self
+            .store
+            .component_diagnostic(scope, request_id)?
+            .ok_or(ApplicationError::NotFound)?;
+        if !matches!(
+            diagnostic.state,
+            ComponentModelTestState::Queued | ComponentModelTestState::Running
+        ) || detail.as_ref().is_some_and(|v| v.len() > 4096)
+        {
+            return Err(ApplicationError::Conflict);
+        }
+        let version = diagnostic.version;
+        diagnostic.version += 1;
+        diagnostic.state = state;
+        diagnostic.detail = detail;
+        diagnostic.updated_at_ms = now;
+        self.store
+            .write_component_diagnostic(scope, Some(version), &diagnostic)?;
+        Ok(diagnostic)
+    }
     pub fn new(store: Arc<dyn ComponentAgentRepository>, host_incarnation: String) -> Self {
         Self {
             store,

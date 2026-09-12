@@ -58,6 +58,15 @@ pub enum ComponentEngineOutcome {
 #[async_trait]
 pub trait ComponentAgentEngine: Send + Sync {
     async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome;
+    async fn test_model(
+        &self,
+        _model: rho_contract::ComponentModelConnection,
+        _key: ComponentModelKey,
+        _kind: rho_contract::ComponentModelTestKind,
+        _cancellation: CancellationToken,
+    ) -> Result<(), String> {
+        Err("Model diagnostics are unavailable for this engine".into())
+    }
 }
 
 #[async_trait]

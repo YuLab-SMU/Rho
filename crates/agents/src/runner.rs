@@ -159,6 +159,15 @@ fn instructions(profile: ComponentAgentProfile) -> String {
 
 #[async_trait]
 impl ComponentAgentEngine for RigComponentEngine {
+    async fn test_model(
+        &self,
+        model: rho_contract::ComponentModelConnection,
+        key: ComponentModelKey,
+        kind: rho_contract::ComponentModelTestKind,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> Result<(), String> {
+        crate::diagnostics::test(self, model, key, kind, cancellation).await
+    }
     async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome {
         let cancellation = request.cancellation.clone();
         if cancellation.is_cancelled() {
@@ -215,24 +224,26 @@ impl ComponentAgentEngine for RigComponentEngine {
 }
 
 impl RigComponentEngine {
+    pub(super) fn http_client(&self) -> Result<reqwest::Client, String> {
+        self.client
+            .get_or_init(|| {
+                reqwest::Client::builder()
+                    .redirect(reqwest::redirect::Policy::none())
+                    .retry(reqwest::retry::never())
+                    .connect_timeout(Duration::from_secs(15))
+                    .timeout(Duration::from_secs(120))
+                    .build()
+                    .map_err(|_| "Model HTTP client configuration failed".to_string())
+            })
+            .clone()
+    }
     async fn drive(
         &self,
         request: ComponentEngineExecution,
         mut context: DispatchContext,
     ) -> ComponentEngineOutcome {
         let result: Result<(), String> = async {
-            let client = self
-                .client
-                .get_or_init(|| {
-                    reqwest::Client::builder()
-                        .redirect(reqwest::redirect::Policy::none())
-                        .retry(reqwest::retry::never())
-                        .connect_timeout(Duration::from_secs(15))
-                        .timeout(Duration::from_secs(120))
-                        .build()
-                        .map_err(|_| "Model HTTP client configuration failed".to_string())
-                })
-                .clone()?;
+            let client = self.http_client()?;
             let preamble = instructions(request.run.profile);
             context.fixed_context_bytes = preamble.len().saturating_add(
                 serde_json::to_vec(&request.tools)

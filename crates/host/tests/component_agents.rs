@@ -20,6 +20,7 @@ enum Mode {
     ForgedWindow,
     Silent,
     Redirect,
+    Diagnostics,
 }
 #[derive(Clone)]
 struct ProviderState {
@@ -68,7 +69,7 @@ async fn completion(
 ) -> axum::response::Response {
     let index = {
         let mut requests = state.requests.lock().unwrap();
-        requests.push(body);
+        requests.push(body.clone());
         requests.len()
     };
     state.requested.notify_one();
@@ -83,7 +84,47 @@ async fn completion(
             .into_response();
     }
     let mut text = chunk(json!({"role":"assistant"}), Value::Null);
-    if index == 1 {
+    if matches!(state.mode, Mode::Diagnostics) {
+        let connection = body["tools"].as_array().is_some_and(|tools| {
+            tools
+                .iter()
+                .any(|tool| tool["function"]["name"] == "component_verify")
+        });
+        let marker = body["messages"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|m| m["role"] == "tool")
+            .find_map(|m| {
+                serde_json::from_str::<Value>(m["content"].as_str()?)
+                    .ok()?
+                    .get("marker")?
+                    .as_str()
+                    .map(str::to_owned)
+            });
+        if connection && marker.is_none() {
+            text.push_str(&chunk(json!({"tool_calls":[{"index":0,"id":"diagnostic-call","type":"function","function":{"name":"component_verify","arguments":"{}"}}]}),Value::Null));
+            text.push_str(&chunk(json!({}), json!("tool_calls")));
+        } else {
+            let serialized = body.to_string();
+            let answer = marker.unwrap_or_else(|| {
+                if serialized.contains(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEElEQVR4nGNg+M+AHQ0tCQDpMD",
+                ) {
+                    "green"
+                } else if serialized.contains(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEElEQVR4nGNgYPiPAw0pCQ",
+                ) {
+                    "blue"
+                } else {
+                    "red"
+                }
+                .into()
+            });
+            text.push_str(&chunk(json!({"content":answer}), Value::Null));
+            text.push_str(&chunk(json!({}), json!("stop")));
+        }
+    } else if index == 1 {
         let (name, args) = match state.mode {
             Mode::ReadFile => ("project_read_text", json!({"path":"analysis.R"})),
             Mode::Context => ("application_context", json!({"limit":1})),
@@ -109,6 +150,214 @@ async fn completion(
         text,
     )
         .into_response()
+}
+
+async fn diagnostic_done(f: &Fixture, id: &str) -> ComponentModelDiagnostic {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let value = f
+                .service
+                .diagnostic(&f.host, &f.context, &f.project, id)
+                .unwrap()
+                .unwrap();
+            if !matches!(
+                value.state,
+                ComponentModelTestState::Queued | ComponentModelTestState::Running
+            ) {
+                return value;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn explicit_diagnostics_are_synthetic_durable_and_idempotent() {
+    let provider = Provider::new(Mode::Diagnostics).await;
+    let f = Fixture::new().await;
+    f.configure(&provider).await;
+    let request = ComponentModelTestRequest {
+        project_root: f.project.clone(),
+        window: f.window.clone(),
+        request_id: "connection-test".into(),
+        model_settings_version: 1,
+        kind: ComponentModelTestKind::Connection,
+    };
+    f.service
+        .test_model(f.host.clone(), f.context.clone(), request.clone())
+        .await
+        .unwrap();
+    f.service
+        .test_model(f.host.clone(), f.context.clone(), request.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        diagnostic_done(&f, "connection-test").await.state,
+        ComponentModelTestState::Passed
+    );
+    let mut changed = request;
+    changed.kind = ComponentModelTestKind::Images;
+    assert!(
+        f.service
+            .test_model(f.host.clone(), f.context.clone(), changed)
+            .await
+            .is_err()
+    );
+    f.service
+        .test_model(
+            f.host.clone(),
+            f.context.clone(),
+            ComponentModelTestRequest {
+                project_root: f.project.clone(),
+                window: f.window.clone(),
+                request_id: "image-test".into(),
+                model_settings_version: 1,
+                kind: ComponentModelTestKind::Images,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        diagnostic_done(&f, "image-test").await.state,
+        ComponentModelTestState::Passed
+    );
+    let wire = serde_json::to_string(&provider.state.requests.lock().unwrap().clone()).unwrap();
+    assert!(
+        !wire.contains("native-project-evidence-27")
+            && !wire.contains(&f.project)
+            && !wire.contains("host-only-fixture-key")
+    );
+    assert_eq!(provider.state.requests.lock().unwrap().len(), 3);
+    let mut settings = f.service.settings(&f.host, &f.context, &f.project).unwrap();
+    settings.connection.as_mut().unwrap().model = "a-different-model".into();
+    let settings = f
+        .service
+        .configure(&f.host, &f.context, &f.project, &f.window, &settings)
+        .await
+        .unwrap();
+    let mut start = f.request();
+    start.model_settings_version = settings.version;
+    start.sources.push(AgentContextSelection {
+        source: "plots".into(),
+        label: "image".into(),
+        reference: json!({}),
+        inclusion: "image".into(),
+    });
+    assert!(
+        f.service
+            .start(f.host.clone(), f.context.clone(), &f.project, start)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("Image input is not verified")
+    );
+    assert_eq!(
+        f.service
+            .diagnostics(&f.host, &f.context, &f.project)
+            .unwrap()
+            .len(),
+        2
+    );
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn source_search_never_sends_a_model_request_and_respects_scope() {
+    let provider = Provider::new(Mode::ReadFile).await;
+    let f = Fixture::new().await;
+    f.configure(&provider).await;
+    let request = ComponentSourceSearch {
+        project_root: f.project.clone(),
+        window: f.window.clone(),
+        session: None,
+        source: "files".into(),
+        text: "analysis".into(),
+        limit: 10,
+    };
+    let found = f
+        .service
+        .search_sources(&f.host, &f.context, request.clone())
+        .await
+        .unwrap();
+    assert!(
+        found
+            .items
+            .iter()
+            .any(|item| item.selection.reference["path"] == "analysis.R")
+    );
+    let mut wrong = request;
+    wrong.project_root = "/another-project".into();
+    assert!(
+        f.service
+            .search_sources(&f.host, &f.context, wrong)
+            .await
+            .is_err()
+    );
+    assert!(provider.state.requests.lock().unwrap().is_empty());
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn unverified_images_are_rejected_before_source_or_model_work() {
+    let provider = Provider::new(Mode::ReadFile).await;
+    let f = Fixture::new().await;
+    f.configure(&provider).await;
+    let mut request = f.request();
+    request.sources.push(AgentContextSelection {
+        source: "plots".into(),
+        label: "unverified".into(),
+        reference: json!({}),
+        inclusion: "image".into(),
+    });
+    let result = f
+        .service
+        .start(f.host.clone(), f.context.clone(), &f.project, request)
+        .await
+        .unwrap_err();
+    assert!(result.to_string().contains("Image input is not verified"));
+    assert!(provider.state.requests.lock().unwrap().is_empty());
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn a_silent_model_diagnostic_can_be_stopped_without_repeating_it() {
+    let provider = Provider::new(Mode::Silent).await;
+    let f = Fixture::new().await;
+    f.configure(&provider).await;
+    let request = ComponentModelTestRequest {
+        project_root: f.project.clone(),
+        window: f.window.clone(),
+        request_id: "silent-test".into(),
+        model_settings_version: 1,
+        kind: ComponentModelTestKind::Connection,
+    };
+    f.service
+        .test_model(f.host.clone(), f.context.clone(), request.clone())
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(3), provider.state.requested.notified())
+        .await
+        .unwrap();
+    f.service
+        .stop_test(&f.host, &f.context, &f.project, &f.window, "silent-test")
+        .await
+        .unwrap();
+    assert_eq!(
+        diagnostic_done(&f, "silent-test").await.state,
+        ComponentModelTestState::Interrupted
+    );
+    assert_eq!(
+        f.service
+            .test_model(f.host.clone(), f.context.clone(), request)
+            .await
+            .unwrap()
+            .state,
+        ComponentModelTestState::Interrupted
+    );
+    f.service.close().await;
+    assert_eq!(provider.state.requests.lock().unwrap().len(), 1);
 }
 
 struct Fixture {

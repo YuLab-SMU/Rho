@@ -89,6 +89,13 @@ clients do not follow redirects or automatically retry model requests. Model wor
 retains its Host lifetime; native science and its receipts outlive dropped model
 waits. Service closure participates in Workbench shutdown.
 
+Explicit model diagnostics have their own idempotent Application records. They
+use synthetic content and no scientific tool port, share the model concurrency
+budget, and retain the exact configuration digest. An image diagnostic for a
+different endpoint/model/credential reference does not authorize image input on
+the selected configuration. Source search and diagnostic observation do not send
+model requests; only the explicit Test action does.
+
 A user request binds its project/principal, window incarnation, profile, model
 configuration and native targets. Explain grants no writes; Edit binds named
 documents/files; Run requires an explicit R instance and native session. Profiles

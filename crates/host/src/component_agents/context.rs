@@ -9,6 +9,88 @@ pub(super) struct PreparedContext {
     pub images: Vec<ComponentImageInput>,
 }
 
+pub(super) async fn search(
+    host: &NextHost,
+    context: &CallContext,
+    request: &ComponentSourceSearch,
+) -> Result<ComponentSourceSearchResult, ApplicationError> {
+    let _actor =
+        ComponentAgentService::actor(host, context, &request.project_root, &request.window)?;
+    if request.text.len() > 256 || !(1..=50).contains(&request.limit) {
+        return Err(error("Source search exceeds its budget"));
+    }
+    let reader = crate::AgentContextReader::new(&request.project_root, host, context);
+    if matches!(request.source.as_str(), "files" | "editor" | "plots") {
+        let (items, notices) = crate::agent_context::search(
+            &reader,
+            &request.window,
+            Some(&request.source),
+            &request.text,
+            request.limit,
+            &[],
+        )
+        .await
+        .map_err(error)?;
+        return Ok(ComponentSourceSearchResult { items, notices });
+    }
+    let item =
+        |label: String, description: String, reference: Value, inclusion: &str| AgentContextItem {
+            title: label.clone(),
+            description,
+            kind: request.source.clone(),
+            selection: AgentContextSelection {
+                source: request.source.clone(),
+                label,
+                reference,
+                inclusion: inclusion.into(),
+            },
+        };
+    let result=async {
+        match request.source.as_str(){
+            "objects"|"tables"|"packages"|"workspace"=>{
+                let session=request.session.as_ref().ok_or("Choose an R session")?;
+                let _hold=host.hold_runtime_instance(&session.workspace_instance_id,&session.session_id,"component-source-search","Source search").map_err(|e|e.to_string())?;
+                if request.source=="workspace" {return Ok(vec![item("Console / Workspace".into(),session.workspace_instance_id.clone(),json!({"workspace_instance_id":session.workspace_instance_id,"expected_session":session.session_id}),"summary")]);}
+                if request.source=="packages" {
+                    let data=reader.query("workspace.packages",json!({"workspace_instance_id":session.workspace_instance_id,"expected_session":session.session_id,"mode":"installed","filter":request.text,"grouped":false,"limit":request.limit})).await?;
+                    return Ok(data["packages"].as_array().into_iter().flatten().filter_map(|package|{
+                        let name=package["name"].as_str()?;Some(item(name.into(),format!("{} · {}",package["version"].as_str().unwrap_or("unknown"),package["library_path"].as_str().unwrap_or_default()),json!({"workspace_instance_id":session.workspace_instance_id,"expected_session":session.session_id,"package":name,"library_path":package["library_path"],"observation_id":data["observation_id"]}),"summary"))
+                    }).take(request.limit as usize).collect());
+                }
+                let data=reader.query("workspace.snapshot",json!({"workspace_instance_id":session.workspace_instance_id,"expected_session":session.session_id,"limit":200})).await?;
+                Ok(data["objects"].as_array().into_iter().flatten().filter_map(|object|{
+                    let name=object["name"].as_str()?;if !name.to_lowercase().contains(&request.text.to_lowercase()){return None;}
+                    if request.source=="tables" && object["dimensions"].as_array().is_none_or(|d|d.len()!=2){return None;}
+                    Some(item(name.into(),object["object_type"].as_str().unwrap_or("R object").into(),json!({"workspace_instance_id":session.workspace_instance_id,"expected_session":session.session_id,"name":name}),if request.source=="tables"{"selection"}else{"summary"}))
+                }).take(request.limit as usize).collect())
+            },
+            "environment"=>{
+                let data=reader.query("runtime.instances",json!({"limit":request.limit})).await?;
+                Ok(data["instances"].as_array().into_iter().flatten().filter_map(|instance|{
+                    let id=instance["workspace_instance_id"].as_str()?;let name=instance["name"].as_str().unwrap_or(id);
+                    if !name.to_lowercase().contains(&request.text.to_lowercase()){return None;}
+                    Some(item(name.into(),"R session metadata".into(),json!({"workspace_instance_id":id}),"summary"))
+                }).collect())
+            },
+            _=>Err("Unknown component source".into()),
+        }
+    }.await;
+    match result {
+        Ok(items) => Ok(ComponentSourceSearchResult {
+            items,
+            notices: if matches!(request.source.as_str(), "objects" | "tables") {
+                vec!["Suggestions cover at most the first 200 bindings".into()]
+            } else {
+                vec![]
+            },
+        }),
+        Err(message) => Ok(ComponentSourceSearchResult {
+            items: vec![],
+            notices: vec![message],
+        }),
+    }
+}
+
 fn source_session(
     selection: &AgentContextSelection,
     session: Option<&ComponentAgentSession>,

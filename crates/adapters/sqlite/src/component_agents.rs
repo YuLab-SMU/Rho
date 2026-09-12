@@ -41,11 +41,77 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), String> {
     CREATE INDEX IF NOT EXISTS component_agent_event_conversation ON component_agent_events(project,principal,conversation_id,event_order);
     CREATE TABLE IF NOT EXISTS component_agent_settings (
       project TEXT NOT NULL, principal TEXT NOT NULL, version INTEGER NOT NULL,
-      value TEXT NOT NULL CHECK(json_valid(value)), PRIMARY KEY(project,principal));")
+      value TEXT NOT NULL CHECK(json_valid(value)), PRIMARY KEY(project,principal));
+    CREATE TABLE IF NOT EXISTS component_model_diagnostics (
+      project TEXT NOT NULL, principal TEXT NOT NULL, request_id TEXT NOT NULL,
+      version INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+      value TEXT NOT NULL CHECK(json_valid(value)), PRIMARY KEY(project,principal,request_id));")
       .map_err(|e|e.to_string())
 }
 
 impl ComponentAgentRepository for ApplicationStore {
+    fn component_diagnostic(
+        &self,
+        s: &ApplicationScope,
+        id: &str,
+    ) -> Result<Option<ComponentModelDiagnostic>, ApplicationError> {
+        let c = self.0.lock().map_err(error)?;
+        let value:Option<String>=c.query_row("SELECT value FROM component_model_diagnostics WHERE project=?1 AND principal=?2 AND request_id=?3",params![s.project,s.principal,id],|r|r.get(0)).optional().map_err(error)?;
+        value.map(decode).transpose()
+    }
+    fn component_diagnostics(
+        &self,
+        s: &ApplicationScope,
+    ) -> Result<Vec<ComponentModelDiagnostic>, ApplicationError> {
+        let c = self.0.lock().map_err(error)?;
+        let mut query=c.prepare("SELECT value FROM component_model_diagnostics WHERE project=?1 AND principal=?2 ORDER BY updated_at DESC,request_id DESC LIMIT 64").map_err(error)?;
+        query
+            .query_map(params![s.project, s.principal], |r| r.get::<_, String>(0))
+            .map_err(error)?
+            .map(|r| decode(r.map_err(error)?))
+            .collect()
+    }
+    fn write_component_diagnostic(
+        &self,
+        s: &ApplicationScope,
+        expected: Option<u64>,
+        diagnostic: &ComponentModelDiagnostic,
+    ) -> Result<(), ApplicationError> {
+        let mut c = self.0.lock().map_err(error)?;
+        let tx = c
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(error)?;
+        let previous:Option<String>=tx.query_row("SELECT value FROM component_model_diagnostics WHERE project=?1 AND principal=?2 AND request_id=?3",params![s.project,s.principal,diagnostic.request_id],|r|r.get(0)).optional().map_err(error)?;
+        let previous = previous
+            .map(decode::<ComponentModelDiagnostic>)
+            .transpose()?;
+        if previous.as_ref().map(|d| d.version) != expected
+            || diagnostic.version
+                != expected
+                    .unwrap_or(0)
+                    .checked_add(1)
+                    .ok_or(ApplicationError::Conflict)?
+        {
+            return Err(ApplicationError::Conflict);
+        }
+        if let Some(previous) = &previous {
+            if previous.connection_digest != diagnostic.connection_digest
+                || previous.kind != diagnostic.kind
+                || previous.window != diagnostic.window
+            {
+                return Err(ApplicationError::RequestConflict);
+            }
+        } else {
+            let count:usize=tx.query_row("SELECT COUNT(*) FROM component_model_diagnostics WHERE project=?1 AND principal=?2",params![s.project,s.principal],|r|r.get(0)).map_err(error)?;
+            if count >= 4096 {
+                return Err(ApplicationError::Budget(
+                    "Model diagnostic record limit reached".into(),
+                ));
+            }
+        }
+        tx.execute("INSERT INTO component_model_diagnostics VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(project,principal,request_id) DO UPDATE SET version=excluded.version,updated_at=excluded.updated_at,value=excluded.value",params![s.project,s.principal,diagnostic.request_id,diagnostic.version,diagnostic.updated_at_ms,encode(diagnostic)?]).map_err(error)?;
+        tx.commit().map_err(error)
+    }
     fn component_conversation(
         &self,
         s: &ApplicationScope,

@@ -305,6 +305,10 @@ pub struct ComponentAgentsQuery {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComponentAgentQuery {
+    Diagnostics,
+    Diagnostic {
+        request_id: String,
+    },
     Settings,
     Conversations {
         after: Option<String>,
@@ -338,6 +342,9 @@ pub struct ComponentAgentsCommand {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComponentAgentCommand {
+    StopTest {
+        request_id: String,
+    },
     Create {
         conversation_id: String,
         profile: ComponentAgentProfile,
@@ -370,4 +377,58 @@ pub struct ComponentSessionCredential {
     pub project_root: String,
     pub window: ApplicationWindowRef,
     pub key: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentModelTestKind {
+    Connection,
+    Images,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentModelTestState {
+    Queued,
+    Running,
+    Passed,
+    Failed,
+    Interrupted,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentModelTestRequest {
+    pub project_root: String,
+    pub window: ApplicationWindowRef,
+    pub request_id: String,
+    pub model_settings_version: u64,
+    pub kind: ComponentModelTestKind,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentModelDiagnostic {
+    pub request_id: String,
+    pub version: u64,
+    pub window: ApplicationWindowRef,
+    pub model_settings_version: u64,
+    pub connection_digest: String,
+    pub model: ComponentModelConnection,
+    pub kind: ComponentModelTestKind,
+    pub state: ComponentModelTestState,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
+    pub detail: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentSourceSearch {
+    pub project_root: String,
+    pub window: ApplicationWindowRef,
+    pub session: Option<ComponentAgentSession>,
+    pub source: String,
+    pub text: String,
+    pub limit: u32,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentSourceSearchResult {
+    pub items: Vec<crate::AgentContextItem>,
+    pub notices: Vec<String>,
 }

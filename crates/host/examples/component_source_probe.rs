@@ -59,6 +59,12 @@ async fn probe() -> Result<(), String> {
         let window=registration.session.window.clone();
         let protocol=match std::env::var("RHO_COMPONENT_MODEL_PROTOCOL").as_deref(){Ok("anthropic")=>ComponentModelProtocol::Anthropic,_=>ComponentModelProtocol::OpenaiCompletions};
         service.configure(&host,&context,&project,&window,&ComponentModelSettings{version:0,enabled:true,connection:Some(ComponentModelConnection{protocol,base_url:std::env::var("RHO_COMPONENT_MODEL_BASE_URL").map_err(|_|"Missing model URL")?,model:std::env::var("RHO_COMPONENT_MODEL_ID").map_err(|_|"Missing model ID")?,credential:ComponentCredentialRef::Environment{name:std::env::var("RHO_COMPONENT_MODEL_KEY_ENV").map_err(|_|"Missing credential reference")?}})}).await.map_err(|_|"Model configuration failed")?;
+        for (id,kind) in [("test-connection",ComponentModelTestKind::Connection),("test-images",ComponentModelTestKind::Images)] {
+            service.test_model(host.clone(),context.clone(),ComponentModelTestRequest{project_root:project.clone(),window:window.clone(),request_id:id.into(),model_settings_version:1,kind}).await.map_err(|e|e.to_string())?;
+            let test=tokio::time::timeout(Duration::from_secs(125),async{loop{let test=service.diagnostic(&host,&context,&project,id).map_err(|e|e.to_string())?.ok_or("Missing diagnostic")?;if !matches!(test.state,ComponentModelTestState::Queued|ComponentModelTestState::Running){return Ok::<_,String>(test);}tokio::time::sleep(Duration::from_millis(25)).await;}}).await.map_err(|_|"Diagnostic timeout")??;
+            if test.state!=ComponentModelTestState::Passed{return Err(format!("Diagnostic {id} failed: {:?}",test.detail));}
+            println!("{}",json!({"phase":"component-model-diagnostic","kind":kind,"passed":true}));
+        }
         let packages=host.dispatch(&context,HostRequest::QuerySnapshot(QueryRequest{capability:CapabilityRef::new("workspace.packages",1).unwrap(),arguments:json!({"workspace_instance_id":"main","expected_session":session.session_id,"package_name":"stats","mode":"installed"})})).await.map_err(|_|"Package observation failed")?;
         let copy=&packages["data"]["packages"][0];let version=copy["version"].as_str().ok_or("Missing package version")?.to_string();
         let cases=vec![

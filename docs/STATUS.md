@@ -10,6 +10,21 @@ page, including 600 px/320 px content, source evidence, settings and recovery st
 Screenshots were inspected and the original fourteen Agent boards were preserved.
 User review is pending; no new Studio interface has been implemented from them.
 
+Source search and model diagnostics are now connected to the authenticated component
+API. Search uses existing owners without model requests. Connection/tool and image
+tests use separate synthetic inputs and durable request IDs, with versioned diagnostic
+records and fixed configuration digests. Duplicate tests return the original record;
+tests share the bounded model slots, can be stopped, and are cancelled by Disable/Quit.
+Image requests require a passed image test for the selected configuration; changing
+models does not reuse the old verification. Test requests contain no project data.
+The authorized real service passed both diagnostics, followed by the Objects,
+Packages and Plots source checks with zero additional scientific operations.
+Evidence: `target/component-diagnostics-real-model.log`. Real R source search also
+passed in `target/component-diagnostics-real-r.log`.
+Final diagnostic regression passed 46 deterministic tests (10 engine, 13 storage,
+12 Host and 11 Workbench), client generation/build/check and focused Clippy with
+the documented Host-style baseline exceptions. Logs: `target/component-diagnostics-*.log`.
+
 P2 now has a real read-only `workspace.read_help` capability in the Workspace
 owner and both single/multi-session registries. It reads one observed installed
 copy using index/help file identities, paginates UTF-8 text and refuses absent
@@ -117,8 +132,7 @@ package/version nodes relative to its previous lock; its hash and counts remain 
 the shipped Rho size increase. The active engine graph excludes vector stores,
 embedded inference, Rig SQLite/memory and a replacement MCP dependency.
 
-Next: finish P2's source search and model/vision diagnostics, plus Paper B01–B06
-review before UI implementation. P3 authorized
+Next: Paper B01–B06 review before UI implementation, and P3 authorized
 writes and seven usable entrances, P4 recovery/continuation/terminal-store failure
 handling and resource stress, and P5 complete regression/real-model/performance
 acceptance remain outstanding. The current real checks use disposable projects;

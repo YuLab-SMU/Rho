@@ -37,6 +37,7 @@ pub struct ComponentAgentService {
     owner: Arc<ComponentAgentOwner>,
     engine: Arc<dyn ComponentAgentEngine>,
     live: Mutex<BTreeMap<String, LiveRun>>,
+    tests: Mutex<BTreeMap<SecretScope, CancellationToken>>,
     gate: Mutex<()>,
     slots: Arc<Semaphore>,
     tasks: TaskTracker,
@@ -58,6 +59,7 @@ impl ComponentAgentService {
             )),
             engine,
             live: Mutex::new(BTreeMap::new()),
+            tests: Mutex::new(BTreeMap::new()),
             gate: Mutex::new(()),
             slots: Arc::new(Semaphore::new(MAX_COMPONENT_RUNNING_RUNS)),
             tasks: TaskTracker::new(),
@@ -110,6 +112,90 @@ impl ComponentAgentService {
     ) -> Result<ComponentSourcePreview, ApplicationError> {
         context::preview(host, context, &request, false).await
     }
+    pub async fn search_sources(
+        &self,
+        host: &NextHost,
+        context: &CallContext,
+        request: ComponentSourceSearch,
+    ) -> Result<ComponentSourceSearchResult, ApplicationError> {
+        context::search(host, context, &request).await
+    }
+    pub fn diagnostics(
+        &self,
+        host: &NextHost,
+        context: &CallContext,
+        project: &str,
+    ) -> Result<Vec<ComponentModelDiagnostic>, ApplicationError> {
+        self.owner
+            .store
+            .component_diagnostics(&Self::scope(host, context, project)?)
+    }
+    pub fn diagnostic(
+        &self,
+        host: &NextHost,
+        context: &CallContext,
+        project: &str,
+        id: &str,
+    ) -> Result<Option<ComponentModelDiagnostic>, ApplicationError> {
+        self.owner
+            .store
+            .component_diagnostic(&Self::scope(host, context, project)?, id)
+    }
+    pub async fn test_model(
+        self: &Arc<Self>,
+        host: Arc<NextHost>,
+        context: CallContext,
+        request: ComponentModelTestRequest,
+    ) -> Result<ComponentModelDiagnostic, ApplicationError> {
+        let _gate = self.gate.lock().await;
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(error("Component service is closing"));
+        }
+        let actor = Self::actor(&host, &context, &request.project_root, &request.window)?;
+        if self
+            .owner
+            .store
+            .component_diagnostic(actor.scope(), &request.request_id)?
+            .is_some()
+        {
+            return Ok(self.owner.begin_model_test(&actor, &request, now())?.0);
+        }
+        if self.live.lock().await.len() + self.tests.lock().await.len() >= MAX_COMPONENT_QUEUED_RUNS
+        {
+            return Err(ApplicationError::Budget(
+                "Model request queue is full".into(),
+            ));
+        }
+        let (diagnostic, _) = self.owner.begin_model_test(&actor, &request, now())?;
+        let scope = actor.scope().clone();
+        let identity = (
+            scope.project.clone(),
+            scope.principal.clone(),
+            request.request_id.clone(),
+        );
+        let cancellation = CancellationToken::new();
+        self.tests
+            .lock()
+            .await
+            .insert(identity.clone(), cancellation.clone());
+        let service = self.clone();
+        let accepted = diagnostic.clone();
+        self.tasks.spawn(async move {
+            let _host=host;
+            let work=async {
+                let _permit=service.slots.clone().acquire_owned().await.map_err(|_|error("Model service closed"))?;
+                service.owner.update_model_test(&scope,&diagnostic.request_id,ComponentModelTestState::Running,None,now())?;
+                let key=service.key(&scope,&diagnostic.model.credential)?;
+                service.engine.test_model(diagnostic.model.clone(),key,diagnostic.kind,cancellation.clone()).await.map_err(error)
+            };
+            let result=tokio::select!{biased;_=cancellation.cancelled()=>Err(error("Model test interrupted")),result=work=>result};
+            let _gate=service.gate.lock().await;
+            let (state,detail)=if cancellation.is_cancelled(){(ComponentModelTestState::Interrupted,Some("Model test interrupted".into()))}else{match result{Ok(())=>(ComponentModelTestState::Passed,None),Err(error)=>(ComponentModelTestState::Failed,Some(error.to_string()))}};
+            let _=service.owner.update_model_test(&scope,&diagnostic.request_id,state,detail,now());
+            service.tests.lock().await.remove(&identity);
+        });
+        Ok(accepted)
+    }
     pub async fn configure(
         &self,
         host: &NextHost,
@@ -131,8 +217,53 @@ impl ComponentAgentService {
             {
                 run.cancellation.cancel();
             }
+            for ((project, principal, _), cancel) in self.tests.lock().await.iter() {
+                if project == &actor.scope().project && principal == &actor.scope().principal {
+                    cancel.cancel();
+                }
+            }
         }
         Ok(updated)
+    }
+    pub async fn stop_test(
+        &self,
+        host: &NextHost,
+        context: &CallContext,
+        project: &str,
+        window: &ApplicationWindowRef,
+        id: &str,
+    ) -> Result<ComponentModelDiagnostic, ApplicationError> {
+        let _gate = self.gate.lock().await;
+        let actor = Self::actor(host, context, project, window)?;
+        let original = self
+            .owner
+            .store
+            .component_diagnostic(actor.scope(), id)?
+            .ok_or(ApplicationError::NotFound)?;
+        if original.window != *window {
+            return Err(ApplicationError::Conflict);
+        }
+        if !matches!(
+            original.state,
+            ComponentModelTestState::Queued | ComponentModelTestState::Running
+        ) {
+            return Ok(original);
+        }
+        let result = self.owner.update_model_test(
+            actor.scope(),
+            id,
+            ComponentModelTestState::Interrupted,
+            Some("Model test stopped by the user".into()),
+            now(),
+        )?;
+        if let Some(cancel) = self.tests.lock().await.get(&(
+            actor.scope().project.clone(),
+            actor.scope().principal.clone(),
+            id.into(),
+        )) {
+            cancel.cancel();
+        }
+        Ok(result)
     }
     pub fn put_session_key(
         &self,
@@ -329,6 +460,33 @@ impl ComponentAgentService {
         if request.grant.mode != ComponentAgentMode::Explain {
             return Err(error("Authorized write dispatch is not connected yet"));
         }
+        let settings = self.owner.store.component_settings(actor.scope())?;
+        if !settings.enabled || settings.connection.is_none() {
+            return Err(error("Component assistant is disabled or unconfigured"));
+        }
+        if settings.version != request.model_settings_version {
+            return Err(ApplicationError::Conflict);
+        }
+        if request
+            .sources
+            .iter()
+            .any(|source| source.source == "plots" && source.inclusion == "image")
+        {
+            let digest = component_digest(settings.connection.as_ref().unwrap())?;
+            let latest = self
+                .owner
+                .store
+                .component_diagnostics(actor.scope())?
+                .into_iter()
+                .find(|d| {
+                    d.kind == ComponentModelTestKind::Images && d.connection_digest == digest
+                });
+            if latest.is_none_or(|d| d.state != ComponentModelTestState::Passed) {
+                return Err(error(
+                    "Image input is not verified for this model; run Test image input first",
+                ));
+            }
+        }
         if serde_json::to_vec(&request).map_err(error)?.len() > 64 * 1024 {
             return Err(error("Assistant request exceeds 64 KiB"));
         }
@@ -337,6 +495,18 @@ impl ComponentAgentService {
         let _gate = self.gate.lock().await;
         if self.closed.load(Ordering::SeqCst) {
             return Err(error("Component service is closing"));
+        }
+        if self
+            .owner
+            .store
+            .component_run_by_request(actor.scope(), &request.request_id)?
+            .is_none()
+            && self.live.lock().await.len() + self.tests.lock().await.len()
+                >= MAX_COMPONENT_QUEUED_RUNS
+        {
+            return Err(ApplicationError::Budget(
+                "Model request queue is full".into(),
+            ));
         }
         let admission = self.owner.start(&actor, request, now())?;
         if admission.repeated {
@@ -478,7 +648,7 @@ impl ComponentAgentService {
         Ok(run.run)
     }
     pub async fn has_live(&self) -> bool {
-        !self.live.lock().await.is_empty()
+        !self.live.lock().await.is_empty() || !self.tests.lock().await.is_empty()
     }
     pub async fn close(&self) {
         {
@@ -486,6 +656,9 @@ impl ComponentAgentService {
             self.closed.store(true, Ordering::SeqCst);
             for run in self.live.lock().await.values() {
                 run.cancellation.cancel();
+            }
+            for cancel in self.tests.lock().await.values() {
+                cancel.cancel();
             }
             self.tasks.close();
         }

@@ -60,6 +60,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ComponentSessionCredential::export_all(&config)?;
     ComponentSourcePreviewRequest::export_all(&config)?;
     ComponentSourcePreview::export_all(&config)?;
+    ComponentModelTestRequest::export_all(&config)?;
+    ComponentModelDiagnostic::export_all(&config)?;
+    ComponentSourceSearch::export_all(&config)?;
+    ComponentSourceSearchResult::export_all(&config)?;
     ReadPackageHelpArguments::export_all(&config)?;
     PackageHelpPage::export_all(&config)?;
     TestAgent::export_all(&config)?;

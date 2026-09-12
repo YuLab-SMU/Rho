@@ -12,6 +12,15 @@ use std::{
 struct Capture(Arc<Mutex<Option<(String, usize)>>>);
 #[async_trait]
 impl ComponentAgentEngine for Capture {
+    async fn test_model(
+        &self,
+        _: ComponentModelConnection,
+        _: rho_application::ComponentModelKey,
+        _: ComponentModelTestKind,
+        _: tokio_util::sync::CancellationToken,
+    ) -> Result<(), String> {
+        Ok(())
+    }
     async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome {
         assert_eq!(request.images.len(), 1);
         assert!(request.images[0].base64.starts_with("iVBOR"));
@@ -104,6 +113,60 @@ async fn real_objects_packages_and_plot_sources_are_verified_without_new_operati
         )
         .await
         .unwrap();
+    service
+        .test_model(
+            host.clone(),
+            context.clone(),
+            ComponentModelTestRequest {
+                project_root: root.into(),
+                window: window.clone(),
+                request_id: "verify-images".into(),
+                model_settings_version: 1,
+                kind: ComponentModelTestKind::Images,
+            },
+        )
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if service
+                .diagnostic(&host, &context, root, "verify-images")
+                .unwrap()
+                .unwrap()
+                .state
+                == ComponentModelTestState::Passed
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    for (source, text) in [
+        ("objects", "source_data"),
+        ("tables", "source_data"),
+        ("packages", "stats"),
+        ("environment", "Main"),
+        ("workspace", ""),
+    ] {
+        let found = service
+            .search_sources(
+                &host,
+                &context,
+                ComponentSourceSearch {
+                    project_root: root.into(),
+                    window: window.clone(),
+                    session: Some(session.clone()),
+                    source: source.into(),
+                    text: text.into(),
+                    limit: 10,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(!found.items.is_empty(), "{source}: {:?}", found.notices);
+    }
     let inventory=host.dispatch(&context,HostRequest::QuerySnapshot(QueryRequest{capability:CapabilityRef::new("workspace.packages",1).unwrap(),arguments:json!({"workspace_instance_id":"main","expected_session":session.session_id,"package_name":"stats","mode":"installed"})})).await.unwrap();
     let copy = &inventory["data"]["packages"][0];
     let inputs = vec![
