@@ -167,6 +167,7 @@ pub struct ComponentAgentRun {
     pub updated_at_ms: u64,
     pub reason: Option<String>,
     pub context: Option<ComponentAgentContext>,
+    pub document_versions: Option<std::collections::BTreeMap<String, ApplicationDocumentRef>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

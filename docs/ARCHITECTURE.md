@@ -122,6 +122,20 @@ new code submission. Waiting for R and user input are application observations.
 Application command receipts retain the exact document versions acknowledged by
 that command. Later user changes cannot silently become the version attributed to
 an earlier edit, which is necessary for subsequent authorized save/run steps.
+The resident bridge synchronizes the post-save draft and acknowledges the original
+execution association. Application verifies its text, disk base, path and selection
+against the successful capture before recording a successor document version.
+Concurrent user input remains a different version; saving it does not extend the
+assistant grant. Component runs retain their original request plus only these
+owner-confirmed successor references.
+
+Component document tools project the native control schema to fixed document IDs.
+The Host injects versions, destinations and the original R instance/session; capture
+admission checks that execution target atomically. Native application tracking
+outlives the model wait and reconciles submitted SCI steps through the shared status
+query. Stop cancels pending commands, fences unsubmitted steps and requests
+cancellation only for accepted operations belonging to the original command.
+Claimed local edits may already apply; cancellation never implies rollback.
 
 Settings persist only non-secret configuration and explicit environment/session
 credential references. Remote endpoints require HTTPS; loopback HTTP is explicit.

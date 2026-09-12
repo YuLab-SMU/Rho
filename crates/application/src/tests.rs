@@ -292,7 +292,7 @@ fn control(
     owner
         .control(
             &actor(true),
-            ApplicationCommandRequest {
+            ApplicationCommandRequest { execution_target: None,
                 window: r.session.window.clone(),
                 request_id: id.into(),
                 action: ApplicationAction::RunFile {
@@ -464,7 +464,7 @@ fn same_request_returns_original_and_different_input_is_rejected() {
     let first = control(&owner, &r, &d, "request", 2);
     let again = control(&owner, &r, &d, "request", 3);
     assert_eq!(first, again);
-    let changed = ApplicationCommandRequest {
+    let changed = ApplicationCommandRequest { execution_target: None,
         window: r.session.window,
         request_id: "request".into(),
         action: ApplicationAction::Save {
@@ -711,7 +711,7 @@ fn captured_run_keeps_its_instance_when_the_window_selects_another_session() {
         }, now).unwrap();
     };
     select("main", "R-session-1", 2);
-    owner.control(&actor(true), ApplicationCommandRequest {
+    owner.control(&actor(true), ApplicationCommandRequest { execution_target: None,
         window: r.session.window.clone(), request_id: "captured-main".into(),
         action: ApplicationAction::RunSelection { document: document_ref(&d) },
     }, 3).unwrap();
@@ -808,7 +808,7 @@ fn selection_versions_are_local_and_surrogate_boundaries_are_checked() {
         owner
             .control(
                 &actor(true),
-                ApplicationCommandRequest {
+                ApplicationCommandRequest { execution_target: None,
                     window: r.session.window.clone(),
                     request_id: "bad-selection".into(),
                     action
@@ -1171,7 +1171,7 @@ fn an_unchanged_empty_save_uses_project_evidence_without_an_operation_id() {
     owner
         .control(
             &actor(true),
-            ApplicationCommandRequest {
+            ApplicationCommandRequest { execution_target: None,
                 window: r.session.window.clone(),
                 request_id: "empty-save".into(),
                 action: ApplicationAction::Save {
@@ -1238,7 +1238,7 @@ fn failed_empty_save_verification_reports_no_effect_without_replay() {
     owner
         .control(
             &actor(true),
-            ApplicationCommandRequest {
+            ApplicationCommandRequest { execution_target: None,
                 window: r.session.window.clone(),
                 request_id: "empty-save".into(),
                 action: ApplicationAction::Save {
@@ -1274,7 +1274,7 @@ fn a_bridge_acknowledgement_cannot_claim_an_edit_that_its_resources_do_not_show(
     owner
         .control(
             &actor(true),
-            ApplicationCommandRequest {
+            ApplicationCommandRequest { execution_target: None,
                 window: r.session.window.clone(),
                 request_id: "missing-edit".into(),
                 action: ApplicationAction::EditDocument {
@@ -1358,7 +1358,7 @@ fn native_read_controls_require_the_original_actor_scope_before_a_bridge_command
         ),
     ];
     for (index, (required, action)) in actions.into_iter().enumerate() {
-        let request = ApplicationCommandRequest {
+        let request = ApplicationCommandRequest { execution_target: None,
             window: r.session.window.clone(),
             request_id: format!("native-read-{index}"),
             action,
@@ -1437,7 +1437,7 @@ fn application_owned_edits_and_creation_do_not_require_native_read_authority() {
             owner
                 .control(
                     &actor(true),
-                    ApplicationCommandRequest {
+                    ApplicationCommandRequest { execution_target: None,
                         window: r.session.window.clone(),
                         request_id: format!("application-only-{index}"),
                         action
@@ -1454,7 +1454,7 @@ fn application_owned_edits_and_creation_do_not_require_native_read_authority() {
 #[test]
 fn applied_document_receipt_does_not_follow_later_user_edits() {
     let owner=owner();let r=register(&owner,"window",0);let original=sync(&owner,&r,document("draft"),1);
-    owner.control(&actor(true),ApplicationCommandRequest{window:r.session.window.clone(),request_id:"edit".into(),action:ApplicationAction::EditDocument{document:document_ref(&original),edits:vec![ApplicationTextEdit{from:0,to:1,insert:"D".into()}]}},2).unwrap();
+    owner.control(&actor(true),ApplicationCommandRequest{execution_target:None,window:r.session.window.clone(),request_id:"edit".into(),action:ApplicationAction::EditDocument{document:document_ref(&original),edits:vec![ApplicationTextEdit{from:0,to:1,insert:"D".into()}]}},2).unwrap();
     let grant=claim(&owner,&r,3);
     let mut edited=original.clone();edited.version="doc-v2".into();edited.text="Draft".into();
     let completion=ApplicationCommandCompletion{request_id:"edit".into(),claim_id:grant.claim_id,outcome:ApplicationLocalOutcome::Applied,changes:ApplicationChanges{documents:vec![ApplicationDocumentUpdate{expected_version:Some(original.version),expected_selection_version:Some(original.selection.version),document:edited.clone()}],..Default::default()},diagnostic:None};
@@ -1486,4 +1486,233 @@ fn window_liveness_is_principal_scoped_and_expires() {
         !owner.any_window_online(&other, 1).unwrap(),
         "another principal's window is not attendance for this session"
     );
+}
+
+#[test]
+fn cancellation_prevents_unclaimed_or_unsubmitted_document_work() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let d = sync(&owner, &r, document("x <- 2\n"), 1);
+    control(&owner, &r, &d, "pending", 2);
+    let receipt = owner
+        .cancel_command(&actor(true), &r.session.window, "pending", 3)
+        .unwrap();
+    assert_eq!(receipt.state, ApplicationCommandState::Cancelled);
+    assert!(matches!(
+        owner
+            .bridge(
+                &actor(false),
+                ApplicationBridgeRequest::Claim {
+                    session: r.session.clone(),
+                    claim_request_id: fresh(),
+                },
+                4
+            )
+            .unwrap(),
+        ApplicationBridgeReply::Claimed(None)
+    ));
+    control(&owner, &r, &d, "claimed", 5);
+    let grant = claim(&owner, &r, 6);
+    assert_eq!(
+        owner
+            .cancel_command(&actor(true), &r.session.window, "claimed", 7)
+            .unwrap()
+            .state,
+        ApplicationCommandState::Claimed
+    );
+    assert_eq!(
+        complete(&owner, &r, &grant, 8).state,
+        ApplicationCommandState::Cancelled
+    );
+    assert!(
+        owner
+            .begin_execution(
+                &actor(false),
+                &execute_request(&r, &grant, ApplicationExecutionStep::Save),
+                9
+            )
+            .is_err()
+    );
+}
+
+#[test]
+fn cancellation_during_save_retains_its_result_and_fences_the_run() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let d = sync(&owner, &r, document("x <- 2\n"), 1);
+    control(&owner, &r, &d, "request", 2);
+    let grant = claim(&owner, &r, 3);
+    complete(&owner, &r, &grant, 4);
+    let request = execute_request(&r, &grant, ApplicationExecutionStep::Save);
+    let ApplicationExecutionAdmission::Invoke {
+        context,
+        invocation,
+    } = owner.begin_execution(&actor(false), &request, 5).unwrap()
+    else {
+        panic!()
+    };
+    assert!(
+        owner
+            .cancel_command(&actor(false), &r.session.window, "request", 6)
+            .is_err()
+    );
+    let stopping = owner
+        .cancel_command(&actor(true), &r.session.window, "request", 6)
+        .unwrap();
+    assert_eq!(stopping.state, ApplicationCommandState::AwaitingExecution);
+    assert_eq!(
+        stopping.save.unwrap().state,
+        ApplicationStepState::Submitting
+    );
+    assert_eq!(stopping.run.unwrap().state, ApplicationStepState::Cancelled);
+    let record = operation_record(
+        &invocation,
+        &context,
+        OperationStatus::Succeeded,
+        Some(project_output(&sha256(&d.text))),
+    );
+    let done = owner
+        .record_execution(&actor(false), &request, &record, 7)
+        .unwrap();
+    assert_eq!(done.state, ApplicationCommandState::Cancelled);
+    assert_eq!(done.save.unwrap().state, ApplicationStepState::Succeeded);
+    assert!(
+        owner
+            .begin_execution(
+                &actor(false),
+                &execute_request(&r, &grant, ApplicationExecutionStep::Run),
+                8
+            )
+            .is_err()
+    );
+}
+
+#[test]
+fn execution_target_is_checked_before_document_capture() {
+    let owner = owner();
+    let r = register(&owner, "a", 0);
+    let d = sync(&owner, &r, document("x <- 2\n"), 1);
+    let request = ApplicationCommandRequest {
+        window: r.session.window.clone(),
+        request_id: "wrong-session".into(),
+        action: ApplicationAction::RunSelection {
+            document: document_ref(&d),
+        },
+        execution_target: Some(ApplicationExecutionTarget {
+            workspace_instance_id: "main".into(),
+            native_session_id: "other-R".into(),
+        }),
+    };
+    assert!(owner.control(&actor(true), request, 2).is_err());
+    assert!(matches!(
+        owner.command_status(
+            &actor(true),
+            ApplicationCommandStatusArguments {
+                window: r.session.window,
+                request_id: "wrong-session".into()
+            },
+            3
+        ),
+        Err(ApplicationError::NotFound)
+    ));
+}
+
+#[test]
+fn saved_document_acknowledgement_preserves_capture_and_rejects_concurrent_typing() {
+    for changed in [false, true] {
+        let owner = owner();
+        let r = register(&owner, "a", 0);
+        let d = sync(&owner, &r, document("x <- 2\n"), 1);
+        control(&owner, &r, &d, "request", 2);
+        let grant = claim(&owner, &r, 3);
+        complete(&owner, &r, &grant, 4);
+        let request = execute_request(&r, &grant, ApplicationExecutionStep::Save);
+        let ApplicationExecutionAdmission::Invoke {
+            context,
+            invocation,
+        } = owner.begin_execution(&actor(false), &request, 5).unwrap()
+        else {
+            panic!()
+        };
+        let record = operation_record(
+            &invocation,
+            &context,
+            OperationStatus::Succeeded,
+            Some(project_output(&sha256(&d.text))),
+        );
+        owner
+            .record_execution(&actor(false), &request, &record, 6)
+            .unwrap();
+        let mut saved = d.clone();
+        saved.version = "saved-version".into();
+        saved.base_text = Some(d.text.clone());
+        saved.base_hash = Some(sha256(&d.text));
+        if changed {
+            saved.text = "user input during save\n".into();
+        }
+        owner
+            .bridge(
+                &actor(false),
+                ApplicationBridgeRequest::Sync {
+                    session: r.session.clone(),
+                    sync_id: fresh(),
+                    changes: ApplicationChanges {
+                        documents: vec![ApplicationDocumentUpdate {
+                            expected_version: Some(d.version),
+                            expected_selection_version: Some(d.selection.version),
+                            document: saved.clone(),
+                        }],
+                        ..Default::default()
+                    },
+                },
+                7,
+            )
+            .unwrap();
+        let ack = ApplicationBridgeRequest::ConfirmSaved {
+            session: r.session.clone(),
+            request_id: "request".into(),
+            execution_ref: grant.execution_ref.unwrap(),
+            document: document_ref(&saved),
+        };
+        let ApplicationBridgeReply::Saved(receipt) =
+            owner.bridge(&actor(false), ack.clone(), 8).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(receipt.save_synchronized, Some(true));
+        assert_eq!(
+            receipt.applied_documents.as_ref().unwrap(),
+            &if changed {
+                vec![]
+            } else {
+                vec![document_ref(&saved)]
+            }
+        );
+        let mut later = saved.clone();
+        later.text = "later user input\n".into();
+        later.version = "later".into();
+        owner
+            .bridge(
+                &actor(false),
+                ApplicationBridgeRequest::Sync {
+                    session: r.session.clone(),
+                    sync_id: fresh(),
+                    changes: ApplicationChanges {
+                        documents: vec![ApplicationDocumentUpdate {
+                            expected_version: Some(saved.version),
+                            expected_selection_version: Some(saved.selection.version),
+                            document: later,
+                        }],
+                        ..Default::default()
+                    },
+                },
+                9,
+            )
+            .unwrap();
+        let ApplicationBridgeReply::Saved(repeated) = owner.bridge(&actor(false), ack, 10).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(repeated, receipt);
+    }
 }

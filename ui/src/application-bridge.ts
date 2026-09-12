@@ -271,7 +271,7 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
       if (reply.kind !== "completed") throw new Error("Host did not confirm the application command."); receipt = reply.data;
     }
     this.lastReceipt = receipt;
-    if (receipt.state === "applied" || receipt.state === "awaiting_execution") this.acknowledged = pending.snapshot;
+    if (receipt.state === "applied" || receipt.state === "awaiting_execution" || receipt.state === "cancelled") this.acknowledged = pending.snapshot;
     if (receipt.state === "locally_applied_unsynced" || receipt.state === "uncertain") {
       this.error = receipt.diagnostic ?? "Local changes are retained; application synchronization is unconfirmed.";
       this.ports.reportError(this.error);
@@ -289,25 +289,37 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
       execution_ref: pending.grant.execution_ref!, step: pending.step });
     current();
     this.lastReceipt = reply.receipt;
-    this.confirmSave(pending, reply.receipt);
-    const step = pending.step === "save" ? reply.receipt.save : reply.receipt.run;
+    const receipt = await this.confirmSave(pending, reply.receipt, project, current);
+    const step = pending.step === "save" ? receipt.save : receipt.run;
     if (step?.state === "succeeded") {
-      if (pending.step === "save" && reply.receipt.run?.state === "not_submitted" && pending.continueRun && this.ports.scope().connected) pending.step = "run";
+      if (pending.step === "save" && receipt.run?.state === "not_submitted" && pending.continueRun && this.ports.scope().connected) pending.step = "run";
       else this.execution = null;
     } else if (step && ["failed", "cancelled", "uncertain"].includes(step.state)) this.execution = null;
     this.publish();
   }
-  private confirmSave(pending: PendingExecution, receipt: ApplicationCommandReceipt) {
+  private async confirmSave(pending: PendingExecution, receipt: ApplicationCommandReceipt, project: string, current: () => void) {
     const capture = receipt.capture;
     if (!pending.saveConfirmed && receipt.save?.state === "succeeded" && capture?.path && pending.captured !== null) {
       this.ports.modules.confirmSave(capture.document.document_id, pending.captured, capture.path, capture.sha256);
       pending.saveConfirmed = true;
     }
+    if (pending.saveConfirmed && receipt.save_synchronized !== true && this.ports.scope().connected) {
+      await this.sync(project, current); current();
+      const document = this.acknowledged?.documents.find(d => d.document_id === capture?.document.document_id);
+      if (capture) {
+        const reply = await this.ports.transport.bridge(project, { kind: "confirm_saved", session: this.session!,
+          request_id: receipt.request_id, execution_ref: pending.grant.execution_ref!, document: document ? ref(document) : capture.document });
+        current(); if (reply.kind !== "saved") throw new Error("Host did not acknowledge the saved document version.");
+        this.lastReceipt = reply.data;
+        return reply.data;
+      }
+    }
+    return receipt;
   }
   private async observeRecovery(project: string, current: () => void) {
     const pending = this.recovery!;
     const receipt = await this.ports.transport.status(project, { window: pending.grant.request.window, request_id: pending.grant.request.request_id });
-    current(); this.lastReceipt = receipt; this.confirmSave(pending, receipt);
+    current(); this.lastReceipt = receipt; await this.confirmSave(pending, receipt, project, current);
     // No execute call is made from reconnection. The original receipt and
     // authoritative Operation records determine what actually finished.
     const step = pending.step === "save" ? receipt.save : receipt.run;

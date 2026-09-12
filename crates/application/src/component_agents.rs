@@ -240,6 +240,22 @@ fn id(value: &str) -> Result<(), ApplicationError> {
     }
     Ok(())
 }
+pub fn component_document_reference<'a>(
+    run: &'a ComponentAgentRun,
+    id: &str,
+) -> Option<&'a ApplicationDocumentRef> {
+    run.document_versions
+        .as_ref()
+        .and_then(|versions| versions.get(id))
+        .or_else(|| {
+            run.request
+                .grant
+                .documents
+                .iter()
+                .find(|grant| grant.document.document_id == id)
+                .map(|grant| &grant.document)
+        })
+}
 pub fn component_digest(value: &impl Serialize) -> Result<String, ApplicationError> {
     fn canonical(value: Value) -> Value {
         match value {
@@ -593,6 +609,7 @@ impl ComponentAgentOwner {
                 updated_at_ms: now,
                 reason: None,
                 context: None,
+                document_versions: None,
             },
         };
         conversation.active_run_id = Some(run_id);
@@ -684,7 +701,7 @@ impl ComponentAgentOwner {
                         .grant
                         .documents
                         .iter()
-                        .find(|g| g.document == *document)
+                        .find(|g| g.document.document_id == document.document_id)
                         .and_then(|g| g.path.clone());
                 }
                 _ => {}
@@ -696,7 +713,21 @@ impl ComponentAgentOwner {
                 "Tool arguments exceed 64 KiB".into(),
             ));
         }
-        let digest = component_digest(&action)?;
+        let arguments_digest = component_digest(&action)?;
+        let mut semantic_action = action.clone();
+        if let ComponentToolAction::Control(command) = &mut semantic_action
+            && let ApplicationAction::EditDocument { document, .. } = &mut command.action
+            && let Some(grant) = run
+                .run
+                .request
+                .grant
+                .documents
+                .iter()
+                .find(|grant| grant.document.document_id == document.document_id)
+        {
+            *document = grant.document.clone();
+        }
+        let digest = component_digest(&semantic_action)?;
         let previous_tools = self.store.component_tools(scope, run_id)?;
         for previous in &previous_tools {
             if previous
@@ -752,7 +783,7 @@ impl ComponentAgentOwner {
                 model_call,
                 tool_call_id: tool_call_id.into(),
                 capability: action.capability().into(),
-                arguments_digest: digest.clone(),
+                arguments_digest,
                 action_digest: digest,
                 client_request_id,
                 mutation: action.mutation(),
@@ -892,6 +923,44 @@ impl ComponentAgentOwner {
                     return Err(ApplicationError::Budget(
                         "Too many tool evidence references".into(),
                     ));
+                }
+                if let ComponentToolAction::Control(command) = &tool.action
+                    && let ApplicationAction::EditDocument { document, .. }
+                    | ApplicationAction::Save { document, .. }
+                    | ApplicationAction::RunFile { document, .. } = &command.action
+                {
+                    let receipt: ApplicationCommandReceipt =
+                        serde_json::from_value(result.clone()).map_err(storage)?;
+                    if receipt.request_id != tool.receipt.client_request_id
+                        || receipt.window != run.run.request.window
+                    {
+                        return Err(ApplicationError::RequestConflict);
+                    }
+                    let applied = receipt.applied_documents.as_ref().and_then(|documents| {
+                        documents
+                            .iter()
+                            .find(|updated| updated.document_id == document.document_id)
+                    });
+                    let edited = matches!(command.action, ApplicationAction::EditDocument { .. })
+                        && receipt.state == ApplicationCommandState::Applied;
+                    if edited && applied.is_none() {
+                        return Err(invalid(
+                            "Applied document version is missing from the native receipt",
+                        ));
+                    }
+                    if let Some(applied) = applied
+                        && (edited || receipt.save_synchronized == Some(true))
+                    {
+                        if component_document_reference(&run.run, &document.document_id)
+                            != Some(document)
+                        {
+                            return Err(ApplicationError::Conflict);
+                        }
+                        run.run
+                            .document_versions
+                            .get_or_insert_with(Default::default)
+                            .insert(document.document_id.clone(), applied.clone());
+                    }
                 }
                 let bytes = serde_json::to_vec(&result).map_err(storage)?.len();
                 let total = (run.run.tool_result_bytes as usize)

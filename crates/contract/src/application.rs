@@ -304,6 +304,15 @@ pub struct ApplicationCommandRequest {
     pub window: ApplicationWindowRef,
     pub request_id: String,
     pub action: ApplicationAction,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub execution_target: Option<ApplicationExecutionTarget>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationExecutionTarget {
+    pub workspace_instance_id: String,
+    pub native_session_id: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
@@ -314,6 +323,7 @@ pub struct ApplicationCommandStatusArguments {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ApplicationCommandState {
+    Cancelled,
     Pending,
     Claimed,
     Applied,
@@ -391,6 +401,10 @@ pub struct ApplicationCommandReceipt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub applied_documents: Option<Vec<ApplicationDocumentRef>>,
+    /// The resident editor acknowledged the successful save; a changed draft is not adopted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub save_synchronized: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
@@ -471,6 +485,12 @@ pub enum ApplicationBridgeRequest {
         sync_id: String,
         changes: ApplicationChanges,
     },
+    ConfirmSaved {
+        session: ApplicationBridgeSession,
+        request_id: String,
+        execution_ref: String,
+        document: ApplicationDocumentRef,
+    },
     Claim {
         session: ApplicationBridgeSession,
         claim_request_id: String,
@@ -488,6 +508,7 @@ pub enum ApplicationBridgeReply {
     Synced(ApplicationSyncReceipt),
     Claimed(Option<ApplicationCommandGrant>),
     Completed(Box<ApplicationCommandReceipt>),
+    Saved(Box<ApplicationCommandReceipt>),
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]

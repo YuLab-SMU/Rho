@@ -21,15 +21,32 @@ Two real Ark/R tests passed for exact-once execution and confirmed cancellation
 after dropping the model wait. The real model also used the authorized path,
 producing one scientific operation and the expected native result in 4,189 ms.
 Evidence: `target/component-mutations-real-r.log` and `target/component-run-real-model.log`.
-Captured document editing/execution remains unavailable while its version chain
-is being connected. Application command receipts now retain the document versions
-confirmed by that command; a regression proves later user edits do not replace them.
-Validation passed the existing 35 component engine/storage/Host cases, all 25
-Application tests, the 11-case Workbench serial run, client generation/build/check
-and focused Clippy with documented baseline exceptions. The first parallel HTTP
-run had a single 500 in an unchanged project-switch fixture; its focused rerun and
-full serial rerun passed without a behavior change. The failure remains recorded
-in `target/component-run-http.log`; current evidence is in `target/component-run-*.log`.
+P3 captured document editing, saving and running is now connected through the
+resident Application bridge. Tools expose fixed document IDs; Host binds the
+current owner-confirmed version, save destination and original execution session.
+Save acknowledgements associate the synchronized disk base with the original
+capture; concurrent typing does not become an authorized successor version.
+Stop fences unclaimed commands and unsubmitted steps, while native tracking
+preserves original accepted operations and reconciles their shared status records.
+The real Ark/R document test passed edit → save → Run File, including a repeated
+edit under a new model call ID, exact saved text and one actual R increment.
+Application passed 29 tests; the full UI suite passed 364 tests, with the affected
+16 bridge tests passed after the final offline/Cancelled acknowledgement adjustment.
+The editor uses that acknowledgement's latest state before considering Run.
+Client generation/build/check passed. Evidence: `target/component-documents-application.log`,
+`target/component-documents-real-r-focused.log`, `target/component-documents-ui-*.log`
+and `target/component-documents-client-final.log`.
+The authorized remote model also completed the same document chain with one
+edit and three mutation receipts in 42,383 ms; the saved file and actual R
+increment matched. Evidence: `target/component-documents-real-model.log`.
+Final regression passed 35 component engine/storage/Host cases and all 11
+Workbench HTTP tests. Three Chrome cases passed on the rebuilt binary for Chinese
+script save/run/edit, UTF-8/BOM/CRLF and disk conflicts, and two-window draft
+protection. Application/Host Clippy passed with only the previously reproduced
+`collapsible_if` and `unnecessary_sort_by` Host categories allowed; no new warning
+suppression was added to source. Current logs are
+`target/component-documents-{http,clippy,browser-final,build-final}.log` and
+`target/component-agent-probe/2026-09-12T23-28-24.148Z/`.
 
 Source search and model diagnostics are now connected to the authenticated component
 API. Search uses existing owners without model requests. Connection/tool and image
@@ -81,8 +98,8 @@ and R-session fields, and validates both model and native schemas. It reloads ea
 persisted action before dispatch and rejects an altered ticket. Queries retain the
 full owner snapshot, including partial/busy/unavailable states. Native session holds
 are scoped to a query; the current project and principal are preserved. Model
-selection is fixed for each run. Direct Workspace/Project Run is available;
-captured document editing/save/run is still being connected.
+selection is fixed for each run. Direct Workspace/Project Run and captured document editing/save/run are available
+through the backend; their new Studio interface is still awaiting design review.
 
 `/api/agents/components/context` previews files, editor selections, objects/tables,
 installed package copies, console state and R-session metadata without a model call.
@@ -117,13 +134,13 @@ HTTPS/loopback policy, no automatic redirects/retries and a 120-second request l
 No credential or native CLI configuration is discovered implicitly. Stop/Disable
 fence model and tool admission; model waits can be dropped without waiting for a
 token. Final acknowledgement is serialized with Stop. Quit closes the service and
-active runs prevent project switching. Accepted science will need its separate
-cancellation/reconciliation path when writes are enabled in P3/P4.
+active runs prevent project switching. Accepted science retains its separate
+owner cancellation/reconciliation path through Host-owned native tasks.
 
 ### Current component evidence
 
-- **40 focused tests passed:** ten Rig HTTP/SSE protocol cases, thirteen real-SQLite
-  admission cases, six Host integration cases and eleven Workbench cases. The Host
+- **46 focused tests passed:** ten Rig HTTP/SSE protocol cases, thirteen real-SQLite
+  admission cases, twelve Host integration cases and eleven Workbench cases. The Host
   tests compare actual project-file tool results against direct queries field by
   field, reject forged windows and altered tickets, test silent-provider Stop and
   reject redirects. HTTP checks reject MCP credentials and wrong project/window
@@ -153,8 +170,8 @@ package/version nodes relative to its previous lock; its hash and counts remain 
 the shipped Rho size increase. The active engine graph excludes vector stores,
 embedded inference, Rig SQLite/memory and a replacement MCP dependency.
 
-Next: Paper B01–B06 review before UI implementation, and P3 authorized
-writes and seven usable entrances, P4 recovery/continuation/terminal-store failure
+Next: Paper B01–B06 review before UI implementation, P3 failure-repair/plot
+acceptance and seven usable entrances, P4 recovery/continuation/terminal-store failure
 handling and resource stress, and P5 complete regression/real-model/performance
 acceptance remain outstanding. The current real checks use disposable projects;
 existing user Hosts, R memory and drafts are preserved. Inspect live state before

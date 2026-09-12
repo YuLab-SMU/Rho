@@ -39,9 +39,12 @@ for (const forbidden of ["sqlx", "rig-sqlite", "lancedb", "fastembed", "ort", "d
 if (real) {
   await run("real-model", ["cargo", "run", "-p", "rho-agents", "--example", "provider_probe", "--locked"]);
   await run("real-host", ["cargo", "run", "-p", "rho-host", "--example", "component_agent_probe", "--locked"]);
-  if (sources) await run("real-sources", ["cargo", "run", "-p", "rho-host", "--example", "component_source_probe", "--locked"]);
+  if (sources) {
+    await run("real-sources", ["cargo", "run", "-p", "rho-host", "--example", "component_source_probe", "--locked"]);
+    await run("real-documents", ["cargo", "test", "-p", "rho-host", "--test", "component_mutations_real_r", "real_model_captured_document", "--locked", "--", "--ignored", "--nocapture"]);
+  }
 }
-const summary = { phase: "P2-sources", fakeProtocol: "passed", applicationAdmission: "passed", hostQueryIntegration: "passed", realModel: real ? "passed" : "not_run",
-  realProjectRead: real ? "passed" : "not_run", realRSources: sources ? "passed" : "not_run", evidence: directory };
+const summary = { phase: "P3-documents", fakeProtocol: "passed", applicationAdmission: "passed", hostQueryIntegration: "passed", realModel: real ? "passed" : "not_run",
+  realProjectRead: real ? "passed" : "not_run", realRSources: sources ? "passed" : "not_run", realDocuments: sources ? "passed" : "not_run", evidence: directory };
 fs.writeFileSync(path.join(directory, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
 console.log(JSON.stringify(summary));

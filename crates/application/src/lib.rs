@@ -4,6 +4,7 @@
 mod agent_tasks;
 mod component_agents;
 pub use component_agents::*;
+mod cancellation;
 mod execution;
 pub use agent_tasks::*;
 mod store;
@@ -329,6 +330,17 @@ impl ApplicationOwner {
         let mut window = self.load_window(&scope, &request.window)?;
         self.require_online(&window, now)?;
         let documents = self.store.documents(&scope, &window.window.window_id)?;
+        if let Some(target) = &request.execution_target {
+            if !matches!(
+                request.action,
+                ApplicationAction::RunFile { .. } | ApplicationAction::RunSelection { .. }
+            ) || window.context.workspace_instance_id.as_deref()
+                != Some(&target.workspace_instance_id)
+                || window.context.native_session_id.as_deref() != Some(&target.native_session_id)
+            {
+                return Err(ApplicationError::Conflict);
+            }
+        }
         validate_action(&request.action, &window.context, &documents)?;
         if self.store.commands(&scope, &window.window.window_id)?.len() >= MAX_WINDOW_COMMANDS {
             return Err(ApplicationError::Budget(
@@ -367,8 +379,10 @@ impl ApplicationOwner {
             run: needs_run.then(|| step("run")),
             diagnostic: None,
             applied_documents: None,
+            save_synchronized: None,
         };
         let stored = StoredCommand {
+            cancel_requested: false,
             request,
             context: context.clone(),
             receipt: receipt.clone(),
@@ -464,6 +478,22 @@ impl ApplicationOwner {
                 let (scope, mut window) = self.bridge_window(context, &session, now)?;
                 self.sync(&scope, &mut window, sync_id, changes, now)
                     .map(ApplicationBridgeReply::Synced)
+            }
+            ApplicationBridgeRequest::ConfirmSaved {
+                session,
+                request_id,
+                execution_ref,
+                document,
+            } => {
+                let (scope, mut window) = self.bridge_window(context, &session, now)?;
+                self.confirm_saved_document(
+                    &scope,
+                    &mut window,
+                    &request_id,
+                    &execution_ref,
+                    &document,
+                )
+                .map(|receipt| ApplicationBridgeReply::Saved(Box::new(receipt)))
             }
             ApplicationBridgeRequest::Claim {
                 session,
@@ -824,9 +854,12 @@ impl ApplicationOwner {
                         Ok(changes)
                     }) {
                     Ok(changes) => {
-                        command.receipt.applied_documents=Some(changes.documents.iter().map(document_ref).collect());
+                        command.receipt.applied_documents =
+                            Some(changes.documents.iter().map(document_ref).collect());
                         write = changes;
-                        if command.capture.is_some() {
+                        if command.capture.is_some() && command.cancel_requested {
+                            ApplicationCommandState::Cancelled
+                        } else if command.capture.is_some() {
                             ApplicationCommandState::AwaitingExecution
                         } else {
                             ApplicationCommandState::Applied

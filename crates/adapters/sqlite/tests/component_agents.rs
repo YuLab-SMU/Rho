@@ -437,7 +437,7 @@ fn forged_tools_session_and_document_permissions_have_no_receipts() {
             edits: vec![],
         },
     ] {
-        let action = ComponentToolAction::Control(ApplicationCommandRequest {
+        let action = ComponentToolAction::Control(ApplicationCommandRequest { execution_target: None,
             window: f.actor.window().clone(),
             request_id: "forged".into(),
             action,

@@ -39,6 +39,8 @@ pub struct StoredCapture {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StoredCommand {
+    #[serde(default)]
+    pub cancel_requested: bool,
     pub request: ApplicationCommandRequest,
     pub context: CallContext,
     pub receipt: ApplicationCommandReceipt,

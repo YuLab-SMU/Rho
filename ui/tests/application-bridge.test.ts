@@ -50,6 +50,13 @@ function fixture(initial: ApplicationDocument[] = [draft()], remoteInitial: Appl
         if (lastClaim) receipts.set(lastClaim.request.request_id, makeReceipt(lastClaim, "claimed"));
         return { kind: "claimed", data: lastClaim };
       }
+      if (request.kind === "confirm_saved") {
+        const receipt = receipts.get(request.request_id)!;
+        const document = remote.find(d => JSON.stringify(reference(d)) === JSON.stringify(request.document));
+        receipt.save_synchronized = true;
+        receipt.applied_documents = document?.text === document?.base_text ? [request.document] : [];
+        return { kind: "saved", data: structuredClone(receipt) };
+      }
       const previous = receipts.get(request.completion.request_id)!;
       const receipt = { ...previous, state: request.completion.outcome === "applied" ? previous.capture ? "awaiting_execution" as const : "applied" as const : "failed" as const };
       receipts.set(receipt.request_id, receipt);
@@ -225,4 +232,53 @@ it("a native-session observation change does not recreate the application window
   const f = fixture(); await f.bridge.start(); f.type("retained after R restart\n"); f.scope.epoch++; f.scope.session = "native-2"; f.advance(500); await f.bridge.step();
   expect(vi.mocked(f.transport.bridge).mock.calls.filter(([, request]) => request.kind === "register")).toHaveLength(1);
   expect(f.local()[0].text).toBe("retained after R restart\n");
+});
+
+it("acknowledges the saved draft version before continuing the captured run", async () => {
+  const f = fixture(); await f.bridge.start();
+  const grant = await f.queue({ kind: "run_file", document: reference(f.local()[0]), target_path: null });
+  await f.bridge.step(); await f.bridge.step();
+  const receipt = f.receipts.get(grant.request.request_id)!;
+  expect(receipt.save_synchronized).toBe(true);
+  expect(receipt.applied_documents).toEqual([reference(f.local()[0])]);
+  expect(reference(f.remote()[0])).toEqual(reference(f.local()[0]));
+  expect(f.transport.execute).toHaveBeenCalledTimes(1);
+  await f.bridge.step();
+  expect(vi.mocked(f.transport.execute).mock.calls.map(([, r]) => r.step)).toEqual(["save", "run"]);
+  expect(f.ports.reportError).not.toHaveBeenCalled();
+});
+
+it("recovers a lost saved-version acknowledgement without saving or running again", async () => {
+  const f = fixture(); await f.bridge.start();
+  const original = f.transport.bridge; let lose = true;
+  f.transport.bridge = vi.fn(async (project, request) => {
+    const reply = await original(project, request);
+    if (request.kind === "confirm_saved" && lose) { lose = false; throw new Error("save acknowledgement lost"); }
+    return reply;
+  });
+  await f.queue({ kind: "run_file", document: reference(f.local()[0]), target_path: null });
+  await f.bridge.step(); await f.bridge.step(); await f.bridge.step();
+  expect(f.transport.execute).toHaveBeenCalledTimes(1);
+  expect(f.modules.confirmSave).toHaveBeenCalledTimes(1);
+  expect(f.bridge.getSnapshot().receipt?.save_synchronized).toBe(true);
+});
+
+it("does not submit Run when cancellation arrives with the saved-version acknowledgement", async () => {
+  const f = fixture(); await f.bridge.start();
+  const original = f.transport.bridge, execute = f.transport.execute;
+  f.transport.execute = vi.fn(async (...args) => structuredClone(await execute(...args)));
+  f.transport.bridge = vi.fn(async (project, request) => {
+    const reply = await original(project, request);
+    if (reply.kind === "saved") {
+      reply.data.state = "cancelled";
+      reply.data.run!.state = "cancelled";
+      f.receipts.set(reply.data.request_id, structuredClone(reply.data));
+    }
+    return reply;
+  });
+  await f.queue({ kind: "run_file", document: reference(f.local()[0]), target_path: null });
+  await f.bridge.step(); await f.bridge.step(); await f.bridge.step();
+  expect(f.transport.execute).toHaveBeenCalledTimes(1);
+  expect(f.bridge.getSnapshot().receipt?.state).toBe("cancelled");
+  expect(f.ports.reportError).not.toHaveBeenCalled();
 });

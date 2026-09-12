@@ -2,5 +2,6 @@
 import type { ApplicationBridgeSession } from "./ApplicationBridgeSession";
 import type { ApplicationChanges } from "./ApplicationChanges";
 import type { ApplicationCommandCompletion } from "./ApplicationCommandCompletion";
+import type { ApplicationDocumentRef } from "./ApplicationDocumentRef";
 
-export type ApplicationBridgeRequest = { "kind": "register", window_id: string, incarnation: string, label: string, previous_session: ApplicationBridgeSession | null, } | { "kind": "renew", session: ApplicationBridgeSession, } | { "kind": "sync", session: ApplicationBridgeSession, sync_id: string, changes: ApplicationChanges, } | { "kind": "claim", session: ApplicationBridgeSession, claim_request_id: string, } | { "kind": "complete", session: ApplicationBridgeSession, completion: ApplicationCommandCompletion, };
+export type ApplicationBridgeRequest = { "kind": "register", window_id: string, incarnation: string, label: string, previous_session: ApplicationBridgeSession | null, } | { "kind": "renew", session: ApplicationBridgeSession, } | { "kind": "sync", session: ApplicationBridgeSession, sync_id: string, changes: ApplicationChanges, } | { "kind": "confirm_saved", session: ApplicationBridgeSession, request_id: string, execution_ref: string, document: ApplicationDocumentRef, } | { "kind": "claim", session: ApplicationBridgeSession, claim_request_id: string, } | { "kind": "complete", session: ApplicationBridgeSession, completion: ApplicationCommandCompletion, };

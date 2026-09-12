@@ -272,13 +272,28 @@ pub(super) fn authorize_tool(
                 .grant
                 .documents
                 .iter()
-                .find(|g| g.document == *document)
+                .find(|g| {
+                    g.document.document_id == document.document_id
+                        && super::component_document_reference(run, &document.document_id)
+                            == Some(document)
+                })
                 .ok_or_else(denied)?;
             if (save && !grant.allow_save)
                 || (execute && run.request.grant.mode != ComponentAgentMode::Run)
                 || target.is_some_and(|path| Some(path) != grant.path.as_deref())
             {
                 return Err(denied());
+            }
+            if execute {
+                let session = run.request.grant.session.as_ref().ok_or_else(denied)?;
+                if command.execution_target.as_ref()
+                    != Some(&ApplicationExecutionTarget {
+                        workspace_instance_id: session.workspace_instance_id.clone(),
+                        native_session_id: session.session_id.clone(),
+                    })
+                {
+                    return Err(denied());
+                }
             }
         }
     }

@@ -5,4 +5,4 @@ import type { ApplicationCommandReceipt } from "./ApplicationCommandReceipt";
 import type { ApplicationSyncReceipt } from "./ApplicationSyncReceipt";
 import type { ApplicationWindowSummary } from "./ApplicationWindowSummary";
 
-export type ApplicationBridgeReply = { "kind": "registered", "data": ApplicationBridgeRegistration } | { "kind": "renewed", "data": ApplicationWindowSummary } | { "kind": "synced", "data": ApplicationSyncReceipt } | { "kind": "claimed", "data": ApplicationCommandGrant | null } | { "kind": "completed", "data": ApplicationCommandReceipt };
+export type ApplicationBridgeReply = { "kind": "registered", "data": ApplicationBridgeRegistration } | { "kind": "renewed", "data": ApplicationWindowSummary } | { "kind": "synced", "data": ApplicationSyncReceipt } | { "kind": "claimed", "data": ApplicationCommandGrant | null } | { "kind": "completed", "data": ApplicationCommandReceipt } | { "kind": "saved", "data": ApplicationCommandReceipt };

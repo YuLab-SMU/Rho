@@ -6,6 +6,7 @@ pub(super) struct RegisteredTool {
     hidden: Vec<String>,
     model_validator: jsonschema::Validator,
     native_validator: jsonschema::Validator,
+    document_action: Option<&'static str>,
 }
 impl RegisteredTool {
     pub fn bind(
@@ -15,6 +16,57 @@ impl RegisteredTool {
     ) -> Result<ComponentToolAction, ApplicationError> {
         if !self.model_validator.is_valid(&arguments) {
             return Err(error("Tool parameters do not match the allowed schema"));
+        }
+        if let Some(kind) = self.document_action {
+            let id = arguments["document_id"]
+                .as_str()
+                .ok_or_else(|| error("Document identity is required"))?;
+            let grant = run
+                .request
+                .grant
+                .documents
+                .iter()
+                .find(|grant| grant.document.document_id == id)
+                .ok_or_else(|| error("Document is outside this request"))?;
+            let document = component_document_reference(run, id)
+                .ok_or_else(|| error("Document version is unavailable"))?;
+            let mut action = arguments
+                .as_object()
+                .cloned()
+                .ok_or_else(|| error("Document arguments must be an object"))?;
+            action.remove("document_id");
+            action.insert("kind".into(), json!(kind));
+            action.insert("document".into(), json!(document));
+            if matches!(kind, "save" | "run_file") {
+                action.insert("target_path".into(), json!(grant.path));
+            }
+            let execution_target = if matches!(kind, "run_file" | "run_selection") {
+                let session = run
+                    .request
+                    .grant
+                    .session
+                    .as_ref()
+                    .ok_or_else(|| error("Execution session is not bound"))?;
+                Some(ApplicationExecutionTarget {
+                    workspace_instance_id: session.workspace_instance_id.clone(),
+                    native_session_id: session.session_id.clone(),
+                })
+            } else {
+                None
+            };
+            let request = ApplicationCommandRequest {
+                window: run.request.window.clone(),
+                request_id: "component-prepared".into(),
+                action: serde_json::from_value(Value::Object(action)).map_err(error)?,
+                execution_target,
+            };
+            if !self
+                .native_validator
+                .is_valid(&serde_json::to_value(&request).map_err(error)?)
+            {
+                return Err(error("Bound document action violates the native schema"));
+            }
+            return Ok(ComponentToolAction::Control(request));
         }
         let mut args = arguments
             .as_object()
@@ -117,6 +169,20 @@ fn expanded(value: &Value, root: &Value, depth: usize) -> Result<Value, Applicat
     }
 }
 
+fn find_action(value: &Value, kind: &str) -> Option<Value> {
+    if value["properties"]["kind"]["const"] == kind {
+        return Some(value.clone());
+    }
+    for alternatives in ["oneOf", "anyOf"] {
+        for variant in value[alternatives].as_array().into_iter().flatten() {
+            if let Some(found) = find_action(variant, kind) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
 pub(super) fn registered_tools(
     host: &NextHost,
     context: &CallContext,
@@ -124,6 +190,86 @@ pub(super) fn registered_tools(
 ) -> Result<BTreeMap<String, RegisteredTool>, ApplicationError> {
     let mut registered = BTreeMap::new();
     for descriptor in host.capabilities_for(context) {
+        if descriptor.kind == CapabilityKind::Control
+            && descriptor.capability.id == "application.control"
+            && run.request.grant.mode != ComponentAgentMode::Explain
+        {
+            let native = expanded(&descriptor.input_schema, &descriptor.input_schema, 0)?;
+            for (kind, name) in [
+                ("edit_document", "application_edit_document"),
+                ("save", "application_save_document"),
+                ("run_file", "application_run_file"),
+                ("run_selection", "application_run_selection"),
+            ] {
+                let execute = matches!(kind, "run_file" | "run_selection");
+                let save = matches!(kind, "save" | "run_file");
+                if execute && run.request.grant.mode != ComponentAgentMode::Run {
+                    continue;
+                }
+                let ids: Vec<_> = run
+                    .request
+                    .grant
+                    .documents
+                    .iter()
+                    .filter(|g| !save || g.allow_save)
+                    .map(|g| g.document.document_id.clone())
+                    .collect();
+                if ids.is_empty() {
+                    continue;
+                }
+                let mut descriptor = descriptor.clone();
+                if save {
+                    descriptor.required_scopes.insert("project.write".into());
+                }
+                if execute {
+                    descriptor.required_scopes.insert("workspace.run_r".into());
+                }
+                if !descriptor.required_scopes.is_subset(&context.scopes) {
+                    continue;
+                }
+                let mut parameters = find_action(&native["properties"]["action"], kind)
+                    .ok_or_else(|| error("Native application action schema is unavailable"))?;
+                let properties = parameters
+                    .get_mut("properties")
+                    .and_then(Value::as_object_mut)
+                    .ok_or_else(|| error("Application action schema is not an object"))?;
+                for hidden in ["kind", "document", "target_path"] {
+                    properties.remove(hidden);
+                }
+                properties.insert("document_id".into(), json!({"type":"string","enum":ids}));
+                let required = parameters
+                    .get_mut("required")
+                    .and_then(Value::as_array_mut)
+                    .ok_or_else(|| error("Application action fields are unavailable"))?;
+                required
+                    .retain(|v| !matches!(v.as_str(), Some("kind" | "document" | "target_path")));
+                required.push(json!("document_id"));
+                parameters["additionalProperties"] = json!(false);
+                let spec = ComponentToolSpec {
+                    name: name.into(),
+                    description: format!(
+                        "{} within this request's fixed document and execution scope",
+                        kind.replace('_', " ")
+                    ),
+                    parameters: parameters.clone(),
+                };
+                let model_validator = jsonschema::validator_for(&parameters).map_err(error)?;
+                let native_validator =
+                    jsonschema::validator_for(&descriptor.input_schema).map_err(error)?;
+                registered.insert(
+                    name.into(),
+                    RegisteredTool {
+                        descriptor,
+                        spec,
+                        hidden: vec![],
+                        model_validator,
+                        native_validator,
+                        document_action: Some(kind),
+                    },
+                );
+            }
+            continue;
+        }
         let run_r = descriptor.kind == CapabilityKind::Operation
             && descriptor.capability.id == "workspace.run_r"
             && run.request.grant.mode == ComponentAgentMode::Run
@@ -184,6 +330,7 @@ pub(super) fn registered_tools(
                 hidden,
                 model_validator,
                 native_validator,
+                document_action: None,
             },
         );
     }

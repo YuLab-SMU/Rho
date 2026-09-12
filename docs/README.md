@@ -18,8 +18,8 @@ current product commitments. The [page index](INDEX.md) and
 
 The [built-in component Agent plan](BUILTIN-AGENT-PLAN.md) defines the authorized
 Rig integration and bounded extension to the external-Agent-only rule. The P0
-experiment and P1 backend query integration are implemented; component context,
-authorized writes and the reviewed Studio interaction are still being completed.
+experiment, component context and authorized backend execution are implemented.
+Studio integration and complete acceptance remain in progress.
 See Status for executed evidence and the next phase.
 
 ## Maintenance

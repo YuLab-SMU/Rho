@@ -24,6 +24,71 @@ pub struct ApplicationOperationLookup {
 }
 
 impl ApplicationOwner {
+    /// Called with the Application lock held after the editor synchronizes its save result.
+    /// Acknowledgement cannot grant authority over typing that happened during the save.
+    pub(crate) fn confirm_saved_document(
+        &self,
+        scope: &ApplicationScope,
+        window: &mut StoredWindow,
+        request_id: &str,
+        execution_ref: &str,
+        reference: &ApplicationDocumentRef,
+    ) -> Result<ApplicationCommandReceipt, ApplicationError> {
+        let mut command = self
+            .store
+            .command(scope, &window.window.window_id, request_id)?
+            .ok_or(ApplicationError::NotFound)?;
+        if command.request.window != window.window
+            || command.execution_ref.as_deref() != Some(execution_ref)
+            || !command
+                .receipt
+                .save
+                .as_ref()
+                .is_some_and(|s| s.state == ApplicationStepState::Succeeded)
+        {
+            return Err(ApplicationError::Conflict);
+        }
+        if command.receipt.save_synchronized == Some(true) {
+            return Ok(command.receipt);
+        }
+        let capture = command
+            .capture
+            .as_ref()
+            .ok_or_else(|| invalid("Saved capture is absent"))?;
+        if reference.document_id != capture.summary.document.document_id {
+            return Err(ApplicationError::Conflict);
+        }
+        // The document may have changed again between synchronization and this acknowledgement.
+        // Preserve successful saving, but never bind that newer content to the original command.
+        let document = match self.find_document(scope, &window.window.window_id, reference) {
+            Ok(document) => Some(document),
+            Err(ApplicationError::NotFound | ApplicationError::Conflict) => None,
+            Err(error) => return Err(error),
+        };
+        let applied = document
+            .filter(|d| {
+                d.text == capture.text
+                    && d.base_text.as_deref() == Some(capture.text.as_str())
+                    && d.base_hash.as_ref() == Some(&capture.summary.sha256)
+                    && d.path == capture.summary.path
+                    && d.selection == capture.summary.selection
+                    && d.readonly_reason.is_none()
+            })
+            .map(|d| document_ref(&d));
+        command.receipt.applied_documents = Some(applied.into_iter().collect());
+        command.receipt.save_synchronized = Some(true);
+        let receipt = command.receipt.clone();
+        self.commit(
+            scope,
+            window,
+            ApplicationStoreChanges {
+                commands: vec![command],
+                ..Default::default()
+            },
+        )?;
+        Ok(receipt)
+    }
+
     /// Private Host reconciliation input, never returned through an Agent query.
     /// It includes only steps already submitted, so status reads cannot run work.
     pub fn status_executions(
@@ -149,6 +214,14 @@ impl ApplicationOwner {
         let scope = self.scope(context)?;
         let mut command = self.load_execution(&scope, request)?;
         let previous_step = step_receipt(&command.receipt, request.step)?;
+        if command.cancel_requested
+            && matches!(
+                previous_step.state,
+                ApplicationStepState::NotSubmitted | ApplicationStepState::Cancelled
+            )
+        {
+            return Err(ApplicationError::Conflict);
+        }
         let verify_empty = request.step == ApplicationExecutionStep::Save
             && command.capture.as_ref().is_some_and(|capture| {
                 capture.text.is_empty() && capture.base_text.as_deref() == Some("")
@@ -194,9 +267,15 @@ impl ApplicationOwner {
             // selects another one while a save is in flight. The Workspace
             // owner validates the captured native session at execution admission.
             // Older single-session captures still use the bridge's session fence.
-            if command.capture.as_ref().is_some_and(|c| c.summary.workspace_instance_id.is_none())
+            if command
+                .capture
+                .as_ref()
+                .is_some_and(|c| c.summary.workspace_instance_id.is_none())
                 && window.context.native_session_id
-                    != command.capture.as_ref().and_then(|c| c.summary.native_session_id.clone())
+                    != command
+                        .capture
+                        .as_ref()
+                        .and_then(|c| c.summary.native_session_id.clone())
             {
                 return Err(ApplicationError::Conflict);
             }
@@ -353,6 +432,30 @@ impl ApplicationOwner {
             _ => ApplicationCommandState::AwaitingExecution,
         };
         command.receipt.diagnostic = error;
+        if command.cancel_requested {
+            for step in [&mut command.receipt.save, &mut command.receipt.run]
+                .into_iter()
+                .flatten()
+            {
+                if step.state == ApplicationStepState::NotSubmitted {
+                    step.state = ApplicationStepState::Cancelled;
+                }
+            }
+            if ![command.receipt.save.as_ref(), command.receipt.run.as_ref()]
+                .into_iter()
+                .flatten()
+                .any(|step| {
+                    matches!(
+                        step.state,
+                        ApplicationStepState::Submitting
+                            | ApplicationStepState::Accepted
+                            | ApplicationStepState::Running
+                    )
+                })
+            {
+                command.receipt.state = ApplicationCommandState::Cancelled;
+            }
+        }
         command.receipt.completed_at_ms = completion_time(command.receipt.state, now);
         let receipt = command.receipt.clone();
         let mut window = self
@@ -491,6 +594,9 @@ impl ApplicationOwner {
                 command.receipt.state = ApplicationCommandState::Failed;
                 command.receipt.diagnostic = Some("The Project owner could not verify the unchanged file. No scientific mutation or subsequent run was submitted.".into());
             }
+        }
+        if command.cancel_requested {
+            command.receipt.state = ApplicationCommandState::Cancelled;
         }
         command.receipt.completed_at_ms = completion_time(command.receipt.state, now);
         let receipt = command.receipt.clone();

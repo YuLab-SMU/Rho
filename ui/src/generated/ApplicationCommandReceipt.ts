@@ -10,4 +10,8 @@ export type ApplicationCommandReceipt = { window: ApplicationWindowRef, request_
 /**
  * Versions acknowledged by this exact local command, independent of later edits.
  */
-applied_documents?: Array<ApplicationDocumentRef>, };
+applied_documents?: Array<ApplicationDocumentRef>,
+/**
+ * The resident editor acknowledged the successful save; a changed draft is not adopted.
+ */
+save_synchronized?: boolean, };

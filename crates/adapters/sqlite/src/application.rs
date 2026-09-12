@@ -448,7 +448,7 @@ mod tests {
                 2,
             )
             .unwrap();
-        let request = ApplicationCommandRequest {
+        let request = ApplicationCommandRequest { execution_target: None,
             window: registration.session.window.clone(),
             request_id: "edit".into(),
             action: ApplicationAction::EditDocument {

@@ -458,18 +458,9 @@ impl ComponentAgentService {
         {
             return Ok(self.owner.start(&actor, request, now())?.run.run);
         }
-        let profile = self
-            .owner
-            .store
-            .component_conversation(actor.scope(), &request.conversation_id)?
-            .ok_or(ApplicationError::NotFound)?
-            .profile;
-        if request.grant.mode == ComponentAgentMode::Edit
-            || (request.grant.mode == ComponentAgentMode::Run
-                && profile == ComponentAgentProfile::Documents)
-        {
+        if request.grant.mode == ComponentAgentMode::Edit && request.grant.documents.is_empty() {
             return Err(error(
-                "Captured document editing/execution is not connected yet",
+                "Open the authorized target as a document before editing",
             ));
         }
         let settings = self.owner.store.component_settings(actor.scope())?;
@@ -718,7 +709,12 @@ impl ComponentRunPort for HostRunPort {
             .registered
             .get(name)
             .ok_or_else(|| error("Tool is outside this component's scope"))?;
-        let action = tool.bind(&self.run, arguments)?;
+        let current = self
+            .owner
+            .store
+            .component_run(&self.scope, &self.run.run_id)?
+            .ok_or(ApplicationError::NotFound)?;
+        let action = tool.bind(&current.run, arguments)?;
         self.owner.admit_tool(
             &self.scope,
             &self.run.run_id,
@@ -742,7 +738,10 @@ impl ComponentRunPort for HostRunPort {
         if component_digest(&tool.action)? != component_digest(&admission.tool.action)? {
             return Err(error("Tool ticket differs from its durable intent"));
         }
-        if matches!(tool.action, ComponentToolAction::Invoke(_)) {
+        if matches!(
+            tool.action,
+            ComponentToolAction::Invoke(_) | ComponentToolAction::Control(_)
+        ) {
             return mutations::execute(self, &tool, admission.repeated).await;
         }
         if admission.repeated {
