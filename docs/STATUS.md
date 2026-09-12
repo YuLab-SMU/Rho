@@ -106,10 +106,22 @@ user feedback on the interaction.
 
 ### Restart paths
 
-This continuation uses `.worktrees/runtime-recovery` on `codex/runtime-recovery`.
-Inspect current processes before any real integration launch. Existing user Hosts and
-R memory have not been restarted. New browser and native tests use disposable projects.
-No application installation, signing or publication has been performed.
+The primary repository checkout on `main` is now the only local worktree. It includes
+all session/recovery work through `0d3112e3`. Current verification logs and screenshots
+were retained under `target/` when the auxiliary worktrees were removed. The primary
+checkout passed `cargo build --locked`, generated-client consistency, CLI startup,
+documentation checks and backup verification after consolidation.
+
+Original branch refs and history are preserved in
+`.git/cleanup-backups/20260912T130405Z/branches.bundle`; the same private directory
+contains the retired kernel checkout's local state/artifacts and the cleanup inventory.
+These are manual administrative backups, not supported inputs for the current runtime.
+Routine development continues in this checkout; temporary worktrees should be removed
+once their work has been integrated.
+
+Inspect current processes before a real launch or replacement. Existing user Hosts
+and R memory were not restarted during consolidation. New browser and native tests
+use disposable projects. No application installation, signing or publication was performed.
 
 ## Shell navigation and configurable status bar
 

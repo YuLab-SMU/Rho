@@ -121,9 +121,11 @@ migration, import, archive-reader or compatibility work without a new request.
 
 ## Parallel work and distribution
 
-Register only genuinely independent worktrees with `scripts/dev-lanes.mjs`:
-`start --id NAME --own 'path/**'`, `check --id NAME --changed-auto`, and
-`finish --id NAME`. Keep real workbench runs in the integration checkout.
+Use the primary checkout on `main` for routine work. Temporary worktrees are for
+genuinely independent work; integrate their changes and remove them when finished.
+Register them with `scripts/dev-lanes.mjs`: `start --id NAME --own 'path/**'`,
+`check --id NAME --changed-auto`, and `finish --id NAME`.
+Keep real workbench runs in the primary checkout.
 Before switching tasks, preserve unfinished work in a clearly named WIP commit.
 
 Distribution requires an explicit task and a verified packaging path. Report exact
