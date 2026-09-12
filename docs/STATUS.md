@@ -4,6 +4,12 @@ Updated: 2026-09-12. This is the single current status summary. Git retains hist
 
 ## Built-in component Agent implementation
 
+P2 interaction review is ready: [Paper B01–B06](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/A-0),
+with the proposal recorded in Design section 18. All six boards are on their own
+page, including 600 px/320 px content, source evidence, settings and recovery states.
+Screenshots were inspected and the original fourteen Agent boards were preserved.
+User review is pending; no new Studio interface has been implemented from them.
+
 The user authorized the [implementation plan](BUILTIN-AGENT-PLAN.md). P0 and the
 P1 backend are implemented: `rho-agents` uses the pinned Rig 0.42 driver through
 engine-neutral Application ports; Host composes the service and shared query
