@@ -95,6 +95,10 @@ packages or reuse an existing user's R process.
 The real-source probe first runs the explicit synthetic connection/tool and image
 diagnostics. Image context requires a passed image diagnostic matching the current
 model configuration; a changed model does not inherit that result.
+For the explicit direct-R mutation probe, run the `component_source_probe` Host
+example with `--with-run` in that same configured environment. It verifies one
+authorized R operation and the model's use of its native result. Captured document
+save/run and final seven-component acceptance remain separate.
 
 Native/transport verification:
 

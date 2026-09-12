@@ -50,10 +50,29 @@ impl RegisteredTool {
         if !self.native_validator.is_valid(&arguments) {
             return Err(error("Bound tool arguments violate the native schema"));
         }
-        Ok(ComponentToolAction::Query(QueryRequest {
-            capability: self.descriptor.capability.clone(),
-            arguments,
-        }))
+        if self.descriptor.kind == CapabilityKind::Operation {
+            let session = run
+                .request
+                .grant
+                .session
+                .as_ref()
+                .ok_or_else(|| error("R session is not bound"))?;
+            Ok(ComponentToolAction::Invoke(Invocation {
+                client_request_id: "component-prepared".into(),
+                capability: self.descriptor.capability.clone(),
+                arguments,
+                preconditions: vec![Precondition {
+                    kind: "workspace.session".into(),
+                    subject: "active".into(),
+                    expected: json!(session.session_id),
+                }],
+            }))
+        } else {
+            Ok(ComponentToolAction::Query(QueryRequest {
+                capability: self.descriptor.capability.clone(),
+                arguments,
+            }))
+        }
     }
 }
 
@@ -105,8 +124,16 @@ pub(super) fn registered_tools(
 ) -> Result<BTreeMap<String, RegisteredTool>, ApplicationError> {
     let mut registered = BTreeMap::new();
     for descriptor in host.capabilities_for(context) {
-        if descriptor.kind != CapabilityKind::Query
-            || !component_query_allowed(run.profile, &descriptor.capability.id)
+        let run_r = descriptor.kind == CapabilityKind::Operation
+            && descriptor.capability.id == "workspace.run_r"
+            && run.request.grant.mode == ComponentAgentMode::Run
+            && matches!(
+                run.profile,
+                ComponentAgentProfile::Workspace | ComponentAgentProfile::Project
+            );
+        if !run_r
+            && (descriptor.kind != CapabilityKind::Query
+                || !component_query_allowed(run.profile, &descriptor.capability.id))
         {
             continue;
         }

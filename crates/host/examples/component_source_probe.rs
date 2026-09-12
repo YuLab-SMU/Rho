@@ -88,6 +88,26 @@ async fn probe() -> Result<(), String> {
             if answer.trim()!=expected || count()!=before{return Err(format!("{name} source answer or scientific operation count did not match"));}
             println!("{}",json!({"phase":"component-source-probe","profile":name,"passed":true,"model_calls":terminal.model_calls,"tool_calls":terminal.tool_calls,"additional_scientific_operations":0,"elapsed_ms":started.elapsed().as_millis()}));
         }
+        if std::env::args().any(|arg|arg=="--with-run") {
+            host.dispatch(&context,HostRequest::ApplicationBridge(ApplicationBridgeRequest::Renew{session:registration.session.clone()})).await.map_err(|_|"Window heartbeat failed")?;
+            let conversation=service.create(&host,&context,&project,&window,"authorized-run",ComponentAgentProfile::Workspace).map_err(|e|e.to_string())?;
+            let expected=format!("run-{}",uuid::Uuid::new_v4());
+            let code=format!("component_answer <- '{expected}'; invisible(component_answer)");
+            let text=format!("In the authorized Main session, call workspace_run_r exactly once with this exact code:\n```r\n{code}\n```\nThen reply with only the resulting string, without quotes or formatting.");
+            let started=Instant::now();
+            let run=service.start(host.clone(),context.clone(),&project,ComponentAgentStart{request_id:"authorized-run".into(),conversation_id:conversation.conversation_id,conversation_version:conversation.version,window:window.clone(),model_settings_version:1,text,grant:ComponentAgentGrant{mode:ComponentAgentMode::Run,session:Some(session.clone()),documents:vec![],files:vec![]},sources:vec![]}).await.map_err(|e|e.to_string())?;
+            let terminal=tokio::time::timeout(Duration::from_secs(125),async{loop{let run=service.run(&host,&context,&project,&run.run_id).map_err(|e|e.to_string())?;if run.state.is_terminal(){return Ok::<_,String>(run);}tokio::time::sleep(Duration::from_millis(25)).await;}}).await.map_err(|_|"Run model deadline exceeded")??;
+            if terminal.state!=ComponentAgentRunState::Completed{return Err(format!("Authorized run failed: {:?}",terminal.reason));}
+            let tools=service.tools(&host,&context,&project,&run.run_id).map_err(|e|e.to_string())?;
+            let writes=tools.iter().filter(|tool|tool.mutation).collect::<Vec<_>>();
+            if writes.len()!=1 || count()!=before+1{return Err("Unexpected scientific dispatch count".into());}
+            let record=host.get_operation(&context,writes[0].operation_id.as_ref().ok_or("Missing native operation identity")?).await.map_err(|e|e.to_string())?.ok_or("Missing native record")?;
+            if record.status!=OperationStatus::Succeeded || record.operation.normalized_arguments["code"].as_str()!=Some(&code){return Err("Native operation did not match authorized code".into());}
+            let events=service.events(&host,&context,&project,&run.run_id,0,128).map_err(|e|e.to_string())?;
+            let answer=events.events.into_iter().filter_map(|e|match e.content{ComponentAgentEventContent::Text{text}=>Some(text),_=>None}).collect::<String>();
+            if answer.trim()!=expected{return Err("Model did not return the native R result".into());}
+            println!("{}",json!({"phase":"component-authorized-run","passed":true,"model_calls":terminal.model_calls,"tool_calls":terminal.tool_calls,"scientific_operations":1,"elapsed_ms":started.elapsed().as_millis()}));
+        }
         Ok(())
     }.await;
     service.close().await;

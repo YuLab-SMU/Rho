@@ -366,6 +366,7 @@ impl ApplicationOwner {
             save: needs_save.then(|| step("save")),
             run: needs_run.then(|| step("run")),
             diagnostic: None,
+            applied_documents: None,
         };
         let stored = StoredCommand {
             request,
@@ -823,6 +824,7 @@ impl ApplicationOwner {
                         Ok(changes)
                     }) {
                     Ok(changes) => {
+                        command.receipt.applied_documents=Some(changes.documents.iter().map(document_ref).collect());
                         write = changes;
                         if command.capture.is_some() {
                             ApplicationCommandState::AwaitingExecution

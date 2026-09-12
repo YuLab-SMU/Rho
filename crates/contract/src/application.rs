@@ -387,6 +387,10 @@ pub struct ApplicationCommandReceipt {
     pub save: Option<ApplicationStepReceipt>,
     pub run: Option<ApplicationStepReceipt>,
     pub diagnostic: Option<String>,
+    /// Versions acknowledged by this exact local command, independent of later edits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub applied_documents: Option<Vec<ApplicationDocumentRef>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

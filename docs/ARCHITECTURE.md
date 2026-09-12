@@ -112,6 +112,17 @@ intents remain durable even when text events are pruned. Receiving a tool result
 does not imply scientific success. Stop fences later calls; accepted scientific
 work retains its original identities and cancellation/reconciliation semantics.
 
+Direct component R execution uses the existing accepted-operation path with the
+fixed instance and native-session precondition. A Host-owned task retains the
+operation even when the model future is dropped. It records acceptance, observes
+the original operation, and requests cancellation only for that identity. Missing
+acknowledgements are looked up by the original caller/request; they do not authorize
+new code submission. Waiting for R and user input are application observations.
+
+Application command receipts retain the exact document versions acknowledged by
+that command. Later user changes cannot silently become the version attributed to
+an earlier edit, which is necessary for subsequent authorized save/run steps.
+
 Settings persist only non-secret configuration and explicit environment/session
 credential references. Remote endpoints require HTTPS; loopback HTTP is explicit.
 Endpoint credentials in URLs are rejected. A disabled or unconfigured assistant

@@ -201,6 +201,9 @@ pub struct ComponentToolAdmission {
     pub repeated: bool,
 }
 pub enum ComponentToolUpdate {
+    Rejected {
+        reason: String,
+    },
     Accepted {
         operation_id: Option<OperationId>,
         application_request_id: Option<String>,
@@ -832,6 +835,14 @@ impl ComponentAgentOwner {
             .find(|t| t.receipt.receipt_id == receipt_id)
             .ok_or(ApplicationError::NotFound)?;
         match update {
+            ComponentToolUpdate::Rejected { reason } => {
+                if tool.receipt.phase != ComponentToolPhase::Intent || reason.len() > 4096 {
+                    return Err(ApplicationError::Conflict);
+                }
+                tool.receipt.phase = ComponentToolPhase::Resolved;
+                tool.receipt.result =
+                    Some(serde_json::json!({"status":"rejected","accepted":false,"error":reason}));
+            }
             ComponentToolUpdate::Accepted {
                 operation_id,
                 application_request_id,
@@ -848,7 +859,10 @@ impl ComponentAgentOwner {
                 {
                     return Err(ApplicationError::RequestConflict);
                 }
-                if tool.receipt.phase != ComponentToolPhase::Intent {
+                if !matches!(
+                    tool.receipt.phase,
+                    ComponentToolPhase::Intent | ComponentToolPhase::Uncertain
+                ) {
                     if tool.receipt.operation_id == operation_id
                         && tool.receipt.application_request_id == application_request_id
                     {
@@ -1008,6 +1022,56 @@ impl ComponentAgentOwner {
         run.run.output_tokens = output_tokens;
         run.run.updated_at_ms = now;
         self.save(scope, conversation, Some(&run), &[], &[], now)
+    }
+    pub fn native_wait_state(
+        &self,
+        scope: &ApplicationScope,
+        run_id: &str,
+        state: ComponentAgentRunState,
+        now: u64,
+    ) -> Result<(), ApplicationError> {
+        let _guard = self.gate.lock().map_err(storage)?;
+        if !matches!(
+            state,
+            ComponentAgentRunState::Running
+                | ComponentAgentRunState::WaitingForR
+                | ComponentAgentRunState::NeedsInput
+        ) {
+            return Err(invalid("Invalid native wait state"));
+        }
+        let mut run = self
+            .store
+            .component_run(scope, run_id)?
+            .ok_or(ApplicationError::NotFound)?;
+        if run.host_incarnation != self.host_incarnation {
+            return Err(ApplicationError::Conflict);
+        }
+        if run.run.state == state
+            || run.run.state == ComponentAgentRunState::Stopping
+            || run.run.state.is_terminal()
+        {
+            return Ok(());
+        }
+        let conversation = self
+            .store
+            .component_conversation(scope, &run.run.request.conversation_id)?
+            .ok_or(ApplicationError::NotFound)?;
+        if conversation.active_run_id.as_deref() != Some(run_id) {
+            return Err(ApplicationError::Conflict);
+        }
+        run.run.state = state;
+        run.run.updated_at_ms = now;
+        run.run.event_cursor += 1;
+        let event = ComponentAgentEvent {
+            run_id: run_id.into(),
+            sequence: run.run.event_cursor,
+            created_at_ms: now,
+            content: ComponentAgentEventContent::State {
+                state,
+                reason: None,
+            },
+        };
+        self.save(scope, conversation, Some(&run), &[], &[event], now)
     }
 
     pub fn check_tool_dispatch(

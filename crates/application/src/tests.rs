@@ -1451,6 +1451,21 @@ fn application_owned_edits_and_creation_do_not_require_native_read_authority() {
     }
 }
 
+#[test]
+fn applied_document_receipt_does_not_follow_later_user_edits() {
+    let owner=owner();let r=register(&owner,"window",0);let original=sync(&owner,&r,document("draft"),1);
+    owner.control(&actor(true),ApplicationCommandRequest{window:r.session.window.clone(),request_id:"edit".into(),action:ApplicationAction::EditDocument{document:document_ref(&original),edits:vec![ApplicationTextEdit{from:0,to:1,insert:"D".into()}]}},2).unwrap();
+    let grant=claim(&owner,&r,3);
+    let mut edited=original.clone();edited.version="doc-v2".into();edited.text="Draft".into();
+    let completion=ApplicationCommandCompletion{request_id:"edit".into(),claim_id:grant.claim_id,outcome:ApplicationLocalOutcome::Applied,changes:ApplicationChanges{documents:vec![ApplicationDocumentUpdate{expected_version:Some(original.version),expected_selection_version:Some(original.selection.version),document:edited.clone()}],..Default::default()},diagnostic:None};
+    let ApplicationBridgeReply::Completed(receipt)=owner.bridge(&actor(false),ApplicationBridgeRequest::Complete{session:r.session.clone(),completion},4).unwrap() else{panic!()};
+    assert_eq!(receipt.applied_documents,Some(vec![document_ref(&edited)]));
+    let mut later=edited.clone();later.version="doc-v3".into();later.text="later user input".into();
+    owner.bridge(&actor(false),ApplicationBridgeRequest::Sync{session:r.session.clone(),sync_id:"later".into(),changes:ApplicationChanges{documents:vec![ApplicationDocumentUpdate{expected_version:Some(edited.version.clone()),expected_selection_version:Some(edited.selection.version.clone()),document:later}],..Default::default()}},5).unwrap();
+    let receipt=owner.command_status(&actor(true),ApplicationCommandStatusArguments{window:r.session.window,request_id:"edit".into()},6).unwrap();
+    assert_eq!(receipt.applied_documents,Some(vec![document_ref(&edited)]));
+}
+
 /// The runtime idle-release policy treats this one fact as its safety condition for
 /// ending an unattended session, so its scope and expiry are load-bearing.
 #[test]

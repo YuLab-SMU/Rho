@@ -10,6 +10,27 @@ page, including 600 px/320 px content, source evidence, settings and recovery st
 Screenshots were inspected and the original fourteen Agent boards were preserved.
 User review is pending; no new Studio interface has been implemented from them.
 
+P3 direct R execution is connected for Workspace/Project Run grants. The Host
+injects the fixed instance/native-session precondition and stable request ID,
+persists acceptance, then follows the original Operation. Native work is tracked
+independently of the model future; Stop/timeout requests cancellation only for its
+associated operation, waits for the observed result and preserves uncertainty.
+Waiting for R and native input are separate assistant states. Duplicate mutation
+calls return the original result rather than executing the code again.
+Two real Ark/R tests passed for exact-once execution and confirmed cancellation
+after dropping the model wait. The real model also used the authorized path,
+producing one scientific operation and the expected native result in 4,189 ms.
+Evidence: `target/component-mutations-real-r.log` and `target/component-run-real-model.log`.
+Captured document editing/execution remains unavailable while its version chain
+is being connected. Application command receipts now retain the document versions
+confirmed by that command; a regression proves later user edits do not replace them.
+Validation passed the existing 35 component engine/storage/Host cases, all 25
+Application tests, the 11-case Workbench serial run, client generation/build/check
+and focused Clippy with documented baseline exceptions. The first parallel HTTP
+run had a single 500 in an unchanged project-switch fixture; its focused rerun and
+full serial rerun passed without a behavior change. The failure remains recorded
+in `target/component-run-http.log`; current evidence is in `target/component-run-*.log`.
+
 Source search and model diagnostics are now connected to the authenticated component
 API. Search uses existing owners without model requests. Connection/tool and image
 tests use separate synthetic inputs and durable request IDs, with versioned diagnostic
@@ -60,8 +81,8 @@ and R-session fields, and validates both model and native schemas. It reloads ea
 persisted action before dispatch and rejects an altered ticket. Queries retain the
 full owner snapshot, including partial/busy/unavailable states. Native session holds
 are scoped to a query; the current project and principal are preserved. Model
-selection is fixed for each run. Edit/Run dispatch remains explicitly unavailable
-until the authorized-write phase is connected.
+selection is fixed for each run. Direct Workspace/Project Run is available;
+captured document editing/save/run is still being connected.
 
 `/api/agents/components/context` previews files, editor selections, objects/tables,
 installed package copies, console state and R-session metadata without a model call.

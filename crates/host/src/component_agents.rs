@@ -15,6 +15,7 @@ use tokio::sync::{Mutex, Semaphore};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 mod context;
+mod mutations;
 mod registry;
 use registry::{RegisteredTool, registered_tools};
 
@@ -457,8 +458,19 @@ impl ComponentAgentService {
         {
             return Ok(self.owner.start(&actor, request, now())?.run.run);
         }
-        if request.grant.mode != ComponentAgentMode::Explain {
-            return Err(error("Authorized write dispatch is not connected yet"));
+        let profile = self
+            .owner
+            .store
+            .component_conversation(actor.scope(), &request.conversation_id)?
+            .ok_or(ApplicationError::NotFound)?
+            .profile;
+        if request.grant.mode == ComponentAgentMode::Edit
+            || (request.grant.mode == ComponentAgentMode::Run
+                && profile == ComponentAgentProfile::Documents)
+        {
+            return Err(error(
+                "Captured document editing/execution is not connected yet",
+            ));
         }
         let settings = self.owner.store.component_settings(actor.scope())?;
         if !settings.enabled || settings.connection.is_none() {
@@ -609,8 +621,9 @@ impl ComponentAgentService {
                 run: run.clone(),
                 registered,
                 cancellation: cancellation.clone(),
+                native_tasks: TaskTracker::new(),
             });
-            Ok(self
+            let result = self
                 .engine
                 .execute(ComponentEngineExecution {
                     context: serde_json::to_string(&run.context).map_err(error)?,
@@ -618,10 +631,13 @@ impl ComponentAgentService {
                     images,
                     tools,
                     key,
-                    port,
+                    port: port.clone(),
                     cancellation,
                 })
-                .await)
+                .await;
+            port.native_tasks.close();
+            port.native_tasks.wait().await;
+            Ok(result)
         }
         .await;
         match result {
@@ -677,6 +693,7 @@ struct HostRunPort {
     run: ComponentAgentRun,
     registered: BTreeMap<String, RegisteredTool>,
     cancellation: CancellationToken,
+    native_tasks: TaskTracker,
 }
 #[async_trait]
 impl ComponentRunPort for HostRunPort {
@@ -724,6 +741,9 @@ impl ComponentRunPort for HostRunPort {
             .ok_or(ApplicationError::NotFound)?;
         if component_digest(&tool.action)? != component_digest(&admission.tool.action)? {
             return Err(error("Tool ticket differs from its durable intent"));
+        }
+        if matches!(tool.action, ComponentToolAction::Invoke(_)) {
+            return mutations::execute(self, &tool, admission.repeated).await;
         }
         if admission.repeated {
             return Ok(tool.receipt.result.unwrap_or_else(||json!({"status":"uncertain","receipt_id":tool.receipt.receipt_id,"message":"Original tool intent is unconfirmed; it was not replayed"})));
