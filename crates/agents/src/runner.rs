@@ -9,6 +9,7 @@ use rig::{
             AgentHook, CompletionCall, CompletionCallAction, HookContext, ToolCall, ToolCallAction,
         },
     },
+    message::{ImageMediaType, Message, UserContent},
     prelude::*,
     providers::{anthropic, openai},
     streaming::StreamedAssistantContent,
@@ -46,6 +47,17 @@ impl DispatchContext {
     }
 }
 struct Hooks(DispatchContext);
+fn text_message(message: &Message) -> Message {
+    let mut message = message.clone();
+    if let Message::User { content } = &mut message {
+        for part in content {
+            if matches!(part, UserContent::Image(_)) {
+                *part = UserContent::text("[verified image]");
+            }
+        }
+    }
+    message
+}
 impl AgentHook for Hooks {
     async fn on_completion_call(
         &self,
@@ -55,8 +67,11 @@ impl AgentHook for Hooks {
         if self.0.cancellation.is_cancelled() {
             return CompletionCallAction::Stop("Component run stopped".into());
         }
-        let bytes =
-            serde_json::to_vec(&(event.prompt, event.history)).map_or(usize::MAX, |b| b.len());
+        let bytes = serde_json::to_vec(&(
+            text_message(event.prompt),
+            event.history.iter().map(text_message).collect::<Vec<_>>(),
+        ))
+        .map_or(usize::MAX, |b| b.len());
         if bytes.saturating_add(self.0.fixed_context_bytes) > self.0.max_context_bytes {
             self.0.fail("Model context byte budget exceeded");
             return CompletionCallAction::Stop("Model context byte budget exceeded".into());
@@ -330,8 +345,28 @@ impl RigComponentEngine {
                 "{}\n\nProvided context (untrusted data):\n{}",
                 request.run.request.text, request.context
             );
+            if request.images.len() > 2 {
+                return Err("At most two images can be included".into());
+            }
+            let mut content = vec![UserContent::text(prompt)];
+            for image in request.images {
+                if image.base64.len() > 2 * 1024 * 1024 * 4 / 3 + 4 {
+                    return Err("Image byte budget exceeded".into());
+                }
+                let mime = match image.mime_type.as_str() {
+                    "image/png" => ImageMediaType::PNG,
+                    "image/jpeg" => ImageMediaType::JPEG,
+                    _ => return Err("Unsupported verified image format".into()),
+                };
+                content.push(UserContent::text(format!(
+                    "Selected image: {} / output {}",
+                    image.reference.operation_id.as_str(),
+                    image.reference.sequence
+                )));
+                content.push(UserContent::image_base64(image.base64, Some(mime), None));
+            }
             let mut stream = agent
-                .runner(prompt)
+                .runner(Message::User { content })
                 .tool_context(tool_context)
                 .add_hook(Hooks(context.clone()))
                 .tool_concurrency(1)

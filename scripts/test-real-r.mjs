@@ -25,6 +25,7 @@ run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test
   "--locked", "--no-run"], { env, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
   "--locked", "--", "--ignored", "--nocapture"], { env, stdio: "inherit", timeout: 120_000 });
+run("cargo", ["test", "-p", "rho-host", "--test", "component_sources_real_r", "--locked", "--", "--ignored"], { env, stdio: "inherit", timeout: 120_000 });
 // The two-installation case in this file needs RHO_ALT_* and stays opt-in.
 const checkpointHelper = run("node", ["scripts/test-r-checkpoints.mjs", "--print-library"], { env }).trim();
 const instanceEnv = { ...env, RHO_CHECKPOINT_HELPER: checkpointHelper };

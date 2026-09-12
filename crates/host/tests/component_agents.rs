@@ -495,3 +495,133 @@ async fn dispatch_reloads_the_durable_intent_instead_of_trusting_an_altered_tick
     assert!(provider.state.requests.lock().unwrap().is_empty());
     f.service.close().await;
 }
+
+#[tokio::test]
+async fn file_context_is_previewed_frozen_and_reused_without_revalidating_a_duplicate_start() {
+    let provider = Provider::new(Mode::ReadFile).await;
+    let f = Fixture::new().await;
+    let preview = f
+        .service
+        .preview_source(
+            &f.host,
+            &f.context,
+            ComponentSourcePreviewRequest {
+                project_root: f.project.clone(),
+                window: f.window.clone(),
+                session: None,
+                selection: AgentContextSelection {
+                    source: "files".into(),
+                    label: "analysis.R".into(),
+                    reference: json!({"path":"analysis.R"}),
+                    inclusion: "text".into(),
+                },
+            },
+        )
+        .await
+        .unwrap();
+    assert!(preview.error.is_none());
+    assert!(provider.state.requests.lock().unwrap().is_empty());
+    let snapshot = preview.snapshot.unwrap();
+    assert!(snapshot.text.contains("native-project-evidence-27"));
+    assert_eq!(snapshot.observations[0].status, QueryStatus::Ready);
+    assert!(
+        snapshot.selection.reference["expected_sha256"]
+            .as_str()
+            .is_some()
+    );
+    f.configure(&provider).await;
+    let mut request = f.request();
+    request.sources = vec![snapshot.selection];
+    let run = f.start(request.clone()).await;
+    assert_eq!(
+        f.terminal(&run.run_id).await.state,
+        ComponentAgentRunState::Completed
+    );
+    assert!(
+        run.context.as_ref().unwrap().sources[0]
+            .text
+            .contains("native-project-evidence-27")
+    );
+    std::fs::write(
+        std::path::Path::new(&f.project).join("analysis.R"),
+        "changed after accepted request",
+    )
+    .unwrap();
+    let repeated = f.start(request).await;
+    assert_eq!(repeated.run_id, run.run_id);
+    assert_eq!(provider.state.requests.lock().unwrap().len(), 2);
+    let first = provider.state.requests.lock().unwrap()[0].clone();
+    assert!(first.to_string().contains("native-project-evidence-27"));
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn changed_file_or_cross_window_context_is_rejected_before_model_admission() {
+    let provider = Provider::new(Mode::ReadFile).await;
+    let f = Fixture::new().await;
+    f.configure(&provider).await;
+    let preview = f
+        .service
+        .preview_source(
+            &f.host,
+            &f.context,
+            ComponentSourcePreviewRequest {
+                project_root: f.project.clone(),
+                window: f.window.clone(),
+                session: None,
+                selection: AgentContextSelection {
+                    source: "files".into(),
+                    label: "analysis.R".into(),
+                    reference: json!({"path":"analysis.R"}),
+                    inclusion: "text".into(),
+                },
+            },
+        )
+        .await
+        .unwrap();
+    let mut request = f.request();
+    request.sources = vec![preview.snapshot.unwrap().selection];
+    std::fs::write(
+        std::path::Path::new(&f.project).join("analysis.R"),
+        "a later version",
+    )
+    .unwrap();
+    assert!(
+        f.service
+            .start(
+                f.host.clone(),
+                f.context.clone(),
+                &f.project,
+                request.clone()
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        f.service
+            .run_by_request(&f.host, &f.context, &f.project, &request.request_id)
+            .unwrap()
+            .is_none()
+    );
+    assert!(provider.state.requests.lock().unwrap().is_empty());
+    let denied = f
+        .service
+        .preview_source(
+            &f.host,
+            &f.context,
+            ComponentSourcePreviewRequest {
+                project_root: f.project.clone(),
+                window: f.window.clone(),
+                session: None,
+                selection: AgentContextSelection {
+                    source: "editor".into(),
+                    label: "other document".into(),
+                    reference: json!({"window":{"window_id":"other","incarnation":"other"}}),
+                    inclusion: "text".into(),
+                },
+            },
+        )
+        .await;
+    assert!(denied.is_err());
+    f.service.close().await;
+}

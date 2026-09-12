@@ -14,6 +14,7 @@ use std::{
 use tokio::sync::{Mutex, Semaphore};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
+mod context;
 mod registry;
 use registry::{RegisteredTool, registered_tools};
 
@@ -100,6 +101,14 @@ impl ComponentAgentService {
         self.owner
             .store
             .component_settings(&Self::scope(host, context, project)?)
+    }
+    pub async fn preview_source(
+        &self,
+        host: &NextHost,
+        context: &CallContext,
+        request: ComponentSourcePreviewRequest,
+    ) -> Result<ComponentSourcePreview, ApplicationError> {
+        context::preview(host, context, &request, false).await
     }
     pub async fn configure(
         &self,
@@ -309,17 +318,46 @@ impl ComponentAgentService {
             return Err(error("Component service is closing"));
         }
         let actor = Self::actor(&host, &context, project, &request.window)?;
-        // Source expansion and authorized writes are connected in the following vertical phases.
-        if request.grant.mode != ComponentAgentMode::Explain || !request.sources.is_empty() {
-            return Err(error(
-                "Only Explain requests without attached sources are connected at this stage",
-            ));
+        if self
+            .owner
+            .store
+            .component_run_by_request(actor.scope(), &request.request_id)?
+            .is_some()
+        {
+            return Ok(self.owner.start(&actor, request, now())?.run.run);
+        }
+        if request.grant.mode != ComponentAgentMode::Explain {
+            return Err(error("Authorized write dispatch is not connected yet"));
+        }
+        if serde_json::to_vec(&request).map_err(error)?.len() > 64 * 1024 {
+            return Err(error("Assistant request exceeds 64 KiB"));
+        }
+        drop(_gate);
+        let prepared = context::prepare(&host, &context, project, &request).await?;
+        let _gate = self.gate.lock().await;
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(error("Component service is closing"));
         }
         let admission = self.owner.start(&actor, request, now())?;
         if admission.repeated {
             return Ok(admission.run.run);
         }
-        let run = admission.run.run;
+        let mut run = admission.run.run;
+        if let Err(error) =
+            self.owner
+                .capture_context(actor.scope(), &run.run_id, prepared.context.clone(), now())
+        {
+            let _ = self.owner.finish(
+                actor.scope(),
+                &run.run_id,
+                ComponentAgentRunState::Failed,
+                Some("Context persistence failed before model dispatch".into()),
+                now(),
+            );
+            return Err(error);
+        }
+        run.context = Some(prepared.context);
+        let images = prepared.images;
         let cancellation = CancellationToken::new();
         let scope = actor.scope().clone();
         self.live.lock().await.insert(
@@ -334,7 +372,14 @@ impl ComponentAgentService {
         self.tasks.spawn(async move {
             let stopped = cancellation.clone();
             let mut outcome = service
-                .execute(host, context, scope.clone(), run.clone(), cancellation)
+                .execute(
+                    host,
+                    context,
+                    scope.clone(),
+                    run.clone(),
+                    cancellation,
+                    images,
+                )
                 .await;
             // Serialize final acknowledgement against Stop/Disable admission.
             let _gate = service.gate.lock().await;
@@ -363,6 +408,7 @@ impl ComponentAgentService {
         scope: ApplicationScope,
         run: ComponentAgentRun,
         cancellation: CancellationToken,
+        images: Vec<ComponentImageInput>,
     ) -> ComponentEngineOutcome {
         let permit = tokio::select! {biased;_=cancellation.cancelled()=>return ComponentEngineOutcome::Stopped,p=self.slots.clone().acquire_owned()=>p};
         let Ok(_permit) = permit else {
@@ -397,8 +443,9 @@ impl ComponentAgentService {
             Ok(self
                 .engine
                 .execute(ComponentEngineExecution {
+                    context: serde_json::to_string(&run.context).map_err(error)?,
                     run,
-                    context: String::new(),
+                    images,
                     tools,
                     key,
                     port,
@@ -543,7 +590,7 @@ impl ComponentRunPort for HostRunPort {
         } else {
             None
         };
-        let value = match self
+        let mut value = match self
             .host
             .dispatch(&self.context, HostRequest::QuerySnapshot(query.clone()))
             .await
@@ -553,13 +600,48 @@ impl ComponentRunPort for HostRunPort {
                 json!({"status":"error","error":error.to_string(),"capability":query.capability})
             }
         };
+        let mut evidence = Vec::new();
+        if query.capability.id == "workspace.console_state"
+            && let Some(data) = value.get_mut("data").and_then(Value::as_object_mut)
+        {
+            let waiting = data.remove("input").is_some_and(|input| !input.is_null());
+            data.insert("needs_user_input".into(), json!(waiting));
+            value["model_projection"] = json!({"omitted_fields":["data.input"],"reason":"Native input belongs to the user"});
+        }
+        if query.capability.id == "output.view"
+            && let Some(data) = value.get_mut("data").and_then(Value::as_object_mut)
+        {
+            data.remove("preview_base64");
+            if let Some(reference) = data.get("reference").cloned() {
+                let included = self.run.context.as_ref().is_some_and(|context| {
+                    context.sources.iter().any(|source| {
+                        source.selection.source == "plots"
+                            && source.selection.inclusion == "image"
+                            && source.selection.reference == reference
+                    })
+                });
+                if let Ok(reference) = serde_json::from_value(reference) {
+                    evidence.push(ComponentAgentEvidence::Media { reference });
+                }
+                value["model_projection"] = json!({"omitted_fields":["data.preview_base64"],"image_in_initial_context":included,"reason":if included{"Verified image is already provided with selected sources"}else{"Add this plot as image context before visual analysis"}});
+            }
+        }
+        if query.capability.id == "project.read_text"
+            && let Some(file) = value["data"].get("file")
+            && let (Some(path), Some(sha256)) = (file["path"].as_str(), file["sha256"].as_str())
+        {
+            evidence.push(ComponentAgentEvidence::File {
+                path: path.into(),
+                sha256: sha256.into(),
+            });
+        }
         self.owner.record_tool(
             &self.scope,
             &self.run.run_id,
             &tool.receipt.receipt_id,
             ComponentToolUpdate::Resolved {
                 result: value.clone(),
-                evidence: vec![],
+                evidence,
             },
             now(),
         )?;

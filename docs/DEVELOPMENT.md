@@ -86,6 +86,13 @@ under `target/component-agent-probe/`; absence of `--real-model` means real mode
 testing was not run. These probes do not replace real R, component UI or authorized
 write/recovery acceptance.
 
+`node scripts/test-component-agents.mjs --real-sources` additionally uses explicit
+`RHO_ARK` and `RHO_R_HOME` to create a disposable R project and verify Objects,
+Packages and native plot context with the configured model. The deterministic
+source/byte checks are in `cargo test -p rho-host --test component_sources_real_r
+--locked -- --ignored` with the same R environment. These tests do not install
+packages or reuse an existing user's R process.
+
 Native/transport verification:
 
 | Script | Scope and prerequisites |

@@ -73,6 +73,15 @@ the accepted run, then validated against the original native schema. Dispatch
 reloads the original intent and refuses altered tickets. Owner observations retain
 their status, completeness, timestamp and continuation rather than only their data.
 
+Selected component context reuses the existing composer source readers. Preview
+records owner observation metadata; submission revalidates the same file/document,
+package-copy or object reference before capturing bounded context in the run.
+Cross-window document sources and mismatched native-session sources are refused.
+Captured text and evidence are durable application records. Verified image bytes
+remain transient inputs with original media references and preview digests, separate
+from the text budget and store. Binary output-view fields and native input prompts
+are explicitly omitted from model-facing text; projections identify that omission.
+
 Browser-only component query/command routes observe and admit these application
 records. A separate transient credential endpoint returns a reference and never
 places key material in pending commands or synchronized drafts. Shared lazy HTTP

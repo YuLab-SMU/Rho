@@ -7,12 +7,13 @@ use rho_agent_client::NativeInput;
 use rho_contract::*;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct AgentContextReader<'a> {
     pub project: &'a str,
     host: &'a NextHost,
     context: &'a CallContext,
+    observations: Option<&'a Mutex<Vec<ComponentSourceObservation>>>,
 }
 impl<'a> AgentContextReader<'a> {
     pub(crate) fn new(project: &'a str, host: &'a NextHost, context: &'a CallContext) -> Self {
@@ -20,7 +21,15 @@ impl<'a> AgentContextReader<'a> {
             project,
             host,
             context,
+            observations: None,
         }
+    }
+    pub(crate) fn recording(
+        mut self,
+        observations: &'a Mutex<Vec<ComponentSourceObservation>>,
+    ) -> Self {
+        self.observations = Some(observations);
+        self
     }
     pub async fn query(&self, id: &str, args: Value) -> Result<Value, String> {
         let value = self
@@ -37,19 +46,33 @@ impl<'a> AgentContextReader<'a> {
             )
             .await
             .map_err(|e| e.to_string())?;
-        if value["status"] != "ready" {
-            return Err(value["notices"]
-                .as_array()
-                .map(|v| {
-                    v.iter()
-                        .filter_map(Value::as_str)
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                })
-                .filter(|v| !v.is_empty())
-                .unwrap_or_else(|| format!("{id} is not ready")));
+        let snapshot: QuerySnapshot = serde_json::from_value(value).map_err(|e| e.to_string())?;
+        if let Some(observations) = self.observations {
+            let mut observations = observations
+                .lock()
+                .map_err(|_| "Context observation storage unavailable")?;
+            if observations.len() >= 32 {
+                return Err("Too many source observations".into());
+            }
+            observations.push(ComponentSourceObservation {
+                capability: id.into(),
+                target: snapshot.target.clone(),
+                source: snapshot.source.clone(),
+                observed_at_ms: snapshot.observed_at_ms,
+                status: snapshot.status,
+                completeness: snapshot.completeness,
+                notices: snapshot.notices.clone(),
+            });
         }
-        Ok(value["data"].clone())
+        if snapshot.status != QueryStatus::Ready {
+            let message = snapshot.notices.join("\n");
+            return Err(if message.is_empty() {
+                format!("{id} is not ready")
+            } else {
+                message
+            });
+        }
+        Ok(snapshot.data.unwrap_or(Value::Null))
     }
 }
 #[async_trait]
@@ -332,15 +355,20 @@ pub(crate) async fn preview(
                 if sending {
                     return Err("Preview this object before including it".into());
                 }
-                let mut arguments=json!({"expected_session":session,"name":field(&reference,"name")?,"path":[]});
-                if let Some(instance)=reference["workspace_instance_id"].as_str() { arguments["workspace_instance_id"]=json!(instance); }
-                let observation=reader.query("workspace.observe_object",arguments).await?;
+                let mut arguments =
+                    json!({"expected_session":session,"name":field(&reference,"name")?,"path":[]});
+                if let Some(instance) = reference["workspace_instance_id"].as_str() {
+                    arguments["workspace_instance_id"] = json!(instance);
+                }
+                let observation = reader.query("workspace.observe_object", arguments).await?;
                 reference["object_ref"] = observation["object_ref"].clone();
             }
             let table = s.inclusion == "selection";
-            let mut arguments=json!({"expected_session":session,"object_ref":field(&reference,"object_ref")?,"kind":if table{"table"}else{"structure"},"start":reference["start"].as_u64().unwrap_or(1),"limit":reference["limit"].as_u64().unwrap_or(20).min(20),"column_start":reference["column_start"].as_u64().unwrap_or(1),"column_limit":reference["column_limit"].as_u64().unwrap_or(6).min(10)});
-            if let Some(instance)=reference["workspace_instance_id"].as_str() { arguments["workspace_instance_id"]=json!(instance); }
-            let data=reader.query("workspace.read_object",arguments).await?;
+            let mut arguments = json!({"expected_session":session,"object_ref":field(&reference,"object_ref")?,"kind":if table{"table"}else{"structure"},"start":reference["start"].as_u64().unwrap_or(1),"limit":reference["limit"].as_u64().unwrap_or(20).min(20),"column_start":reference["column_start"].as_u64().unwrap_or(1),"column_limit":reference["column_limit"].as_u64().unwrap_or(6).min(10)});
+            if let Some(instance) = reference["workspace_instance_id"].as_str() {
+                arguments["workspace_instance_id"] = json!(instance);
+            }
+            let data = reader.query("workspace.read_object", arguments).await?;
             let page: ObjectReadPage =
                 serde_json::from_value(data.clone()).map_err(|e| e.to_string())?;
             let mut p = preview_base(s, &["summary", "selection"]);

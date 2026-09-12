@@ -1,0 +1,89 @@
+//! Explicit P2 real model + R source acceptance, always in a disposable project.
+use rho_contract::*;
+use rho_host::{ApplicationStore, ArkConfig, ComponentAgentService, NextHost};
+use serde_json::json;
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    if let Err(error) = probe().await {
+        eprintln!(
+            "{}",
+            json!({"phase":"component-source-probe","passed":false,"error":error})
+        );
+        std::process::exit(1);
+    }
+}
+async fn probe() -> Result<(), String> {
+    let temp = tempfile::tempdir().map_err(|_| "Cannot create temporary project")?;
+    let root = temp
+        .path()
+        .canonicalize()
+        .map_err(|_| "Cannot resolve project")?;
+    let project = root.to_string_lossy().into_owned();
+    let database = root.join("journal.sqlite");
+    let host = Arc::new(
+        NextHost::open_ark(
+            &database,
+            ArkConfig {
+                executable: PathBuf::from(std::env::var_os("RHO_ARK").ok_or("Missing RHO_ARK")?),
+                r_home: PathBuf::from(std::env::var_os("RHO_R_HOME").ok_or("Missing RHO_R_HOME")?),
+                project_root: root.clone(),
+                data_root: root.join("runtime"),
+                execution_timeout: Duration::from_secs(30),
+                library_path: None,
+                checkpoint_helper_path: None,
+            },
+        )
+        .await
+        .map_err(|_| "Cannot open R Host")?,
+    );
+    let service = ComponentAgentService::new(Arc::new(ApplicationStore::open(
+        &root.join("components.sqlite"),
+    )?));
+    let result=async {
+        let mut context=NextHost::local_context();context.connection_id="studio:source-probe".into();
+        let marker=format!("source-{}",uuid::Uuid::new_v4());
+        let color=["red","green","blue"][(uuid::Uuid::new_v4().as_bytes()[0]%3) as usize];
+        let code=format!("source_data <- data.frame(marker = '{marker}', value = 29L); par(mar=c(0,0,0,0)); plot.new(); rect(-1,-1,2,2,col='{color}',border=NA); invisible(NULL)");
+        let setup=host.invoke(&context,Invocation{client_request_id:"fixture-setup".into(),capability:CapabilityRef::new("workspace.run_r",1).unwrap(),arguments:json!({"workspace_instance_id":"main","code":code}),preconditions:vec![]}).await.map_err(|_|"Fixture execution failed")?;
+        if setup.status!=OperationStatus::Succeeded{return Err("Fixture did not succeed".into());}
+        let output:RunROutput=serde_json::from_value(setup.output.ok_or("Missing fixture output")?).map_err(|_|"Invalid fixture output")?;
+        let media=output.output_references.into_iter().find(|r|r.mime_type.starts_with("image/")).ok_or("Missing native plot")?;
+        let session=ComponentAgentSession{workspace_instance_id:"main".into(),session_id:output.session_id};
+        let ApplicationBridgeReply::Registered(registration)=serde_json::from_value(host.dispatch(&context,HostRequest::ApplicationBridge(ApplicationBridgeRequest::Register{window_id:"probe".into(),incarnation:uuid::Uuid::new_v4().to_string(),label:"Source acceptance".into(),previous_session:None})).await.map_err(|_|"Window registration failed")?).map_err(|_|"Invalid registration")? else{return Err("Unexpected registration".into());};
+        let window=registration.session.window.clone();
+        let protocol=match std::env::var("RHO_COMPONENT_MODEL_PROTOCOL").as_deref(){Ok("anthropic")=>ComponentModelProtocol::Anthropic,_=>ComponentModelProtocol::OpenaiCompletions};
+        service.configure(&host,&context,&project,&window,&ComponentModelSettings{version:0,enabled:true,connection:Some(ComponentModelConnection{protocol,base_url:std::env::var("RHO_COMPONENT_MODEL_BASE_URL").map_err(|_|"Missing model URL")?,model:std::env::var("RHO_COMPONENT_MODEL_ID").map_err(|_|"Missing model ID")?,credential:ComponentCredentialRef::Environment{name:std::env::var("RHO_COMPONENT_MODEL_KEY_ENV").map_err(|_|"Missing credential reference")?}})}).await.map_err(|_|"Model configuration failed")?;
+        let packages=host.dispatch(&context,HostRequest::QuerySnapshot(QueryRequest{capability:CapabilityRef::new("workspace.packages",1).unwrap(),arguments:json!({"workspace_instance_id":"main","expected_session":session.session_id,"package_name":"stats","mode":"installed"})})).await.map_err(|_|"Package observation failed")?;
+        let copy=&packages["data"]["packages"][0];let version=copy["version"].as_str().ok_or("Missing package version")?.to_string();
+        let cases=vec![
+            ("objects",ComponentAgentProfile::Objects,AgentContextSelection{source:"objects".into(),label:"source_data".into(),reference:json!({"workspace_instance_id":"main","expected_session":session.session_id,"name":"source_data"}),inclusion:"selection".into()},"Read the selected source_data context. Reply with only the exact string in the marker column, without quotes or formatting. Do not use tools.".to_string(),marker),
+            ("packages",ComponentAgentProfile::Packages,AgentContextSelection{source:"packages".into(),label:"stats".into(),reference:json!({"workspace_instance_id":"main","expected_session":session.session_id,"observation_id":packages["data"]["observation_id"],"package":"stats","library_path":copy["library_path"]}),inclusion:"summary".into()},"Read the selected installed-copy metadata. Reply with only its exact version number. Do not use tools.".to_string(),version),
+            ("plots",ComponentAgentProfile::Plots,AgentContextSelection{source:"plots".into(),label:"Native color plot".into(),reference:serde_json::to_value(&media).unwrap(),inclusion:"image".into()},"Inspect the actual attached image. Reply with only its dominant fill color as one lowercase English word. Do not use tools.".to_string(),color.to_string()),
+        ];
+        let connection=rusqlite::Connection::open(&database).map_err(|_|"Cannot inspect journal")?;
+        let count=||connection.query_row("SELECT COUNT(*) FROM operations",[],|r|r.get::<_,u64>(0)).unwrap();let before=count();
+        for (name,profile,selection,text,expected) in cases {
+            host.dispatch(&context,HostRequest::ApplicationBridge(ApplicationBridgeRequest::Renew{session:registration.session.clone()})).await.map_err(|_|"Window heartbeat failed")?;
+            let preview=service.preview_source(&host,&context,ComponentSourcePreviewRequest{project_root:project.clone(),window:window.clone(),session:Some(session.clone()),selection}).await.map_err(|e|e.to_string())?;
+            if let Some(error)=preview.error{return Err(error);}
+            let conversation=service.create(&host,&context,&project,&window,name,profile).map_err(|e|e.to_string())?;
+            let started=Instant::now();
+            let run=service.start(host.clone(),context.clone(),&project,ComponentAgentStart{request_id:format!("{name}-request"),conversation_id:conversation.conversation_id,conversation_version:conversation.version,window:window.clone(),model_settings_version:1,text,grant:ComponentAgentGrant{mode:ComponentAgentMode::Explain,session:Some(session.clone()),documents:vec![],files:vec![]},sources:vec![preview.snapshot.ok_or("Source is unavailable")?.selection]}).await.map_err(|e|e.to_string())?;
+            let terminal=tokio::time::timeout(Duration::from_secs(125),async{loop{let observed=service.run(&host,&context,&project,&run.run_id).map_err(|e|e.to_string())?;if observed.state.is_terminal(){return Ok::<_,String>(observed);}tokio::time::sleep(Duration::from_millis(25)).await;}}).await.map_err(|_|"Model deadline exceeded")??;
+            if terminal.state!=ComponentAgentRunState::Completed{return Err(format!("{name} failed: {:?}",terminal.reason));}
+            let page=service.events(&host,&context,&project,&run.run_id,0,128).map_err(|e|e.to_string())?;
+            let answer=page.events.into_iter().filter_map(|e|match e.content{ComponentAgentEventContent::Text{text}=>Some(text),_=>None}).collect::<String>();
+            if answer.trim()!=expected || count()!=before{return Err(format!("{name} source answer or scientific operation count did not match"));}
+            println!("{}",json!({"phase":"component-source-probe","profile":name,"passed":true,"model_calls":terminal.model_calls,"tool_calls":terminal.tool_calls,"additional_scientific_operations":0,"elapsed_ms":started.elapsed().as_millis()}));
+        }
+        Ok(())
+    }.await;
+    service.close().await;
+    result
+}

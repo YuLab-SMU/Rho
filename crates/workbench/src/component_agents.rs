@@ -16,6 +16,30 @@ fn owns_window(headers: &HeaderMap, window: &ApplicationWindowRef) -> bool {
         .and_then(|h| h.to_str().ok())
         == Some(&window.window_id)
 }
+pub(super) async fn preview_source(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<ComponentSourcePreviewRequest>,
+) -> Response {
+    if !owns_window(&headers, &request.window) {
+        return failure(
+            StatusCode::FORBIDDEN,
+            "Source preview belongs to another window",
+        );
+    }
+    let hosting = state.hosting.read().await;
+    let Some(selected) = &hosting.selected else {
+        return failure(StatusCode::CONFLICT, "Select a project first");
+    };
+    match state
+        .component_agents
+        .preview_source(&selected.host, &NextHost::local_context(), request)
+        .await
+    {
+        Ok(preview) => Json(preview).into_response(),
+        Err(error) => failure(StatusCode::CONFLICT, error.to_string()),
+    }
+}
 pub(super) async fn query(
     State(state): State<AppState>,
     Json(request): Json<ComponentAgentsQuery>,

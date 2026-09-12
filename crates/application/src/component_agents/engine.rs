@@ -34,10 +34,18 @@ pub struct ComponentToolSpec {
 pub struct ComponentEngineExecution {
     pub run: ComponentAgentRun,
     pub context: String,
+    pub images: Vec<ComponentImageInput>,
     pub tools: Vec<ComponentToolSpec>,
     pub key: ComponentModelKey,
     pub port: Arc<dyn ComponentRunPort>,
     pub cancellation: CancellationToken,
+}
+/// Verified image bytes are transient model input, never serialized in run records.
+pub struct ComponentImageInput {
+    pub reference: rho_contract::MediaReference,
+    pub mime_type: String,
+    pub base64: String,
+    pub sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

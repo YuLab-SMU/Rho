@@ -496,6 +496,7 @@ impl ComponentAgentOwner {
                 created_at_ms: now,
                 updated_at_ms: now,
                 reason: None,
+                context: None,
             },
         };
         conversation.active_run_id = Some(run_id);
@@ -938,5 +939,29 @@ impl ComponentAgentOwner {
         } else {
             Err(ApplicationError::Conflict)
         }
+    }
+
+    pub fn capture_context(
+        &self,
+        scope: &ApplicationScope,
+        run_id: &str,
+        context: ComponentAgentContext,
+        now: u64,
+    ) -> Result<(), ApplicationError> {
+        let _guard = self.gate.lock().map_err(storage)?;
+        let (conversation, mut run) = self.active(scope, run_id, now)?;
+        if run.run.state != ComponentAgentRunState::Queued || run.run.context.is_some() {
+            return Err(ApplicationError::Conflict);
+        }
+        if context.sources.len() > 16
+            || serde_json::to_vec(&context).map_err(storage)?.len() > 64 * 1024
+        {
+            return Err(ApplicationError::Budget(
+                "Selected context exceeds 64 KiB".into(),
+            ));
+        }
+        run.run.context = Some(context);
+        run.run.updated_at_ms = now;
+        self.save(scope, conversation, Some(&run), &[], &[], now)
     }
 }

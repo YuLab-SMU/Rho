@@ -5,14 +5,16 @@ import fs from "node:fs";
 import path from "node:path";
 const root = path.resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
-assert.ok(args.every(arg => arg === "--real-model"), "Only --real-model is supported");
-const real = args.includes("--real-model");
+assert.ok(args.every(arg => ["--real-model", "--real-sources"].includes(arg)), "Only --real-model and --real-sources are supported");
+const sources = args.includes("--real-sources");
+const real = args.includes("--real-model") || sources;
 if (real) {
   for (const name of ["RHO_COMPONENT_MODEL_BASE_URL", "RHO_COMPONENT_MODEL_ID", "RHO_COMPONENT_MODEL_KEY_ENV"]) {
     assert.ok(process.env[name], `Explicit model probe requires ${name}`);
   }
   assert.ok(process.env[process.env.RHO_COMPONENT_MODEL_KEY_ENV], "Selected credential reference is unavailable");
 }
+if (sources) for (const name of ["RHO_ARK", "RHO_R_HOME"]) assert.ok(process.env[name], `Real source checks require ${name}`);
 const directory = path.join(root, "target", "component-agent-probe", new Date().toISOString().replaceAll(":", "-"));
 fs.mkdirSync(directory, { recursive: true });
 async function run(label, command, echo = true) {
@@ -37,8 +39,9 @@ for (const forbidden of ["sqlx", "rig-sqlite", "lancedb", "fastembed", "ort", "d
 if (real) {
   await run("real-model", ["cargo", "run", "-p", "rho-agents", "--example", "provider_probe", "--locked"]);
   await run("real-host", ["cargo", "run", "-p", "rho-host", "--example", "component_agent_probe", "--locked"]);
+  if (sources) await run("real-sources", ["cargo", "run", "-p", "rho-host", "--example", "component_source_probe", "--locked"]);
 }
-const summary = { phase: "P1-read-only-integration", fakeProtocol: "passed", applicationAdmission: "passed", hostQueryIntegration: "passed", realModel: real ? "passed" : "not_run",
-  realProjectRead: real ? "passed" : "not_run", realRIntegration: "not_run", evidence: directory };
+const summary = { phase: "P2-sources", fakeProtocol: "passed", applicationAdmission: "passed", hostQueryIntegration: "passed", realModel: real ? "passed" : "not_run",
+  realProjectRead: real ? "passed" : "not_run", realRSources: sources ? "passed" : "not_run", evidence: directory };
 fs.writeFileSync(path.join(directory, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
 console.log(JSON.stringify(summary));

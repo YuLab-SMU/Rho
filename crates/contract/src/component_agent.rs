@@ -166,6 +166,50 @@ pub struct ComponentAgentRun {
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
     pub reason: Option<String>,
+    pub context: Option<ComponentAgentContext>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentSourceObservation {
+    pub capability: String,
+    pub target: crate::TargetRef,
+    pub source: String,
+    pub observed_at_ms: i64,
+    pub status: crate::QueryStatus,
+    pub completeness: crate::ObservationCompleteness,
+    pub notices: Vec<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentSourceSnapshot {
+    pub selection: AgentContextSelection,
+    pub title: String,
+    pub description: String,
+    pub text: String,
+    pub native_data: serde_json::Value,
+    pub truncated: bool,
+    pub observations: Vec<ComponentSourceObservation>,
+    pub evidence: Vec<ComponentAgentEvidence>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentAgentContext {
+    pub sources: Vec<ComponentSourceSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentSourcePreviewRequest {
+    pub project_root: String,
+    pub window: ApplicationWindowRef,
+    pub session: Option<ComponentAgentSession>,
+    pub selection: AgentContextSelection,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentSourcePreview {
+    pub snapshot: Option<ComponentSourceSnapshot>,
+    pub image_base64: Option<String>,
+    pub image_mime_type: Option<String>,
+    pub observations: Vec<ComponentSourceObservation>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

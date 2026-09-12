@@ -17,7 +17,7 @@ resident providers. Existing `workspace.help` remains the explicit operation pat
 The new native R checks pass for state preservation, UTF-8 boundaries and changed
 or missing evidence; the real Ark/Host test confirms paging without increasing
 the scientific operation count. Existing native help/format/lint regressions pass.
-Context attachments, image delivery and the component UI are still pending.
+Component sources and selected-image delivery are now connected; the UI is pending.
 Read-help validation also passed twenty Workspace/R-adapter unit tests, generated
 client types, client build/check, the main build and architecture/governance checks. Native evidence
 is in `target/component-read-help-{real-r,native-regression,rust}.log`; the real R
@@ -39,14 +39,39 @@ invalidate the user's draft version. Event pruning retains tool receipts and rep
 history gaps. Original Contract/Application/SQLite behavior passed its 52 tests;
 13 new admission tests cover these component records and injected write failure.
 
-The Host service now runs **Explain without attached sources**. It derives tools
+The Host service now runs **Explain with validated attached sources**. It derives tools
 from the actual registry, resolves local schema references, hides and injects window
 and R-session fields, and validates both model and native schemas. It reloads each
 persisted action before dispatch and rejects an altered ticket. Queries retain the
 full owner snapshot, including partial/busy/unavailable states. Native session holds
 are scoped to a query; the current project and principal are preserved. Model
-selection is fixed for each run. Edit/Run and attached-context expansion remain
-explicitly unavailable until their subsequent vertical phases are connected.
+selection is fixed for each run. Edit/Run dispatch remains explicitly unavailable
+until the authorized-write phase is connected.
+
+`/api/agents/components/context` previews files, editor selections, objects/tables,
+installed package copies, console state and R-session metadata without a model call.
+Send revalidates the original file/document/observation identities, captures bounded
+text and evidence in the run, and sends verified selected images through a separate
+transient channel. Images are limited to two and 2 MiB each; their bytes are excluded
+from the text budget and are not persisted in conversation text. Source observations
+retain owner status, completeness and time. Stale/cross-window/session sources fail
+before model admission; duplicate accepted requests keep their captured input.
+Native stdin is omitted from model context, and output-view tool responses explicitly
+say whether the image was already included rather than embedding Base64 in text.
+
+Real Ark/R source acceptance passed for objects, packages and a native plot with no
+additional scientific records. The configured real model then independently read
+an unseen object marker, the installed stats version and a randomized native plot
+color correctly. Each used one model call and no additional scientific operation;
+the single attempts took 1,148 / 1,682 / 2,832 ms respectively. This does not replace
+the 27-case final acceptance or model-connection/vision diagnostics still to be added.
+Evidence: `target/component-sources-real-r.log` and
+`target/component-source-real-model.log`. File source/change/repeated-request tests
+also passed in `target/component-context-tests.log`.
+The final context regression passed 42 deterministic cases (10 engine, 13 storage,
+8 Host and 11 Workbench), client type generation/build/check and focused Clippy with
+the previously documented Host-style baseline exceptions. Logs are
+`target/component-context-*.log`; this does not claim the full workspace regression.
 
 `/api/agents/components/query`, `/command` and the separate transient `/credential`
 route use the existing browser authentication and window checks. The MCP-only
@@ -92,8 +117,8 @@ package/version nodes relative to its previous lock; its hash and counts remain 
 the shipped Rho size increase. The active engine graph excludes vector stores,
 embedded inference, Rig SQLite/memory and a replacement MCP dependency.
 
-Next: P2's validated component sources, actual R Objects/Packages/Plots and verified
-image delivery, plus Paper B01–B06 review before UI implementation. P3 authorized
+Next: finish P2's source search and model/vision diagnostics, plus Paper B01–B06
+review before UI implementation. P3 authorized
 writes and seven usable entrances, P4 recovery/continuation/terminal-store failure
 handling and resource stress, and P5 complete regression/real-model/performance
 acceptance remain outstanding. The current real checks use disposable projects;
