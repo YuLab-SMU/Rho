@@ -31,6 +31,8 @@ pub mod objects;
 pub use objects::*;
 pub mod package_index;
 pub use package_index::*;
+mod package_help;
+pub use package_help::*;
 pub mod application;
 pub use application::*;
 pub mod media;

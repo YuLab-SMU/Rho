@@ -968,6 +968,7 @@ impl NextHost {
                 WorkspaceQueryKind::ObserveObject,
                 WorkspaceQueryKind::ReadObject,
                 WorkspaceQueryKind::PackageIndex,
+                WorkspaceQueryKind::ReadHelp,
             ] {
                 registry.register_query(Arc::new(WorkspaceQueryHandler::new(
                     workspace.clone(),

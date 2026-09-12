@@ -30,6 +30,11 @@ pub fn builtin_documentation(id: &str) -> CapabilityDocumentation {
             "Read structure, base vector values, list children, table rows/columns or long text through an exact object_ref. Follow next_start, next_column_start and next_text_start separately. For a shortened data-frame cell append its column index to path and use kind=text/start=row. For an atomic matrix cell retain path and use start=row+(column-1)*nrow. For names/levels set text_attribute. R indices and text character positions start at 1; text_limit_bytes is a UTF-8 byte budget. Unknown classes remain metadata only.",
             json!({"expected_session":"session-example","object_ref":"object_2","kind":"table","start":201,"limit":100,"column_start":1,"column_limit":20}),
         ),
+        "workspace.read_help" => (
+            "Read help from an observed package copy",
+            "Read bounded UTF-8 help pages from the exact package observation and index files. Only already-resident tools/utils providers are used; no namespaces, examples, dynamic Rd stages, scientific operations or output artifacts are created. Continuation requires the returned help file identities.",
+            json!({"expected_session":"session-example","observation_id":"packages_example","package":"stats","library_path":"/observed/R/library","topic":"lm","expected_index_files":[{"path":"DESCRIPTION","digest":"md5:observed"},{"path":"NAMESPACE","digest":"md5:observed"},{"path":"help/AnIndex","digest":"md5:observed"},{"path":"INDEX","digest":"md5:observed"}],"limit_bytes":16384}),
+        ),
         "workspace.package_index" => (
             "Investigate one installed package copy",
             "Read static DESCRIPTION, NAMESPACE declarations and help aliases/topics for the exact observed package and library copy. Subsequent pages bind index_ref and file digests; unresolved conditional/exportPattern declarations are explicitly partial. This does not load a namespace or test loadability.",

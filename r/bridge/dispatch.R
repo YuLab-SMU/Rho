@@ -1,15 +1,16 @@
 # Loaded into a private environment by the Ark adapter. No Operation or Store policy here.
 rho_dispatch <- function(request) {
   stopifnot(identical(request$protocol_version, 1L),
-            request$action %in% c("execute", "checkpoint_capture", "checkpoint_restore", "snapshot", "packages", "inspect_object", "list_objects", "observe_object", "read_object", "package_index", "help", "lint", "format"),
+            request$action %in% c("execute", "checkpoint_capture", "checkpoint_restore", "snapshot", "packages", "inspect_object", "list_objects", "observe_object", "read_object", "package_index", "read_help", "help", "lint", "format"),
             is.character(request$request_id), length(request$request_id) == 1L)
-  if (request$action %in% c("snapshot", "packages", "inspect_object", "list_objects", "observe_object", "read_object", "package_index")) {
+  if (request$action %in% c("snapshot", "packages", "inspect_object", "list_objects", "observe_object", "read_object", "package_index", "read_help")) {
     failure <- NULL
     value <- tryCatch(switch(request$action,
                     list_objects = rho_list_objects(request$payload),
                     observe_object = rho_observe_object(request$payload),
                     read_object = rho_read_object(request$payload),
                     package_index = rho_package_index(request$payload),
+                    read_help = rho_read_help(request$payload),
                     snapshot = rho_workspace_snapshot(request$payload$limit),
                     packages = rho_packages(request$payload),
                     inspect_object = rho_inspect_object(request$payload$name, request$payload$max_items)),

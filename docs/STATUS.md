@@ -10,6 +10,19 @@ page, including 600 px/320 px content, source evidence, settings and recovery st
 Screenshots were inspected and the original fourteen Agent boards were preserved.
 User review is pending; no new Studio interface has been implemented from them.
 
+P2 now has a real read-only `workspace.read_help` capability in the Workspace
+owner and both single/multi-session registries. It reads one observed installed
+copy using index/help file identities, paginates UTF-8 text and refuses absent
+resident providers. Existing `workspace.help` remains the explicit operation path.
+The new native R checks pass for state preservation, UTF-8 boundaries and changed
+or missing evidence; the real Ark/Host test confirms paging without increasing
+the scientific operation count. Existing native help/format/lint regressions pass.
+Context attachments, image delivery and the component UI are still pending.
+Read-help validation also passed twenty Workspace/R-adapter unit tests, generated
+client types, client build/check, the main build and architecture/governance checks. Native evidence
+is in `target/component-read-help-{real-r,native-regression,rust}.log`; the real R
+test uses a disposable Host and confirms zero additional scientific records.
+
 The user authorized the [implementation plan](BUILTIN-AGENT-PLAN.md). P0 and the
 P1 backend are implemented: `rho-agents` uses the pinned Rig 0.42 driver through
 engine-neutral Application ports; Host composes the service and shared query

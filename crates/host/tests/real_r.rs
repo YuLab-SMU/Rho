@@ -28,6 +28,76 @@ fn query(id: &str, mut arguments: serde_json::Value) -> QueryRequest {
 }
 
 #[tokio::test]
+#[ignore = "requires real Ark/R; run scripts/test-real-r.mjs"]
+async fn real_r_read_help_is_a_paged_query_without_scientific_records() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("help.sqlite");
+    let host = NextHost::open_ark(
+        &database,
+        ArkConfig {
+            executable: PathBuf::from(std::env::var_os("RHO_ARK").expect("RHO_ARK required")),
+            r_home: PathBuf::from(std::env::var_os("RHO_R_HOME").expect("RHO_R_HOME required")),
+            project_root: directory.path().into(),
+            data_root: directory.path().join("runtime"),
+            execution_timeout: Duration::from_secs(30),
+            library_path: None,
+            checkpoint_helper_path: None,
+        },
+    )
+    .await
+    .unwrap();
+    let context = NextHost::local_context();
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    let count = || {
+        connection
+            .query_row("SELECT COUNT(*) FROM operations", [], |row| {
+                row.get::<_, u64>(0)
+            })
+            .unwrap()
+    };
+    let before = count();
+    let inventory = host
+        .query_snapshot(
+            &context,
+            query(
+                "workspace.packages",
+                json!({"package_name":"base","mode":"installed"}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(inventory.status, QueryStatus::Ready);
+    let data = inventory.data.unwrap();
+    let copy = &data["packages"][0];
+    let index=host.query_snapshot(&context,query("workspace.package_index",json!({"expected_session":inventory.target.identity,"observation_id":data["observation_id"],"package":"base","library_path":copy["library_path"],"limit":1}))).await.unwrap();
+    let mut arguments = json!({"expected_session":inventory.target.identity,"observation_id":data["observation_id"],"package":"base","library_path":copy["library_path"],"topic":"mean","expected_index_files":index.data.unwrap()["files"],"limit_bytes":128});
+    let mut text = String::new();
+    loop {
+        let page = host
+            .query_snapshot(&context, query("workspace.read_help", arguments.clone()))
+            .await
+            .unwrap();
+        assert_eq!(page.status, QueryStatus::Ready);
+        let data = page.data.unwrap();
+        text.push_str(data["text"].as_str().unwrap());
+        if data["complete"] == true {
+            break;
+        }
+        assert_eq!(page.next_reads.len(), 1);
+        arguments = page.next_reads[0].arguments.clone();
+    }
+    assert!(text.contains("Arithmetic Mean"));
+    assert_eq!(count(), before);
+    arguments["expected_session"] = json!("old-native-session");
+    assert!(
+        host.query_snapshot(&context, query("workspace.read_help", arguments))
+            .await
+            .is_err()
+    );
+    assert_eq!(count(), before);
+}
+
+#[tokio::test]
 #[ignore = "requires real Ark/R with lintr and styler; run scripts/test-real-r.mjs"]
 async fn real_r_tools_use_native_libraries_and_the_shared_operation_path() {
     let directory = tempfile::tempdir().unwrap();

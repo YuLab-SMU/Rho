@@ -160,7 +160,7 @@ profile 仅保存说明、能力允许列表、来源类型、可用动作、模
 | Profile / 入口 | 用户场景 | 读取与动作 |
 | --- | --- | --- |
 | Objects | 解释结构、大小、维度，比较两个已选对象 | `workspace.list_objects/observe_object/read_object`；比较由读取结果推理，不能偷跑 summary/print |
-| Packages | 解释版本、安装副本、函数用法或来源 | `workspace.packages/package_index/help`；不加载、安装、更新包，不从当前仓库推断安装历史 |
+| Packages | 解释版本、安装副本、函数用法或来源 | `workspace.packages/package_index/read_help`；不加载、安装、更新包，不从当前仓库推断安装历史 |
 | Plots | 解释选中图、比较两张图、查产生它的执行 | `workspace.list_outputs/read_output`、`output.view`、原操作；显示原始媒体引用，有视觉能力才做图像判断 |
 | Documents | 解释选区、改写函数、修复代码 | `application.read_document/context`；获授权后 EditDocument/Save/RunFile，保留文档版本与捕获 |
 | Console / Workspace | 解读错误，定位失败队列，运行明确代码 | runtime/console 状态、原操作、包与有界对象观察；执行模式下 `workspace.run_r` 或 captured Run；只控制本次关联操作 |

@@ -429,6 +429,7 @@ enum BridgeAction<'a> {
     ),
     ReadObject(&'a rho_workspace::ScopedWorkspaceArguments<rho_contract::ReadObjectArguments>),
     PackageIndex(&'a rho_workspace::ScopedWorkspaceArguments<rho_contract::PackageIndexArguments>),
+    ReadHelp(&'a rho_workspace::ScopedWorkspaceArguments<rho_contract::ReadPackageHelpArguments>),
     Help(&'a HelpArguments),
     Lint(&'a LintArguments),
     Format(&'a FormatArguments),
@@ -613,6 +614,7 @@ impl WorkspaceRuntime for ArkRuntime {
             WorkspaceQuery::ObserveObject(args) => BridgeAction::ObserveObject(args),
             WorkspaceQuery::ReadObject(args) => BridgeAction::ReadObject(args),
             WorkspaceQuery::PackageIndex(args) => BridgeAction::PackageIndex(args),
+            WorkspaceQuery::ReadHelp(args) => BridgeAction::ReadHelp(args),
         };
         let (response, _, result_path) = self
             .bridge_call(&id, action, watch::channel(false).1)
@@ -649,6 +651,9 @@ impl WorkspaceRuntime for ArkRuntime {
                     .map_err(before)?,
             )
             .map_err(before)?,
+            WorkspaceQuery::ReadHelp(_) => serde_json::to_value(
+                serde_json::from_value::<rho_contract::PackageHelpPage>(response.value).map_err(before)?,
+            ).map_err(before)?,
             WorkspaceQuery::Packages(_) => {
                 let data: rho_contract::PackageSnapshotData =
                     serde_json::from_value(response.value).map_err(before)?;
@@ -821,6 +826,7 @@ impl ArkRuntime {
             | BridgeAction::ObserveObject(_)
             | BridgeAction::ReadObject(_)
             | BridgeAction::PackageIndex(_) => None,
+            BridgeAction::ReadHelp(_) => None,
             _ => Some(rho_contract::OperationId::new(id).map_err(before)?),
         };
         let bridge_request = BridgeRequest {

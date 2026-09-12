@@ -133,7 +133,7 @@ pub fn component_query_allowed(profile: ComponentAgentProfile, capability: &str)
     );
     let packages = matches!(
         capability,
-        "workspace.packages" | "workspace.package_index" | "workspace.help"
+        "workspace.packages" | "workspace.package_index" | "workspace.read_help"
     );
     let plots = matches!(
         capability,

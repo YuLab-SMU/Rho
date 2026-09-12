@@ -75,6 +75,38 @@ rho_help <- function(payload) {
        preview_truncated = nchar(text) > payload$max_chars, truncated = FALSE)
 }
 
+rho_help_text_page <- function(text, offset, limit) {
+  bytes <- charToRaw(enc2utf8(text)); total <- length(bytes)
+  if (offset > total || (offset < total && bitwAnd(as.integer(bytes[[offset + 1L]]), 192L) == 128L)) rho_object_error("invalid_input", "Help offset is not a UTF-8 boundary.")
+  to <- min(total, offset + limit)
+  while (to < total && to > offset && bitwAnd(as.integer(bytes[[to + 1L]]), 192L) == 128L) to <- to - 1L
+  list(text = if (to > offset) rawToChar(bytes[seq.int(offset + 1L, to)]) else "",
+       offset_utf8 = offset, next_offset_utf8 = if (to < total) to else NULL,
+       total_bytes = total, complete = to == total)
+}
+
+# Exact-copy help for the Query lane. Missing providers remain unavailable.
+rho_read_help <- function(payload) {
+  get_help <- rho_readonly_binding("utils", ".getHelpFile")
+  render <- rho_readonly_binding("tools", "Rd2txt")
+  capture <- rho_readonly_binding("utils", "capture.output")
+  copy <- rho_package_exact_copy(payload)
+  path <- copy$path
+  index_files <- rho_package_index_files(path)
+  if (!identical(index_files, payload$expected_index_files)) rho_object_error("content_changed", "Package index changed before help reading.")
+  help_files <- rho_help_exact_files(path)
+  if (!is.null(payload$expected_help_files) && !identical(help_files, payload$expected_help_files)) rho_object_error("content_changed", "Help files changed between pages.")
+  entry <- rho_help_exact_entry(path, payload$topic)
+  found <- length(entry) == 1L
+  text <- if (found) paste(capture(render(get_help(entry[[1L]]), stages = character(), options = list(underline_titles = FALSE))), collapse = "\n") else ""
+  text <- enc2utf8(text)
+  if (nchar(text, type = "bytes") > 16 * 1024 * 1024) rho_object_error("budget_exhausted", "Rendered help exceeds 16 MiB.")
+  if (!identical(index_files, rho_package_index_files(path)) || !identical(help_files, rho_help_exact_files(path))) rho_object_error("content_changed", "Package help changed during reading.")
+  c(list(observation_id = payload$observation_id, package = payload$package, library_path = payload$library_path,
+         topic = payload$topic, found = found, help_files = help_files),
+    rho_help_text_page(text, payload$offset_utf8, payload$limit_bytes))
+}
+
 rho_lint <- function(payload) {
   if (!requireNamespace("lintr", quietly = TRUE)) {
     stop("workspace.lint requires an installed lintr package; no package was installed")

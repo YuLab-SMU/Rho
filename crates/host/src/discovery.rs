@@ -470,7 +470,7 @@ fn truncate(text: &mut String, bound: usize) -> bool {
 pub(crate) fn module_for(id: &str) -> &str {
     match id {
         "workspace.runtime_status" | "workspace.snapshot" => "session",
-        "workspace.packages" | "workspace.package_index" | "workspace.help" => "packages",
+        "workspace.packages" | "workspace.package_index" | "workspace.help" | "workspace.read_help" => "packages",
         "workspace.inspect_object"
         | "workspace.list_objects"
         | "workspace.observe_object"

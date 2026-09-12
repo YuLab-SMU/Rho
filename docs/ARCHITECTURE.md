@@ -350,6 +350,13 @@ It locates a selected copy/topic, renders without dynamic Rd stages/examples onc
 and stores a text artifact. Later pages use `output.read_text`; help documents do
 not enter Plots.
 
+`workspace.read_help` is the corresponding Query for read-only investigation.
+It requires the observed copy, native session and package index file identities;
+continued UTF-8 pages also require the returned help database identities. It uses
+only resident utils/tools bindings and reports unavailable instead of loading a
+provider. File changes reject continuation. It does not invalidate object handles,
+execute dynamic Rd/examples, create scientific records or append output artifacts.
+
 Project text observations bind content hashes and native file identity. Line and
 long-line fragments from `project.read_text` cannot silently combine replacements.
 `project.search_text` separates scanned bytes/entries from result budgets and

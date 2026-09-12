@@ -86,6 +86,7 @@ pub enum WorkspaceQuery {
     ObserveObject(ScopedWorkspaceArguments<ObserveObjectArguments>),
     ReadObject(ScopedWorkspaceArguments<ReadObjectArguments>),
     PackageIndex(ScopedWorkspaceArguments<PackageIndexArguments>),
+    ReadHelp(ScopedWorkspaceArguments<rho_contract::ReadPackageHelpArguments>),
 }
 impl WorkspaceQuery {
     fn expected_session(&self) -> Option<&str> {
@@ -97,6 +98,7 @@ impl WorkspaceQuery {
             Self::ObserveObject(a) => Some(&a.arguments.expected_session),
             Self::ReadObject(a) => Some(&a.arguments.expected_session),
             Self::PackageIndex(a) => Some(&a.arguments.expected_session),
+            Self::ReadHelp(a) => Some(&a.arguments.expected_session),
         }
     }
 }
@@ -112,6 +114,7 @@ pub struct WorkspaceObservation {
 
 #[derive(Clone, Copy)]
 pub enum WorkspaceQueryKind {
+    ReadHelp,
     Packages,
     Snapshot,
     InspectObject,
@@ -129,6 +132,10 @@ pub struct WorkspaceQueryHandler {
 impl WorkspaceQueryHandler {
     pub fn new(owner: Arc<WorkspaceRunHandler>, kind: WorkspaceQueryKind) -> Self {
         let (id, input_schema) = match kind {
+            WorkspaceQueryKind::ReadHelp => (
+                "workspace.read_help",
+                schema_for!(rho_contract::ReadPackageHelpArguments).to_value(),
+            ),
             WorkspaceQueryKind::ListObjects => (
                 "workspace.list_objects",
                 schema_for!(ListObjectsArguments).to_value(),
@@ -165,6 +172,9 @@ impl WorkspaceQueryHandler {
                 domain: "workspace".into(),
                 input_schema,
                 output_schema: match kind {
+                    WorkspaceQueryKind::ReadHelp => {
+                        schema_for!(rho_contract::PackageHelpPage).to_value()
+                    }
                     WorkspaceQueryKind::ListObjects => schema_for!(ObjectDirectoryPage).to_value(),
                     WorkspaceQueryKind::ObserveObject => schema_for!(ObjectObservation).to_value(),
                     WorkspaceQueryKind::ReadObject => schema_for!(ObjectReadPage).to_value(),
@@ -187,6 +197,41 @@ impl WorkspaceQueryHandler {
     fn parse(&self, arguments: &Value) -> Result<WorkspaceQuery, OperationError> {
         let invalid = |e: serde_json::Error| OperationError::InvalidInput(e.to_string());
         match self.kind {
+            WorkspaceQueryKind::ReadHelp => {
+                let a: rho_contract::ReadPackageHelpArguments =
+                    serde_json::from_value(arguments.clone()).map_err(invalid)?;
+                validate_reference(Some(&a.observation_id))?;
+                let files_ok = |files: &[rho_contract::PackageFileIdentity]| {
+                    files.len() == 4
+                        && files
+                            .iter()
+                            .all(|f| f.path.len() <= 128 && f.digest.len() <= 32768)
+                };
+                if a.package.is_empty()
+                    || a.package.len() > 128
+                    || !a.package.starts_with(|c: char| c.is_ascii_alphabetic())
+                    || !a
+                        .package
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'.')
+                    || a.library_path.is_empty()
+                    || a.library_path.len() > 16384
+                    || a.library_path.contains('\0')
+                    || a.topic.trim().is_empty()
+                    || a.topic.len() > 128
+                    || a.topic.chars().any(char::is_control)
+                    || !files_ok(&a.expected_index_files)
+                    || a.expected_help_files.as_ref().is_some_and(|f| !files_ok(f))
+                    || !(4..=32768).contains(&a.limit_bytes)
+                    || a.offset_utf8 > 16 * 1024 * 1024
+                    || (a.offset_utf8 > 0 && a.expected_help_files.is_none())
+                {
+                    return Err(OperationError::InvalidInput("Help reading requires an observed package/index, bounded topic, 4..=32768 bytes and help identities for continuation".into()));
+                }
+                Ok(WorkspaceQuery::ReadHelp(ScopedWorkspaceArguments::unbound(
+                    a,
+                )))
+            }
             WorkspaceQueryKind::ListObjects => {
                 let a: ListObjectsArguments =
                     serde_json::from_value(arguments.clone()).map_err(invalid)?;
@@ -344,6 +389,7 @@ impl QueryHandler for WorkspaceQueryHandler {
             WorkspaceQuery::ObserveObject(a) => serde_json::to_value(a.arguments),
             WorkspaceQuery::ReadObject(a) => serde_json::to_value(a.arguments),
             WorkspaceQuery::PackageIndex(a) => serde_json::to_value(a.arguments),
+            WorkspaceQuery::ReadHelp(a) => serde_json::to_value(a.arguments),
         }
         .map_err(|e| OperationError::InvalidInput(e.to_string()))
     }
@@ -355,6 +401,7 @@ impl QueryHandler for WorkspaceQueryHandler {
                 | WorkspaceQueryKind::ObserveObject
                 | WorkspaceQueryKind::ReadObject
                 | WorkspaceQueryKind::PackageIndex
+                | WorkspaceQueryKind::ReadHelp
         ) {
             return Err(OperationError::InvalidInput(
                 "Reference-bearing Workspace queries require trusted CallContext".into(),
@@ -389,6 +436,7 @@ impl WorkspaceQueryHandler {
                 WorkspaceQuery::ObserveObject(a) => a.scope = scope,
                 WorkspaceQuery::ReadObject(a) => a.scope = scope,
                 WorkspaceQuery::PackageIndex(a) => a.scope = scope,
+                WorkspaceQuery::ReadHelp(a) => a.scope = scope,
                 _ => {}
             }
         }
@@ -460,6 +508,12 @@ impl WorkspaceQueryHandler {
             bound["expected_session"] = serde_json::json!(snapshot.target.identity);
             if let Some(data) = &snapshot.data {
                 match self.kind {
+                    WorkspaceQueryKind::ReadHelp=>{
+                        if let Some(offset)=data.get("next_offset_utf8").filter(|value|!value.is_null()) {
+                            bound["offset_utf8"]=offset.clone();bound["expected_help_files"]=data["help_files"].clone();
+                            snapshot.next_reads.push(rho_contract::NextRead::query(id,"Continue the same help file identities",bound));
+                        }
+                    },
                     WorkspaceQueryKind::Snapshot=>snapshot.next_reads.push(rho_contract::NextRead::query("workspace.list_objects","Browse a stable complete binding directory",serde_json::json!({"expected_session":snapshot.target.identity,"limit":100}))),
                     WorkspaceQueryKind::InspectObject=>snapshot.next_reads.push(rho_contract::NextRead::query("workspace.observe_object","Open an observation that supports continued investigation",serde_json::json!({"expected_session":snapshot.target.identity,"name":arguments["name"]}))),
                     WorkspaceQueryKind::ObserveObject=>snapshot.next_reads.push(rho_contract::NextRead::query("workspace.read_object","Read metadata and supported structure from this exact observation",serde_json::json!({"expected_session":snapshot.target.identity,"object_ref":data["object_ref"],"kind":"structure"}))),

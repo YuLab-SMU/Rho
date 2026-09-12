@@ -346,6 +346,7 @@ observations, reopen deliberately; do not join pages from different versions.
 | Live objects | `workspace.list_objects` → `observe_object` / `read_object`; bind `expected_session`, retain directory/object reference and structured path |
 | Saved project text | `project.read_text`, `project.search_text`; retain file identity/hash and returned continuation, including long-line fragments and scan pages with zero matches |
 | Installed package copy | `workspace.packages`, then `workspace.package_index` with observation, native session, package and exact library path |
+| Read-only package help | `workspace.read_help` with the same observation/copy and index file identities; follow its UTF-8 continuation and help-file identities without creating an Operation |
 | Help evidence | Explicit `workspace.help`, then `output.read_text` using its `text_reference`; later pages do not render help again |
 | Image evidence | MCP `rho.output.view` or shared `output.view`; crop in original pixel coordinates and keep the original reference |
 | Execution/recovery | Original operation record, output events and owner-specific status/retention reads; accepted or cancellation-requested does not mean completed/stopped |
@@ -526,6 +527,11 @@ retain their source, time and completeness.
 `workspace.help` accepts `topic`, optional `package` and bounded preview `max_chars`.
 `library_path` plus `observation_id` selects an exact copy; `expected_index_files`
 checks the index evidence. Full text is retained once as a separate text artifact.
+For a read-only query use `workspace.read_help`: provide `expected_session`,
+`observation_id`, `package`, `library_path`, `topic` and `expected_index_files` from
+the package index. Its `limit_bytes` is 4–32768; `next_reads` retains UTF-8 offsets
+and `expected_help_files` for continuation. Missing resident help providers stay
+unavailable, and changing package/help files invalidate the read.
 Lint/format accept up to 64 KiB of code; lintr/styler must already be installed.
 They do not evaluate the supplied program or edit files. Help avoids dynamic Rd
 execution; lint avoids project `.lintr` configuration. Format output over 128 KiB
