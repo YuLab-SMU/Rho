@@ -9,6 +9,9 @@ The [implementation plan](BUILTIN-AGENT-PLAN.md) is authorized. The user approve
 2026-09-13. The Rig backend and the seven Studio entrances are now implemented.
 The first-version implementation and scoped acceptance are complete, with the
 verification limits below. No deployment or installation is implied.
+The user reviewed the launched local binary and confirmed it was usable on
+2026-09-13. The independent preview was then stopped through native session
+shutdown and Workbench Quit, retaining its recovery copy.
 
 The optional `rho-agents` crate pins Rig 0.42; Application owns conversations,
 request identities, scopes and receipts. Host binds the existing scientific ports.
