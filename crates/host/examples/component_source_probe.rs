@@ -99,7 +99,9 @@ async fn probe() -> Result<(), String> {
             let page=service.events(&host,&context,&project,&run.run_id,0,128).map_err(|e|e.to_string())?;
             let answer=page.events.into_iter().filter_map(|e|match e.content{ComponentAgentEventContent::Text{text}=>Some(text),_=>None}).collect::<String>();
             let correct=if name=="plots" {image_color(&answer)==Some(expected.as_str())} else {answer.trim()==expected};
-            if !correct || count()!=before{return Err(format!("{name} source answer or scientific operation count did not match"));}
+            let after=count();
+            println!("{}",json!({"phase":"component-source-evidence","profile":name,"expected":expected,"answer":answer,"correct":correct,"scientific_operations_before":before,"scientific_operations_after":after,"model_calls":terminal.model_calls,"tool_calls":terminal.tool_calls}));
+            if !correct || after!=before{return Err(format!("{name} source answer or scientific operation count did not match"));}
             println!("{}",json!({"phase":"component-source-probe","profile":name,"passed":true,"model_calls":terminal.model_calls,"tool_calls":terminal.tool_calls,"additional_scientific_operations":0,"elapsed_ms":started.elapsed().as_millis()}));
         }
         if std::env::args().any(|arg|arg=="--with-run") || selected.as_deref()==Some("workspace") {
@@ -127,6 +129,9 @@ async fn probe() -> Result<(), String> {
         Ok(())
     }.await;
     service.close().await;
+    if result.is_err() {
+        eprintln!("{}", json!({"phase":"retained-source-fixture","path":temp.keep()}));
+    }
     result
 }
 

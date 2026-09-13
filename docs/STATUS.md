@@ -142,14 +142,27 @@ Current evidence:
   tool/native evidence before its execution-count assertion. Earlier passing
   Workspace responses alone did not prove a returned native value. The production
   receipt checksum and queue-precondition changes require a new complete matrix.
-  A fourth fixed-source matrix finished at code commit `285ca1c3` with 26/27 passed.
-  All seven profile cases passed three times; document repair passed three times.
+  A fourth fixed-source matrix finished at code commit `285ca1c3` with 25/27 passed.
+  Six profile cases passed three times, Plots passed twice, and document repair
+  passed three times. Plots' third repeat reported an answer/operation-count mismatch;
+  its current log is insufficient to distinguish those causes. The earlier live
+  status missed this failure; the complete summary is authoritative.
   The first produced-plot repair stopped on a typed provider/stream error after
   the original saved R failure and two reads, before submitting an edit; the other
   two repeats passed. This is not a complete passing model acceptance. Its
   evidence is `target/component-matrix/2026-09-13T07-20-03.997Z/summary.json` and
-  `target/component-matrix-preconditions.log`. Verify explicit continuation from
-  this kind of interrupted repair before the next complete matrix.
+  `target/component-matrix-preconditions.log`. Source probes now record expected
+  and actual answers plus before/after operation counts, and retain failed temporary
+  projects. Progress output and JSON summaries include cumulative failures.
+  Targeted Plots repeats then passed 2/3: one response claimed no image was delivered,
+  despite a passed synthetic image diagnostic and unchanged scientific operation
+  counts. Its retained original PNG was visually verified as solid green (800×600).
+  Evidence: `target/component-matrix/2026-09-13T07-40-27.070Z/summary.json`; the failed
+  case log records its retained fixture location. This subset is not a full matrix.
+  Verify Anthropic outbound image content/delivery and explicit continuation from
+  the interrupted repair before the next complete matrix. The source probe build,
+  selected Clippy with existing style exceptions and matrix self-test passed:
+  `target/component-source-evidence-{build,clippy-final}.log`.
   Focused validation passed 32 Application, 28 SQLite, 14 real-R and 365 UI tests,
   contract generation/client build/check, architecture and documentation fixtures.
   Evidence: `target/component-precondition-{application,store,native,ui,client}.log`.

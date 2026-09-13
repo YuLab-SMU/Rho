@@ -55,7 +55,11 @@ const report = {
   matrixComplete: false, allPassed: false,
   note: "Backend scenario evidence only; UI review, UI performance and full workspace regression are separate gates. Synthetic diagnostics are additional model calls.",
 };
-const save = () => fs.writeFileSync(path.join(directory, "summary.json"), JSON.stringify(report, null, 2) + "\n");
+const save = () => {
+  report.passedScenarios = report.attempts.filter(attempt => attempt.passed).length;
+  report.failedScenarios = report.attempts.filter(attempt => !attempt.passed).map(({ id, repetition, log }) => ({ id, repetition, log }));
+  fs.writeFileSync(path.join(directory, "summary.json"), JSON.stringify(report, null, 2) + "\n");
+};
 async function run(command, logPath) {
   const log = fs.createWriteStream(logPath);
   const child = spawn(command[0], command.slice(1), { cwd: root, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
@@ -79,7 +83,7 @@ for (const test of cases.filter(test => !selected || test.id === selected)) {
     const code = await run(test.command, path.join(directory, file));
     const attempt = { id: test.id, profile: test.profile, repetition, passed: code === 0, exitCode: code, elapsedMs: Date.now() - started, log: file };
     report.attempts.push(attempt); save();
-    console.log(JSON.stringify(attempt));
+    console.log(JSON.stringify({ ...attempt, completed: report.attempts.length, passedTotal: report.passedScenarios, failedTotal: report.failedScenarios.length }));
   }
 }
 assert.equal(fingerprint(), source, "Backend/fixture source changed during the final matrix attempt");
