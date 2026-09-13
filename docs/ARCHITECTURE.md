@@ -158,6 +158,23 @@ These attempts consume tool/result budgets and survive reload. Unknown tools,
 attempts to override hidden targets, storage failures and exhausted budgets stop
 the run instead of entering this correction path.
 
+Run observation is serialized with service admission/finalization. A request from
+a previous Host, or one with no live owning task, is reported as Interrupted
+without launching a model or changing science. Explicit reconciliation persists
+that interruption and records bounded, versioned owner observations alongside the
+original tool receipts. Original caller/request IDs determine scientific lookups;
+missing acknowledged records and unconfirmed application/SCI outcomes remain
+uncertain. Repeated unchanged observations retain the same recovery version.
+Reconciliation never submits, cancels or resumes a scientific step.
+
+Explicit conversation takeover requires the observed conversation version and a
+live authenticated destination window. It refuses live owning tasks. Orphan
+interruption, controller replacement and clearing the stale active pointer share
+one Application transaction; drafts and original run/window identities survive.
+Old-window writes/stops and late model text remain fenced, while original native
+facts can still be recorded. Continue must use these observations and fresh
+target validation; the reconciliation/takeover commands alone do not continue work.
+
 Settings persist only non-secret configuration and explicit environment/session
 credential references. Remote endpoints require HTTPS; loopback HTTP is explicit.
 Endpoint credentials in URLs are rejected. A disabled or unconfigured assistant

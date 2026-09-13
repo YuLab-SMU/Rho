@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 
 mod engine;
 mod policy;
+mod recovery;
 pub use engine::*;
 pub use policy::{component_query_allowed, validate_component_grant, validate_component_model};
 
@@ -695,6 +696,7 @@ impl ComponentAgentOwner {
                 reason: None,
                 context: None,
                 document_versions: None,
+                recovery: None,
             },
         };
         conversation.active_run_id = Some(run_id);

@@ -5,7 +5,8 @@ Updated: 2026-09-12. This is the single current status summary. Git retains hist
 ## Built-in component Agent implementation
 
 The [implementation plan](BUILTIN-AGENT-PLAN.md) is authorized. P0, the P1 backend,
-P2 source/context access and the P3 document/R execution paths are implemented.
+P2 source/context access, P3 document/R execution and the P4 reconciliation/takeover
+foundation are implemented.
 The optional `rho-agents` crate uses pinned Rig 0.42 through Application ports;
 Host composes it with the existing scientific owners. No replacement scientific
 gateway or external Agent-provider variant was introduced.
@@ -45,6 +46,16 @@ approve this interaction or establish its visual quality.
   dropped model waits, reconciles original SCI records and cancels only associated
   work. Cancelled local commands do not imply rollback; scientific failure,
   uncertainty and successful saving remain separately visible in receipts.
+- Run/request observations serialize with admission and finalization, and report
+  Interrupted when the current Host has no owning task. Explicit Reconcile reads
+  original caller/request identities, recording versioned native status and document
+  references without model calls, replay, cancellation or queue resume. Missing
+  acknowledged records and unconfirmed saves/runs remain uncertain. Original tool
+  receipts remain intact; repeated unchanged recovery observations are idempotent.
+- Explicit conversation takeover checks the observed version and refuses live
+  tasks. Orphan interruption and controller replacement commit atomically, preserving
+  the user draft and original run/window identities. Old-window draft writes, Stop
+  and late model text remain fenced; late native facts can still be retained.
 - Known-tool argument format failures are durable non-executable records. Rig's
   Skip hook returns bounded schema feedback without calling the tool body. These
   attempts consume budgets; hidden-target overrides, unknown tools, storage
@@ -77,6 +88,15 @@ dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
 These are individual acceptance runs, not throughput guarantees.
 
 Current evidence:
+- P4 passed 18 SQLite cases, the no-runtime orphan/takeover Host test, 13 Host
+  regressions and five real-R cases. Recovery finds an original successful R result
+  despite missing acceptance/result/final application acknowledgements; R still
+  increments exactly once. It also verifies saved/run document receipts and refuses
+  to classify a live Host task as abandoned. Logs: `target/component-recovery-*.log`.
+  The 11 Workbench tests, contract generation/client build/check, main build and
+  selected Application/Host Clippy with the previously documented style exceptions
+  also passed. Reconcile and TakeControl are authenticated backend commands; they
+  do not implement Continue or a new Studio interface.
 - 13 Host tests: `target/component-repair-host-final.log`.
 - 16 real-SQLite admission/budget tests: `target/component-repair-store-final.log`.
 - 10 protocol tests and a typed-error privacy test:
@@ -104,7 +124,8 @@ no source-wide suppression has been introduced. Evidence: `target/component-repa
 and `target/component-repair-clippy.log`.
 
 Outstanding: Paper review and seven usable Studio entrances; produced-plot
-acceptance; explicit Continue/crash reconciliation, final-store failure handling,
+acceptance; explicit Continue using fresh targets and reconciled history, further
+crash/final-store failure handling,
 multiwindow/resource stress; and P5 complete scientific, workspace and performance
 acceptance. The P0 standalone binary size was only a diagnostic measurement; it
 does not establish the shipped application overhead. See

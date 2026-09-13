@@ -30,6 +30,7 @@ async function run(label, command, echo = true) {
 await run("protocol", ["cargo", "test", "-p", "rho-agents", "--locked"]);
 await run("application", ["cargo", "test", "-p", "rho-sqlite", "--test", "component_agents", "--locked"]);
 await run("host", ["cargo", "test", "-p", "rho-host", "--test", "component_agents", "--locked"]);
+await run("recovery", ["cargo", "test", "-p", "rho-host", "--test", "component_recovery", "--locked"]);
 await run("boundaries", ["node", "scripts/test-architecture.mjs"]);
 await run("dependencies", ["cargo", "tree", "-p", "rho-agents", "--locked", "--edges", "normal", "--prefix", "none"], false);
 const dependencies = fs.readFileSync(path.join(directory, "dependencies.log"), "utf8");

@@ -69,10 +69,12 @@ pub(super) async fn query(
             .conversation(host, &context, project, &conversation_id)
             .map(|v| json!({"conversation":v})),
         ComponentAgentQuery::Run { run_id } => service
-            .run(host, &context, project, &run_id)
+            .observe_run(host, &context, project, &run_id)
+            .await
             .map(|v| json!({"run":v})),
         ComponentAgentQuery::Request { request_id } => service
-            .run_by_request(host, &context, project, &request_id)
+            .observe_request(host, &context, project, &request_id)
+            .await
             .map(|v| json!({"run":v})),
         ComponentAgentQuery::Tools { run_id } => service
             .tools(host, &context, project, &run_id)
@@ -111,6 +113,8 @@ pub(super) async fn command(
     let window = &request.window;
     let service = &state.component_agents;
     let result = match request.command {
+        ComponentAgentCommand::Reconcile {run_id}=>service.reconcile(host,&context,project,window,&run_id).await.map(|v|json!({"run":v})),
+        ComponentAgentCommand::TakeControl {conversation_id,expected_version}=>service.take_control(host,&context,project,window,&conversation_id,expected_version).await.map(|v|json!({"conversation":v})),
         ComponentAgentCommand::StopTest { request_id } => service
             .stop_test(host, &context, project, window, &request_id)
             .await

@@ -168,6 +168,43 @@ pub struct ComponentAgentRun {
     pub reason: Option<String>,
     pub context: Option<ComponentAgentContext>,
     pub document_versions: Option<std::collections::BTreeMap<String, ApplicationDocumentRef>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub recovery: Option<ComponentAgentRecovery>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentRecoveryState {
+    Confirmed,
+    NotSubmitted,
+    ReadInterrupted,
+    Pending,
+    Uncertain,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ComponentRecoveredOperation {
+    pub operation_id: OperationId,
+    pub status: crate::OperationStatus,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ComponentRecoveredTool {
+    pub receipt_id: String,
+    pub state: ComponentRecoveryState,
+    pub application_request_id: Option<String>,
+    pub application_state: Option<crate::ApplicationCommandState>,
+    pub operations: Vec<ComponentRecoveredOperation>,
+    pub documents: Vec<ApplicationDocumentRef>,
+    pub note: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ComponentAgentRecovery {
+    pub version: u64,
+    pub digest: String,
+    pub checked_at_ms: u64,
+    pub unresolved_mutations: u32,
+    pub tools: Vec<ComponentRecoveredTool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -266,6 +303,9 @@ pub struct ComponentToolReceipt {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ComponentAgentEventContent {
+    Recovery {
+        version: u64,
+    },
     Text {
         text: String,
     },
@@ -343,6 +383,13 @@ pub struct ComponentAgentsCommand {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComponentAgentCommand {
+    Reconcile {
+        run_id: String,
+    },
+    TakeControl {
+        conversation_id: String,
+        expected_version: u64,
+    },
     StopTest {
         request_id: String,
     },

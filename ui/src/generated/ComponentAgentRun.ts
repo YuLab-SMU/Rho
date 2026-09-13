@@ -3,6 +3,7 @@ import type { ApplicationDocumentRef } from "./ApplicationDocumentRef";
 import type { ComponentAgentBudget } from "./ComponentAgentBudget";
 import type { ComponentAgentContext } from "./ComponentAgentContext";
 import type { ComponentAgentProfile } from "./ComponentAgentProfile";
+import type { ComponentAgentRecovery } from "./ComponentAgentRecovery";
 import type { ComponentAgentRunState } from "./ComponentAgentRunState";
 import type { ComponentAgentStart } from "./ComponentAgentStart";
 import type { ComponentModelConnection } from "./ComponentModelConnection";
@@ -11,4 +12,4 @@ export type ComponentAgentRun = { run_id: string, request: ComponentAgentStart, 
 /**
  * Fixed configuration for this run. Contains references, never credentials.
  */
-model: ComponentModelConnection, budget: ComponentAgentBudget, model_calls: number, tool_calls: number, tool_result_bytes: number, input_tokens: number | null, output_tokens: number | null, event_cursor: number, created_at_ms: number, updated_at_ms: number, reason: string | null, context: ComponentAgentContext | null, document_versions: { [key in string]: ApplicationDocumentRef } | null, };
+model: ComponentModelConnection, budget: ComponentAgentBudget, model_calls: number, tool_calls: number, tool_result_bytes: number, input_tokens: number | null, output_tokens: number | null, event_cursor: number, created_at_ms: number, updated_at_ms: number, reason: string | null, context: ComponentAgentContext | null, document_versions: { [key in string]: ApplicationDocumentRef } | null, recovery?: ComponentAgentRecovery, };

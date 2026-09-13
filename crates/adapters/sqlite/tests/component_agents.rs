@@ -1023,3 +1023,161 @@ fn rejected_argument_attempts_are_durable_and_consume_tool_budget_without_native
             > 0
     );
 }
+
+#[test]
+fn orphan_takeover_is_atomic_preserves_drafts_and_fences_old_model_output() {
+    let f = Fixture::new();
+    let id = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let tool = f
+        .owner
+        .admit_tool(f.actor.scope(), &id, 1, "native", mutation(), 6)
+        .unwrap();
+    f.owner
+        .save_draft(&f.actor, "conversation", 1, "retained user draft".into(), 7)
+        .unwrap();
+    let previous = f
+        .store
+        .component_conversation(f.actor.scope(), "conversation")
+        .unwrap()
+        .unwrap();
+    let next = actor(&f.application, &f.context, "new-window", 8);
+    let owner = ComponentAgentOwner::new(f.store.clone(), "replacement-host".into());
+    let stored = f
+        .store
+        .component_run(f.actor.scope(), &id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        owner.observed_run(stored).state,
+        ComponentAgentRunState::Interrupted
+    );
+    assert_eq!(
+        f.store
+            .component_run(f.actor.scope(), &id)
+            .unwrap()
+            .unwrap()
+            .run
+            .state,
+        ComponentAgentRunState::Running
+    );
+    assert!(
+        owner
+            .take_control(&next, "conversation", previous.version - 1, 9)
+            .is_err()
+    );
+    let controlled = owner
+        .take_control(&next, "conversation", previous.version, 9)
+        .unwrap();
+    assert_eq!(controlled.controller, *next.window());
+    assert_eq!(controlled.draft, "retained user draft");
+    assert_eq!(controlled.draft_version, previous.draft_version);
+    assert!(controlled.active_run_id.is_none());
+    assert_eq!(
+        f.store
+            .component_run(f.actor.scope(), &id)
+            .unwrap()
+            .unwrap()
+            .run
+            .request
+            .window,
+        *f.actor.window()
+    );
+    assert!(
+        f.owner
+            .append_text(f.actor.scope(), &id, "late model text".into(), 10)
+            .is_err()
+    );
+    assert!(
+        f.owner
+            .save_draft(
+                &f.actor,
+                "conversation",
+                controlled.draft_version,
+                "overwrite".into(),
+                10
+            )
+            .is_err()
+    );
+    // An already accepted native fact may arrive late; it cannot change control.
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &id,
+            &tool.tool.receipt.receipt_id,
+            ComponentToolUpdate::Accepted {
+                operation_id: Some(OperationId::new("original-operation").unwrap()),
+                application_request_id: None,
+            },
+            10,
+        )
+        .unwrap();
+    assert_eq!(
+        f.store
+            .component_conversation(f.actor.scope(), "conversation")
+            .unwrap()
+            .unwrap()
+            .controller,
+        *next.window()
+    );
+}
+
+#[test]
+fn reconciliation_metadata_is_bounded_idempotent_and_retained_across_reopen() {
+    let f = Fixture::new();
+    let id = f.running(ComponentAgentProfile::Objects, ComponentAgentMode::Explain);
+    let tool = f
+        .owner
+        .admit_tool(f.actor.scope(), &id, 1, "read", query(), 6)
+        .unwrap();
+    let owner = ComponentAgentOwner::new(f.store.clone(), "replacement-host".into());
+    owner.interrupt_abandoned(f.actor.scope(), &id, 7).unwrap();
+    let entry = ComponentRecoveredTool {
+        receipt_id: tool.tool.receipt.receipt_id.clone(),
+        state: ComponentRecoveryState::ReadInterrupted,
+        application_request_id: None,
+        application_state: None,
+        operations: vec![],
+        documents: vec![],
+        note: None,
+    };
+    let first = owner
+        .record_recovery(f.actor.scope(), &id, vec![entry.clone()], 8)
+        .unwrap();
+    let repeated = owner
+        .record_recovery(f.actor.scope(), &id, vec![entry.clone()], 9)
+        .unwrap();
+    assert_eq!(first.recovery, repeated.recovery);
+    assert_eq!(first.event_cursor, repeated.event_cursor);
+    assert_eq!(first.recovery.as_ref().unwrap().unresolved_mutations, 0);
+    let mut wrong = entry.clone();
+    wrong.receipt_id = "not-owned".into();
+    assert!(
+        owner
+            .record_recovery(f.actor.scope(), &id, vec![wrong], 10)
+            .is_err()
+    );
+    let mut changed = entry;
+    changed.note = Some("Owner still has no read result".into());
+    assert_eq!(
+        owner
+            .record_recovery(f.actor.scope(), &id, vec![changed], 11)
+            .unwrap()
+            .recovery
+            .unwrap()
+            .version,
+        2
+    );
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    let retained = reopened
+        .component_run(f.actor.scope(), &id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(retained.run.state, ComponentAgentRunState::Interrupted);
+    assert_eq!(retained.run.recovery.unwrap().version, 2);
+    assert_eq!(
+        reopened.component_tools(f.actor.scope(), &id).unwrap()[0]
+            .receipt
+            .phase,
+        ComponentToolPhase::Intent
+    );
+}

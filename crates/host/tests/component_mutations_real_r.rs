@@ -309,6 +309,13 @@ async fn stop_tracks_and_cancels_the_original_r_operation() {
     )
     .await;
     let run = f.start().await;
+    assert!(
+        f.service
+            .reconcile(&f.host, &f.context, &f.project, &f.window, &run.run_id)
+            .await
+            .is_err()
+    );
+
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let tools = f
@@ -841,12 +848,123 @@ async fn documents_acceptance(real_model: bool, repair: bool) {
     }
     assert_eq!(failed_records, usize::from(repair));
     assert_eq!(native_ids.len(), native_runs);
-    let finished=f.service.run(&f.host,&f.context,&f.project,&run.run_id).unwrap();
-    println!("model_calls={}, tool_calls={}, model_limit={}",finished.model_calls,finished.tool_calls,finished.budget.model_calls);
+    let finished = f
+        .service
+        .run(&f.host, &f.context, &f.project, &run.run_id)
+        .unwrap();
+    println!(
+        "model_calls={}, tool_calls={}, model_limit={}",
+        finished.model_calls, finished.tool_calls, finished.budget.model_calls
+    );
     println!(
         "document acceptance: real_model={real_model}, repair={repair}, edits={edits}, native_runs={native_runs}, failures={failures}, mutations={}, elapsed_ms={}",
         mutations.len(),
         started.elapsed().as_millis()
     );
     f.service.close().await;
+    let replacement=ComponentAgentService::new(Arc::new(ApplicationStore::open(&f._temp.path().join("components.sqlite")).unwrap()));
+    let observed=replacement.reconcile(&f.host,&f.context,&f.project,&f.window,&run.run_id).await.unwrap();
+    assert_eq!(observed.state,ComponentAgentRunState::Completed);
+    let recovery=observed.recovery.unwrap();
+    assert_eq!(recovery.unresolved_mutations,0);
+    assert!(recovery.tools.iter().all(|t|t.state==ComponentRecoveryState::Confirmed));
+    assert_eq!(recovery.tools.iter().flat_map(|t|t.operations.iter()).filter(|op|op.status==OperationStatus::Failed).count(),usize::from(repair));
+    replacement.close().await;
+
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; original operation acknowledgement recovery"]
+async fn orphan_reconciliation_finds_the_original_r_result_without_reexecuting() {
+    let f = Fixture::new("counter <- counter + 1L; invisible(counter)", false).await;
+    let started = f.start().await;
+    let completed = f.terminal(&started.run_id).await;
+    assert_eq!(completed.state, ComponentAgentRunState::Completed);
+    f.service.close().await;
+    let store =
+        Arc::new(ApplicationStore::open(&f._temp.path().join("components.sqlite")).unwrap());
+    let scope = ApplicationScope {
+        project: f.project.clone(),
+        principal: serde_json::to_string(f.context.principal()).unwrap(),
+    };
+    let mut run = store
+        .component_run(&scope, &started.run_id)
+        .unwrap()
+        .unwrap();
+    let mut tools = store.component_tools(&scope, &started.run_id).unwrap();
+    let original = tools[0].receipt.operation_id.clone().unwrap();
+    // Simulate a crash before acceptance/result/final acknowledgement reached Application.
+    tools[0].receipt.phase = ComponentToolPhase::Intent;
+    tools[0].receipt.operation_id = None;
+    tools[0].receipt.result = None;
+    tools[0].receipt.evidence.clear();
+    run.run.state = ComponentAgentRunState::Running;
+    let mut conversation = store
+        .component_conversation(&scope, &run.run.request.conversation_id)
+        .unwrap()
+        .unwrap();
+    let expected = conversation.version;
+    conversation.version += 1;
+    conversation.active_run_id = Some(started.run_id.clone());
+    store
+        .commit_component(
+            &scope,
+            ComponentWrite {
+                expected_version: Some(expected),
+                conversation: &conversation,
+                run: Some(&run),
+                tools: &tools,
+                events: &[],
+            },
+        )
+        .unwrap();
+    let replacement = ComponentAgentService::new(store);
+    let recovered = replacement
+        .reconcile(&f.host, &f.context, &f.project, &f.window, &started.run_id)
+        .await
+        .unwrap();
+    assert_eq!(recovered.state, ComponentAgentRunState::Interrupted);
+    assert_eq!(recovered.model_calls, completed.model_calls);
+    let report = recovered.recovery.unwrap();
+    assert_eq!(report.unresolved_mutations, 0);
+    assert_eq!(report.tools.len(), 1);
+    assert_eq!(report.tools[0].state, ComponentRecoveryState::Confirmed);
+    assert_eq!(
+        report.tools[0].operations,
+        vec![ComponentRecoveredOperation {
+            operation_id: original.clone(),
+            status: OperationStatus::Succeeded
+        }]
+    );
+    assert_eq!(
+        replacement
+            .reconcile(&f.host, &f.context, &f.project, &f.window, &started.run_id)
+            .await
+            .unwrap()
+            .recovery
+            .unwrap(),
+        report
+    );
+    let proof = f
+        .host
+        .invoke(
+            &f.context,
+            invoke(
+                "verify-recovered-once",
+                "stopifnot(counter == 1L); invisible(NULL)",
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(proof.status, OperationStatus::Succeeded);
+    assert_eq!(
+        f.host
+            .get_operation(&f.context, &original)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        OperationStatus::Succeeded
+    );
+    replacement.close().await;
 }

@@ -17,6 +17,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 mod context;
 mod mutations;
 mod registry;
+mod recovery;
 use registry::{RegisteredTool, registered_tools};
 
 fn now() -> u64 {
@@ -394,7 +395,7 @@ impl ComponentAgentService {
         self.owner
             .store
             .component_run(&Self::scope(host, context, project)?, id)?
-            .map(|r| r.run)
+            .map(|r| self.owner.observed_run(r))
             .ok_or(ApplicationError::NotFound)
     }
     pub fn run_by_request(
@@ -408,7 +409,7 @@ impl ComponentAgentService {
             .owner
             .store
             .component_run_by_request(&Self::scope(host, context, project)?, id)?
-            .map(|r| r.run))
+            .map(|r| self.owner.observed_run(r)))
     }
     pub fn tools(
         &self,
@@ -456,7 +457,13 @@ impl ComponentAgentService {
             .component_run_by_request(actor.scope(), &request.request_id)?
             .is_some()
         {
-            return Ok(self.owner.start(&actor, request, now())?.run.run);
+            let original=self.owner.start(&actor, request, now())?.run;
+            let mut run=self.owner.observed_run(original);
+            if !run.state.is_terminal() && !self.live.lock().await.contains_key(&run.run_id) {
+                run.state=ComponentAgentRunState::Interrupted;
+                run.reason=Some("The original request has no live Host task; reconcile its tool records".into());
+            }
+            return Ok(run);
         }
         if request.grant.mode == ComponentAgentMode::Edit && request.grant.documents.is_empty() {
             return Err(error(

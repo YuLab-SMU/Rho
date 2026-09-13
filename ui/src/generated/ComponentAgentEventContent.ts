@@ -3,4 +3,4 @@ import type { ComponentAgentEvidence } from "./ComponentAgentEvidence";
 import type { ComponentAgentRunState } from "./ComponentAgentRunState";
 import type { ComponentToolPhase } from "./ComponentToolPhase";
 
-export type ComponentAgentEventContent = { "kind": "text", text: string, } | { "kind": "state", state: ComponentAgentRunState, reason: string | null, } | { "kind": "tool", receipt_id: string, phase: ComponentToolPhase, } | { "kind": "evidence", reference: ComponentAgentEvidence, };
+export type ComponentAgentEventContent = { "kind": "recovery", version: number, } | { "kind": "text", text: string, } | { "kind": "state", state: ComponentAgentRunState, reason: string | null, } | { "kind": "tool", receipt_id: string, phase: ComponentToolPhase, } | { "kind": "evidence", reference: ComponentAgentEvidence, };
