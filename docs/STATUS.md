@@ -142,9 +142,14 @@ Current evidence:
   tool/native evidence before its execution-count assertion. Earlier passing
   Workspace responses alone did not prove a returned native value. The production
   receipt checksum and queue-precondition changes require a new complete matrix.
-  A fourth fixed-source matrix is now running at code commit `285ca1c3`; its live
+  A fourth fixed-source matrix finished at code commit `285ca1c3` with 26/27 passed.
+  All seven profile cases passed three times; document repair passed three times.
+  The first produced-plot repair stopped on a typed provider/stream error after
+  the original saved R failure and two reads, before submitting an edit; the other
+  two repeats passed. This is not a complete passing model acceptance. Its
   evidence is `target/component-matrix/2026-09-13T07-20-03.997Z/summary.json` and
-  `target/component-matrix-preconditions.log`. No final outcome is claimed yet.
+  `target/component-matrix-preconditions.log`. Verify explicit continuation from
+  this kind of interrupted repair before the next complete matrix.
   Focused validation passed 32 Application, 28 SQLite, 14 real-R and 365 UI tests,
   contract generation/client build/check, architecture and documentation fixtures.
   Evidence: `target/component-precondition-{application,store,native,ui,client}.log`.
@@ -152,6 +157,10 @@ Current evidence:
   ignored; doc tests and the main build also passed. Three Chrome regressions passed
   for Chinese edit/save/run, UTF-8/BOM/CRLF and disk conflicts, and two-window drafts.
   Evidence: `target/component-precondition-{workspace,build,browser}.log`.
+  All nine existing external-Agent browser cases also passed with a local CLI
+  fixture, including source previews, takeover, docking and native IME handling:
+  `target/component-parity-agent-browser.log`. This does not verify a live CLI
+  provider account or the unimplemented component-assistant interface.
   Startup sampling found a test executable waiting at `_dyld_start`, before test
   code; this is a test-environment observation, not an assistant UI measurement.
 - Native input ownership now uses the exact operation and R-session identities
