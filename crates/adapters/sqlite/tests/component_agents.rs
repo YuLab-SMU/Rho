@@ -1638,3 +1638,339 @@ fn byte_pruning_preserves_unconfirmed_tool_identity_and_late_native_result() {
         ComponentAgentRunState::Stopped
     );
 }
+
+// Populate valid inactive conversation payloads, as an existing store can contain.
+// Triggers still account every byte; no scientific/application owner state is forged.
+fn seed_inactive_payload(
+    connection: &mut rusqlite::Connection,
+    scope: &ApplicationScope,
+    budget: usize,
+) -> usize {
+    let tx = connection.transaction().unwrap();
+    let mut remaining = budget;
+    let mut index = 0;
+    loop {
+        let mut value = ComponentAgentConversation {
+            conversation_id: format!("stored-{index}"),
+            version: 1,
+            draft_version: 1,
+            controller: ApplicationWindowRef {
+                window_id: "history".into(),
+                incarnation: "history".into(),
+            },
+            profile: ComponentAgentProfile::Project,
+            draft: String::new(),
+            active_run_id: None,
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+        let overhead = serde_json::to_vec(&value).unwrap().len();
+        if remaining < overhead {
+            break;
+        }
+        value.draft = "x".repeat((remaining - overhead).min(32 * 1024));
+        let encoded = serde_json::to_string(&value).unwrap();
+        remaining -= encoded.len();
+        tx.execute(
+            "INSERT INTO component_agent_conversations VALUES(?1,?2,?3,1,NULL,0,?4)",
+            rusqlite::params![
+                scope.project,
+                scope.principal,
+                value.conversation_id,
+                encoded
+            ],
+        )
+        .unwrap();
+        index += 1;
+    }
+    tx.commit().unwrap();
+    budget - remaining
+}
+
+#[test]
+fn project_payload_quota_reserves_native_completion_and_rolls_back_new_intents() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let original = f
+        .owner
+        .admit_tool(f.actor.scope(), &run, 1, "accepted", mutation(), 6)
+        .unwrap()
+        .tool;
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &run,
+            &original.receipt.receipt_id,
+            ComponentToolUpdate::Accepted {
+                operation_id: Some(OperationId::new("native-original").unwrap()),
+                application_request_id: None,
+            },
+            7,
+        )
+        .unwrap();
+    let mut connection = rusqlite::Connection::open(&f.path).unwrap();
+    let events: usize = connection
+        .query_row(
+            "SELECT COALESCE(SUM(bytes),0) FROM component_agent_events",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let reserved = MAX_COMPONENT_SETTINGS_RECORD_BYTES
+        + MAX_COMPONENT_CONVERSATION_RECORD_BYTES
+        + MAX_COMPONENT_RUN_RECORD_BYTES
+        + MAX_COMPONENT_TOOL_RECORD_BYTES
+        + events;
+    let other = ApplicationScope {
+        project: f.actor.scope().project.clone(),
+        principal: "another-principal".into(),
+    };
+    seed_inactive_payload(
+        &mut connection,
+        &other,
+        MAX_COMPONENT_PROJECT_PAYLOAD_BYTES - reserved - 1024,
+    );
+    assert_eq!(
+        f.store
+            .component_conversations(f.actor.scope(), None, 128)
+            .unwrap()
+            .len(),
+        1
+    );
+    let before = f
+        .store
+        .component_run(f.actor.scope(), &run)
+        .unwrap()
+        .unwrap();
+    let count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM component_payload_bytes", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    let mut next = mutation();
+    if let ComponentToolAction::Invoke(i) = &mut next {
+        i.arguments["code"] = json!("different code");
+    }
+    assert!(matches!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "new-obligation", next, 8),
+        Err(ApplicationError::Budget(_))
+    ));
+    assert_eq!(
+        f.store
+            .component_run(f.actor.scope(), &run)
+            .unwrap()
+            .unwrap()
+            .run
+            .tool_calls,
+        before.run.tool_calls
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM component_payload_bytes", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        count
+    );
+    assert_eq!(
+        f.store
+            .component_tools(f.actor.scope(), &run)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(matches!(
+        f.owner.begin_model_test(
+            &f.actor,
+            &ComponentModelTestRequest {
+                project_root: f.actor.scope().project.clone(),
+                window: f.actor.window().clone(),
+                request_id: "over-budget-test".into(),
+                model_settings_version: 1,
+                kind: ComponentModelTestKind::Connection
+            },
+            8
+        ),
+        Err(ApplicationError::Budget(_))
+    ));
+    assert!(
+        f.store
+            .component_diagnostic(f.actor.scope(), "over-budget-test")
+            .unwrap()
+            .is_none()
+    );
+    f.owner.stop(&f.actor, &run, 9).unwrap();
+    f.owner
+        .finish(
+            f.actor.scope(),
+            &run,
+            ComponentAgentRunState::Stopped,
+            None,
+            10,
+        )
+        .unwrap();
+    let result = json!({"status":"succeeded","output":"r".repeat(200*1024)});
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &run,
+            &original.receipt.receipt_id,
+            ComponentToolUpdate::Resolved {
+                result: result.clone(),
+                evidence: vec![],
+            },
+            11,
+        )
+        .unwrap();
+    let mut settings = f.store.component_settings(f.actor.scope()).unwrap();
+    settings.enabled = false;
+    f.owner.configure(&f.actor, &settings, 12).unwrap();
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    assert_eq!(
+        reopened.component_tools(f.actor.scope(), &run).unwrap()[0]
+            .receipt
+            .result
+            .as_ref(),
+        Some(&result)
+    );
+    let bytes: usize = connection
+        .query_row("SELECT SUM(bytes) FROM component_payload_bytes", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert!(bytes < MAX_COMPONENT_PROJECT_PAYLOAD_BYTES);
+}
+
+#[test]
+fn payload_ledger_bootstraps_current_records_and_counts_unicode_bytes() {
+    let f = Fixture::new();
+    f.configure();
+    f.owner
+        .create(&f.actor, "unicode", ComponentAgentProfile::Project, 3)
+        .unwrap();
+    f.owner
+        .save_draft(&f.actor, "unicode", 1, "测😀".repeat(100), 4)
+        .unwrap();
+    let connection = rusqlite::Connection::open(&f.path).unwrap();
+    for table in [
+        "component_agent_conversations",
+        "component_agent_runs",
+        "component_agent_tools",
+        "component_agent_settings",
+        "component_model_diagnostics",
+    ] {
+        for event in ["insert", "update", "delete"] {
+            connection
+                .execute_batch(&format!("DROP TRIGGER {table}_payload_{event}"))
+                .unwrap();
+        }
+    }
+    connection
+        .execute_batch("DROP TABLE component_payload_bytes")
+        .unwrap();
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    assert_eq!(
+        reopened
+            .component_conversation(f.actor.scope(), "unicode")
+            .unwrap()
+            .unwrap()
+            .draft,
+        "测😀".repeat(100)
+    );
+    let (bytes,characters):(usize,usize)=connection.query_row("SELECT length(CAST(value AS BLOB)),length(value) FROM component_agent_conversations WHERE conversation_id='unicode'",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
+    let charged:usize=connection.query_row("SELECT bytes FROM component_payload_bytes WHERE kind='conversation' AND identity='unicode'",[],|r|r.get(0)).unwrap();
+    assert_eq!(charged, bytes);
+    assert!(bytes > characters);
+}
+
+#[test]
+fn an_existing_oversized_store_can_finish_reserved_work_and_disable_without_losing_history() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let tool = f
+        .owner
+        .admit_tool(f.actor.scope(), &run, 1, "old-intent", mutation(), 6)
+        .unwrap()
+        .tool;
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &run,
+            &tool.receipt.receipt_id,
+            ComponentToolUpdate::Accepted {
+                operation_id: Some(OperationId::new("old-native").unwrap()),
+                application_request_id: None,
+            },
+            7,
+        )
+        .unwrap();
+    let mut connection = rusqlite::Connection::open(&f.path).unwrap();
+    seed_inactive_payload(
+        &mut connection,
+        &ApplicationScope {
+            project: f.actor.scope().project.clone(),
+            principal: "old-data".into(),
+        },
+        MAX_COMPONENT_PROJECT_PAYLOAD_BYTES,
+    );
+    assert!(matches!(
+        f.owner.create(
+            &f.actor,
+            "new-obligation",
+            ComponentAgentProfile::Project,
+            8
+        ),
+        Err(ApplicationError::Budget(_))
+    ));
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &run,
+            &tool.receipt.receipt_id,
+            ComponentToolUpdate::Resolved {
+                result: json!({"status":"succeeded","output":"r".repeat(200*1024)}),
+                evidence: vec![],
+            },
+            9,
+        )
+        .unwrap();
+    f.owner
+        .finish(
+            f.actor.scope(),
+            &run,
+            ComponentAgentRunState::Completed,
+            None,
+            10,
+        )
+        .unwrap();
+    let mut settings = f.store.component_settings(f.actor.scope()).unwrap();
+    settings.enabled = false;
+    f.owner.configure(&f.actor, &settings, 11).unwrap();
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    assert_eq!(
+        reopened
+            .component_run(f.actor.scope(), &run)
+            .unwrap()
+            .unwrap()
+            .run
+            .state,
+        ComponentAgentRunState::Completed
+    );
+    assert_eq!(
+        reopened.component_tools(f.actor.scope(), &run).unwrap()[0]
+            .receipt
+            .operation_id
+            .as_ref()
+            .unwrap()
+            .as_str(),
+        "old-native"
+    );
+    let retained: usize = connection
+        .query_row(
+            "SELECT COUNT(*) FROM component_agent_conversations WHERE principal='old-data'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(retained > 1000);
+}

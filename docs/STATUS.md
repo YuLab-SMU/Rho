@@ -1,6 +1,6 @@
 # Rho: current state and focus
 
-Updated: 2026-09-12. This is the single current status summary. Git retains history.
+Updated: 2026-09-13. This is the single current status summary. Git retains history.
 
 ## Built-in component Agent implementation
 
@@ -25,6 +25,12 @@ approve this interaction or establish its visual quality.
   inputs and model references, durable tool identities, results and bounded events.
   Stable request/call identities survive retries; late results retain their original
   window, principal and scientific owner. Event pruning preserves tool receipts.
+- Project persistence now accounts all component payload tables under the 64 MiB
+  budget, including reserved completion capacity. Transactional byte entries are
+  derived from UTF-8 serialized values. New obligations fail before dispatch when
+  full; active/unconfirmed receipts can finish within reserved space. Only events
+  are pruned. Existing oversized data remains readable and non-growing completion
+  or disable operations remain possible; request/tool identities are never evicted.
 - Source search and preview read existing owners without model calls. Submission
   revalidates file/document/object/package identities before capture. Verified
   selected PNG/JPEG images are transient model input with native references and
@@ -99,6 +105,14 @@ dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
 These are individual acceptance runs, not throughput guarantees.
 
 Current evidence:
+- Payload accounting passed the 25-case SQLite regression plus an existing-
+  oversized-store test. Near-limit tests cover rollback of new tool and model-test
+  admission, cross-principal project accounting, Unicode bytes, current-record
+  bootstrap, Stop, a 200 KiB late result, Disable and reopen. Host saturation and
+  recovery tests and real-R intent/result/final-acknowledgement failure injection
+  also passed. Evidence: `target/component-payload-*.log`. Selected SQLite Clippy
+  passed with only its documented pre-existing range-style exception; the main
+  build also passed.
 - P4 now injects actual SQLite aborts before tool intent, while storing a native
   result and while committing the final run acknowledgement. Intent failure
   executes no R; result/final failures retain one native execution and Continue
@@ -169,9 +183,8 @@ reproduced `collapsible_if` and Host `unnecessary_sort_by` categories allowed;
 no source-wide suppression has been introduced. Evidence: `target/component-repair-*-clippy*.log`
 and `target/component-repair-clippy.log`.
 
-Outstanding: Paper review and seven usable Studio entrances; further crash/input/cross-session stress and a total persistent component-payload
-quota (the current 64 MiB project limit covers events),
-multiwindow/resource stress; and P5 complete scientific, workspace and performance
+Outstanding: Paper review and seven usable Studio entrances; further input,
+cross-session, multiwindow and resource stress; and P5 complete scientific, workspace and performance
 acceptance. The P0 standalone binary size was only a diagnostic measurement; it
 does not establish the shipped application overhead. See
 `target/component-agent-build-evidence.json` for that original measurement.

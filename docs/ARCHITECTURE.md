@@ -160,7 +160,17 @@ bodies, raw error strings and private message history are excluded.
 Known-tool argument format failures produce non-executable application receipts
 with an argument digest and bounded schema feedback. Rig's native Skip hook returns
 that feedback to the model; neither the tool body nor a scientific owner is invoked.
-These attempts consume tool/result budgets and survive reload. Unknown tools,
+These attempts consume tool/result budgets and survive reload.
+Component persistence has a project-wide 64 MiB serialized-payload budget across
+conversations, runs, tool receipts, settings, diagnostics and events. SQLite keeps
+transactional byte/phase entries, not a second result store. Active runs, active
+conversation records, pending diagnostics and unresolved tools retain bounded
+completion capacity. Budget checks and event pruning occur in the same transaction
+as writes; rejected admission rolls back its identities and counters. Only event
+payloads are evicted. Existing oversized stores remain readable and may finish or
+shrink already-accounted obligations, but cannot increase charged storage. The
+limit measures UTF-8 payload and reserved receipt capacity, not SQLite page/WAL
+size or the separate scientific owners' storage. Unknown tools,
 attempts to override hidden targets, storage failures and exhausted budgets stop
 the run instead of entering this correction path.
 

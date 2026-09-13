@@ -4,6 +4,7 @@ use rho_application::*;
 use rho_contract::*;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Serialize, de::DeserializeOwned};
+mod payload_budget;
 
 fn error(error: impl ToString) -> ApplicationError {
     ApplicationError::Storage(error.to_string())
@@ -46,7 +47,8 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), String> {
       project TEXT NOT NULL, principal TEXT NOT NULL, request_id TEXT NOT NULL,
       version INTEGER NOT NULL, updated_at INTEGER NOT NULL,
       value TEXT NOT NULL CHECK(json_valid(value)), PRIMARY KEY(project,principal,request_id));")
-      .map_err(|e|e.to_string())
+      .map_err(|e|e.to_string())?;
+    payload_budget::initialize(connection)
 }
 
 impl ComponentAgentRepository for ApplicationStore {
@@ -81,6 +83,12 @@ impl ComponentAgentRepository for ApplicationStore {
         let tx = c
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(error)?;
+        let before = payload_budget::charged_bytes(&tx, &s.project)?;
+        if encode(diagnostic)?.len() > MAX_COMPONENT_DIAGNOSTIC_RECORD_BYTES {
+            return Err(ApplicationError::Budget(
+                "Model diagnostic payload is too large".into(),
+            ));
+        }
         let previous:Option<String>=tx.query_row("SELECT value FROM component_model_diagnostics WHERE project=?1 AND principal=?2 AND request_id=?3",params![s.project,s.principal,diagnostic.request_id],|r|r.get(0)).optional().map_err(error)?;
         let previous = previous
             .map(decode::<ComponentModelDiagnostic>)
@@ -110,6 +118,7 @@ impl ComponentAgentRepository for ApplicationStore {
             }
         }
         tx.execute("INSERT INTO component_model_diagnostics VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(project,principal,request_id) DO UPDATE SET version=excluded.version,updated_at=excluded.updated_at,value=excluded.value",params![s.project,s.principal,diagnostic.request_id,diagnostic.version,diagnostic.updated_at_ms,encode(diagnostic)?]).map_err(error)?;
+        payload_budget::enforce(&tx, &s.project, before)?;
         tx.commit().map_err(error)
     }
     fn component_conversation(
@@ -243,6 +252,12 @@ impl ComponentAgentRepository for ApplicationStore {
         let tx = c
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(error)?;
+        let before = payload_budget::charged_bytes(&tx, &s.project)?;
+        if encode(settings)?.len() > MAX_COMPONENT_SETTINGS_RECORD_BYTES {
+            return Err(ApplicationError::Budget(
+                "Model settings payload is too large".into(),
+            ));
+        }
         let version: Option<u64> = tx
             .query_row(
                 "SELECT version FROM component_agent_settings WHERE project=?1 AND principal=?2",
@@ -257,6 +272,7 @@ impl ComponentAgentRepository for ApplicationStore {
             return Err(ApplicationError::Conflict);
         }
         tx.execute("INSERT INTO component_agent_settings VALUES(?1,?2,?3,?4) ON CONFLICT(project,principal) DO UPDATE SET version=excluded.version,value=excluded.value",params![s.project,s.principal,settings.version,encode(settings)?]).map_err(error)?;
+        payload_budget::enforce(&tx, &s.project, before)?;
         tx.commit().map_err(error)
     }
     fn commit_component(
@@ -268,7 +284,13 @@ impl ComponentAgentRepository for ApplicationStore {
         let tx = c
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(error)?;
+        let before = payload_budget::charged_bytes(&tx, &s.project)?;
         let conversation = write.conversation;
+        if encode(conversation)?.len() > MAX_COMPONENT_CONVERSATION_RECORD_BYTES {
+            return Err(ApplicationError::Budget(
+                "Conversation payload is too large".into(),
+            ));
+        }
         let version:Option<u64>=tx.query_row("SELECT version FROM component_agent_conversations WHERE project=?1 AND principal=?2 AND conversation_id=?3",params![s.project,s.principal,conversation.conversation_id],|r|r.get(0)).optional().map_err(error)?;
         if version != write.expected_version
             || conversation.version
@@ -288,6 +310,9 @@ impl ComponentAgentRepository for ApplicationStore {
             }
         }
         if let Some(run) = write.run {
+            if encode(run)?.len() > MAX_COMPONENT_RUN_RECORD_BYTES {
+                return Err(ApplicationError::Budget("Run payload is too large".into()));
+            }
             if run.run.request.conversation_id != conversation.conversation_id {
                 return Err(ApplicationError::Conflict);
             }
@@ -343,7 +368,7 @@ impl ComponentAgentRepository for ApplicationStore {
             {
                 return Err(ApplicationError::Conflict);
             }
-            if value.len() > 512 * 1024 {
+            if value.len() > MAX_COMPONENT_TOOL_RECORD_BYTES {
                 return Err(ApplicationError::Budget(
                     "Tool receipt exceeds storage limit".into(),
                 ));
@@ -382,19 +407,7 @@ impl ComponentAgentRepository for ApplicationStore {
             }
             tx.execute("DELETE FROM component_agent_events WHERE event_order=(SELECT MIN(event_order) FROM component_agent_events WHERE project=?1 AND principal=?2 AND conversation_id=?3)",params![s.project,s.principal,conversation.conversation_id]).map_err(error)?;
         }
-        loop {
-            let bytes: usize = tx
-                .query_row(
-                    "SELECT COALESCE(SUM(bytes),0) FROM component_agent_events WHERE project=?1",
-                    params![s.project],
-                    |r| r.get(0),
-                )
-                .map_err(error)?;
-            if bytes <= MAX_COMPONENT_PROJECT_EVENT_BYTES {
-                break;
-            }
-            tx.execute("DELETE FROM component_agent_events WHERE event_order=(SELECT e.event_order FROM component_agent_events e JOIN component_agent_conversations c ON c.project=e.project AND c.principal=e.principal AND c.conversation_id=e.conversation_id WHERE e.project=?1 ORDER BY (c.active_run_id IS NOT NULL),e.event_order LIMIT 1)",params![s.project]).map_err(error)?;
-        }
+        payload_budget::enforce(&tx, &s.project, before)?;
         tx.commit().map_err(error)
     }
 }
