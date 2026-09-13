@@ -99,6 +99,14 @@ impl Fixture {
         );
         let mut context = NextHost::local_context();
         context.connection_id = "studio:mutation-test".into();
+        let policy = host.invoke(&context, Invocation {
+            client_request_id: "fixture-manual-recovery".into(),
+            capability: CapabilityRef::new("runtime.update_settings", 1).unwrap(),
+            arguments: json!({"scope":"project","workspace_instance_id":null,"expected_version":null,"overrides":{"mode":"manual"}}),
+            preconditions: vec![],
+        }).await.unwrap();
+        assert_eq!(policy.status, OperationStatus::Succeeded);
+
         let setup = host
             .invoke(&context, invoke("setup", "counter <- 0L; invisible(NULL)"))
             .await
@@ -1609,7 +1617,7 @@ async fn inspect_produced_plot(
     let run=f.service.start(f.host.clone(),f.context.clone(),&f.project,ComponentAgentStart{
         continuation:None,request_id:"inspect-produced-plot".into(),conversation_id:conversation.conversation_id,conversation_version:conversation.version,
         window:f.window.clone(),model_settings_version:1,
-        text:"Inspect the actual selected image and answer only its dominant fill color as one lowercase English word. You may inspect image metadata with output_view if needed. Do not read the producing operation or source code, infer color from metadata, run R or modify anything.".into(),
+        text:"Inspect the actual selected image. Put its dominant fill color (one lowercase English word) on the first line. Then briefly cite the selected operation ID and output number. You may inspect image metadata with output_view if needed. Do not read the producing operation or source code, infer color from metadata, run R or modify anything.".into(),
         grant:ComponentAgentGrant{mode:ComponentAgentMode::Explain,session:Some(f.session.clone()),documents:vec![],files:vec![]},
         sources:vec![snapshot.selection]
     }).await.unwrap();
@@ -1647,23 +1655,7 @@ async fn inspect_produced_plot(
         .service
         .events(&f.host, &f.context, &f.project, &run.run_id, 0, 128)
         .unwrap();
-    let answer = events
-        .events
-        .into_iter()
-        .filter_map(|e| match e.content {
-            ComponentAgentEventContent::Text { text } => Some(text),
-            _ => None,
-        })
-        .collect::<String>();
-    if real_model {
-        assert_eq!(
-            observed_color(&answer),
-            Some(color),
-            "Unexpected image interpretation: {answer}"
-        );
-    } else {
-        assert_eq!(answer.trim(), "Verified selected image");
-    }
+    let answer = final_plot_answer(events.events);
     assert_eq!(recent_science(f).await, before);
     let reads = f
         .service
@@ -1677,6 +1669,17 @@ async fn inspect_produced_plot(
             .is_none_or(|r| !r.to_string().contains(hex))),
         "The color answer must not be disclosed by a tool's source-code result"
     );
+    println!("{}",json!({"phase":"produced-plot-answer","expected":color,"answer":answer,"reference":media}));
+    if real_model {
+        assert_eq!(
+            observed_color(&answer),
+            Some(color),
+            "Unexpected image interpretation: {answer}"
+        );
+        assert!(cites_plot(&answer, media.operation_id.as_str(), media.sequence), "Missing original plot citation: {answer}");
+    } else {
+        assert_eq!(answer.trim(), "Verified selected image");
+    }
     println!(
         "plot interpretation: model_calls={}, readonly_tool_calls={}",
         done.model_calls, done.tool_calls
@@ -2383,8 +2386,46 @@ async fn captured_document_input_is_marked_and_cancelled_by_its_original_operati
     f.service.close().await;
 }
 
+fn final_plot_answer(events: Vec<ComponentAgentEvent>) -> String {
+    let mut answer = String::new();
+    for event in events {
+        match event.content {
+            ComponentAgentEventContent::Text { text } => answer.push_str(&text),
+            ComponentAgentEventContent::Tool { .. } => answer.clear(),
+            _ => {}
+        }
+    }
+    answer
+}
+
+fn cites_plot(answer: &str, operation: &str, sequence: u64) -> bool {
+    let normalized = answer.replace(['*', '`'], "").to_ascii_lowercase();
+    let words: Vec<_> = normalized.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .filter(|word| !word.is_empty()).map(|word| word.trim_matches('_')).collect();
+    words.contains(&operation) && words.iter().enumerate().any(|(index, word)| {
+        if !matches!(*word, "output" | "sequence") { return false; }
+        let mut next = index + 1;
+        if words.get(next).is_some_and(|word| matches!(*word, "number" | "no")) { next += 1; }
+        words.get(next).and_then(|word| word.parse::<u64>().ok()) == Some(sequence)
+    })
+}
+
+#[test]
+fn plot_citation_uses_exact_identity_and_sequence_with_natural_labels() {
+    for text in ["red\nSource op_original output 2", "green\n`op_original`, output number 2", "green\nop_original, output/sequence 2"] {
+        assert!(cites_plot(text, "op_original", 2));
+    }
+    assert!(!cites_plot("op_original output 20", "op_original", 2));
+    assert!(!cites_plot("op_original_extra output 2", "op_original", 2));
+    let events = [ComponentAgentEventContent::Text { text: "I will inspect".into() },
+        ComponentAgentEventContent::Tool { receipt_id: "t".into(), phase: ComponentToolPhase::Resolved },
+        ComponentAgentEventContent::Text { text: "green\nop_original output 2".into() }]
+        .into_iter().enumerate().map(|(index, content)| ComponentAgentEvent { run_id: "run".into(), sequence: index as u64, created_at_ms: 0, content }).collect();
+    assert_eq!(final_plot_answer(events), "green\nop_original output 2");
+}
+
 fn observed_color(raw: &str) -> Option<&'static str> {
-    let mut text = raw.trim();
+    let mut text = raw.lines().find(|line| !line.trim().is_empty())?.trim();
     for marker in ["**", "__", "`", "\"", "'"] {
         if let Some(inner) = text
             .strip_prefix(marker)
@@ -2394,12 +2435,17 @@ fn observed_color(raw: &str) -> Option<&'static str> {
             break;
         }
     }
-    match text.to_ascii_lowercase().as_str() {
-        "red" => Some("red"),
-        "green" => Some("green"),
-        "blue" => Some("blue"),
-        _ => None,
+    let color = match text.to_ascii_lowercase().as_str() {
+        "red" => "red", "green" => "green", "blue" => "blue", _ => return None,
+    };
+    let answer = raw.to_ascii_lowercase();
+    if ["not red", "not green", "not blue", "cannot", "can't", "uncertain", "guess", "maybe", "perhaps", "no image"].iter().any(|word| answer.contains(word)) {
+        return None;
     }
+    if answer.split(|c: char| !c.is_ascii_alphabetic()).any(|word| matches!(word, "red" | "green" | "blue") && word != color) {
+        return None;
+    }
+    Some(color)
 }
 #[test]
 fn image_color_oracle_accepts_presentation_but_rejects_ambiguous_claims() {
@@ -2409,4 +2455,8 @@ fn image_color_oracle_accepts_presentation_but_rejects_ambiguous_claims() {
     assert_eq!(observed_color("not blue"), None);
     assert_eq!(observed_color("red or blue"), None);
     assert_eq!(observed_color("**blue** but uncertain"), None);
+    assert_eq!(observed_color("**green**\nSource: op_example, output 2. The fill is green."), Some("green"));
+    assert_eq!(observed_color("green\nActually blue."), None);
+    assert_eq!(observed_color("green\nIt is not green."), None);
+    assert_eq!(observed_color("green\nI cannot see the image."), None);
 }

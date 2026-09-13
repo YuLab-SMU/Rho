@@ -22,6 +22,8 @@ import { Agents } from "./agents";
 import { NativeAgents } from "./native-agents";
 import { AgentTasks } from "./agent-tasks";
 import { taskDraftCache, previewAgentAsset, releaseAgentAsset } from "./agent-task-adapter";
+import { ComponentAgents } from "./component-agents";
+import { componentDraftCache } from "./component-agent-adapter";
 import { copyAgentText } from "./agent-adapter";
 import { browserMedia } from "./media-adapter";
 import { mediaKey } from "./output-ports";
@@ -58,6 +60,7 @@ export class Studio {
   readonly agents: Agents;
   readonly nativeAgents: NativeAgents;
   readonly agentTasks: AgentTasks;
+  readonly componentAgents: ComponentAgents;
   private readonly documentPersistence: PersistenceFragment;
   private readonly consolePersistence: PersistenceFragment;
   private readonly objectPersistence: PersistenceFragment;
@@ -280,6 +283,10 @@ export class Studio {
       asset: async request => previewAgentAsset(await client.agentAsset(request)), releaseAsset: releaseAgentAsset,
       ...taskDraftCache(windowId), changed: this.persistence.changed,
       schedule: () => { this.coordinator.wake("agent-task-summary"); this.coordinator.wake("agent-task-events"); } });
+    this.componentAgents = new ComponentAgents({ context: this.session.context,
+      window: () => this.application.getSnapshot().online ? this.application.window : null,
+      query: request => client.componentQuery(request), command: request => client.componentCommand(request),
+      ...componentDraftCache(windowId) });
 
     this.consolePersistence = this.workspaceFragment("console", "runtimeConsoleViews");
     this.objectPersistence = this.workspaceFragment("objects", "runtimeObjectViews");
@@ -300,6 +307,7 @@ export class Studio {
         this.documents.reset(); this.outputs.reset(); this.mediaCache.reset(); this.plots.reset(); this.layout.resetState(); this.navigation.reset();
         this.application.reset(); this.agents.reset(); this.nativeAgents.reset();
         this.agentTasks.reset();
+        this.componentAgents.reset();
         this.persistence.prepareRestore();
       }),
       this.notifications.on("sessionChanged", () => {
@@ -542,6 +550,7 @@ export class Studio {
     this.agents.stop();
     this.nativeAgents.stop();
     this.agentTasks.stop();
+    this.componentAgents.dispose();
     this.stopped = true; this.lifecycle++; this.session.stop(); this.coordinator.stop(); this.client.stopReads(); this.persistence.stop(); this.preferences.stop();
     this.operations.stop(); this.runtimeSessions.stop(); this.documents.stop(); this.files.stop();
     for (const workspace of this.workspaces.values()) { workspace.console.stop(); workspace.objects.stop(); workspace.packages.stop(); }

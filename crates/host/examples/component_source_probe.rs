@@ -54,6 +54,9 @@ async fn probe() -> Result<(), String> {
     )?));
     let result=async {
         let mut context=NextHost::local_context();context.connection_id="studio:source-probe".into();
+        let policy=host.invoke(&context,Invocation{client_request_id:"fixture-manual-recovery".into(),capability:CapabilityRef::new("runtime.update_settings",1).unwrap(),arguments:json!({"scope":"project","workspace_instance_id":null,"expected_version":null,"overrides":{"mode":"manual"}}),preconditions:vec![]}).await.map_err(|_|"Fixture recovery policy failed")?;
+        if policy.status!=OperationStatus::Succeeded{return Err("Fixture recovery policy did not apply".into());}
+
         let marker=format!("source-{}",uuid::Uuid::new_v4());
         let color=["red","green","blue"][(uuid::Uuid::new_v4().as_bytes()[0]%3) as usize];
         let code=format!("source_data <- data.frame(marker = '{marker}', value = 29L); par(mar=c(0,0,0,0)); plot.new(); rect(-1,-1,2,2,col='{color}',border=NA); invisible(NULL)");

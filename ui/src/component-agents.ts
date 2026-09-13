@@ -1,4 +1,4 @@
-import { Model, immutable, readonlyMap } from "./shared/model";
+import { Model, immutable, readonlyMap, readonlySet } from "./shared/model";
 import { message } from "./shared/ports";
 import type { ComponentAgentPorts } from "./component-agent-ports";
 import type { ApplicationWindowRef } from "./generated/ApplicationWindowRef";
@@ -21,6 +21,7 @@ interface Draft { text: string; baseVersion: number; revision: number; dirty: bo
 interface PendingStart { request: ComponentAgentStart; state: "sending" | "uncertain" }
 interface Scope { project: string; epoch: number; generation: number; window: ApplicationWindowRef | null }
 interface ComponentSnapshot {
+  submitting: ReadonlySet<string>;
   history: ReadonlyMap<string, { runs: readonly ComponentAgentRunSummary[]; before: string | null; next: string | null }>;
   conversations: ReadonlyMap<string, ComponentAgentConversation>;
   drafts: ReadonlyMap<string, Draft>;
@@ -46,14 +47,16 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
   private cursors = new Map<string, number>();
   private gaps = new Map<string, boolean>();
   private pending = new Map<string, PendingStart>();
+  private submitting = new Map<string, symbol>();
   private saves = new Map<string, Promise<void>>();
   private runOrder = new Set<string>();
-  private historyRequests = new Map<string, number>();
-  private toolRequests = new Map<string, number>();
+  private historyRequests = new Map<string, symbol>();
+  private toolRequests = new Map<string, symbol>();
+  private eventRequests = new Map<string, symbol>();
   private error = "";
   constructor(private ports: ComponentAgentPorts) { super(); }
   protected readSnapshot(): ComponentSnapshot {
-    return { history: readonlyMap(this.history), conversations: readonlyMap(this.conversations), drafts: readonlyMap(new Map([...this.drafts].map(([id, draft]) => [id, immutable(clone(draft))]))),
+    return { submitting: readonlySet(new Set(this.submitting.keys())), history: readonlyMap(this.history), conversations: readonlyMap(this.conversations), drafts: readonlyMap(new Map([...this.drafts].map(([id, draft]) => [id, immutable(clone(draft))]))),
       runs: readonlyMap(this.runs), tools: readonlyMap(this.tools), events: readonlyMap(this.events), historyGap: readonlyMap(this.gaps),
       pending: immutable(clone([...this.pending.values()])), error: this.error };
   }
@@ -63,7 +66,8 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
     this.project = this.ports.context().project;
     this.conversations.clear(); this.history.clear(); this.drafts.clear(); this.runs.clear(); this.tools.clear();
     this.events.clear(); this.cursors.clear(); this.gaps.clear(); this.pending.clear(); this.saves.clear(); this.runOrder.clear(); this.error = "";
-    this.historyRequests.clear(); this.toolRequests.clear();
+    this.historyRequests.clear(); this.toolRequests.clear(); this.eventRequests.clear();
+    this.submitting.clear();
     if (this.project) {
       try { this.restore(this.ports.readLocal(this.project)); }
       catch { this.error = "The local assistant draft state could not be read."; }
@@ -168,7 +172,7 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
   async observeHistory(id: string, before: string | null = null) {
     const scope = this.scope();
     if (!this.conversations.has(id)) throw new Error("Read the conversation before its history.");
-    const request = (this.historyRequests.get(id) ?? 0) + 1; this.historyRequests.set(id, request);
+    const request = Symbol(); this.historyRequests.set(id, request);
     const reply = await this.ports.query({ project_root: scope.project, query: { kind: "runs", conversation_id: id, before, limit: 32 } });
     if (!this.current(scope) || this.historyRequests.get(id) !== request) return;
     if (reply.runs.length > 32 || reply.runs.some(run => run.conversation_id !== id) ||
@@ -231,11 +235,21 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
       const expired = this.runOrder.values().next().value!;
       this.runOrder.delete(expired); this.runs.delete(expired); this.tools.delete(expired);
       this.toolRequests.delete(expired);
+      this.eventRequests.delete(expired);
       this.events.delete(expired); this.cursors.delete(expired); this.gaps.delete(expired);
     }
   }
   async start(input: Omit<ComponentAgentStart, "request_id" | "window" | "conversation_version">) {
     const scope = this.scope(true);
+    const id = input.conversation_id;
+    if (this.submitting.has(id)) throw new Error("A submission for this conversation is already in progress.");
+    const token = Symbol(); this.submitting.set(id, token); this.publish();
+    try { return await this.submit(input, scope); }
+    finally {
+      if (this.submitting.get(id) === token) { this.submitting.delete(id); this.publish(); }
+    }
+  }
+  private async submit(input: Omit<ComponentAgentStart, "request_id" | "window" | "conversation_version">, scope: Scope) {
     input = clone(input);
     await this.observeConversation(input.conversation_id);
     if (!this.current(scope)) return;
@@ -243,13 +257,36 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
     if (this.drafts.get(input.conversation_id)?.conflict !== null || this.conversations.get(input.conversation_id)?.active_run_id) throw new Error("Resolve the draft or active run before submitting.");
     if ([...this.pending.values()].some(p => p.request.conversation_id === input.conversation_id)) throw new Error("Resolve the previous submission first.");
     if (this.pending.size >= 16) throw new Error("Too many unresolved submissions.");
-    const request: ComponentAgentStart = clone({ ...input, request_id: crypto.randomUUID(), window: scope.window!,
-      conversation_version: this.conversations.get(input.conversation_id)!.version });
+    const request: ComponentAgentStart = immutable(clone({ ...input, request_id: crypto.randomUUID(), window: scope.window!,
+      conversation_version: this.conversations.get(input.conversation_id)!.version }));
     if (bytes(request) > 64 * 1024) throw new Error("Request exceeds 64 KiB.");
     this.pending.set(request.request_id, { request, state: "sending" });
     try { this.persist(true); }
     catch (error) { this.pending.delete(request.request_id); this.publish(); throw error; }
     this.publish();
+    return this.dispatchSubmission(request, scope);
+  }
+  /** Explicit user retry only; reuse the entire original payload and request identity. */
+  async retrySubmission(requestId: string) {
+    const scope = this.scope(true), pending = this.pending.get(requestId);
+    if (!pending || pending.state !== "uncertain") throw new Error("There is no uncertain submission to retry.");
+    if (!sameWindow(scope.window, pending.request.window)) throw new Error("The original submission belongs to another window incarnation.");
+    const id = pending.request.conversation_id;
+    if (this.submitting.has(id)) throw new Error("A submission for this conversation is already in progress.");
+    const token = Symbol(); this.submitting.set(id, token); this.publish();
+    try {
+      await this.observeConversation(id);
+      if (!this.current(scope)) return;
+      if (!this.canControl(id)) throw new Error("This window does not control the conversation.");
+      return await this.dispatchSubmission(immutable(clone(pending.request)), scope);
+    } finally {
+      if (this.submitting.get(id) === token) { this.submitting.delete(id); this.publish(); }
+    }
+  }
+  private async dispatchSubmission(request: ComponentAgentStart, scope: Scope) {
+    const pending = this.pending.get(request.request_id);
+    if (!pending) return;
+    pending.state = "sending"; this.persist(); this.publish();
     try {
       const reply = await this.ports.command({ project_root: scope.project, window: scope.window!, command: { kind: "start", request } });
       if (!this.current(scope)) return;
@@ -285,8 +322,9 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
   }
   async observeEvents(id: string) {
     const scope = this.scope(), after = this.cursors.get(id) ?? 0;
+    const request = Symbol(); this.eventRequests.set(id, request);
     const { page } = await this.ports.query({ project_root: scope.project, query: { kind: "events", run_id: id, after, limit: 128 } });
-    if (!this.current(scope) || (this.cursors.get(id) ?? 0) !== after) return;
+    if (!this.current(scope) || this.eventRequests.get(id) !== request || (this.cursors.get(id) ?? 0) !== after) return;
     if (!Number.isSafeInteger(page.cursor) || page.cursor < after) throw new Error("Invalid event cursor.");
     let last = after;
     for (const event of page.events) {
@@ -305,7 +343,7 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
   }
   async observeTools(id: string) {
     const scope = this.scope();
-    const request = (this.toolRequests.get(id) ?? 0) + 1; this.toolRequests.set(id, request);
+    const request = Symbol(); this.toolRequests.set(id, request);
     const reply = await this.ports.query({ project_root: scope.project, query: { kind: "tools", run_id: id } });
     if (!this.current(scope) || this.toolRequests.get(id) !== request) return;
     if (reply.tools.some(tool => tool.run_id !== id)) throw new Error("Tool receipt identity mismatch.");

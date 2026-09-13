@@ -179,3 +179,60 @@ it("a newer authoritative conversation version is used for an explicit Start", a
   const result = await f.model.start(input);
   expect(result?.request.conversation_version).toBe(4);
 });
+it("serializes submission preflight so a second click cannot mint another request", async () => {
+  const f = fixture(); await f.model.observeConversation("c");
+  const preflight = deferred<never>(); vi.mocked(f.ports.query).mockReturnValueOnce(preflight.promise);
+  const first = f.model.start(input);
+  expect(f.model.getSnapshot().submitting.has("c")).toBe(true);
+  await expect(f.model.start(input)).rejects.toThrow("already in progress");
+  preflight.resolve({ conversation: conversation() } as never); await first;
+  expect(f.ports.command).toHaveBeenCalledTimes(1);
+  expect(f.model.getSnapshot().submitting.size).toBe(0);
+});
+it("an obsolete preflight cannot clear a newer project submission", async () => {
+  const f = fixture(); await f.model.observeConversation("c");
+  const old = deferred<never>(); vi.mocked(f.ports.query).mockReturnValueOnce(old.promise);
+  const first = f.model.start(input);
+  f.project("/two"); f.model.reset();
+  const current = deferred<never>(); vi.mocked(f.ports.query).mockReturnValueOnce(current.promise);
+  const second = f.model.start(input);
+  old.resolve({ conversation: conversation() } as never); await first;
+  expect(f.model.getSnapshot().submitting.has("c")).toBe(true);
+  current.resolve({ conversation: conversation() } as never); await second;
+  expect(f.ports.command).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(f.ports.command).mock.calls[0][0].project_root).toBe("/two");
+});
+it("an evicted event request cannot overwrite the same run after it is reopened", async () => {
+  const f = fixture(); await f.model.observeEvents("run");
+  const old = deferred<never>(); vi.mocked(f.ports.query).mockReturnValueOnce(old.promise);
+  const first = f.model.observeEvents("run");
+  for (let index = 0; index < 32; index++) await f.model.observeEvents(`other-${index}`);
+  const current = deferred<never>(); vi.mocked(f.ports.query).mockReturnValueOnce(current.promise);
+  const second = f.model.observeEvents("run");
+  const page = (text: string) => ({ page: { events: [{ run_id: "run", sequence: 1, created_at_ms: 1,
+    content: { kind: "text", text } }], cursor: 1, history_gap: false } });
+  old.resolve(page("old") as never); await first;
+  expect(f.model.getSnapshot().events.has("run")).toBe(false);
+  current.resolve(page("current") as never); await second;
+  expect(f.model.getSnapshot().events.get("run")?.[0].content).toEqual({ kind: "text", text: "current" });
+});
+it("an explicit retry reuses the frozen request rather than later drafts or settings", async () => {
+  const f = fixture(); await f.model.observeConversation("c");
+  vi.mocked(f.ports.command).mockRejectedValueOnce(new Error("ACK lost"));
+  await expect(f.model.start(input)).rejects.toThrow("ACK lost");
+  const original = clone(vi.mocked(f.ports.command).mock.calls[0][0]);
+  const pending = f.model.getSnapshot().pending[0];
+  f.model.editDraft("c", "later question"); f.remote({ ...conversation(), version: 9 });
+  await f.model.retrySubmission(pending.request.request_id);
+  expect(vi.mocked(f.ports.command).mock.calls[1][0]).toEqual(original);
+  expect(f.model.getSnapshot().drafts.get("c")?.text).toBe("later question");
+});
+it("cannot retry an old request through a new window incarnation", async () => {
+  const f = fixture(); await f.model.observeConversation("c");
+  vi.mocked(f.ports.command).mockRejectedValueOnce(new Error("ACK lost"));
+  await expect(f.model.start(input)).rejects.toThrow("ACK lost");
+  const id = f.model.getSnapshot().pending[0].request.request_id;
+  f.window({ window_id: "one", incarnation: "new" });
+  await expect(f.model.retrySubmission(id)).rejects.toThrow("another window incarnation");
+  expect(f.ports.command).toHaveBeenCalledTimes(1);
+});

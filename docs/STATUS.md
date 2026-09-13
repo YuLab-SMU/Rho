@@ -24,8 +24,11 @@ event caches, CAS draft conflicts, persisted submission identities, read-only
 acknowledgement recovery, project/window response fences and explicit Stop,
 Reconcile and takeover commands. HostClient exposes the existing authenticated
 component endpoints; read timeouts do not cancel or replay commands. This model is
-not yet mounted or connected to Studio's lifecycle/views. Its local-storage adapter
-must be scoped to the browser window when that integration is implemented.
+connected to Studio's project-switch and stop lifecycle, with a separate local
+window/project cache. No component views or polling are mounted. Submission
+preflight is serialized per conversation; explicit retries preserve the complete
+original request, and unique observation tokens fence responses after cache eviction.
+Startup recovery tests verify zero component queries, commands or model tests.
 
 ### Current backend behavior
 
@@ -168,6 +171,7 @@ model configuration, all case logs and `summary.json`:
 | `2026-09-13T05-35-26.516Z` | 23/27 | Invisible-return fixture and runs submitted before Resume |
 | `2026-09-13T07-20-03.997Z` | 25/27 | Plots answer/count mismatch; provider/stream error during produced-plot repair |
 | `2026-09-13T08-27-28.616Z` | 26/27 | Workspace checker combined pre-tool narration with the final answer |
+| `2026-09-13T09-29-10.428Z` | 26/27 | Correct plot color with source citation rejected by one-word-only checker |
 
 The fourth matrix used code commit `285ca1c3`. Six profiles passed three times,
 Plots passed twice, and document repair passed three times. The interrupted repair
@@ -213,6 +217,24 @@ replay, repairs, resumes and finishes. Parent and child retain separate terminal
 states and original native identities; the counter increments once. All 15 native
 mutation tests pass in `target/component-interrupted-repair-regression.log`.
 This is an injected engine failure, not another live-provider availability measurement.
+
+The sixth matrix (`2026-09-13T09-29-10.428Z`) also finished at 26/27: the failed
+produced-plot case identified green and cited the original output, but the checker
+required a lone word while the assistant instructions require citations. The probe
+now requests a first-line color plus the original operation/output reference and
+checks both, retaining ambiguity/negative-answer rejection and all native checks.
+A targeted repeat at `2026-09-13T10-02-28.955Z` passed 2/3; its remaining failure
+was an independently scheduled `workspace.checkpoint_capture` during model waiting.
+Temporary source/mutation fixtures now explicitly use project-scoped Manual recovery
+policy so that strict no-new-operation assertions measure assistant effects.
+Product recovery defaults are unchanged. All 15 native mutation tests and selected
+fixture Clippy passed: `target/component-fixture-isolation-{tests,clippy,build}.log`.
+The next isolated repeat (`2026-09-13T10-12-41.010Z`) passed 1/3; its two failures
+were checker mismatches for "output number 2" and pre-tool narration. The checker
+now reads the final post-tool answer and recognizes complete output/sequence
+numbers and exact operation IDs. Regressions reject wrong IDs, number prefixes,
+conflicting colors and unavailable-image claims. Logs:
+`target/component-plot-citation-labels.log`, `target/component-final-citation-clippy.log`.
 Engine and mutation-test Clippy passed (the latter with the existing Host style
 exceptions), and the current main binary built successfully. Logs:
 `target/component-image-order-{clippy,build}.log` and
@@ -229,6 +251,13 @@ The authenticated history HTTP route also passed its no-model/no-runtime test,
 and the current main binary built: `target/component-history-{http-final,build}.log`.
 The final-answer extraction regression and selected probe Clippy passed in
 `target/component-final-answer-{test,clippy}.log`.
+
+The later lifecycle/concurrency pass completed 391 UI tests plus 25 boundary
+fixtures, typecheck, client build/check and the current main build. An external-Agent
+browser run passed 8/9; the failing case waited on CLI discovery, and its isolated
+repeat passed. No component requests appeared in that failed trace. Logs:
+`target/component-client-lifecycle-{unit,types,build,main,browser,browser-repeat}.log`.
+The component UI remains unimplemented pending Paper review.
 
 The Start command boxes its Rust payload without changing generated JSON/TypeScript.
 Its newly introduced large-enum diagnostic was removed. Selected Application,

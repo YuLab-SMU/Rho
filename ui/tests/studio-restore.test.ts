@@ -29,6 +29,7 @@ function fixture(delay: "runtime" | "plot" | "persistence" | null = null) {
   const session = { window: { window_id: "window", incarnation: "incarnation" }, bridge_token: "fixture-bridge" };
   const host = {
     agentConnection: vi.fn(), agentConfiguration: vi.fn(),
+    componentQuery: vi.fn(), componentCommand: vi.fn(), componentModelTest: vi.fn(),
     windowId: session.window.window_id, incarnation: session.window.incarnation,
     previousBridgeSession: () => undefined, rememberBridgeSession: vi.fn(), stopReads: vi.fn(),
     info: vi.fn(async () => ({ project_root: "/project", runtime: "R", capabilities: [{ capability: { id: "workspace.runtime_status", version: 1 } }] })),
@@ -72,6 +73,9 @@ it.each(["runtime", "persistence"] as const)("keeps Show Packages during delayed
   expect(f.studio.packages.serialize().packages.filter).toBe("stats");
   expect(f.remote().views.some((view) => view.view_id === "packages")).toBe(true); expect(f.remote().active_view_id).toBe("packages");
   expect(f.host.invoke).not.toHaveBeenCalled();
+  expect(f.host.componentQuery).not.toHaveBeenCalled();
+  expect(f.host.componentCommand).not.toHaveBeenCalled();
+  expect(f.host.componentModelTest).not.toHaveBeenCalled();
 });
 
 it("keeps a closed plot and newer active view when original plot evidence arrives late", async () => {
