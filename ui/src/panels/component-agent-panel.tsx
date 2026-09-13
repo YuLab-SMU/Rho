@@ -104,7 +104,8 @@ function ComponentConversation({ id, settings }: { id: string; settings(): void 
   const [picker, setPicker] = useState<{ selection: AgentContextSelection | null } | null>(null), [composing, setComposing] = useState(false);
   const editable = owner.canControl(id), pending = state.pending.filter(p => p.request.conversation_id === id);
   const latest = history?.runs[0], run = latest ? state.runs.get(latest.run_id) : undefined;
-  const busy = !!conversation?.active_run_id || !!run && componentBusy(run);
+  const activeRun = conversation?.active_run_id ? state.runs.get(conversation.active_run_id) : undefined;
+  const busy = !!conversation?.active_run_id && (!activeRun || componentBusy(activeRun)) || !!run && componentBusy(run);
   const hasImages = composer.sources.some(s => s.source === "plots" && s.inclusion === "image");
   const imageTest = state.diagnostics.find(d => d.kind === "images" && JSON.stringify(d.model) === JSON.stringify(state.settings?.connection));
   const imagesReady = !hasImages || imageTest?.state === "passed";

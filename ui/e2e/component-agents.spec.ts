@@ -10,7 +10,7 @@ let requests: unknown[] = [];
 test.beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "rho-component-browser-"));
   const project = join(directory, "study"); await mkdir(project);
-  await writeFile(join(project, "notes.txt"), "A retained native file source.\n");
+  await writeFile(join(project, "notes.txt"), "A retained native file source.\nValidation marker: RHO_NATIVE_FILE_3847_ALPHA\n");
   await writeFile(join(project, "analysis.R"), "x <- 1\nprint(x)\n");
   model = createServer(async (request, response) => {
     let body = ""; for await (const part of request) body += part;
@@ -38,7 +38,7 @@ test.beforeAll(async () => {
   });
   await new Promise<void>(resolve => model.listen(0, "127.0.0.1", resolve));
   endpoint = `http://127.0.0.1:${(model.address() as { port: number }).port}`;
-  host = spawn(resolve("../target/debug/rho"), ["--database", join(directory, "state.sqlite"), "--project", project, "workbench", ...(process.env.RHO_COMPONENT_BROWSER_DEV_ASSETS ? ["--dev-assets", resolve(process.env.RHO_COMPONENT_BROWSER_DEV_ASSETS)] : [])], { env: { ...process.env, RHO_COMPONENT_BROWSER_KEY: "fixture-only" }, stdio: ["ignore", "pipe", "pipe"] });
+  host = spawn(resolve("../target/debug/rho"), ["--database", join(directory, "state.sqlite"), "--project", project, "workbench", ...(process.env.RHO_COMPONENT_BROWSER_DEV_ASSETS ? ["--dev-assets", resolve(process.env.RHO_COMPONENT_BROWSER_DEV_ASSETS)] : [])], { env: { ...process.env, RHO_COMPONENT_BROWSER_KEY: process.env.RHO_COMPONENT_BROWSER_REAL_MODEL ? process.env.RHO_COMPONENT_BROWSER_SECRET : "fixture-only" }, stdio: ["ignore", "pipe", "pipe"] });
   url = await new Promise<string>((resolve, reject) => {
     let output = "", errors = "";
     const timer = setTimeout(() => reject(new Error(`Host startup: ${errors}`)), 40000);
@@ -66,8 +66,8 @@ async function configure(page: Page) {
   await page.getByLabel("Assistant model settings").click();
   const settings = page.getByLabel("Built-in assistant settings");
   await settings.getByLabel("Enable built-in assistant").check();
-  await settings.getByLabel("Base URL", { exact: true }).fill(endpoint);
-  await settings.getByLabel("Model ID", { exact: true }).fill("fixture");
+  await settings.getByLabel("Base URL", { exact: true }).fill(process.env.RHO_COMPONENT_BROWSER_REAL_MODEL ? process.env.RHO_COMPONENT_BROWSER_URL! : endpoint);
+  await settings.getByLabel("Model ID", { exact: true }).fill(process.env.RHO_COMPONENT_BROWSER_REAL_MODEL || "fixture");
   await settings.getByLabel("Credential lifetime").selectOption("environment");
   await settings.getByLabel("Environment variable name").fill("RHO_COMPONENT_BROWSER_KEY");
   await settings.getByRole("button", { name: "Save", exact: true }).click();
@@ -256,4 +256,21 @@ test("typing and frame latency stay bounded while the model stream is active", a
   const report = { baseline, active, provider: "local protocol fixture", measurement: "keydown to second animation frame; same console input on same Host; no R execution" };
   await writeFile(testInfo.outputPath("performance.json"), JSON.stringify(report, null, 2));
   await testInfo.attach("performance", { body: JSON.stringify(report), contentType: "application/json" });
+});
+
+test("opt-in real model reads a native file through the approved Studio UI", async ({ page }) => {
+  test.skip(!process.env.RHO_COMPONENT_BROWSER_REAL_MODEL, "Requires an explicitly authorized real model service.");
+  test.setTimeout(180000);
+  await open(page); await create(page);
+  await page.getByRole("button", { name: "＋ Context", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Assistant sources" });
+  await picker.getByLabel("Assistant source type").selectOption("files");
+  await picker.getByRole("button", { name: /notes.txt/ }).click();
+  await expect(picker).toContainText("RHO_NATIVE_FILE_3847_ALPHA");
+  await picker.getByRole("button", { name: "Add context", exact: true }).click();
+  await page.getByRole("textbox", { name: "Agent message", exact: true }).fill("Quote the validation marker from the selected notes.txt file, then cite the file. Keep the answer short.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".ca-answer")).toContainText("RHO_NATIVE_FILE_3847_ALPHA", { timeout: 150000 });
+  await expect(page.getByLabel("Assistant run")).toContainText("completed", { timeout: 150000 });
+  await page.screenshot({ path: "../target/studio-browser/component-real-model.png" });
 });
