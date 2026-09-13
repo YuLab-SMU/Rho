@@ -142,6 +142,9 @@ Current evidence:
   tool/native evidence before its execution-count assertion. Earlier passing
   Workspace responses alone did not prove a returned native value. The production
   receipt checksum and queue-precondition changes require a new complete matrix.
+  A fourth fixed-source matrix is now running at code commit `285ca1c3`; its live
+  evidence is `target/component-matrix/2026-09-13T07-20-03.997Z/summary.json` and
+  `target/component-matrix-preconditions.log`. No final outcome is claimed yet.
   Focused validation passed 32 Application, 28 SQLite, 14 real-R and 365 UI tests,
   contract generation/client build/check, architecture and documentation fixtures.
   Evidence: `target/component-precondition-{application,store,native,ui,client}.log`.
