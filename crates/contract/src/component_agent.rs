@@ -414,7 +414,7 @@ pub enum ComponentAgentCommand {
         draft: ComponentAgentDraftUpdate,
     },
     Start {
-        request: ComponentAgentStart,
+        request: Box<ComponentAgentStart>,
     },
     Stop {
         run_id: String,

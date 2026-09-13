@@ -914,10 +914,11 @@ async fn rig_corrects_known_tool_argument_shape_without_dispatching_the_rejected
     assert!(tools.iter().any(|t| t.result.as_ref().is_some_and(
         |r| r["status"] == "ready" && r.to_string().contains("native-project-evidence-27")
     )));
-    let requests = provider.state.requests.lock().unwrap();
-    assert_eq!(requests.len(), 3);
-    assert!(requests[1]["messages"].to_string().contains("rejected"));
-    drop(requests);
+    {
+        let requests = provider.state.requests.lock().unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(requests[1]["messages"].to_string().contains("rejected"));
+    }
     f.service.close().await;
 }
 

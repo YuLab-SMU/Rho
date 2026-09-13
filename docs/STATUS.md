@@ -112,6 +112,24 @@ dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
 These are individual acceptance runs, not throughput guarantees.
 
 Current evidence:
+- Cross-edge fact parity now passes with a real R session and a local HTTP model
+  fixture driving Rig. Component tools, direct Host reads, and both MCP operation
+  read names over rmcp's framed duplex transport retain the same native operation
+  and observation. Only the observation timestamp is excluded from comparison;
+  operation identity, output, status and navigation remain exact. The operation set
+  grows by exactly the assistant's one execution, and subsequent reads append no
+  scientific events. Evidence: `target/component-parity-rig-final.log`.
+  `scripts/test-real-r.mjs` includes this check. The MCP crate retains its existing
+  Host-only domain dependency boundary; the HTTP fixture is a dev dependency.
+  The component Start command now boxes its Rust request payload; generated JSON
+  and TypeScript stay unchanged. This removes its newly introduced large-enum
+  diagnostic. Selected Application/engine/Host/MCP/Workbench Clippy passed with the
+  documented pre-existing style exceptions; strict Contract Clippy retains only
+  the two old diagnostics in unchanged checkpoint/Host request enums. Evidence:
+  `target/component-parity-{client,clippy,contract-lints}.log`. Workbench's 11 tests
+  also passed in `target/component-parity-workbench.log`.
+  The affected Rig parameter-feedback test and final main build passed:
+  `target/component-parity-{feedback,build-final}.log`.
 - The new explicit `scripts/test-component-matrix.mjs --run` executes nine backend
   scenarios (all seven profiles plus two repair workflows), three times each. It
   retains each attempt and fixes the backend source digest and model configuration.
@@ -127,8 +145,10 @@ Current evidence:
   Focused validation passed 32 Application, 28 SQLite, 14 real-R and 365 UI tests,
   contract generation/client build/check, architecture and documentation fixtures.
   Evidence: `target/component-precondition-{application,store,native,ui,client}.log`.
-  The full workspace regression and following main build were launched; their
-  final results still need review in `target/component-precondition-{workspace,build}.log`.
+  Full workspace regression subsequently passed 350 tests, with 31 external checks
+  ignored; doc tests and the main build also passed. Three Chrome regressions passed
+  for Chinese edit/save/run, UTF-8/BOM/CRLF and disk conflicts, and two-window drafts.
+  Evidence: `target/component-precondition-{workspace,build,browser}.log`.
   Startup sampling found a test executable waiting at `_dyld_start`, before test
   code; this is a test-environment observation, not an assistant UI measurement.
 - Native input ownership now uses the exact operation and R-session identities

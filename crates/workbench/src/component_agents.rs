@@ -140,7 +140,7 @@ pub(super) async fn command(
                 );
             }
             service
-                .start(host.clone(), context, project, start)
+                .start(host.clone(), context, project, *start)
                 .await
                 .map(|v| json!({"run":v}))
         }
