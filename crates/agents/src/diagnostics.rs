@@ -103,10 +103,10 @@ pub(super) async fn test(
                     builder.max_tokens(2048).build(),
                     Message::User {
                         content: vec![
+                            UserContent::image_base64(bytes, Some(ImageMediaType::PNG), None),
                             UserContent::text(
                                 "Inspect the attached synthetic image. Reply with only the dominant color as one lowercase English word.",
                             ),
-                            UserContent::image_base64(bytes, Some(ImageMediaType::PNG), None),
                         ],
                     },
                     color.into(),

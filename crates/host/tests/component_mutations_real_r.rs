@@ -399,7 +399,8 @@ impl ComponentAgentEngine for DocumentEngine {
                 request.port.append_text("Verified selected image".into()).await?;
                 return Ok(());
             }
-            if request.run.request.continuation.is_some() {
+            let interrupted_repair = request.run.request.text == "fixture-continue-repair";
+            if request.run.request.continuation.is_some() && !interrupted_repair {
                 let history=request.run.context.as_ref().unwrap().history.as_ref().unwrap();
                 let resume=history["tools"].as_array().unwrap().iter().find(|t|t["capability"]=="workspace.resume_queue").unwrap();
                 let pause=resume["result"]["operation"]["normalized_arguments"]["pause_id"].clone();
@@ -408,7 +409,13 @@ impl ComponentAgentEngine for DocumentEngine {
                 if result["executed_again"]!=false || result["result"]["status"]!="succeeded" {return Err(ApplicationError::InvalidInput(format!("Prior resume was not reused: {result}")));}
                 return Ok(());
             }
-            if self.repair {
+            if interrupted_repair {
+                let previous=request.port.prepare_tool(turn,"repeat-parent-failure","application_run_file",json!({"document_id":"analysis"})).await?;
+                assert!(!previous.tool.receipt.mutation);
+                let result=request.port.execute_tool(previous).await?;
+                assert_eq!(result["executed_again"],false);
+                assert_eq!(result["result"]["state"],"failed");
+            } else if self.repair {
                 let first=request.port.prepare_tool(turn,"first-run","application_run_file",json!({"document_id":"analysis"})).await?;
                 let original=first.tool.receipt.client_request_id.clone();
                 let failed=request.port.execute_tool(first).await?;
@@ -422,6 +429,9 @@ impl ComponentAgentEngine for DocumentEngine {
                 if request.port.execute_tool(duplicate).await? != failed {
                     return Err(ApplicationError::InvalidInput("Repeated failure lost its original receipt".into()));
                 }
+            }
+            if request.run.request.text == "fixture-model-interruption" {
+                return Err(ApplicationError::InvalidInput("Injected model failure after confirmed R failure".into()));
             }
             let (edit_name,edit) = if self.repair { ("application_replace_text",json!({"document_id":"analysis","old_text":REPAIR_LINE.trim_end(),"new_text":""})) } else { ("application_edit_document",json!({"document_id":"analysis","edits":[{"from":0,"to":0,"insert":"counter <- counter + 1L\n"}]})) };
             let ticket = request.port.prepare_tool(turn,"edit",edit_name,edit.clone()).await?;
@@ -560,6 +570,20 @@ async fn documents_acceptance(
     produced_plot: bool,
     profile: ComponentAgentProfile,
 ) {
+    documents_acceptance_with_interruption(real_model, repair, continue_model, produced_plot, profile, false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; explicit Continue after an injected model failure"]
+async fn interrupted_document_repair_continues_without_replaying_the_failed_capture() {
+    documents_acceptance_with_interruption(false, true, false, false, ComponentAgentProfile::Documents, true).await;
+}
+
+async fn documents_acceptance_with_interruption(
+    real_model: bool, repair: bool, continue_model: bool, produced_plot: bool,
+    profile: ComponentAgentProfile, interrupt_model: bool,
+) {
+    assert!(!interrupt_model || (!real_model && repair));
     let f = Fixture::with_documents("", false, true, real_model, repair).await;
     let (color, hex) = [
         ("red", "#D62424"),
@@ -638,7 +662,7 @@ async fn documents_acceptance(
             profile,
         )
         .unwrap();
-    let run = f
+    let mut run = f
         .service
         .start(
             f.host.clone(),
@@ -650,7 +674,7 @@ async fn documents_acceptance(
                 conversation_version: conversation.version,
                 window: f.window.clone(),
                 model_settings_version: 1,
-                text: if repair { "First run the authorized document analysis (analysis.R) using application_run_file to observe its failure. Then inspect its original native failure and current draft, repair only the failing first line, and use application_run_file again to save and run the corrected script. Keep the counter increment and other code unchanged. The counter must increment exactly once across the entire workflow. Do not repeat the failed execution and do not create another document or use direct R.".into() } else { "Use the authorized document analysis (analysis.R) whose initial text is exactly invisible(counter) followed by a newline. First prepend counter <- counter + 1L followed by a newline using application_edit_document, then call application_save_document, then application_run_file. Execute exactly once. Wait for each native receipt and report whether it succeeded. Do not create another document or use direct R.".into() },
+                text: if interrupt_model { "fixture-model-interruption".into() } else if repair { "First run the authorized document analysis (analysis.R) using application_run_file to observe its failure. Then inspect its original native failure and current draft, repair only the failing first line, and use application_run_file again to save and run the corrected script. Keep the counter increment and other code unchanged. The counter must increment exactly once across the entire workflow. Do not repeat the failed execution and do not create another document or use direct R.".into() } else { "Use the authorized document analysis (analysis.R) whose initial text is exactly invisible(counter) followed by a newline. First prepend counter <- counter + 1L followed by a newline using application_edit_document, then call application_save_document, then application_run_file. Execute exactly once. Wait for each native receipt and report whether it succeeded. Do not create another document or use direct R.".into() },
                 grant: ComponentAgentGrant {
                     mode: ComponentAgentMode::Run,
                     session: Some(f.session.clone()),
@@ -666,6 +690,7 @@ async fn documents_acceptance(
         )
         .await
         .unwrap();
+    let mut parents = Vec::new();
     let mut edits = 0;
     let mut native_runs = 0;
     let mut failures = 0;
@@ -690,6 +715,24 @@ async fn documents_acceptance(
                     .run(&f.host, &f.context, &f.project, &run.run_id)
                     .unwrap();
                 if state.state.is_terminal() {
+                    if interrupt_model && parents.is_empty() {
+                        assert_eq!(state.state, ComponentAgentRunState::Failed);
+                        assert!(state.reason.as_deref().unwrap().contains("Injected model failure"));
+                        assert_eq!((edits, native_runs, failures), (0, 1, 1));
+                        let reconciled = f.service.reconcile(&f.host, &f.context, &f.project, &f.window, &run.run_id).await.unwrap();
+                        let recovery = reconciled.recovery.unwrap();
+                        assert_eq!(recovery.unresolved_mutations, 0);
+                        let mut next = run.request.clone();
+                        next.request_id = "continue-interrupted-repair".into();
+                        next.text = "fixture-continue-repair".into();
+                        next.conversation_version = f.service.conversation(&f.host, &f.context, &f.project, &next.conversation_id).unwrap().version;
+                        next.grant.documents[0].document = doc_ref(&document);
+                        next.sources = vec![];
+                        next.continuation = Some(ComponentContinuation { run_id: run.run_id.clone(), recovery_digest: recovery.digest });
+                        parents.push(run.run_id.clone());
+                        run = f.service.start(f.host.clone(), f.context.clone(), &f.project, next).await.unwrap();
+                        continue;
+                    }
                     if state.state != ComponentAgentRunState::Completed {
                         let scope = ApplicationScope {
                             project: f.project.clone(),
@@ -899,10 +942,11 @@ async fn documents_acceptance(
         .await
         .unwrap();
     assert_eq!(proof.status, OperationStatus::Succeeded);
-    let tools = f
-        .service
-        .tools(&f.host, &f.context, &f.project, &run.run_id)
-        .unwrap();
+    let mut tools = Vec::new();
+    for id in parents.iter().chain(std::iter::once(&run.run_id)) {
+        tools.extend(f.service.tools(&f.host, &f.context, &f.project, id).unwrap());
+    }
+    assert_eq!(parents.len(), usize::from(interrupt_model));
     let mutations: Vec<_> = tools.iter().filter(|t| t.mutation).collect();
     assert_eq!(mutations.len(), if repair { 4 } else { 3 });
     assert!(
@@ -1069,6 +1113,7 @@ async fn documents_acceptance(
             .unwrap();
         let mut request = run.request.clone();
         request.request_id = "continue-resume".into();
+        request.text = "Confirm the original resumed queue result without new actions.".into();
         request.conversation_version = f
             .service
             .conversation(&f.host, &f.context, &f.project, &request.conversation_id)
@@ -1117,15 +1162,19 @@ async fn documents_acceptance(
             .iter()
             .all(|t| t.state == ComponentRecoveryState::Confirmed)
     );
-    assert_eq!(
-        recovery
-            .tools
-            .iter()
-            .flat_map(|t| t.operations.iter())
-            .filter(|op| op.status == OperationStatus::Failed)
-            .count(),
-        usize::from(repair)
-    );
+    let mut recoveries = vec![recovery];
+    for parent in &parents {
+        let restored = replacement.reconcile(&f.host, &f.context, &f.project, &f.window, parent).await.unwrap();
+        assert_eq!(restored.state, ComponentAgentRunState::Failed);
+        let original = restored.recovery.unwrap();
+        assert_eq!(original.unresolved_mutations, 0);
+        assert!(original.tools.iter().all(|tool| tool.state == ComponentRecoveryState::Confirmed));
+        recoveries.push(original);
+    }
+    let failed_operations = recoveries.iter().flat_map(|report| &report.tools)
+        .flat_map(|tool| &tool.operations).filter(|op| op.status == OperationStatus::Failed)
+        .map(|op| op.operation_id.clone()).collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(failed_operations.len(), usize::from(repair));
     replacement.close().await;
 }
 

@@ -13,7 +13,7 @@ use rig::{
     },
     message::{ImageMediaType, Message, UserContent},
     prelude::*,
-    providers::openai,
+    providers::{anthropic, openai},
     streaming::StreamedAssistantContent,
     tool::{DynamicTool, ToolContext, ToolExecutionError, ToolOutput},
 };
@@ -66,6 +66,7 @@ impl Provider {
         };
         let app = Router::new()
             .route("/v1/chat/completions", post(completion))
+            .route("/v1/messages", post(anthropic_completion))
             .with_state(state.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}/v1", listener.local_addr().unwrap());
@@ -85,6 +86,32 @@ fn chunk(delta: Value, finish: Value) -> String {
         json!({"id":"synthetic-completion", "object":"chat.completion.chunk",
         "created":1, "model":"synthetic", "choices":[{"index":0,"delta":delta,"finish_reason":finish}]})
     )
+}
+
+async fn anthropic_completion(
+    State(state): State<ProviderState>,
+    Json(body): Json<Value>,
+) -> axum::response::Response {
+    state.requests.lock().unwrap().push(body);
+    let events = [
+        json!({"type":"message_start","message":{"id":"synthetic","type":"message","role":"assistant","content":[],"model":"synthetic","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":5,"output_tokens":0}}}),
+        json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Two images received"}}),
+        json!({"type":"content_block_stop","index":0}),
+        json!({"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":3}}),
+        json!({"type":"message_stop"}),
+    ];
+    let stream = events
+        .into_iter()
+        .map(|event| {
+            format!(
+                "event: {}\ndata: {}\n\n",
+                event["type"].as_str().unwrap(),
+                event
+            )
+        })
+        .collect::<String>();
+    ([("content-type", "text/event-stream")], stream).into_response()
 }
 
 async fn completion(
@@ -576,4 +603,71 @@ async fn image_bytes_are_encoded_in_the_provider_message_without_a_local_path() 
     let wire = serde_json::to_string(&requests[0]).unwrap();
     assert!(wire.contains(&format!("data:image/png;base64,{image}")));
     assert!(!wire.contains("file://"));
+}
+
+#[tokio::test]
+async fn anthropic_keeps_two_labelled_images_before_the_question_on_the_wire() {
+    let provider = Provider::new(Scenario::Text).await;
+    let images = [
+        "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC",
+        "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEElEQVR4nGNgYPiPAw0pCQCpcD/BFMrqcwAAAABJRU5ErkJggg==",
+    ];
+    let agent = anthropic::Client::builder()
+        .api_key("synthetic-key")
+        .base_url(provider.url.trim_end_matches("/v1"))
+        .build()
+        .unwrap()
+        .agent("synthetic")
+        .max_tokens(64)
+        .build();
+    let result = drain(
+        agent
+            .runner(Message::User {
+                content: vec![
+                    UserContent::text("Selected image: original-one / output 1"),
+                    UserContent::image_base64(images[0], Some(ImageMediaType::PNG), None),
+                    UserContent::text("Selected image: original-two / output 2"),
+                    UserContent::image_base64(images[1], Some(ImageMediaType::PNG), None),
+                    UserContent::text(
+                        "Compare the supplied images using their original references.",
+                    ),
+                ],
+            })
+            .max_turns(1)
+            .record_content_telemetry(false),
+    )
+    .await
+    .unwrap();
+    assert!(result.finished);
+    assert_eq!(result.text, "Two images received");
+    let requests = provider.requests();
+    assert_eq!(requests.len(), 1);
+    let content = requests[0]["messages"][0]["content"].as_array().unwrap();
+    assert_eq!(
+        content
+            .iter()
+            .map(|block| block["type"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["text", "image", "text", "image", "text"]
+    );
+    for (position, data) in [(1, images[0]), (3, images[1])] {
+        assert_eq!(
+            content[position]["source"],
+            json!({"type":"base64","media_type":"image/png","data":data})
+        );
+    }
+    assert_eq!(
+        content[0]["text"],
+        "Selected image: original-one / output 1"
+    );
+    assert_eq!(
+        content[2]["text"],
+        "Selected image: original-two / output 2"
+    );
+    assert_eq!(
+        content[4]["text"],
+        "Compare the supplied images using their original references."
+    );
+    let wire = requests[0].to_string();
+    assert!(!wire.contains("file://") && !wire.contains("synthetic-key"));
 }

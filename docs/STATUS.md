@@ -112,147 +112,98 @@ dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
 These are individual acceptance runs, not throughput guarantees.
 
 Current evidence:
-- Cross-edge fact parity now passes with a real R session and a local HTTP model
-  fixture driving Rig. Component tools, direct Host reads, and both MCP operation
-  read names over rmcp's framed duplex transport retain the same native operation
-  and observation. Only the observation timestamp is excluded from comparison;
-  operation identity, output, status and navigation remain exact. The operation set
-  grows by exactly the assistant's one execution, and subsequent reads append no
-  scientific events. Evidence: `target/component-parity-rig-final.log`.
-  `scripts/test-real-r.mjs` includes this check. The MCP crate retains its existing
-  Host-only domain dependency boundary; the HTTP fixture is a dev dependency.
-  The component Start command now boxes its Rust request payload; generated JSON
-  and TypeScript stay unchanged. This removes its newly introduced large-enum
-  diagnostic. Selected Application/engine/Host/MCP/Workbench Clippy passed with the
-  documented pre-existing style exceptions; strict Contract Clippy retains only
-  the two old diagnostics in unchanged checkpoint/Host request enums. Evidence:
-  `target/component-parity-{client,clippy,contract-lints}.log`. Workbench's 11 tests
-  also passed in `target/component-parity-workbench.log`.
-  The affected Rig parameter-feedback test and final main build passed:
-  `target/component-parity-{feedback,build-final}.log`.
-- The new explicit `scripts/test-component-matrix.mjs --run` executes nine backend
-  scenarios (all seven profiles plus two repair workflows), three times each. It
-  retains each attempt and fixes the backend source digest and model configuration.
-  Three complete matrices so far scored 26/27, 26/27 and 23/27, so complete model
-  acceptance has **not** passed. The first exposed overly strict Markdown color
-  parsing; the second exposed checksum confusion and exhausted model-call budget;
-  the third exposed an invisible-return fixture and runs queued before Resume.
-  Evidence: `target/component-matrix/{2026-09-13T04-54-46.711Z,2026-09-13T05-10-46.226Z,2026-09-13T05-35-26.516Z}/summary.json`.
-  The Workspace fixture now requires a real structured R return value and records
-  tool/native evidence before its execution-count assertion. Earlier passing
-  Workspace responses alone did not prove a returned native value. The production
-  receipt checksum and queue-precondition changes require a new complete matrix.
-  A fourth fixed-source matrix finished at code commit `285ca1c3` with 25/27 passed.
-  Six profile cases passed three times, Plots passed twice, and document repair
-  passed three times. Plots' third repeat reported an answer/operation-count mismatch;
-  its current log is insufficient to distinguish those causes. The earlier live
-  status missed this failure; the complete summary is authoritative.
-  The first produced-plot repair stopped on a typed provider/stream error after
-  the original saved R failure and two reads, before submitting an edit; the other
-  two repeats passed. This is not a complete passing model acceptance. Its
-  evidence is `target/component-matrix/2026-09-13T07-20-03.997Z/summary.json` and
-  `target/component-matrix-preconditions.log`. Source probes now record expected
-  and actual answers plus before/after operation counts, and retain failed temporary
-  projects. Progress output and JSON summaries include cumulative failures.
-  Targeted Plots repeats then passed 2/3: one response claimed no image was delivered,
-  despite a passed synthetic image diagnostic and unchanged scientific operation
-  counts. Its retained original PNG was visually verified as solid green (800×600).
-  Evidence: `target/component-matrix/2026-09-13T07-40-27.070Z/summary.json`; the failed
-  case log records its retained fixture location. This subset is not a full matrix.
-  Verify Anthropic outbound image content/delivery and explicit continuation from
-  the interrupted repair before the next complete matrix. The source probe build,
-  selected Clippy with existing style exceptions and matrix self-test passed:
-  `target/component-source-evidence-{build,clippy-final}.log`.
-  Focused validation passed 32 Application, 28 SQLite, 14 real-R and 365 UI tests,
-  contract generation/client build/check, architecture and documentation fixtures.
-  Evidence: `target/component-precondition-{application,store,native,ui,client}.log`.
-  Full workspace regression subsequently passed 350 tests, with 31 external checks
-  ignored; doc tests and the main build also passed. Three Chrome regressions passed
-  for Chinese edit/save/run, UTF-8/BOM/CRLF and disk conflicts, and two-window drafts.
-  Evidence: `target/component-precondition-{workspace,build,browser}.log`.
-  All nine existing external-Agent browser cases also passed with a local CLI
-  fixture, including source previews, takeover, docking and native IME handling:
-  `target/component-parity-agent-browser.log`. This does not verify a live CLI
-  provider account or the unimplemented component-assistant interface.
-  Startup sampling found a test executable waiting at `_dyld_start`, before test
-  code; this is a test-environment observation, not an assistant UI measurement.
-- Native input ownership now uses the exact operation and R-session identities
-  for both direct R and captured documents. A real-R baseline exposed another
-  caller's input being attributed to a queued assistant; the corrected tests keep
-  it WaitingForR. User prompts/answers do not enter assistant records. Stop cancels
-  the captured/direct input operation while independent work in another R session
-  completes unchanged. Evidence: `target/component-input-*.log`. Final validation passed 14 Host cases
-  plus recovery/takeover, all 13 real-R cases, selected Host Clippy with the
-  documented style exceptions and the main build.
-- Payload accounting passed the 25-case SQLite regression plus an existing-
-  oversized-store test. Near-limit tests cover rollback of new tool and model-test
-  admission, cross-principal project accounting, Unicode bytes, current-record
-  bootstrap, Stop, a 200 KiB late result, Disable and reopen. Host saturation and
-  recovery tests and real-R intent/result/final-acknowledgement failure injection
-  also passed. Evidence: `target/component-payload-*.log`. Selected SQLite Clippy
-  passed with only its documented pre-existing range-style exception; the main
-  build also passed.
-- P4 now injects actual SQLite aborts before tool intent, while storing a native
-  result and while committing the final run acknowledgement. Intent failure
-  executes no R; result/final failures retain one native execution and Continue
-  never replays it. A saturated two-running/eight-waiting model queue rejects
-  excess work; project observation and queued Stop return within the tested
-  250 ms bound, and Disable prevents later queued model requests. Unicode event
-  payloads exceeding the 1 MiB conversation budget are pruned while unconfirmed
-  tool identities and late native results survive reopen. Evidence:
-  `target/component-fault-injection.log`, `target/component-saturation.log`,
-  `target/component-byte-pruning.log`. These are backend measurements, not the
-  still-pending UI performance comparison.
-- Produced-artifact acceptance now covers a real failed script, repair, captured
-  save/run, retained PNG lookup by producing operation, checksum/size verification,
-  synthetic image diagnostics and a separate Plots interpretation request. The final
-  fixture passed three real-model repeats: repair used 7 model calls/6 tools in each;
-  actual image colors were recognized and interpretation added zero scientific
-  operations. A file-only PNG cannot be forged into a retained Plots output. Logs:
-  `target/component-produced-final-{1,2,3}.log` and `target/component-produced-native.log`.
-  Earlier attempts exposed offset/newline mistakes and an overstrict zero-read
-  assertion; their logs remain. Final validation checks no mutation, no source-code
-  color leakage and equality of the scientific operation lists. Final regression passed 32 Application tests, 22 SQLite tests, 13 Host cases plus
-  recovery/takeover, eight real-R cases, selected Clippy with the documented style
-  exceptions and the main build. This is one three-repeat repair scenario, not the
-  complete 27-run/seven-profile acceptance matrix.
-- Continue policy tests cover required reconciliation, stale targets, unresolved
-  mutations and document edit/save version chains. Real R verifies repeated Continue
-  with a missing original result acknowledgement, unchanged execution count, and
-  intentional execution from a fresh request. Scoped queue Resume also reuses its
-  confirmed ancestor result. The real model continued with one model call, zero
-  tools and zero new mutations, citing the original R operation; R remained at one
-  increment. Evidence: `target/component-continue-*.log`. Final validation passed 21 SQLite
-  tests, 13 Host cases plus recovery/takeover, six real-R cases, selected Clippy
-  with the documented Host style exceptions, contract generation/client build/check
-  and the main build. Continue is available through Start.continuation in the
-  authenticated backend; the new Studio interface is still pending review.
-- P4 passed 18 SQLite cases, the no-runtime orphan/takeover Host test, 13 Host
-  regressions and five real-R cases. Recovery finds an original successful R result
-  despite missing acceptance/result/final application acknowledgements; R still
-  increments exactly once. It also verifies saved/run document receipts and refuses
-  to classify a live Host task as abandoned. Logs: `target/component-recovery-*.log`.
-  The 11 Workbench tests, contract generation/client build/check, main build and
-  selected Application/Host Clippy with the previously documented style exceptions
-  also passed. Reconcile and TakeControl are authenticated backend commands; they
-  do not implement Continue or a new Studio interface.
-- 13 Host tests: `target/component-repair-host-final.log`.
-- 16 real-SQLite admission/budget tests: `target/component-repair-store-final.log`.
-- 10 protocol tests and a typed-error privacy test:
-  `target/component-repair-protocol.log` and
-  `target/component-repair-error-classification.log`.
-- Two atomic queue-scope tests: `target/component-repair-queue-tests.log`.
-- Four real-R tests and the real-model repair:
-  `target/component-repair-real-r-final.log` and
-  `target/component-repair-model-feedback.log`.
-- The earlier source/image/model diagnostics and read-help checks remain in
-  `target/component-{diagnostics,context,read-help}-*.log`. They verify exact object,
-  package and native plot observations without new scientific operations.
-- The preceding document integration passed 29 Application tests, 364 UI tests,
-  the affected 16 bridge tests, 11 Workbench tests and three Chrome cases for
-  Chinese save/run, UTF-8/disk conflicts and two-window drafts. Current contract
-  generation/build/check and the main build passed; the Chrome queue/error/refresh/Resume
-  regression also passed. Logs: `target/component-repair-{client,build,browser}.log`.
+
+- Full workspace regression passed **350 tests**, with **31 external checks ignored**;
+  doc tests and the main build passed. Focused validation passed 32 Application,
+  28 SQLite, 14 real-R and 365 UI tests, plus contract generation/client build/check.
+  Logs: `target/component-precondition-{workspace,application,store,native,ui,client,build}.log`.
+- Twelve Chrome regressions passed: three document/save/conflict/multiwindow cases
+  and nine external-Agent cases covering previews, takeover, docking and native IME.
+  Logs: `target/component-precondition-browser.log`, `target/component-parity-agent-browser.log`.
+  The latter uses a local CLI fixture; neither verifies a live CLI provider account
+  or the still-unimplemented component-assistant interface.
+- Cross-edge fact parity passed with real R and a local HTTP model fixture driving
+  Rig. Component tools, direct Host reads and both MCP operation-read names over
+  rmcp's framed duplex transport retain identical native records and observations,
+  excluding only observation time. Exactly one assistant execution is added; reads
+  add no scientific events. `scripts/test-real-r.mjs` includes the check.
+  Log: `target/component-parity-rig-final.log`.
+- Native/store coverage includes captured edit/save/run, failed-run repair, scoped
+  Resume, original-operation input ownership, cross-session Stop, missing result
+  acknowledgements, Continue without replay, explicit fresh requests, retained plot
+  identity, and SQLite aborts before intent/result/final acknowledgement. Quota tests
+  cover admission rollback, Unicode bytes, active completion reservations, event
+  pruning, reopen and an existing oversized store. Source/help checks retain exact
+  installed-copy and object observations without additional scientific operations.
+  Earlier detailed evidence remains in `target/component-{input,payload,continue,recovery,read-help}-*.log`
+  and `target/component-fault-injection.log`.
+- Saturation tests verified two running/eight waiting model slots, Disable fencing
+  queued requests, and project reads/queued Stop within the tested 250 ms backend
+  bound. This is not the pending UI performance comparison. Log:
+  `target/component-saturation.log`. Startup sampling of the full test run found a
+  test executable waiting at `_dyld_start`, before test code; this is an environment
+  observation, not an assistant UI measurement.
+
+**Complete real-model acceptance has not passed.** All attempts remain under
+`target/component-matrix/`; each directory contains the fixed source digest,
+model configuration, all case logs and `summary.json`:
+
+| Complete matrix directory | Passed | Failure evidence |
+| --- | --- | --- |
+| `2026-09-13T04-54-46.711Z` | 26/27 | Overstrict Markdown color parsing |
+| `2026-09-13T05-10-46.226Z` | 26/27 | Checksum confusion and model-call budget exhaustion |
+| `2026-09-13T05-35-26.516Z` | 23/27 | Invisible-return fixture and runs submitted before Resume |
+| `2026-09-13T07-20-03.997Z` | 25/27 | Plots answer/count mismatch; provider/stream error during produced-plot repair |
+
+The fourth matrix used code commit `285ca1c3`. Six profiles passed three times,
+Plots passed twice, and document repair passed three times. The interrupted repair
+retained its original saved R failure and two reads, before submitting an edit.
+A live update initially missed the other Plots failure; the complete summary is
+authoritative. Progress output now includes cumulative failures.
+
+Source probes now record expected/actual answers and operation counts and retain
+failed temporary projects. Targeted Plots repeats at
+`2026-09-13T07-40-27.070Z` passed 2/3. One model response claimed no image was delivered
+after a successful synthetic diagnostic; operation counts stayed unchanged. Its
+retained original PNG was visually verified as solid green (800×600). The failed
+case log locates the retained fixture. The source-probe build, selected Clippy with
+existing style exceptions and matrix self-test passed in
+`target/component-source-evidence-{build,clippy-final}.log`.
+
+Image delivery diagnostics now use `scripts/test-component-image-wire.mjs --run`.
+The local relay forwards the original request/response and records only image
+manifests, hashes, dimensions, content-block order and HTTP status, excluding keys,
+headers and prompt bodies. Six text-first probes passed with one 640×480 PNG per
+source request, matching its declared native preview hash, and HTTP 200 responses.
+Evidence: `target/component-image-wire/{2026-09-13T07-50-20.678Z,2026-09-13T07-52-06.350Z}/`.
+These successful captures do not prove the cause of the earlier refusal.
+
+Labelled images now precede the long question/context, following the official
+Anthropic vision placement recommendation. Diagnostics use the same image-first
+order. The new Anthropic two-image wire test preserves bytes, labels and the final
+question; 11 protocol tests plus the typed-error test passed. Three image-first
+relay probes and three direct Plots probes passed. Evidence:
+`target/component-image-wire/2026-09-13T08-01-32.906Z/`,
+`target/component-matrix/2026-09-13T08-06-16.563Z/`, and
+`target/component-image-order-protocol-final.log`.
+These are subsets, not a new complete matrix, and do not establish causality or
+provider reliability. The next complete matrix remains to be verified. An additional
+real-R test now injects model failure immediately after the original captured R
+failure, explicitly reconciles and Continues, re-reads the parent failure without
+replay, repairs, resumes and finishes. Parent and child retain separate terminal
+states and original native identities; the counter increments once. All 15 native
+mutation tests pass in `target/component-interrupted-repair-regression.log`.
+This is an injected engine failure, not another live-provider availability measurement.
+Engine and mutation-test Clippy passed (the latter with the existing Host style
+exceptions), and the current main binary built successfully. Logs:
+`target/component-image-order-{clippy,build}.log` and
+`target/component-interrupted-repair-clippy.log`.
+
+The Start command boxes its Rust payload without changing generated JSON/TypeScript.
+Its newly introduced large-enum diagnostic was removed. Selected Application,
+engine, Host, MCP and Workbench Clippy passed with existing style exceptions;
+Workbench's 11 tests, the affected Rig feedback test and final build also passed.
+Logs: `target/component-parity-{client,clippy,contract-lints,workbench,feedback,build-final}.log`.
 
 Strict Clippy has pre-existing diagnostics in large Contract wire enums, a SQLite
 range test, Host session-protection style and Workspace checkpoint style.

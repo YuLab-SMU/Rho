@@ -396,6 +396,13 @@ A03 的 `crates/mcp/tests/component_fact_parity.rs` 使用真实 R、本地 HTTP
 脚本串行构建/执行，固定后端源码指纹，逐次保存日志与 `target/component-matrix/*/summary.json`，
 记录模型配置与密钥引用名，不记录密钥。失败尝试保留；该矩阵不代替 Studio 和性能验收。
 
+Anthropic 兼容服务的图像排查可使用 `node scripts/test-component-image-wire.mjs --run`。
+它要求已构建 `component_source_probe`，沿用上述 R/模型环境变量，并仅支持 HTTPS 根服务地址。
+本地转发器保留原始请求/响应，只记录图像哈希、尺寸、块顺序和 HTTP 状态，不记录密钥、
+请求头或提示词正文。该诊断不能代替直连模型矩阵。图片及来源标签位于长问题/上下文之前，
+采用[官方视觉接口的建议顺序](https://platform.claude.com/docs/en/build-with-claude/vision)；
+兼容服务上的效果须单独验证。
+
 实施期间使用现有命令，Cargo 与类型生成串行：
 
 ```sh

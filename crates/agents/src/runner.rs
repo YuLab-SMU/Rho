@@ -403,7 +403,7 @@ impl RigComponentEngine {
             if request.images.len() > 2 {
                 return Err("At most two images can be included".into());
             }
-            let mut content = vec![UserContent::text(prompt)];
+            let mut content = Vec::new();
             for image in request.images {
                 if image.base64.len() > 2 * 1024 * 1024 * 4 / 3 + 4 {
                     return Err("Image byte budget exceeded".into());
@@ -420,6 +420,8 @@ impl RigComponentEngine {
                 )));
                 content.push(UserContent::image_base64(image.base64, Some(mime), None));
             }
+            // Keep image labels adjacent to their blocks, before the long question/context.
+            content.push(UserContent::text(prompt));
             let mut stream = agent
                 .runner(Message::User { content })
                 .tool_context(tool_context)
