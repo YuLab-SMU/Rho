@@ -33,6 +33,19 @@ import type { AgentTaskCommandResult } from "./generated/AgentTaskCommandResult"
 import type { TestAgent } from "./generated/TestAgent";
 import type { AgentDiagnostic } from "./generated/AgentDiagnostic";
 import type { ReadAgentAsset } from "./generated/ReadAgentAsset";
+import type { ComponentQueryReplies, ComponentCommandReplies } from "./component-agent-ports";
+import type { ComponentAgentQuery } from "./generated/ComponentAgentQuery";
+import type { ComponentAgentCommand } from "./generated/ComponentAgentCommand";
+import type { ComponentAgentsQuery } from "./generated/ComponentAgentsQuery";
+import type { ComponentAgentsCommand } from "./generated/ComponentAgentsCommand";
+import type { ComponentSourcePreviewRequest } from "./generated/ComponentSourcePreviewRequest";
+import type { ComponentSourcePreview } from "./generated/ComponentSourcePreview";
+import type { ComponentSourceSearch } from "./generated/ComponentSourceSearch";
+import type { ComponentSourceSearchResult } from "./generated/ComponentSourceSearchResult";
+import type { ComponentSessionCredential } from "./generated/ComponentSessionCredential";
+import type { ComponentCredentialRef } from "./generated/ComponentCredentialRef";
+import type { ComponentModelTestRequest } from "./generated/ComponentModelTestRequest";
+import type { ComponentModelDiagnostic } from "./generated/ComponentModelDiagnostic";
 
 export function json(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue;
@@ -82,6 +95,7 @@ export class HostClient {
   async request<T>(path: string, body?: unknown): Promise<T> {
     const method = (body as WorkbenchFrame | undefined)?.frame?.request?.method;
     const reading = body === undefined || path === "/api/state/read" || path === "/api/r/probe" || path === "/api/agents/tasks/query" ||
+      ["/api/agents/components/query", "/api/agents/components/context", "/api/agents/components/context/search"].includes(path) ||
       (path === "/api/host" && ["query_snapshot", "get_operation", "subscribe"].includes(method ?? ""));
     const controller = reading ? new AbortController() : undefined;
     if (controller) this.reads.add(controller);
@@ -123,6 +137,16 @@ export class HostClient {
   setupAgent(request: SetupAgent) { return this.request<LocalAgent>("/api/agents/setup", request); }
   agentTaskQuery(request: AgentTasksQuery) { return this.request<AgentTaskQueryResult>("/api/agents/tasks/query", request); }
   agentTaskCommand(request: AgentTasksCommand) { return this.request<AgentTaskCommandResult>("/api/agents/tasks/command", request); }
+  componentQuery<Q extends ComponentAgentQuery>(request: ComponentAgentsQuery & { query: Q }) {
+    return this.request<ComponentQueryReplies[Q["kind"]]>("/api/agents/components/query", request);
+  }
+  componentCommand<C extends ComponentAgentCommand>(request: ComponentAgentsCommand & { command: C }) {
+    return this.request<ComponentCommandReplies[C["kind"]]>("/api/agents/components/command", request);
+  }
+  componentSourcePreview(request: ComponentSourcePreviewRequest) { return this.request<ComponentSourcePreview>("/api/agents/components/context", request); }
+  componentSourceSearch(request: ComponentSourceSearch) { return this.request<ComponentSourceSearchResult>("/api/agents/components/context/search", request); }
+  componentCredential(request: ComponentSessionCredential) { return this.request<{ credential: ComponentCredentialRef }>("/api/agents/components/credential", request); }
+  componentModelTest(request: ComponentModelTestRequest) { return this.request<{ diagnostic: ComponentModelDiagnostic }>("/api/agents/components/test", request); }
   testAgent(request: TestAgent) { return this.request<AgentDiagnostic>("/api/agents/test", request); }
   async agentAsset(request: ReadAgentAsset) {
     const response = await fetch("/api/agents/tasks/asset", { method: "POST", headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });

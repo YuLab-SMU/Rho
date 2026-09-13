@@ -19,12 +19,25 @@ execution evidence and constrained layouts. All six boards were inspected; the
 original fourteen Agent boards were preserved. Functional backend tests do not
 approve this interaction or establish its visual quality.
 
+A nonvisual TypeScript client now handles immutable snapshots, bounded history and
+event caches, CAS draft conflicts, persisted submission identities, read-only
+acknowledgement recovery, project/window response fences and explicit Stop,
+Reconcile and takeover commands. HostClient exposes the existing authenticated
+component endpoints; read timeouts do not cancel or replay commands. This model is
+not yet mounted or connected to Studio's lifecycle/views. Its local-storage adapter
+must be scoped to the browser window when that integration is implemented.
+
 ### Current backend behavior
 
 - Application owns conversations, independent CAS drafts/controllers, fixed run
   inputs and model references, durable tool identities, results and bounded events.
   Stable request/call identities survive retries; late results retain their original
   window, principal and scientific owner. Event pruning preserves tool receipts.
+- Conversation history is now an indexed, project/principal-scoped Application
+  query, ordered by creation time and run ID. Pages contain at most 32 summaries;
+  full context and receipts remain on their existing reads. Foreign-conversation
+  cursors are rejected, tied timestamps paginate deterministically, and missing
+  live tasks are observed as Interrupted without rewriting the stored run.
 - Project persistence now accounts all component payload tables under the 64 MiB
   budget, including reserved completion capacity. Transactional byte entries are
   derived from UTF-8 serialized values. New obligations fail before dispatch when
@@ -154,6 +167,7 @@ model configuration, all case logs and `summary.json`:
 | `2026-09-13T05-10-46.226Z` | 26/27 | Checksum confusion and model-call budget exhaustion |
 | `2026-09-13T05-35-26.516Z` | 23/27 | Invisible-return fixture and runs submitted before Resume |
 | `2026-09-13T07-20-03.997Z` | 25/27 | Plots answer/count mismatch; provider/stream error during produced-plot repair |
+| `2026-09-13T08-27-28.616Z` | 26/27 | Workspace checker combined pre-tool narration with the final answer |
 
 The fourth matrix used code commit `285ca1c3`. Six profiles passed three times,
 Plots passed twice, and document repair passed three times. The interrupted repair
@@ -187,9 +201,12 @@ relay probes and three direct Plots probes passed. Evidence:
 `target/component-matrix/2026-09-13T08-06-16.563Z/`, and
 `target/component-image-order-protocol-final.log`.
 These are subsets, not a new complete matrix, and do not establish causality or
-provider reliability. A fifth complete matrix is running on code commit `c9ed28b0`;
-inspect `target/component-matrix/2026-09-13T08-27-28.616Z/summary.json` and
-`target/component-matrix-image-first.log` before claiming its result. An additional
+provider reliability. The fifth matrix on `c9ed28b0` finished with 26/27 automatically
+passed. Its retained Workspace record verifies one native execution and the correct
+return value; the post-tool answer is exactly that value. The checker had included
+earlier progress narration. It now distinguishes the final answer after the last
+tool event, with a regression test, and logs expected/actual final text. The original
+summary remains unchanged and a fresh complete matrix is still pending. An additional
 real-R test now injects model failure immediately after the original captured R
 failure, explicitly reconciles and Continues, re-reads the parent failure without
 replay, repairs, resumes and finishes. Parent and child retain separate terminal
@@ -200,6 +217,18 @@ Engine and mutation-test Clippy passed (the latter with the existing Host style
 exceptions), and the current main binary built successfully. Logs:
 `target/component-image-order-{clippy,build}.log` and
 `target/component-interrupted-repair-clippy.log`.
+
+Client/history verification passed 383 UI tests, 25 frontend boundary fixtures,
+type generation/build/check, 29 SQLite component tests and the Host recovery test.
+History tests cover scope, cursor bounds, tied timestamps and read purity. The new
+client tests cover late acknowledgements, immutable targets, storage failure before
+dispatch, offline drafts, explicit conflicts, stale pages and bounded event history.
+Logs: `target/component-client-{unit-final,validation,types-verified,boundary-fixtures}.log`,
+`target/component-history-{store-final,pagination-final,recovery,clippy-final}.log`.
+The authenticated history HTTP route also passed its no-model/no-runtime test,
+and the current main binary built: `target/component-history-{http-final,build}.log`.
+The final-answer extraction regression and selected probe Clippy passed in
+`target/component-final-answer-{test,clippy}.log`.
 
 The Start command boxes its Rust payload without changing generated JSON/TypeScript.
 Its newly introduced large-enum diagnostic was removed. Selected Application,

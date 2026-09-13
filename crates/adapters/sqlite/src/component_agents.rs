@@ -27,6 +27,7 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), String> {
       state TEXT NOT NULL, event_cursor INTEGER NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
       PRIMARY KEY(project,principal,run_id), UNIQUE(project,principal,request_id));
     CREATE INDEX IF NOT EXISTS component_agent_active ON component_agent_runs(host_incarnation,state);
+    CREATE INDEX IF NOT EXISTS component_agent_history ON component_agent_runs(project,principal,conversation_id,json_extract(value,'$.run.created_at_ms') DESC,run_id DESC);
     CREATE TABLE IF NOT EXISTS component_agent_tools (
       project TEXT NOT NULL, principal TEXT NOT NULL, run_id TEXT NOT NULL, receipt_id TEXT NOT NULL,
       model_call INTEGER NOT NULL, tool_call_id TEXT NOT NULL, action_digest TEXT NOT NULL, mutation INTEGER NOT NULL,
@@ -167,6 +168,41 @@ impl ComponentAgentRepository for ApplicationStore {
         let c = self.0.lock().map_err(error)?;
         let row:Option<String>=c.query_row("SELECT value FROM component_agent_runs WHERE project=?1 AND principal=?2 AND request_id=?3",params![s.project,s.principal,id],|r|r.get(0)).optional().map_err(error)?;
         row.map(decode).transpose()
+    }
+    fn component_run_history(
+        &self,
+        scope: &ApplicationScope,
+        conversation: &str,
+        before: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<(ComponentAgentRunSummary, String)>, ApplicationError> {
+        if !(1..=32).contains(&limit) || conversation.len() > 160 || before.is_some_and(|id| id.len() > 160) {
+            return Err(ApplicationError::InvalidInput("Invalid run history page".into()));
+        }
+        let connection = self.0.lock().map_err(error)?;
+        let exists: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM component_agent_conversations WHERE project=?1 AND principal=?2 AND conversation_id=?3)",
+            params![scope.project, scope.principal, conversation], |row| row.get(0)).map_err(error)?;
+        if !exists { return Err(ApplicationError::NotFound); }
+        let boundary: Option<i64> = if let Some(id) = before {
+            Some(connection.query_row("SELECT json_extract(value,'$.run.created_at_ms') FROM component_agent_runs WHERE project=?1 AND principal=?2 AND conversation_id=?3 AND run_id=?4",
+                params![scope.project, scope.principal, conversation, id], |row| row.get(0)).optional().map_err(error)?.ok_or(ApplicationError::NotFound)?)
+        } else { None };
+        let mut query = connection.prepare("SELECT json_object(
+            'run_id',run_id,'request_id',request_id,'conversation_id',conversation_id,
+            'profile',json_extract(value,'$.run.profile'),'state',state,
+            'text_excerpt',substr(json_extract(value,'$.run.request.text'),1,240),
+            'created_at_ms',json_extract(value,'$.run.created_at_ms'),
+            'updated_at_ms',json_extract(value,'$.run.updated_at_ms'),
+            'reason',json_extract(value,'$.run.reason'),
+            'continuation_run_id',json_extract(value,'$.run.request.continuation.run_id')),host_incarnation
+            FROM component_agent_runs WHERE project=?1 AND principal=?2 AND conversation_id=?3
+            AND (?4 IS NULL OR (json_extract(value,'$.run.created_at_ms'),run_id)<(?5,?4))
+            ORDER BY json_extract(value,'$.run.created_at_ms') DESC,run_id DESC LIMIT ?6").map_err(error)?;
+        query.query_map(params![scope.project, scope.principal, conversation, before, boundary, limit], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .map_err(error)?.map(|row| {
+                let (value, incarnation) = row.map_err(error)?;
+                Ok((decode(value)?, incarnation))
+            }).collect()
     }
     fn component_tools(
         &self,

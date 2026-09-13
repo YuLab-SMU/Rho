@@ -36,6 +36,8 @@ afterEach(() => { for (const host of clients.splice(0)) host.stopReads(); vi.cle
 it.each([
   ["Host health", (host: HostClient) => host.info()],
   ["Agent connections", (host: HostClient) => host.agentConnection()],
+  ["component conversations", (host: HostClient) => host.componentQuery({ project_root: "/project", query: { kind: "conversations", after: null, limit: 32 } })],
+  ["component source search", (host: HostClient) => host.componentSourceSearch({ project_root: "/project", window: { window_id: "w", incarnation: "i" }, session: null, text: "", source: "plots", limit: 10 })],
   ["application state", (host: HostClient) => host.readState("/project", "studio")],
   ["scientific query", (host: HostClient) => host.query("/project", "workspace.snapshot")],
   ["operation record", (host: HostClient) => host.getOperation("/project", "operation-1")],

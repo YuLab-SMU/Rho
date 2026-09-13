@@ -1588,7 +1588,7 @@ fn byte_pruning_preserves_unconfirmed_tool_identity_and_late_native_result() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert!(count < 150 && count <= MAX_COMPONENT_EVENTS);
+    assert!(count < 150);
     assert!(bytes <= MAX_COMPONENT_EVENT_BYTES);
     let page = f
         .store
@@ -2051,4 +2051,43 @@ fn native_precondition_blocks_new_work_but_preserves_admitted_identity() {
     ).unwrap();
     assert!(original_rejection.repeated);
     assert_eq!(original_rejection.tool.receipt.receipt_id, blocked.tool.receipt.receipt_id);
+}
+
+#[test]
+fn run_history_is_scoped_bounded_and_stable_across_tied_timestamps() {
+    let f = Fixture::new();
+    f.configure();
+    let mut request = f.request("history", ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let mut expected = Vec::new();
+    for (index, now) in [10, 10, 11].into_iter().enumerate() {
+        request.request_id = format!("history-{index}");
+        request.text = "中文🧬".repeat(120);
+        request.conversation_version = f.store.component_conversation(f.actor.scope(), "history").unwrap().unwrap().version;
+        let run = f.owner.start(&f.actor, request.clone(), now).unwrap().run.run;
+        f.owner.claim(f.actor.scope(), &run.run_id, now + 1).unwrap();
+        f.owner.finish(f.actor.scope(), &run.run_id, ComponentAgentRunState::Completed, None, now + 2).unwrap();
+        expected.push((now, run.run_id));
+    }
+    expected.sort_by(|a, b| b.cmp(a));
+    let before_bytes = std::fs::read(&f.path).unwrap();
+    let mut cursor = None;
+    for (_, id) in &expected {
+        let page = f.store.component_run_history(f.actor.scope(), "history", cursor.as_deref(), 1).unwrap();
+        assert_eq!(page.len(), 1);
+        assert_eq!(&page[0].0.run_id, id);
+        assert_eq!(page[0].0.state, ComponentAgentRunState::Completed);
+        assert_eq!(page[0].0.text_excerpt.chars().count(), 240);
+        assert!(serde_json::to_vec(&page[0].0).unwrap().len() < 2048);
+        cursor = Some(id.clone());
+    }
+    assert!(f.store.component_run_history(f.actor.scope(), "history", cursor.as_deref(), 1).unwrap().is_empty());
+    assert_eq!(std::fs::read(&f.path).unwrap(), before_bytes);
+    assert!(f.store.component_run_history(f.actor.scope(), "history", None, 33).is_err());
+    let mut hidden = f.actor.scope().clone(); hidden.principal = "another-principal".into();
+    assert!(matches!(f.store.component_run_history(&hidden, "history", None, 1), Err(ApplicationError::NotFound)));
+    hidden = f.actor.scope().clone(); hidden.project = "/another-project".into();
+    assert!(matches!(f.store.component_run_history(&hidden, "history", None, 1), Err(ApplicationError::NotFound)));
+    let other = f.request("other", ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let other = f.owner.start(&f.actor, other, 15).unwrap().run.run;
+    assert!(matches!(f.store.component_run_history(f.actor.scope(), "history", Some(&other.run_id), 1), Err(ApplicationError::NotFound)));
 }

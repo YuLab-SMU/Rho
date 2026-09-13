@@ -359,6 +359,11 @@ pub struct ComponentAgentsQuery {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComponentAgentQuery {
+    Runs {
+        conversation_id: String,
+        before: Option<String>,
+        limit: u32,
+    },
     Diagnostics,
     Diagnostic {
         request_id: String,
@@ -385,6 +390,21 @@ pub enum ComponentAgentQuery {
         after: u64,
         limit: u32,
     },
+}
+
+/// Bounded history navigation; full request/context and native receipts remain on Run/Tools.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct ComponentAgentRunSummary {
+    pub run_id: String,
+    pub request_id: String,
+    pub conversation_id: String,
+    pub profile: ComponentAgentProfile,
+    pub state: ComponentAgentRunState,
+    pub text_excerpt: String,
+    pub created_at_ms: u64,
+    pub updated_at_ms: u64,
+    pub reason: Option<String>,
+    pub continuation_run_id: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]

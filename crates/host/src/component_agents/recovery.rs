@@ -67,6 +67,32 @@ impl ComponentAgentService {
             None => Ok(None),
         }
     }
+    pub async fn run_history(
+        &self,
+        host: &NextHost,
+        context: &CallContext,
+        request: ComponentAgentsQuery,
+    ) -> Result<Vec<ComponentAgentRunSummary>, ApplicationError> {
+        let ComponentAgentQuery::Runs { conversation_id, before, limit } = request.query else {
+            return Err(error("Expected a run history query"));
+        };
+        let _gate = self.gate.lock().await;
+        let rows = self.owner.store.component_run_history(
+            &Self::scope(host, context, &request.project_root)?, &conversation_id, before.as_deref(), limit as usize)?;
+        let live = self.live.lock().await;
+        Ok(rows.into_iter().map(|(mut summary, incarnation)| {
+            if !summary.state.is_terminal() {
+                if incarnation != self.owner.host_incarnation {
+                    summary.state = ComponentAgentRunState::Interrupted;
+                    summary.reason = Some("The previous Host no longer owns this request; reconcile its original tool records".into());
+                } else if !live.contains_key(&summary.run_id) {
+                    summary.state = ComponentAgentRunState::Interrupted;
+                    summary.reason = Some("The Host has no live task for this request; reconcile the original tool records".into());
+                }
+            }
+            summary
+        }).collect())
+    }
     pub async fn take_control(
         &self,
         host: &NextHost,

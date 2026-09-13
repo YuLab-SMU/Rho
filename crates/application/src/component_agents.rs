@@ -192,6 +192,13 @@ pub trait ComponentAgentRepository: Send + Sync {
         scope: &ApplicationScope,
         id: &str,
     ) -> Result<Option<StoredComponentRun>, ApplicationError>;
+    fn component_run_history(
+        &self,
+        scope: &ApplicationScope,
+        conversation: &str,
+        before: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<(ComponentAgentRunSummary, String)>, ApplicationError>;
     fn component_tools(
         &self,
         scope: &ApplicationScope,

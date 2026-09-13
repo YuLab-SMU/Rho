@@ -53,6 +53,9 @@ pub(super) async fn query(
     let project = &request.project_root;
     let service = &state.component_agents;
     let result = match request.query {
+        query @ ComponentAgentQuery::Runs { .. } => service
+            .run_history(host, &context, ComponentAgentsQuery { project_root: project.clone(), query })
+            .await.map(|runs| json!({"runs":runs})),
         ComponentAgentQuery::Diagnostics => service
             .diagnostics(host, &context, project)
             .map(|v| json!({"diagnostics":v})),

@@ -122,7 +122,8 @@ async fn probe() -> Result<(), String> {
             if record.status!=OperationStatus::Succeeded || record.operation.normalized_arguments["code"].as_str()!=Some(&code){return Err("Native operation did not match authorized code".into());}
             if record.output.as_ref().and_then(|output|output["value"].as_str())!=Some(expected.as_str()){return Err("Native R value did not match the requested result".into());}
             let events=service.events(&host,&context,&project,&run.run_id,0,128).map_err(|e|e.to_string())?;
-            let answer=events.events.into_iter().filter_map(|e|match e.content{ComponentAgentEventContent::Text{text}=>Some(text),_=>None}).collect::<String>();
+            let answer=final_answer(events.events);
+            println!("{}",json!({"phase":"component-run-answer","expected":expected,"answer":answer}));
             if answer.trim()!=expected{return Err("Model did not return the native R result".into());}
             println!("{}",json!({"phase":"component-authorized-run","passed":true,"model_calls":terminal.model_calls,"tool_calls":terminal.tool_calls,"scientific_operations":1,"elapsed_ms":started.elapsed().as_millis()}));
         }
@@ -152,4 +153,31 @@ fn image_color(raw: &str) -> Option<&'static str> {
         "blue" => Some("blue"),
         _ => None,
     }
+}
+
+// Progress narration before tools is not the final model answer after their results.
+fn final_answer(events: Vec<ComponentAgentEvent>) -> String {
+    let mut answer = String::new();
+    for event in events {
+        match event.content {
+            ComponentAgentEventContent::Text { text } => answer.push_str(&text),
+            ComponentAgentEventContent::Tool { .. } => answer.clear(),
+            _ => {}
+        }
+    }
+    answer
+}
+
+#[test]
+fn final_answer_excludes_progress_before_tool_completion() {
+    let events = vec![
+        ComponentAgentEventContent::Text { text: "I will run this now.".into() },
+        ComponentAgentEventContent::Tool { receipt_id: "tool".into(), phase: ComponentToolPhase::Resolved },
+        ComponentAgentEventContent::Text { text: "native-".into() },
+        ComponentAgentEventContent::Text { text: "result".into() },
+        ComponentAgentEventContent::State { state: ComponentAgentRunState::Completed, reason: None },
+    ].into_iter().enumerate().map(|(index, content)| ComponentAgentEvent {
+        run_id: "run".into(), sequence: index as u64 + 1, created_at_ms: 1, content,
+    }).collect();
+    assert_eq!(final_answer(events), "native-result");
 }

@@ -53,6 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ComponentModelSettings::export_all(&config)?;
     ComponentAgentConversation::export_all(&config)?;
     ComponentAgentRun::export_all(&config)?;
+    ComponentAgentRunSummary::export_all(&config)?;
     ComponentToolReceipt::export_all(&config)?;
     ComponentAgentEventPage::export_all(&config)?;
     ComponentAgentsQuery::export_all(&config)?;

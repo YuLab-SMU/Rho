@@ -239,5 +239,16 @@
     "rules": [
       "composition-state"
     ]
+  },
+  {
+    "name": "component assistants cannot depend on scientific or external Agent owners",
+    "files": {
+      "component-agents.ts": "import type { Documents } from './documents'; import type { AgentTasks } from './agent-tasks'; export interface ComponentAgents { documents: Documents; tasks: AgentTasks }",
+      "documents.ts": "export interface Documents {}",
+      "agent-tasks.ts": "export interface AgentTasks {}"
+    },
+    "rules": [
+      "domain-dependency"
+    ]
   }
 ]

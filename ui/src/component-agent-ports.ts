@@ -1,0 +1,46 @@
+import type { RequestContext } from "./shared/ports";
+import type { ApplicationWindowRef } from "./generated/ApplicationWindowRef";
+import type { ComponentAgentConversation } from "./generated/ComponentAgentConversation";
+import type { ComponentAgentRun } from "./generated/ComponentAgentRun";
+import type { ComponentAgentEventPage } from "./generated/ComponentAgentEventPage";
+import type { ComponentAgentQuery } from "./generated/ComponentAgentQuery";
+import type { ComponentAgentsQuery } from "./generated/ComponentAgentsQuery";
+import type { ComponentAgentsCommand } from "./generated/ComponentAgentsCommand";
+import type { ComponentAgentCommand } from "./generated/ComponentAgentCommand";
+import type { ComponentModelSettings } from "./generated/ComponentModelSettings";
+import type { ComponentModelDiagnostic } from "./generated/ComponentModelDiagnostic";
+import type { ComponentToolReceipt } from "./generated/ComponentToolReceipt";
+import type { ComponentAgentRunSummary } from "./generated/ComponentAgentRunSummary";
+
+export interface ComponentQueryReplies {
+  runs: { runs: ComponentAgentRunSummary[] };
+  settings: { settings: ComponentModelSettings };
+  diagnostics: { diagnostics: ComponentModelDiagnostic[] };
+  diagnostic: { diagnostic: ComponentModelDiagnostic | null };
+  conversations: { conversations: ComponentAgentConversation[] };
+  conversation: { conversation: ComponentAgentConversation };
+  run: { run: ComponentAgentRun };
+  request: { run: ComponentAgentRun | null };
+  tools: { tools: ComponentToolReceipt[] };
+  events: { page: ComponentAgentEventPage };
+}
+export interface ComponentCommandReplies {
+  create: { conversation: ComponentAgentConversation };
+  save_draft: { conversation: ComponentAgentConversation };
+  take_control: { conversation: ComponentAgentConversation };
+  start: { run: ComponentAgentRun };
+  stop: { run: ComponentAgentRun };
+  reconcile: { run: ComponentAgentRun };
+  configure: { settings: ComponentModelSettings };
+  stop_test: { diagnostic: ComponentModelDiagnostic };
+}
+export interface ComponentAgentPorts {
+  context(): RequestContext;
+  window(): ApplicationWindowRef | null;
+  query<Q extends ComponentAgentQuery>(request: ComponentAgentsQuery & { query: Q }): Promise<ComponentQueryReplies[Q["kind"]]>;
+  command<C extends ComponentAgentCommand>(request: ComponentAgentsCommand & { command: C }): Promise<ComponentCommandReplies[C["kind"]]>;
+  /** Local records belong to this browser window; adapters must not share a key across controllers. */
+  readLocal(project: string): unknown;
+  /** Must finish synchronously; submission identity must be durable before dispatch. */
+  writeLocal(project: string, value: unknown): void;
+}

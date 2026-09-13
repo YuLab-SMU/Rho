@@ -774,6 +774,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn component_history_route_reads_without_a_model_or_r_runtime() {
+        let (_temp, state, app) = fixture().await;
+        let host = state.hosting.read().await.selected.as_ref().unwrap().host.clone();
+        let project = state.hosting.read().await.info().project_root.unwrap();
+        let mut context = NextHost::local_context();
+        context.connection_id = "studio:history-test".into();
+        let registered = host.dispatch(&context, HostRequest::ApplicationBridge(rho_contract::ApplicationBridgeRequest::Register {
+            window_id: "history-window".into(), incarnation: "history-life".into(), label: "History test".into(), previous_session: None,
+        })).await.unwrap();
+        let rho_contract::ApplicationBridgeReply::Registered(registration) = serde_json::from_value(registered).unwrap() else { panic!() };
+        state.component_agents.create(&host, &context, &project, &registration.session.window, "history", rho_contract::ComponentAgentProfile::Objects).unwrap();
+        let before = host.outbox(&context, 0, 100).await.unwrap();
+        let reply = request(&app, "/api/agents/components/query", Some(json!({"project_root":project,"query":{"kind":"runs","conversation_id":"history","before":null,"limit":32}}))).await;
+        assert_eq!(reply.status(), StatusCode::OK);
+        assert_eq!(json_body(reply).await, json!({"runs":[]}));
+        assert!(!state.component_agents.has_live().await);
+        assert!(host.is_idle());
+        assert_eq!(host.outbox(&context, 0, 100).await.unwrap(), before);
+    }
+
+    #[tokio::test]
     async fn local_boundary_rejects_foreign_host_origin_and_missing_token() {
         let (_temp, _state, app) = fixture().await;
         for (uri, host, origin, token, expected) in [

@@ -73,6 +73,13 @@ the accepted run, then validated against the original native schema. Dispatch
 reloads the original intent and refuses altered tickets. Owner observations retain
 their status, completeness, timestamp and continuation rather than only their data.
 
+The browser component client owns only bounded presentation caches, draft copies
+and unresolved request identities. Local request identity must be saved before a
+Start is dispatched. Lost acknowledgements are read back by that identity; reads
+and lifecycle resets never replay commands. Conversation history is indexed in the
+same ApplicationStore and paginated by immutable creation time plus run ID, within
+project/principal scope. Summaries do not become a second scientific result store.
+
 Selected component context reuses the existing composer source readers. Preview
 records owner observation metadata; submission revalidates the same file/document,
 package-copy or object reference before capturing bounded context in the run.

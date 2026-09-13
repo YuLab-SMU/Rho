@@ -224,6 +224,14 @@ async fn orphaned_intent_is_not_dispatched_and_takeover_fences_the_old_window() 
             .state,
         ComponentAgentRunState::Interrupted
     );
+    let history = service.run_history(&host, &context, ComponentAgentsQuery {
+        project_root: project.clone(), query: ComponentAgentQuery::Runs {
+            conversation_id: run.request.conversation_id.clone(), before: None, limit: 32,
+        },
+    }).await.unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].run_id, run.run_id);
+    assert_eq!(history[0].state, ComponentAgentRunState::Interrupted);
     assert_eq!(
         store
             .component_run(&scope, &run.run_id)
