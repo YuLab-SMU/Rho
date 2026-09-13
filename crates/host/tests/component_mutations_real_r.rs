@@ -433,6 +433,11 @@ impl ComponentAgentEngine for DocumentEngine {
             assert_eq!(repeated.tool.receipt.client_request_id,original);
             assert_eq!(request.port.execute_tool(repeated).await?,result);
             if self.repair {
+                let blocked=request.port.prepare_tool(turn,"run-before-resume","application_run_file",json!({"document_id":"analysis"})).await?;
+                assert!(!blocked.tool.receipt.mutation);
+                assert!(blocked.tool.receipt.operation_id.is_none());
+                assert!(blocked.tool.receipt.application_request_id.is_none());
+                assert_eq!(request.port.execute_tool(blocked).await?["accepted"],false);
                 let query=request.port.prepare_tool(turn,"queue","workspace_console_state",json!({})).await?;
                 let queue=request.port.execute_tool(query).await?;
                 let args=json!({"pause_id":queue["data"]["pause"]["id"]});
@@ -497,43 +502,55 @@ async fn sync_document(f: &Fixture, old: &ApplicationDocument, new: &Application
 #[tokio::test]
 #[ignore = "requires real Ark/R; captured component document acceptance"]
 async fn captured_document_edit_save_and_run_follow_confirmed_versions() {
-    documents_acceptance(false, false, false, false).await;
+    documents_acceptance(false, false, false, false, ComponentAgentProfile::Documents).await;
 }
 
 #[tokio::test]
 #[ignore = "requires explicitly configured real model and Ark/R"]
 async fn real_model_captured_document_edit_save_and_run() {
-    documents_acceptance(true, false, false, false).await;
+    documents_acceptance(true, false, false, false, ComponentAgentProfile::Documents).await;
 }
 
 #[tokio::test]
 #[ignore = "requires real Ark/R; failed captured execution and repair"]
 async fn captured_document_failure_is_not_replayed_and_repair_uses_its_saved_version() {
-    documents_acceptance(false, true, false, false).await;
+    documents_acceptance(false, true, false, false, ComponentAgentProfile::Documents).await;
 }
 
 #[tokio::test]
 #[ignore = "requires explicitly configured real model and Ark/R"]
 async fn real_model_captured_document_failure_and_repair() {
-    documents_acceptance(true, true, false, false).await;
+    documents_acceptance(true, true, false, false, ComponentAgentProfile::Documents).await;
 }
 
 #[tokio::test]
 #[ignore = "requires explicitly configured real model and Ark/R"]
 async fn real_model_continues_original_document_result() {
-    documents_acceptance(true, false, true, false).await;
+    documents_acceptance(true, false, true, false, ComponentAgentProfile::Documents).await;
 }
 
 #[tokio::test]
 #[ignore = "requires real Ark/R; repaired analysis produces owner-verified media"]
 async fn repaired_document_plot_is_verified_without_additional_science() {
-    documents_acceptance(false, true, false, true).await;
+    documents_acceptance(false, true, false, true, ComponentAgentProfile::Documents).await;
 }
 
 #[tokio::test]
 #[ignore = "requires explicitly configured real model and Ark/R"]
 async fn real_model_repairs_document_and_reads_its_produced_plot() {
-    documents_acceptance(true, true, false, true).await;
+    documents_acceptance(true, true, false, true, ComponentAgentProfile::Documents).await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured real model and Ark/R"]
+async fn real_model_project_document_edit_save_and_run() {
+    documents_acceptance(true, false, false, false, ComponentAgentProfile::Project).await;
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; Project profile uses authorized document execution"]
+async fn project_profile_document_edit_save_and_run() {
+    documents_acceptance(false, false, false, false, ComponentAgentProfile::Project).await;
 }
 
 async fn documents_acceptance(
@@ -541,6 +558,7 @@ async fn documents_acceptance(
     repair: bool,
     continue_model: bool,
     produced_plot: bool,
+    profile: ComponentAgentProfile,
 ) {
     let f = Fixture::with_documents("", false, true, real_model, repair).await;
     let (color, hex) = [
@@ -617,7 +635,7 @@ async fn documents_acceptance(
             &f.project,
             &f.window,
             "documents",
-            ComponentAgentProfile::Documents,
+            profile,
         )
         .unwrap();
     let run = f
@@ -1588,14 +1606,15 @@ async fn inspect_produced_plot(
             _ => None,
         })
         .collect::<String>();
-    assert_eq!(
-        answer.trim(),
-        if real_model {
-            color
-        } else {
-            "Verified selected image"
-        }
-    );
+    if real_model {
+        assert_eq!(
+            observed_color(&answer),
+            Some(color),
+            "Unexpected image interpretation: {answer}"
+        );
+    } else {
+        assert_eq!(answer.trim(), "Verified selected image");
+    }
     assert_eq!(recent_science(f).await, before);
     let reads = f
         .service
@@ -2313,4 +2332,32 @@ async fn captured_document_input_is_marked_and_cancelled_by_its_original_operati
         OperationStatus::Cancelled
     );
     f.service.close().await;
+}
+
+fn observed_color(raw: &str) -> Option<&'static str> {
+    let mut text = raw.trim();
+    for marker in ["**", "__", "`", "\"", "'"] {
+        if let Some(inner) = text
+            .strip_prefix(marker)
+            .and_then(|s| s.strip_suffix(marker))
+        {
+            text = inner.trim();
+            break;
+        }
+    }
+    match text.to_ascii_lowercase().as_str() {
+        "red" => Some("red"),
+        "green" => Some("green"),
+        "blue" => Some("blue"),
+        _ => None,
+    }
+}
+#[test]
+fn image_color_oracle_accepts_presentation_but_rejects_ambiguous_claims() {
+    assert_eq!(observed_color("**blue**"), Some("blue"));
+    assert_eq!(observed_color("`red`"), Some("red"));
+    assert_eq!(observed_color(" green\n"), Some("green"));
+    assert_eq!(observed_color("not blue"), None);
+    assert_eq!(observed_color("red or blue"), None);
+    assert_eq!(observed_color("**blue** but uncertain"), None);
 }

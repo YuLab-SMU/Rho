@@ -924,7 +924,28 @@ impl ComponentRunPort for HostRunPort {
                     serde_json::to_value(owned).map_err(error)?;
             }
         }
-        self.owner.admit_tool_call(
+        let starts_r = match &action {
+            ComponentToolAction::Invoke(invocation) => invocation.capability.id == "workspace.run_r",
+            ComponentToolAction::Control(command) => matches!(command.action,
+                ApplicationAction::RunFile { .. } | ApplicationAction::RunSelection { .. }),
+            _ => false,
+        };
+        let rejection = if starts_r {
+            let session = current.run.request.grant.session.as_ref()
+                .ok_or_else(|| error("R session is absent"))?;
+            let observed = self.host.query_snapshot(&self.context, QueryRequest {
+                capability: CapabilityRef::new("workspace.console_state", 1).map_err(error)?,
+                arguments: json!({"workspace_instance_id":session.workspace_instance_id}),
+            }).await;
+            let state = observed.ok().and_then(|snapshot| snapshot.data)
+                .and_then(|data| serde_json::from_value::<ConsoleState>(data).ok());
+            match state {
+                Some(state) if state.session_id == session.session_id =>
+                    state.pause.is_some().then_some("The R queue is paused. No new execution was submitted. Read workspace_console_state and explicitly use workspace_resume_queue only for this run's verified failure. A pause owned by the user or another operation requires user action."),
+                _ => Some("The original R session's queue could not be verified. No new execution was submitted. Inspect the original session; do not switch targets or repeat uncertain work."),
+            }
+        } else { None };
+        self.owner.admit_tool_call_with_precondition(
             &self.scope,
             &self.run.run_id,
             ComponentToolCall {
@@ -933,6 +954,7 @@ impl ComponentRunPort for HostRunPort {
                 origin: Some(origin),
             },
             action,
+            rejection,
             now(),
         )
     }

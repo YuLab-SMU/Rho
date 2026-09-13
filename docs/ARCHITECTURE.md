@@ -151,6 +151,9 @@ Saved document successor references are normalized through their original save
 receipts for mutation deduplication. A saved-base version change cannot turn a
 duplicate failed Run File into another execution; an actual edit supplies a new
 document identity for a subsequent repair.
+Edit/save receipts retain exact acknowledged document summaries, including the
+draft SHA-256 for subsequent reads. These summaries do not follow later edits;
+the document version and saved base hash are not substitutes for that checksum.
 
 Queue recovery remains an explicit model tool choice. Host binds Resume to this
 run's confirmed failed R operation and observed native pause ID, injecting only
@@ -158,6 +161,11 @@ operation IDs already present in its durable receipts. Workspace checks that set
 against the pause origin and every current, pending and reserved run under the
 queue lock, including work hidden by principal filtering. Manual pauses, other
 requests' failures and unconfirmed outcomes cannot be resumed by this path.
+Before new component R work is admitted, Host observes the bound session's queue.
+An existing pause yields bounded non-executable feedback. Application applies this
+precondition after duplicate/ancestor identity resolution, so reading an original
+receipt remains possible. No automatic Resume occurs. The observation does not
+replace native checks or promise the queue cannot change before submission.
 Model failures retain typed error categories or numeric HTTP status; provider
 bodies, raw error strings and private message history are excluded.
 

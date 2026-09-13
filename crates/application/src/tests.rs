@@ -1460,10 +1460,12 @@ fn applied_document_receipt_does_not_follow_later_user_edits() {
     let completion=ApplicationCommandCompletion{request_id:"edit".into(),claim_id:grant.claim_id,outcome:ApplicationLocalOutcome::Applied,changes:ApplicationChanges{documents:vec![ApplicationDocumentUpdate{expected_version:Some(original.version),expected_selection_version:Some(original.selection.version),document:edited.clone()}],..Default::default()},diagnostic:None};
     let ApplicationBridgeReply::Completed(receipt)=owner.bridge(&actor(false),ApplicationBridgeRequest::Complete{session:r.session.clone(),completion},4).unwrap() else{panic!()};
     assert_eq!(receipt.applied_documents,Some(vec![document_ref(&edited)]));
+    assert_eq!(receipt.applied_document_summaries.as_ref().unwrap()[0].sha256,sha256(&edited.text));
     let mut later=edited.clone();later.version="doc-v3".into();later.text="later user input".into();
     owner.bridge(&actor(false),ApplicationBridgeRequest::Sync{session:r.session.clone(),sync_id:"later".into(),changes:ApplicationChanges{documents:vec![ApplicationDocumentUpdate{expected_version:Some(edited.version.clone()),expected_selection_version:Some(edited.selection.version.clone()),document:later}],..Default::default()}},5).unwrap();
     let receipt=owner.command_status(&actor(true),ApplicationCommandStatusArguments{window:r.session.window,request_id:"edit".into()},6).unwrap();
     assert_eq!(receipt.applied_documents,Some(vec![document_ref(&edited)]));
+    assert_eq!(receipt.applied_document_summaries.as_ref().unwrap()[0].sha256,sha256(&edited.text));
 }
 
 /// The runtime idle-release policy treats this one fact as its safety condition for
@@ -1688,6 +1690,8 @@ fn saved_document_acknowledgement_preserves_capture_and_rejects_concurrent_typin
                 vec![document_ref(&saved)]
             }
         );
+        assert_eq!(receipt.applied_document_summaries.as_ref().unwrap(),
+            &if changed { vec![] } else { vec![document_summary(&saved)] });
         let mut later = saved.clone();
         later.text = "later user input\n".into();
         later.version = "later".into();

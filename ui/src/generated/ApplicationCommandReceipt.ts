@@ -2,6 +2,7 @@
 import type { ApplicationCaptureSummary } from "./ApplicationCaptureSummary";
 import type { ApplicationCommandState } from "./ApplicationCommandState";
 import type { ApplicationDocumentRef } from "./ApplicationDocumentRef";
+import type { ApplicationDocumentSummary } from "./ApplicationDocumentSummary";
 import type { ApplicationStepReceipt } from "./ApplicationStepReceipt";
 import type { ApplicationWindowRef } from "./ApplicationWindowRef";
 import type { CallerIdentity } from "./CallerIdentity";
@@ -11,6 +12,11 @@ export type ApplicationCommandReceipt = { window: ApplicationWindowRef, request_
  * Versions acknowledged by this exact local command, independent of later edits.
  */
 applied_documents?: Array<ApplicationDocumentRef>,
+/**
+ * Exact acknowledged snapshots. Use sha256 to read this document version;
+ * neither document_version nor the saved base_hash is the draft checksum.
+ */
+applied_document_summaries?: Array<ApplicationDocumentSummary>,
 /**
  * The resident editor acknowledged the successful save; a changed draft is not adopted.
  */

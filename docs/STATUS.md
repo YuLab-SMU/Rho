@@ -44,6 +44,9 @@ approve this interaction or establish its visual quality.
   Saving may advance a document version without changing its text; predecessor
   receipts preserve mutation identity across that transition. A repaired draft has
   a new execution identity, while concurrent user input never expands the grant.
+  Edit/save acknowledgements also return immutable document summaries with the
+  exact draft SHA-256. Follow-up reads can use that checksum without confusing
+  the document version or saved base hash with the current draft checksum.
 - Literal document repairs now have an exact unique-text replacement tool. The
   Application owner computes editor UTF-16 ranges, retaining BOM/line-ending
   behavior and rejecting missing, overlapping/ambiguous, read-only or stale matches.
@@ -53,6 +56,10 @@ approve this interaction or establish its visual quality.
   this run's confirmed failed operation and observed pause. Workspace atomically
   rejects manual/other-operation pauses or current, pending and reserved work
   outside the injected operation set, including principal-hidden work.
+  A component run now checks the original session's queue before admitting new R
+  execution. A known pause returns non-executable feedback; duplicate actions still
+  resolve to their original receipts. This check never resumes the queue and does
+  not replace the native checks if state changes after the observation.
 - Stop fences new calls and unsubmitted application steps. Native tracking outlives
   dropped model waits, reconciles original SCI records and cancels only associated
   work. Cancelled local commands do not imply rollback; scientific failure,
@@ -105,6 +112,25 @@ dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
 These are individual acceptance runs, not throughput guarantees.
 
 Current evidence:
+- The new explicit `scripts/test-component-matrix.mjs --run` executes nine backend
+  scenarios (all seven profiles plus two repair workflows), three times each. It
+  retains each attempt and fixes the backend source digest and model configuration.
+  Three complete matrices so far scored 26/27, 26/27 and 23/27, so complete model
+  acceptance has **not** passed. The first exposed overly strict Markdown color
+  parsing; the second exposed checksum confusion and exhausted model-call budget;
+  the third exposed an invisible-return fixture and runs queued before Resume.
+  Evidence: `target/component-matrix/{2026-09-13T04-54-46.711Z,2026-09-13T05-10-46.226Z,2026-09-13T05-35-26.516Z}/summary.json`.
+  The Workspace fixture now requires a real structured R return value and records
+  tool/native evidence before its execution-count assertion. Earlier passing
+  Workspace responses alone did not prove a returned native value. The production
+  receipt checksum and queue-precondition changes require a new complete matrix.
+  Focused validation passed 32 Application, 28 SQLite, 14 real-R and 365 UI tests,
+  contract generation/client build/check, architecture and documentation fixtures.
+  Evidence: `target/component-precondition-{application,store,native,ui,client}.log`.
+  The full workspace regression and following main build were launched; their
+  final results still need review in `target/component-precondition-{workspace,build}.log`.
+  Startup sampling found a test executable waiting at `_dyld_start`, before test
+  code; this is a test-environment observation, not an assistant UI measurement.
 - Native input ownership now uses the exact operation and R-session identities
   for both direct R and captured documents. A real-R baseline exposed another
   caller's input being attributed to a queued assistant; the corrected tests keep

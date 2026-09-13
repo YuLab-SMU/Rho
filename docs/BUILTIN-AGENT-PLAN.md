@@ -384,6 +384,14 @@ UI 测试入口仍待 Paper 评审后的界面实现。各项实际执行记录�
 属于任一发生即不通过；不能用问候成功或总体成功率掩盖这些失败。
 只测一个 provider 时，只声明该 provider 已验证；本地服务独立记录，不能挪用远程通过结果。
 
+后端完整矩阵入口现为 `node scripts/test-component-matrix.mjs --run`：七 profile
+加文档修复、修复后生成并读取图像两条场景，各三轮。运行前明确配置
+`RHO_ARK`、`RHO_R_HOME`、`RHO_COMPONENT_MODEL_BASE_URL`、`RHO_COMPONENT_MODEL_ID`、
+`RHO_COMPONENT_MODEL_PROTOCOL` 和 `RHO_COMPONENT_MODEL_KEY_ENV` 指向的密钥环境变量。
+默认调用与 `--self-test` 不访问模型；`--run --case=ID` 只复测指定场景，不能宣称完整矩阵通过。
+脚本串行构建/执行，固定后端源码指纹，逐次保存日志与 `target/component-matrix/*/summary.json`，
+记录模型配置与密钥引用名，不记录密钥。失败尝试保留；该矩阵不代替 Studio 和性能验收。
+
 实施期间使用现有命令，Cargo 与类型生成串行：
 
 ```sh

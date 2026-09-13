@@ -793,7 +793,20 @@ impl ComponentAgentOwner {
         scope: &ApplicationScope,
         run_id: &str,
         call: ComponentToolCall,
+        action: ComponentToolAction,
+        now: u64,
+    ) -> Result<ComponentToolAdmission, ApplicationError> {
+        self.admit_tool_call_with_precondition(scope, run_id, call, action, None, now)
+    }
+    /// A fresh owner observation can reject new work, but cannot replace an
+    /// already admitted action or prevent reading its original receipt.
+    pub fn admit_tool_call_with_precondition(
+        &self,
+        scope: &ApplicationScope,
+        run_id: &str,
+        call: ComponentToolCall,
         mut action: ComponentToolAction,
+        rejection: Option<&str>,
         now: u64,
     ) -> Result<ComponentToolAdmission, ApplicationError> {
         let model_call = call.model_call;
@@ -957,6 +970,16 @@ impl ComponentAgentOwner {
                 tool: previous,
                 repeated: true,
             });
+        }
+        if action.mutation()
+            && let Some(reason) = rejection
+        {
+            action = ComponentToolAction::Rejected {
+                capability: CapabilityRef::new(action.capability(), 1)
+                    .map_err(|e| invalid(e.to_string()))?,
+                arguments_digest: arguments_digest.clone(),
+                feedback: serde_json::json!({"status":"rejected","accepted":false,"error":reason}),
+            };
         }
         let client_request_id = uuid::Uuid::new_v4().to_string();
         action.bind_request(&client_request_id);

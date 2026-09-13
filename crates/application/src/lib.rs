@@ -381,6 +381,7 @@ impl ApplicationOwner {
             run: needs_run.then(|| step("run")),
             diagnostic: None,
             applied_documents: None,
+            applied_document_summaries: None,
             save_synchronized: None,
         };
         let stored = StoredCommand {
@@ -858,6 +859,7 @@ impl ApplicationOwner {
                     Ok(changes) => {
                         command.receipt.applied_documents =
                             Some(changes.documents.iter().map(document_ref).collect());
+                        command.receipt.applied_document_summaries=Some(changes.documents.iter().map(document_summary).collect());
                         write = changes;
                         if command.capture.is_some() && command.cancel_requested {
                             ApplicationCommandState::Cancelled

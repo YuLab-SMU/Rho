@@ -1974,3 +1974,81 @@ fn an_existing_oversized_store_can_finish_reserved_work_and_disable_without_losi
         .unwrap();
     assert!(retained > 1000);
 }
+
+#[test]
+fn all_seven_profiles_reject_unconfigured_and_insufficient_scope_requests() {
+    for profile in [
+        ComponentAgentProfile::Objects,
+        ComponentAgentProfile::Packages,
+        ComponentAgentProfile::Plots,
+        ComponentAgentProfile::Documents,
+        ComponentAgentProfile::Workspace,
+        ComponentAgentProfile::Project,
+        ComponentAgentProfile::Environment,
+    ] {
+        let f = Fixture::new();
+        let unavailable = f.request("unconfigured", profile, ComponentAgentMode::Explain);
+        assert!(
+            f.owner.start(&f.actor, unavailable.clone(), 3).is_err(),
+            "{profile:?}"
+        );
+        assert!(
+            f.store
+                .component_run_by_request(f.actor.scope(), &unavailable.request_id)
+                .unwrap()
+                .is_none()
+        );
+        f.configure();
+        let mut forbidden = f.request("insufficient", profile, ComponentAgentMode::Run);
+        if matches!(
+            profile,
+            ComponentAgentProfile::Documents
+                | ComponentAgentProfile::Workspace
+                | ComponentAgentProfile::Project
+        ) {
+            forbidden.grant.session = None;
+        }
+        assert!(
+            f.owner.start(&f.actor, forbidden.clone(), 4).is_err(),
+            "{profile:?}"
+        );
+        assert!(
+            f.store
+                .component_run_by_request(f.actor.scope(), &forbidden.request_id)
+                .unwrap()
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn native_precondition_blocks_new_work_but_preserves_admitted_identity() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let call = |id: &str| ComponentToolCall {
+        model_call: 1, tool_call_id: id.into(), origin: None,
+    };
+    let blocked = f.owner.admit_tool_call_with_precondition(
+        f.actor.scope(), &run, call("paused"), mutation(), Some("Queue paused"), 6,
+    ).unwrap();
+    assert!(!blocked.tool.receipt.mutation);
+    assert_eq!(blocked.tool.receipt.phase, ComponentToolPhase::Resolved);
+    assert_eq!(blocked.tool.receipt.result.as_ref().unwrap()["accepted"], false);
+    assert!(blocked.tool.receipt.operation_id.is_none());
+    let admitted = f.owner.admit_tool_call(
+        f.actor.scope(), &run, call("resumed"), mutation(), 7,
+    ).unwrap();
+    assert!(admitted.tool.receipt.mutation);
+    assert!(!admitted.repeated);
+    let repeated = f.owner.admit_tool_call_with_precondition(
+        f.actor.scope(), &run, call("repeat-after-pause"), mutation(), Some("Queue paused again"), 8,
+    ).unwrap();
+    assert!(repeated.repeated);
+    assert_eq!(repeated.tool.receipt.receipt_id, admitted.tool.receipt.receipt_id);
+    assert_eq!(repeated.tool.receipt.client_request_id, admitted.tool.receipt.client_request_id);
+    let original_rejection = f.owner.admit_tool_call(
+        f.actor.scope(), &run, call("paused"), mutation(), 9,
+    ).unwrap();
+    assert!(original_rejection.repeated);
+    assert_eq!(original_rejection.tool.receipt.receipt_id, blocked.tool.receipt.receipt_id);
+}

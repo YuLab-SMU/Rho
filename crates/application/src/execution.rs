@@ -74,8 +74,9 @@ impl ApplicationOwner {
                     && d.selection == capture.summary.selection
                     && d.readonly_reason.is_none()
             })
-            .map(|d| document_ref(&d));
-        command.receipt.applied_documents = Some(applied.into_iter().collect());
+            .map(|d| document_summary(&d));
+        command.receipt.applied_documents = Some(applied.iter().map(|d|d.document.clone()).collect());
+        command.receipt.applied_document_summaries=Some(applied.into_iter().collect());
         command.receipt.save_synchronized = Some(true);
         let receipt = command.receipt.clone();
         self.commit(

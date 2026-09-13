@@ -401,6 +401,11 @@ pub struct ApplicationCommandReceipt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub applied_documents: Option<Vec<ApplicationDocumentRef>>,
+    /// Exact acknowledged snapshots. Use sha256 to read this document version;
+    /// neither document_version nor the saved base_hash is the draft checksum.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub applied_document_summaries: Option<Vec<ApplicationDocumentSummary>>,
     /// The resident editor acknowledged the successful save; a changed draft is not adopted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
