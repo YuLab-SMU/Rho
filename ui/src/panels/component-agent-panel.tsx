@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAgentTasks, useComponentAgents, useDocuments, useNavigation } from "../context";
 import { componentBusy } from "../component-agents";
 import { AgentPanel } from "./agent-panel";
@@ -102,6 +102,11 @@ function ComponentConversation({ id, settings }: { id: string; settings(): void 
   const owner = useComponentAgents(), state = owner.getSnapshot(), conversation = state.conversations.get(id);
   const draft = state.drafts.get(id), composer = owner.composer(id), history = state.history.get(id);
   const [picker, setPicker] = useState<{ selection: AgentContextSelection | null } | null>(null), [composing, setComposing] = useState(false);
+  const transcript = useRef<HTMLDivElement>(null), following = useRef(true);
+  const [showLatest, setShowLatest] = useState(false);
+  useLayoutEffect(() => {
+    if (following.current && transcript.current) transcript.current.scrollTop = transcript.current.scrollHeight;
+  });
   const editable = owner.canControl(id), pending = state.pending.filter(p => p.request.conversation_id === id);
   const latest = history?.runs[0], run = latest ? state.runs.get(latest.run_id) : undefined;
   const activeRun = conversation?.active_run_id ? state.runs.get(conversation.active_run_id) : undefined;
@@ -128,11 +133,15 @@ function ComponentConversation({ id, settings }: { id: string; settings(): void 
   if (!conversation) return <p className="ca-meta">Reading conversation…</p>;
   return <>
     <div className="ca-meta">{componentLabels[conversation.profile]}{composer.grant.session && ` · ${composer.grant.session.workspace_instance_id}`}{!editable && " · Controlled by another window"}</div>
-    <div className="ca-history">
-      {history?.next && <button onClick={() => action(owner.observeHistory(id, history.next))}>Earlier runs</button>}
-      {history?.before && <button onClick={() => action(owner.observeHistory(id))}>Latest runs</button>}
+    <div className="ca-history" ref={transcript} onScroll={e => {
+      const node = e.currentTarget; following.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40;
+      setShowLatest(!following.current);
+    }}>
+      {history?.next && <button onClick={() => { following.current = false; action(owner.observeHistory(id, history.next)); }}>Earlier runs</button>}
+      {history?.before && <button onClick={() => { following.current = true; action(owner.observeHistory(id)); }}>Latest runs</button>}
       {[...(history?.runs ?? [])].reverse().map(summary => <RunTurn key={summary.run_id} summary={summary} />)}
       {!history?.runs.length && <div className="ca-empty"><Icon name="agent" size={28} /><h2>Ask about {componentLabels[conversation.profile]}</h2><p>{state.settings?.enabled ? "Choose context and describe what you want to understand or change." : "Choose a model to start. Your draft is kept while you configure it."}</p></div>}
+      {showLatest && <button className="ca-follow" onClick={() => { following.current = true; setShowLatest(false); }}>Jump to latest</button>}
     </div>
     <div className="ca-composer">
       {!imagesReady && <div className="ca-actions"><small>Image input is not verified for this model. Test image input in settings, or preview each plot and include its summary.</small><button onClick={settings}>Model settings</button></div>}

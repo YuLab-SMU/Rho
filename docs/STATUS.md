@@ -7,7 +7,8 @@ Updated: 2026-09-13. This is the single current status summary. Git retains hist
 The [implementation plan](BUILTIN-AGENT-PLAN.md) is authorized. The user approved
 [Paper B01–B06](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/A-0) on
 2026-09-13. The Rig backend and the seven Studio entrances are now implemented.
-Final fixed-version model acceptance and regression verification are in progress.
+The first-version implementation and scoped acceptance are complete, with the
+verification limits below. No deployment or installation is implied.
 
 The optional `rho-agents` crate pins Rig 0.42; Application owns conversations,
 request identities, scopes and receipts. Host binds the existing scientific ports.
@@ -31,6 +32,8 @@ session-memory or environment credential reference, and explicit synthetic
 connection/image tests. Image input requires a passed test for the exact saved
 connection. Model text is displayed separately from native tool results and links.
 The shared native IME composer preserves preedit and saves only committed text.
+Long replies follow new output while at the bottom; manual earlier reading remains
+in place until Jump to latest is selected.
 
 The client retains bounded local drafts, selected context and submission identities,
 with CAS conflict copies and project/window response fences. It never automatically
@@ -68,54 +71,71 @@ assistant usable in a 320 px panel and a 600 px workspace.
 
 ### Executed evidence
 
-- Nine new isolated Chrome scenarios passed with current development assets:
-  native file preview and streamed response, retained draft after reload, two-window
-  takeover, 320/600/1024/1440/1920 layouts, synthetic connection/image diagnostics,
-  stop/reconcile/Continue, rejected-scope correction, exact document save/run scope,
-  native Chinese IME and comparative Console input/frame latency. Log:
-  `target/component-ui-chrome-sync.log`. These use a local protocol fixture,
-  not the user's real model. Screenshots and performance JSON are in
-  `target/studio-browser/`. All nine existing external-Agent Chrome tests also
-  passed in `target/component-ui-chrome-regression.log`; that combined run retained
-  its earlier narrow-layout failure, subsequently fixed and independently verified.
-- 395 frontend tests, 25 boundary fixtures, typecheck, client generation/build/check,
-  architecture/governance checks and vendor integrity passed. Final regenerated
-  assets and binary verification are being completed. Logs use
-  `target/component-ui-*` and `target/component-final-*`.
+- The fixed backend/model matrix passed **27/27** on
+  `b288a081f2f862398eb907f5e6096ce616bfb59a`, with seven profiles and two repair
+  workflows repeated three times. Service: Anthropic Messages,
+  `deepseek-v4.1-flash`. The final report is
+  `target/component-matrix/2026-09-13T12-01-56.815Z/summary.json`;
+  `matrixComplete=true` and `allPassed=true`. Its backend/source fingerprint is
+  `44cdf49e8a7c515b5d3f97c3c032ef15f6f16d2a03a4b181ac178770f450c2c4`.
+  Original failed matrices remain in their separate directories. The final fixtures
+  use explicit source citations, final-answer extraction, manual recovery policy
+  and the published run duration plus 15 seconds; they do not turn previous failures
+  into passes or establish error-free future model behavior. Subsequent production
+  changes only refine transcript following; engine/scientific owners are unchanged.
+- **Two real-model browser cases passed with the final embedded client**: reading
+  a native file and quoting its marker/source; and applying a real Editor change,
+  saving `analysis.R`, executing it through the resident Application bridge and
+  observing `[1] 42` in Console. Disk contents and original execution state were
+  checked independently of the model's answer. Log:
+  `target/component-browser-live-closed.log`. Screenshots:
+  `target/studio-browser/component-real-model{,-execution}.png`.
+  The earlier `component-browser-real-final` attempt is retained: its assertion
+  incorrectly matched a tool receipt's completion before the whole run completed.
+  The final checks target the run's own status.
+- **19 embedded-client Chrome scenarios passed**: all nine existing external-Agent
+  cases plus ten new component cases covering native source preview, streamed
+  responses, retained drafts, takeover, 320/600/1024/1440/1920 layouts, synthetic
+  connection/image diagnostics, stop/reconcile/Continue, rejected-scope correction,
+  exact document grants, native Chinese IME, long-reply follow/reading behavior
+  and comparative input/frame latency.
+  Log: `target/component-browser-final.log`. The two opt-in real-model cases skipped
+  in this default fixture run were executed separately above.
+- On the final embedded client, Console typing p95 was **32.2 ms idle / 31.9 ms
+  during an active model stream**; frame p95 was **16.7 / 16.8 ms** (75 key samples
+  per phase). Observed JS heap was 22.0 / 19.7 MB; this is a short measurement,
+  not a retained-memory/leak claim. The local protocol fixture uses the same Host
+  and input script. Report:
+  `target/component-browser-final/component-agents-typing-an-41baf--the-model-stream-is-active/performance.json`.
+- **395 frontend tests**, 25 boundary fixtures, typecheck, generated contracts,
+  embedded assets, current binary build, architecture/governance and vendor checks
+  passed. Logs include `target/component-ui-unit-final.log`,
+  `target/component-ui-scroll-host.log`, `target/component-ui-scroll-check.log`
+  and `target/component-final-*`. A macOS dynamic-library validation wait delayed
+  compilation; the scoped cache rebuild and final build completed without changing
+  platform security settings or dependencies.
 - The complete real-R suite passed in `target/component-complete-real-r-final.log`,
-  including captured source/mutation cases, protected recovery copies and persistent
-  CLI state/cancellation/EOF. Test prebuilds now separate compile/loader time from
-  execution deadlines. Real model fixture waits use the published run budget plus
-  15 seconds instead of a premature 125-second harness timeout.
-- Existing focused evidence covers Host cancellation/late delivery, duplicate
-  mutation identities, injected model failure after captured R failure, explicit
-  Continue, separate parent/child states and exactly-once native effects. The
-  interrupted repair regression passed all 15 native mutation cases in
+  including captured sources/mutations, protected recovery copies and persistent
+  CLI state/cancellation/EOF. **MCP and Workbench real-R checks passed again** in
+  `target/component-final-{mcp,workbench}-real-r.log`, including shared principal
+  truth, pure queries, idempotency, cancellation/drain and native R/Environment reads.
+- Existing focused evidence covers cancellation/late delivery, duplicate mutation
+  identities, injected model failure after captured R failure, explicit Continue,
+  separate parent/child states and exactly-once native effects. The interrupted
+  repair regression passed all 15 native mutation cases in
   `target/component-interrupted-repair-regression.log`. Store/history/HTTP,
-  protocol/tool limits and large result tests are retained under `target/component-*`.
-- Direct/MCP parity and the existing scientific acceptance were already exercised.
-  The external Agent crash/resume fixture passed again in
-  `target/component-external-recovery-fixture.log`, preserving the original native
-  identity, uncertain receipt, draft and fresh MCP connection. This is a protocol
-  fixture, not another live external-provider acceptance claim.
+  protocol/tool limits and large result tests remain under `target/component-*`.
+  The external Agent crash/resume fixture passed in
+  `target/component-external-recovery-fixture.log`, preserving native identity,
+  uncertain receipt, draft and a fresh MCP connection. This is a protocol fixture,
+  not another live external-provider acceptance claim.
 
 The additional full-workspace Rust rerun was stopped after 14 minutes of mostly
 cold test-program startup, with no assertion failure observed before interruption.
-Its partial log is `target/component-final-workspace.log`; it is not a full pass.
-The previously completed workspace baseline remains applicable to production Rust,
-which this Studio change does not modify. Final source/mutation model tests exercise
-the changed fixture deadlines separately.
-
-Earlier complete real-model matrices remain in `target/component-matrix/`, including
-failed attempts. The latest prior full matrix (2026-09-13T09-29-10.428Z) was 26/27;
-a correct produced-plot answer was rejected by a checker that conflicted with the
-source-citation requirement. Subsequent isolated attempts exposed fixture timing,
-automatic recovery-copy timing and answer-format assumptions; the original reports
-were not overwritten. The fixtures now use manual recovery policy, final-answer
-extraction, explicit original-output citations and the published application budget.
-A new full matrix is still required on the final frozen implementation. Wire probes
-confirmed matching native PNG hashes and successful HTTP image delivery; they do
-not prove the cause of earlier provider image refusals or overall provider reliability.
+Its partial log is `target/component-final-workspace.log`; it is **not** a full pass.
+The earlier completed workspace baseline and subsequent affected-crate checks are
+retained evidence. This Studio integration does not change production Rust behavior;
+its changed real-model fixture deadlines were exercised by the final matrix.
 
 Strict Clippy retains pre-existing large Contract enums, SQLite range style,
 Workspace checkpoint style and Host style diagnostics. Selected checks passed with

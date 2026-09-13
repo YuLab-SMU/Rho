@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { createServer, type Server } from "node:http";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { spawn, type ChildProcess } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -17,7 +17,7 @@ test.beforeAll(async () => {
     const input = JSON.parse(body); requests.push(input);
     const serialized = JSON.stringify(input), marker = serialized.match(/rho-check-[0-9a-f-]+/)?.[0];
     const verify = input.tools?.some((tool: { name: string }) => tool.name === "component_verify") && !marker;
-    const answer = marker ?? (serialized.includes("synthetic image") ? serialized.includes("nGP4z8CA") ? "red" : serialized.includes("nGNg+M+AH") ? "green" : "blue" : "The selected context is available. This is a streamed fixture response.");
+    const answer = marker ?? (serialized.includes("synthetic image") ? serialized.includes("nGP4z8CA") ? "red" : serialized.includes("nGNg+M+AH") ? "green" : "blue" : serialized.includes("LONG_STREAM") ? "A long streamed explanation with retained source references.\n".repeat(80) : "The selected context is available. This is a streamed fixture response.");
     if (!input.stream) { response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify({ id: "fixture", type: "message", role: "assistant", content: [{ type: "text", text: answer }], model: "fixture", stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 5, output_tokens: 8 } })); return; }
     response.writeHead(200, { "Content-Type": "text/event-stream" });
     const event = (value: object) => response.write(`data: ${JSON.stringify(value)}\n\n`);
@@ -159,7 +159,7 @@ test("stopping reconciles the original run and Continue is an explicit new submi
   expect(requests.length).toBe(before + 1);
   await input.fill("Finish after stop");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByLabel("Assistant run").last()).toContainText("completed", { timeout: 20000 });
+  await expect(page.locator(".ca-turn > p > small").last()).toContainText(/^completed(?: ·|$)/, { timeout: 20000 });
   expect(requests.length).toBe(before + 2);
 });
 test("a rejected edit preserves the draft and can be corrected without an uncertain replay", async ({ page }) => {
@@ -174,7 +174,7 @@ test("a rejected edit preserves the draft and can be corrected without an uncert
   await page.getByLabel("Assistant mode", { exact: true }).selectOption("explain");
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(page.getByLabel("Assistant run")).toContainText("completed", { timeout: 20000 });
+  await expect(page.locator(".ca-turn > p > small").last()).toContainText(/^completed(?: ·|$)/, { timeout: 20000 });
   expect(requests.length).toBe(before + 1);
 });
 
@@ -196,7 +196,7 @@ test("document Ask binds the observed draft and explicit save/run scope", async 
   expect(request.grant.documents).toHaveLength(1);
   expect(request.grant.documents[0]).toMatchObject({ path: "analysis.R", allow_save: true });
   expect(request.grant.documents[0].document).toEqual(request.sources.find((s: { source: string }) => s.source === "editor").reference.document);
-  await expect(page.getByLabel("Assistant run")).toContainText("completed", { timeout: 20000 });
+  await expect(page.locator(".ca-turn > p > small").last()).toContainText(/^completed(?: ·|$)/, { timeout: 20000 });
 });
 
 test("component IME preserves native preedit across observation and sends only after explicit Enter", async ({ page, context }) => {
@@ -214,7 +214,7 @@ test("component IME preserves native preedit across observation and sends only a
   await expect(page.locator(".ca-composer")).toContainText("Draft saved");
   expect(commands.filter(c => c.kind === "start")).toHaveLength(0);
   await input.press("Enter");
-  await expect(page.getByLabel("Assistant run")).toContainText("completed", { timeout: 20000 });
+  await expect(page.locator(".ca-turn > p > small").last()).toContainText(/^completed(?: ·|$)/, { timeout: 20000 });
   expect(commands.filter(c => c.kind === "start").map(c => c.request.text)).toEqual(["你好"]);
   await cdp.detach();
 });
@@ -258,6 +258,23 @@ test("typing and frame latency stay bounded while the model stream is active", a
   await testInfo.attach("performance", { body: JSON.stringify(report), contentType: "application/json" });
 });
 
+test("long replies follow the stream while preserving an explicit earlier reading position", async ({ page }) => {
+  await open(page); await create(page);
+  const input = page.getByRole("textbox", { name: "Agent message", exact: true });
+  await input.fill("LONG_STREAM"); await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".ca-turn > p > small").last()).toContainText(/^completed(?: ·|$)/);
+  const history = page.locator(".ca-main > .ca-history");
+  await expect.poll(() => history.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeLessThan(40);
+  await history.evaluate(node => { node.scrollTop = 0; node.dispatchEvent(new Event("scroll", { bubbles: true })); });
+  await expect(page.getByRole("button", { name: "Jump to latest", exact: true })).toBeVisible();
+  await input.fill("A short follow-up."); await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".ca-turn")).toHaveCount(2);
+  await expect(page.locator(".ca-turn > p > small").last()).toContainText(/^completed(?: ·|$)/);
+  expect(await history.evaluate(node => node.scrollTop)).toBeLessThan(40);
+  await page.getByRole("button", { name: "Jump to latest", exact: true }).click();
+  await expect.poll(() => history.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeLessThan(40);
+});
+
 test("opt-in real model reads a native file through the approved Studio UI", async ({ page }) => {
   test.skip(!process.env.RHO_COMPONENT_BROWSER_REAL_MODEL, "Requires an explicitly authorized real model service.");
   test.setTimeout(180000);
@@ -271,6 +288,28 @@ test("opt-in real model reads a native file through the approved Studio UI", asy
   await page.getByRole("textbox", { name: "Agent message", exact: true }).fill("Quote the validation marker from the selected notes.txt file, then cite the file. Keep the answer short.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.locator(".ca-answer")).toContainText("RHO_NATIVE_FILE_3847_ALPHA", { timeout: 150000 });
-  await expect(page.getByLabel("Assistant run")).toContainText("completed", { timeout: 150000 });
+  await expect(page.locator(".ca-turn > p > small").last()).toContainText(/^completed(?: ·|$)/, { timeout: 150000 });
   await page.screenshot({ path: "../target/studio-browser/component-real-model.png" });
+});
+
+test("opt-in real model edits saves and executes through the resident Studio bridge", async ({ page }) => {
+  test.skip(!process.env.RHO_COMPONENT_BROWSER_REAL_MODEL, "Requires an explicitly authorized real model service and real R.");
+  test.setTimeout(660000);
+  await page.goto(url);
+  await expect(page.locator(".console-status > span").first()).toHaveText("Ready", { timeout: 60000 });
+  await page.getByRole("button", { name: "R analysis.R", exact: true }).dblclick();
+  const group = page.locator(".flexlayout__tabset").filter({ has: page.getByRole("tab", { name: "analysis.R", exact: true }) });
+  await group.getByRole("button", { name: "Ask about Documents", exact: true }).click();
+  await expect(page.locator(".ca-sources")).toContainText("analysis.R");
+  if (await page.locator(".ca-composer").getByRole("button", { name: "Configure model", exact: true }).isVisible()) await configure(page);
+  await page.getByLabel("Assistant mode", { exact: true }).selectOption("run");
+  await page.getByLabel("Allow saving analysis.R").check();
+  await page.getByRole("textbox", { name: "Agent message", exact: true }).fill("Change the selected analysis.R script so x is assigned 42 and then printed. Save it to its existing path and execute the whole saved script in the authorized R session. Verify the actual result and cite the original execution. Do not only propose code.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".ca-turn > p > small").last()).toContainText(/^completed(?: ·|$)/, { timeout: 620000 });
+  const saved = await readFile(join(directory, "study", "analysis.R"), "utf8");
+  expect(saved).toMatch(/x\s*(?:<-|=)\s*42/);
+  await expect(page.locator(".console-transcript")).toContainText("[1] 42", { timeout: 20000 });
+  await expect(page.locator(".ca-tool")).not.toHaveCount(0);
+  await page.screenshot({ path: "../target/studio-browser/component-real-model-execution.png" });
 });

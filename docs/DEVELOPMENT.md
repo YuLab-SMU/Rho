@@ -67,6 +67,15 @@ storage. Check ordinary/wide/constrained layouts and copying, not only snapshots
 | Vendored Jet snapshot / verifier | `node scripts/vendor-jet.mjs check` and `node scripts/test-vendor-jet.mjs` |
 | Documentation/map only | `node scripts/governance.mjs check` and `node scripts/test-governance.mjs` |
 
+The component browser suite defaults to a local Anthropic protocol fixture and
+starts an isolated Host/project. Its real-model cases are opt-in: supply
+`RHO_COMPONENT_BROWSER_URL`, `RHO_COMPONENT_BROWSER_REAL_MODEL` (the model ID), and
+`RHO_COMPONENT_BROWSER_SECRET` through the process environment, then run
+`npm run test:browser --prefix ui -- component-agents.spec.ts --grep "opt-in real model"`.
+These cases verify a native file read and an actual resident Editor edit/save/R run.
+Keep credentials out of tracked files and command logs. Use a distinct Playwright
+`--output` directory to retain each run's traces and performance report.
+
 Broader Rust checks, run sequentially when affected:
 
 ```sh

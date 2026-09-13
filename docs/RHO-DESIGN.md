@@ -1522,5 +1522,6 @@ reference. Connection and image tests use clearly labeled synthetic input.
 
 All boards were reviewed with Paper screenshots for spacing, typography, contrast,
 alignment and clipping; B06 includes full 320 px controls. Read their JSX and computed
-styles for implementation values. User review, browser evidence at 600/1024/1440/1920
-px, keyboard/IME checks and real-source behavior are still separate acceptance gates.
+styles for implementation values. The user approval above is separate from browser
+evidence, keyboard/IME checks and real-source behavior; executed acceptance and its
+limits are recorded in Status.
