@@ -744,11 +744,100 @@ impl ComponentRunPort for HostRunPort {
             .store
             .component_run(&self.scope, &self.run.run_id)?
             .ok_or(ApplicationError::NotFound)?;
+        let origin = ComponentToolOrigin {
+            name: name.into(),
+            arguments_digest: component_digest(&arguments)?,
+        };
         let mut action = if let Some(feedback) = tool.invalid_arguments_feedback(&arguments) {
             ComponentToolAction::Rejected {
                 capability: tool.descriptor.capability.clone(),
                 arguments_digest: component_digest(&arguments)?,
                 feedback,
+            }
+        } else if tool.is_valid_text_replace(&arguments) {
+            let document = component_document_reference(
+                &current.run,
+                arguments["document_id"].as_str().unwrap(),
+            )
+            .ok_or_else(|| error("Document is outside this request"))?;
+            let matched = self
+                .host
+                .application_owner()
+                .map_err(error)?
+                .prepare_text_replacement(
+                    &self.context,
+                    &current.run.request.window,
+                    document,
+                    arguments["old_text"].as_str().unwrap(),
+                    arguments["new_text"].as_str().unwrap(),
+                    now(),
+                )?;
+            let mut history = self
+                .owner
+                .store
+                .component_tools(&self.scope, &current.run.run_id)?
+                .into_iter()
+                .filter(|t| {
+                    t.receipt.phase == ComponentToolPhase::Resolved
+                        && t.receipt
+                            .result
+                            .as_ref()
+                            .is_some_and(|r| r["state"] == "applied")
+                })
+                .collect::<Vec<_>>();
+            for ancestor in self.owner.ancestor_runs(&self.scope, &current.run)? {
+                history.extend(
+                    self.owner
+                        .store
+                        .component_tools(&self.scope, &ancestor.run.run_id)?
+                        .into_iter()
+                        .filter(|t| {
+                            ancestor.run.recovery.as_ref().is_some_and(|r| {
+                                r.tools.iter().any(|entry| {
+                                    entry.receipt_id == t.receipt.receipt_id
+                                        && entry.state == ComponentRecoveryState::Confirmed
+                                        && entry.application_state
+                                            == Some(ApplicationCommandState::Applied)
+                                })
+                            })
+                        }),
+                );
+            }
+            let previous = history.iter().find_map(|prior| {
+                if !prior
+                    .calls
+                    .iter()
+                    .any(|call| call.origin.as_ref() == Some(&origin))
+                {
+                    return None;
+                }
+                match &prior.action {
+                    ComponentToolAction::Control(command) => match &command.action {
+                        ApplicationAction::EditDocument { edits, .. } => Some(edits.clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+            });
+            let edits = previous.or_else(|| match matched {
+                ApplicationTextMatch::Unique(edit) => Some(vec![edit]),
+                _ => None,
+            });
+            if let Some(edits) = edits {
+                self.registered
+                    .get("application_edit_document")
+                    .ok_or_else(|| error("Native document editing is unavailable"))?
+                    .bind(
+                        &current.run,
+                        json!({"document_id":document.document_id,"edits":edits}),
+                    )?
+            } else {
+                ComponentToolAction::Rejected {
+                    capability: tool.descriptor.capability.clone(),
+                    arguments_digest: origin.arguments_digest.clone(),
+                    feedback: json!({"status":"rejected","accepted":false,"tool":tool.spec.name,"parameters":tool.spec.parameters,
+                        "error":"The old text has no unique exact match. No edit was applied; read current text and include enough surrounding context."}),
+                }
             }
         } else {
             tool.bind(&current.run, arguments)?
@@ -835,11 +924,14 @@ impl ComponentRunPort for HostRunPort {
                     serde_json::to_value(owned).map_err(error)?;
             }
         }
-        self.owner.admit_tool(
+        self.owner.admit_tool_call(
             &self.scope,
             &self.run.run_id,
-            model_call,
-            call_id,
+            ComponentToolCall {
+                model_call,
+                tool_call_id: call_id.into(),
+                origin: Some(origin),
+            },
             action,
             now(),
         )

@@ -9,6 +9,9 @@ pub(super) struct RegisteredTool {
     document_action: Option<&'static str>,
 }
 impl RegisteredTool {
+    pub fn is_valid_text_replace(&self, arguments: &Value) -> bool {
+        self.document_action == Some("replace_text") && self.model_validator.is_valid(arguments)
+    }
     pub fn invalid_arguments_feedback(&self, arguments: &Value) -> Option<Value> {
         if self.model_validator.is_valid(arguments) {
             return None;
@@ -235,6 +238,7 @@ pub(super) fn registered_tools(
             let native = expanded(&descriptor.input_schema, &descriptor.input_schema, 0)?;
             for (kind, name) in [
                 ("edit_document", "application_edit_document"),
+                ("replace_text", "application_replace_text"),
                 ("save", "application_save_document"),
                 ("run_file", "application_run_file"),
                 ("run_selection", "application_run_selection"),
@@ -259,14 +263,24 @@ pub(super) fn registered_tools(
                 if save {
                     descriptor.required_scopes.insert("project.write".into());
                 }
+                if kind == "replace_text" {
+                    descriptor.required_scopes.insert("application.read".into());
+                }
                 if execute {
                     descriptor.required_scopes.insert("workspace.run_r".into());
                 }
                 if !descriptor.required_scopes.is_subset(&context.scopes) {
                     continue;
                 }
-                let mut parameters = find_action(&native["properties"]["action"], kind)
-                    .ok_or_else(|| error("Native application action schema is unavailable"))?;
+                let mut parameters = find_action(
+                    &native["properties"]["action"],
+                    if kind == "replace_text" {
+                        "edit_document"
+                    } else {
+                        kind
+                    },
+                )
+                .ok_or_else(|| error("Native application action schema is unavailable"))?;
                 let properties = parameters
                     .get_mut("properties")
                     .and_then(Value::as_object_mut)
@@ -283,12 +297,29 @@ pub(super) fn registered_tools(
                     .retain(|v| !matches!(v.as_str(), Some("kind" | "document" | "target_path")));
                 required.push(json!("document_id"));
                 parameters["additionalProperties"] = json!(false);
+                if kind == "replace_text" {
+                    parameters["properties"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("edits");
+                    parameters["properties"]["old_text"] =
+                        json!({"type":"string","minLength":1,"maxLength":32768});
+                    parameters["properties"]["new_text"] =
+                        json!({"type":"string","maxLength":32768});
+                    parameters["required"] = json!(["document_id", "old_text", "new_text"]);
+                }
                 let spec = ComponentToolSpec {
                     name: name.into(),
-                    description: format!(
-                        "{} within this request's fixed document and execution scope",
-                        kind.replace('_', " ")
-                    ),
+                    description: if kind == "replace_text" {
+                        "Replace one exact, unique text fragment in the authorized document. Prefer this over numeric offsets. To delete a statement, match its text without the line break and replace with an empty string. No fuzzy or multiple matches are applied.".into()
+                    } else if kind=="edit_document" {
+                        "Advanced edits using UTF-16 offsets in the authorized document. Prefer application_replace_text for existing literal text so line boundaries do not require manual offset arithmetic.".into()
+                    } else {
+                        format!(
+                            "{} within this request's fixed document and execution scope",
+                            kind.replace('_', " ")
+                        )
+                    },
                     parameters: parameters.clone(),
                 };
                 let model_validator = jsonschema::validator_for(&parameters).map_err(error)?;

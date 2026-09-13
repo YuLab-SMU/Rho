@@ -38,6 +38,11 @@ approve this interaction or establish its visual quality.
   Saving may advance a document version without changing its text; predecessor
   receipts preserve mutation identity across that transition. A repaired draft has
   a new execution identity, while concurrent user input never expands the grant.
+- Literal document repairs now have an exact unique-text replacement tool. The
+  Application owner computes editor UTF-16 ranges, retaining BOM/line-ending
+  behavior and rejecting missing, overlapping/ambiguous, read-only or stale matches.
+  Tool name/argument hashes preserve repeated replacement identity without storing
+  raw model argument copies. Numeric edits remain available for advanced changes.
 - A failed R run pauses its native queue. Resume is an explicit tool choice tied to
   this run's confirmed failed operation and observed pause. Workspace atomically
   rejects manual/other-operation pauses or current, pending and reserved work
@@ -94,6 +99,19 @@ dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
 These are individual acceptance runs, not throughput guarantees.
 
 Current evidence:
+- Produced-artifact acceptance now covers a real failed script, repair, captured
+  save/run, retained PNG lookup by producing operation, checksum/size verification,
+  synthetic image diagnostics and a separate Plots interpretation request. The final
+  fixture passed three real-model repeats: repair used 7 model calls/6 tools in each;
+  actual image colors were recognized and interpretation added zero scientific
+  operations. A file-only PNG cannot be forged into a retained Plots output. Logs:
+  `target/component-produced-final-{1,2,3}.log` and `target/component-produced-native.log`.
+  Earlier attempts exposed offset/newline mistakes and an overstrict zero-read
+  assertion; their logs remain. Final validation checks no mutation, no source-code
+  color leakage and equality of the scientific operation lists. Final regression passed 32 Application tests, 22 SQLite tests, 13 Host cases plus
+  recovery/takeover, eight real-R cases, selected Clippy with the documented style
+  exceptions and the main build. This is one three-repeat repair scenario, not the
+  complete 27-run/seven-profile acceptance matrix.
 - Continue policy tests cover required reconciliation, stale targets, unresolved
   mutations and document edit/save version chains. Real R verifies repeated Continue
   with a missing original result acknowledgement, unchanged execution count, and
@@ -140,8 +158,7 @@ reproduced `collapsible_if` and Host `unnecessary_sort_by` categories allowed;
 no source-wide suppression has been introduced. Evidence: `target/component-repair-*-clippy*.log`
 and `target/component-repair-clippy.log`.
 
-Outstanding: Paper review and seven usable Studio entrances; produced-plot
-acceptance; further crash/final-store failure handling,
+Outstanding: Paper review and seven usable Studio entrances; further crash/final-store failure handling,
 multiwindow/resource stress; and P5 complete scientific, workspace and performance
 acceptance. The P0 standalone binary size was only a diagnostic measurement; it
 does not establish the shipped application overhead. See

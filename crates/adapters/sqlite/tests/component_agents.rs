@@ -1498,3 +1498,56 @@ fn continued_document_versions_follow_confirmed_edits_and_saves_without_reapplyi
         assert!(!repeated.tool.receipt.mutation);
     }
 }
+
+#[test]
+fn tool_origin_hashes_survive_aliases_and_reopen_without_storing_raw_model_arguments() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let origin = ComponentToolOrigin {
+        name: "workspace_run_r".into(),
+        arguments_digest: "a".repeat(64),
+    };
+    let first = f
+        .owner
+        .admit_tool_call(
+            f.actor.scope(),
+            &run,
+            ComponentToolCall {
+                model_call: 1,
+                tool_call_id: "first".into(),
+                origin: Some(origin.clone()),
+            },
+            mutation(),
+            6,
+        )
+        .unwrap();
+    let again = f
+        .owner
+        .admit_tool_call(
+            f.actor.scope(),
+            &run,
+            ComponentToolCall {
+                model_call: 1,
+                tool_call_id: "again".into(),
+                origin: Some(origin.clone()),
+            },
+            mutation(),
+            7,
+        )
+        .unwrap();
+    assert!(again.repeated);
+    assert_eq!(
+        again.tool.receipt.client_request_id,
+        first.tool.receipt.client_request_id
+    );
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    let tools = reopened.component_tools(f.actor.scope(), &run).unwrap();
+    assert_eq!(tools.len(), 1);
+    assert_eq!(tools[0].calls.len(), 2);
+    assert!(
+        tools[0]
+            .calls
+            .iter()
+            .all(|call| call.origin.as_ref() == Some(&origin))
+    );
+}

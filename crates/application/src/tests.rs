@@ -1716,3 +1716,34 @@ fn saved_document_acknowledgement_preserves_capture_and_rejects_concurrent_typin
         assert_eq!(repeated, receipt);
     }
 }
+
+#[test]
+fn exact_text_replacement_uses_editor_utf16_positions_without_mutating_the_document() {
+    let owner=owner();let r=register(&owner,"match",0);
+    let d=sync(&owner,&r,document("\u{feff}a😀\r\nstop('bad')\r\nz\r\n"),1);
+    let ApplicationTextMatch::Unique(edit)=owner.prepare_text_replacement(&actor(false),&r.session.window,&document_ref(&d),"stop('bad')","",2).unwrap() else {panic!()};
+    assert_eq!((edit.from,edit.to),(4,15));assert!(edit.insert.is_empty());
+    let unchanged=owner.find_document(&owner.scope(&actor(false)).unwrap(),&r.session.window.window_id,&document_ref(&d)).unwrap();
+    assert_eq!(unchanged,d);
+    let ApplicationTextMatch::Unique(edit)=owner.prepare_text_replacement(&actor(false),&r.session.window,&document_ref(&d),"stop('bad')\r\n","ok\r\n",3).unwrap() else {panic!()};
+    assert_eq!(edit.insert,"ok\n");
+}
+
+#[test]
+fn exact_text_replacement_rejects_missing_ambiguous_and_overlapping_matches() {
+    let owner=owner();let r=register(&owner,"match",0);
+    let d=sync(&owner,&r,document("aaa\n"),1);
+    assert!(matches!(owner.prepare_text_replacement(&actor(false),&r.session.window,&document_ref(&d),"aa","b",2).unwrap(),ApplicationTextMatch::Ambiguous));
+    assert!(matches!(owner.prepare_text_replacement(&actor(false),&r.session.window,&document_ref(&d),"absent","b",2).unwrap(),ApplicationTextMatch::Missing));
+    assert!(owner.prepare_text_replacement(&actor(false),&r.session.window,&document_ref(&d),"","b",2).is_err());
+    let mut stale=document_ref(&d);stale.document_version="stale".into();
+    assert!(matches!(owner.prepare_text_replacement(&actor(false),&r.session.window,&stale,"aaa","b",2),Err(ApplicationError::Conflict)));
+}
+
+#[test]
+fn exact_text_replacement_cannot_edit_a_readonly_document() {
+    let owner=owner();let r=register(&owner,"match",0);
+    let mut d=document("readonly");d.readonly_reason=Some("read-only source".into());
+    let d=sync(&owner,&r,d,1);
+    assert!(owner.prepare_text_replacement(&actor(false),&r.session.window,&document_ref(&d),"readonly","changed",2).is_err());
+}

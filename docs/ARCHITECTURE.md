@@ -122,6 +122,12 @@ new code submission. Waiting for R and user input are application observations.
 Application command receipts retain the exact document versions acknowledged by
 that command. Later user changes cannot silently become the version attributed to
 an earlier edit, which is necessary for subsequent authorized save/run steps.
+Literal repairs can use `application_replace_text`. Application resolves one exact
+match against the versioned editor text, normalizing editor line endings and
+returning UTF-16 offsets for the existing EditDocument command. Missing, ambiguous
+(including overlapping), read-only or stale targets never produce an edit. Model
+call origins retain only tool names and argument digests; confirmed replacement
+retries retain the original edit identity even after its old text is gone.
 The resident bridge synchronizes the post-save draft and acknowledges the original
 execution association. Application verifies its text, disk base, path and selection
 against the successful capture before recording a successor document version.

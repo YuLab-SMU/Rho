@@ -5,6 +5,8 @@ mod agent_tasks;
 mod component_agents;
 pub use component_agents::*;
 mod cancellation;
+mod text_match;
+pub use text_match::ApplicationTextMatch;
 mod execution;
 pub use agent_tasks::*;
 mod store;

@@ -44,9 +44,10 @@ if (real) {
     await run("real-sources", ["cargo", "run", "-p", "rho-host", "--example", "component_source_probe", "--locked"]);
     await run("real-documents", ["cargo", "test", "-p", "rho-host", "--test", "component_mutations_real_r", "real_model_captured_document", "--locked", "--", "--ignored", "--nocapture", "--test-threads=1"]);
     await run("real-continue", ["cargo", "test", "-p", "rho-host", "--test", "component_mutations_real_r", "real_model_continues_original", "--locked", "--", "--ignored", "--nocapture"]);
+    await run("real-produced-plot", ["cargo", "test", "-p", "rho-host", "--test", "component_mutations_real_r", "real_model_repairs_document_and_reads_its_produced_plot", "--locked", "--", "--ignored", "--nocapture"]);
   }
 }
-const summary = { phase: "P3-documents", fakeProtocol: "passed", applicationAdmission: "passed", hostQueryIntegration: "passed", realModel: real ? "passed" : "not_run",
-  realProjectRead: real ? "passed" : "not_run", realRSources: sources ? "passed" : "not_run", realDocuments: sources ? "passed" : "not_run", evidence: directory };
+const summary = { phase: "P3-artifacts", fakeProtocol: "passed", applicationAdmission: "passed", hostQueryIntegration: "passed", realModel: real ? "passed" : "not_run",
+  realProjectRead: real ? "passed" : "not_run", realRSources: sources ? "passed" : "not_run", realDocuments: sources ? "passed" : "not_run", realArtifacts: sources ? "passed" : "not_run", evidence: directory };
 fs.writeFileSync(path.join(directory, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
 console.log(JSON.stringify(summary));

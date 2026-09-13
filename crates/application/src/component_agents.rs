@@ -6,10 +6,10 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
+mod continuation;
 mod engine;
 mod policy;
 mod recovery;
-mod continuation;
 pub use engine::*;
 pub use policy::{component_query_allowed, validate_component_grant, validate_component_model};
 
@@ -85,7 +85,11 @@ pub struct StoredComponentRun {
 #[serde(tag = "kind", content = "request", rename_all = "snake_case")]
 pub enum ComponentToolAction {
     Query(QueryRequest),
-    PreviousResult { capability: CapabilityRef, run_id: String, receipt_id: String },
+    PreviousResult {
+        capability: CapabilityRef,
+        run_id: String,
+        receipt_id: String,
+    },
     Invoke(Invocation),
     Control(ApplicationCommandRequest),
     /// A rejected model argument attempt; this variant has no native dispatch.
@@ -101,7 +105,9 @@ impl ComponentToolAction {
             Self::Query(q) => &q.capability.id,
             Self::Invoke(i) => &i.capability.id,
             Self::Control(_) => "application.control",
-            Self::Rejected { capability, .. } | Self::PreviousResult { capability, .. } => &capability.id,
+            Self::Rejected { capability, .. } | Self::PreviousResult { capability, .. } => {
+                &capability.id
+            }
         }
     }
     pub fn mutation(&self) -> bool {
@@ -126,6 +132,13 @@ pub struct StoredComponentTool {
 pub struct ComponentToolCall {
     pub model_call: u32,
     pub tool_call_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<ComponentToolOrigin>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ComponentToolOrigin {
+    pub name: String,
+    pub arguments_digest: String,
 }
 
 pub struct ComponentWrite<'a> {
@@ -754,11 +767,44 @@ impl ComponentAgentOwner {
         run_id: &str,
         model_call: u32,
         tool_call_id: &str,
+        action: ComponentToolAction,
+        now: u64,
+    ) -> Result<ComponentToolAdmission, ApplicationError> {
+        self.admit_tool_call(
+            scope,
+            run_id,
+            ComponentToolCall {
+                model_call,
+                tool_call_id: tool_call_id.into(),
+                origin: None,
+            },
+            action,
+            now,
+        )
+    }
+    pub fn admit_tool_call(
+        &self,
+        scope: &ApplicationScope,
+        run_id: &str,
+        call: ComponentToolCall,
         mut action: ComponentToolAction,
         now: u64,
     ) -> Result<ComponentToolAdmission, ApplicationError> {
+        let model_call = call.model_call;
+        let tool_call_id = call.tool_call_id.clone();
+        if let Some(origin) = &call.origin {
+            id(&origin.name)?;
+            if origin.arguments_digest.len() != 64
+                || !origin
+                    .arguments_digest
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit())
+            {
+                return Err(invalid("Invalid model argument digest"));
+            }
+        }
         let _guard = self.gate.lock().map_err(storage)?;
-        id(tool_call_id)?;
+        id(&tool_call_id)?;
         let (conversation, mut run) = self.active(scope, run_id, now)?;
         if run.run.state != ComponentAgentRunState::Running
             || model_call == 0
@@ -812,22 +858,26 @@ impl ComponentAgentOwner {
                 serde_json::from_value(invocation.arguments["only_operation_ids"].clone())
                     .map_err(storage)?;
             if allowed.is_empty()
-                || !allowed.is_subset(&self.owned_operations(scope,&run.run,&previous_tools)?)
+                || !allowed.is_subset(&self.owned_operations(scope, &run.run, &previous_tools)?)
             {
                 return Err(invalid(
                     "Queue resume must be restricted to this run's recorded operations",
                 ));
             }
         }
-        let ancestors=self.ancestor_runs(scope,&run.run)?;
-        let mut prior_tools=Vec::new();
+        let ancestors = self.ancestor_runs(scope, &run.run)?;
+        let mut prior_tools = Vec::new();
         for ancestor in &ancestors {
-            for tool in self.store.component_tools(scope,&ancestor.run.run_id)? {prior_tools.push((ancestor,tool));}
+            for tool in self.store.component_tools(scope, &ancestor.run.run_id)? {
+                prior_tools.push((ancestor, tool));
+            }
         }
         let mut semantic_action = action.clone();
         if let ComponentToolAction::Control(command) = &mut semantic_action
             && let ApplicationAction::EditDocument { document, .. } = &mut command.action
-            && let Some(grant) = ancestors.last().map_or(&run.run.request.grant,|r|&r.run.request.grant)
+            && let Some(grant) = ancestors
+                .last()
+                .map_or(&run.run.request.grant, |r| &r.run.request.grant)
                 .documents
                 .iter()
                 .find(|grant| grant.document.document_id == document.document_id)
@@ -840,15 +890,26 @@ impl ComponentAgentOwner {
             | ApplicationAction::RunSelection { document } = &mut command.action
         {
             *document = saved_document_identity(document, &previous_tools)?;
-            *document = self.prior_saved_identity(scope,document, &ancestors)?;
+            *document = self.prior_saved_identity(scope, document, &ancestors)?;
         }
         let digest = component_digest(&semantic_action)?;
         if action.mutation() {
-            if let Some((ancestor,previous))=prior_tools.iter().find(|(ancestor,tool)|
-                tool.receipt.mutation && tool.receipt.action_digest==digest
-                && ancestor.run.recovery.as_ref().is_some_and(|r|r.tools.iter().any(|entry|entry.receipt_id==tool.receipt.receipt_id && entry.state==ComponentRecoveryState::Confirmed))) {
-                action=ComponentToolAction::PreviousResult {capability:CapabilityRef::new(action.capability(),1).map_err(|e|invalid(e.to_string()))?,
-                    run_id:ancestor.run.run_id.clone(),receipt_id:previous.receipt.receipt_id.clone()};
+            if let Some((ancestor, previous)) = prior_tools.iter().find(|(ancestor, tool)| {
+                tool.receipt.mutation
+                    && tool.receipt.action_digest == digest
+                    && ancestor.run.recovery.as_ref().is_some_and(|r| {
+                        r.tools.iter().any(|entry| {
+                            entry.receipt_id == tool.receipt.receipt_id
+                                && entry.state == ComponentRecoveryState::Confirmed
+                        })
+                    })
+            }) {
+                action = ComponentToolAction::PreviousResult {
+                    capability: CapabilityRef::new(action.capability(), 1)
+                        .map_err(|e| invalid(e.to_string()))?,
+                    run_id: ancestor.run.run_id.clone(),
+                    receipt_id: previous.receipt.receipt_id.clone(),
+                };
             }
         }
         for previous in &previous_tools {
@@ -869,10 +930,6 @@ impl ComponentAgentOwner {
         if run.run.tool_calls >= run.run.budget.tool_calls {
             return Err(ApplicationError::Budget("Tool call budget exceeded".into()));
         }
-        let call = ComponentToolCall {
-            model_call,
-            tool_call_id: tool_call_id.into(),
-        };
         if action.mutation()
             && let Some(mut previous) = previous_tools
                 .into_iter()
@@ -921,7 +978,7 @@ impl ComponentAgentOwner {
                 receipt_id: uuid::Uuid::new_v4().to_string(),
                 run_id: run_id.into(),
                 model_call,
-                tool_call_id: tool_call_id.into(),
+                tool_call_id,
                 capability: action.capability().into(),
                 arguments_digest,
                 action_digest: digest,

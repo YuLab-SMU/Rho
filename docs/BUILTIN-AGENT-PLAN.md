@@ -376,7 +376,8 @@ P0 若发现具体 provider 或必要 Rig hook 不能满足约束，先记录最
 `ui/tests/component-agents.test.ts`、`ui/e2e/component-agents.spec.ts`。
 新增 `scripts/test-component-agents.mjs`：默认 fake provider；`--real-model` 为显式真实模型验收，
 使用临时项目/Host，输出原始模型请求摘要、工具轨迹、Operation 回读、图像摘要与判定。
-这些文件/参数尚未实现，不是当前可运行命令。
+后端与脚本现已实现；`--real-sources` 还会运行真实 R 来源、文档修复、Continue 和生成图像验收。
+UI 测试入口仍待 Paper 评审后的界面实现。各项实际执行记录以 Status 为准。
 
 真实模型验收至少包含七 profile 各一例，以及两条完整修复/运行场景；每例重复三次，
 共 27 次，固定模型配置和代码版本，保留所有尝试。越权、重复执行、错误目标、伪造产物
