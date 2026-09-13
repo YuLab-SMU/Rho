@@ -187,7 +187,9 @@ relay probes and three direct Plots probes passed. Evidence:
 `target/component-matrix/2026-09-13T08-06-16.563Z/`, and
 `target/component-image-order-protocol-final.log`.
 These are subsets, not a new complete matrix, and do not establish causality or
-provider reliability. The next complete matrix remains to be verified. An additional
+provider reliability. A fifth complete matrix is running on code commit `c9ed28b0`;
+inspect `target/component-matrix/2026-09-13T08-27-28.616Z/summary.json` and
+`target/component-matrix-image-first.log` before claiming its result. An additional
 real-R test now injects model failure immediately after the original captured R
 failure, explicitly reconciles and Continues, re-reads the parent failure without
 replay, repairs, resumes and finishes. Parent and child retain separate terminal
