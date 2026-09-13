@@ -85,6 +85,11 @@ pub struct CodeCompleteness {
 pub struct QueueControlArguments {
     pub session_id: String,
     pub pause_id: Option<String>,
+    /// Optional atomic resume fence: the failed pause and every queued/current run
+    /// must belong to this explicit set. It cannot authorize resuming hidden work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub only_operation_ids: Option<Vec<OperationId>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]

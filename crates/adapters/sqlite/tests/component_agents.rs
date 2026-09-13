@@ -437,7 +437,8 @@ fn forged_tools_session_and_document_permissions_have_no_receipts() {
             edits: vec![],
         },
     ] {
-        let action = ComponentToolAction::Control(ApplicationCommandRequest { execution_target: None,
+        let action = ComponentToolAction::Control(ApplicationCommandRequest {
+            execution_target: None,
             window: f.actor.window().clone(),
             request_id: "forged".into(),
             action,
@@ -865,4 +866,160 @@ fn streaming_observations_do_not_invalidate_the_users_draft_version() {
     assert_eq!(current.draft, "new user draft");
     assert_eq!(current.draft_version, observed.draft_version + 1);
     assert!(current.version > observed.version + 1);
+}
+
+#[test]
+fn queue_resume_scope_requires_native_operations_recorded_in_this_run() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let resume = |ids: Vec<&str>| {
+        ComponentToolAction::Invoke(Invocation {
+            client_request_id: "provider-id".into(),
+            capability: CapabilityRef::new("workspace.resume_queue", 1).unwrap(),
+            arguments: json!({"workspace_instance_id":"main","session_id":"native-one","pause_id":"pause-1","only_operation_ids":ids}),
+            preconditions: vec![Precondition {
+                kind: "workspace.session".into(),
+                subject: "active".into(),
+                expected: json!("native-one"),
+            }],
+        })
+    };
+    assert!(
+        f.owner
+            .admit_tool(
+                f.actor.scope(),
+                &run,
+                1,
+                "forged-resume",
+                resume(vec!["foreign"]),
+                6
+            )
+            .is_err()
+    );
+    assert!(
+        f.store
+            .component_tools(f.actor.scope(), &run)
+            .unwrap()
+            .is_empty()
+    );
+    let original = f
+        .owner
+        .admit_tool(f.actor.scope(), &run, 1, "run", mutation(), 7)
+        .unwrap();
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &run,
+            &original.tool.receipt.receipt_id,
+            ComponentToolUpdate::Accepted {
+                operation_id: Some(OperationId::new("own-operation").unwrap()),
+                application_request_id: None,
+            },
+            8,
+        )
+        .unwrap();
+    assert!(
+        f.owner
+            .admit_tool(
+                f.actor.scope(),
+                &run,
+                1,
+                "mixed-resume",
+                resume(vec!["own-operation", "foreign"]),
+                9
+            )
+            .is_err()
+    );
+    let accepted = f
+        .owner
+        .admit_tool(
+            f.actor.scope(),
+            &run,
+            1,
+            "own-resume",
+            resume(vec!["own-operation"]),
+            10,
+        )
+        .unwrap();
+    assert_eq!(accepted.tool.receipt.phase, ComponentToolPhase::Intent);
+    assert_eq!(
+        f.store
+            .component_tools(f.actor.scope(), &run)
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn measured_run_budget_still_fences_the_next_model_call() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    for expected in 2..=12 {
+        assert_eq!(
+            f.owner.begin_model_call(f.actor.scope(), &run, 6).unwrap(),
+            expected
+        );
+    }
+    assert!(matches!(
+        f.owner.begin_model_call(f.actor.scope(), &run, 7),
+        Err(ApplicationError::Budget(_))
+    ));
+    let stored = f
+        .store
+        .component_run(f.actor.scope(), &run)
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.run.model_calls, 12);
+    assert_eq!(stored.run.budget.tool_calls, 16);
+    assert_eq!(stored.run.budget.context_bytes, 65536);
+}
+
+#[test]
+fn rejected_argument_attempts_are_durable_and_consume_tool_budget_without_native_identity() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Objects, ComponentAgentMode::Explain);
+    let rejected = ComponentToolAction::Rejected {
+        capability: CapabilityRef::new("workspace.list_objects", 1).unwrap(),
+        arguments_digest: "0".repeat(64),
+        feedback: json!({"status":"rejected","accepted":false,"error":"Invalid parameters"}),
+    };
+    for call in 0..8 {
+        let admission = f
+            .owner
+            .admit_tool(
+                f.actor.scope(),
+                &run,
+                1,
+                &format!("invalid-{call}"),
+                rejected.clone(),
+                6,
+            )
+            .unwrap();
+        assert_eq!(admission.tool.receipt.phase, ComponentToolPhase::Resolved);
+        assert!(!admission.tool.receipt.mutation);
+        assert!(admission.tool.receipt.operation_id.is_none());
+    }
+    assert!(matches!(
+        f.owner
+            .admit_tool(f.actor.scope(), &run, 1, "invalid-over-budget", rejected, 7),
+        Err(ApplicationError::Budget(_))
+    ));
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    let tools = reopened.component_tools(f.actor.scope(), &run).unwrap();
+    assert_eq!(tools.len(), 8);
+    assert!(
+        tools
+            .iter()
+            .all(|t| t.receipt.result.as_ref().unwrap()["accepted"] == false)
+    );
+    assert!(
+        reopened
+            .component_run(f.actor.scope(), &run)
+            .unwrap()
+            .unwrap()
+            .run
+            .tool_result_bytes
+            > 0
+    );
 }

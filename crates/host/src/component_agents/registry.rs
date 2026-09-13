@@ -9,6 +9,35 @@ pub(super) struct RegisteredTool {
     document_action: Option<&'static str>,
 }
 impl RegisteredTool {
+    pub fn invalid_arguments_feedback(&self, arguments: &Value) -> Option<Value> {
+        if self.model_validator.is_valid(arguments) {
+            return None;
+        }
+        let properties = self.spec.parameters["properties"].as_object();
+        // Attempts to override a hidden identity are terminal, not format repair.
+        if arguments.as_object().is_some_and(|args| {
+            args.keys().any(|key| {
+                properties.is_none_or(|p| !p.contains_key(key))
+                    && matches!(
+                        key.as_str(),
+                        "window"
+                            | "workspace_instance_id"
+                            | "expected_session"
+                            | "session_id"
+                            | "only_operation_ids"
+                            | "execution_target"
+                            | "request_id"
+                            | "document"
+                            | "target_path"
+                    )
+            })
+        }) {
+            return None;
+        }
+        Some(
+            json!({"status":"rejected","accepted":false,"error":"Tool arguments do not match the offered schema. Correct them within the remaining request budget.","tool":self.spec.name,"parameters":self.spec.parameters}),
+        )
+    }
     pub fn bind(
         &self,
         run: &ComponentAgentRun,
@@ -86,6 +115,15 @@ impl RegisteredTool {
                         .ok_or_else(|| error("R instance is not bound"))?
                         .workspace_instance_id
                 ),
+                "session_id" => json!(
+                    run.request
+                        .grant
+                        .session
+                        .as_ref()
+                        .ok_or_else(|| error("Native session is not bound"))?
+                        .session_id
+                ),
+                "only_operation_ids" => json!([]),
                 "expected_session" => json!(
                     run.request
                         .grant
@@ -277,7 +315,17 @@ pub(super) fn registered_tools(
                 run.profile,
                 ComponentAgentProfile::Workspace | ComponentAgentProfile::Project
             );
+        let resume = descriptor.kind == CapabilityKind::Operation
+            && descriptor.capability.id == "workspace.resume_queue"
+            && run.request.grant.mode == ComponentAgentMode::Run
+            && matches!(
+                run.profile,
+                ComponentAgentProfile::Documents
+                    | ComponentAgentProfile::Workspace
+                    | ComponentAgentProfile::Project
+            );
         if !run_r
+            && !resume
             && (descriptor.kind != CapabilityKind::Query
                 || !component_query_allowed(run.profile, &descriptor.capability.id))
         {
@@ -295,7 +343,11 @@ pub(super) fn registered_tools(
         {
             continue;
         }
-        for name in ["window", "workspace_instance_id", "expected_session"] {
+        let mut fields = vec!["window", "workspace_instance_id", "expected_session"];
+        if resume {
+            fields.extend(["session_id", "only_operation_ids"]);
+        }
+        for name in fields {
             if properties.remove(name).is_some() {
                 hidden.push(name.into());
             }

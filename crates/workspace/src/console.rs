@@ -284,7 +284,33 @@ impl ConsoleQueue {
         self.signal();
     }
     pub fn control(&self, pause: bool, pause_id: Option<&str>) -> Result<(), HandlerError> {
+        self.control_scoped(pause, pause_id, None)
+    }
+    fn control_scoped(
+        &self,
+        pause: bool,
+        pause_id: Option<&str>,
+        allowed: Option<&[rho_contract::OperationId]>,
+    ) -> Result<(), HandlerError> {
         let mut d = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(allowed) = allowed
+            && (pause
+                || allowed.is_empty()
+                || allowed.len() > 32
+                || d.pause
+                    .as_ref()
+                    .and_then(|p| p.operation_id.as_ref())
+                    .is_none_or(|id| !allowed.contains(id))
+                || d.pending
+                    .iter()
+                    .chain(d.current.iter())
+                    .any(|r| !allowed.contains(&r.operation_id))
+                || d.reserved.as_ref().is_some_and(|id| !allowed.contains(id)))
+        {
+            return Err(HandlerError::before_effect(
+                "Resume scope changed or includes another request's work; inspect the queue",
+            ));
+        }
         if pause {
             Self::pause_locked(&mut d, None, "Queue paused. The current run continues.");
         } else {
@@ -534,10 +560,97 @@ impl OperationHandler for QueueControlHandler {
         {
             return Err(HandlerError::before_effect("Workspace session changed"));
         }
-        self.owner.queue.control(
+        let arguments: rho_contract::QueueControlArguments =
+            serde_json::from_value(operation.normalized_arguments.clone())
+                .map_err(|e| HandlerError::before_effect(e.to_string()))?;
+        self.owner.queue.control_scoped(
             self.pause,
-            operation.normalized_arguments["pause_id"].as_str(),
+            arguments.pause_id.as_deref(),
+            arguments.only_operation_ids.as_deref(),
         )?;
         Ok(CommitPlan::succeeded(json!({"paused":self.pause})))
+    }
+}
+
+#[cfg(test)]
+mod scoped_resume_tests {
+    use super::*;
+    fn id(value: &str) -> rho_contract::OperationId {
+        rho_contract::OperationId::new(value).unwrap()
+    }
+    #[test]
+    fn scoped_resume_checks_hidden_pending_and_reserved_work_atomically() {
+        let queue = ConsoleQueue::default();
+        let own = id("own-failure");
+        let other = id("other-request");
+        {
+            let mut data = queue.data.lock().unwrap();
+            ConsoleQueue::pause_locked(&mut data, Some(own.clone()), "failure");
+            data.pending.push_back(QueuedRun {
+                operation_id: other.clone(),
+                source: None,
+                summary: "another principal's pending work".into(),
+            });
+        }
+        assert!(
+            queue
+                .visible_snapshot(
+                    "session",
+                    None,
+                    &rho_contract::CallerIdentity {
+                        kind: rho_contract::CallerKind::Human,
+                        id: "visible-user".into()
+                    }
+                )
+                .pending
+                .is_empty()
+        );
+        assert!(
+            queue
+                .control_scoped(false, Some("pause-1"), Some(std::slice::from_ref(&own)))
+                .is_err()
+        );
+        assert!(queue.snapshot("session", None).pause.is_some());
+        {
+            let mut data = queue.data.lock().unwrap();
+            data.pending.clear();
+            data.reserved = Some(other);
+        }
+        assert!(
+            queue
+                .control_scoped(false, Some("pause-1"), Some(std::slice::from_ref(&own)))
+                .is_err()
+        );
+        queue.data.lock().unwrap().reserved = None;
+        assert!(
+            queue
+                .control_scoped(false, Some("stale-pause"), Some(std::slice::from_ref(&own)))
+                .is_err()
+        );
+        queue
+            .control_scoped(false, Some("pause-1"), Some(&[own]))
+            .unwrap();
+        assert!(queue.snapshot("session", None).pause.is_none());
+    }
+    #[test]
+    fn scoped_resume_cannot_clear_manual_or_other_operation_pause() {
+        let queue = ConsoleQueue::default();
+        let own = id("own");
+        queue.control(true, None).unwrap();
+        assert!(
+            queue
+                .control_scoped(false, Some("pause-1"), Some(std::slice::from_ref(&own)))
+                .is_err()
+        );
+        {
+            let mut data = queue.data.lock().unwrap();
+            ConsoleQueue::pause_locked(&mut data, Some(id("other")), "other failed");
+        }
+        assert!(
+            queue
+                .control_scoped(false, Some("pause-2"), Some(&[own]))
+                .is_err()
+        );
+        assert!(queue.snapshot("session", None).pause.is_some());
     }
 }

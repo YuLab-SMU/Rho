@@ -151,7 +151,7 @@ pub fn component_query_allowed(profile: ComponentAgentProfile, capability: &str)
         Objects => objects,
         Packages => packages,
         Plots => plots,
-        Documents => documents || packages,
+        Documents => documents || packages || runtime,
         Workspace => runtime || objects || packages || plots || documents,
         Project => {
             runtime
@@ -188,6 +188,21 @@ pub(super) fn authorize_tool(
 ) -> Result<(), ApplicationError> {
     let denied = || invalid("Tool action exceeds the component request's authorization");
     match action {
+        ComponentToolAction::Rejected {
+            capability,
+            arguments_digest,
+            feedback,
+        } => {
+            if CapabilityRef::new(capability.id.clone(), capability.version).is_err()
+                || feedback["status"] != "rejected"
+                || feedback["accepted"] != false
+                || arguments_digest.len() != 64
+                || !arguments_digest.bytes().all(|b| b.is_ascii_hexdigit())
+                || serde_json::to_vec(feedback).map_err(super::storage)?.len() > 16 * 1024
+            {
+                return Err(denied());
+            }
+        }
         ComponentToolAction::Query(query) => {
             if query.capability.version != 1
                 || !component_query_allowed(run.profile, &query.capability.id)
@@ -223,17 +238,35 @@ pub(super) fn authorize_tool(
         }
         ComponentToolAction::Invoke(invocation) => {
             invocation.validate().map_err(|_| denied())?;
+            let resume = invocation.capability.id == "workspace.resume_queue";
             if run.request.grant.mode != ComponentAgentMode::Run
-                || !matches!(
-                    run.profile,
-                    ComponentAgentProfile::Workspace | ComponentAgentProfile::Project
-                )
-                || invocation.capability.id != "workspace.run_r"
                 || invocation.capability.version != 1
+                || (!resume
+                    && (invocation.capability.id != "workspace.run_r"
+                        || !matches!(
+                            run.profile,
+                            ComponentAgentProfile::Workspace | ComponentAgentProfile::Project
+                        )))
+                || (resume
+                    && !matches!(
+                        run.profile,
+                        ComponentAgentProfile::Workspace
+                            | ComponentAgentProfile::Project
+                            | ComponentAgentProfile::Documents
+                    ))
             {
                 return Err(denied());
             }
             let session = run.request.grant.session.as_ref().ok_or_else(denied)?;
+            if resume
+                && (invocation.arguments["session_id"].as_str() != Some(&session.session_id)
+                    || invocation.arguments["pause_id"].as_str().is_none()
+                    || invocation.arguments["only_operation_ids"]
+                        .as_array()
+                        .is_none_or(|ids| ids.is_empty() || ids.len() > 32))
+            {
+                return Err(denied());
+            }
             if invocation
                 .arguments
                 .get("workspace_instance_id")

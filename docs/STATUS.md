@@ -4,178 +4,115 @@ Updated: 2026-09-12. This is the single current status summary. Git retains hist
 
 ## Built-in component Agent implementation
 
-P2 interaction review is ready: [Paper B01–B06](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/A-0),
-with the proposal recorded in Design section 18. All six boards are on their own
-page, including 600 px/320 px content, source evidence, settings and recovery states.
-Screenshots were inspected and the original fourteen Agent boards were preserved.
-User review is pending; no new Studio interface has been implemented from them.
+The [implementation plan](BUILTIN-AGENT-PLAN.md) is authorized. P0, the P1 backend,
+P2 source/context access and the P3 document/R execution paths are implemented.
+The optional `rho-agents` crate uses pinned Rig 0.42 through Application ports;
+Host composes it with the existing scientific owners. No replacement scientific
+gateway or external Agent-provider variant was introduced.
 
-P3 direct R execution is connected for Workspace/Project Run grants. The Host
-injects the fixed instance/native-session precondition and stable request ID,
-persists acceptance, then follows the original Operation. Native work is tracked
-independently of the model future; Stop/timeout requests cancellation only for its
-associated operation, waits for the observed result and preserves uncertainty.
-Waiting for R and native input are separate assistant states. Duplicate mutation
-calls return the original result rather than executing the code again.
-Two real Ark/R tests passed for exact-once execution and confirmed cancellation
-after dropping the model wait. The real model also used the authorized path,
-producing one scientific operation and the expected native result in 4,189 ms.
-Evidence: `target/component-mutations-real-r.log` and `target/component-run-real-model.log`.
-P3 captured document editing, saving and running is now connected through the
-resident Application bridge. Tools expose fixed document IDs; Host binds the
-current owner-confirmed version, save destination and original execution session.
-Save acknowledgements associate the synchronized disk base with the original
-capture; concurrent typing does not become an authorized successor version.
-Stop fences unclaimed commands and unsubmitted steps, while native tracking
-preserves original accepted operations and reconciles their shared status records.
-The real Ark/R document test passed edit → save → Run File, including a repeated
-edit under a new model call ID, exact saved text and one actual R increment.
-Application passed 29 tests; the full UI suite passed 364 tests, with the affected
-16 bridge tests passed after the final offline/Cancelled acknowledgement adjustment.
-The editor uses that acknowledgement's latest state before considering Run.
-Client generation/build/check passed. Evidence: `target/component-documents-application.log`,
-`target/component-documents-real-r-focused.log`, `target/component-documents-ui-*.log`
-and `target/component-documents-client-final.log`.
-The authorized remote model also completed the same document chain with one
-edit and three mutation receipts in 42,383 ms; the saved file and actual R
-increment matched. Evidence: `target/component-documents-real-model.log`.
-Final regression passed 35 component engine/storage/Host cases and all 11
-Workbench HTTP tests. Three Chrome cases passed on the rebuilt binary for Chinese
-script save/run/edit, UTF-8/BOM/CRLF and disk conflicts, and two-window draft
-protection. Application/Host Clippy passed with only the previously reproduced
-`collapsible_if` and `unnecessary_sort_by` Host categories allowed; no new warning
-suppression was added to source. Current logs are
-`target/component-documents-{http,clippy,browser-final,build-final}.log` and
-`target/component-agent-probe/2026-09-12T23-28-24.148Z/`.
+The new Studio interface remains unimplemented pending user review of
+[Paper B01–B06](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/A-0).
+[Design section 18](RHO-DESIGN.md)
+records the proposal: separate assistant navigation, component sources, settings,
+execution evidence and constrained layouts. All six boards were inspected; the
+original fourteen Agent boards were preserved. Functional backend tests do not
+approve this interaction or establish its visual quality.
 
-Source search and model diagnostics are now connected to the authenticated component
-API. Search uses existing owners without model requests. Connection/tool and image
-tests use separate synthetic inputs and durable request IDs, with versioned diagnostic
-records and fixed configuration digests. Duplicate tests return the original record;
-tests share the bounded model slots, can be stopped, and are cancelled by Disable/Quit.
-Image requests require a passed image test for the selected configuration; changing
-models does not reuse the old verification. Test requests contain no project data.
-The authorized real service passed both diagnostics, followed by the Objects,
-Packages and Plots source checks with zero additional scientific operations.
-Evidence: `target/component-diagnostics-real-model.log`. Real R source search also
-passed in `target/component-diagnostics-real-r.log`.
-Final diagnostic regression passed 46 deterministic tests (10 engine, 13 storage,
-12 Host and 11 Workbench), client generation/build/check and focused Clippy with
-the documented Host-style baseline exceptions. Logs: `target/component-diagnostics-*.log`.
+### Current backend behavior
 
-P2 now has a real read-only `workspace.read_help` capability in the Workspace
-owner and both single/multi-session registries. It reads one observed installed
-copy using index/help file identities, paginates UTF-8 text and refuses absent
-resident providers. Existing `workspace.help` remains the explicit operation path.
-The new native R checks pass for state preservation, UTF-8 boundaries and changed
-or missing evidence; the real Ark/Host test confirms paging without increasing
-the scientific operation count. Existing native help/format/lint regressions pass.
-Component sources and selected-image delivery are now connected; the UI is pending.
-Read-help validation also passed twenty Workspace/R-adapter unit tests, generated
-client types, client build/check, the main build and architecture/governance checks. Native evidence
-is in `target/component-read-help-{real-r,native-regression,rust}.log`; the real R
-test uses a disposable Host and confirms zero additional scientific records.
+- Application owns conversations, independent CAS drafts/controllers, fixed run
+  inputs and model references, durable tool identities, results and bounded events.
+  Stable request/call identities survive retries; late results retain their original
+  window, principal and scientific owner. Event pruning preserves tool receipts.
+- Source search and preview read existing owners without model calls. Submission
+  revalidates file/document/object/package identities before capture. Verified
+  selected PNG/JPEG images are transient model input with native references and
+  digests; their bytes are not persisted in conversation text.
+- Objects, Packages, Plots and Environment are Explain-only. Native
+  `workspace.read_help` reads the exact observed installed copy without loading,
+  attaching or installing packages. Workspace/Project Run uses the original R
+  instance/session and the shared Operation path.
+- Document tools bind authorized IDs, confirmed versions and destinations. The
+  existing resident bridge applies edits and acknowledges captured save/run steps.
+  Saving may advance a document version without changing its text; predecessor
+  receipts preserve mutation identity across that transition. A repaired draft has
+  a new execution identity, while concurrent user input never expands the grant.
+- A failed R run pauses its native queue. Resume is an explicit tool choice tied to
+  this run's confirmed failed operation and observed pause. Workspace atomically
+  rejects manual/other-operation pauses or current, pending and reserved work
+  outside the injected operation set, including principal-hidden work.
+- Stop fences new calls and unsubmitted application steps. Native tracking outlives
+  dropped model waits, reconciles original SCI records and cancels only associated
+  work. Cancelled local commands do not imply rollback; scientific failure,
+  uncertainty and successful saving remain separately visible in receipts.
+- Known-tool argument format failures are durable non-executable records. Rig's
+  Skip hook returns bounded schema feedback without calling the tool body. These
+  attempts consume budgets; hidden-target overrides, unknown tools, storage
+  failures and exhausted budgets stop the run.
+- Remote model settings use HTTPS, or explicitly configured loopback HTTP. Keys
+  remain environment/session references; raw session keys stay in Host memory.
+  Clients are lazy, shared and do not automatically follow redirects or retry.
+  Explicit synthetic connection/image diagnostics have durable identities and
+  share model slots. Image input requires a matching passed image diagnostic.
+- Browser-only component routes retain existing authentication, project/window
+  checks and native CLI separation. Native stdin and private reasoning are not
+  sent into assistant history. Model failures expose typed categories or numeric
+  HTTP status, excluding provider bodies and raw error histories.
 
-The user authorized the [implementation plan](BUILTIN-AGENT-PLAN.md). P0 and the
-P1 backend are implemented: `rho-agents` uses the pinned Rig 0.42 driver through
-engine-neutral Application ports; Host composes the service and shared query
-access. Rig dependencies stay inside `rho-agents`. No custom inference/tool loop,
-native Agent-provider variant or second scientific gateway was introduced.
+### Evidence and limits
 
-Application owns typed conversations, independent draft CAS, fixed run inputs and
-model references, durable tool intents/results, usage and bounded events in additive
-SQLite tables. A live authenticated window issues the actor. Admission rechecks
-scope, window incarnation, versions, model enablement, budgets and concurrent slots.
-Mutation call aliases preserve the original native request identity and consume
-budget; exact retries return the original receipt. Streaming observations do not
-invalidate the user's draft version. Event pruning retains tool receipts and reports
-history gaps. Original Contract/Application/SQLite behavior passed its 52 tests;
-13 new admission tests cover these component records and injected write failure.
+The real Ark/R tests verify direct execution once, confirmed cancellation,
+edit → save → Run File, and failure → edit → scoped resume → successful rerun.
+The repair test also repeats failed-run, edit and resume calls under new provider
+IDs and verifies that original native identities are retained. Both failed and
+successful SCI records survive, the saved text matches, and R increments once.
 
-The Host service now runs **Explain with validated attached sources**. It derives tools
-from the actual registry, resolves local schema references, hides and injects window
-and R-session fields, and validates both model and native schemas. It reloads each
-persisted action before dispatch and rejects an altered ticket. Queries retain the
-full owner snapshot, including partial/busy/unavailable states. Native session holds
-are scoped to a query; the current project and principal are preserved. Model
-selection is fixed for each run. Direct Workspace/Project Run and captured document editing/save/run are available
-through the backend; their new Studio interface is still awaiting design review.
+The authorized `115-newapi` / `deepseek-v4.1-flash` service completed the repair
+workflow with 10 model calls and 9 tool calls in 66,848 ms. It retained one failed
+and one successful R execution, one edit and four mutation receipts. The Run
+model-call default was re-estimated from 8 to 12 after earlier attempts exhausted
+8 calls before rerunning the repaired draft; tool, byte and duration limits remain
+unchanged. Another attempt was rejected for invalid parameter shape before native
+dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
+These are individual acceptance runs, not throughput guarantees.
 
-`/api/agents/components/context` previews files, editor selections, objects/tables,
-installed package copies, console state and R-session metadata without a model call.
-Send revalidates the original file/document/observation identities, captures bounded
-text and evidence in the run, and sends verified selected images through a separate
-transient channel. Images are limited to two and 2 MiB each; their bytes are excluded
-from the text budget and are not persisted in conversation text. Source observations
-retain owner status, completeness and time. Stale/cross-window/session sources fail
-before model admission; duplicate accepted requests keep their captured input.
-Native stdin is omitted from model context, and output-view tool responses explicitly
-say whether the image was already included rather than embedding Base64 in text.
+Current evidence:
+- 13 Host tests: `target/component-repair-host-final.log`.
+- 16 real-SQLite admission/budget tests: `target/component-repair-store-final.log`.
+- 10 protocol tests and a typed-error privacy test:
+  `target/component-repair-protocol.log` and
+  `target/component-repair-error-classification.log`.
+- Two atomic queue-scope tests: `target/component-repair-queue-tests.log`.
+- Four real-R tests and the real-model repair:
+  `target/component-repair-real-r-final.log` and
+  `target/component-repair-model-feedback.log`.
+- The earlier source/image/model diagnostics and read-help checks remain in
+  `target/component-{diagnostics,context,read-help}-*.log`. They verify exact object,
+  package and native plot observations without new scientific operations.
+- The preceding document integration passed 29 Application tests, 364 UI tests,
+  the affected 16 bridge tests, 11 Workbench tests and three Chrome cases for
+  Chinese save/run, UTF-8/disk conflicts and two-window drafts. Current contract
+  generation/build/check and the main build passed; the Chrome queue/error/refresh/Resume
+  regression also passed. Logs: `target/component-repair-{client,build,browser}.log`.
 
-Real Ark/R source acceptance passed for objects, packages and a native plot with no
-additional scientific records. The configured real model then independently read
-an unseen object marker, the installed stats version and a randomized native plot
-color correctly. Each used one model call and no additional scientific operation;
-the single attempts took 1,148 / 1,682 / 2,832 ms respectively. This does not replace
-the 27-case final acceptance or model-connection/vision diagnostics still to be added.
-Evidence: `target/component-sources-real-r.log` and
-`target/component-source-real-model.log`. File source/change/repeated-request tests
-also passed in `target/component-context-tests.log`.
-The final context regression passed 42 deterministic cases (10 engine, 13 storage,
-8 Host and 11 Workbench), client type generation/build/check and focused Clippy with
-the previously documented Host-style baseline exceptions. Logs are
-`target/component-context-*.log`; this does not claim the full workspace regression.
+Strict Clippy has pre-existing diagnostics in large Contract wire enums, a SQLite
+range test, Host session-protection style and Workspace checkpoint style.
+The three Workspace diagnostics were reproduced at commit `4b0907ff` in a
+temporary registered worktree, then that worktree was removed. Selected Workspace, Application, engine and Host Clippy passed with only the
+reproduced `collapsible_if` and Host `unnecessary_sort_by` categories allowed;
+no source-wide suppression has been introduced. Evidence: `target/component-repair-*-clippy*.log`
+and `target/component-repair-clippy.log`.
 
-`/api/agents/components/query`, `/command` and the separate transient `/credential`
-route use the existing browser authentication and window checks. The MCP-only
-credential cannot access them. Settings persist only environment/session references;
-raw session keys stay in Host memory. HTTP clients are lazy and shared, with explicit
-HTTPS/loopback policy, no automatic redirects/retries and a 120-second request limit.
-No credential or native CLI configuration is discovered implicitly. Stop/Disable
-fence model and tool admission; model waits can be dropped without waiting for a
-token. Final acknowledgement is serialized with Stop. Quit closes the service and
-active runs prevent project switching. Accepted science retains its separate
-owner cancellation/reconciliation path through Host-owned native tasks.
+Outstanding: Paper review and seven usable Studio entrances; produced-plot
+acceptance; explicit Continue/crash reconciliation, final-store failure handling,
+multiwindow/resource stress; and P5 complete scientific, workspace and performance
+acceptance. The P0 standalone binary size was only a diagnostic measurement; it
+does not establish the shipped application overhead. See
+`target/component-agent-build-evidence.json` for that original measurement.
 
-### Current component evidence
-
-- **46 focused tests passed:** ten Rig HTTP/SSE protocol cases, thirteen real-SQLite
-  admission cases, twelve Host integration cases and eleven Workbench cases. The Host
-  tests compare actual project-file tool results against direct queries field by
-  field, reject forged windows and altered tickets, test silent-provider Stop and
-  reject redirects. HTTP checks reject MCP credentials and wrong project/window
-  commands. These tests do not establish real-R or UI acceptance.
-- The authorized `115-newapi` / `deepseek-v4.1-flash` service passed the earlier
-  Anthropic synthetic tool/image probe and the new **real Host project-read probe**.
-  The latter read an unseen random marker through the Project owner and returned it
-  exactly; duplicate start kept one run. It used two model calls and one tool call,
-  reported 8,487 input / 183 output tokens, and took 2,262 ms in that single attempt.
-  Evidence: `target/component-real-host.log`. This is not a throughput guarantee or
-  the plan's 27-case scientific acceptance.
-- Generated Rust/TypeScript contracts, client build/check and architecture fixtures
-  passed. The main `cargo build --locked` and CLI help smoke also passed; the
-  current binary was built without replacing an existing user Host. Deterministic logs are under
-  `target/component-agent-probe/2026-09-12T19-45-29.342Z/` and
-  `target/component-{engine,http}-*.log`. No new Studio interaction is implemented.
-- Strict Clippy has baseline failures: two large wire enums, one existing SQLite
-  range test, and three existing session-protection style diagnostics. The relevant
-  pre-change failures were reproduced from isolated Git source copies, which were
-  then removed. The selected engine/application/Host/Workbench run passes with only
-  the two reproduced Host style categories allowed. No source-wide warning
-  suppression was added. See `target/component-*-clippy*.log`.
-
-P0's optimized standalone diagnostic was 9,629,040 bytes, with 31 new active
-package/version nodes relative to its previous lock; its hash and counts remain in
-`target/component-agent-build-evidence.json`. That is a diagnostic measurement, not
-the shipped Rho size increase. The active engine graph excludes vector stores,
-embedded inference, Rig SQLite/memory and a replacement MCP dependency.
-
-Next: Paper B01–B06 review before UI implementation, P3 failure-repair/plot
-acceptance and seven usable entrances, P4 recovery/continuation/terminal-store failure
-handling and resource stress, and P5 complete regression/real-model/performance
-acceptance remain outstanding. The current real checks use disposable projects;
-existing user Hosts, R memory and drafts are preserved. Inspect live state before
-any workbench replacement. No installation, signing or publication was performed.
+All real checks use disposable projects. Existing user Hosts, R memory and drafts
+are preserved. Inspect live state before replacing any workbench. No installation,
+signing or publication was performed.
 
 ## Multiple R sessions and recovery copies
 

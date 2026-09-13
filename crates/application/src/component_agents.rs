@@ -85,6 +85,12 @@ pub enum ComponentToolAction {
     Query(QueryRequest),
     Invoke(Invocation),
     Control(ApplicationCommandRequest),
+    /// A rejected model argument attempt; this variant has no native dispatch.
+    Rejected {
+        capability: CapabilityRef,
+        arguments_digest: String,
+        feedback: Value,
+    },
 }
 impl ComponentToolAction {
     pub fn capability(&self) -> &str {
@@ -92,16 +98,17 @@ impl ComponentToolAction {
             Self::Query(q) => &q.capability.id,
             Self::Invoke(i) => &i.capability.id,
             Self::Control(_) => "application.control",
+            Self::Rejected { capability, .. } => &capability.id,
         }
     }
     pub fn mutation(&self) -> bool {
-        !matches!(self, Self::Query(_))
+        matches!(self, Self::Invoke(_) | Self::Control(_))
     }
     fn bind_request(&mut self, id: &str) {
         match self {
             Self::Invoke(i) => i.client_request_id = id.into(),
             Self::Control(c) => c.request_id = id.into(),
-            Self::Query(_) => {}
+            Self::Query(_) | Self::Rejected { .. } => {}
         }
     }
 }
@@ -256,6 +263,84 @@ pub fn component_document_reference<'a>(
                 .map(|grant| &grant.document)
         })
 }
+/// Native identities already linked to this run's durable mutation receipts.
+pub fn component_owned_operations(
+    tools: &[StoredComponentTool],
+) -> Result<std::collections::BTreeSet<OperationId>, ApplicationError> {
+    let mut ids = std::collections::BTreeSet::new();
+    for tool in tools.iter().filter(|t| t.receipt.mutation) {
+        if let Some(id) = &tool.receipt.operation_id {
+            ids.insert(id.clone());
+        }
+        if matches!(tool.action, ComponentToolAction::Control(_))
+            && tool.receipt.phase == ComponentToolPhase::Resolved
+        {
+            let receipt: ApplicationCommandReceipt = serde_json::from_value(
+                tool.receipt
+                    .result
+                    .clone()
+                    .ok_or_else(|| storage("Native application result is absent"))?,
+            )
+            .map_err(storage)?;
+            for step in [receipt.save, receipt.run].into_iter().flatten() {
+                if let Some(id) = step.operation_id {
+                    ids.insert(id);
+                }
+            }
+        }
+    }
+    Ok(ids)
+}
+
+/// Saving advances the editor version without changing captured text/selection.
+/// Follow only owner-confirmed save receipts so a repeated save/run keeps its
+/// original identity. An actual edit has no save link and starts a new identity.
+fn saved_document_identity(
+    reference: &ApplicationDocumentRef,
+    tools: &[StoredComponentTool],
+) -> Result<ApplicationDocumentRef, ApplicationError> {
+    let mut links = Vec::new();
+    for tool in tools {
+        let ComponentToolAction::Control(command) = &tool.action else {
+            continue;
+        };
+        let (ApplicationAction::Save { document, .. }
+        | ApplicationAction::RunFile { document, .. }) = &command.action
+        else {
+            continue;
+        };
+        if tool.receipt.phase != ComponentToolPhase::Resolved {
+            continue;
+        }
+        let receipt: ApplicationCommandReceipt = serde_json::from_value(
+            tool.receipt
+                .result
+                .clone()
+                .ok_or_else(|| storage("Resolved application result is absent"))?,
+        )
+        .map_err(storage)?;
+        if receipt.save_synchronized != Some(true) {
+            continue;
+        }
+        if let Some(updated) = receipt
+            .applied_documents
+            .as_ref()
+            .and_then(|refs| refs.iter().find(|r| r.document_id == document.document_id))
+            && updated != document
+        {
+            links.push((updated.clone(), document.clone()));
+        }
+    }
+    let mut identity = reference.clone();
+    for _ in 0..=links.len() {
+        let Some((_, earlier)) = links.iter().find(|(updated, _)| updated == &identity) else {
+            return Ok(identity);
+        };
+        identity = earlier.clone();
+    }
+    Err(storage("Saved document identity contains a cycle"))
+}
+
 pub fn component_digest(value: &impl Serialize) -> Result<String, ApplicationError> {
     fn canonical(value: Value) -> Value {
         match value {
@@ -278,7 +363,7 @@ fn budget(mode: ComponentAgentMode) -> ComponentAgentBudget {
     let (model_calls, tool_calls) = match mode {
         ComponentAgentMode::Explain => (4, 8),
         ComponentAgentMode::Edit => (6, 12),
-        ComponentAgentMode::Run => (8, 16),
+        ComponentAgentMode::Run => (12, 16),
     };
     ComponentAgentBudget {
         model_calls,
@@ -714,6 +799,21 @@ impl ComponentAgentOwner {
             ));
         }
         let arguments_digest = component_digest(&action)?;
+        let previous_tools = self.store.component_tools(scope, run_id)?;
+        if let ComponentToolAction::Invoke(invocation) = &action
+            && invocation.capability.id == "workspace.resume_queue"
+        {
+            let allowed: std::collections::BTreeSet<OperationId> =
+                serde_json::from_value(invocation.arguments["only_operation_ids"].clone())
+                    .map_err(storage)?;
+            if allowed.is_empty()
+                || !allowed.is_subset(&component_owned_operations(&previous_tools)?)
+            {
+                return Err(invalid(
+                    "Queue resume must be restricted to this run's recorded operations",
+                ));
+            }
+        }
         let mut semantic_action = action.clone();
         if let ComponentToolAction::Control(command) = &mut semantic_action
             && let ApplicationAction::EditDocument { document, .. } = &mut command.action
@@ -727,8 +827,14 @@ impl ComponentAgentOwner {
         {
             *document = grant.document.clone();
         }
+        if let ComponentToolAction::Control(command) = &mut semantic_action
+            && let ApplicationAction::Save { document, .. }
+            | ApplicationAction::RunFile { document, .. }
+            | ApplicationAction::RunSelection { document } = &mut command.action
+        {
+            *document = saved_document_identity(document, &previous_tools)?;
+        }
         let digest = component_digest(&semantic_action)?;
-        let previous_tools = self.store.component_tools(scope, run_id)?;
         for previous in &previous_tools {
             if previous
                 .calls
@@ -775,6 +881,24 @@ impl ComponentAgentOwner {
         }
         let client_request_id = uuid::Uuid::new_v4().to_string();
         action.bind_request(&client_request_id);
+        let rejected = match &action {
+            ComponentToolAction::Rejected { feedback, .. } => Some(feedback.clone()),
+            _ => None,
+        };
+        if let Some(result) = &rejected {
+            let bytes = serde_json::to_vec(result).map_err(storage)?.len() as u32;
+            let total = run
+                .run
+                .tool_result_bytes
+                .checked_add(bytes)
+                .ok_or_else(|| invalid("Tool result size overflow"))?;
+            if total > run.run.budget.tool_result_bytes {
+                return Err(ApplicationError::Budget(
+                    "Tool feedback byte budget exceeded".into(),
+                ));
+            }
+            run.run.tool_result_bytes = total;
+        }
         let tool = StoredComponentTool {
             calls: vec![call],
             receipt: ComponentToolReceipt {
@@ -787,10 +911,14 @@ impl ComponentAgentOwner {
                 action_digest: digest,
                 client_request_id,
                 mutation: action.mutation(),
-                phase: ComponentToolPhase::Intent,
+                phase: if rejected.is_some() {
+                    ComponentToolPhase::Resolved
+                } else {
+                    ComponentToolPhase::Intent
+                },
                 operation_id: None,
                 application_request_id: None,
-                result: None,
+                result: rejected,
                 evidence: vec![],
                 updated_at_ms: now,
             },

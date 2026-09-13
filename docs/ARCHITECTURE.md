@@ -137,6 +137,27 @@ query. Stop cancels pending commands, fences unsubmitted steps and requests
 cancellation only for accepted operations belonging to the original command.
 Claimed local edits may already apply; cancellation never implies rollback.
 
+Saved document successor references are normalized through their original save
+receipts for mutation deduplication. A saved-base version change cannot turn a
+duplicate failed Run File into another execution; an actual edit supplies a new
+document identity for a subsequent repair.
+
+Queue recovery remains an explicit model tool choice. Host binds Resume to this
+run's confirmed failed R operation and observed native pause ID, injecting only
+operation IDs already present in its durable receipts. Workspace checks that set
+against the pause origin and every current, pending and reserved run under the
+queue lock, including work hidden by principal filtering. Manual pauses, other
+requests' failures and unconfirmed outcomes cannot be resumed by this path.
+Model failures retain typed error categories or numeric HTTP status; provider
+bodies, raw error strings and private message history are excluded.
+
+Known-tool argument format failures produce non-executable application receipts
+with an argument digest and bounded schema feedback. Rig's native Skip hook returns
+that feedback to the model; neither the tool body nor a scientific owner is invoked.
+These attempts consume tool/result budgets and survive reload. Unknown tools,
+attempts to override hidden targets, storage failures and exhausted budgets stop
+the run instead of entering this correction path.
+
 Settings persist only non-secret configuration and explicit environment/session
 credential references. Remote endpoints require HTTPS; loopback HTTP is explicit.
 Endpoint credentials in URLs are rejected. A disabled or unconfigured assistant

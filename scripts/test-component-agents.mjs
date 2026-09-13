@@ -41,7 +41,7 @@ if (real) {
   await run("real-host", ["cargo", "run", "-p", "rho-host", "--example", "component_agent_probe", "--locked"]);
   if (sources) {
     await run("real-sources", ["cargo", "run", "-p", "rho-host", "--example", "component_source_probe", "--locked"]);
-    await run("real-documents", ["cargo", "test", "-p", "rho-host", "--test", "component_mutations_real_r", "real_model_captured_document", "--locked", "--", "--ignored", "--nocapture"]);
+    await run("real-documents", ["cargo", "test", "-p", "rho-host", "--test", "component_mutations_real_r", "real_model_captured_document", "--locked", "--", "--ignored", "--nocapture", "--test-threads=1"]);
   }
 }
 const summary = { phase: "P3-documents", fakeProtocol: "passed", applicationAdmission: "passed", hostQueryIntegration: "passed", realModel: real ? "passed" : "not_run",

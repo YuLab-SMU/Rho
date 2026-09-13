@@ -714,7 +714,82 @@ impl ComponentRunPort for HostRunPort {
             .store
             .component_run(&self.scope, &self.run.run_id)?
             .ok_or(ApplicationError::NotFound)?;
-        let action = tool.bind(&current.run, arguments)?;
+        let mut action = if let Some(feedback) = tool.invalid_arguments_feedback(&arguments) {
+            ComponentToolAction::Rejected {
+                capability: tool.descriptor.capability.clone(),
+                arguments_digest: component_digest(&arguments)?,
+                feedback,
+            }
+        } else {
+            tool.bind(&current.run, arguments)?
+        };
+        if let ComponentToolAction::Invoke(invocation) = &mut action
+            && invocation.capability.id == "workspace.resume_queue"
+        {
+            let tools = self
+                .owner
+                .store
+                .component_tools(&self.scope, &self.run.run_id)?;
+            let previous = tools.iter().find_map(|t| match &t.action {
+                ComponentToolAction::Invoke(old)
+                    if old.capability.id == "workspace.resume_queue"
+                        && old.arguments["pause_id"] == invocation.arguments["pause_id"] =>
+                {
+                    Some(old)
+                }
+                _ => None,
+            });
+            if let Some(previous) = previous {
+                invocation.arguments = previous.arguments.clone();
+            } else {
+                let owned = component_owned_operations(&tools)?;
+                let session = current
+                    .run
+                    .request
+                    .grant
+                    .session
+                    .as_ref()
+                    .ok_or_else(|| error("R session is absent"))?;
+                let state=self.host.query_snapshot(&self.context,QueryRequest{capability:CapabilityRef::new("workspace.console_state",1).map_err(error)?,
+                arguments:json!({"workspace_instance_id":session.workspace_instance_id})}).await.map_err(error)?;
+                let state: ConsoleState = serde_json::from_value(
+                    state
+                        .data
+                        .ok_or_else(|| error("Console state is unavailable"))?,
+                )
+                .map_err(error)?;
+                if state.session_id != session.session_id {
+                    return Err(error("The native R session changed"));
+                }
+                let pause = state
+                    .pause
+                    .ok_or_else(|| error("There is no observed R queue pause"))?;
+                let id = pause
+                    .operation_id
+                    .ok_or_else(|| error("The queue was paused outside this assistant run"))?;
+                if invocation.arguments["pause_id"].as_str() != Some(&pause.id)
+                    || !owned.contains(&id)
+                {
+                    return Err(error("The queue pause is outside this assistant run"));
+                }
+                let original = self
+                    .host
+                    .get_operation(&self.context, &id)
+                    .await
+                    .map_err(error)?
+                    .ok_or_else(|| error("Original failed operation is unavailable"))?;
+                if original.status != OperationStatus::Failed
+                    || original.operation.caller != self.context.caller
+                    || original.operation.capability.id != "workspace.run_r"
+                {
+                    return Err(error(
+                        "Verify the original failure before resuming its queue",
+                    ));
+                }
+                invocation.arguments["only_operation_ids"] =
+                    serde_json::to_value(owned).map_err(error)?;
+            }
+        }
         self.owner.admit_tool(
             &self.scope,
             &self.run.run_id,
@@ -737,6 +812,12 @@ impl ComponentRunPort for HostRunPort {
             .ok_or(ApplicationError::NotFound)?;
         if component_digest(&tool.action)? != component_digest(&admission.tool.action)? {
             return Err(error("Tool ticket differs from its durable intent"));
+        }
+        if matches!(tool.action, ComponentToolAction::Rejected { .. }) {
+            return tool
+                .receipt
+                .result
+                .ok_or_else(|| error("Rejected argument feedback is unavailable"));
         }
         if matches!(
             tool.action,

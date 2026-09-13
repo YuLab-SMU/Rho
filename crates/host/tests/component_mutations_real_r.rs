@@ -69,9 +69,15 @@ struct Fixture {
 }
 impl Fixture {
     async fn new(code: &str, repeat: bool) -> Self {
-        Self::with_documents(code, repeat, false, false).await
+        Self::with_documents(code, repeat, false, false, false).await
     }
-    async fn with_documents(code: &str, repeat: bool, documents: bool, real_model: bool) -> Self {
+    async fn with_documents(
+        code: &str,
+        repeat: bool,
+        documents: bool,
+        real_model: bool,
+        repair: bool,
+    ) -> Self {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().canonicalize().unwrap();
         let project = root.to_string_lossy().into_owned();
@@ -125,7 +131,7 @@ impl Fixture {
             if real_model {
                 Arc::new(rho_agents::RigComponentEngine::default()) as Arc<dyn ComponentAgentEngine>
             } else if documents {
-                Arc::new(DocumentEngine) as Arc<dyn ComponentAgentEngine>
+                Arc::new(DocumentEngine { repair }) as Arc<dyn ComponentAgentEngine>
             } else {
                 Arc::new(RunEngine {
                     code: code.into(),
@@ -340,13 +346,31 @@ async fn stop_tracks_and_cancels_the_original_r_operation() {
     f.service.close().await;
 }
 
-struct DocumentEngine;
+struct DocumentEngine {
+    repair: bool,
+}
+const REPAIR_LINE: &str = "stop(\"component repair fixture\")\n";
 #[async_trait]
 impl ComponentAgentEngine for DocumentEngine {
     async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome {
         let result = async {
             let turn = request.port.begin_model_call().await?;
-            let edit = json!({"document_id":"analysis","edits":[{"from":0,"to":0,"insert":"counter <- counter + 1L\n"}]});
+            if self.repair {
+                let first=request.port.prepare_tool(turn,"first-run","application_run_file",json!({"document_id":"analysis"})).await?;
+                let original=first.tool.receipt.client_request_id.clone();
+                let failed=request.port.execute_tool(first).await?;
+                if failed["state"]!="failed" || failed["run"]["state"]!="failed" || failed["save_synchronized"]!=true {
+                    return Err(ApplicationError::InvalidInput(format!("Expected a saved native failure: {failed}")));
+                }
+                let duplicate=request.port.prepare_tool(turn,"repeat-failed-run","application_run_file",json!({"document_id":"analysis"})).await?;
+                if !duplicate.repeated || duplicate.tool.receipt.client_request_id!=original {
+                    return Err(ApplicationError::InvalidInput("Repeated failed capture was admitted as new scientific work".into()));
+                }
+                if request.port.execute_tool(duplicate).await? != failed {
+                    return Err(ApplicationError::InvalidInput("Repeated failure lost its original receipt".into()));
+                }
+            }
+            let edit = if self.repair { json!({"document_id":"analysis","edits":[{"from":0,"to":REPAIR_LINE.len(),"insert":""}]}) } else { json!({"document_id":"analysis","edits":[{"from":0,"to":0,"insert":"counter <- counter + 1L\n"}]}) };
             let ticket = request.port.prepare_tool(turn,"edit","application_edit_document",edit.clone()).await?;
             let original = ticket.tool.receipt.client_request_id.clone();
             let result = request.port.execute_tool(ticket).await?;
@@ -355,7 +379,20 @@ impl ComponentAgentEngine for DocumentEngine {
             assert!(repeated.repeated);
             assert_eq!(repeated.tool.receipt.client_request_id,original);
             assert_eq!(request.port.execute_tool(repeated).await?,result);
-            for (id,name) in [("save","application_save_document"),("run","application_run_file")] {
+            if self.repair {
+                let query=request.port.prepare_tool(turn,"queue","workspace_console_state",json!({})).await?;
+                let queue=request.port.execute_tool(query).await?;
+                let args=json!({"pause_id":queue["data"]["pause"]["id"]});
+                let resume=request.port.prepare_tool(turn,"resume","workspace_resume_queue",args.clone()).await?;
+                let original=resume.tool.receipt.client_request_id.clone();
+                let resumed=request.port.execute_tool(resume).await?;
+                if resumed["status"]!="succeeded" {return Err(ApplicationError::InvalidInput(format!("Resume failed: {resumed}")));}
+                let duplicate=request.port.prepare_tool(turn,"resume-again","workspace_resume_queue",args).await?;
+                if !duplicate.repeated || duplicate.tool.receipt.client_request_id!=original {return Err(ApplicationError::InvalidInput("Resume did not preserve its original identity".into()));}
+                if request.port.execute_tool(duplicate).await?!=resumed {return Err(ApplicationError::InvalidInput("Resume receipt changed".into()));}
+            }
+            let steps = if self.repair { vec![("run","application_run_file")] } else { vec![("save","application_save_document"),("run","application_run_file")] };
+            for (id,name) in steps {
                 let ticket = request.port.prepare_tool(turn,id,name,json!({"document_id":"analysis"})).await?;
                 let result = request.port.execute_tool(ticket).await?;
                 assert_eq!(result["state"],"applied","{result}");
@@ -407,18 +444,35 @@ async fn sync_document(f: &Fixture, old: &ApplicationDocument, new: &Application
 #[tokio::test]
 #[ignore = "requires real Ark/R; captured component document acceptance"]
 async fn captured_document_edit_save_and_run_follow_confirmed_versions() {
-    documents_acceptance(false).await;
+    documents_acceptance(false, false).await;
 }
 
 #[tokio::test]
 #[ignore = "requires explicitly configured real model and Ark/R"]
 async fn real_model_captured_document_edit_save_and_run() {
-    documents_acceptance(true).await;
+    documents_acceptance(true, false).await;
 }
 
-async fn documents_acceptance(real_model: bool) {
-    let f = Fixture::with_documents("", false, true, real_model).await;
-    let text = "invisible(counter)\n";
+#[tokio::test]
+#[ignore = "requires real Ark/R; failed captured execution and repair"]
+async fn captured_document_failure_is_not_replayed_and_repair_uses_its_saved_version() {
+    documents_acceptance(false, true).await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured real model and Ark/R"]
+async fn real_model_captured_document_failure_and_repair() {
+    documents_acceptance(true, true).await;
+}
+
+async fn documents_acceptance(real_model: bool, repair: bool) {
+    let f = Fixture::with_documents("", false, true, real_model, repair).await;
+    let initial = if repair {
+        format!("{REPAIR_LINE}counter <- counter + 1L\ninvisible(counter)\n")
+    } else {
+        "invisible(counter)\n".into()
+    };
+    let text = initial.as_str();
     std::fs::write(f._temp.path().join("analysis.R"), text).unwrap();
     let mut document = ApplicationDocument {
         document_id: "analysis".into(),
@@ -460,6 +514,13 @@ async fn documents_acceptance(real_model: bool) {
         },
     )
     .await;
+    let preview=f.service.preview_source(&f.host,&f.context,ComponentSourcePreviewRequest{
+        project_root:f.project.clone(),window:f.window.clone(),session:Some(f.session.clone()),
+        selection:AgentContextSelection{source:"editor".into(),label:"analysis.R".into(),inclusion:"text".into(),
+            reference:json!({"window":f.window,"document":doc_ref(&document),"expected_sha256":rho_application::sha256(&document.text),"selection":document.selection})}
+    }).await.unwrap();
+    assert!(preview.error.is_none(), "{:?}", preview.error);
+    let sources = vec![preview.snapshot.unwrap().selection];
     let conversation = f
         .service
         .create(
@@ -483,7 +544,7 @@ async fn documents_acceptance(real_model: bool) {
                 conversation_version: conversation.version,
                 window: f.window.clone(),
                 model_settings_version: 1,
-                text: "Use the authorized document analysis (analysis.R) whose initial text is exactly invisible(counter) followed by a newline. First prepend counter <- counter + 1L followed by a newline using application_edit_document, then call application_save_document, then application_run_file. Execute exactly once. Wait for each native receipt and report whether it succeeded. Do not create another document or use direct R.".into(),
+                text: if repair { "First run the authorized document analysis (analysis.R) using application_run_file to observe its failure. Then inspect its original native failure and current draft, repair only the failing first line, and use application_run_file again to save and run the corrected script. Keep the counter increment and other code unchanged. The counter must increment exactly once across the entire workflow. Do not repeat the failed execution and do not create another document or use direct R.".into() } else { "Use the authorized document analysis (analysis.R) whose initial text is exactly invisible(counter) followed by a newline. First prepend counter <- counter + 1L followed by a newline using application_edit_document, then call application_save_document, then application_run_file. Execute exactly once. Wait for each native receipt and report whether it succeeded. Do not create another document or use direct R.".into() },
                 grant: ComponentAgentGrant {
                     mode: ComponentAgentMode::Run,
                     session: Some(f.session.clone()),
@@ -494,16 +555,18 @@ async fn documents_acceptance(real_model: bool) {
                     }],
                     files: vec![],
                 },
-                sources: vec![],
+                sources,
             },
         )
         .await
         .unwrap();
     let mut edits = 0;
+    let mut native_runs = 0;
+    let mut failures = 0;
     let started = std::time::Instant::now();
     let mut renewed = std::time::Instant::now();
-    tokio::time::timeout(
-        Duration::from_secs(if real_model { 125 } else { 45 }),
+    let completed = tokio::time::timeout(
+        Duration::from_secs(if real_model { 125 } else { 20 }),
         async {
             loop {
                 if renewed.elapsed() >= Duration::from_secs(3) {
@@ -521,6 +584,21 @@ async fn documents_acceptance(real_model: bool) {
                     .run(&f.host, &f.context, &f.project, &run.run_id)
                     .unwrap();
                 if state.state.is_terminal() {
+                    if state.state != ComponentAgentRunState::Completed {
+                        let scope = ApplicationScope {
+                            project: f.project.clone(),
+                            principal: serde_json::to_string(f.context.principal()).unwrap(),
+                        };
+                        let store =
+                            ApplicationStore::open(&f._temp.path().join("components.sqlite"))
+                                .unwrap();
+                        for tool in store.component_tools(&scope, &run.run_id).unwrap() {
+                            eprintln!(
+                                "Synthetic probe tool {:?}: {:?}",
+                                tool.action, tool.receipt.result
+                            );
+                        }
+                    }
                     assert_eq!(
                         state.state,
                         ComponentAgentRunState::Completed,
@@ -541,6 +619,10 @@ async fn documents_acceptance(real_model: bool) {
                     tokio::time::sleep(Duration::from_millis(20)).await;
                     continue;
                 };
+                eprintln!(
+                    "Bridge applying {}",
+                    serde_json::to_value(&grant.request.action).unwrap()["kind"]
+                );
                 let mut changes = ApplicationChanges::default();
                 if let ApplicationAction::EditDocument {
                     document: reference,
@@ -601,18 +683,26 @@ async fn documents_acceptance(real_model: bool) {
                                 .unwrap(),
                         )
                         .unwrap();
+                        eprintln!("Native step {step:?}: {:?}", result.receipt.state);
                         let step_receipt = if step == ApplicationExecutionStep::Save {
                             result.receipt.save.as_ref()
                         } else {
                             result.receipt.run.as_ref()
                         }
                         .unwrap();
-                        assert_eq!(
-                            step_receipt.state,
-                            ApplicationStepState::Succeeded,
-                            "{:?}",
-                            result.receipt
-                        );
+                        let expected = if repair
+                            && step == ApplicationExecutionStep::Run
+                            && native_runs == 0
+                        {
+                            failures += 1;
+                            ApplicationStepState::Failed
+                        } else {
+                            ApplicationStepState::Succeeded
+                        };
+                        assert_eq!(step_receipt.state, expected, "{:?}", result.receipt);
+                        if step == ApplicationExecutionStep::Run {
+                            native_runs += 1;
+                        }
                         if step == ApplicationExecutionStep::Save {
                             let before = document.clone();
                             let capture = result.receipt.capture.unwrap();
@@ -636,9 +726,61 @@ async fn documents_acceptance(real_model: bool) {
             }
         },
     )
-    .await
-    .unwrap();
+    .await;
+    if completed.is_err() {
+        let run = f
+            .service
+            .run(&f.host, &f.context, &f.project, &run.run_id)
+            .unwrap();
+        let tools = f
+            .service
+            .tools(&f.host, &f.context, &f.project, &run.run_id)
+            .unwrap();
+        eprintln!(
+            "Timed out component run: {}",
+            serde_json::to_string(&run).unwrap()
+        );
+        for tool in tools {
+            eprintln!("Tool: {}", serde_json::to_string(&tool).unwrap());
+            if let Some(id) = tool.application_request_id {
+                let state = f
+                    .host
+                    .query_snapshot(
+                        &f.context,
+                        QueryRequest {
+                            capability: CapabilityRef::new("application.command_status", 1)
+                                .unwrap(),
+                            arguments: json!({"window":f.window,"request_id":id}),
+                        },
+                    )
+                    .await;
+                eprintln!("Application: {state:?}");
+            }
+        }
+        bridge(
+            &f,
+            ApplicationBridgeRequest::Renew {
+                session: f.bridge.clone(),
+            },
+        )
+        .await;
+        f.service
+            .stop(&f.host, &f.context, &f.project, &f.window, &run.run_id)
+            .await
+            .unwrap();
+        f.service.close().await;
+        panic!("Document execution timed out; original receipts printed above");
+    }
     assert_eq!(edits, 1);
+    assert_eq!(native_runs, if repair { 2 } else { 1 });
+    assert_eq!(failures, usize::from(repair));
+    if repair {
+        assert!(
+            document
+                .text
+                .ends_with("counter <- counter + 1L\ninvisible(counter)\n")
+        );
+    }
     assert_eq!(
         std::fs::read_to_string(f._temp.path().join("analysis.R")).unwrap(),
         document.text
@@ -660,14 +802,49 @@ async fn documents_acceptance(real_model: bool) {
         .tools(&f.host, &f.context, &f.project, &run.run_id)
         .unwrap();
     let mutations: Vec<_> = tools.iter().filter(|t| t.mutation).collect();
-    assert_eq!(mutations.len(), 3);
+    assert_eq!(mutations.len(), if repair { 4 } else { 3 });
     assert!(
         mutations
             .iter()
-            .all(|t| t.phase == ComponentToolPhase::Resolved && t.application_request_id.is_some())
+            .all(|t| t.phase == ComponentToolPhase::Resolved
+                && (t.application_request_id.is_some() || t.operation_id.is_some()))
     );
+    let mut native_ids = std::collections::BTreeSet::new();
+    let mut failed_records = 0;
+    for tool in mutations.iter() {
+        if tool.capability == "workspace.resume_queue" {
+            let record: OperationRecord =
+                serde_json::from_value(tool.result.clone().unwrap()).unwrap();
+            assert_eq!(record.status, OperationStatus::Succeeded);
+            continue;
+        }
+        let receipt: ApplicationCommandReceipt =
+            serde_json::from_value(tool.result.clone().unwrap()).unwrap();
+        if let Some(step) = receipt.run {
+            let id = step.operation_id.unwrap();
+            assert!(native_ids.insert(id.clone()));
+            let native = f
+                .host
+                .get_operation(&f.context, &id)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(native.operation.caller.kind, CallerKind::Agent);
+            if step.state == ApplicationStepState::Failed {
+                assert_eq!(native.status, OperationStatus::Failed);
+                assert!(native.error.is_some());
+                failed_records += 1;
+            } else {
+                assert_eq!(native.status, OperationStatus::Succeeded);
+            }
+        }
+    }
+    assert_eq!(failed_records, usize::from(repair));
+    assert_eq!(native_ids.len(), native_runs);
+    let finished=f.service.run(&f.host,&f.context,&f.project,&run.run_id).unwrap();
+    println!("model_calls={}, tool_calls={}, model_limit={}",finished.model_calls,finished.tool_calls,finished.budget.model_calls);
     println!(
-        "document acceptance: real_model={real_model}, edits={edits}, mutations={}, elapsed_ms={}",
+        "document acceptance: real_model={real_model}, repair={repair}, edits={edits}, native_runs={native_runs}, failures={failures}, mutations={}, elapsed_ms={}",
         mutations.len(),
         started.elapsed().as_millis()
     );

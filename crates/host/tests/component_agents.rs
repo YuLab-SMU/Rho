@@ -16,6 +16,7 @@ use tokio::sync::Notify;
 #[derive(Clone, Copy)]
 enum Mode {
     ReadFile,
+    RepairArguments,
     Context,
     ForgedWindow,
     Silent,
@@ -124,9 +125,17 @@ async fn completion(
             text.push_str(&chunk(json!({"content":answer}), Value::Null));
             text.push_str(&chunk(json!({}), json!("stop")));
         }
-    } else if index == 1 {
+    } else if index == 1 || (matches!(state.mode, Mode::RepairArguments) && index == 2) {
         let (name, args) = match state.mode {
             Mode::ReadFile => ("project_read_text", json!({"path":"analysis.R"})),
+            Mode::RepairArguments => (
+                "project_read_text",
+                if index == 1 {
+                    json!({"path":7})
+                } else {
+                    json!({"path":"analysis.R"})
+                },
+            ),
             Mode::Context => ("application_context", json!({"limit":1})),
             Mode::ForgedWindow => (
                 "application_context",
@@ -872,5 +881,41 @@ async fn changed_file_or_cross_window_context_is_rejected_before_model_admission
         )
         .await;
     assert!(denied.is_err());
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn rig_corrects_known_tool_argument_shape_without_dispatching_the_rejected_call() {
+    let provider = Provider::new(Mode::RepairArguments).await;
+    let f = Fixture::new().await;
+    f.configure(&provider).await;
+    let run = f.start(f.request()).await;
+    let done = f.terminal(&run.run_id).await;
+    assert_eq!(
+        done.state,
+        ComponentAgentRunState::Completed,
+        "{:?}",
+        done.reason
+    );
+    assert_eq!((done.model_calls, done.tool_calls), (3, 2));
+    let tools = f
+        .service
+        .tools(&f.host, &f.context, &f.project, &run.run_id)
+        .unwrap();
+    assert_eq!(tools.len(), 2);
+    let rejected = tools
+        .iter()
+        .find(|t| t.result.as_ref().is_some_and(|r| r["status"] == "rejected"))
+        .unwrap();
+    assert!(!rejected.mutation);
+    assert!(rejected.operation_id.is_none() && rejected.application_request_id.is_none());
+    assert_eq!(rejected.result.as_ref().unwrap()["accepted"], false);
+    assert!(tools.iter().any(|t| t.result.as_ref().is_some_and(
+        |r| r["status"] == "ready" && r.to_string().contains("native-project-evidence-27")
+    )));
+    let requests = provider.state.requests.lock().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert!(requests[1]["messages"].to_string().contains("rejected"));
+    drop(requests);
     f.service.close().await;
 }
