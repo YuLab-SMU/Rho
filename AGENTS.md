@@ -9,9 +9,11 @@ shared rules here; add a nested AGENTS.md only for genuinely different local rul
 
 ## Read for the task
 
-Start with `docs/README.md` and `docs/STATUS.md`. Read `docs/ARCHITECTURE.md` for
-ownership and execution constraints. For Studio work, read `docs/RHO-DESIGN.md`
-and `docs/STUDIO-FEEDBACK.md`. Design distinguishes approved interactions from
+When first joining or resuming project work, use `docs/README.md` and the relevant
+parts of `docs/STATUS.md` for orientation. Otherwise read only what the task needs:
+`docs/ARCHITECTURE.md` for ownership or execution boundaries, `docs/RHO-DESIGN.md`
+and `docs/STUDIO-FEEDBACK.md` for Studio interaction changes. Reuse context already
+read when it remains current. Design distinguishes approved interactions from
 proposals; Status records implementation and evidence. Passing functional tests
 does not establish visual quality or close usability feedback.
 
@@ -71,11 +73,16 @@ migration, import, archive-reader or compatibility work without a new request.
 
 ## Working loop
 
+The following loop applies to tasks that change the repository. Read-only questions
+and reviews do not require edits, builds, status updates, or commits.
+
 1. Inspect `git status` and the relevant source/tests. Preserve unrelated changes.
 2. Run `node scripts/governance.mjs impact --changed-auto` for mapped checks.
 3. Make a coherent change and iterate with the closest useful test.
 4. Run affected checks once behavior settles; inspect the diff and report only
-   commands that ran. Compare failures against a pre-change baseline.
+   commands that ran. Investigate a pre-change baseline when needed to attribute
+   a failure. Reuse passing results that cover the current changes; rerun only
+   when new changes, failures, or unresolved concerns justify it.
 5. Update a current document when it clarifies behavior or changes current focus.
    Keep proposed, implemented and verified claims distinct.
 
@@ -85,8 +92,9 @@ migration, import, archive-reader or compatibility work without a new request.
   in parallel. Type generation invokes Cargo too. Wait for completion; do not
   poll background tests with sleeps.
 - Rust changes: use `cargo test -p <crate> <filter> --locked` while iterating.
-- Contract/client changes: run `npm run generate --prefix ui`, then
-  `npm run build --prefix ui`, then `npm run check --prefix ui`.
+- Contract DTO or generator changes: run `npm run generate --prefix ui` before
+  the client checks. Client changes: run `npm run build --prefix ui`, then
+  `npm run check --prefix ui`; ordinary client edits do not require type generation.
 - UI behavior: use `npm run test --prefix ui` and relevant isolated Chrome tests.
   Build the current binary before `npm run test:browser --prefix ui`.
 - Real R checks use `node scripts/test-real-r.mjs`; skipped external checks are not
@@ -128,7 +136,9 @@ genuinely independent work; integrate their changes and remove them when finishe
 Register them with `scripts/dev-lanes.mjs`: `start --id NAME --own 'path/**'`,
 `check --id NAME --changed-auto`, and `finish --id NAME`.
 Keep real workbench runs in the primary checkout.
-Before switching tasks, preserve unfinished work in a clearly named WIP commit.
+Before leaving unfinished repository changes to switch to unrelated work, preserve
+those changes in a clearly named WIP commit. Answering a question during ongoing
+work is not a task switch.
 
 Distribution requires an explicit task and a verified packaging path. Report exact
 commit, artifacts, sizes, hashes and executed checks. Build, signing, installation
@@ -137,8 +147,10 @@ Use `docs/RELEASE.md` for the current operator map.
 
 ## Session handoff
 
-Before ending a session, commit coherent authorized work and check `git status`.
-Record the current implementation, executed checks, unresolved work and useful
-restart paths in `docs/STATUS.md`. Keep transient process details out of this file.
+When a task changes the repository, commit coherent authorized work and check
+`git status` before ending. Update `docs/STATUS.md` only when current behavior,
+verification conclusions, focus, or unresolved work changes; include relevant
+checks and restart guidance where useful. Do not add a status entry merely to
+record a completed edit or read-only review. Keep transient process details out.
 The next session should read that page and inspect the live processes before
 starting another Host for the same project.
