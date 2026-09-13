@@ -1551,3 +1551,90 @@ fn tool_origin_hashes_survive_aliases_and_reopen_without_storing_raw_model_argum
             .all(|call| call.origin.as_ref() == Some(&origin))
     );
 }
+
+#[test]
+fn byte_pruning_preserves_unconfirmed_tool_identity_and_late_native_result() {
+    let f = Fixture::new();
+    let run = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let tool = f
+        .owner
+        .admit_tool(f.actor.scope(), &run, 1, "original", mutation(), 6)
+        .unwrap()
+        .tool;
+    let operation = OperationId::new("accepted-native-operation").unwrap();
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &run,
+            &tool.receipt.receipt_id,
+            ComponentToolUpdate::Accepted {
+                operation_id: Some(operation.clone()),
+                application_request_id: None,
+            },
+            7,
+        )
+        .unwrap();
+    let text = "测😀".repeat(1100);
+    for _ in 0..150 {
+        f.owner
+            .append_text(f.actor.scope(), &run, text.clone(), 8)
+            .unwrap();
+    }
+    let connection = rusqlite::Connection::open(&f.path).unwrap();
+    let (count, bytes): (usize, usize) = connection
+        .query_row(
+            "SELECT COUNT(*),SUM(bytes) FROM component_agent_events",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert!(count < 150 && count <= MAX_COMPONENT_EVENTS);
+    assert!(bytes <= MAX_COMPONENT_EVENT_BYTES);
+    let page = f
+        .store
+        .component_events(f.actor.scope(), &run, 0, 128)
+        .unwrap();
+    assert!(page.history_gap);
+    let original = f.store.component_tools(f.actor.scope(), &run).unwrap();
+    assert_eq!(original.len(), 1);
+    assert_eq!(original[0].receipt.operation_id.as_ref(), Some(&operation));
+    assert_eq!(original[0].receipt.phase, ComponentToolPhase::Accepted);
+    f.owner.stop(&f.actor, &run, 9).unwrap();
+    f.owner
+        .finish(
+            f.actor.scope(),
+            &run,
+            ComponentAgentRunState::Stopped,
+            None,
+            10,
+        )
+        .unwrap();
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &run,
+            &tool.receipt.receipt_id,
+            ComponentToolUpdate::Resolved {
+                result: json!({"status":"succeeded","operation_id":operation}),
+                evidence: vec![],
+            },
+            11,
+        )
+        .unwrap();
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    let result = reopened.component_tools(f.actor.scope(), &run).unwrap();
+    assert_eq!(result[0].receipt.phase, ComponentToolPhase::Resolved);
+    assert_eq!(
+        result[0].receipt.client_request_id,
+        tool.receipt.client_request_id
+    );
+    assert_eq!(
+        reopened
+            .component_run(f.actor.scope(), &run)
+            .unwrap()
+            .unwrap()
+            .run
+            .state,
+        ComponentAgentRunState::Stopped
+    );
+}

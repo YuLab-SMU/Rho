@@ -99,6 +99,17 @@ dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
 These are individual acceptance runs, not throughput guarantees.
 
 Current evidence:
+- P4 now injects actual SQLite aborts before tool intent, while storing a native
+  result and while committing the final run acknowledgement. Intent failure
+  executes no R; result/final failures retain one native execution and Continue
+  never replays it. A saturated two-running/eight-waiting model queue rejects
+  excess work; project observation and queued Stop return within the tested
+  250 ms bound, and Disable prevents later queued model requests. Unicode event
+  payloads exceeding the 1 MiB conversation budget are pruned while unconfirmed
+  tool identities and late native results survive reopen. Evidence:
+  `target/component-fault-injection.log`, `target/component-saturation.log`,
+  `target/component-byte-pruning.log`. These are backend measurements, not the
+  still-pending UI performance comparison.
 - Produced-artifact acceptance now covers a real failed script, repair, captured
   save/run, retained PNG lookup by producing operation, checksum/size verification,
   synthetic image diagnostics and a separate Plots interpretation request. The final
@@ -158,7 +169,8 @@ reproduced `collapsible_if` and Host `unnecessary_sort_by` categories allowed;
 no source-wide suppression has been introduced. Evidence: `target/component-repair-*-clippy*.log`
 and `target/component-repair-clippy.log`.
 
-Outstanding: Paper review and seven usable Studio entrances; further crash/final-store failure handling,
+Outstanding: Paper review and seven usable Studio entrances; further crash/input/cross-session stress and a total persistent component-payload
+quota (the current 64 MiB project limit covers events),
 multiwindow/resource stress; and P5 complete scientific, workspace and performance
 acceptance. The P0 standalone binary size was only a diagnostic measurement; it
 does not establish the shipped application overhead. See

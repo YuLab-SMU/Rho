@@ -1687,3 +1687,146 @@ async fn saved_image_file_cannot_be_forged_into_a_plots_artifact() {
     assert_eq!(recent_science(&f).await, before);
     f.service.close().await;
 }
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; SQLite failure injection around component acknowledgements"]
+async fn injected_application_write_failures_preserve_native_facts_without_replay() {
+    for phase in ["intent", "result", "terminal"] {
+        let f = Fixture::new("counter <- counter + 1L; invisible(counter)", false).await;
+        let database =
+            rusqlite::Connection::open(f._temp.path().join("components.sqlite")).unwrap();
+        let trigger = match phase {
+            "intent" => {
+                "CREATE TRIGGER fail_component BEFORE INSERT ON component_agent_tools BEGIN SELECT RAISE(ABORT,'injected intent failure'); END;"
+            }
+            "result" => {
+                "CREATE TRIGGER fail_component BEFORE UPDATE ON component_agent_tools WHEN json_extract(NEW.value,'$.receipt.phase')='resolved' BEGIN SELECT RAISE(ABORT,'injected result failure'); END;"
+            }
+            _ => {
+                "CREATE TRIGGER fail_component BEFORE UPDATE ON component_agent_runs WHEN NEW.state='completed' BEGIN SELECT RAISE(ABORT,'injected terminal failure'); END;"
+            }
+        };
+        database.execute_batch(trigger).unwrap();
+        let run = f.start().await;
+        let observed = tokio::time::timeout(Duration::from_secs(15), async {
+            loop {
+                let value = f
+                    .service
+                    .observe_run(&f.host, &f.context, &f.project, &run.run_id)
+                    .await
+                    .unwrap();
+                if value.state.is_terminal() {
+                    break value;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            observed.state,
+            if phase == "terminal" {
+                ComponentAgentRunState::Interrupted
+            } else {
+                ComponentAgentRunState::Failed
+            },
+            "{phase}: {:?}",
+            observed.reason
+        );
+        let tools = f
+            .service
+            .tools(&f.host, &f.context, &f.project, &run.run_id)
+            .unwrap();
+        assert_eq!(tools.len(), usize::from(phase != "intent"));
+        if phase != "intent" {
+            let record = f
+                .host
+                .get_operation(&f.context, tools[0].operation_id.as_ref().unwrap())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(record.status, OperationStatus::Succeeded);
+            assert_eq!(
+                tools[0].phase,
+                if phase == "result" {
+                    ComponentToolPhase::Accepted
+                } else {
+                    ComponentToolPhase::Resolved
+                }
+            );
+        }
+        if phase == "terminal" {
+            let events = f
+                .service
+                .events(&f.host, &f.context, &f.project, &run.run_id, 0, 128)
+                .unwrap();
+            assert!(!events.events.iter().any(|e| matches!(
+                e.content,
+                ComponentAgentEventContent::State {
+                    state: ComponentAgentRunState::Completed,
+                    ..
+                }
+            )));
+        }
+        database
+            .execute_batch("DROP TRIGGER fail_component")
+            .unwrap();
+        let recovered = f
+            .service
+            .reconcile(&f.host, &f.context, &f.project, &f.window, &run.run_id)
+            .await
+            .unwrap();
+        assert_eq!(recovered.recovery.as_ref().unwrap().unresolved_mutations, 0);
+        if phase != "intent" {
+            assert_eq!(
+                recovered.recovery.as_ref().unwrap().tools[0].state,
+                ComponentRecoveryState::Confirmed
+            );
+            let mut continued = run.request.clone();
+            continued.request_id = format!("continue-after-{phase}");
+            continued.conversation_version = f
+                .service
+                .conversation(&f.host, &f.context, &f.project, &continued.conversation_id)
+                .unwrap()
+                .version;
+            continued.continuation = Some(ComponentContinuation {
+                run_id: run.run_id.clone(),
+                recovery_digest: recovered.recovery.unwrap().digest,
+            });
+            let continued = f
+                .service
+                .start(f.host.clone(), f.context.clone(), &f.project, continued)
+                .await
+                .unwrap();
+            let done = f.terminal(&continued.run_id).await;
+            assert_eq!(
+                done.state,
+                ComponentAgentRunState::Completed,
+                "{phase}: {:?}",
+                done.reason
+            );
+            assert!(
+                f.service
+                    .tools(&f.host, &f.context, &f.project, &done.run_id)
+                    .unwrap()
+                    .iter()
+                    .all(|t| !t.mutation)
+            );
+        }
+        let expected = usize::from(phase != "intent");
+        let check = f
+            .host
+            .invoke(
+                &f.context,
+                invoke(
+                    "verify-failure-boundary",
+                    &format!("stopifnot(counter == {expected}L); invisible(NULL)"),
+                ),
+            )
+            .await
+            .unwrap();
+        assert_eq!(check.status, OperationStatus::Succeeded, "{phase}");
+        f.service.close().await;
+        println!("application failure boundary {phase}: native increments={expected}, replay=0");
+    }
+}

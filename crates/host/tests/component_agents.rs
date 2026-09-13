@@ -466,7 +466,8 @@ impl Fixture {
                 ComponentAgentProfile::Project,
             )
             .unwrap();
-        ComponentAgentStart { continuation: None,
+        ComponentAgentStart {
+            continuation: None,
             request_id: "user-request".into(),
             conversation_id: conversation.conversation_id,
             conversation_version: conversation.version,
@@ -917,5 +918,156 @@ async fn rig_corrects_known_tool_argument_shape_without_dispatching_the_rejected
     assert_eq!(requests.len(), 3);
     assert!(requests[1]["messages"].to_string().contains("rejected"));
     drop(requests);
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn saturated_model_queue_keeps_queries_and_stop_responsive_and_disable_fences_waiters() {
+    let provider = Provider::new(Mode::Silent).await;
+    let f = Fixture::new().await;
+    f.configure(&provider).await;
+    let make_request = |id: usize| {
+        let conversation = f
+            .service
+            .create(
+                &f.host,
+                &f.context,
+                &f.project,
+                &f.window,
+                &format!("queue-{id}"),
+                ComponentAgentProfile::Project,
+            )
+            .unwrap();
+        ComponentAgentStart {
+            continuation: None,
+            request_id: format!("request-{id}"),
+            conversation_id: conversation.conversation_id,
+            conversation_version: conversation.version,
+            window: f.window.clone(),
+            model_settings_version: 1,
+            text: "Observe the authorized project".into(),
+            grant: ComponentAgentGrant {
+                mode: ComponentAgentMode::Explain,
+                session: None,
+                documents: vec![],
+                files: vec![],
+            },
+            sources: vec![],
+        }
+    };
+    let mut runs = Vec::new();
+    for id in 0..10 {
+        runs.push(f.start(make_request(id)).await);
+    }
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if provider.state.requests.lock().unwrap().len() == 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let observed = runs
+        .iter()
+        .map(|r| {
+            f.service
+                .run(&f.host, &f.context, &f.project, &r.run_id)
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        observed
+            .iter()
+            .filter(|r| r.state == ComponentAgentRunState::Running)
+            .count(),
+        2
+    );
+    assert_eq!(
+        observed
+            .iter()
+            .filter(|r| r.state == ComponentAgentRunState::Queued)
+            .count(),
+        8
+    );
+    let rejected = f
+        .service
+        .start(
+            f.host.clone(),
+            f.context.clone(),
+            &f.project,
+            make_request(10),
+        )
+        .await;
+    assert!(matches!(
+        rejected,
+        Err(rho_application::ApplicationError::Budget(_))
+    ));
+    let observation = tokio::time::timeout(
+        Duration::from_millis(250),
+        f.host.query_snapshot(
+            &f.context,
+            QueryRequest {
+                capability: CapabilityRef::new("project.list_directory", 1).unwrap(),
+                arguments: json!({"path":""}),
+            },
+        ),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(observation.status, QueryStatus::Ready);
+    tokio::time::timeout(
+        Duration::from_millis(250),
+        f.service
+            .stop(&f.host, &f.context, &f.project, &f.window, &runs[9].run_id),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let stopped = f.terminal(&runs[9].run_id).await;
+    assert_eq!(stopped.state, ComponentAgentRunState::Stopped);
+    assert_eq!(stopped.model_calls, 0);
+    runs.push(f.start(make_request(11)).await);
+    f.service
+        .stop(&f.host, &f.context, &f.project, &f.window, &runs[0].run_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        f.terminal(&runs[0].run_id).await.state,
+        ComponentAgentRunState::Stopped
+    );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if provider.state.requests.lock().unwrap().len() == 3 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        f.service
+            .run(&f.host, &f.context, &f.project, &runs[1].run_id)
+            .unwrap()
+            .state,
+        ComponentAgentRunState::Running
+    );
+    let mut settings = f.service.settings(&f.host, &f.context, &f.project).unwrap();
+    settings.enabled = false;
+    f.service
+        .configure(&f.host, &f.context, &f.project, &f.window, &settings)
+        .await
+        .unwrap();
+    for run in runs {
+        assert_eq!(
+            f.terminal(&run.run_id).await.state,
+            ComponentAgentRunState::Stopped
+        );
+    }
+    assert_eq!(provider.state.requests.lock().unwrap().len(), 3);
+    assert!(f.host.is_idle());
     f.service.close().await;
 }
