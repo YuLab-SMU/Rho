@@ -235,6 +235,9 @@ now reads the final post-tool answer and recognizes complete output/sequence
 numbers and exact operation IDs. Regressions reject wrong IDs, number prefixes,
 conflicting colors and unavailable-image claims. Logs:
 `target/component-plot-citation-labels.log`, `target/component-final-citation-clippy.log`.
+The next three-case produced-plot repeat is running on `a920e860`; inspect
+`target/component-matrix/2026-09-13T10-19-58.596Z/summary.json` and
+`target/component-final-citation-model.log` before reporting its outcome.
 Engine and mutation-test Clippy passed (the latter with the existing Host style
 exceptions), and the current main binary built successfully. Logs:
 `target/component-image-order-{clippy,build}.log` and
