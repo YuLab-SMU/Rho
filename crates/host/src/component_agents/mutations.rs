@@ -213,14 +213,9 @@ impl Work {
                 return self
                     .uncertain("Cancellation is not confirmed; inspect the original operation");
             }
-            if last_input_check.elapsed() >= Duration::from_secs(1)
-                && let Some(session) = &self.run.request.grant.session
-            {
+            if last_input_check.elapsed() >= Duration::from_secs(1) {
                 last_input_check = Instant::now();
-                if let Ok(value)=self.host.dispatch(&self.context,HostRequest::QuerySnapshot(QueryRequest{capability:CapabilityRef::new("workspace.console_state",1).map_err(error)?,arguments:json!({"workspace_instance_id":session.workspace_instance_id})})).await {
-                    let state=if value["data"].get("input").is_some_and(|input|!input.is_null()){ComponentAgentRunState::NeedsInput}else{ComponentAgentRunState::WaitingForR};
-                    self.owner.native_wait_state(&self.scope,&self.run.run_id,state,now())?;
-                }
+                self.observe_input_wait(Some(&id)).await?;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
             match self
@@ -250,6 +245,35 @@ impl Work {
 }
 
 impl Work {
+    async fn observe_input_wait(
+        &self,
+        operation: Option<&OperationId>,
+    ) -> Result<(), ApplicationError> {
+        let mut state = ComponentAgentRunState::WaitingForR;
+        if let (Some(id), Some(session)) = (operation, self.run.request.grant.session.as_ref()) {
+            if let Ok(snapshot) = self
+                .host
+                .query_snapshot(
+                    &self.context,
+                    QueryRequest {
+                        capability: CapabilityRef::new("workspace.console_state", 1)
+                            .map_err(error)?,
+                        arguments: json!({"workspace_instance_id":session.workspace_instance_id}),
+                    },
+                )
+                .await
+            {
+                if snapshot.data.as_ref().is_some_and(|data| {
+                    data["input"]["operation_id"].as_str() == Some(id.as_str())
+                        && data["input"]["session_id"].as_str() == Some(&session.session_id)
+                }) {
+                    state = ComponentAgentRunState::NeedsInput;
+                }
+            }
+        }
+        self.owner
+            .native_wait_state(&self.scope, &self.run.run_id, state, now())
+    }
     async fn application(
         &self,
         command: &ApplicationCommandRequest,
@@ -323,6 +347,7 @@ impl Work {
             application_request_id: Some(command.request_id.clone()),
         })?;
         let mut stopping = None;
+        let mut last_input_check = Instant::now() - Duration::from_secs(2);
         let mut cancelled = BTreeSet::new();
         loop {
             if matches!(
@@ -428,14 +453,18 @@ impl Work {
                 return self
                     .uncertain("Application stop is unconfirmed; original receipts retained");
             }
-            if receipt.state == ApplicationCommandState::AwaitingExecution && receipt.run.is_some()
+            if receipt.state == ApplicationCommandState::AwaitingExecution
+                && receipt.run.is_some()
+                && last_input_check.elapsed() >= Duration::from_secs(1)
             {
-                self.owner.native_wait_state(
-                    &self.scope,
-                    &self.run.run_id,
-                    ComponentAgentRunState::WaitingForR,
-                    now(),
-                )?;
+                last_input_check = Instant::now();
+                self.observe_input_wait(
+                    receipt
+                        .run
+                        .as_ref()
+                        .and_then(|step| step.operation_id.as_ref()),
+                )
+                .await?;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
             // The shared status query reconciles only already-submitted scientific steps.

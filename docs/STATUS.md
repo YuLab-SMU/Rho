@@ -105,6 +105,14 @@ dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
 These are individual acceptance runs, not throughput guarantees.
 
 Current evidence:
+- Native input ownership now uses the exact operation and R-session identities
+  for both direct R and captured documents. A real-R baseline exposed another
+  caller's input being attributed to a queued assistant; the corrected tests keep
+  it WaitingForR. User prompts/answers do not enter assistant records. Stop cancels
+  the captured/direct input operation while independent work in another R session
+  completes unchanged. Evidence: `target/component-input-*.log`. Final validation passed 14 Host cases
+  plus recovery/takeover, all 13 real-R cases, selected Host Clippy with the
+  documented style exceptions and the main build.
 - Payload accounting passed the 25-case SQLite regression plus an existing-
   oversized-store test. Near-limit tests cover rollback of new tool and model-test
   admission, cross-principal project accounting, Unicode bytes, current-record

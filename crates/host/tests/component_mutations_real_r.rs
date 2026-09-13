@@ -1830,3 +1830,487 @@ async fn injected_application_write_failures_preserve_native_facts_without_repla
         println!("application failure boundary {phase}: native increments={expected}, replay=0");
     }
 }
+
+async fn console_state(f: &Fixture) -> ConsoleState {
+    serde_json::from_value(
+        f.host
+            .query_snapshot(
+                &f.context,
+                QueryRequest {
+                    capability: CapabilityRef::new("workspace.console_state", 1).unwrap(),
+                    arguments: json!({"workspace_instance_id":"main"}),
+                },
+            )
+            .await
+            .unwrap()
+            .data
+            .unwrap(),
+    )
+    .unwrap()
+}
+async fn wait_input(f: &Fixture) -> InputRequest {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Some(input) = console_state(f).await.input {
+                break input;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap()
+}
+async fn wait_operation(f: &Fixture, id: &OperationId) -> OperationRecord {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let record = f.host.get_operation(&f.context, id).await.unwrap().unwrap();
+            if record.status.is_terminal() {
+                break record;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; native input stays with the user"]
+async fn native_input_wait_is_visible_without_copying_input_into_assistant_records() {
+    let f = Fixture::new(
+        "invisible(readline(get('input_prompt'))); invisible(NULL)",
+        false,
+    )
+    .await;
+    let prompt = format!("private-prompt-{}", uuid::Uuid::new_v4());
+    f.host
+        .invoke(
+            &f.context,
+            invoke(
+                "seed-input",
+                &format!(
+                    "input_prompt <- {}; invisible(NULL)",
+                    serde_json::to_string(&prompt).unwrap()
+                ),
+            ),
+        )
+        .await
+        .unwrap();
+    let run = f.start().await;
+    let input = wait_input(&f).await;
+    assert_eq!(input.prompt, prompt);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if f.service
+                .run(&f.host, &f.context, &f.project, &run.run_id)
+                .unwrap()
+                .state
+                == ComponentAgentRunState::NeedsInput
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let answer = format!("private-answer-{}", uuid::Uuid::new_v4());
+    f.host
+        .dispatch(
+            &f.context,
+            HostRequest::RespondInput(RespondInput {
+                session_id: input.session_id,
+                operation_id: input.operation_id,
+                request_id: input.request_id,
+                reply_id: "user-answer".into(),
+                value: answer.clone(),
+            }),
+        )
+        .await
+        .unwrap();
+    let done = f.terminal(&run.run_id).await;
+    assert_eq!(
+        done.state,
+        ComponentAgentRunState::Completed,
+        "{:?}",
+        done.reason
+    );
+    let tools = f
+        .service
+        .tools(&f.host, &f.context, &f.project, &run.run_id)
+        .unwrap();
+    let events = f
+        .service
+        .events(&f.host, &f.context, &f.project, &run.run_id, 0, 128)
+        .unwrap();
+    let records = serde_json::to_string(&(done, tools, events)).unwrap();
+    assert!(
+        !records.contains(&answer),
+        "The user's input was copied into assistant history"
+    );
+    assert!(
+        !records.contains(&prompt),
+        "The native input prompt was copied into assistant history"
+    );
+    f.service.close().await;
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; another caller's input must not belong to the assistant"]
+async fn another_requests_input_does_not_mark_the_queued_assistant_as_needing_input() {
+    let f = Fixture::new("counter <- counter + 1L; invisible(NULL)", false).await;
+    let user = f
+        .host
+        .invoke_accepted(
+            &f.context,
+            invoke(
+                "user-input",
+                "invisible(readline('User input: ')); invisible(NULL)",
+            ),
+        )
+        .await
+        .unwrap();
+    let input = wait_input(&f).await;
+    let run = f.start().await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if f.service
+                .tools(&f.host, &f.context, &f.project, &run.run_id)
+                .unwrap()
+                .first()
+                .is_some_and(|t| t.operation_id.is_some())
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    let waiting = f
+        .service
+        .run(&f.host, &f.context, &f.project, &run.run_id)
+        .unwrap()
+        .state;
+    f.service
+        .stop(&f.host, &f.context, &f.project, &f.window, &run.run_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        f.terminal(&run.run_id).await.state,
+        ComponentAgentRunState::Stopped
+    );
+    assert_eq!(
+        console_state(&f).await.input.as_ref().unwrap().operation_id,
+        user.operation.operation_id
+    );
+    f.host
+        .dispatch(
+            &f.context,
+            HostRequest::RespondInput(RespondInput {
+                session_id: input.session_id,
+                operation_id: input.operation_id,
+                request_id: input.request_id,
+                reply_id: "user-continues".into(),
+                value: "okay".into(),
+            }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        wait_operation(&f, &user.operation.operation_id)
+            .await
+            .status,
+        OperationStatus::Succeeded
+    );
+    f.service.close().await;
+    assert_eq!(waiting, ComponentAgentRunState::WaitingForR);
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; stopping native input must preserve another R instance"]
+async fn stop_native_input_preserves_work_in_another_r_session() {
+    let f = Fixture::new(
+        "invisible(readline('Assistant input: ')); invisible(NULL)",
+        false,
+    )
+    .await;
+    let main: WorkspaceInstance = serde_json::from_value(
+        f.host
+            .query_snapshot(
+                &f.context,
+                QueryRequest {
+                    capability: CapabilityRef::new("runtime.instance", 1).unwrap(),
+                    arguments: json!({"workspace_instance_id":"main"}),
+                },
+            )
+            .await
+            .unwrap()
+            .data
+            .unwrap(),
+    )
+    .unwrap();
+    let created = f
+        .host
+        .invoke(
+            &f.context,
+            Invocation {
+                client_request_id: "other-session".into(),
+                capability: CapabilityRef::new("runtime.create_instance", 1).unwrap(),
+                arguments: json!({"name":"Other work","binding":main.binding,"start":true}),
+                preconditions: vec![],
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        created.status,
+        OperationStatus::Succeeded,
+        "{:?}",
+        created.error
+    );
+    let other: WorkspaceInstance = serde_json::from_value(created.output.unwrap()).unwrap();
+    let independent=f.host.invoke_accepted(&f.context,Invocation{client_request_id:"independent-work".into(),capability:CapabilityRef::new("workspace.run_r",1).unwrap(),
+        arguments:json!({"workspace_instance_id":other.workspace_instance_id,"code":"Sys.sleep(5); independent_value <- 42L; invisible(NULL)"}),
+        preconditions:vec![Precondition{kind:"workspace.session".into(),subject:"active".into(),expected:json!(other.native_session_id)}]}).await.unwrap();
+    let run = f.start().await;
+    let input = wait_input(&f).await;
+    let original = f
+        .service
+        .tools(&f.host, &f.context, &f.project, &run.run_id)
+        .unwrap()[0]
+        .operation_id
+        .clone()
+        .unwrap();
+    assert_eq!(input.operation_id, original);
+    f.service
+        .stop(&f.host, &f.context, &f.project, &f.window, &run.run_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        f.terminal(&run.run_id).await.state,
+        ComponentAgentRunState::Stopped
+    );
+    assert_eq!(
+        wait_operation(&f, &original).await.status,
+        OperationStatus::Cancelled
+    );
+    let unaffected = wait_operation(&f, &independent.operation.operation_id).await;
+    assert_eq!(
+        unaffected.status,
+        OperationStatus::Succeeded,
+        "{:?}",
+        unaffected.error
+    );
+    assert!(!unaffected.cancellation_requested);
+    let proof=f.host.invoke(&f.context,Invocation{client_request_id:"verify-other-session".into(),capability:CapabilityRef::new("workspace.run_r",1).unwrap(),
+        arguments:json!({"workspace_instance_id":other.workspace_instance_id,"code":"stopifnot(independent_value == 42L); invisible(NULL)"}),
+        preconditions:vec![Precondition{kind:"workspace.session".into(),subject:"active".into(),expected:json!(other.native_session_id)}]}).await.unwrap();
+    assert_eq!(proof.status, OperationStatus::Succeeded);
+    f.service.close().await;
+}
+
+struct CapturedInputEngine;
+#[async_trait]
+impl ComponentAgentEngine for CapturedInputEngine {
+    async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome {
+        let work = async {
+            let turn = request.port.begin_model_call().await?;
+            let ticket = request
+                .port
+                .prepare_tool(
+                    turn,
+                    "selection",
+                    "application_run_selection",
+                    json!({"document_id":"input-doc"}),
+                )
+                .await?;
+            request.port.execute_tool(ticket).await?;
+            Ok::<_, ApplicationError>(())
+        };
+        tokio::select! {biased;_=request.cancellation.cancelled()=>ComponentEngineOutcome::Stopped,result=work=>match result{
+            Ok(())=>ComponentEngineOutcome::Completed,Err(e)=>ComponentEngineOutcome::Failed(e.to_string())
+        }}
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; captured document input ownership"]
+async fn captured_document_input_is_marked_and_cancelled_by_its_original_operation() {
+    let mut f = Fixture::new("", false).await;
+    f.service.close().await;
+    f.service = ComponentAgentService::with_engine(
+        Arc::new(ApplicationStore::open(&f._temp.path().join("components.sqlite")).unwrap()),
+        Arc::new(CapturedInputEngine),
+    );
+    let key = f
+        .service
+        .put_session_key(
+            &f.host,
+            &f.context,
+            &f.project,
+            &f.window,
+            "fixture-only".into(),
+        )
+        .unwrap();
+    let mut settings = f.service.settings(&f.host, &f.context, &f.project).unwrap();
+    settings.connection.as_mut().unwrap().credential = key;
+    let version = f
+        .service
+        .configure(&f.host, &f.context, &f.project, &f.window, &settings)
+        .await
+        .unwrap()
+        .version;
+    let text = "invisible(readline('Captured input: ')); invisible(NULL)";
+    let document = ApplicationDocument {
+        document_id: "input-doc".into(),
+        version: "v1".into(),
+        path: Some("input.R".into()),
+        text: text.into(),
+        base_text: None,
+        base_hash: None,
+        selection: ApplicationSelection {
+            anchor: 0,
+            head: text.encode_utf16().count() as u32,
+            version: "s1".into(),
+        },
+        readonly_reason: None,
+    };
+    bridge(
+        &f,
+        ApplicationBridgeRequest::Sync {
+            session: f.bridge.clone(),
+            sync_id: "input-document".into(),
+            changes: ApplicationChanges {
+                documents: vec![ApplicationDocumentUpdate {
+                    expected_version: None,
+                    expected_selection_version: None,
+                    document: document.clone(),
+                }],
+                ..Default::default()
+            },
+        },
+    )
+    .await;
+    let conversation = f
+        .service
+        .create(
+            &f.host,
+            &f.context,
+            &f.project,
+            &f.window,
+            "captured-input",
+            ComponentAgentProfile::Documents,
+        )
+        .unwrap();
+    let run = f
+        .service
+        .start(
+            f.host.clone(),
+            f.context.clone(),
+            &f.project,
+            ComponentAgentStart {
+                continuation: None,
+                request_id: "captured-input".into(),
+                conversation_id: conversation.conversation_id,
+                conversation_version: conversation.version,
+                window: f.window.clone(),
+                model_settings_version: version,
+                text: "Run the captured selection".into(),
+                grant: ComponentAgentGrant {
+                    mode: ComponentAgentMode::Run,
+                    session: Some(f.session.clone()),
+                    documents: vec![ComponentDocumentGrant {
+                        document: document_ref(&document),
+                        allow_save: false,
+                        path: document.path,
+                    }],
+                    files: vec![],
+                },
+                sources: vec![],
+            },
+        )
+        .await
+        .unwrap();
+    let grant = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let ApplicationBridgeReply::Claimed(Some(grant)) = bridge(
+                &f,
+                ApplicationBridgeRequest::Claim {
+                    session: f.bridge.clone(),
+                    claim_request_id: uuid::Uuid::new_v4().to_string(),
+                },
+            )
+            .await
+            {
+                break grant;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    bridge(
+        &f,
+        ApplicationBridgeRequest::Complete {
+            session: f.bridge.clone(),
+            completion: ApplicationCommandCompletion {
+                request_id: grant.request.request_id.clone(),
+                claim_id: grant.claim_id,
+                outcome: ApplicationLocalOutcome::Applied,
+                changes: ApplicationChanges::default(),
+                diagnostic: None,
+            },
+        },
+    )
+    .await;
+    let request = ApplicationExecuteRequest {
+        session: f.bridge.clone(),
+        request_id: grant.request.request_id,
+        execution_ref: grant.execution_ref.unwrap(),
+        step: ApplicationExecutionStep::Run,
+    };
+    let host = f.host.clone();
+    let context = f.context.clone();
+    let execution = tokio::spawn(async move {
+        host.dispatch(&context, HostRequest::ApplicationExecute(request))
+            .await
+    });
+    let input = wait_input(&f).await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if f.service
+                .run(&f.host, &f.context, &f.project, &run.run_id)
+                .unwrap()
+                .state
+                == ComponentAgentRunState::NeedsInput
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    f.service
+        .stop(&f.host, &f.context, &f.project, &f.window, &run.run_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        f.terminal(&run.run_id).await.state,
+        ComponentAgentRunState::Stopped
+    );
+    let returned: ApplicationExecuteReply =
+        serde_json::from_value(execution.await.unwrap().unwrap()).unwrap();
+    assert_eq!(returned.receipt.state, ApplicationCommandState::Cancelled);
+    assert_eq!(
+        returned.receipt.run.unwrap().operation_id.as_ref(),
+        Some(&input.operation_id)
+    );
+    assert_eq!(
+        wait_operation(&f, &input.operation_id).await.status,
+        OperationStatus::Cancelled
+    );
+    f.service.close().await;
+}

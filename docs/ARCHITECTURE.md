@@ -118,6 +118,10 @@ operation even when the model future is dropped. It records acceptance, observes
 the original operation, and requests cancellation only for that identity. Missing
 acknowledgements are looked up by the original caller/request; they do not authorize
 new code submission. Waiting for R and user input are application observations.
+NeedsInput is associated with the exact original OperationId and native session.
+An unrelated caller's input in the same queue cannot become the assistant's input
+request. Direct R and captured-document tracking share this observation rule;
+input prompts/answers remain with the native user interaction, not Agent records.
 
 Application command receipts retain the exact document versions acknowledged by
 that command. Later user changes cannot silently become the version attributed to
