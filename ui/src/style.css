@@ -1270,6 +1270,9 @@ button {
     min-width: 760px;
     min-height: 380px;
   }
+  .layout-host:has(.flexlayout__tabset-maximized) {
+    min-width: 0;
+  }
   .project-button {
     max-width: 180px;
   }

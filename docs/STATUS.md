@@ -4,287 +4,129 @@ Updated: 2026-09-13. This is the single current status summary. Git retains hist
 
 ## Built-in component Agent implementation
 
-The [implementation plan](BUILTIN-AGENT-PLAN.md) is authorized. P0, the P1 backend,
-P2 source/context access, P3 document/R execution and the P4 reconciliation, takeover and
-explicit Continue backend are implemented.
-The optional `rho-agents` crate uses pinned Rig 0.42 through Application ports;
-Host composes it with the existing scientific owners. No replacement scientific
-gateway or external Agent-provider variant was introduced.
+The [implementation plan](BUILTIN-AGENT-PLAN.md) is authorized. The user approved
+[Paper B01–B06](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/A-0) on
+2026-09-13. The Rig backend and the seven Studio entrances are now implemented.
+Final fixed-version model acceptance and regression verification are in progress.
 
-The new Studio interface remains unimplemented pending user review of
-[Paper B01–B06](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/A-0).
-[Design section 18](RHO-DESIGN.md)
-records the proposal: separate assistant navigation, component sources, settings,
-execution evidence and constrained layouts. All six boards were inspected; the
-original fourteen Agent boards were preserved. Functional backend tests do not
-approve this interaction or establish its visual quality.
+The optional `rho-agents` crate pins Rig 0.42; Application owns conversations,
+request identities, scopes and receipts. Host binds the existing scientific ports.
+Objects, Packages, Plots and Environment are Explain-only. Documents, Workspace and
+Project support explicitly scoped editing, saving and R execution. Exact document
+versions and destinations, native R session identities, retained operations and
+original output references remain authoritative. No scientific owner calls models.
 
-A nonvisual TypeScript client now handles immutable snapshots, bounded history and
-event caches, CAS draft conflicts, persisted submission identities, read-only
-acknowledgement recovery, project/window response fences and explicit Stop,
-Reconcile and takeover commands. HostClient exposes the existing authenticated
-component endpoints; read timeouts do not cancel or replay commands. This model is
-connected to Studio's project-switch and stop lifecycle, with a separate local
-window/project cache. No component views or polling are mounted. Submission
-preflight is serialized per conversation; explicit retries preserve the complete
-original request, and unique observation tokens fence responses after cache eviction.
-Startup recovery tests verify zero component queries, commands or model tests.
+### Studio behavior
 
-### Current backend behavior
+Ask buttons live in existing component title bars; Environment/R Sessions has an
+Ask action in its page. All use the same Rho Assistant area, with grouped built-in
+conversations and external tasks, a narrow selector, owner-backed source search and
+preview, fixed context chips and separate model settings. Opening an existing panel
+never sends a model prompt or scans a CLI. The selected document is synchronized
+through the existing Application bridge before its version and checksum are read.
 
-- Application owns conversations, independent CAS drafts/controllers, fixed run
-  inputs and model references, durable tool identities, results and bounded events.
-  Stable request/call identities survive retries; late results retain their original
-  window, principal and scientific owner. Event pruning preserves tool receipts.
-- Conversation history is now an indexed, project/principal-scoped Application
-  query, ordered by creation time and run ID. Pages contain at most 32 summaries;
-  full context and receipts remain on their existing reads. Foreign-conversation
-  cursors are rejected, tied timestamps paginate deterministically, and missing
-  live tasks are observed as Interrupted without rewriting the stored run.
-- Project persistence now accounts all component payload tables under the 64 MiB
-  budget, including reserved completion capacity. Transactional byte entries are
-  derived from UTF-8 serialized values. New obligations fail before dispatch when
-  full; active/unconfirmed receipts can finish within reserved space. Only events
-  are pruned. Existing oversized data remains readable and non-growing completion
-  or disable operations remain possible; request/tool identities are never evicted.
-- Source search and preview read existing owners without model calls. Submission
-  revalidates file/document/object/package identities before capture. Verified
-  selected PNG/JPEG images are transient model input with native references and
-  digests; their bytes are not persisted in conversation text.
-- Objects, Packages, Plots and Environment are Explain-only. Native
-  `workspace.read_help` reads the exact observed installed copy without loading,
-  attaching or installing packages. Workspace/Project Run uses the original R
-  instance/session and the shared Operation path.
-- Document tools bind authorized IDs, confirmed versions and destinations. The
-  existing resident bridge applies edits and acknowledges captured save/run steps.
-  Saving may advance a document version without changing its text; predecessor
-  receipts preserve mutation identity across that transition. A repaired draft has
-  a new execution identity, while concurrent user input never expands the grant.
-  Edit/save acknowledgements also return immutable document summaries with the
-  exact draft SHA-256. Follow-up reads can use that checksum without confusing
-  the document version or saved base hash with the current draft checksum.
-- Literal document repairs now have an exact unique-text replacement tool. The
-  Application owner computes editor UTF-16 ranges, retaining BOM/line-ending
-  behavior and rejecting missing, overlapping/ambiguous, read-only or stale matches.
-  Tool name/argument hashes preserve repeated replacement identity without storing
-  raw model argument copies. Numeric edits remain available for advanced changes.
-- A failed R run pauses its native queue. Resume is an explicit tool choice tied to
-  this run's confirmed failed operation and observed pause. Workspace atomically
-  rejects manual/other-operation pauses or current, pending and reserved work
-  outside the injected operation set, including principal-hidden work.
-  A component run now checks the original session's queue before admitting new R
-  execution. A known pause returns non-executable feedback; duplicate actions still
-  resolve to their original receipts. This check never resumes the queue and does
-  not replace the native checks if state changes after the observation.
-- Stop fences new calls and unsubmitted application steps. Native tracking outlives
-  dropped model waits, reconciles original SCI records and cancels only associated
-  work. Cancelled local commands do not imply rollback; scientific failure,
-  uncertainty and successful saving remain separately visible in receipts.
-- Run/request observations serialize with admission and finalization, and report
-  Interrupted when the current Host has no owning task. Explicit Reconcile reads
-  original caller/request identities, recording versioned native status and document
-  references without model calls, replay, cancellation or queue resume. Missing
-  acknowledged records and unconfirmed saves/runs remain uncertain. Original tool
-  receipts remain intact; repeated unchanged recovery observations are idempotent.
-- Explicit conversation takeover checks the observed version and refuses live
-  tasks. Orphan interruption and controller replacement commit atomically, preserving
-  the user draft and original run/window identities. Old-window draft writes, Stop
-  and late model text remain fenced; late native facts can still be retained.
-- Explicit Continue binds a terminal parent and current recovery digest. Host
-  rechecks native records and targets; Application prevents authorization expansion,
-  changed document/session targets and further writes with unresolved mutations.
-  Confirmed ancestor actions read their original results instead of executing again.
-  History preserves user requests, labels partial text/results and shares the 64 KiB
-  context limit. A fresh Start remains a new explicit action that can repeat work.
-- Known-tool argument format failures are durable non-executable records. Rig's
-  Skip hook returns bounded schema feedback without calling the tool body. These
-  attempts consume budgets; hidden-target overrides, unknown tools, storage
-  failures and exhausted budgets stop the run.
-- Remote model settings use HTTPS, or explicitly configured loopback HTTP. Keys
-  remain environment/session references; raw session keys stay in Host memory.
-  Clients are lazy, shared and do not automatically follow redirects or retry.
-  Explicit synthetic connection/image diagnostics have durable identities and
-  share model slots. Image input requires a matching passed image diagnostic.
-- Browser-only component routes retain existing authentication, project/window
-  checks and native CLI separation. Native stdin and private reasoning are not
-  sent into assistant history. Model failures expose typed categories or numeric
-  HTTP status, excluding provider bodies and raw error histories.
+Explain is read-only. Edit/Run show the bounded targets and per-document save scope.
+Model settings expose the remote destination, Anthropic/OpenAI-compatible protocol,
+session-memory or environment credential reference, and explicit synthetic
+connection/image tests. Image input requires a passed test for the exact saved
+connection. Model text is displayed separately from native tool results and links.
+The shared native IME composer preserves preedit and saves only committed text.
 
-### Evidence and limits
+The client retains bounded local drafts, selected context and submission identities,
+with CAS conflict copies and project/window response fences. It never automatically
+replays an unknown submission. A completed initial HTTP rejection releases the
+retained draft only after an authoritative query proves no request was accepted;
+an uncertain retry cannot use that shortcut. Stop, Check status, takeover and
+Continue are explicit. Continue retains the original authorization and rechecks
+confirmed document references. Another window's draft is read-only until takeover.
+Maximizing a group removes the normal multi-column minimum width, keeping the
+assistant usable in a 320 px panel and a 600 px workspace.
 
-The real Ark/R tests verify direct execution once, confirmed cancellation,
-edit → save → Run File, and failure → edit → scoped resume → successful rerun.
-The repair test also repeats failed-run, edit and resume calls under new provider
-IDs and verifies that original native identities are retained. Both failed and
-successful SCI records survive, the saved text matches, and R increments once.
+### Backend and recovery
 
-The authorized `115-newapi` / `deepseek-v4.1-flash` service completed the repair
-workflow with 10 model calls and 9 tool calls in 66,848 ms. It retained one failed
-and one successful R execution, one edit and four mutation receipts. The Run
-model-call default was re-estimated from 8 to 12 after earlier attempts exhausted
-8 calls before rerunning the repaired draft; tool, byte and duration limits remain
-unchanged. Another attempt was rejected for invalid parameter shape before native
-dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
-These are individual acceptance runs, not throughput guarantees.
+- Rig drives bounded model/tool execution. Tool intent precedes dispatch;
+  semantically identical mutations reuse original receipts across changed call IDs
+  and confirmed continuation ancestors. Repeated save acknowledgements cannot
+  create a second scientific execution.
+- Captured document edit/save/run uses Application's resident bridge. Literal
+  replacement computes owner-side UTF-16 ranges and rejects ambiguous/stale text.
+  Receipts return immutable document summaries with exact draft SHA-256 values.
+- A failed R operation pauses its native queue. Resume is explicit and restricted
+  to the original operation lineage; unrelated/manual work cannot be resumed.
+- Stop fences new calls; native tracking survives dropped model waits. Reconcile
+  observes the original operations/documents without replay or model calls.
+  Missing evidence remains uncertain. Takeover never cancels another R operation.
+- Source/image reads use native owners. Up to two bounded PNG/JPEG images are
+  transient model inputs; no image bytes or raw credentials enter conversation
+  storage. Package help uses the observed installed copy without loading/installing.
+- SQLite bounds total component payload at 64 MiB with reserved completion space.
+  Event pruning preserves request/tool identities. Indexed run history has stable
+  32-item pages; the browser bounds drafts, history, events and pending requests.
+- Model settings accept HTTPS or loopback HTTP; credentials resolve lazily.
+  Diagnostics retain exact configuration digests and use no scientific tool port.
+  Model concurrency, request duration, calls, text and image bytes remain bounded.
 
-Current evidence:
+### Executed evidence
 
-- Full workspace regression passed **350 tests**, with **31 external checks ignored**;
-  doc tests and the main build passed. Focused validation passed 32 Application,
-  28 SQLite, 14 real-R and 365 UI tests, plus contract generation/client build/check.
-  Logs: `target/component-precondition-{workspace,application,store,native,ui,client,build}.log`.
-- Twelve Chrome regressions passed: three document/save/conflict/multiwindow cases
-  and nine external-Agent cases covering previews, takeover, docking and native IME.
-  Logs: `target/component-precondition-browser.log`, `target/component-parity-agent-browser.log`.
-  The latter uses a local CLI fixture; neither verifies a live CLI provider account
-  or the still-unimplemented component-assistant interface.
-- Cross-edge fact parity passed with real R and a local HTTP model fixture driving
-  Rig. Component tools, direct Host reads and both MCP operation-read names over
-  rmcp's framed duplex transport retain identical native records and observations,
-  excluding only observation time. Exactly one assistant execution is added; reads
-  add no scientific events. `scripts/test-real-r.mjs` includes the check.
-  Log: `target/component-parity-rig-final.log`.
-- Native/store coverage includes captured edit/save/run, failed-run repair, scoped
-  Resume, original-operation input ownership, cross-session Stop, missing result
-  acknowledgements, Continue without replay, explicit fresh requests, retained plot
-  identity, and SQLite aborts before intent/result/final acknowledgement. Quota tests
-  cover admission rollback, Unicode bytes, active completion reservations, event
-  pruning, reopen and an existing oversized store. Source/help checks retain exact
-  installed-copy and object observations without additional scientific operations.
-  Earlier detailed evidence remains in `target/component-{input,payload,continue,recovery,read-help}-*.log`
-  and `target/component-fault-injection.log`.
-- Saturation tests verified two running/eight waiting model slots, Disable fencing
-  queued requests, and project reads/queued Stop within the tested 250 ms backend
-  bound. This is not the pending UI performance comparison. Log:
-  `target/component-saturation.log`. Startup sampling of the full test run found a
-  test executable waiting at `_dyld_start`, before test code; this is an environment
-  observation, not an assistant UI measurement.
+- Nine new isolated Chrome scenarios passed with current development assets:
+  native file preview and streamed response, retained draft after reload, two-window
+  takeover, 320/600/1024/1440/1920 layouts, synthetic connection/image diagnostics,
+  stop/reconcile/Continue, rejected-scope correction, exact document save/run scope,
+  native Chinese IME and comparative Console input/frame latency. Log:
+  `target/component-ui-chrome-sync.log`. These use a local protocol fixture,
+  not the user's real model. Screenshots and performance JSON are in
+  `target/studio-browser/`. All nine existing external-Agent Chrome tests also
+  passed in `target/component-ui-chrome-regression.log`; that combined run retained
+  its earlier narrow-layout failure, subsequently fixed and independently verified.
+- 395 frontend tests, 25 boundary fixtures, typecheck, client generation/build/check,
+  architecture/governance checks and vendor integrity passed. Final regenerated
+  assets and binary verification are being completed. Logs use
+  `target/component-ui-*` and `target/component-final-*`.
+- The complete real-R suite passed in `target/component-complete-real-r-final.log`,
+  including captured source/mutation cases, protected recovery copies and persistent
+  CLI state/cancellation/EOF. Test prebuilds now separate compile/loader time from
+  execution deadlines. Real model fixture waits use the published run budget plus
+  15 seconds instead of a premature 125-second harness timeout.
+- Existing focused evidence covers Host cancellation/late delivery, duplicate
+  mutation identities, injected model failure after captured R failure, explicit
+  Continue, separate parent/child states and exactly-once native effects. The
+  interrupted repair regression passed all 15 native mutation cases in
+  `target/component-interrupted-repair-regression.log`. Store/history/HTTP,
+  protocol/tool limits and large result tests are retained under `target/component-*`.
+- Direct/MCP parity and the existing scientific acceptance were already exercised.
+  The external Agent crash/resume fixture passed again in
+  `target/component-external-recovery-fixture.log`, preserving the original native
+  identity, uncertain receipt, draft and fresh MCP connection. This is a protocol
+  fixture, not another live external-provider acceptance claim.
 
-**Complete real-model acceptance has not passed.** All attempts remain under
-`target/component-matrix/`; each directory contains the fixed source digest,
-model configuration, all case logs and `summary.json`:
+The additional full-workspace Rust rerun was stopped after 14 minutes of mostly
+cold test-program startup, with no assertion failure observed before interruption.
+Its partial log is `target/component-final-workspace.log`; it is not a full pass.
+The previously completed workspace baseline remains applicable to production Rust,
+which this Studio change does not modify. Final source/mutation model tests exercise
+the changed fixture deadlines separately.
 
-| Complete matrix directory | Passed | Failure evidence |
-| --- | --- | --- |
-| `2026-09-13T04-54-46.711Z` | 26/27 | Overstrict Markdown color parsing |
-| `2026-09-13T05-10-46.226Z` | 26/27 | Checksum confusion and model-call budget exhaustion |
-| `2026-09-13T05-35-26.516Z` | 23/27 | Invisible-return fixture and runs submitted before Resume |
-| `2026-09-13T07-20-03.997Z` | 25/27 | Plots answer/count mismatch; provider/stream error during produced-plot repair |
-| `2026-09-13T08-27-28.616Z` | 26/27 | Workspace checker combined pre-tool narration with the final answer |
-| `2026-09-13T09-29-10.428Z` | 26/27 | Correct plot color with source citation rejected by one-word-only checker |
+Earlier complete real-model matrices remain in `target/component-matrix/`, including
+failed attempts. The latest prior full matrix (2026-09-13T09-29-10.428Z) was 26/27;
+a correct produced-plot answer was rejected by a checker that conflicted with the
+source-citation requirement. Subsequent isolated attempts exposed fixture timing,
+automatic recovery-copy timing and answer-format assumptions; the original reports
+were not overwritten. The fixtures now use manual recovery policy, final-answer
+extraction, explicit original-output citations and the published application budget.
+A new full matrix is still required on the final frozen implementation. Wire probes
+confirmed matching native PNG hashes and successful HTTP image delivery; they do
+not prove the cause of earlier provider image refusals or overall provider reliability.
 
-The fourth matrix used code commit `285ca1c3`. Six profiles passed three times,
-Plots passed twice, and document repair passed three times. The interrupted repair
-retained its original saved R failure and two reads, before submitting an edit.
-A live update initially missed the other Plots failure; the complete summary is
-authoritative. Progress output now includes cumulative failures.
+Strict Clippy retains pre-existing large Contract enums, SQLite range style,
+Workspace checkpoint style and Host style diagnostics. Selected checks passed with
+only reproduced existing categories allowed, without source-wide suppressions.
+The P0 isolated diagnostic measured 9,629,040 release bytes and 31 new normal package
+versions; see `target/component-agent-build-evidence.json`. That measurement does
+not establish the shipped application's release-size overhead.
 
-Source probes now record expected/actual answers and operation counts and retain
-failed temporary projects. Targeted Plots repeats at
-`2026-09-13T07-40-27.070Z` passed 2/3. One model response claimed no image was delivered
-after a successful synthetic diagnostic; operation counts stayed unchanged. Its
-retained original PNG was visually verified as solid green (800×600). The failed
-case log locates the retained fixture. The source-probe build, selected Clippy with
-existing style exceptions and matrix self-test passed in
-`target/component-source-evidence-{build,clippy-final}.log`.
-
-Image delivery diagnostics now use `scripts/test-component-image-wire.mjs --run`.
-The local relay forwards the original request/response and records only image
-manifests, hashes, dimensions, content-block order and HTTP status, excluding keys,
-headers and prompt bodies. Six text-first probes passed with one 640×480 PNG per
-source request, matching its declared native preview hash, and HTTP 200 responses.
-Evidence: `target/component-image-wire/{2026-09-13T07-50-20.678Z,2026-09-13T07-52-06.350Z}/`.
-These successful captures do not prove the cause of the earlier refusal.
-
-Labelled images now precede the long question/context, following the official
-Anthropic vision placement recommendation. Diagnostics use the same image-first
-order. The new Anthropic two-image wire test preserves bytes, labels and the final
-question; 11 protocol tests plus the typed-error test passed. Three image-first
-relay probes and three direct Plots probes passed. Evidence:
-`target/component-image-wire/2026-09-13T08-01-32.906Z/`,
-`target/component-matrix/2026-09-13T08-06-16.563Z/`, and
-`target/component-image-order-protocol-final.log`.
-These are subsets, not a new complete matrix, and do not establish causality or
-provider reliability. The fifth matrix on `c9ed28b0` finished with 26/27 automatically
-passed. Its retained Workspace record verifies one native execution and the correct
-return value; the post-tool answer is exactly that value. The checker had included
-earlier progress narration. It now distinguishes the final answer after the last
-tool event, with a regression test, and logs expected/actual final text. The original
-summary remains unchanged and a fresh complete matrix is still pending. An additional
-real-R test now injects model failure immediately after the original captured R
-failure, explicitly reconciles and Continues, re-reads the parent failure without
-replay, repairs, resumes and finishes. Parent and child retain separate terminal
-states and original native identities; the counter increments once. All 15 native
-mutation tests pass in `target/component-interrupted-repair-regression.log`.
-This is an injected engine failure, not another live-provider availability measurement.
-
-The sixth matrix (`2026-09-13T09-29-10.428Z`) also finished at 26/27: the failed
-produced-plot case identified green and cited the original output, but the checker
-required a lone word while the assistant instructions require citations. The probe
-now requests a first-line color plus the original operation/output reference and
-checks both, retaining ambiguity/negative-answer rejection and all native checks.
-A targeted repeat at `2026-09-13T10-02-28.955Z` passed 2/3; its remaining failure
-was an independently scheduled `workspace.checkpoint_capture` during model waiting.
-Temporary source/mutation fixtures now explicitly use project-scoped Manual recovery
-policy so that strict no-new-operation assertions measure assistant effects.
-Product recovery defaults are unchanged. All 15 native mutation tests and selected
-fixture Clippy passed: `target/component-fixture-isolation-{tests,clippy,build}.log`.
-The next isolated repeat (`2026-09-13T10-12-41.010Z`) passed 1/3; its two failures
-were checker mismatches for "output number 2" and pre-tool narration. The checker
-now reads the final post-tool answer and recognizes complete output/sequence
-numbers and exact operation IDs. Regressions reject wrong IDs, number prefixes,
-conflicting colors and unavailable-image claims. Logs:
-`target/component-plot-citation-labels.log`, `target/component-final-citation-clippy.log`.
-The next three-case produced-plot repeat is running on `a920e860`; inspect
-`target/component-matrix/2026-09-13T10-19-58.596Z/summary.json` and
-`target/component-final-citation-model.log` before reporting its outcome.
-Engine and mutation-test Clippy passed (the latter with the existing Host style
-exceptions), and the current main binary built successfully. Logs:
-`target/component-image-order-{clippy,build}.log` and
-`target/component-interrupted-repair-clippy.log`.
-
-Client/history verification passed 383 UI tests, 25 frontend boundary fixtures,
-type generation/build/check, 29 SQLite component tests and the Host recovery test.
-History tests cover scope, cursor bounds, tied timestamps and read purity. The new
-client tests cover late acknowledgements, immutable targets, storage failure before
-dispatch, offline drafts, explicit conflicts, stale pages and bounded event history.
-Logs: `target/component-client-{unit-final,validation,types-verified,boundary-fixtures}.log`,
-`target/component-history-{store-final,pagination-final,recovery,clippy-final}.log`.
-The authenticated history HTTP route also passed its no-model/no-runtime test,
-and the current main binary built: `target/component-history-{http-final,build}.log`.
-The final-answer extraction regression and selected probe Clippy passed in
-`target/component-final-answer-{test,clippy}.log`.
-
-The later lifecycle/concurrency pass completed 391 UI tests plus 25 boundary
-fixtures, typecheck, client build/check and the current main build. An external-Agent
-browser run passed 8/9; the failing case waited on CLI discovery, and its isolated
-repeat passed. No component requests appeared in that failed trace. Logs:
-`target/component-client-lifecycle-{unit,types,build,main,browser,browser-repeat}.log`.
-The component UI remains unimplemented pending Paper review.
-
-The Start command boxes its Rust payload without changing generated JSON/TypeScript.
-Its newly introduced large-enum diagnostic was removed. Selected Application,
-engine, Host, MCP and Workbench Clippy passed with existing style exceptions;
-Workbench's 11 tests, the affected Rig feedback test and final build also passed.
-Logs: `target/component-parity-{client,clippy,contract-lints,workbench,feedback,build-final}.log`.
-
-Strict Clippy has pre-existing diagnostics in large Contract wire enums, a SQLite
-range test, Host session-protection style and Workspace checkpoint style.
-The three Workspace diagnostics were reproduced at commit `4b0907ff` in a
-temporary registered worktree, then that worktree was removed. Selected Workspace, Application, engine and Host Clippy passed with only the
-reproduced `collapsible_if` and Host `unnecessary_sort_by` categories allowed;
-no source-wide suppression has been introduced. Evidence: `target/component-repair-*-clippy*.log`
-and `target/component-repair-clippy.log`.
-
-Outstanding: Paper review and seven usable Studio entrances; further input,
-cross-session, multiwindow and resource stress; and P5 complete scientific, workspace and performance
-acceptance. The P0 standalone binary size was only a diagnostic measurement; it
-does not establish the shipped application overhead. See
-`target/component-agent-build-evidence.json` for that original measurement.
-
-All real checks use disposable projects. Existing user Hosts, R memory and drafts
-are preserved. Inspect live state before replacing any workbench. No installation,
-signing or publication was performed.
+All real checks use disposable projects. Existing user Hosts, R memory, drafts and
+native configuration are preserved. No installation, signing or publication was
+performed. See [Operations](OPERATIONS.md#built-in-component-assistant) for use.
 
 ## Multiple R sessions and recovery copies
 

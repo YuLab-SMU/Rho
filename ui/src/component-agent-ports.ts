@@ -35,6 +35,12 @@ export interface ComponentCommandReplies {
   stop_test: { diagnostic: ComponentModelDiagnostic };
 }
 export interface ComponentAgentPorts {
+  synchronizeContext?(): Promise<void>;
+  sourceSearch?(request: import("./generated/ComponentSourceSearch").ComponentSourceSearch): Promise<import("./generated/ComponentSourceSearchResult").ComponentSourceSearchResult>;
+  sourcePreview?(request: import("./generated/ComponentSourcePreviewRequest").ComponentSourcePreviewRequest): Promise<import("./generated/ComponentSourcePreview").ComponentSourcePreview>;
+  credential?(request: import("./generated/ComponentSessionCredential").ComponentSessionCredential): Promise<{ credential: import("./generated/ComponentCredentialRef").ComponentCredentialRef }>;
+  test?(request: import("./generated/ComponentModelTestRequest").ComponentModelTestRequest): Promise<{ diagnostic: ComponentModelDiagnostic }>;
+  initial?(profile: import("./generated/ComponentAgentProfile").ComponentAgentProfile, viewId?: string): { session: import("./generated/ComponentAgentSession").ComponentAgentSession | null; sources: import("./generated/AgentContextSelection").AgentContextSelection[]; documentId?: string };
   context(): RequestContext;
   window(): ApplicationWindowRef | null;
   query<Q extends ComponentAgentQuery>(request: ComponentAgentsQuery & { query: Q }): Promise<ComponentQueryReplies[Q["kind"]]>;

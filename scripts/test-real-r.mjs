@@ -22,6 +22,7 @@ run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-
 run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-r-packages.R"], { env, stdio: "inherit" });
 for (const script of ["scripts/test-r-objects.R", "scripts/test-r-package-index.R"]) run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", script], { env, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
+  "--test", "component_sources_real_r", "--test", "component_mutations_real_r",
   "--locked", "--no-run"], { env, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
   "--locked", "--", "--ignored", "--nocapture"], { env, stdio: "inherit", timeout: 120_000 });
@@ -38,6 +39,8 @@ run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test
   "--locked", "--", "--ignored", "--nocapture",
   "real_instances_restore_and_clean_restart_without_cross_session_effects"],
   { env: instanceEnv, stdio: "inherit", timeout: 300_000 });
+run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--lib", "--locked",
+  "recovery_copy_protects_its_library", "--no-run"], { env: instanceEnv, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--lib", "--locked",
   "recovery_copy_protects_its_library", "--", "--ignored", "--nocapture"], { env: instanceEnv, stdio: "inherit", timeout: 120_000 });
 run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-cli", "--locked"], { stdio: "inherit" });

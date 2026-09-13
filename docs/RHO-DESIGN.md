@@ -1473,11 +1473,11 @@ keyboard selection of sessions and buttons, blur never submitting, closing the
 management page preserving editor and Console drafts, and restore or launch status
 affecting only the target session.
 
-## 18. Built-in component assistant — interaction review pending
+## 18. Built-in component assistant — approved interaction
 
 The six editable [Paper B01–B06 boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/A-0)
-are on the independent **Built-in Assistant · 组件助手交互评审** page. They are proposals
-awaiting user review, not implemented UI or scientific evidence. The original
+are on the independent **Built-in Assistant · 组件助手交互评审** page. The user approved all six boards on 2026-09-13. This approval establishes the
+interaction scope; implementation and scientific evidence remain separate. The original
 Agent task page still contains its fourteen boards and 2,911 nodes; its content was
 not replaced. Example data, messages, plots and statuses are design fixtures.
 

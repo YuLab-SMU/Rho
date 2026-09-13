@@ -284,8 +284,34 @@ export class Studio {
       ...taskDraftCache(windowId), changed: this.persistence.changed,
       schedule: () => { this.coordinator.wake("agent-task-summary"); this.coordinator.wake("agent-task-events"); } });
     this.componentAgents = new ComponentAgents({ context: this.session.context,
+      synchronizeContext: () => this.application.flush(),
       window: () => this.application.getSnapshot().online ? this.application.window : null,
       query: request => client.componentQuery(request), command: request => client.componentCommand(request),
+      sourceSearch: request => client.componentSourceSearch(request),
+      sourcePreview: request => client.componentSourcePreview(request),
+      credential: request => client.componentCredential(request), test: request => client.componentModelTest(request),
+      initial: (profile, viewId) => {
+        const workspace = profile === "environment" && viewId && this.runtimeSessions.getInstance(viewId) ? this.workspaceFor(viewId) : this.workspaceForView(viewId), native = this.session.contextFor(workspace.id).session;
+        const session = native ? { workspace_instance_id: workspace.id, session_id: native } : null;
+        const sources: import("./generated/AgentContextSelection").AgentContextSelection[] = [];
+        const reference = { workspace_instance_id: workspace.id, expected_session: native };
+        if (profile === "objects" && native && workspace.objects.selected)
+          sources.push({ source: "objects", label: workspace.objects.selected, reference: { ...reference, name: workspace.objects.selected }, inclusion: "summary" });
+        if (profile === "packages" && native && workspace.packages.applicationSelection) {
+          const selected = workspace.packages.applicationSelection;
+          const copy = workspace.packages.details.get(selected.package)?.copies.find(copy => packageCopyKey(copy) === selected.copy_id);
+          if (copy) sources.push({ source: "packages", label: selected.package, reference: { ...reference, package: selected.package, library_path: copy.library_path, observation_id: selected.observation_id }, inclusion: "summary" });
+        }
+        if (profile === "plots") {
+          const plot = this.plots.selectedEvidence(viewId ?? "plots");
+          if (plot) sources.push({ source: "plots", label: "Selected plot", reference: { ...plot }, inclusion: "image" });
+        }
+        if (profile === "workspace" && native) sources.push({ source: "workspace", label: "Console / Workspace", reference, inclusion: "summary" });
+        if (profile === "environment") sources.push({ source: "environment", label: workspace.id, reference: { workspace_instance_id: workspace.id }, inclusion: "summary" });
+        if (profile === "project" && this.files.selected) sources.push({ source: "files", label: this.files.selected, reference: { path: this.files.selected }, inclusion: "text" });
+        const documentId = this.documents.applicationDocuments().some(d => d.document_id === viewId) ? viewId : this.documents.active ?? undefined;
+        return { session, sources, documentId };
+      },
       ...componentDraftCache(windowId) });
 
     this.consolePersistence = this.workspaceFragment("console", "runtimeConsoleViews");

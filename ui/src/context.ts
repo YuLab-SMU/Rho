@@ -26,6 +26,7 @@ export const useSession = () => { const { view, id } = useRuntimeBinding(); retu
 export const useAgents = () => useModule(studio.agents);
 export const useNativeAgents = () => useModule(studio.nativeAgents);
 export const useAgentTasks = () => useModule(studio.agentTasks);
+export const useComponentAgents = () => useModule(studio.componentAgents);
 export const useOperations = () => { const { view, id } = useRuntimeBinding(); return useModule(view ? studio.operations.forInstance(id) : studio.operations); };
 export const useFiles = () => useModule(studio.files);
 export const useObjects = () => { const { id } = useRuntimeBinding(); return useModule(studio.workspaceFor(id).objects); };

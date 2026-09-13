@@ -62,6 +62,34 @@ function fixture() {
     online: (value: boolean) => connected = value };
 }
 
+it("keeps selected context across reopening while request observation never sends it", async () => {
+  const f = fixture(); await f.model.observeConversation("c");
+  const composer = { ...input, grant: input.grant, sources: [{ source: "files", label: "notes.R", reference: { path: "notes.R", expected_sha256: "abc" }, inclusion: "text" }] };
+  f.model.setComposer("c", composer); f.model.select("c");
+  const reopened = new ComponentAgents(f.ports); reopened.reset();
+  expect(reopened.getSnapshot().selected).toBe("c");
+  expect(reopened.composer("c").sources).toEqual(composer.sources);
+  expect(f.ports.command).not.toHaveBeenCalled();
+});
+it("clears a removed document's authority together with its context", async () => {
+  const f = fixture(); await f.model.observeConversation("c");
+  const document = { document_id: "doc", document_version: "v1", selection_version: "s1" };
+  f.model.includeSource("c", { snapshot: { selection: { source: "editor", label: "analysis.R", reference: { document }, inclusion: "text" }, title: "analysis.R", description: "", text: "1", native_data: { path: "analysis.R" }, truncated: false, observations: [], evidence: [{ kind: "document", document }] }, image_base64: null, image_mime_type: null, observations: [], error: null });
+  expect(f.model.composer("c").grant.documents).toEqual([{ document, path: "analysis.R", allow_save: false }]);
+  f.model.removeSource("c", 0);
+  expect(f.model.composer("c").grant.documents).toEqual([]);
+});
+it("sends a session credential only through the transient port and persists only its reference", async () => {
+  const f = fixture(); await f.model.observeConversation("c");
+  f.ports.credential = vi.fn(async () => ({ credential: { kind: "session", key_id: "opaque" } }));
+  vi.mocked(f.ports.command).mockImplementationOnce(async request => ({ settings: request.command.kind === "configure" ? request.command.settings : null }) as never);
+  await f.model.configure({ version: 0, enabled: true, connection: { protocol: "anthropic", model: "fixture", base_url: "https://example.test", credential: { kind: "session", key_id: "" } } }, "transient-test-secret");
+  expect(f.ports.credential).toHaveBeenCalledOnce();
+  expect(JSON.stringify(vi.mocked(f.ports.command).mock.calls)).not.toContain("transient-test-secret");
+  expect(JSON.stringify(f.model.getSnapshot())).not.toContain("transient-test-secret");
+  expect(JSON.stringify(f.model.serialize())).not.toContain("transient-test-secret");
+});
+
 it("constructing and restoring only read local state and never submit or test a model", () => {
   const f = fixture(); f.model.reset();
   expect(f.ports.query).not.toHaveBeenCalled(); expect(f.ports.command).not.toHaveBeenCalled();
@@ -98,6 +126,15 @@ it("lost Start acknowledgement persists its immutable identity and observes with
   expect(restored.getSnapshot().pending).toHaveLength(0);
   expect(restored.getSnapshot().runs.get("run")?.request.request_id).toBe(pending.request.request_id);
   expect(f.ports.command).toHaveBeenCalledTimes(1);
+});
+
+it("a completed initial rejection with an absent authoritative request releases the retained draft", async () => {
+  const f = fixture(); await f.model.observeConversation("c"); f.model.editDraft("c", "keep me");
+  vi.mocked(f.ports.command).mockRejectedValueOnce(Object.assign(new Error("Invalid scope"), { status: 409 }));
+  await expect(f.model.start(input)).rejects.toThrow("Invalid scope");
+  expect(f.model.getSnapshot().pending).toHaveLength(0);
+  expect(f.model.getSnapshot().drafts.get("c")?.text).toBe("keep me");
+  expect(f.ports.command).toHaveBeenCalledOnce();
 });
 it("does not submit when the recovery identity cannot be persisted", async () => {
   const f = fixture(); await f.model.observeConversation("c");

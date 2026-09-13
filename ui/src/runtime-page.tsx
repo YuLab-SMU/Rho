@@ -10,6 +10,7 @@ import type { WorkspaceInstance } from "./generated/WorkspaceInstance";
 import type { CheckpointEntry } from "./generated/CheckpointEntry";
 import type { RuntimeTab } from "./navigation";
 import "./runtime.css";
+import { AskComponent } from "./panels/component-agent-panel";
 
 export function RuntimeBadge({ instance }: { instance: WorkspaceInstance }) {
   const session = useInstanceSession(instance.workspace_instance_id), console = useInstanceConsole(instance.workspace_instance_id);
@@ -41,7 +42,7 @@ export function RuntimeSessionsPage({ open, onClose }: { open: boolean; onClose(
   const choose = (id: string) => { setSelected(id); setDetail(true); navigation.runtimePage = { instanceId: id, tab }; };
   const chooseTab = (value: RuntimeTab) => { setTab(value); navigation.runtimePage = { instanceId: currentId, tab: value }; };
   return <Dialog.Root open={open} onOpenChange={value => { if (!value) onClose(); }}><Dialog.Portal><Dialog.Content className={`runtime-page${detail ? " shows-detail" : ""}`} onCloseAutoFocus={event => { event.preventDefault(); if (opener.current?.isConnected) opener.current.focus(); }}>
-    <header className="runtime-page-header"><Dialog.Title>R Sessions</Dialog.Title><Dialog.Description>{session.project?.split(/[\\/]/).at(-1) ?? "This project"}</Dialog.Description><div className="runtime-actions"><button disabled={!session.connected} onClick={() => setCreating(true)}>＋ New session…</button><Dialog.Close>Back to workspace</Dialog.Close></div></header>
+    <header className="runtime-page-header"><AskComponent profile="environment" viewId={selected ?? undefined} /><Dialog.Title>R Sessions</Dialog.Title><Dialog.Description>{session.project?.split(/[\\/]/).at(-1) ?? "This project"}</Dialog.Description><div className="runtime-actions"><button disabled={!session.connected} onClick={() => setCreating(true)}>＋ New session…</button><Dialog.Close>Back to workspace</Dialog.Close></div></header>
     <div className="runtime-page-body"><nav className="runtime-session-list" aria-label="R sessions in this project"><div className="runtime-eyebrow">This project</div>
       {state.catalogIds.map(id => state.instances.get(id)).filter((value): value is WorkspaceInstance => !!value).map(value => <SessionRow key={value.workspace_instance_id} instance={value} selected={value.workspace_instance_id === currentId} choose={() => choose(value.workspace_instance_id)} />)}
       {state.next && <button disabled={state.loading.has("instances")} onClick={() => void owner.refreshInstances(true).catch(() => {})}>More sessions</button>}

@@ -3,6 +3,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useAgents, useDocuments, useNavigation, useSession } from "./context";
 import { Icon } from "./icons";
 import { SettingsControls } from "./settings-controls";
+import { ComponentModelSettingsPanel } from "./panels/component-model-settings";
 import { NativeAgentSettings } from "./native-agent-settings";
 import { RuntimeSettingsControls } from "./runtime-settings";
 import type { AgentConfigurationFormat } from "./agent-ports";
@@ -104,13 +105,13 @@ function AgentSettings() {
   return <>
     <div className="agent-tabs" role="tablist" aria-label="Agent settings" onKeyDown={event => {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-      event.preventDefault(); const next = event.key === "Home" ? "apps" : event.key === "End" ? "connections" : tab === "apps" ? "connections" : "apps";
+      event.preventDefault(); const tabs = ["apps", "assistant", "connections"]; const next = event.key === "Home" ? "apps" : event.key === "End" ? "connections" : tabs[(tabs.indexOf(tab) + (event.key === "ArrowRight" ? 1 : 2)) % 3];
       setTab(next); event.currentTarget.querySelector<HTMLButtonElement>(`#agent-tab-${next}`)?.focus();
     }}>
-      {["apps", "connections"].map(value => <button key={value} id={`agent-tab-${value}`} role="tab" aria-selected={tab === value} tabIndex={tab === value ? 0 : -1} aria-controls="agent-tab-panel" onClick={() => setTab(value)}>{value === "apps" ? "Agent apps" : "Connections"}{value === "connections" && !state.stale && !!state.data?.active_sessions && <span className="agent-count">{state.data.active_sessions}</span>}</button>)}
+      {["apps", "assistant", "connections"].map(value => <button key={value} id={`agent-tab-${value}`} role="tab" aria-selected={tab === value} tabIndex={tab === value ? 0 : -1} aria-controls="agent-tab-panel" onClick={() => setTab(value)}>{value === "apps" ? "Agent apps" : value === "assistant" ? "Rho Assistant" : "Connections"}{value === "connections" && !state.stale && !!state.data?.active_sessions && <span className="agent-count">{state.data.active_sessions}</span>}</button>)}
     </div>
     {state.error && <div className="agent-error" role="alert"><span>{state.error}{state.stale ? " Previous observations may be stale." : ""}</span><button disabled={state.loading} onClick={() => void agents.refresh()}>Retry</button></div>}
-    <div role="tabpanel" id="agent-tab-panel" aria-labelledby={`agent-tab-${tab}`}>{tab === "apps" ? <><NativeAgentSettings /><details className="native-manual"><summary>Advanced: manual MCP setup</summary><AgentApps /></details></> : <Connections />}</div>
+    <div role="tabpanel" id="agent-tab-panel" aria-labelledby={`agent-tab-${tab}`}>{tab === "apps" ? <><NativeAgentSettings /><details className="native-manual"><summary>Advanced: manual MCP setup</summary><AgentApps /></details></> : tab === "assistant" ? <ComponentModelSettingsPanel /> : <Connections />}</div>
   </>;
 }
 

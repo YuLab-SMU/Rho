@@ -83,6 +83,15 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     [search, setSearch] = useState(""),
     [newOutput, setNewOutput] = useState(false);
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
+  const requestedOperation = navigation.getSnapshot().operationId;
+  useEffect(() => {
+    if (!requestedOperation) return;
+    let disposed = false;
+    void operations.ensureOperation(requestedOperation).then(record => {
+      if (!disposed && record) { setDetailsFor(requestedOperation); setDialog("details"); navigation.acknowledgeOperation(requestedOperation); }
+    }).catch(error => { if (!disposed) setError(message(error)); });
+    return () => { disposed = true; };
+  }, [requestedOperation, operations, navigation]);
   const renderScope = session.context();
   const reportError = (error: unknown) => {
     if (input.current && consoleModel.viewIdentity(viewId) === identity && sameScope(renderScope, session.context(), true)) setError(message(error));

@@ -9,6 +9,13 @@ import type { ComponentAgentEvent } from "./generated/ComponentAgentEvent";
 import type { ComponentToolReceipt } from "./generated/ComponentToolReceipt";
 import type { ComponentAgentRunSummary } from "./generated/ComponentAgentRunSummary";
 import type { ComponentAgentProfile } from "./generated/ComponentAgentProfile";
+import type { AgentContextSelection } from "./generated/AgentContextSelection";
+import type { ComponentAgentGrant } from "./generated/ComponentAgentGrant";
+import type { ComponentModelSettings } from "./generated/ComponentModelSettings";
+import type { ComponentModelDiagnostic } from "./generated/ComponentModelDiagnostic";
+import type { ComponentSourcePreview } from "./generated/ComponentSourcePreview";
+import type { ComponentSourceSearchResult } from "./generated/ComponentSourceSearchResult";
+export interface ComponentComposer { sources: AgentContextSelection[]; grant: ComponentAgentGrant }
 
 const clone = <T>(value: T): T => structuredClone(value);
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
@@ -21,6 +28,11 @@ interface Draft { text: string; baseVersion: number; revision: number; dirty: bo
 interface PendingStart { request: ComponentAgentStart; state: "sending" | "uncertain" }
 interface Scope { project: string; epoch: number; generation: number; window: ApplicationWindowRef | null }
 interface ComponentSnapshot {
+  selected: string | null;
+  assistantVisible: boolean;
+  settings: ComponentModelSettings | null;
+  diagnostics: readonly ComponentModelDiagnostic[];
+  composers: ReadonlyMap<string, ComponentComposer>;
   submitting: ReadonlySet<string>;
   history: ReadonlyMap<string, { runs: readonly ComponentAgentRunSummary[]; before: string | null; next: string | null }>;
   conversations: ReadonlyMap<string, ComponentAgentConversation>;
@@ -35,6 +47,12 @@ interface ComponentSnapshot {
 
 /** Nonvisual application client. Every model/owner action is explicit; observation never replays it. */
 export class ComponentAgents extends Model<ComponentSnapshot> {
+  private selected: string | null = null;
+  private assistantVisible = false;
+  private settings: ComponentModelSettings | null = null;
+  private diagnostics: ComponentModelDiagnostic[] = [];
+  private composers = new Map<string, ComponentComposer>();
+  private sending = new Set<string>();
   private project: string | null = null;
   private generation = 0;
   private stopped = false;
@@ -56,13 +74,16 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
   private error = "";
   constructor(private ports: ComponentAgentPorts) { super(); }
   protected readSnapshot(): ComponentSnapshot {
-    return { submitting: readonlySet(new Set(this.submitting.keys())), history: readonlyMap(this.history), conversations: readonlyMap(this.conversations), drafts: readonlyMap(new Map([...this.drafts].map(([id, draft]) => [id, immutable(clone(draft))]))),
+    return { selected: this.selected, assistantVisible: this.assistantVisible, settings: this.settings, diagnostics: immutable(clone(this.diagnostics)), composers: readonlyMap(this.composers),
+      submitting: readonlySet(new Set(this.submitting.keys())), history: readonlyMap(this.history), conversations: readonlyMap(this.conversations), drafts: readonlyMap(new Map([...this.drafts].map(([id, draft]) => [id, immutable(clone(draft))]))),
       runs: readonlyMap(this.runs), tools: readonlyMap(this.tools), events: readonlyMap(this.events), historyGap: readonlyMap(this.gaps),
       pending: immutable(clone([...this.pending.values()])), error: this.error };
   }
   /** Called by the application lifecycle, never by a panel mount/unmount. */
   reset() {
     this.generation++;
+    this.selected = null; this.assistantVisible = false; this.settings = null; this.diagnostics = []; this.composers.clear();
+    this.sending.clear();
     this.project = this.ports.context().project;
     this.conversations.clear(); this.history.clear(); this.drafts.clear(); this.runs.clear(); this.tools.clear();
     this.events.clear(); this.cursors.clear(); this.gaps.clear(); this.pending.clear(); this.saves.clear(); this.runOrder.clear(); this.error = "";
@@ -99,12 +120,20 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
     }
   }
   serialize() {
-    return clone({ version: 1, drafts: [...this.drafts].filter(([, draft]) => draft.dirty || draft.conflict !== null), pending: [...this.pending.values()] });
+    return clone({ version: 1, selected: this.selected, composers: [...this.composers], drafts: [...this.drafts].filter(([, draft]) => draft.dirty || draft.conflict !== null), pending: [...this.pending.values()] });
   }
   private restore(value: unknown) {
     if (!value || typeof value !== "object" || bytes(value) > 2 * 1024 * 1024) return;
-    const saved = value as { version?: number; drafts?: unknown; pending?: unknown };
+    const saved = value as { version?: number; drafts?: unknown; pending?: unknown; composers?: unknown; selected?: unknown };
     if (saved.version !== 1 || !Array.isArray(saved.drafts) || !Array.isArray(saved.pending)) return;
+    if (typeof saved.selected === "string") this.selected = saved.selected;
+    if (Array.isArray(saved.composers)) for (const entry of saved.composers.slice(0, 32)) {
+      if (!Array.isArray(entry)) continue;
+      const [id, composer] = entry;
+      if (typeof id === "string" && composer && Array.isArray(composer.sources) && composer.sources.length <= 16 &&
+          ["explain", "edit", "run"].includes(composer.grant?.mode) && Array.isArray(composer.grant?.documents) && Array.isArray(composer.grant?.files))
+        this.composers.set(id, immutable(clone(composer)));
+    }
     for (const entry of saved.drafts.slice(0, 32)) {
       if (!Array.isArray(entry) || typeof entry[0] !== "string") continue;
       const draft = entry[1] as Draft | undefined;
@@ -127,9 +156,10 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
     const previous = this.conversations.get(remote.conversation_id);
     if (previous && (previous.version > remote.version || previous.draft_version > remote.draft_version)) return;
     if (!this.drafts.has(remote.conversation_id) && this.drafts.size >= 32) {
-      const removable = [...this.drafts].find(([id, draft]) => !draft.dirty && ![...this.pending.values()].some(p => p.request.conversation_id === id));
+      const removable = [...this.drafts].find(([id, draft]) => id !== this.selected && !draft.dirty && draft.conflict === null && ![...this.pending.values()].some(p => p.request.conversation_id === id));
       if (!removable) throw new Error("Keep at most 32 local assistant drafts.");
       this.drafts.delete(removable[0]); this.conversations.delete(removable[0]); this.history.delete(removable[0]);
+      this.composers.delete(removable[0]);
       this.historyRequests.delete(removable[0]);
     }
     const local = this.drafts.get(remote.conversation_id);
@@ -278,12 +308,12 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
       await this.observeConversation(id);
       if (!this.current(scope)) return;
       if (!this.canControl(id)) throw new Error("This window does not control the conversation.");
-      return await this.dispatchSubmission(immutable(clone(pending.request)), scope);
+      return await this.dispatchSubmission(immutable(clone(pending.request)), scope, true);
     } finally {
       if (this.submitting.get(id) === token) { this.submitting.delete(id); this.publish(); }
     }
   }
-  private async dispatchSubmission(request: ComponentAgentStart, scope: Scope) {
+  private async dispatchSubmission(request: ComponentAgentStart, scope: Scope, wasUncertain = false) {
     const pending = this.pending.get(request.request_id);
     if (!pending) return;
     pending.state = "sending"; this.persist(); this.publish();
@@ -294,6 +324,18 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
       return reply.run;
     } catch (error) {
       if (this.current(scope)) {
+        // A completed first-attempt rejection plus an authoritative absent record
+        // can release this draft. Lost acknowledgements and uncertain retries cannot.
+        const status = (error as { status?: number } | null)?.status;
+        if (!wasUncertain && status && [400, 403, 409, 422].includes(status)) {
+          try {
+            const observed = await this.ports.query({ project_root: scope.project, query: { kind: "request", request_id: request.request_id } });
+            if (this.current(scope)) {
+              if (observed.run) this.acceptSubmission(request, observed.run);
+              else this.pending.delete(request.request_id);
+            }
+          } catch { /* Failed proof remains uncertain. */ }
+        }
         const pending = this.pending.get(request.request_id);
         if (pending) pending.state = "uncertain";
         this.error = message(error); this.persist(); this.publish();
@@ -367,6 +409,164 @@ export class ComponentAgents extends Model<ComponentSnapshot> {
     if (!this.current(scope)) return;
     if (reply.conversation.conversation_id !== id || !sameWindow(reply.conversation.controller, scope.window)) throw new Error("Controller acknowledgement identity mismatch.");
     this.acceptConversation(reply.conversation);
+  }
+  reportError(error: unknown) { this.error = message(error); this.publish(); }
+  clearError() { this.error = ""; this.publish(); }
+  showAssistant(visible = true) { this.assistantVisible = visible; this.publish(); }
+  select(id: string) { this.selected = id; this.assistantVisible = true; this.persist(); this.publish(); }
+  async ask(profile: ComponentAgentProfile, viewId?: string) {
+    const scope = this.scope(true), initial = this.ports.initial?.(profile, viewId);
+    await this.ports.synchronizeContext?.();
+    if (!this.current(scope)) return;
+    const id = crypto.randomUUID();
+    await this.create(id, profile);
+    if (!this.current(scope)) return;
+    this.setComposer(id, { sources: initial?.sources ?? [], grant: { mode: "explain", session: initial?.session ?? null, documents: [], files: [] } });
+    this.select(id);
+    for (const selection of initial?.sources ?? []) {
+      try { const preview = await this.previewSource(id, selection); if (preview?.snapshot && this.current(scope)) this.includeSource(id, preview); }
+      catch (error) { if (this.current(scope)) this.reportError(error); }
+    }
+    if (profile === "documents") {
+      const page = await this.searchSources(id, "editor", "");
+      const selected = page?.items.find(item => {
+        const ref = item.selection.reference;
+        if (!ref || typeof ref !== "object" || Array.isArray(ref)) return false;
+        const document = ref.document;
+        return document && typeof document === "object" && !Array.isArray(document) && document.document_id === (initial?.documentId ?? viewId);
+      });
+      if (selected) { const preview = await this.previewSource(id, selected.selection); if (preview?.snapshot && this.current(scope)) this.includeSource(id, preview); }
+      else if (initial?.documentId) this.reportError("The selected document is not synchronized yet. Add it from Context after synchronization.");
+    }
+    return id;
+  }
+  composer(id: string): ComponentComposer {
+    return this.composers.get(id) ?? { sources: [], grant: { mode: "explain", session: null, documents: [], files: [] } };
+  }
+  setComposer(id: string, composer: ComponentComposer) {
+    if (!this.canControl(id)) throw new Error("Take control before changing the request.");
+    if (composer.sources.length > 16 || bytes(composer) > 64 * 1024) throw new Error("Select less context.");
+    if (!this.composers.has(id) && this.composers.size >= 32) throw new Error("Keep at most 32 local assistant contexts.");
+    this.composers.set(id, immutable(clone(composer))); this.persist(); this.publish();
+  }
+  includeSource(id: string, preview: ComponentSourcePreview) {
+    const snapshot = preview.snapshot; if (!snapshot) throw new Error(preview.error ?? "Source unavailable.");
+    const composer = clone(this.composer(id)), selection = snapshot.selection;
+    const index = composer.sources.findIndex(s => s.source === selection.source && s.label === selection.label);
+    if (index >= 0) composer.sources[index] = clone(selection); else composer.sources.push(clone(selection));
+    const data = snapshot.native_data;
+    for (const evidence of snapshot.evidence) {
+      if (evidence.kind === "document") {
+        const grant = { document: clone(evidence.document), allow_save: false, path: data && typeof data === "object" && !Array.isArray(data) && typeof data.path === "string" ? data.path : null };
+        composer.grant.documents = [...composer.grant.documents.filter(d => d.document.document_id !== grant.document.document_id), grant];
+      }
+      if (evidence.kind === "file") composer.grant.files = [...composer.grant.files.filter(f => f.path !== evidence.path), { path: evidence.path, sha256: evidence.sha256 }];
+    }
+    this.setComposer(id, composer);
+  }
+  removeSource(id: string, index: number) {
+    const composer = clone(this.composer(id)), removed = composer.sources.splice(index, 1)[0];
+    if (removed?.source === "editor") {
+      const ref = removed.reference;
+      if (ref && typeof ref === "object" && !Array.isArray(ref)) composer.grant.documents = composer.grant.documents.filter(d => JSON.stringify(d.document) !== JSON.stringify(ref.document));
+    }
+    if (removed?.source === "files") {
+      const ref = removed.reference;
+      if (ref && typeof ref === "object" && !Array.isArray(ref)) composer.grant.files = composer.grant.files.filter(f => f.path !== ref.path);
+    }
+    this.setComposer(id, composer);
+  }
+  async searchSources(id: string, source: string, text: string): Promise<ComponentSourceSearchResult | null> {
+    const scope = this.scope(true);
+    if (!this.ports.sourceSearch) throw new Error("Source search is unavailable.");
+    const result = await this.ports.sourceSearch({ project_root: scope.project, window: scope.window!, session: this.composer(id).grant.session, source, text, limit: 32 });
+    return this.current(scope) ? result : null;
+  }
+  async previewSource(id: string, selection: AgentContextSelection): Promise<ComponentSourcePreview | null> {
+    const scope = this.scope(true);
+    if (!this.ports.sourcePreview) throw new Error("Source preview is unavailable.");
+    const result = await this.ports.sourcePreview({ project_root: scope.project, window: scope.window!, session: this.composer(id).grant.session, selection });
+    return this.current(scope) ? result : null;
+  }
+  async observeSettings() {
+    const scope = this.scope();
+    const [settings, diagnostics] = await Promise.all([
+      this.ports.query({ project_root: scope.project, query: { kind: "settings" } }),
+      this.ports.query({ project_root: scope.project, query: { kind: "diagnostics" } }),
+    ]);
+    if (!this.current(scope)) return;
+    if (!this.settings || settings.settings.version >= this.settings.version) this.settings = immutable(clone(settings.settings));
+    this.diagnostics = clone(diagnostics.diagnostics); this.publish();
+  }
+  async configure(settings: ComponentModelSettings, key = "") {
+    const scope = this.scope(true);
+    settings = clone(settings);
+    if (key) {
+      if (!this.ports.credential || !settings.connection) throw new Error("Credential endpoint is unavailable.");
+      const result = await this.ports.credential({ project_root: scope.project, window: scope.window!, key });
+      if (!this.current(scope)) return;
+      settings.connection.credential = result.credential;
+    }
+    const reply = await this.ports.command({ project_root: scope.project, window: scope.window!, command: { kind: "configure", settings } });
+    if (this.current(scope)) { this.settings = immutable(clone(reply.settings)); this.publish(); }
+  }
+  async testModel(kind: "connection" | "images") {
+    const scope = this.scope(true);
+    if (!this.settings || !this.ports.test) throw new Error("Save model settings first.");
+    const result = await this.ports.test({ project_root: scope.project, window: scope.window!, request_id: crypto.randomUUID(), model_settings_version: this.settings.version, kind });
+    if (this.current(scope)) { this.diagnostics = [result.diagnostic, ...this.diagnostics].slice(0, 16); this.publish(); }
+  }
+  async stopTest(request_id: string) {
+    const scope = this.scope(true);
+    await this.ports.command({ project_root: scope.project, window: scope.window!, command: { kind: "stop_test", request_id } });
+    if (this.current(scope)) await this.observeSettings();
+  }
+  async send(id: string, continueRun?: string) {
+    if (this.sending.has(id)) throw new Error("A submission for this conversation is already in progress.");
+    this.sending.add(id);
+    try { return await this.sendDraft(id, continueRun); }
+    finally { this.sending.delete(id); }
+  }
+  private async sendDraft(id: string, continueRun?: string) {
+    const scope = this.scope(true);
+    const draft = this.drafts.get(id), composer = clone(this.composer(id));
+    if (!draft || !this.settings?.enabled || !this.settings.connection) throw new Error("Configure a model first.");
+    const text = draft.text, revision = draft.revision, settingsVersion = this.settings.version;
+    if (!text.trim()) throw new Error("Enter a question first.");
+    if (composer.grant.mode === "explain") { composer.grant.documents = []; composer.grant.files = []; }
+    let continuation: ComponentAgentStart["continuation"] = undefined;
+    if (continueRun) {
+      const run = this.runs.get(continueRun);
+      if (!run?.recovery || run.recovery.unresolved_mutations || componentBusy(run)) throw new Error("Check the original run status before continuing.");
+      continuation = { run_id: run.run_id, recovery_digest: run.recovery.digest };
+      composer.grant = clone(run.request.grant);
+      composer.sources = clone(run.request.sources);
+      for (const document of composer.grant.documents) {
+        const updated = run.document_versions?.[document.document.document_id];
+        if (updated) document.document = clone(updated);
+      }
+      if (composer.sources.some(s => s.source === "editor")) {
+        const page = await this.searchSources(id, "editor", "");
+        if (!this.current(scope)) return;
+        composer.sources = composer.sources.map(source => {
+          if (source.source !== "editor") return source;
+          const ref = source.reference as { document?: { document_id?: string } };
+          const allowed = composer.grant.documents.find(d => d.document.document_id === ref.document?.document_id);
+          const fresh = page?.items.find(item => {
+            const reference = item.selection.reference as { document?: unknown };
+            return allowed && JSON.stringify(reference.document) === JSON.stringify(allowed.document);
+          });
+          if (!fresh) throw new Error("The original document changed. Refresh context and start a new request.");
+          return { ...fresh.selection, inclusion: source.inclusion };
+        });
+      }
+    }
+    await this.flushDraft(id);
+    if (!this.current(scope)) return;
+    const run = await this.start({ conversation_id: id, model_settings_version: settingsVersion, text, ...composer, continuation });
+    if (run && this.drafts.get(id)?.revision === revision) { this.editDraft(id, ""); await this.flushDraft(id); }
+    if (run) { await this.observeConversation(id); await this.observeHistory(id); }
+    return run;
   }
   override dispose() { this.stopped = true; this.generation++; super.dispose(); }
 }

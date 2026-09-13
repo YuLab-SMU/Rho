@@ -18,14 +18,17 @@ interface NavigationPorts {
 }
 
 /** Explicit view navigation and typed editor intents; no mutable UI callback slots. */
-export class Navigation extends Model<{ dialog: Dialog }> {
+export class Navigation extends Model<{ dialog: Dialog; operationId: string | null }> {
   private dialog: Dialog = null;
+  private operationId: string | null = null;
   private documentListeners = new Map<string, Set<(action: DocumentAction) => void>>();
   private pending = new Map<string, DocumentAction>();
   private generation = 0;
   runtimePage: { instanceId: string | null; tab: RuntimeTab } = { instanceId: null, tab: "overview" };
   constructor(private ports: NavigationPorts) { super(); }
-  protected readSnapshot() { return { dialog: this.dialog }; }
+  protected readSnapshot() { return { dialog: this.dialog, operationId: this.operationId }; }
+  openOperation(operationId: string) { this.operationId = operationId; this.ports.show("console"); this.publish(); }
+  acknowledgeOperation(operationId: string) { if (this.operationId === operationId) { this.operationId = null; this.publish(); } }
   setDialog(dialog: Dialog) { this.dialog = dialog; this.publish(); }
   openSessions(instanceId: string | null = null, tab: RuntimeTab = "overview") {
     this.runtimePage = { instanceId, tab }; this.setDialog("sessions");
@@ -63,6 +66,6 @@ export class Navigation extends Model<{ dialog: Dialog }> {
     });
     return () => { listeners.delete(listener); };
   }
-  reset() { this.generation++; this.pending.clear(); this.runtimePage = { instanceId: null, tab: "overview" }; this.setDialog(null); }
+  reset() { this.generation++; this.operationId = null; this.pending.clear(); this.runtimePage = { instanceId: null, tab: "overview" }; this.setDialog(null); }
   stop() { this.generation++; this.documentListeners.clear(); this.pending.clear(); this.dispose(); }
 }

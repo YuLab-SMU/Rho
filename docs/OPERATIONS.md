@@ -640,3 +640,47 @@ controls. It reports bounded observations and does not infer an environment
 manager. If an older running Host lacks `workspace.packages`, restart Workbench
 with the current binary when ready to end that R session; a browser asset refresh
 alone cannot add a Host capability.
+
+## Built-in component assistant
+
+Use **Ask about…** (the assistant icon in a component's title bar) from Objects,
+Packages, Plots, an open document, Console or Files. R Sessions has its own Ask
+button. All entrances open **Rho Assistant** in the existing Agent area. The
+**External tasks** tab retains the native CLI task workflow.
+
+Configure the project model under **Agent Settings → Rho Assistant**, or the
+assistant's model settings button. Enable the assistant, choose Anthropic Messages
+or OpenAI Chat Completions, and enter the service base URL and model ID. HTTPS is
+required except for HTTP loopback services. Questions and selected context go to
+that service. A session key is retained only in Host memory until that Host quits;
+an environment reference reads the named variable from the Host's environment.
+Neither value is stored in conversation text. Save before explicitly testing the
+connection or image input. Tests use synthetic content. Opening a panel does not
+send a model prompt or scan a local CLI.
+
+Preview selected sources with their context chips; **＋ Context** finds other
+owner-backed sources. Objects must be resolved to a native observation. Plot images
+require a successful image test for the exact saved model connection; a plot's
+**summary** inclusion sends metadata instead. Changing the active component does
+not change an accepted request's sources or execution target.
+
+**Explain** is read-only. **Edit** and **Run** are available for Documents,
+Console/Workspace and Files/Project. Add an open document to authorize its exact
+version; select **Allow saving** for its existing project-relative destination.
+Run displays the bound R session. These choices are the request's authorization;
+there is no further per-tool approval. Scientific owners retain their existing
+version and scope checks. For an untitled script, choose its destination in Editor
+before authorizing saving. Open a project file as a document when it needs editing.
+
+The answer retains its source references, native tool receipts and original run
+links. A model's success sentence does not replace an execution result. **Stop**
+requests cancellation; **Check status** reconciles the original work. Once original
+actions are resolved, enter a follow-up and explicitly **Continue** within the
+original scope. If the document changed outside those actions, select its current
+source and start a fresh request. An unknown submission keeps its original identity;
+checking it never replays it automatically.
+
+Drafts and context selections survive panel navigation. Another window's
+conversation is read-only until **Take control**. Conflicting local text remains
+available for comparison and explicit resolution. On narrow windows, maximize the
+Agent group to keep all controls in view; the assistant also fits a 320 px panel.

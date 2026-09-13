@@ -705,7 +705,7 @@ async fn documents_acceptance_with_interruption(
     let started = std::time::Instant::now();
     let mut renewed = std::time::Instant::now();
     let completed = tokio::time::timeout(
-        Duration::from_secs(if real_model { 125 } else { 20 }),
+        if real_model { Duration::from_millis(run.budget.duration_ms.saturating_add(15_000)) } else { Duration::from_secs(20) },
         async {
             loop {
                 if renewed.elapsed() >= Duration::from_secs(3) {
@@ -1037,7 +1037,7 @@ async fn documents_acceptance_with_interruption(
             .await
             .unwrap();
         let mut heartbeat = std::time::Instant::now();
-        let child = tokio::time::timeout(Duration::from_secs(125), async {
+        let child = tokio::time::timeout(Duration::from_millis(child.budget.duration_ms.saturating_add(15_000)), async {
             loop {
                 if heartbeat.elapsed() >= Duration::from_secs(3) {
                     bridge(
@@ -1621,7 +1621,7 @@ async fn inspect_produced_plot(
         grant:ComponentAgentGrant{mode:ComponentAgentMode::Explain,session:Some(f.session.clone()),documents:vec![],files:vec![]},
         sources:vec![snapshot.selection]
     }).await.unwrap();
-    let done = tokio::time::timeout(Duration::from_secs(125), async {
+    let done = tokio::time::timeout(if real_model { Duration::from_millis(run.budget.duration_ms.saturating_add(15_000)) } else { Duration::from_secs(20) }, async {
         loop {
             if heartbeat.elapsed() >= Duration::from_secs(3) {
                 bridge(

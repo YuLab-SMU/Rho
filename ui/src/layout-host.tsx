@@ -13,7 +13,8 @@ import { Modal } from "./primitives";
 import { directions, PanelLayout, regionName } from "./layout-model";
 import type { Direction } from "./layout-model";
 import { Icon } from "./icons";
-import { renderBuiltinPanel } from "./builtin-panel-renderers";
+import { AskComponent } from "./panels/component-agent-panel";
+import { renderBuiltinPanel, componentProfile } from "./builtin-panel-renderers";
 export { PanelLayout, panelNames, defaultLayout } from "./layout-model";
 class PanelBoundary extends Component<
   { children: ReactNode },
@@ -161,6 +162,9 @@ export function LayoutHost({
           }}
           onRenderTabSet={(node, values) => {
             if (!(node instanceof TabSetNode)) return;
+            const selected = node.getSelectedNode();
+            const profile = selected instanceof TabNode ? componentProfile(selected.getComponent() ?? "") : undefined;
+            if (profile && selected) values.buttons.push(<AskComponent key="ask-component" profile={profile} viewId={selected.getId()} compact />);
             values.buttons.unshift(
               <button
                 key="collapse"
