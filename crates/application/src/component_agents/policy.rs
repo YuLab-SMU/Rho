@@ -188,6 +188,7 @@ pub(super) fn authorize_tool(
 ) -> Result<(), ApplicationError> {
     let denied = || invalid("Tool action exceeds the component request's authorization");
     match action {
+        ComponentToolAction::PreviousResult{..}=>return Err(denied()),
         ComponentToolAction::Rejected {
             capability,
             arguments_digest,

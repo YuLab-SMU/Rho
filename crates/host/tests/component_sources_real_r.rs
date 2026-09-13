@@ -231,7 +231,7 @@ async fn real_objects_packages_and_plot_sources_are_verified_without_new_operati
             host.clone(),
             context.clone(),
             root,
-            ComponentAgentStart {
+            ComponentAgentStart { continuation: None,
                 request_id: "with-sources".into(),
                 conversation_id: conversation.conversation_id,
                 conversation_version: conversation.version,

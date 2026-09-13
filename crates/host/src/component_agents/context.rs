@@ -337,7 +337,7 @@ pub(super) async fn prepare(
                 .ok_or_else(|| error("Context source is unavailable"))?,
         );
     }
-    let context = ComponentAgentContext { sources };
+    let context = ComponentAgentContext { sources, history: None };
     if images.len() > 2 || serde_json::to_vec(&context).map_err(error)?.len() > 64 * 1024 {
         return Err(ApplicationError::Budget(
             "Selected context exceeds the text/image budget".into(),

@@ -15,9 +15,10 @@ use tokio::sync::{Mutex, Semaphore};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 mod context;
+mod continuation;
 mod mutations;
-mod registry;
 mod recovery;
+mod registry;
 use registry::{RegisteredTool, registered_tools};
 
 fn now() -> u64 {
@@ -457,11 +458,13 @@ impl ComponentAgentService {
             .component_run_by_request(actor.scope(), &request.request_id)?
             .is_some()
         {
-            let original=self.owner.start(&actor, request, now())?.run;
-            let mut run=self.owner.observed_run(original);
+            let original = self.owner.start(&actor, request, now())?.run;
+            let mut run = self.owner.observed_run(original);
             if !run.state.is_terminal() && !self.live.lock().await.contains_key(&run.run_id) {
-                run.state=ComponentAgentRunState::Interrupted;
-                run.reason=Some("The original request has no live Host task; reconcile its tool records".into());
+                run.state = ComponentAgentRunState::Interrupted;
+                run.reason = Some(
+                    "The original request has no live Host task; reconcile its tool records".into(),
+                );
             }
             return Ok(run);
         }
@@ -501,7 +504,27 @@ impl ComponentAgentService {
             return Err(error("Assistant request exceeds 64 KiB"));
         }
         drop(_gate);
-        let prepared = context::prepare(&host, &context, project, &request).await?;
+        let mut prepared = context::prepare(&host, &context, project, &request).await?;
+        if let Some(reference) = &request.continuation {
+            let previous = self
+                .reconcile(&host, &context, project, &request.window, &reference.run_id)
+                .await?;
+            if previous
+                .recovery
+                .as_ref()
+                .is_none_or(|r| r.digest != reference.recovery_digest)
+            {
+                return Err(ApplicationError::Conflict);
+            }
+            self.validate_continued_targets(&host, &context, &request)
+                .await?;
+            prepared.context.history = Some(self.continuation_history(actor.scope(), &previous)?);
+            if serde_json::to_vec(&prepared.context).map_err(error)?.len() > 64 * 1024 {
+                return Err(error(
+                    "Continuation and selected sources exceed 64 KiB; reduce the selected sources",
+                ));
+            }
+        }
         let _gate = self.gate.lock().await;
         if self.closed.load(Ordering::SeqCst) {
             return Err(error("Component service is closing"));
@@ -737,7 +760,14 @@ impl ComponentRunPort for HostRunPort {
                 .owner
                 .store
                 .component_tools(&self.scope, &self.run.run_id)?;
-            let previous = tools.iter().find_map(|t| match &t.action {
+            let mut known = tools.clone();
+            for ancestor in self.owner.ancestor_runs(&self.scope, &current.run)? {
+                let recovered = ancestor.run.recovery.as_ref();
+                known.extend(self.owner.store.component_tools(&self.scope,&ancestor.run.run_id)?.into_iter().filter(|tool|
+                    matches!(&tool.action,ComponentToolAction::Invoke(i) if i.capability.id=="workspace.resume_queue")
+                    && recovered.is_some_and(|r|r.tools.iter().any(|entry|entry.receipt_id==tool.receipt.receipt_id && entry.state==ComponentRecoveryState::Confirmed))));
+            }
+            let previous = known.iter().find_map(|t| match &t.action {
                 ComponentToolAction::Invoke(old)
                     if old.capability.id == "workspace.resume_queue"
                         && old.arguments["pause_id"] == invocation.arguments["pause_id"] =>
@@ -749,7 +779,9 @@ impl ComponentRunPort for HostRunPort {
             if let Some(previous) = previous {
                 invocation.arguments = previous.arguments.clone();
             } else {
-                let owned = component_owned_operations(&tools)?;
+                let owned = self
+                    .owner
+                    .owned_operations(&self.scope, &current.run, &tools)?;
                 let session = current
                     .run
                     .request
@@ -785,8 +817,14 @@ impl ComponentRunPort for HostRunPort {
                     .await
                     .map_err(error)?
                     .ok_or_else(|| error("Original failed operation is unavailable"))?;
+                let ancestors = self.owner.ancestor_runs(&self.scope, &current.run)?;
+                let own_caller = original.operation.caller == self.context.caller
+                    || ancestors.iter().any(|r| {
+                        original.operation.caller.kind == CallerKind::Agent
+                            && original.operation.caller.id == format!("component:{}", r.run.run_id)
+                    });
                 if original.status != OperationStatus::Failed
-                    || original.operation.caller != self.context.caller
+                    || !own_caller
                     || original.operation.capability.id != "workspace.run_r"
                 {
                     return Err(error(
@@ -819,6 +857,45 @@ impl ComponentRunPort for HostRunPort {
             .ok_or(ApplicationError::NotFound)?;
         if component_digest(&tool.action)? != component_digest(&admission.tool.action)? {
             return Err(error("Tool ticket differs from its durable intent"));
+        }
+        if let ComponentToolAction::PreviousResult {
+            run_id, receipt_id, ..
+        } = &tool.action
+        {
+            if admission.repeated {
+                return tool
+                    .receipt
+                    .result
+                    .ok_or_else(|| error("Previous result observation is incomplete"));
+            }
+            self.owner.check_tool_dispatch(
+                &self.scope,
+                &self.run.run_id,
+                &tool.receipt.receipt_id,
+                now(),
+            )?;
+            let (source, original) =
+                self.owner
+                    .previous_tool(&self.scope, &self.run, run_id, receipt_id)?;
+            let value = continuation::previous_result(
+                &self.host,
+                &self.context,
+                &self.scope.project,
+                &source.run,
+                &original,
+            )
+            .await?;
+            self.owner.record_tool(
+                &self.scope,
+                &self.run.run_id,
+                &tool.receipt.receipt_id,
+                ComponentToolUpdate::Resolved {
+                    result: value.clone(),
+                    evidence: original.receipt.evidence.clone(),
+                },
+                now(),
+            )?;
+            return Ok(value);
         }
         if matches!(tool.action, ComponentToolAction::Rejected { .. }) {
             return tool

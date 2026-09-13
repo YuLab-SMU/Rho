@@ -466,7 +466,7 @@ impl Fixture {
                 ComponentAgentProfile::Project,
             )
             .unwrap();
-        ComponentAgentStart {
+        ComponentAgentStart { continuation: None,
             request_id: "user-request".into(),
             conversation_id: conversation.conversation_id,
             conversation_version: conversation.version,

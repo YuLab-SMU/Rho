@@ -5,8 +5,8 @@ Updated: 2026-09-12. This is the single current status summary. Git retains hist
 ## Built-in component Agent implementation
 
 The [implementation plan](BUILTIN-AGENT-PLAN.md) is authorized. P0, the P1 backend,
-P2 source/context access, P3 document/R execution and the P4 reconciliation/takeover
-foundation are implemented.
+P2 source/context access, P3 document/R execution and the P4 reconciliation, takeover and
+explicit Continue backend are implemented.
 The optional `rho-agents` crate uses pinned Rig 0.42 through Application ports;
 Host composes it with the existing scientific owners. No replacement scientific
 gateway or external Agent-provider variant was introduced.
@@ -56,6 +56,12 @@ approve this interaction or establish its visual quality.
   tasks. Orphan interruption and controller replacement commit atomically, preserving
   the user draft and original run/window identities. Old-window draft writes, Stop
   and late model text remain fenced; late native facts can still be retained.
+- Explicit Continue binds a terminal parent and current recovery digest. Host
+  rechecks native records and targets; Application prevents authorization expansion,
+  changed document/session targets and further writes with unresolved mutations.
+  Confirmed ancestor actions read their original results instead of executing again.
+  History preserves user requests, labels partial text/results and shares the 64 KiB
+  context limit. A fresh Start remains a new explicit action that can repeat work.
 - Known-tool argument format failures are durable non-executable records. Rig's
   Skip hook returns bounded schema feedback without calling the tool body. These
   attempts consume budgets; hidden-target overrides, unknown tools, storage
@@ -88,6 +94,17 @@ dispatch; bounded format-correction behavior now has a real Rig/HTTP regression.
 These are individual acceptance runs, not throughput guarantees.
 
 Current evidence:
+- Continue policy tests cover required reconciliation, stale targets, unresolved
+  mutations and document edit/save version chains. Real R verifies repeated Continue
+  with a missing original result acknowledgement, unchanged execution count, and
+  intentional execution from a fresh request. Scoped queue Resume also reuses its
+  confirmed ancestor result. The real model continued with one model call, zero
+  tools and zero new mutations, citing the original R operation; R remained at one
+  increment. Evidence: `target/component-continue-*.log`. Final validation passed 21 SQLite
+  tests, 13 Host cases plus recovery/takeover, six real-R cases, selected Clippy
+  with the documented Host style exceptions, contract generation/client build/check
+  and the main build. Continue is available through Start.continuation in the
+  authenticated backend; the new Studio interface is still pending review.
 - P4 passed 18 SQLite cases, the no-runtime orphan/takeover Host test, 13 Host
   regressions and five real-R cases. Recovery finds an original successful R result
   despite missing acceptance/result/final application acknowledgements; R still
@@ -124,8 +141,7 @@ no source-wide suppression has been introduced. Evidence: `target/component-repa
 and `target/component-repair-clippy.log`.
 
 Outstanding: Paper review and seven usable Studio entrances; produced-plot
-acceptance; explicit Continue using fresh targets and reconciled history, further
-crash/final-store failure handling,
+acceptance; further crash/final-store failure handling,
 multiwindow/resource stress; and P5 complete scientific, workspace and performance
 acceptance. The P0 standalone binary size was only a diagnostic measurement; it
 does not establish the shipped application overhead. See

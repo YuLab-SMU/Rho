@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 mod engine;
 mod policy;
 mod recovery;
+mod continuation;
 pub use engine::*;
 pub use policy::{component_query_allowed, validate_component_grant, validate_component_model};
 
@@ -84,6 +85,7 @@ pub struct StoredComponentRun {
 #[serde(tag = "kind", content = "request", rename_all = "snake_case")]
 pub enum ComponentToolAction {
     Query(QueryRequest),
+    PreviousResult { capability: CapabilityRef, run_id: String, receipt_id: String },
     Invoke(Invocation),
     Control(ApplicationCommandRequest),
     /// A rejected model argument attempt; this variant has no native dispatch.
@@ -99,7 +101,7 @@ impl ComponentToolAction {
             Self::Query(q) => &q.capability.id,
             Self::Invoke(i) => &i.capability.id,
             Self::Control(_) => "application.control",
-            Self::Rejected { capability, .. } => &capability.id,
+            Self::Rejected { capability, .. } | Self::PreviousResult { capability, .. } => &capability.id,
         }
     }
     pub fn mutation(&self) -> bool {
@@ -109,7 +111,7 @@ impl ComponentToolAction {
         match self {
             Self::Invoke(i) => i.client_request_id = id.into(),
             Self::Control(c) => c.request_id = id.into(),
-            Self::Query(_) | Self::Rejected { .. } => {}
+            Self::Query(_) | Self::Rejected { .. } | Self::PreviousResult { .. } => {}
         }
     }
 }
@@ -663,6 +665,7 @@ impl ComponentAgentOwner {
             ));
         }
         validate_component_grant(conversation.profile, &request.grant)?;
+        self.validate_continuation(&actor.scope, &request)?;
         let settings = self.store.component_settings(&actor.scope)?;
         if !settings.enabled {
             return Err(invalid("Component assistant is disabled"));
@@ -809,20 +812,22 @@ impl ComponentAgentOwner {
                 serde_json::from_value(invocation.arguments["only_operation_ids"].clone())
                     .map_err(storage)?;
             if allowed.is_empty()
-                || !allowed.is_subset(&component_owned_operations(&previous_tools)?)
+                || !allowed.is_subset(&self.owned_operations(scope,&run.run,&previous_tools)?)
             {
                 return Err(invalid(
                     "Queue resume must be restricted to this run's recorded operations",
                 ));
             }
         }
+        let ancestors=self.ancestor_runs(scope,&run.run)?;
+        let mut prior_tools=Vec::new();
+        for ancestor in &ancestors {
+            for tool in self.store.component_tools(scope,&ancestor.run.run_id)? {prior_tools.push((ancestor,tool));}
+        }
         let mut semantic_action = action.clone();
         if let ComponentToolAction::Control(command) = &mut semantic_action
             && let ApplicationAction::EditDocument { document, .. } = &mut command.action
-            && let Some(grant) = run
-                .run
-                .request
-                .grant
+            && let Some(grant) = ancestors.last().map_or(&run.run.request.grant,|r|&r.run.request.grant)
                 .documents
                 .iter()
                 .find(|grant| grant.document.document_id == document.document_id)
@@ -835,8 +840,17 @@ impl ComponentAgentOwner {
             | ApplicationAction::RunSelection { document } = &mut command.action
         {
             *document = saved_document_identity(document, &previous_tools)?;
+            *document = self.prior_saved_identity(scope,document, &ancestors)?;
         }
         let digest = component_digest(&semantic_action)?;
+        if action.mutation() {
+            if let Some((ancestor,previous))=prior_tools.iter().find(|(ancestor,tool)|
+                tool.receipt.mutation && tool.receipt.action_digest==digest
+                && ancestor.run.recovery.as_ref().is_some_and(|r|r.tools.iter().any(|entry|entry.receipt_id==tool.receipt.receipt_id && entry.state==ComponentRecoveryState::Confirmed))) {
+                action=ComponentToolAction::PreviousResult {capability:CapabilityRef::new(action.capability(),1).map_err(|e|invalid(e.to_string()))?,
+                    run_id:ancestor.run.run_id.clone(),receipt_id:previous.receipt.receipt_id.clone()};
+            }
+        }
         for previous in &previous_tools {
             if previous
                 .calls

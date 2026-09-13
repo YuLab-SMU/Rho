@@ -140,9 +140,29 @@ impl Fixture {
                 })
             },
         );
-        let application_context = registration.context;
+        let mut application_context = registration.context;
         let bridge = registration.session;
         let window = bridge.window.clone();
+        let expected = application_context.version.clone();
+        application_context.version = uuid::Uuid::new_v4().to_string();
+        application_context.workspace_instance_id = Some(session.workspace_instance_id.clone());
+        application_context.native_session_id = Some(session.session_id.clone());
+        host.dispatch(
+            &context,
+            HostRequest::ApplicationBridge(ApplicationBridgeRequest::Sync {
+                session: bridge.clone(),
+                sync_id: uuid::Uuid::new_v4().to_string(),
+                changes: ApplicationChanges {
+                    context: Some(ApplicationContextUpdate {
+                        expected_version: expected,
+                        context: application_context.clone(),
+                    }),
+                    ..Default::default()
+                },
+            }),
+        )
+        .await
+        .unwrap();
         let credential = service
             .put_session_key(&host, &context, &project, &window, "fixture-only".into())
             .unwrap();
@@ -214,6 +234,7 @@ impl Fixture {
                 self.context.clone(),
                 &self.project,
                 ComponentAgentStart {
+                    continuation: None,
                     request_id: "run-request".into(),
                     conversation_id: conversation.conversation_id,
                     conversation_version: conversation.version,
@@ -362,6 +383,15 @@ impl ComponentAgentEngine for DocumentEngine {
     async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome {
         let result = async {
             let turn = request.port.begin_model_call().await?;
+            if request.run.request.continuation.is_some() {
+                let history=request.run.context.as_ref().unwrap().history.as_ref().unwrap();
+                let resume=history["tools"].as_array().unwrap().iter().find(|t|t["capability"]=="workspace.resume_queue").unwrap();
+                let pause=resume["result"]["operation"]["normalized_arguments"]["pause_id"].clone();
+                let ticket=request.port.prepare_tool(turn,"prior-resume","workspace_resume_queue",json!({"pause_id":pause})).await?;
+                let result=request.port.execute_tool(ticket).await?;
+                if result["executed_again"]!=false || result["result"]["status"]!="succeeded" {return Err(ApplicationError::InvalidInput(format!("Prior resume was not reused: {result}")));}
+                return Ok(());
+            }
             if self.repair {
                 let first=request.port.prepare_tool(turn,"first-run","application_run_file",json!({"document_id":"analysis"})).await?;
                 let original=first.tool.receipt.client_request_id.clone();
@@ -451,28 +481,34 @@ async fn sync_document(f: &Fixture, old: &ApplicationDocument, new: &Application
 #[tokio::test]
 #[ignore = "requires real Ark/R; captured component document acceptance"]
 async fn captured_document_edit_save_and_run_follow_confirmed_versions() {
-    documents_acceptance(false, false).await;
+    documents_acceptance(false, false, false).await;
 }
 
 #[tokio::test]
 #[ignore = "requires explicitly configured real model and Ark/R"]
 async fn real_model_captured_document_edit_save_and_run() {
-    documents_acceptance(true, false).await;
+    documents_acceptance(true, false, false).await;
 }
 
 #[tokio::test]
 #[ignore = "requires real Ark/R; failed captured execution and repair"]
 async fn captured_document_failure_is_not_replayed_and_repair_uses_its_saved_version() {
-    documents_acceptance(false, true).await;
+    documents_acceptance(false, true, false).await;
 }
 
 #[tokio::test]
 #[ignore = "requires explicitly configured real model and Ark/R"]
 async fn real_model_captured_document_failure_and_repair() {
-    documents_acceptance(true, true).await;
+    documents_acceptance(true, true, false).await;
 }
 
-async fn documents_acceptance(real_model: bool, repair: bool) {
+#[tokio::test]
+#[ignore = "requires explicitly configured real model and Ark/R"]
+async fn real_model_continues_original_document_result() {
+    documents_acceptance(true, false, true).await;
+}
+
+async fn documents_acceptance(real_model: bool, repair: bool, continue_model: bool) {
     let f = Fixture::with_documents("", false, true, real_model, repair).await;
     let initial = if repair {
         format!("{REPAIR_LINE}counter <- counter + 1L\ninvisible(counter)\n")
@@ -545,7 +581,7 @@ async fn documents_acceptance(real_model: bool, repair: bool) {
             f.host.clone(),
             f.context.clone(),
             &f.project,
-            ComponentAgentStart {
+            ComponentAgentStart { continuation: None,
                 request_id: "document-request".into(),
                 conversation_id: conversation.conversation_id,
                 conversation_version: conversation.version,
@@ -861,16 +897,174 @@ async fn documents_acceptance(real_model: bool, repair: bool) {
         mutations.len(),
         started.elapsed().as_millis()
     );
+    if continue_model {
+        let parent = f
+            .service
+            .reconcile(&f.host, &f.context, &f.project, &f.window, &run.run_id)
+            .await
+            .unwrap();
+        let mut request = run.request.clone();
+        request.request_id = "real-model-continue".into();
+        request.text="Continue with a concise confirmation of the prior saved and executed result. Cite the original R execution operation ID from the prior receipts. Do not edit the document or execute any code again.".into();
+        request.conversation_version = f
+            .service
+            .conversation(&f.host, &f.context, &f.project, &request.conversation_id)
+            .unwrap()
+            .version;
+        request.grant.documents[0].document = doc_ref(&document);
+        request.sources = vec![];
+        request.continuation = Some(ComponentContinuation {
+            run_id: run.run_id.clone(),
+            recovery_digest: parent.recovery.unwrap().digest,
+        });
+        let child = f
+            .service
+            .start(f.host.clone(), f.context.clone(), &f.project, request)
+            .await
+            .unwrap();
+        let mut heartbeat = std::time::Instant::now();
+        let child = tokio::time::timeout(Duration::from_secs(125), async {
+            loop {
+                if heartbeat.elapsed() >= Duration::from_secs(3) {
+                    bridge(
+                        &f,
+                        ApplicationBridgeRequest::Renew {
+                            session: f.bridge.clone(),
+                        },
+                    )
+                    .await;
+                    heartbeat = std::time::Instant::now();
+                }
+                let observed = f
+                    .service
+                    .run(&f.host, &f.context, &f.project, &child.run_id)
+                    .unwrap();
+                if observed.state.is_terminal() {
+                    break observed;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            child.state,
+            ComponentAgentRunState::Completed,
+            "{:?}",
+            child.reason
+        );
+        let reused = f
+            .service
+            .tools(&f.host, &f.context, &f.project, &child.run_id)
+            .unwrap();
+        assert!(reused.iter().all(|t| !t.mutation));
+        let original_operation = mutations
+            .iter()
+            .find_map(|t| {
+                t.result
+                    .as_ref()
+                    .and_then(|r| r["run"]["operation_id"].as_str())
+            })
+            .unwrap();
+        let events = f
+            .service
+            .events(&f.host, &f.context, &f.project, &child.run_id, 0, 128)
+            .unwrap();
+        let answer = events
+            .events
+            .into_iter()
+            .filter_map(|e| match e.content {
+                ComponentAgentEventContent::Text { text } => Some(text),
+                _ => None,
+            })
+            .collect::<String>();
+        assert!(
+            answer.contains(original_operation),
+            "Continue did not cite the original R record: {answer}"
+        );
+        let proof = f
+            .host
+            .invoke(
+                &f.context,
+                invoke(
+                    "verify-real-continue",
+                    "stopifnot(counter == 1L); invisible(NULL)",
+                ),
+            )
+            .await
+            .unwrap();
+        assert_eq!(proof.status, OperationStatus::Succeeded);
+        println!(
+            "real continuation: model_calls={}, tool_calls={}, new_mutations=0",
+            child.model_calls, child.tool_calls
+        );
+    }
+    if repair && !real_model {
+        let parent = f
+            .service
+            .reconcile(&f.host, &f.context, &f.project, &f.window, &run.run_id)
+            .await
+            .unwrap();
+        let mut request = run.request.clone();
+        request.request_id = "continue-resume".into();
+        request.conversation_version = f
+            .service
+            .conversation(&f.host, &f.context, &f.project, &request.conversation_id)
+            .unwrap()
+            .version;
+        request.grant.documents[0].document = doc_ref(&document);
+        request.sources = vec![];
+        request.continuation = Some(ComponentContinuation {
+            run_id: run.run_id.clone(),
+            recovery_digest: parent.recovery.unwrap().digest,
+        });
+        let child = f
+            .service
+            .start(f.host.clone(), f.context.clone(), &f.project, request)
+            .await
+            .unwrap();
+        let child = f.terminal(&child.run_id).await;
+        assert_eq!(
+            child.state,
+            ComponentAgentRunState::Completed,
+            "{:?}",
+            child.reason
+        );
+        assert!(
+            f.service
+                .tools(&f.host, &f.context, &f.project, &child.run_id)
+                .unwrap()
+                .iter()
+                .all(|t| !t.mutation)
+        );
+    }
     f.service.close().await;
-    let replacement=ComponentAgentService::new(Arc::new(ApplicationStore::open(&f._temp.path().join("components.sqlite")).unwrap()));
-    let observed=replacement.reconcile(&f.host,&f.context,&f.project,&f.window,&run.run_id).await.unwrap();
-    assert_eq!(observed.state,ComponentAgentRunState::Completed);
-    let recovery=observed.recovery.unwrap();
-    assert_eq!(recovery.unresolved_mutations,0);
-    assert!(recovery.tools.iter().all(|t|t.state==ComponentRecoveryState::Confirmed));
-    assert_eq!(recovery.tools.iter().flat_map(|t|t.operations.iter()).filter(|op|op.status==OperationStatus::Failed).count(),usize::from(repair));
+    let replacement = ComponentAgentService::new(Arc::new(
+        ApplicationStore::open(&f._temp.path().join("components.sqlite")).unwrap(),
+    ));
+    let observed = replacement
+        .reconcile(&f.host, &f.context, &f.project, &f.window, &run.run_id)
+        .await
+        .unwrap();
+    assert_eq!(observed.state, ComponentAgentRunState::Completed);
+    let recovery = observed.recovery.unwrap();
+    assert_eq!(recovery.unresolved_mutations, 0);
+    assert!(
+        recovery
+            .tools
+            .iter()
+            .all(|t| t.state == ComponentRecoveryState::Confirmed)
+    );
+    assert_eq!(
+        recovery
+            .tools
+            .iter()
+            .flat_map(|t| t.operations.iter())
+            .filter(|op| op.status == OperationStatus::Failed)
+            .count(),
+        usize::from(repair)
+    );
     replacement.close().await;
-
 }
 
 #[tokio::test]
@@ -967,4 +1161,169 @@ async fn orphan_reconciliation_finds_the_original_r_result_without_reexecuting()
         OperationStatus::Succeeded
     );
     replacement.close().await;
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; explicit continuation must not replay completed code"]
+async fn continue_reuses_prior_r_result_but_a_fresh_request_can_run_again() {
+    let f = Fixture::new("counter <- counter + 1L; invisible(counter)", false).await;
+    let first = f.start().await;
+    let completed = f.terminal(&first.run_id).await;
+    assert_eq!(completed.state, ComponentAgentRunState::Completed);
+    let store = ApplicationStore::open(&f._temp.path().join("components.sqlite")).unwrap();
+    let scope = ApplicationScope {
+        project: f.project.clone(),
+        principal: serde_json::to_string(f.context.principal()).unwrap(),
+    };
+    let stored = store.component_run(&scope, &first.run_id).unwrap().unwrap();
+    let mut lost = store.component_tools(&scope, &first.run_id).unwrap();
+    lost[0].receipt.result = None;
+    lost[0].receipt.operation_id = None;
+    lost[0].receipt.phase = ComponentToolPhase::Intent;
+    let mut saved = store
+        .component_conversation(&scope, &first.request.conversation_id)
+        .unwrap()
+        .unwrap();
+    let expected = saved.version;
+    saved.version += 1;
+    store
+        .commit_component(
+            &scope,
+            ComponentWrite {
+                expected_version: Some(expected),
+                conversation: &saved,
+                run: Some(&stored),
+                tools: &lost,
+                events: &[],
+            },
+        )
+        .unwrap();
+    let reconciled = f
+        .service
+        .reconcile(&f.host, &f.context, &f.project, &f.window, &first.run_id)
+        .await
+        .unwrap();
+    let conversation = f
+        .service
+        .conversation(
+            &f.host,
+            &f.context,
+            &f.project,
+            &first.request.conversation_id,
+        )
+        .unwrap();
+    let mut request = first.request.clone();
+    request.request_id = "explicit-continue".into();
+    request.conversation_version = conversation.version;
+    request.continuation = Some(ComponentContinuation {
+        run_id: first.run_id.clone(),
+        recovery_digest: reconciled.recovery.unwrap().digest,
+    });
+    let second = f
+        .service
+        .start(
+            f.host.clone(),
+            f.context.clone(),
+            &f.project,
+            request.clone(),
+        )
+        .await
+        .unwrap();
+    let done = f.terminal(&second.run_id).await;
+    assert_eq!(
+        done.state,
+        ComponentAgentRunState::Completed,
+        "{:?}",
+        done.reason
+    );
+    let repeated = f
+        .service
+        .start(f.host.clone(), f.context.clone(), &f.project, request)
+        .await
+        .unwrap();
+    assert_eq!(repeated.run_id, second.run_id);
+    let results = f.results.lock().unwrap().clone();
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[1]["executed_again"], false);
+    assert_eq!(results[1]["result"], results[0]);
+    assert!(
+        done.context.as_ref().unwrap().history.as_ref().unwrap()["tools"]
+            .as_array()
+            .is_some_and(|t| !t.is_empty())
+    );
+    let check = f
+        .host
+        .invoke(
+            &f.context,
+            invoke(
+                "continued-once",
+                "stopifnot(counter == 1L); invisible(NULL)",
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(check.status, OperationStatus::Succeeded);
+
+    let observed = f
+        .service
+        .reconcile(&f.host, &f.context, &f.project, &f.window, &second.run_id)
+        .await
+        .unwrap();
+    let mut third = second.request.clone();
+    third.request_id = "continue-again".into();
+    third.conversation_version = f
+        .service
+        .conversation(&f.host, &f.context, &f.project, &third.conversation_id)
+        .unwrap()
+        .version;
+    third.continuation = Some(ComponentContinuation {
+        run_id: second.run_id.clone(),
+        recovery_digest: observed.recovery.unwrap().digest,
+    });
+    let third = f
+        .service
+        .start(f.host.clone(), f.context.clone(), &f.project, third)
+        .await
+        .unwrap();
+    let third = f.terminal(&third.run_id).await;
+    assert_eq!(
+        third.state,
+        ComponentAgentRunState::Completed,
+        "{:?}",
+        third.reason
+    );
+    assert_eq!(
+        f.results.lock().unwrap().last().unwrap()["previous_run_id"],
+        first.run_id
+    );
+    let mut fresh = first.request.clone();
+    fresh.request_id = "new-explicit-action".into();
+    fresh.continuation = None;
+    fresh.conversation_version = f
+        .service
+        .conversation(&f.host, &f.context, &f.project, &fresh.conversation_id)
+        .unwrap()
+        .version;
+    let next = f
+        .service
+        .start(f.host.clone(), f.context.clone(), &f.project, fresh)
+        .await
+        .unwrap();
+    assert_eq!(
+        f.terminal(&next.run_id).await.state,
+        ComponentAgentRunState::Completed
+    );
+    let check = f
+        .host
+        .invoke(
+            &f.context,
+            invoke(
+                "fresh-runs-again",
+                "stopifnot(counter == 2L); invisible(NULL)",
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(check.status, OperationStatus::Succeeded);
+    f.service.close().await;
 }

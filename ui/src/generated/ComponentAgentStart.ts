@@ -2,5 +2,6 @@
 import type { AgentContextSelection } from "./AgentContextSelection";
 import type { ApplicationWindowRef } from "./ApplicationWindowRef";
 import type { ComponentAgentGrant } from "./ComponentAgentGrant";
+import type { ComponentContinuation } from "./ComponentContinuation";
 
-export type ComponentAgentStart = { request_id: string, conversation_id: string, conversation_version: number, window: ApplicationWindowRef, model_settings_version: number, text: string, grant: ComponentAgentGrant, sources: Array<AgentContextSelection>, };
+export type ComponentAgentStart = { continuation?: ComponentContinuation, request_id: string, conversation_id: string, conversation_version: number, window: ApplicationWindowRef, model_settings_version: number, text: string, grant: ComponentAgentGrant, sources: Array<AgentContextSelection>, };

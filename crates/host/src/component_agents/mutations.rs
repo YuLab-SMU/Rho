@@ -461,7 +461,7 @@ impl Work {
         }
     }
 }
-fn present(record: &OperationRecord) -> Result<Value, ApplicationError> {
+pub(super) fn present(record: &OperationRecord) -> Result<Value, ApplicationError> {
     let value = serde_json::to_value(record).map_err(error)?;
     if serde_json::to_vec(&value).map_err(error)?.len() <= 48 * 1024 {
         return Ok(value);

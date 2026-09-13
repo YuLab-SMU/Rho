@@ -106,6 +106,9 @@ pub struct ComponentAgentConversation {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentAgentStart {
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    #[ts(optional)]
+    pub continuation: Option<ComponentContinuation>,
     pub request_id: String,
     pub conversation_id: String,
     pub conversation_version: u64,
@@ -114,6 +117,13 @@ pub struct ComponentAgentStart {
     pub text: String,
     pub grant: ComponentAgentGrant,
     pub sources: Vec<AgentContextSelection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentContinuation {
+    pub run_id: String,
+    pub recovery_digest: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -230,6 +240,9 @@ pub struct ComponentSourceSnapshot {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct ComponentAgentContext {
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    #[ts(optional)]
+    pub history: Option<serde_json::Value>,
     pub sources: Vec<ComponentSourceSnapshot>,
 }
 

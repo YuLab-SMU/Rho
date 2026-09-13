@@ -137,7 +137,7 @@ impl ComponentAgentService {
                 note: None,
             };
             match &tool.action {
-                ComponentToolAction::Query(_) | ComponentToolAction::Rejected { .. } => {
+                ComponentToolAction::Query(_) | ComponentToolAction::Rejected { .. } | ComponentToolAction::PreviousResult { .. } => {
                     if tool.receipt.phase == ComponentToolPhase::Resolved {
                         entry.state = ComponentRecoveryState::Confirmed;
                     } else {

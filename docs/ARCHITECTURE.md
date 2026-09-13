@@ -175,6 +175,23 @@ Old-window writes/stops and late model text remain fenced, while original native
 facts can still be recorded. Continue must use these observations and fresh
 target validation; the reconciliation/takeover commands alone do not continue work.
 
+Explicit Continue uses `ComponentAgentStart.continuation` with the previous run ID
+and observed recovery digest. Host rechecks the original owners; Application checks
+the same conversation, terminal parent, unchanged digest and non-expanding grant.
+Write continuation requires the original window/session, confirmed document version
+lineage and current owner targets. Unresolved mutations prevent further writes; an
+explicit Explain request can retain and describe their uncertainty.
+
+Continuation history retains user requests in a bounded ancestry (at most 32 runs),
+plus labeled partial assistant text, compact tool results and recovery references.
+Combined history and selected sources must fit the existing context limit; user
+request constraints are not silently truncated. Matching confirmed ancestor actions
+become non-executable previous-result reads. They use original owner identities and
+cannot invoke a scientific operation, apply an edit or resume a queue again. Queue
+resume can reference confirmed ancestor failures but retains its atomic operation
+set fence. A fresh Start without a continuation reference is a new explicit action
+and can intentionally repeat work.
+
 Settings persist only non-secret configuration and explicit environment/session
 credential references. Remote endpoints require HTTPS; loopback HTTP is explicit.
 Endpoint credentials in URLs are rejected. A disabled or unconfigured assistant

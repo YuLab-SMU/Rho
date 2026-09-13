@@ -68,6 +68,7 @@ impl Fixture {
             .create(&self.actor, conversation, profile, 2)
             .unwrap();
         ComponentAgentStart {
+            continuation: None,
             request_id: format!("start-{}", conversation.conversation_id),
             conversation_id: conversation.conversation_id,
             conversation_version: conversation.version,
@@ -1180,4 +1181,320 @@ fn reconciliation_metadata_is_bounded_idempotent_and_retained_across_reopen() {
             .phase,
         ComponentToolPhase::Intent
     );
+}
+
+#[test]
+fn continuation_requires_recovery_and_reuses_confirmed_prior_mutations() {
+    let f = Fixture::new();
+    let first = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let original = f
+        .owner
+        .admit_tool(f.actor.scope(), &first, 1, "run", mutation(), 6)
+        .unwrap();
+    let operation = OperationId::new("original-r").unwrap();
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &first,
+            &original.tool.receipt.receipt_id,
+            ComponentToolUpdate::Accepted {
+                operation_id: Some(operation.clone()),
+                application_request_id: None,
+            },
+            7,
+        )
+        .unwrap();
+    f.owner
+        .record_tool(
+            f.actor.scope(),
+            &first,
+            &original.tool.receipt.receipt_id,
+            ComponentToolUpdate::Resolved {
+                result: json!({"status":"succeeded"}),
+                evidence: vec![],
+            },
+            8,
+        )
+        .unwrap();
+    f.owner
+        .finish(
+            f.actor.scope(),
+            &first,
+            ComponentAgentRunState::Interrupted,
+            Some("Model response lost".into()),
+            9,
+        )
+        .unwrap();
+    let previous = f
+        .store
+        .component_run(f.actor.scope(), &first)
+        .unwrap()
+        .unwrap();
+    let mut request = previous.run.request.clone();
+    request.request_id = "continued".into();
+    request.conversation_version = f
+        .store
+        .component_conversation(f.actor.scope(), "conversation")
+        .unwrap()
+        .unwrap()
+        .version;
+    request.continuation = Some(ComponentContinuation {
+        run_id: first.clone(),
+        recovery_digest: "not-reconciled".into(),
+    });
+    assert!(f.owner.start(&f.actor, request.clone(), 10).is_err());
+    let observed = f
+        .owner
+        .record_recovery(
+            f.actor.scope(),
+            &first,
+            vec![ComponentRecoveredTool {
+                receipt_id: original.tool.receipt.receipt_id.clone(),
+                state: ComponentRecoveryState::Confirmed,
+                application_request_id: None,
+                application_state: None,
+                operations: vec![ComponentRecoveredOperation {
+                    operation_id: operation,
+                    status: OperationStatus::Succeeded,
+                }],
+                documents: vec![],
+                note: None,
+            }],
+            11,
+        )
+        .unwrap();
+    request.continuation.as_mut().unwrap().recovery_digest = observed.recovery.unwrap().digest;
+    request.conversation_version = f
+        .store
+        .component_conversation(f.actor.scope(), "conversation")
+        .unwrap()
+        .unwrap()
+        .version;
+    let mut retargeted = request.clone();
+    retargeted.grant.session.as_mut().unwrap().session_id = "different-r".into();
+    assert!(f.owner.start(&f.actor, retargeted, 12).is_err());
+    let continued = f.owner.start(&f.actor, request.clone(), 12).unwrap().run;
+    assert!(f.owner.start(&f.actor, request, 13).unwrap().repeated);
+    f.owner
+        .claim(f.actor.scope(), &continued.run.run_id, 14)
+        .unwrap();
+    f.owner
+        .begin_model_call(f.actor.scope(), &continued.run.run_id, 15)
+        .unwrap();
+    let prior = f
+        .owner
+        .admit_tool(
+            f.actor.scope(),
+            &continued.run.run_id,
+            1,
+            "repeat-original",
+            mutation(),
+            16,
+        )
+        .unwrap();
+    assert!(!prior.tool.receipt.mutation);
+    assert!(
+        matches!(prior.tool.action,ComponentToolAction::PreviousResult{run_id,..} if run_id==first)
+    );
+}
+
+#[test]
+fn continuation_cannot_expand_write_scope_or_ignore_unresolved_mutations() {
+    let f = Fixture::new();
+    let first = f.running(ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
+    let tool = f
+        .owner
+        .admit_tool(f.actor.scope(), &first, 1, "pending", mutation(), 6)
+        .unwrap();
+    f.owner
+        .finish(
+            f.actor.scope(),
+            &first,
+            ComponentAgentRunState::Interrupted,
+            None,
+            7,
+        )
+        .unwrap();
+    let observed = f
+        .owner
+        .record_recovery(
+            f.actor.scope(),
+            &first,
+            vec![ComponentRecoveredTool {
+                receipt_id: tool.tool.receipt.receipt_id,
+                state: ComponentRecoveryState::Uncertain,
+                application_request_id: None,
+                application_state: None,
+                operations: vec![],
+                documents: vec![],
+                note: Some("Unconfirmed".into()),
+            }],
+            8,
+        )
+        .unwrap();
+    let mut request = observed.request.clone();
+    request.request_id = "continue-pending".into();
+    request.conversation_version = f
+        .store
+        .component_conversation(f.actor.scope(), "conversation")
+        .unwrap()
+        .unwrap()
+        .version;
+    request.continuation = Some(ComponentContinuation {
+        run_id: first,
+        recovery_digest: observed.recovery.unwrap().digest,
+    });
+    assert!(f.owner.start(&f.actor, request.clone(), 9).is_err());
+    // Explicitly switching to explanation can retain the uncertainty without granting writes.
+    request.grant.mode = ComponentAgentMode::Explain;
+    assert!(f.owner.start(&f.actor, request, 10).is_ok());
+}
+
+#[test]
+fn continued_document_versions_follow_confirmed_edits_and_saves_without_reapplying_them() {
+    let f = Fixture::new();
+    f.configure();
+    let reference = |version: &str| ApplicationDocumentRef {
+        document_id: "doc".into(),
+        document_version: version.into(),
+        selection_version: "selection".into(),
+    };
+    let mut request = f.request(
+        "conversation",
+        ComponentAgentProfile::Documents,
+        ComponentAgentMode::Edit,
+    );
+    request.grant.documents = vec![ComponentDocumentGrant {
+        document: reference("v1"),
+        allow_save: true,
+        path: Some("analysis.R".into()),
+    }];
+    let run = f.owner.start(&f.actor, request, 3).unwrap().run.run;
+    f.owner.claim(f.actor.scope(), &run.run_id, 4).unwrap();
+    f.owner
+        .begin_model_call(f.actor.scope(), &run.run_id, 5)
+        .unwrap();
+    let action = |document: ApplicationDocumentRef, save: bool| {
+        ComponentToolAction::Control(ApplicationCommandRequest {
+            window: f.actor.window().clone(),
+            request_id: "prepared".into(),
+            execution_target: None,
+            action: if save {
+                ApplicationAction::Save {
+                    document,
+                    target_path: Some("analysis.R".into()),
+                }
+            } else {
+                ApplicationAction::EditDocument {
+                    document,
+                    edits: vec![ApplicationTextEdit {
+                        from: 0,
+                        to: 0,
+                        insert: "# edit\n".into(),
+                    }],
+                }
+            },
+        })
+    };
+    let mut history = vec![];
+    for (call, from, to, save) in [("edit", "v1", "v2", false), ("save", "v2", "v3", true)] {
+        let tool = f
+            .owner
+            .admit_tool(
+                f.actor.scope(),
+                &run.run_id,
+                1,
+                call,
+                action(reference(from), save),
+                6,
+            )
+            .unwrap()
+            .tool;
+        f.owner
+            .record_tool(
+                f.actor.scope(),
+                &run.run_id,
+                &tool.receipt.receipt_id,
+                ComponentToolUpdate::Accepted {
+                    operation_id: None,
+                    application_request_id: Some(tool.receipt.client_request_id.clone()),
+                },
+                7,
+            )
+            .unwrap();
+        let result = json!({"window":f.actor.window(),"request_id":tool.receipt.client_request_id,"actor":{"kind":"agent","id":format!("component:{}",run.run_id)},
+            "state":"applied","created_at_ms":6,"claim_expires_at_ms":30006,"applied_documents":[reference(to)],"save_synchronized":save});
+        f.owner
+            .record_tool(
+                f.actor.scope(),
+                &run.run_id,
+                &tool.receipt.receipt_id,
+                ComponentToolUpdate::Resolved {
+                    result,
+                    evidence: vec![],
+                },
+                8,
+            )
+            .unwrap();
+        history.push(ComponentRecoveredTool {
+            receipt_id: tool.receipt.receipt_id,
+            state: ComponentRecoveryState::Confirmed,
+            application_request_id: Some(tool.receipt.client_request_id),
+            application_state: Some(ApplicationCommandState::Applied),
+            operations: vec![],
+            documents: vec![reference(to)],
+            note: None,
+        });
+    }
+    f.owner
+        .finish(
+            f.actor.scope(),
+            &run.run_id,
+            ComponentAgentRunState::Interrupted,
+            None,
+            9,
+        )
+        .unwrap();
+    let previous = f
+        .owner
+        .record_recovery(f.actor.scope(), &run.run_id, history, 10)
+        .unwrap();
+    let mut continued = run.request.clone();
+    continued.request_id = "continued-doc".into();
+    continued.continuation = Some(ComponentContinuation {
+        run_id: run.run_id.clone(),
+        recovery_digest: previous.recovery.unwrap().digest,
+    });
+    continued.conversation_version = f
+        .store
+        .component_conversation(f.actor.scope(), "conversation")
+        .unwrap()
+        .unwrap()
+        .version;
+    continued.grant.documents[0].document = reference("user-edited-v4");
+    assert!(f.owner.start(&f.actor, continued.clone(), 11).is_err());
+    continued.grant.documents[0].document = reference("v3");
+    let next = f.owner.start(&f.actor, continued, 11).unwrap().run.run;
+    f.owner.claim(f.actor.scope(), &next.run_id, 12).unwrap();
+    f.owner
+        .begin_model_call(f.actor.scope(), &next.run_id, 13)
+        .unwrap();
+    for (call, save) in [("repeat-edit", false), ("repeat-save", true)] {
+        let repeated = f
+            .owner
+            .admit_tool(
+                f.actor.scope(),
+                &next.run_id,
+                1,
+                call,
+                action(reference("v3"), save),
+                14,
+            )
+            .unwrap();
+        assert!(matches!(
+            repeated.tool.action,
+            ComponentToolAction::PreviousResult { .. }
+        ));
+        assert!(!repeated.tool.receipt.mutation);
+    }
 }

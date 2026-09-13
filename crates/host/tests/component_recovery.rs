@@ -150,7 +150,7 @@ async fn orphaned_intent_is_not_dispatched_and_takeover_fences_the_old_window() 
             host.clone(),
             context.clone(),
             &project,
-            ComponentAgentStart {
+            ComponentAgentStart { continuation: None,
                 request_id: "original".into(),
                 conversation_id: "recovery".into(),
                 conversation_version: conversation.version,
