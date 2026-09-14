@@ -1624,3 +1624,99 @@ spacing, alignment, contrast and clipping. Page membership and removal of the ol
 page were verified through Paper. This is design evidence, not browser or runtime
 acceptance of the current implementation. A20 implementation is authorized by the
 user's explicit review, and is verified separately through Rho-owned tests.
+
+## 19. R Help, interactive Viewer and lighter controls — proposal
+
+The user requested a Paper design on 2026-09-14 for separate **Help** and
+**Viewer** components, together with fewer framed controls throughout Studio.
+The [Help and Viewer review page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/B-0)
+contains seven proposed boards pending user review. This section records the
+interaction proposal, not approval or runtime implementation.
+
+| Board | Review focus |
+| --- | --- |
+| HV01 | 1440 px workspace with continuous panel surfaces and `library` Help |
+| HV02 | 1024 px workspace with interactive Viewer and the unified Agent panel |
+| HV03 | 600 px explicitly focused Help view with Restore layout |
+| HV04 | Three 320 px panels: Help, Viewer and source preview |
+| HV05 | Default and expanded Files, Objects, Agent and Plots controls |
+| HV06 | Loading, saved Help after a session ends, disconnected live Viewer, missing resources and unavailable model image input |
+| HV07 | 1024 px Packages documentation entry and topic search within the selected installed copy |
+
+### Separate components, shared HTML presentation
+
+Help presents R help topics, package documentation and their links. Search,
+back/forward navigation and source inspection belong to this component. Its
+source identifies the actual topic, package copy, package version and native
+session. A retained document can remain readable after that session ends, but
+must identify itself as saved content rather than current live help.
+Packages exposes **Documentation** for the selected installed copy. Help search
+shows whether it is scoped to that package or all installed packages; opening a
+topic preserves the source identity. Viewing documentation does not load a package
+or execute examples.
+
+Viewer presents interactive HTML outputs with history, refresh, focus and an
+external-browser entry. An output retains its original producing run and source
+reference. Retained HTML and its resources are distinct from a page that needs
+a live R service: the latter shows disconnection explicitly. Refresh and reading
+history do not rerun the analysis or silently restart a service. Existing Plots
+continues to present static graphics; object inspection retains its own views.
+
+Both components reuse one underlying HTML renderer and resource-serving
+capability, including isolation from the Studio shell, local JS/CSS/image loading,
+navigation handling, resize and truthful load failures. They use the existing
+component registration and Host composition model. This proposal does not add
+a plugin store or a new independent scientific-result database. Scientific
+owners continue to own help observations, sessions, executions and artifacts.
+
+### The same sources for people and Agents
+
+Human views and Agent reads resolve the same owner-issued content references
+through the existing validated Host ports and MCP. Panel visibility is not a
+prerequisite for reading a source. Closing a view does not delete the underlying
+content or end its producing work.
+
+Help readers expose bounded topic text, arguments and examples with the original
+package-copy/version evidence. Viewer readers expose the available artifact,
+resource and producing-run references, descriptions, data and previews. Missing
+fields remain unavailable; a screenshot does not establish access to all graph
+data. Browser selection, filtering or zoom state is readable only when the
+component explicitly exposes it. A live connection, a saved artifact and an
+unavailable interaction state must remain distinguishable.
+
+**Ask about this** appends the current real reference to the existing editable
+Agent draft, preserving text and deduplicating references. It follows the unified
+new-task/read-only flow when necessary, never changes an existing task's Agent
+and never sends a message. Source preview identifies what will be included.
+Unavailable model image support or missing resources preserve the draft and
+offer an explicit alternative; they do not silently change the submitted input.
+
+### Fewer frames, stable content and layout
+
+Reuse the existing typography and semantic color tokens. The proposed compact
+chrome uses 36 px rows and 32 px control targets; content stays at 14–16 px and
+code at 13–14 px. Maintain clear keyboard focus and accessible labels. Borders
+mark real inputs, focus, popovers and docking separators. Panels share continuous
+surfaces without a rounded card and gutter around every panel; ordinary toolbar
+actions use quiet text/icon buttons instead of permanent outlined boxes.
+
+- Files uses a compact directory disclosure and one find/filter entry; expanded
+  options expose the actual search scope and hidden-file preference.
+- Objects keeps find prominent, with compact type selection and secondary field
+  controls in a disclosure. Active filters remain visible and easy to clear.
+- Agent presents task selection as navigation rather than a form field; New task
+  stays discoverable and task permissions retain their existing composer area.
+- Plots keeps history navigation beside its canvas controls. Earlier records load
+  from the history disclosure rather than an otherwise empty full-width footer.
+
+At narrow widths, adapt secondary controls before content size. Disclosures retain
+active-state cues and accessible entry points. Focus is an explicit user action
+with **Restore layout**; viewport resizing never automatically closes, redocks
+or maximizes views, or rewrites saved docking weights. Preserve section 15's
+navigation/resource preferences and scrolling when the retained layout needs more
+space. Owner state, drafts and reading positions survive view changes.
+
+All seven boards were inspected using Paper screenshots for spacing, typography,
+contrast, alignment and clipping; the narrow Help view retains the same example
+parameters by wrapping them. These are editable design fixtures, not execution
+results or evidence that HTML content is supported by the running product.

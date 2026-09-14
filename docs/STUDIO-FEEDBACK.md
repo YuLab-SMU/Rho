@@ -40,6 +40,43 @@ The proposed cross-product principles for interpreting this feedback are in
 
 ## User feedback
 
+### F21 — Framed controls overwhelm constrained workspaces
+
+**User report (2026-09-14):** The current interface has too many boxes. Large
+screens can tolerate them, but smaller screens become difficult to use. The
+supplied screenshot highlights stacked Files selectors, Objects search/type/field
+controls, the Agent task selector and the large Plots Earlier button area.
+
+**Required experience:** Reduce permanent borders and repeated control rows;
+give scientific content more room without shrinking its text. Retain clear input
+and focus affordances, discoverable secondary actions and visible active filters.
+Smaller windows must preserve the user's docking choices and source/draft state.
+An explicit focus action may temporarily expand a component and restore the layout.
+
+**Design response:** Proposed HV01–HV05 explore continuous panel surfaces and
+compact default/expanded controls. The [Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/B-0)
+is pending user review; drawings do not close the usability issue.
+
+### F20 — R help and interactive HTML outputs have no usable view
+
+**User report (2026-09-14):** Running `?library()` starts R's help server but does
+not show the documentation in the workbench. Interactive charts requiring HTML
+likewise lack a usable presentation component.
+
+**Required experience:** Separate Help and interactive Viewer components share
+the underlying HTML/resource presentation capability. People and Agents can
+discover, read and cite the same source content with its actual identity. Help
+retains package-copy/version evidence; Viewer distinguishes saved artifacts from
+content requiring a live service. Unavailable resources and interaction state
+must be stated accurately. Ask appends sources to the unified draft without
+sending. Components remain modular within the existing owner/Host structure.
+
+**Design response:** Proposed HV01–HV04 and HV06–HV07 cover normal/narrow views,
+source preview, package documentation entry/search and failure states.
+[Design section 19](RHO-DESIGN.md#19-r-help-interactive-viewer-and-lighter-controls--proposal)
+records the proposal. No HTML Help/Viewer runtime implementation or acceptance
+is established by this design work.
+
 ### F19 — Built-in Agent must use the existing Agent interface
 
 **User report (2026-09-14):** Adding the built-in Agent produced a severe sense of

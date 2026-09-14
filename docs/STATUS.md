@@ -2,7 +2,22 @@
 
 Updated: 2026-09-14. This is the single current status summary. Git retains history.
 
-## Current focus: macOS preview delivery
+## Current focus: Help, Viewer and control-density review
+
+The user requested Paper designs for separate R Help and interactive HTML Viewer
+components, and less framed chrome in constrained workspaces. Seven proposed
+[Paper boards, HV01–HV07](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/B-0)
+cover 1440/1024/600 px workspaces, 320 px panels, source previews, lighter existing
+controls, package documentation entry/search and unavailable/disconnected states.
+All boards were visually inspected in Paper; they are pending user review.
+[Design section 19](RHO-DESIGN.md#19-r-help-interactive-viewer-and-lighter-controls--proposal)
+records shared HTML presentation, owner-issued sources for people and Agents,
+draft-only Ask, and layout preservation. Feedback F20/F21 remains open.
+
+This is design work only: no new Help/Viewer runtime implementation, product
+acceptance or Host restart is claimed. Existing installation scope remains below.
+
+## macOS preview delivery scope
 
 The user has limited initial installation and experience delivery to the same
 environment as this machine: **macOS 26.5.2 (25F84), Apple Silicon arm64**. The
