@@ -58,7 +58,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ComponentAgentEventPage::export_all(&config)?;
     ComponentAgentsQuery::export_all(&config)?;
     ComponentAgentsCommand::export_all(&config)?;
-    ComponentSessionCredential::export_all(&config)?;
+    ComponentLocalCredential::export_all(&config)?;
+    ReadComponentAgentAsset::export_all(&config)?;
+    ComponentCredentialStatus::export_all(&config)?;
+    ComponentRequestFailure::export_all(&config)?;
     ComponentSourcePreviewRequest::export_all(&config)?;
     ComponentSourcePreview::export_all(&config)?;
     ComponentModelTestRequest::export_all(&config)?;
@@ -69,6 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PackageHelpPage::export_all(&config)?;
     TestAgent::export_all(&config)?;
     AgentDiagnostic::export_all(&config)?;
+    AgentUsageObservation::export_all(&config)?;
     ReadAgentAsset::export_all(&config)?;
     WorkbenchAgentConnection::export_all(&config)?;
     WorkbenchFrame::export_all(&config)?;

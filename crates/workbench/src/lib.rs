@@ -3,6 +3,7 @@ mod agent_tasks;
 mod component_agents;
 mod agents;
 mod settings;
+mod mcp_sessions;
 
 use std::{
     io::Write,
@@ -24,6 +25,7 @@ use rho_mcp::McpEdge;
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
+use rmcp::transport::streamable_http_server::session::SessionManager;
 use tokio::io::AsyncReadExt;
 use tokio::sync::{RwLock, Semaphore};
 use tokio_util::sync::CancellationToken;
@@ -82,6 +84,8 @@ struct AppState {
     origin: String,
     authorization: String,
     native_mcp_authorization: String,
+    mcp_sessions: Arc<mcp_sessions::HttpMcpSessions>,
+    mcp_manager: Arc<LocalSessionManager>,
     task_agents: Arc<rho_host::AgentTaskService>,
     component_agents: Arc<rho_host::ComponentAgentService>,
     calls: Arc<Semaphore>,
@@ -105,7 +109,8 @@ fn failure(status: StatusCode, error: impl Into<String>) -> Response {
         .into_response()
 }
 
-async fn boundary(State(state): State<AppState>, request: Request, next: Next) -> Response {
+async fn boundary(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
+    let deleting = request.method() == axum::http::Method::DELETE;
     let headers = request.headers();
     if headers.get(header::HOST).and_then(|h| h.to_str().ok()) != Some(&state.authority) {
         return failure(StatusCode::FORBIDDEN, "unexpected local Host");
@@ -121,12 +126,55 @@ async fn boundary(State(state): State<AppState>, request: Request, next: Next) -
     let credential = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok());
-    let native_mcp = (request.uri().path() == "/mcp" || request.uri().path().starts_with("/mcp/"))
-        && credential == Some(state.native_mcp_authorization.as_str());
+    let mcp_request = request.uri().path() == "/mcp" || request.uri().path().starts_with("/mcp/");
+    let managed = mcp_request.then(|| credential.and_then(|value| value.strip_prefix("Bearer "))
+        .and_then(|token| state.task_agents.mcp_connections.resolve(token))).flatten();
+    let native_mcp = mcp_request && (managed.is_some() || credential == Some(state.native_mcp_authorization.as_str()));
     if !public_asset && credential != Some(state.authorization.as_str()) && !native_mcp {
         return failure(StatusCode::UNAUTHORIZED, "local bearer token required");
     }
+    let mut session_access = None;
+    if mcp_request {
+        let hosting = state.hosting.read().await;
+        let Some(selected) = &hosting.selected else { return failure(StatusCode::CONFLICT, "Select a project first"); };
+        let project = selected.root.to_string_lossy().into_owned();
+        if managed.as_ref().is_some_and(|identity| identity.project != project || !identity.is_valid()) {
+            return failure(StatusCode::UNAUTHORIZED, "MCP attachment is no longer active in this project");
+        }
+        let identity = managed.as_ref().map(|value| value.context.connection_id.clone()).unwrap_or_else(|| "manual-mcp".into());
+        let identity = rho_mcp::McpRequestIdentity { project, identity, managed };
+        if request.headers().get_all("mcp-session-id").iter().count() > 1 {
+            return failure(StatusCode::BAD_REQUEST, "Duplicate MCP session identity");
+        }
+        let session = match request.headers().get("mcp-session-id").map(|value| value.to_str()) {
+            Some(Err(_)) => return failure(StatusCode::BAD_REQUEST, "Invalid MCP session identity"),
+            value => value.and_then(Result::ok).map(str::to_owned),
+        };
+        session_access = match state.mcp_sessions.enter(identity.clone(), session) {
+            Ok(access) => Some(access),
+            Err(error) => return failure(StatusCode::FORBIDDEN, error),
+        };
+        request.extensions_mut().insert(identity);
+    }
+    if let Some(access) = &mut session_access {
+        // Reclaim only transports whose trusted attachment was revoked. Native
+        // science already accepted through those transports keeps its own owner.
+        let mut cleanup = tokio::task::JoinSet::new();
+        for id in access.take_expired() {
+            let manager = state.mcp_manager.clone();
+            cleanup.spawn(async move { let _ = manager.close_session(&id.into()).await; });
+        }
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while cleanup.join_next().await.is_some() {}
+        }).await;
+    }
     let mut response = next.run(request).await;
+    if let Some(access) = &mut session_access {
+        let session = response.headers().get("mcp-session-id").and_then(|value| value.to_str().ok());
+        if let Err(error) = access.finish(session, deleting && response.status().is_success()) {
+            return failure(StatusCode::CONFLICT, error);
+        }
+    }
     let headers = response.headers_mut();
     headers.insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
     headers.insert("referrer-policy", "no-referrer".parse().unwrap());
@@ -424,10 +472,10 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
                 .as_ref()
                 .ok_or_else(|| std::io::Error::other("select a project first"))?;
             McpEdge::local(host.host.clone())
-                .map(|edge| edge.observe_connections(&host.connections))
+                .map(|edge| edge.observe_connections(&host.connections).http_project(host.root.to_string_lossy().into_owned()))
                 .map_err(std::io::Error::other)
         },
-        Arc::new(LocalSessionManager::default()),
+        state.mcp_manager.clone(),
         StreamableHttpServerConfig::default()
             .with_allowed_hosts(vec![state.authority.clone()])
             .with_allowed_origins(vec![state.origin.clone()])
@@ -477,6 +525,7 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/agents/components/context", post(component_agents::preview_source))
         .route("/api/agents/components/context/search", post(component_agents::search_sources))
         .route("/api/agents/components/test", post(component_agents::test_model))
+        .route("/api/agents/components/asset", post(component_agents::asset))
         .route("/api/project", post(select_project))
         .route("/api/r", get(settings::read_r).post(settings::apply_r))
         .route("/api/r/probe", post(settings::probe))
@@ -507,6 +556,10 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
                     .layer(RequestBodyLimitLayer::new(12 * 1024 * 1024)),
             ),
         )
+        .merge(Router::new().route("/api/agents/components/asset/upload",
+            post(component_agents::asset_upload)
+                .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(3 * 1024 * 1024))
+                .layer(RequestBodyLimitLayer::new(3 * 1024 * 1024))))
         .layer(middleware::from_fn_with_state(state.clone(), boundary))
         .with_state(state)
 }
@@ -582,6 +635,8 @@ pub async fn serve_with_assets(
         authority,
         origin: origin.clone(),
         authorization: format!("Bearer {token}"),
+        mcp_sessions: Arc::default(),
+        mcp_manager: Arc::default(),
         native_mcp_authorization: format!(
             "Bearer {}{}",
             uuid::Uuid::new_v4().simple(),
@@ -639,7 +694,7 @@ mod tests {
     use serde_json::{Value, json};
     use tower::ServiceExt;
 
-    async fn fixture() -> (tempfile::TempDir, AppState, Router) {
+    pub(super) async fn fixture() -> (tempfile::TempDir, AppState, Router) {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("project");
         std::fs::create_dir(&root).unwrap();
@@ -668,6 +723,8 @@ mod tests {
             origin: "http://127.0.0.1:10001".into(),
             authorization: "Bearer fixture-only".into(),
             native_mcp_authorization: "Bearer native-fixture-only".into(),
+            mcp_sessions: Arc::default(),
+            mcp_manager: Arc::default(),
             task_agents: rho_host::AgentTaskService::new(application.clone()),
             component_agents: rho_host::ComponentAgentService::new(application.clone()),
             calls: Arc::new(Semaphore::new(32)),
@@ -767,6 +824,10 @@ mod tests {
         }
         let response=request(&app,"/api/agents/components/query",Some(json!({"project_root":"/other","query":{"kind":"settings"}}))).await;
         assert_eq!(response.status(),StatusCode::CONFLICT);
+        let body=json_body(response).await;
+        assert_eq!(body["diagnostic"]["code"],"unavailable");
+        assert_eq!(body["submission"],"rejected");
+        assert_eq!(body["diagnostic"]["next_reads"],json!([]));
         let response=request(&app,"/api/agents/components/query",Some(json!({"project_root":root,"query":{"kind":"settings"}}))).await;
         assert_eq!(response.status(),StatusCode::OK);assert_eq!(json_body(response).await["settings"]["enabled"],false);
         let response=request(&app,"/api/agents/components/command",Some(json!({"project_root":root,"window":{"window_id":"unregistered","incarnation":"unregistered"},"command":{"kind":"create","conversation_id":"example","profile":"objects"}}))).await;
@@ -1140,3 +1201,6 @@ mod tests {
         assert!(current.upgrade().is_some());
     }
 }
+
+#[cfg(test)]
+mod mcp_identity_tests;

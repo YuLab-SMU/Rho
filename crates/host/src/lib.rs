@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
-pub use rho_agent_client::{ExternalAgentClient, discover_agent, install_deepseek_component};
+pub use rho_agent_client::{
+    ExternalAgentClient, discover_agent, install_deepseek_component,
+    NativeAgentFactory, NativeAgentSession, NativeEvent, NativeEventPage, NativeOpenFailure,
+    NativeOpenRequest, NativeProcessProof, NativePrompt,
+};
 mod application;
 mod discovery;
 mod observer;
@@ -17,8 +21,11 @@ mod r_configuration;
 pub use r_configuration::{default_database, discover_r, probe_r};
 pub use rho_sqlite::ApplicationStore;
 mod agent_tasks;
+mod agent_connections;
+pub use agent_connections::{AgentMcpConnections, AgentMcpIdentity};
 mod component_agents;
 pub use component_agents::ComponentAgentService;
+pub use rho_application::ApplicationError;
 pub use agent_tasks::AgentTaskService;
 mod agent_context;
 pub use agent_context::{AgentContextProvider, AgentContextReader};

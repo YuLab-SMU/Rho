@@ -82,6 +82,7 @@ impl AgentHook for Hooks {
                 CompletionCallAction::Continue
             }
             Err(error) => {
+                let _ = self.0.port.record_diagnostic(error.diagnostic()).await;
                 self.0.fail(error.to_string());
                 CompletionCallAction::Stop("Model admission failed".into())
             }
@@ -129,6 +130,7 @@ impl AgentHook for Hooks {
                 ToolCallAction::Run
             }
             Err(error) => {
+                let _ = self.0.port.record_diagnostic(error.diagnostic()).await;
                 self.0.fail(error.to_string());
                 ToolCallAction::Stop("Tool admission failed".into())
             }
@@ -201,6 +203,18 @@ fn instructions(profile: ComponentAgentProfile) -> String {
     )
 }
 
+fn task_instructions(run: &rho_contract::ComponentAgentRun) -> String {
+    if run.request.grant.permission_policy.is_none() { return instructions(run.profile); }
+    let mut text = instructions(ComponentAgentProfile::Project);
+    text.push_str("\nThe component entry supplies context, not a work mode. Decide whether to explain, edit, save or run from the user's actual request. Before changing anything, use rho_task_intent once to record your understanding with an exact excerpt of the original request and its finite intended actions. You may first read owners to identify exact targets. A request to fix, save and run already authorizes those related actions; do not ask again. Additional actions follow the saved permission policy; do not fabricate user intent to bypass it. Package and environment inspection stays read-only: viewing must not load or attach packages. Authorized R analysis may use already installed packages, including library() and namespace calls. Do not install, update or remove packages, alter library configuration, change environments or control runtime lifecycle; these management capabilities are outside this Agent's scope.");
+    text.push_str(" To work on a project script that was not selected, open it with application_open_document and use the returned owner reference. For a new script, record the exact relative path and create/edit/save actions in the task intent, then application_create_document creates an empty draft; edit and save it through the returned document ID. An execute action with document_id=null and path=null refers only to this run's bound R session. Never invent document IDs or native session IDs.");
+    if let Some(intent) = &run.task_intent {
+        text.push_str("\nThis Continue request retains an already frozen task intent; do not request or replace it: ");
+        text.push_str(&serde_json::to_string(intent).unwrap_or_default());
+    }
+    text
+}
+
 #[async_trait]
 impl ComponentAgentEngine for RigComponentEngine {
     async fn test_model(
@@ -234,7 +248,10 @@ impl ComponentAgentEngine for RigComponentEngine {
         let pending = context.pending.clone();
         let failure = context.failure.clone();
         let port = request.port.clone();
-        let duration = Duration::from_millis(request.run.budget.duration_ms);
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default().as_millis() as u64;
+        let duration = Duration::from_millis(request.run.created_at_ms
+            .saturating_add(request.run.budget.duration_ms).saturating_sub(now));
         let outcome = tokio::select! { biased;
             _=cancellation.cancelled()=>ComponentEngineOutcome::Stopped,
             _=tokio::time::sleep(duration)=>ComponentEngineOutcome::Failed("Component run deadline exceeded".into()),
@@ -288,7 +305,7 @@ impl RigComponentEngine {
     ) -> ComponentEngineOutcome {
         let result: Result<(), String> = async {
             let client = self.http_client()?;
-            let preamble = instructions(request.run.profile);
+            let preamble = task_instructions(&request.run);
             context.fixed_context_bytes = preamble.len().saturating_add(
                 serde_json::to_vec(&request.tools)
                     .map_err(|_| "Tool schema encoding failed")?
@@ -363,6 +380,7 @@ impl RigComponentEngine {
                                     Ok(ToolOutput::json(value))
                                 }
                                 Err(error) => {
+                                    let _ = context.port.record_diagnostic(error.diagnostic()).await;
                                     context.fail(error.to_string());
                                     Err(ToolExecutionError::refused("Host tool execution failed"))
                                 }
@@ -413,11 +431,11 @@ impl RigComponentEngine {
                     "image/jpeg" => ImageMediaType::JPEG,
                     _ => return Err("Unsupported verified image format".into()),
                 };
-                content.push(UserContent::text(format!(
-                    "Selected image: {} / output {}",
-                    image.reference.operation_id.as_str(),
-                    image.reference.sequence
-                )));
+                let label = match &image.reference {
+                    ComponentImageSource::Scientific(reference) => format!("Selected image: {} / output {}", reference.operation_id.as_str(), reference.sequence),
+                    ComponentImageSource::Attachment { conversation_id, asset } => format!("User-uploaded image: {} (rho://attachments/component/{}/{}, sha256:{})", asset.name, conversation_id, asset.asset_id, asset.sha256),
+                };
+                content.push(UserContent::text(label));
                 content.push(UserContent::image_base64(image.base64, Some(mime), None));
             }
             // Keep image labels adjacent to their blocks, before the long question/context.

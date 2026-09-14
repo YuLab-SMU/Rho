@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 mod agent_tasks;
+mod agent_assets;
+mod project_agent_tasks;
+mod caller_records;
 mod component_agents;
 mod application;
 pub use application::ApplicationStore;
@@ -192,6 +195,8 @@ impl SqliteOperationJournal {
                     PRIMARY KEY(operation_id,chunk_index)
                 );
 
+                CREATE INDEX IF NOT EXISTS idx_operation_caller_history
+                    ON operations (caller_kind, caller_id);
                 CREATE INDEX IF NOT EXISTS idx_operation_events_operation
                     ON operation_events(operation_id, sequence);
                 CREATE INDEX IF NOT EXISTS idx_operation_owner_history
@@ -309,6 +314,9 @@ impl OperationJournal for SqliteOperationJournal {
         filter: &rho_operation::OperationRecordFilter,
     ) -> Result<rho_contract::RecentOperations, OperationError> {
         filtered_records::read(self, scope, caller, args, filter)
+    }
+    async fn list_recent_for_caller(&self, scope: &str, principal: &CallerIdentity, caller: &CallerIdentity, args: &rho_contract::RecentOperationsArguments) -> Result<rho_contract::RecentOperations, OperationError> {
+        caller_records::read(self,scope,principal,caller,args)
     }
 
     async fn admit(&self, operation: &Operation) -> Result<Admission, OperationError> {

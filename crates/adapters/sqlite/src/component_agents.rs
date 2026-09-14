@@ -26,6 +26,7 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), String> {
       request_id TEXT NOT NULL, request_digest TEXT NOT NULL, host_incarnation TEXT NOT NULL,
       state TEXT NOT NULL, event_cursor INTEGER NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
       PRIMARY KEY(project,principal,run_id), UNIQUE(project,principal,request_id));
+    CREATE INDEX IF NOT EXISTS component_agent_task_order ON component_agent_conversations(project,principal,json_extract(value,'$.created_at_ms') DESC,conversation_id DESC);
     CREATE INDEX IF NOT EXISTS component_agent_active ON component_agent_runs(host_incarnation,state);
     CREATE INDEX IF NOT EXISTS component_agent_history ON component_agent_runs(project,principal,conversation_id,json_extract(value,'$.run.created_at_ms') DESC,run_id DESC);
     CREATE TABLE IF NOT EXISTS component_agent_tools (
@@ -53,6 +54,16 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), String> {
 }
 
 impl ComponentAgentRepository for ApplicationStore {
+    fn component_assets(&self, scope: &ApplicationScope, conversation: &str) -> Result<Vec<AgentAsset>, ApplicationError> {
+        crate::agent_assets::list(self, scope, crate::agent_assets::AssetOwner::Component(conversation))
+    }
+    fn component_asset(&self, scope: &ApplicationScope, conversation: &str, asset: &str) -> Result<(AgentAsset, Vec<u8>), ApplicationError> {
+        crate::agent_assets::read(self, scope, crate::agent_assets::AssetOwner::Component(conversation), asset)
+    }
+    fn put_component_asset(&self, scope: &ApplicationScope, conversation: &str, asset: &AgentAsset, bytes: &[u8]) -> Result<(), ApplicationError> {
+        crate::agent_assets::put(self, scope, crate::agent_assets::AssetOwner::Component(conversation), asset, bytes)
+    }
+
     fn component_diagnostic(
         &self,
         s: &ApplicationScope,

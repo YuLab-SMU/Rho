@@ -10,8 +10,9 @@ mod continuation;
 mod engine;
 mod policy;
 mod recovery;
+mod permissions;
 pub use engine::*;
-pub use policy::{component_query_allowed, validate_component_grant, validate_component_model};
+pub use policy::{component_query_allowed, component_query_available, validate_component_grant, validate_component_model};
 
 pub const MAX_COMPONENT_CONVERSATIONS: usize = 4096;
 pub const MAX_COMPONENT_EVENTS: usize = 500;
@@ -90,6 +91,7 @@ pub struct StoredComponentRun {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "request", rename_all = "snake_case")]
 pub enum ComponentToolAction {
+    TaskIntent(ComponentAgentTaskIntent),
     Query(QueryRequest),
     PreviousResult {
         capability: CapabilityRef,
@@ -108,6 +110,7 @@ pub enum ComponentToolAction {
 impl ComponentToolAction {
     pub fn capability(&self) -> &str {
         match self {
+            Self::TaskIntent(_) => "agent.task_intent",
             Self::Query(q) => &q.capability.id,
             Self::Invoke(i) => &i.capability.id,
             Self::Control(_) => "application.control",
@@ -119,11 +122,15 @@ impl ComponentToolAction {
     pub fn mutation(&self) -> bool {
         matches!(self, Self::Invoke(_) | Self::Control(_))
     }
+    pub fn requires_permission(&self) -> bool {
+        self.mutation() && !matches!(self, Self::Control(command)
+            if matches!(command.action, ApplicationAction::OpenDocument { .. }))
+    }
     fn bind_request(&mut self, id: &str) {
         match self {
             Self::Invoke(i) => i.client_request_id = id.into(),
             Self::Control(c) => c.request_id = id.into(),
-            Self::Query(_) | Self::Rejected { .. } | Self::PreviousResult { .. } => {}
+            Self::TaskIntent(_) | Self::Query(_) | Self::Rejected { .. } | Self::PreviousResult { .. } => {}
         }
     }
 }
@@ -156,6 +163,16 @@ pub struct ComponentWrite<'a> {
 }
 
 pub trait ComponentAgentRepository: Send + Sync {
+    fn component_assets(&self, _scope: &ApplicationScope, _conversation: &str) -> Result<Vec<AgentAsset>, ApplicationError> {
+        Err(ApplicationError::InvalidInput("Attachments are unavailable in this repository".into()))
+    }
+    fn component_asset(&self, _scope: &ApplicationScope, _conversation: &str, _asset: &str) -> Result<(AgentAsset, Vec<u8>), ApplicationError> {
+        Err(ApplicationError::NotFound)
+    }
+    fn put_component_asset(&self, _scope: &ApplicationScope, _conversation: &str, _asset: &AgentAsset, _bytes: &[u8]) -> Result<(), ApplicationError> {
+        Err(ApplicationError::InvalidInput("Attachments are unavailable in this repository".into()))
+    }
+
     fn component_diagnostic(
         &self,
         scope: &ApplicationScope,
@@ -239,6 +256,7 @@ pub struct ComponentToolAdmission {
 pub enum ComponentToolUpdate {
     Rejected {
         reason: String,
+        diagnostic: Diagnostic,
     },
     Accepted {
         operation_id: Option<OperationId>,
@@ -284,13 +302,15 @@ pub fn component_document_reference<'a>(
         .as_ref()
         .and_then(|versions| versions.get(id))
         .or_else(|| {
-            run.request
-                .grant
-                .documents
-                .iter()
+            run.document_grants.iter().chain(run.request.grant.documents.iter())
                 .find(|grant| grant.document.document_id == id)
                 .map(|grant| &grant.document)
         })
+}
+
+pub fn component_document_grant<'a>(run: &'a ComponentAgentRun, id: &str) -> Option<&'a ComponentDocumentGrant> {
+    run.document_grants.iter().chain(run.request.grant.documents.iter())
+        .find(|grant| grant.document.document_id == id)
 }
 /// Native identities already linked to this run's durable mutation receipts.
 pub fn component_owned_operations(
@@ -388,12 +408,8 @@ pub fn component_digest(value: &impl Serialize) -> Result<String, ApplicationErr
         .map_err(storage)?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
-fn budget(mode: ComponentAgentMode) -> ComponentAgentBudget {
-    let (model_calls, tool_calls) = match mode {
-        ComponentAgentMode::Explain => (4, 8),
-        ComponentAgentMode::Edit => (6, 12),
-        ComponentAgentMode::Run => (12, 16),
-    };
+fn budget() -> ComponentAgentBudget {
+    let (model_calls, tool_calls) = (12, 16);
     ComponentAgentBudget {
         model_calls,
         tool_calls,
@@ -583,11 +599,15 @@ impl ComponentAgentOwner {
         }
         let conversation = ComponentAgentConversation {
             conversation_id: conversation_id.into(),
+            title: "New task".into(),
+            archived: false,
             version: 1,
             draft_version: 1,
             controller: actor.window.clone(),
             profile,
             draft: String::new(),
+            draft_content: AgentDraftContent::default(),
+            draft_grant: None,
             active_run_id: None,
             created_at_ms: now,
             updated_at_ms: now,
@@ -612,19 +632,71 @@ impl ComponentAgentOwner {
         text: String,
         now: u64,
     ) -> Result<(), ApplicationError> {
+        self.save_draft_content(actor, conversation_id, version, AgentDraftContent { text, ..Default::default() }, None, now)
+    }
+    pub fn put_asset(&self, actor: &ComponentActor, conversation_id: &str, asset: &AgentAsset, bytes: &[u8], now: u64) -> Result<(), ApplicationError> {
         let _guard = self.gate.lock().map_err(storage)?;
         actor.validate(now)?;
-        if text.len() > MAX_COMPONENT_TEXT_BYTES {
+        let conversation = self.conversation(actor, conversation_id)?;
+        if conversation.archived { return Err(invalid("Archived tasks cannot receive attachments")); }
+        self.store.put_component_asset(actor.scope(), conversation_id, asset, bytes)
+    }
+    pub fn remove_asset(&self, actor: &ComponentActor, conversation_id: &str, asset_id: &str, draft_version: u64, now: u64) -> Result<(), ApplicationError> {
+        let _guard = self.gate.lock().map_err(storage)?;
+        actor.validate(now)?;
+        let mut conversation = self.conversation(actor, conversation_id)?;
+        if conversation.archived || conversation.draft_version != draft_version { return Err(ApplicationError::Conflict); }
+        self.store.component_asset(actor.scope(), conversation_id, asset_id)?;
+        conversation.draft_content.assets.retain(|id| id != asset_id);
+        conversation.draft_version = conversation.draft_version.checked_add(1).ok_or(ApplicationError::Conflict)?;
+        // Uploaded bytes remain available to already accepted runs and their history.
+        self.save(actor.scope(), conversation, None, &[], &[], now)
+    }
+    pub fn save_draft_content(
+        &self,
+        actor: &ComponentActor,
+        conversation_id: &str,
+        version: u64,
+        content: AgentDraftContent,
+        grant: Option<ComponentAgentGrant>,
+        now: u64,
+    ) -> Result<(), ApplicationError> {
+        let _guard = self.gate.lock().map_err(storage)?;
+        actor.validate(now)?;
+        if content.text.len() > MAX_COMPONENT_TEXT_BYTES || content.context.len() > 16 || content.assets.len() > 20 || serde_json::to_vec(&content).map_err(storage)?.len() > 48 * 1024 {
             return Err(ApplicationError::Budget("Draft exceeds 32 KiB".into()));
         }
         let mut conversation = self.conversation(actor, conversation_id)?;
-        if conversation.draft_version != version {
+        if conversation.archived || conversation.draft_version != version {
             return Err(ApplicationError::Conflict);
         }
-        conversation.draft = text;
+        if !content.assets.is_empty() {
+            let available = self.store.component_assets(actor.scope(), conversation_id)?;
+            let mut seen = std::collections::BTreeSet::new();
+            for asset in &content.assets {
+                if !seen.insert(asset) || !available.iter().any(|known| &known.asset_id == asset) { return Err(invalid("Attachment does not belong to this task or was selected twice")); }
+            }
+        }
+        conversation.draft = content.text.clone();
+        conversation.draft_content = content;
+        conversation.draft_grant = grant;
         conversation.draft_version = version
             .checked_add(1)
             .ok_or_else(|| invalid("Draft version exhausted"))?;
+        self.save(&actor.scope, conversation, None, &[], &[], now)
+    }
+    pub fn update_task_metadata(&self, actor: &ComponentActor, id: &str, expected_version: u64, title: Option<String>, archived: Option<bool>, now: u64) -> Result<(), ApplicationError> {
+        let _guard = self.gate.lock().map_err(storage)?;
+        actor.validate(now)?;
+        let mut conversation = self.conversation(actor, id)?;
+        if conversation.version != expected_version { return Err(ApplicationError::Conflict); }
+        if let Some(title) = title {
+            let title = title.trim();
+            if title.is_empty() || title.len() > 640 || title.chars().any(char::is_control) { return Err(invalid("Task title must contain 1–160 characters")); }
+            if title.chars().count() > 160 { return Err(invalid("Task title exceeds 160 characters")); }
+            conversation.title = title.into();
+        }
+        if let Some(archived) = archived { conversation.archived = archived; }
         self.save(&actor.scope, conversation, None, &[], &[], now)
     }
     pub fn configure(
@@ -676,12 +748,13 @@ impl ComponentAgentOwner {
             });
         }
         let mut conversation = self.conversation(actor, &request.conversation_id)?;
-        if conversation.version != request.conversation_version
+        if conversation.archived || conversation.version != request.conversation_version
             || conversation.active_run_id.is_some()
         {
             return Err(ApplicationError::Conflict);
         }
-        if request.text.trim().is_empty()
+        if (request.text.trim().is_empty() && request.assets.as_ref().is_none_or(Vec::is_empty))
+            || request.assets.as_ref().is_some_and(|assets| assets.len() > 20)
             || request.text.len() > MAX_COMPONENT_TEXT_BYTES
             || request.sources.len() > 16
             || serde_json::to_vec(&request).map_err(storage)?.len() > 64 * 1024
@@ -703,14 +776,21 @@ impl ComponentAgentOwner {
             .connection
             .ok_or_else(|| invalid("No component model configured"))?;
         validate_component_model(&model)?;
+        if conversation.title.is_empty() || conversation.title == "New task" {
+            conversation.title = request.text.lines().next().unwrap_or("New task").trim().chars().take(80).collect();
+        }
+        let (task_intent, document_grants) = self.continued_authority(&actor.scope, &request)?;
         let run_id = uuid::Uuid::new_v4().to_string();
         let run = StoredComponentRun {
             request_digest: digest,
             host_incarnation: self.host_incarnation.clone(),
             run: ComponentAgentRun {
+                document_grants,
+                task_intent,
+                permissions: vec![],
                 run_id: run_id.clone(),
                 profile: conversation.profile,
-                budget: budget(request.grant.mode),
+                budget: budget(),
                 request,
                 state: ComponentAgentRunState::Queued,
                 model,
@@ -857,13 +937,7 @@ impl ComponentAgentOwner {
                     document,
                     target_path,
                 } if target_path.is_none() => {
-                    *target_path = run
-                        .run
-                        .request
-                        .grant
-                        .documents
-                        .iter()
-                        .find(|g| g.document.document_id == document.document_id)
+                    *target_path = component_document_grant(&run.run, &document.document_id)
                         .and_then(|g| g.path.clone());
                 }
                 _ => {}
@@ -901,14 +975,16 @@ impl ComponentAgentOwner {
         let mut semantic_action = action.clone();
         if let ComponentToolAction::Control(command) = &mut semantic_action
             && let ApplicationAction::EditDocument { document, .. } = &mut command.action
-            && let Some(grant) = ancestors
-                .last()
-                .map_or(&run.run.request.grant, |r| &r.run.request.grant)
-                .documents
-                .iter()
-                .find(|grant| grant.document.document_id == document.document_id)
+            && let Some(grant) = component_document_grant(
+                ancestors.last().map_or(&run.run, |r| &r.run), &document.document_id)
         {
             *document = grant.document.clone();
+        }
+        if let ComponentToolAction::Control(command) = &mut semantic_action
+            && let ApplicationAction::CreateDocument { expected_context_version, .. }
+                | ApplicationAction::OpenDocument { expected_context_version, .. } = &mut command.action
+        {
+            *expected_context_version = "component-context".into();
         }
         if let ComponentToolAction::Control(command) = &mut semantic_action
             && let ApplicationAction::Save { document, .. }
@@ -1103,13 +1179,13 @@ impl ComponentAgentOwner {
             .find(|t| t.receipt.receipt_id == receipt_id)
             .ok_or(ApplicationError::NotFound)?;
         match update {
-            ComponentToolUpdate::Rejected { reason } => {
+            ComponentToolUpdate::Rejected { reason, diagnostic } => {
                 if tool.receipt.phase != ComponentToolPhase::Intent || reason.len() > 4096 {
                     return Err(ApplicationError::Conflict);
                 }
                 tool.receipt.phase = ComponentToolPhase::Resolved;
                 tool.receipt.result =
-                    Some(serde_json::json!({"status":"rejected","accepted":false,"error":reason}));
+                    Some(serde_json::json!({"status":"rejected","accepted":false,"error":reason,"diagnostic":diagnostic}));
             }
             ComponentToolUpdate::Accepted {
                 operation_id,
@@ -1160,6 +1236,33 @@ impl ComponentAgentOwner {
                     return Err(ApplicationError::Budget(
                         "Too many tool evidence references".into(),
                     ));
+                }
+                if let ComponentToolAction::Control(command) = &tool.action
+                    && let ApplicationAction::OpenDocument { path, .. }
+                        | ApplicationAction::CreateDocument { path: Some(path), .. } = &command.action
+                {
+                    let receipt: ApplicationCommandReceipt = serde_json::from_value(result.clone()).map_err(storage)?;
+                    if receipt.request_id != tool.receipt.client_request_id || receipt.window != run.run.request.window {
+                        return Err(ApplicationError::RequestConflict);
+                    }
+                    if receipt.state == ApplicationCommandState::Applied {
+                        let summary = receipt.applied_document_summaries.as_ref()
+                            .and_then(|summaries| summaries.iter().find(|summary| summary.path.as_ref() == Some(path)))
+                            .filter(|summary| receipt.applied_documents.as_ref().is_some_and(|docs| docs.contains(&summary.document)))
+                            .ok_or_else(|| invalid("Opened document identity is missing from its owner receipt"))?;
+                        let entry = ComponentDocumentGrant {document:summary.document.clone(),
+                            allow_save:summary.readonly_reason.is_none(),path:Some(path.clone())};
+                        let existing = run.run.document_grants.iter().position(|g| g.document.document_id == summary.document.document_id);
+                        if let Some(index) = existing { run.run.document_grants[index] = entry; }
+                        else {
+                            if run.run.document_grants.len() + run.run.request.grant.documents.len() >= 16 {
+                                return Err(ApplicationError::Budget("Task document target limit reached".into()));
+                            }
+                            run.run.document_grants.push(entry);
+                        }
+                        run.run.document_versions.get_or_insert_with(Default::default)
+                            .insert(summary.document.document_id.clone(), summary.document.clone());
+                    }
                 }
                 if let ComponentToolAction::Control(command) = &tool.action
                     && let ApplicationAction::EditDocument { document, .. }
@@ -1288,6 +1391,26 @@ impl ComponentAgentOwner {
         };
         self.save(scope, conversation, Some(&run), &[], &[event], now)
     }
+    pub fn record_diagnostic(
+        &self,
+        scope: &ApplicationScope,
+        run_id: &str,
+        diagnostic: Diagnostic,
+        now: u64,
+    ) -> Result<(), ApplicationError> {
+        let _guard = self.gate.lock().map_err(storage)?;
+        if serde_json::to_vec(&diagnostic).map_err(storage)?.len() > 16 * 1024 {
+            return Err(ApplicationError::Budget("Diagnostic exceeds the task event budget".into()));
+        }
+        let mut run = self.store.component_run(scope, run_id)?.ok_or(ApplicationError::NotFound)?;
+        if run.host_incarnation != self.host_incarnation { return Err(ApplicationError::Conflict); }
+        let conversation = self.store.component_conversation(scope, &run.run.request.conversation_id)?.ok_or(ApplicationError::NotFound)?;
+        run.run.event_cursor += 1;
+        run.run.updated_at_ms = now;
+        let event = ComponentAgentEvent { run_id: run_id.into(), sequence: run.run.event_cursor,
+            created_at_ms: now, content: ComponentAgentEventContent::Diagnostic { diagnostic } };
+        self.save(scope, conversation, Some(&run), &[], &[event], now)
+    }
     pub fn append_text(
         &self,
         scope: &ApplicationScope,
@@ -1395,6 +1518,15 @@ impl ComponentAgentOwner {
             return Err(ApplicationError::Conflict);
         }
         let tools = self.store.component_tools(scope, run_id)?;
+        if run.run.request.grant.permission_policy.is_some()
+            && tools.iter().any(|t| t.receipt.receipt_id == receipt_id && t.action.requires_permission())
+            && !run.run.permissions.iter().any(|permission| permission.receipt_id == receipt_id
+                && permission.state == ComponentPermissionState::Allowed
+                && tools.iter().any(|tool| tool.receipt.receipt_id == receipt_id
+                    && tool.receipt.action_digest == permission.action_digest))
+        {
+            return Err(invalid("This action has no recorded permission"));
+        }
         if tools.iter().any(|t| {
             t.receipt.receipt_id == receipt_id && t.receipt.phase == ComponentToolPhase::Intent
         }) {

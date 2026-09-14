@@ -377,6 +377,156 @@ struct Fixture {
     project: String,
     window: ApplicationWindowRef,
 }
+
+struct UnifiedTaskEngine;
+
+struct RetainedPortEngine(Arc<Mutex<Option<Arc<dyn rho_application::ComponentRunPort>>>>);
+#[async_trait::async_trait]
+impl ComponentAgentEngine for RetainedPortEngine {
+    async fn execute(&self,request:ComponentEngineExecution)->ComponentEngineOutcome {
+        request.port.begin_model_call().await.unwrap();
+        request.port.append_text("Before final acknowledgement".into()).await.unwrap();
+        *self.0.lock().unwrap()=Some(request.port.clone());
+        ComponentEngineOutcome::Completed
+    }
+}
+
+#[tokio::test]
+async fn failed_terminal_write_fences_late_model_callbacks_independently_of_saved_run_state() {
+    let provider=Provider::new(Mode::ReadFile).await;
+    let mut f=Fixture::new().await;
+    let retained=Arc::new(Mutex::new(None));
+    f.service=ComponentAgentService::with_engine(Arc::new(ApplicationStore::open(&f._directory.path().join("components.sqlite")).unwrap()),Arc::new(RetainedPortEngine(retained.clone())));
+    f.configure(&provider).await;
+    let database=rusqlite::Connection::open(f._directory.path().join("components.sqlite")).unwrap();
+    database.execute_batch("CREATE TRIGGER fail_final BEFORE UPDATE ON component_agent_runs WHEN NEW.state='completed' BEGIN SELECT RAISE(ABORT,'injected terminal failure'); END;").unwrap();
+    let run=f.start(f.request()).await;
+    tokio::time::timeout(Duration::from_secs(3),async{loop{
+        if f.service.observe_run(&f.host,&f.context,&f.project,&run.run_id).await.unwrap().state==ComponentAgentRunState::Interrupted{break;}
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }}).await.unwrap();
+    assert_eq!(f.service.run(&f.host,&f.context,&f.project,&run.run_id).unwrap().state,ComponentAgentRunState::Running);
+    let before=f.service.events(&f.host,&f.context,&f.project,&run.run_id,0,128).unwrap();
+    let port=retained.lock().unwrap().take().unwrap();
+    assert!(port.append_text("Late model text".into()).await.is_err());
+    assert!(port.begin_model_call().await.is_err());
+    assert!(port.prepare_tool(1,"late-read","project_read_text",json!({"path":"analysis.R"})).await.is_err());
+    assert!(port.record_usage(Some(999),Some(999)).await.is_err());
+    assert!(port.record_diagnostic(Diagnostic{code:DiagnosticCode::OutcomeUncertain,
+        continuation:DiagnosticContinuation::InspectOriginal,message:"Late model diagnostic".into(),next_reads:vec![]}).await.is_err());
+    let after=f.service.events(&f.host,&f.context,&f.project,&run.run_id,0,128).unwrap();
+    assert_eq!(after.cursor,before.cursor);
+    assert!(!serde_json::to_string(&after).unwrap().contains("Late model"));
+    database.execute_batch("DROP TRIGGER fail_final").unwrap();
+    f.service.close().await;
+}
+
+struct ConversationMemoryEngine;
+#[async_trait::async_trait]
+impl ComponentAgentEngine for ConversationMemoryEngine {
+    async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome {
+        let call=request.port.begin_model_call().await.unwrap();
+        if request.run.request.request_id=="user-request" {
+            let intent=request.port.prepare_tool(call,"first-intent","rho_task_intent",json!({
+                "request_excerpt":request.run.request.text,"actions":[{"action":"create","document_id":null,"path":"report.R"}]
+            })).await.unwrap();
+            request.port.execute_tool(intent).await.unwrap();
+            let query=request.port.prepare_tool(call,"read-file","project_read_text",json!({"path":"analysis.R"})).await.unwrap();
+            request.port.execute_tool(query).await.unwrap();
+            request.port.append_text("α".repeat(3000)).await.unwrap();
+            request.port.append_text("Result marker: remembered-29".into()).await.unwrap();
+        } else {
+            assert!(request.run.request.continuation.is_none());
+            assert!(request.run.task_intent.is_none());
+            assert!(request.run.document_grants.is_empty() && request.run.permissions.is_empty());
+            assert_eq!(request.run.request.grant.permission_policy,Some(ComponentPermissionPolicy::Ask));
+            let history=request.run.context.as_ref().unwrap().history.as_ref().unwrap();
+            assert_eq!(history["kind"],"conversation");
+            assert!(history["turns"][0]["assistant_text"].as_str().unwrap().contains("remembered-29"));
+            assert_eq!(history["turns"][0]["text_truncated"],true);
+            assert!(!history["turns"][0]["references"].as_array().unwrap().is_empty());
+            assert!(!history.to_string().contains("native-project-evidence-27"),"Raw tool result leaked into ordinary history");
+            assert!(serde_json::to_vec(history).unwrap().len()<=24*1024);
+            let prior=history["turns"][0]["user_text"].as_str().unwrap();
+            assert!(request.port.prepare_tool(call,"old-authority","rho_task_intent",json!({
+                "request_excerpt":prior,"actions":[{"action":"create","document_id":null,"path":"report.R"}]
+            })).await.is_err());
+            let fresh=request.port.prepare_tool(call,"new-intent","rho_task_intent",json!({
+                "request_excerpt":request.run.request.text,"actions":[]
+            })).await.unwrap();
+            request.port.execute_tool(fresh).await.unwrap();
+            request.port.append_text("remembered-29, without inherited authorization".into()).await.unwrap();
+        }
+        ComponentEngineOutcome::Completed
+    }
+}
+
+#[tokio::test]
+async fn ordinary_follow_up_has_bounded_prior_context_without_inheriting_task_authority() {
+    let provider=Provider::new(Mode::ReadFile).await;
+    let mut f=Fixture::new().await;
+    f.service=ComponentAgentService::with_engine(Arc::new(ApplicationStore::open(&f._directory.path().join("components.sqlite")).unwrap()),Arc::new(ConversationMemoryEngine));
+    f.configure(&provider).await;
+    let mut request=f.request();
+    request.text="Read analysis.R and remember its result. You may create report.R.".into();
+    request.grant.permission_policy=Some(ComponentPermissionPolicy::FullAccess);
+    let first=f.start(request.clone()).await;
+    assert_eq!(f.terminal(&first.run_id).await.state,ComponentAgentRunState::Completed);
+    request.request_id="ordinary-follow-up".into();request.text="Explain the previous result without changing files".into();
+    request.grant.permission_policy=Some(ComponentPermissionPolicy::Ask);
+    request.conversation_version=f.service.conversation(&f.host,&f.context,&f.project,&request.conversation_id).unwrap().version;
+    let next=f.start(request).await;
+    let finished=f.terminal(&next.run_id).await;
+    assert_eq!(finished.state,ComponentAgentRunState::Completed,"{:?}",finished.reason);
+    assert!(finished.task_intent.unwrap().actions.is_empty());
+    assert!(finished.permissions.is_empty());
+    assert!(!f._directory.path().join("study/report.R").exists());
+    f.service.close().await;
+}
+#[async_trait::async_trait]
+impl ComponentAgentEngine for UnifiedTaskEngine {
+    async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome {
+        for name in ["rho_task_intent", "application_open_document", "application_create_document",
+            "application_replace_text", "application_save_document", "project_read_text"] {
+            assert!(request.tools.iter().any(|tool| tool.name == name), "missing {name}");
+        }
+        let call = request.port.begin_model_call().await.unwrap();
+        let intent = request.port.prepare_tool(call, "intent", "rho_task_intent", json!({
+            "request_excerpt":request.run.request.text,
+            "actions":[{"action":"create","document_id":null,"path":"new-analysis.R"},
+                {"action":"edit","document_id":null,"path":"new-analysis.R"},
+                {"action":"save","document_id":null,"path":"new-analysis.R"}]
+        })).await.unwrap();
+        request.port.execute_tool(intent).await.unwrap();
+        assert!(request.port.prepare_tool(call, "changed-intent", "rho_task_intent", json!({
+            "request_excerpt":request.run.request.text,"actions":[]
+        })).await.is_err());
+        ComponentEngineOutcome::Completed
+    }
+}
+
+#[tokio::test]
+async fn new_rho_task_exposes_document_work_without_a_component_mode_or_selected_document() {
+    let provider = Provider::new(Mode::ReadFile).await;
+    let mut f = Fixture::new().await;
+    f.service = ComponentAgentService::with_engine(
+        Arc::new(ApplicationStore::open(&f._directory.path().join("components.sqlite")).unwrap()),
+        Arc::new(UnifiedTaskEngine));
+    f.configure(&provider).await;
+    let mut request = f.request();
+    let conversation = f.service.create(&f.host, &f.context, &f.project, &f.window,
+        "objects-task", ComponentAgentProfile::Objects).unwrap();
+    request.conversation_id = conversation.conversation_id;
+    request.conversation_version = conversation.version;
+    request.text = "Create and save a new analysis script".into();
+    request.grant.permission_policy = Some(ComponentPermissionPolicy::Ask);
+    let run = f.start(request).await;
+    let done = f.terminal(&run.run_id).await;
+    assert_eq!(done.state, ComponentAgentRunState::Completed, "{:?}", done.reason);
+    assert_eq!(done.task_intent.unwrap().actions.len(), 3);
+    assert!(provider.state.requests.lock().unwrap().is_empty());
+    f.service.close().await;
+}
 impl Fixture {
     async fn new() -> Self {
         let directory = tempfile::tempdir().unwrap();
@@ -466,7 +616,7 @@ impl Fixture {
                 ComponentAgentProfile::Project,
             )
             .unwrap();
-        ComponentAgentStart {
+        ComponentAgentStart { assets: None,
             continuation: None,
             request_id: "user-request".into(),
             conversation_id: conversation.conversation_id,
@@ -475,6 +625,7 @@ impl Fixture {
             model_settings_version: 1,
             text: "Read analysis.R and explain the fixture.".into(),
             grant: ComponentAgentGrant {
+                permission_policy: None,
                 mode: ComponentAgentMode::Explain,
                 session: None,
                 documents: vec![],
@@ -644,6 +795,41 @@ async fn stop_interrupts_a_silent_provider_and_does_not_stop_other_work() {
         .unwrap();
     assert_eq!(response["status"], "ready");
     f.service.close().await;
+}
+
+#[tokio::test]
+async fn stop_interrupts_an_unfinished_event_stream_and_retains_partial_text() {
+    use tokio::io::{AsyncReadExt,AsyncWriteExt};
+    let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=tokio::spawn(async move {
+        let (mut socket,_)=listener.accept().await.unwrap();
+        let mut bytes=[0u8;4096];assert!(socket.read(&mut bytes).await.unwrap()>0);
+        let partial=chunk(json!({"role":"assistant"}),Value::Null)+&chunk(json!({"content":"Partial answer retained"}),Value::Null);
+        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n").await.unwrap();
+        socket.write_all(format!("{:x}\r\n{}\r\n",partial.len(),partial).as_bytes()).await.unwrap();
+        // Keep the body open without a stop/DONE event or terminal HTTP chunk.
+        std::future::pending::<()>().await;
+        drop(socket);
+    });
+    let f=Fixture::new().await;
+    let key=f.service.put_session_key(&f.host,&f.context,&f.project,&f.window,"fixture-only".into()).unwrap();
+    f.service.configure(&f.host,&f.context,&f.project,&f.window,&ComponentModelSettings{version:0,enabled:true,
+        connection:Some(ComponentModelConnection{protocol:ComponentModelProtocol::OpenaiCompletions,
+            base_url:format!("http://{address}/v1"),model:"fixture".into(),credential:key})}).await.unwrap();
+    let run=f.start(f.request()).await;
+    tokio::time::timeout(Duration::from_secs(3),async{loop{
+        let page=f.service.events(&f.host,&f.context,&f.project,&run.run_id,0,128).unwrap();
+        if page.events.iter().any(|event|matches!(&event.content,ComponentAgentEventContent::Text{text} if text.contains("Partial answer retained"))){break;}
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }}).await.unwrap();
+    f.service.stop(&f.host,&f.context,&f.project,&f.window,&run.run_id).await.unwrap();
+    let done=tokio::time::timeout(Duration::from_secs(1),f.terminal(&run.run_id)).await.unwrap();
+    assert_eq!(done.state,ComponentAgentRunState::Stopped);
+    assert_eq!(done.model_calls,1);
+    let page=f.service.events(&f.host,&f.context,&f.project,&run.run_id,0,128).unwrap();
+    assert!(page.events.iter().any(|event|matches!(&event.content,ComponentAgentEventContent::Text{text} if text.contains("Partial answer retained"))));
+    f.service.close().await;server.abort();
 }
 
 #[tokio::test]
@@ -939,7 +1125,7 @@ async fn saturated_model_queue_keeps_queries_and_stop_responsive_and_disable_fen
                 ComponentAgentProfile::Project,
             )
             .unwrap();
-        ComponentAgentStart {
+        ComponentAgentStart { assets: None,
             continuation: None,
             request_id: format!("request-{id}"),
             conversation_id: conversation.conversation_id,
@@ -948,6 +1134,7 @@ async fn saturated_model_queue_keeps_queries_and_stop_responsive_and_disable_fen
             model_settings_version: 1,
             text: "Observe the authorized project".into(),
             grant: ComponentAgentGrant {
+                permission_policy: None,
                 mode: ComponentAgentMode::Explain,
                 session: None,
                 documents: vec![],
@@ -1070,5 +1257,162 @@ async fn saturated_model_queue_keeps_queries_and_stop_responsive_and_disable_fen
     }
     assert_eq!(provider.state.requests.lock().unwrap().len(), 3);
     assert!(f.host.is_idle());
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn diagnostic_category_does_not_block_regular_runs_and_returns_visible_original_request() {
+    let provider = Provider::new(Mode::Silent).await;
+    let f = Fixture::new().await;
+    f.configure(&provider).await;
+    let request = ComponentModelTestRequest {
+        project_root: f.project.clone(), window: f.window.clone(), request_id: "category-test".into(),
+        model_settings_version: 1, kind: ComponentModelTestKind::Connection,
+    };
+    f.service.test_model(f.host.clone(), f.context.clone(), request.clone()).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(3), provider.state.requested.notified()).await.unwrap();
+    let repeated = f.service.test_model(f.host.clone(), f.context.clone(), request.clone()).await.unwrap();
+    assert_eq!(repeated.request_id, request.request_id);
+    let mut second = request.clone(); second.request_id = "second-test".into();
+    let error = f.service.test_model(f.host.clone(), f.context.clone(), second.clone()).await.unwrap_err();
+    assert!(matches!(&error, rho_application::ApplicationError::Busy { request_id: Some(id), .. } if id == "category-test"));
+    assert_eq!(error.diagnostic().code, DiagnosticCode::Busy);
+    assert!(f.service.diagnostic(&f.host, &f.context, &f.project, "second-test").unwrap().is_none());
+    // A diagnostic uses only one model slot. Ordinary work can still reach the provider.
+    f.service.start(f.host.clone(), f.context.clone(), &f.project, f.request()).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(3), provider.state.requested.notified()).await.unwrap();
+    assert_eq!(provider.state.requests.lock().unwrap().len(), 2);
+    f.service.stop_test(&f.host, &f.context, &f.project, &f.window, "category-test").await.unwrap();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            match f.service.test_model(f.host.clone(), f.context.clone(), second.clone()).await {
+                Ok(diagnostic) => break diagnostic,
+                Err(rho_application::ApplicationError::Busy { .. }) => tokio::task::yield_now().await,
+                Err(error) => panic!("unexpected diagnostic rejection: {error}"),
+            }
+        }
+    }).await.unwrap();
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn removing_current_key_preserves_accepted_work_and_checks_settings_version() {
+    let provider = Provider::new(Mode::Silent).await;
+    let f = Fixture::new().await;
+    f.configure(&provider).await;
+    let settings = f.service.settings(&f.host, &f.context, &f.project).unwrap();
+    let ComponentCredentialRef::Session { key_id } = settings.connection.unwrap().credential else { panic!() };
+    let run = f.service.start(f.host.clone(), f.context.clone(), &f.project, f.request()).await.unwrap();
+    assert!(matches!(f.service.remove_credential(&f.host, &f.context, &f.project, &f.window, 0, &key_id).await,
+        Err(rho_application::ApplicationError::Conflict)));
+    assert!(f.service.credential_status(&f.host, &f.context, &f.project).unwrap().available);
+    let status = f.service.remove_credential(&f.host, &f.context, &f.project, &f.window, 1, &key_id).await.unwrap();
+    assert!(!status.available);
+    // The accepted request owns its key even if execution was still queued at removal.
+    tokio::time::timeout(Duration::from_secs(3), provider.state.requested.notified()).await.unwrap();
+    assert_eq!(provider.state.requests.lock().unwrap().len(), 1);
+    assert_ne!(f.service.run(&f.host, &f.context, &f.project, &run.run_id).unwrap().state, ComponentAgentRunState::Failed);
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn model_test_history_from_another_host_is_observed_as_interrupted_without_replaying() {
+    let provider = Provider::new(Mode::Silent).await;
+    let f = Fixture::new().await;
+    f.configure(&provider).await;
+    let request = ComponentModelTestRequest { project_root: f.project.clone(), window: f.window.clone(), request_id: "old-host-test".into(), model_settings_version: 1, kind: ComponentModelTestKind::Connection };
+    f.service.test_model(f.host.clone(), f.context.clone(), request.clone()).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(3), provider.state.requested.notified()).await.unwrap();
+    let reopened = ComponentAgentService::new(Arc::new(ApplicationStore::open(&f._directory.path().join("components.sqlite")).unwrap()));
+    assert_eq!(reopened.diagnostic(&f.host, &f.context, &f.project, &request.request_id).unwrap().unwrap().state, ComponentModelTestState::Interrupted);
+    assert_eq!(reopened.diagnostics(&f.host, &f.context, &f.project).unwrap()[0].state, ComponentModelTestState::Interrupted);
+    assert_eq!(reopened.test_model(f.host.clone(), f.context.clone(), request.clone()).await.unwrap().state, ComponentModelTestState::Interrupted);
+    assert_eq!(provider.state.requests.lock().unwrap().len(), 1);
+    // Observation does not rewrite the old owner's live record.
+    assert_eq!(f.service.diagnostic(&f.host, &f.context, &f.project, &request.request_id).unwrap().unwrap().state, ComponentModelTestState::Running);
+    f.service.close().await;
+    reopened.close().await;
+}
+
+#[derive(Default)]
+struct UploadEngine { captures: Mutex<Vec<(String, usize)>> }
+#[async_trait::async_trait]
+impl ComponentAgentEngine for UploadEngine {
+    async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome {
+        use rho_application::ComponentImageSource;
+        assert!(request.images.iter().all(|image| matches!(image.reference, ComponentImageSource::Attachment { .. })));
+        self.captures.lock().unwrap().push((request.context, request.images.len()));
+        ComponentEngineOutcome::Completed
+    }
+    async fn test_model(&self, _: ComponentModelConnection, _: rho_application::ComponentModelKey, _: ComponentModelTestKind, _: tokio_util::sync::CancellationToken) -> Result<(), String> { Ok(()) }
+}
+const UPLOADED_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC";
+
+#[tokio::test]
+async fn uploaded_text_and_image_are_task_owned_frozen_inputs_and_image_testing_is_required() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let provider = Provider::new(Mode::Silent).await;
+    let mut f = Fixture::new().await;
+    let engine = Arc::new(UploadEngine::default());
+    f.service = ComponentAgentService::with_engine(Arc::new(ApplicationStore::open(&f._directory.path().join("components.sqlite")).unwrap()), engine.clone());
+    f.configure(&provider).await;
+    let mut request = f.request();
+    let text_id = uuid::Uuid::new_v4().to_string();
+    let text_bytes = "上传的分析说明\nexpected_marker <- 42\n".as_bytes();
+    let text = f.service.add_asset(&f.host, &f.context, &f.project, &f.window, "conversation", &text_id, "nested/analysis.R", "application/octet-stream", &STANDARD.encode(text_bytes)).unwrap();
+    assert_eq!(text.name, "analysis.R");
+    assert_eq!(f.service.add_asset(&f.host, &f.context, &f.project, &f.window, "conversation", &text_id, "analysis.R", "text/plain", &STANDARD.encode(text_bytes)).unwrap().sha256, text.sha256);
+    assert!(matches!(f.service.add_asset(&f.host, &f.context, &f.project, &f.window, "conversation", &text_id, "analysis.R", "text/plain", &STANDARD.encode("changed")), Err(rho_application::ApplicationError::RequestConflict)));
+    let image_id = uuid::Uuid::new_v4().to_string();
+    let image = f.service.add_asset(&f.host, &f.context, &f.project, &f.window, "conversation", &image_id, "uploaded.png", "image/png", UPLOADED_PNG).unwrap();
+    request.assets = Some(vec![text.asset_id.clone(), image.asset_id.clone()]);
+    request.text = "Read the attached analysis and describe the image".into();
+    assert!(f.service.start(f.host.clone(), f.context.clone(), &f.project, request.clone()).await.unwrap_err().to_string().contains("Image input is not verified"));
+    assert!(engine.captures.lock().unwrap().is_empty());
+    let test = ComponentModelTestRequest { project_root: f.project.clone(), window: f.window.clone(), request_id: "verify-upload-images".into(), model_settings_version: 1, kind: ComponentModelTestKind::Images };
+    f.service.test_model(f.host.clone(), f.context.clone(), test).await.unwrap();
+    assert_eq!(diagnostic_done(&f, "verify-upload-images").await.state, ComponentModelTestState::Passed);
+    let run = f.start(request).await;
+    let done = f.terminal(&run.run_id).await;
+    assert_eq!(done.state, ComponentAgentRunState::Completed);
+    let captures = engine.captures.lock().unwrap();
+    assert_eq!(captures.len(), 1);
+    assert_eq!(captures[0].1, 1);
+    assert!(captures[0].0.contains("expected_marker <- 42"));
+    assert!(captures[0].0.contains("user_upload"));
+    assert!(!captures[0].0.contains(UPLOADED_PNG));
+    drop(captures);
+    assert_eq!(done.context.unwrap().sources.len(), 2);
+    let conversation = f.service.conversation(&f.host, &f.context, &f.project, "conversation").unwrap();
+    f.service.remove_asset(&f.host, &f.context, &f.project, &f.window, "conversation", &image.asset_id, conversation.draft_version).unwrap();
+    let (_, read) = f.service.asset(&f.host, &f.context, &ReadComponentAgentAsset { project_root: f.project.clone(), conversation_id: "conversation".into(), asset_id: image.asset_id }).unwrap();
+    assert_eq!(read, STANDARD.decode(UPLOADED_PNG).unwrap());
+    assert!(provider.state.requests.lock().unwrap().is_empty());
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn uploaded_assets_reject_cross_task_references_invalid_images_and_excess_context() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let provider = Provider::new(Mode::Silent).await;
+    let mut f = Fixture::new().await;
+    f.service = ComponentAgentService::with_engine(Arc::new(ApplicationStore::open(&f._directory.path().join("components.sqlite")).unwrap()), Arc::new(UploadEngine::default()));
+    f.configure(&provider).await;
+    let mut request = f.request();
+    let other = f.service.create(&f.host, &f.context, &f.project, &f.window, "other-upload-task", ComponentAgentProfile::Project).unwrap();
+    let asset = f.service.add_asset(&f.host, &f.context, &f.project, &f.window, "conversation", &uuid::Uuid::new_v4().to_string(), "notes.txt", "text/plain", &STANDARD.encode("private to this task")).unwrap();
+    assert!(f.service.asset(&f.host, &f.context, &ReadComponentAgentAsset { project_root: f.project.clone(), conversation_id: other.conversation_id.clone(), asset_id: asset.asset_id.clone() }).is_err());
+    request.conversation_id = other.conversation_id; request.conversation_version = other.version; request.assets = Some(vec![asset.asset_id]);
+    assert!(matches!(f.service.start(f.host.clone(), f.context.clone(), &f.project, request).await, Err(rho_application::ApplicationError::NotFound)));
+    for (mime, bytes) in [("image/png", b"not a PNG".as_slice()), ("application/pdf", b"%PDF-1.5".as_slice()), ("text/plain", b"binary\0data".as_slice())] {
+        assert!(f.service.add_asset(&f.host, &f.context, &f.project, &f.window, "conversation", &uuid::Uuid::new_v4().to_string(), "input.bin", mime, &STANDARD.encode(bytes)).is_err());
+    }
+    assert!(f.service.add_asset(&f.host, &f.context, &f.project, &f.window, "conversation", &uuid::Uuid::new_v4().to_string(), "oversized.txt", "text/plain", &STANDARD.encode(vec![b'a'; 32769])).is_err());
+    let images = (0..3).map(|i| f.service.add_asset(&f.host, &f.context, &f.project, &f.window, "conversation", &uuid::Uuid::new_v4().to_string(), &format!("image-{i}.png"), "image/png", UPLOADED_PNG).unwrap().asset_id).collect();
+    f.service.test_model(f.host.clone(), f.context.clone(), ComponentModelTestRequest { project_root: f.project.clone(), window: f.window.clone(), request_id: "verify-three-images".into(), model_settings_version: 1, kind: ComponentModelTestKind::Images }).await.unwrap();
+    diagnostic_done(&f, "verify-three-images").await;
+    let mut request = f.request(); request.assets = Some(images);
+    assert!(matches!(f.service.start(f.host.clone(), f.context.clone(), &f.project, request).await, Err(rho_application::ApplicationError::Budget(_))));
+    assert!(provider.state.requests.lock().unwrap().is_empty());
     f.service.close().await;
 }

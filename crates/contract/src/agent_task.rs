@@ -134,6 +134,9 @@ pub struct AgentCommandReceipt {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct AgentTaskEvent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub usage: Option<crate::AgentUsageObservation>,
     pub sequence: u64,
     pub event_id: String,
     pub request_id: Option<String>,
@@ -203,6 +206,12 @@ pub struct AgentTasksQuery {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AgentTaskQuery {
+    ScientificWork { task_id: String, limit: u32 },
+    ProjectList {
+        archived: Option<bool>,
+        before: Option<String>,
+        limit: u32,
+    },
     ContextSources,
     ContextSearch {
         window: ApplicationWindowRef,
@@ -241,6 +250,8 @@ pub enum AgentTaskQuery {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AgentTaskQueryResult {
+    ScientificWork { work: crate::AgentScientificWork },
+    ProjectList { page: crate::ProjectAgentTaskPage },
     ContextSources {
         sources: Vec<AgentContextSource>,
     },

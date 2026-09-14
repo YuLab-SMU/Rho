@@ -6093,6 +6093,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "futures",
+ "http",
  "rho-contract",
  "rho-host",
  "rmcp",
@@ -6233,6 +6234,7 @@ dependencies = [
 name = "rho-workbench"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "rho-contract",
  "rho-host",

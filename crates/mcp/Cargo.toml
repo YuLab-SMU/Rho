@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+http = "1"
 base64 = "0.22"
 rho-contract = { path = "../contract" }
 rho-host = { path = "../host" }

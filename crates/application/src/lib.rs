@@ -46,12 +46,38 @@ pub enum ApplicationError {
     InvalidBridge,
     #[error("application budget exhausted: {0}")]
     Budget(String),
+    #[error("{message}")]
+    Busy { message: String, request_id: Option<String> },
+    #[error("{}", .0.message)]
+    Diagnostic(Box<Diagnostic>),
     #[error("application storage failed: {0}")]
     Storage(String),
     #[error(
         "the original caller lacks native read scopes for this application action: {missing:?}"
     )]
     AccessDenied { missing: Vec<String> },
+}
+
+
+impl ApplicationError {
+    /// Transport-independent explanation. Read hints are added only by the owner
+    /// after it verifies visibility and the identities required by that query.
+    pub fn diagnostic(&self) -> Diagnostic {
+        let (code, continuation) = match self {
+            Self::Diagnostic(diagnostic) => return *diagnostic.clone(),
+            Self::InvalidInput(_) => (DiagnosticCode::InvalidInput, DiagnosticContinuation::CorrectInput),
+            Self::NotFound => (DiagnosticCode::NotFound, DiagnosticContinuation::ReadAgain),
+            Self::Offline => (DiagnosticCode::Unavailable, DiagnosticContinuation::ReadAgain),
+            Self::IncarnationChanged => (DiagnosticCode::StaleSession, DiagnosticContinuation::RefreshObservation),
+            Self::Conflict => (DiagnosticCode::ContentChanged, DiagnosticContinuation::RefreshObservation),
+            Self::RequestConflict => (DiagnosticCode::IdempotencyConflict, DiagnosticContinuation::InspectOriginal),
+            Self::InvalidBridge | Self::AccessDenied { .. } => (DiagnosticCode::AccessDenied, DiagnosticContinuation::None),
+            Self::Budget(_) => (DiagnosticCode::BudgetExceeded, DiagnosticContinuation::ReadAgain),
+            Self::Busy { .. } => (DiagnosticCode::Busy, DiagnosticContinuation::InspectOriginal),
+            Self::Storage(_) => (DiagnosticCode::OutcomeUncertain, DiagnosticContinuation::InspectOriginal),
+        };
+        Diagnostic { code, continuation, message: self.to_string(), next_reads: vec![] }
+    }
 }
 
 pub struct ApplicationOwner {

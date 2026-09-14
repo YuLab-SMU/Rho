@@ -9,6 +9,26 @@ pub(super) struct RegisteredTool {
     document_action: Option<&'static str>,
 }
 impl RegisteredTool {
+    pub fn is_document_navigation(&self) -> bool {
+        matches!(self.document_action, Some("open_document" | "create_document"))
+    }
+    pub fn bind_navigation(&self, run: &ComponentAgentRun, arguments: &Value,
+        context_version: String) -> Result<ComponentToolAction, ApplicationError> {
+        if !self.is_document_navigation() || !self.model_validator.is_valid(arguments) {
+            return Err(error("Invalid document target"));
+        }
+        let path = arguments["path"].as_str().ok_or_else(|| error("Document path is required"))?.to_owned();
+        let action = if self.document_action == Some("open_document") {
+            ApplicationAction::OpenDocument { path, expected_context_version: context_version }
+        } else {
+            ApplicationAction::CreateDocument { path: Some(path), text: String::new(), expected_context_version: context_version }
+        };
+        let command = ApplicationCommandRequest { window: run.request.window.clone(), request_id: "component-prepared".into(), action, execution_target: None };
+        if !self.native_validator.is_valid(&serde_json::to_value(&command).map_err(error)?) {
+            return Err(error("Bound document action violates the native schema"));
+        }
+        Ok(ComponentToolAction::Control(command))
+    }
     pub fn is_valid_text_replace(&self, arguments: &Value) -> bool {
         self.document_action == Some("replace_text") && self.model_validator.is_valid(arguments)
     }
@@ -53,12 +73,7 @@ impl RegisteredTool {
             let id = arguments["document_id"]
                 .as_str()
                 .ok_or_else(|| error("Document identity is required"))?;
-            let grant = run
-                .request
-                .grant
-                .documents
-                .iter()
-                .find(|grant| grant.document.document_id == id)
+            let grant = component_document_grant(run, id)
                 .ok_or_else(|| error("Document is outside this request"))?;
             let document = component_document_reference(run, id)
                 .ok_or_else(|| error("Document version is unavailable"))?;
@@ -233,9 +248,23 @@ pub(super) fn registered_tools(
     for descriptor in host.capabilities_for(context) {
         if descriptor.kind == CapabilityKind::Control
             && descriptor.capability.id == "application.control"
-            && run.request.grant.mode != ComponentAgentMode::Explain
+            && run.request.grant.allows_edit()
         {
             let native = expanded(&descriptor.input_schema, &descriptor.input_schema, 0)?;
+            if run.request.grant.permission_policy.is_some() {
+                for (kind, name) in [("open_document", "application_open_document"), ("create_document", "application_create_document")] {
+                    let parameters = json!({"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1,"maxLength":4096}},"required":["path"]});
+                    registered.insert(name.into(), RegisteredTool {
+                        descriptor: descriptor.clone(),
+                        spec: ComponentToolSpec {name:name.into(), description:if kind == "open_document" {
+                            "Open an existing project file through its document owner and obtain the exact document reference for later reads and edits. This is navigation; it does not edit or save the file.".into()
+                        } else { "Create an empty unsaved document at an exact project-relative path. Record the user's create/edit/save intent first, then use the returned document reference for edits and explicit saving.".into() }, parameters: parameters.clone()},
+                        hidden:vec![], model_validator:jsonschema::validator_for(&parameters).map_err(error)?,
+                        native_validator:jsonschema::validator_for(&descriptor.input_schema).map_err(error)?,
+                        document_action:Some(kind),
+                    });
+                }
+            }
             for (kind, name) in [
                 ("edit_document", "application_edit_document"),
                 ("replace_text", "application_replace_text"),
@@ -245,7 +274,7 @@ pub(super) fn registered_tools(
             ] {
                 let execute = matches!(kind, "run_file" | "run_selection");
                 let save = matches!(kind, "save" | "run_file");
-                if execute && run.request.grant.mode != ComponentAgentMode::Run {
+                if execute && !run.request.grant.allows_execution() {
                     continue;
                 }
                 let ids: Vec<_> = run
@@ -253,10 +282,10 @@ pub(super) fn registered_tools(
                     .grant
                     .documents
                     .iter()
-                    .filter(|g| !save || g.allow_save)
+                    .filter(|g| !save || run.request.grant.allows_save(g))
                     .map(|g| g.document.document_id.clone())
                     .collect();
-                if ids.is_empty() {
+                if ids.is_empty() && run.request.grant.permission_policy.is_none() {
                     continue;
                 }
                 let mut descriptor = descriptor.clone();
@@ -288,7 +317,9 @@ pub(super) fn registered_tools(
                 for hidden in ["kind", "document", "target_path"] {
                     properties.remove(hidden);
                 }
-                properties.insert("document_id".into(), json!({"type":"string","enum":ids}));
+                properties.insert("document_id".into(), if run.request.grant.permission_policy.is_some() {
+                    json!({"type":"string","description":"Exact owner-confirmed document_id returned by application_open_document, application_create_document, or selected context"})
+                } else { json!({"type":"string","enum":ids}) });
                 let required = parameters
                     .get_mut("required")
                     .and_then(Value::as_array_mut)
@@ -341,24 +372,24 @@ pub(super) fn registered_tools(
         }
         let run_r = descriptor.kind == CapabilityKind::Operation
             && descriptor.capability.id == "workspace.run_r"
-            && run.request.grant.mode == ComponentAgentMode::Run
-            && matches!(
+            && run.request.grant.allows_execution()
+            && (run.request.grant.permission_policy.is_some() || matches!(
                 run.profile,
                 ComponentAgentProfile::Workspace | ComponentAgentProfile::Project
-            );
+            ));
         let resume = descriptor.kind == CapabilityKind::Operation
             && descriptor.capability.id == "workspace.resume_queue"
-            && run.request.grant.mode == ComponentAgentMode::Run
-            && matches!(
+            && run.request.grant.allows_execution()
+            && (run.request.grant.permission_policy.is_some() || matches!(
                 run.profile,
                 ComponentAgentProfile::Documents
                     | ComponentAgentProfile::Workspace
                     | ComponentAgentProfile::Project
-            );
+            ));
         if !run_r
             && !resume
             && (descriptor.kind != CapabilityKind::Query
-                || !component_query_allowed(run.profile, &descriptor.capability.id))
+                || !component_query_available(run, &descriptor.capability.id))
         {
             continue;
         }

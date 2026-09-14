@@ -30,6 +30,7 @@ struct PendingReply {
     sender: Reply,
     method: String,
     session: Option<String>,
+    request: Option<String>,
 }
 type DecisionReplies = HashMap<u64, (Value, HashMap<String, Value>)>;
 const MAX_TEXT: usize = 256 * 1024;
@@ -263,7 +264,11 @@ impl Rpc {
                             }
                             rpc.changes.notify_waiters();
                         } else if reply.method == "session/prompt" {
-                            rpc.observer.lock().unwrap().finish();
+                            let mut observer = rpc.observer.lock().unwrap();
+                            if observer.session == reply.session && observer.request == reply.request {
+                                if let Ok(value) = &result { observer.observe_usage("acp.prompt_response", "turn_total", &value["usage"]); }
+                                observer.finish();
+                            }
                         }
                         let _ = reply.sender.send(result);
                     }
@@ -321,12 +326,14 @@ impl Rpc {
             .as_str()
             .or_else(|| params["sessionId"].as_str())
             .map(str::to_owned);
+        let request = self.observer.lock().unwrap().request.clone();
         self.replies.lock().unwrap().insert(
             id,
             PendingReply {
                 sender: tx,
                 method: method.into(),
                 session,
+                request,
             },
         );
         if let Err(error) = self

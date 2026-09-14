@@ -2,7 +2,11 @@
 mod agent_client;
 pub use agent_client::*;
 mod agent_task;
+mod agent_usage;
+pub use agent_usage::*;
 pub use agent_task::*;
+mod project_agent_task;
+pub use project_agent_task::*;
 mod component_agent;
 pub use component_agent::*;
 

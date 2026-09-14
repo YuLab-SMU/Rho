@@ -45,6 +45,9 @@ fn decode_task(value: String, cursor: u64, gap: bool) -> Result<StoredAgentTask,
     Ok(task)
 }
 impl AgentTaskRepository for ApplicationStore {
+    fn project_agent_tasks(&self, scope: &ApplicationScope, archived: Option<bool>, before: Option<&str>, limit: usize, native_host: &str, rho_host: &str, rho_live: &[String]) -> Result<ProjectAgentTaskPage, ApplicationError> {
+        self.read_project_agent_tasks(scope, archived, before, limit, native_host, rho_host, rho_live)
+    }
     fn agent_task(
         &self,
         scope: &ApplicationScope,
@@ -207,60 +210,14 @@ impl AgentTaskRepository for ApplicationStore {
             durable_cursor: durable,
         })
     }
-    fn agent_assets(
-        &self,
-        scope: &ApplicationScope,
-        task: &str,
-    ) -> Result<Vec<AgentAsset>, ApplicationError> {
-        let c = self.0.lock().map_err(error)?;
-        let mut s=c.prepare("SELECT value FROM agent_task_assets WHERE project=?1 AND principal=?2 AND task_id=?3 ORDER BY asset_id LIMIT 64").map_err(error)?;
-        let rows = s
-            .query_map(params![scope.project, scope.principal, task], |r| {
-                r.get::<_, String>(0)
-            })
-            .map_err(error)?;
-        rows.map(|r| serde_json::from_str(&r.map_err(error)?).map_err(error))
-            .collect()
+    fn agent_assets(&self, scope: &ApplicationScope, task: &str) -> Result<Vec<AgentAsset>, ApplicationError> {
+        crate::agent_assets::list(self, scope, crate::agent_assets::AssetOwner::Native(task))
     }
-    fn agent_asset(
-        &self,
-        scope: &ApplicationScope,
-        task: &str,
-        asset: &str,
-    ) -> Result<(AgentAsset, Vec<u8>), ApplicationError> {
-        let c = self.0.lock().map_err(error)?;
-        let row: Option<(String,Vec<u8>)>=c.query_row("SELECT value,data FROM agent_task_assets WHERE project=?1 AND principal=?2 AND task_id=?3 AND asset_id=?4",params![scope.project,scope.principal,task,asset],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(error)?;
-        let (value, data) = row.ok_or(ApplicationError::NotFound)?;
-        Ok((serde_json::from_str(&value).map_err(error)?, data))
+    fn agent_asset(&self, scope: &ApplicationScope, task: &str, asset: &str) -> Result<(AgentAsset, Vec<u8>), ApplicationError> {
+        crate::agent_assets::read(self, scope, crate::agent_assets::AssetOwner::Native(task), asset)
     }
-    fn put_agent_asset(
-        &self,
-        scope: &ApplicationScope,
-        task: &str,
-        asset: &AgentAsset,
-        bytes: &[u8],
-    ) -> Result<(), ApplicationError> {
-        if bytes.len() > 8 * 1024 * 1024 || asset.bytes != bytes.len() as u64 {
-            return Err(ApplicationError::Budget(
-                "Attachments are limited to 8 MiB each".into(),
-            ));
-        }
-        let mut c = self.0.lock().map_err(error)?;
-        let tx = c
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(error)?;
-        let exists: bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM agent_tasks WHERE project=?1 AND principal=?2 AND task_id=?3)",params![scope.project,scope.principal,task],|r|r.get(0)).map_err(error)?;
-        if !exists {
-            return Err(ApplicationError::NotFound);
-        }
-        let (count,total):(usize,usize)=tx.query_row("SELECT COUNT(*),COALESCE(SUM(length(data)),0) FROM agent_task_assets WHERE project=?1 AND principal=?2 AND task_id=?3 AND asset_id != ?4",params![scope.project,scope.principal,task,asset.asset_id],|r|Ok((r.get(0)?,r.get(1)?))).map_err(error)?;
-        if count >= 64 || total + bytes.len() > 32 * 1024 * 1024 {
-            return Err(ApplicationError::Budget(
-                "Task attachment storage is full".into(),
-            ));
-        }
-        tx.execute("INSERT INTO agent_task_assets(project,principal,task_id,asset_id,value,data) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(project,principal,task_id,asset_id) DO NOTHING",params![scope.project,scope.principal,task,asset.asset_id,serde_json::to_string(asset).map_err(error)?,bytes]).map_err(error)?;
-        tx.commit().map_err(error)
+    fn put_agent_asset(&self, scope: &ApplicationScope, task: &str, asset: &AgentAsset, bytes: &[u8]) -> Result<(), ApplicationError> {
+        crate::agent_assets::put(self, scope, crate::agent_assets::AssetOwner::Native(task), asset, bytes)
     }
     fn commit_agent_task(
         &self,
@@ -607,6 +564,7 @@ mod tests {
                 task.event_cursor = 510;
                 for sequence in 1..=510 {
                     events.push(AgentTaskEvent {
+                        usage: None,
                         sequence,
                         event_id: format!("e{sequence}"),
                         request_id: None,

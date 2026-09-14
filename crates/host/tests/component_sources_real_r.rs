@@ -231,7 +231,7 @@ async fn real_objects_packages_and_plot_sources_are_verified_without_new_operati
             host.clone(),
             context.clone(),
             root,
-            ComponentAgentStart { continuation: None,
+            ComponentAgentStart { assets: None, continuation: None,
                 request_id: "with-sources".into(),
                 conversation_id: conversation.conversation_id,
                 conversation_version: conversation.version,
@@ -239,6 +239,7 @@ async fn real_objects_packages_and_plot_sources_are_verified_without_new_operati
                 model_settings_version: 1,
                 text: "Inspect selected context".into(),
                 grant: ComponentAgentGrant {
+                    permission_policy: None,
                     mode: ComponentAgentMode::Explain,
                     session: Some(session.clone()),
                     documents: vec![],

@@ -182,7 +182,7 @@ async fn component_host_and_mcp_preserve_the_same_native_operation_and_observati
             host.clone(),
             context.clone(),
             &project,
-            ComponentAgentStart {
+            ComponentAgentStart { assets: None,
                 continuation: None,
                 request_id: "execute-once".into(),
                 conversation_id: conversation.conversation_id,
@@ -191,6 +191,7 @@ async fn component_host_and_mcp_preserve_the_same_native_operation_and_observati
                 model_settings_version: 1,
                 text: "Increment the fixture counter once and read the original operation.".into(),
                 grant: ComponentAgentGrant {
+                    permission_policy: None,
                     mode: ComponentAgentMode::Run,
                     session: Some(ComponentAgentSession {
                         workspace_instance_id: "main".into(),

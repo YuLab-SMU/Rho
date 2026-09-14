@@ -141,6 +141,7 @@ impl NativeAgentSession for Session {
         let mut events = self.events.lock().unwrap();
         let n = events.len() as u64;
         events.push(NativeEvent {
+            usage: None,
             cursor: n + 1,
             key: format!("{}:user", p.request_id),
             request_id: Some(p.request_id.clone()),
@@ -156,6 +157,7 @@ impl NativeAgentSession for Session {
         });
         if !self.hold {
             events.push(NativeEvent {
+            usage: None,
                 cursor: n + 2,
                 key: format!("{}:assistant", p.request_id),
                 request_id: Some(p.request_id),
@@ -200,12 +202,50 @@ impl NativeAgentSession for Session {
         Ok((vec![], None))
     }
 }
+struct FaultRepository {
+    store: Arc<ApplicationStore>,
+    remaining: AtomicUsize,
+    failed: AtomicUsize,
+    receipts: SyncMutex<Vec<(String, String)>>,
+}
+impl FaultRepository {
+    fn new(store: Arc<ApplicationStore>) -> Self {
+        Self { store, remaining: AtomicUsize::new(0), failed: AtomicUsize::new(0), receipts: SyncMutex::new(vec![]) }
+    }
+    fn arm(&self, failures: usize) { self.remaining.store(failures, Ordering::SeqCst); }
+}
+impl AgentTaskRepository for FaultRepository {
+    fn agent_task(&self, scope: &ApplicationScope, id: &str) -> Result<Option<StoredAgentTask>, ApplicationError> { self.store.agent_task(scope, id) }
+    fn agent_tasks(&self, scope: &ApplicationScope, archived: Option<bool>, before: Option<&str>, limit: usize) -> Result<Vec<StoredAgentTask>, ApplicationError> { self.store.agent_tasks(scope, archived, before, limit) }
+    fn agent_task_counts(&self, scope: &ApplicationScope, host: &str) -> Result<(u32, u32), ApplicationError> { self.store.agent_task_counts(scope, host) }
+    fn agent_draft(&self, scope: &ApplicationScope, id: &str) -> Result<AgentTaskDraft, ApplicationError> { self.store.agent_draft(scope, id) }
+    fn agent_receipt(&self, scope: &ApplicationScope, id: &str) -> Result<Option<AgentCommandReceipt>, ApplicationError> { self.store.agent_receipt(scope, id) }
+    fn agent_receipts(&self, scope: &ApplicationScope, id: &str) -> Result<Vec<AgentCommandReceipt>, ApplicationError> { self.store.agent_receipts(scope, id) }
+    fn agent_events(&self, scope: &ApplicationScope, id: &str, after: Option<u64>, before: Option<u64>, limit: usize) -> Result<AgentTaskEventPage, ApplicationError> { self.store.agent_events(scope, id, after, before, limit) }
+    fn agent_assets(&self, scope: &ApplicationScope, id: &str) -> Result<Vec<AgentAsset>, ApplicationError> { self.store.agent_assets(scope, id) }
+    fn agent_asset(&self, scope: &ApplicationScope, task: &str, asset: &str) -> Result<(AgentAsset, Vec<u8>), ApplicationError> { self.store.agent_asset(scope, task, asset) }
+    fn put_agent_asset(&self, scope: &ApplicationScope, task: &str, asset: &AgentAsset, bytes: &[u8]) -> Result<(), ApplicationError> { self.store.put_agent_asset(scope, task, asset, bytes) }
+    fn commit_agent_task(&self, scope: &ApplicationScope, write: AgentTaskWrite<'_>) -> Result<(), ApplicationError> {
+        if !write.events.is_empty() && self.remaining.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+            (left > 0).then(|| left.saturating_sub(1))
+        }).is_ok() {
+            self.failed.fetch_add(1, Ordering::SeqCst);
+            return Err(ApplicationError::Storage("Injected native event transaction failure".into()));
+        }
+        let receipts = write.receipts.iter().map(|receipt| (receipt.request_id.clone(), receipt.status.clone())).collect::<Vec<_>>();
+        self.store.commit_agent_task(scope, write)?;
+        self.receipts.lock().unwrap().extend(receipts);
+        Ok(())
+    }
+}
+
 struct Fixture {
     _dir: tempfile::TempDir,
     host: Arc<NextHost>,
     store: Arc<ApplicationStore>,
     service: Arc<AgentTaskService>,
     factory: Arc<Factory>,
+    faults: Arc<FaultRepository>,
     root: String,
     window: ApplicationWindowRef,
     other: ApplicationWindowRef,
@@ -230,7 +270,8 @@ impl Fixture {
         );
         let store = Arc::new(ApplicationStore::open(&db.with_extension("studio.sqlite")).unwrap());
         let factory = Arc::new(Factory::default());
-        let service = AgentTaskService::with_factory(store.clone(), factory.clone());
+        let faults = Arc::new(FaultRepository::new(store.clone()));
+        let service = AgentTaskService::with_factory(faults.clone(), factory.clone());
         let window = register(&host, "one").await;
         let other = register(&host, "two").await;
         Self {
@@ -239,6 +280,7 @@ impl Fixture {
             store,
             service,
             factory,
+            faults,
             root: root.to_string_lossy().into_owned(),
             window,
             other,
@@ -811,4 +853,254 @@ async fn plugin_information_channels_use_the_read_port_and_preserve_project_cont
             .is_err()
     );
     assert_eq!(f.factory.opens.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn task_gates_retain_one_lock_for_waiters_and_release_unused_entries() {
+    let f = Fixture::new().await;
+    let first = f.service.gate("same-task").await;
+    let waiter = f.service.gate("same-task").await;
+    assert!(Arc::ptr_eq(&first, &waiter));
+    let held = first.clone().lock_owned().await;
+    let weak = Arc::downgrade(&first);
+    drop(first);
+    let waiting = tokio::spawn(async move { waiter.lock_owned().await });
+    tokio::task::yield_now().await;
+    let observed = f.service.gate("same-task").await;
+    assert!(Arc::ptr_eq(&observed, &weak.upgrade().unwrap()));
+    assert!(observed.try_lock().is_err());
+    assert!(!waiting.is_finished());
+    drop(observed);
+    drop(held);
+    let acquired = waiting.await.unwrap();
+    let while_waiter_owns = f.service.gate("same-task").await;
+    assert!(while_waiter_owns.try_lock().is_err());
+    drop(while_waiter_owns);
+    drop(acquired);
+    assert!(weak.upgrade().is_none());
+    let other = f.service.gate("different-task").await;
+    assert!(!f.service.gates.lock().await.contains_key("same-task"));
+    let replacement = f.service.gate("same-task").await;
+    assert!(!Arc::ptr_eq(&other, &replacement));
+    f.service.close().await;
+}
+
+async fn wait_for_native_observation(mut condition: impl FnMut() -> bool) {
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while !condition() { tokio::task::yield_now().await; }
+    }).await.unwrap();
+}
+
+#[tokio::test]
+async fn send_acknowledgement_write_failure_is_uncertain_and_observation_does_not_resend() {
+    let f = Fixture::new().await;
+    let d = f.draft(&f.create().await, "deliver only once").await;
+    f.faults.arm(1);
+    let request = f.request(&f.window, AgentTaskCommand::Send { control: ctl(&d), draft_version: d.draft.version });
+    let original = f.command(request.clone()).await;
+    wait_for_native_observation(|| f.store.agent_receipt(&f.scope(), &original.receipt.request_id).unwrap().is_some_and(|r| r.status == "succeeded")).await;
+    let receipts = f.faults.receipts.lock().unwrap().clone();
+    let statuses: Vec<_> = receipts.iter().filter(|(id, _)| id == &original.receipt.request_id).map(|(_, status)| status.as_str()).collect();
+    assert!(statuses.contains(&"uncertain"), "post-send failure must retain uncertainty before recovery: {statuses:?}");
+    assert!(!statuses.contains(&"failed"));
+    assert_eq!(f.faults.failed.load(Ordering::SeqCst), 1);
+    assert!(f.store.agent_draft(&f.scope(), &d.summary.task.task_id).unwrap().content.text.is_empty());
+    let page = f.store.agent_events(&f.scope(), &d.summary.task.task_id, None, None, 100).unwrap();
+    assert_eq!(page.events.iter().filter(|e| e.request_id.as_ref() == Some(&original.receipt.request_id)).count(), 2);
+    assert!(page.events.iter().any(|e| e.role.as_deref() == Some("assistant") && e.text == "ok"));
+    f.command(request).await;
+    assert_eq!(f.factory.sends.load(Ordering::SeqCst), 1);
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn persistent_post_send_failure_keeps_original_request_draft_and_cursor_for_recovery() {
+    let f = Fixture::new().await;
+    let d = f.draft(&f.create().await, "preserve submitted draft").await;
+    f.faults.arm(usize::MAX);
+    let request = f.request(&f.window, AgentTaskCommand::Send { control: ctl(&d), draft_version: d.draft.version });
+    let original = f.command(request.clone()).await;
+    wait_for_native_observation(|| f.faults.failed.load(Ordering::SeqCst) >= 2).await;
+    let receipt = f.store.agent_receipt(&f.scope(), &original.receipt.request_id).unwrap().unwrap();
+    assert_eq!(receipt.status, "uncertain");
+    assert_eq!(receipt.submitted_draft.as_ref().unwrap().text, "preserve submitted draft");
+    assert_eq!(f.store.agent_draft(&f.scope(), &d.summary.task.task_id).unwrap().content.text, "preserve submitted draft");
+    let live = f.service.live.lock().await.get(&d.summary.task.task_id).unwrap().clone();
+    assert_eq!(live.cursor.load(Ordering::Acquire), 0);
+    assert!(f.store.agent_events(&f.scope(), &d.summary.task.task_id, None, None, 100).unwrap().events.is_empty());
+    f.command(request).await;
+    assert_eq!(f.factory.sends.load(Ordering::SeqCst), 1);
+    let current = f.service.owner.detail(&f.scope(), &d.summary.task.task_id).unwrap();
+    f.draft(&current, "newer user draft").await;
+    f.faults.arm(0);
+    f.factory.sessions.lock().unwrap()[0].changed.notify_waiters();
+    wait_for_native_observation(|| f.store.agent_receipt(&f.scope(), &original.receipt.request_id).unwrap().is_some_and(|r| r.status == "succeeded")).await;
+    assert_eq!(live.cursor.load(Ordering::Acquire), 2);
+    assert_eq!(f.store.agent_draft(&f.scope(), &d.summary.task.task_id).unwrap().content.text, "newer user draft");
+    assert_eq!(f.store.agent_events(&f.scope(), &d.summary.task.task_id, None, None, 100).unwrap().events.len(), 2);
+    assert_eq!(f.factory.sends.load(Ordering::SeqCst), 1);
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn disconnected_final_events_remain_live_until_the_sqlite_transaction_succeeds() {
+    let f = Fixture::new().await;
+    f.factory.hold.store(true, Ordering::SeqCst);
+    let d = f.draft(&f.create().await, "finish later").await;
+    let original = f.command(f.request(&f.window, AgentTaskCommand::Send { control: ctl(&d), draft_version: d.draft.version })).await;
+    wait_for_native_observation(|| f.store.agent_events(&f.scope(), &d.summary.task.task_id, None, None, 100).unwrap().events.len() == 1).await;
+    let live = f.service.live.lock().await.get(&d.summary.task.task_id).unwrap().clone();
+    f.faults.arm(usize::MAX);
+    let session = f.factory.sessions.lock().unwrap()[0].clone();
+    {
+        let mut state = session.state.lock().unwrap();
+        session.events.lock().unwrap().push(NativeEvent {
+            usage: None, cursor: 2, key: "final-native-event".into(), request_id: Some(original.receipt.request_id.clone()),
+            session: state.native_session_id.clone(), turn: Some("final-turn".into()), item: None, kind: "message".into(), role: Some("assistant".into()),
+            text: "final output retained".into(), status: None, historical: false, at_ms: now(),
+        });
+        state.state = "disconnected".into();
+    }
+    session.changed.notify_waiters();
+    wait_for_native_observation(|| f.faults.failed.load(Ordering::SeqCst) >= 2).await;
+    assert_eq!(live.cursor.load(Ordering::Acquire), 1);
+    assert!(!live.closed.load(Ordering::Acquire));
+    assert!(f.service.live.lock().await.contains_key(&d.summary.task.task_id));
+    assert_eq!(f.store.agent_events(&f.scope(), &d.summary.task.task_id, None, None, 100).unwrap().events.len(), 1);
+    f.faults.arm(0);
+    session.changed.notify_waiters();
+    wait_for_native_observation(|| live.closed.load(Ordering::Acquire)).await;
+    assert_eq!(live.cursor.load(Ordering::Acquire), 2);
+    assert!(!f.service.live.lock().await.contains_key(&d.summary.task.task_id));
+    let page = f.store.agent_events(&f.scope(), &d.summary.task.task_id, None, None, 100).unwrap();
+    assert_eq!(page.events.len(), 2);
+    assert_eq!(page.events.iter().filter(|e| e.text == "final output retained").count(), 1);
+    assert_eq!(f.factory.sends.load(Ordering::SeqCst), 1);
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn late_post_send_storage_error_cannot_regress_an_observed_terminal_receipt() {
+    let f = Fixture::new().await;
+    let d = f.draft(&f.create().await, "already confirmed").await;
+    let original = f.command(f.request(&f.window, AgentTaskCommand::Send { control: ctl(&d), draft_version: d.draft.version })).await;
+    wait_for_native_observation(|| f.store.agent_receipt(&f.scope(), &original.receipt.request_id).unwrap().is_some_and(|r| r.status == "succeeded")).await;
+    let current = f.service.owner.detail(&f.scope(), &d.summary.task.task_id).unwrap();
+    f.service.fail(&f.scope(), &d.summary.task.task_id, current.summary.attachment.generation, &original.receipt,
+        TaskFailure::uncertain("late error from an earlier failed acknowledgement write"), None).unwrap();
+    let receipt = f.store.agent_receipt(&f.scope(), &original.receipt.request_id).unwrap().unwrap();
+    assert_eq!(receipt.status, "succeeded");
+    assert!(receipt.error.is_none());
+    assert!(receipt.submitted_draft.is_none());
+    assert_eq!(f.service.owner.detail(&f.scope(), &d.summary.task.task_id).unwrap().summary.attachment.state, "ready");
+    assert_eq!(f.factory.sends.load(Ordering::SeqCst), 1);
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn scientific_work_preserves_read_scope_and_does_not_guess_legacy_task_attribution() {
+    let f=Fixture::new().await;
+    let created=f.create().await; let id=created.summary.task.task_id;
+    let request=AgentTasksQuery{project_root:f.root.clone(),query:AgentTaskQuery::ScientificWork{task_id:id.clone(),limit:8}};
+    let mut limited=NextHost::local_context(); limited.scopes.remove("operation.read");
+    let denied=f.service.query(&f.host,&limited,request.clone()).await.unwrap_err();
+    assert_eq!(denied.diagnostic().code,DiagnosticCode::AccessDenied);
+    let observed=f.service.query(&f.host,&NextHost::local_context(),request.clone()).await.unwrap();
+    assert!(matches!(observed,AgentTaskQueryResult::ScientificWork{work} if work.attributable && work.operations.is_empty()));
+    let mut stored=f.store.agent_task(&f.scope(),&id).unwrap().unwrap(); let previous=stored.revision.clone();
+    stored.task_mcp_identity=false; stored.revision=uuid::Uuid::new_v4().to_string(); stored.observation_version+=1;
+    f.store.commit_agent_task(&f.scope(),AgentTaskWrite{expected_revision:Some(&previous),task:&stored,draft:None,receipts:&[],events:&[]}).unwrap();
+    let legacy=f.service.query(&f.host,&NextHost::local_context(),request).await.unwrap();
+    assert!(matches!(legacy,AgentTaskQueryResult::ScientificWork{work} if !work.attributable && work.operations.is_empty()));
+}
+
+async fn assert_takeover_preserves_native_transport_until_disconnect(stop: bool) {
+    let f = Fixture::new().await;
+    f.factory.hold.store(stop, Ordering::SeqCst);
+    let initial = f.create().await;
+    let task_id = initial.summary.task.task_id.clone();
+    if stop {
+        let draft = f.draft(&initial, "original running instruction").await;
+        f.command(f.request(&f.window, AgentTaskCommand::Send { control: ctl(&draft), draft_version: draft.draft.version })).await;
+        wait_for_native_observation(|| f.factory.sends.load(Ordering::SeqCst) == 1).await;
+    } else {
+        let connected = f.command(f.request(&f.window, AgentTaskCommand::Connect { control: ctl(&initial) })).await;
+        assert_eq!(f.settled(&connected.receipt.request_id).await.status, "succeeded");
+    }
+    let before = f.service.owner.detail(&f.scope(), &task_id).unwrap();
+    let live = f.service.live.lock().await.get(&task_id).unwrap().clone();
+    let token = live.mcp.token.clone();
+    let identity = f.service.mcp_connections.resolve(&token).unwrap();
+    let native = live.session.snapshot();
+    f.expire_window();
+    let transfer = f.command(f.request(&f.other, AgentTaskCommand::TakeOver { control: ctl(&before), stop })).await;
+    assert_eq!(f.settled(&transfer.receipt.request_id).await.status, "succeeded");
+    let controlled = f.service.owner.detail(&f.scope(), &task_id).unwrap();
+    assert_eq!(controlled.summary.attachment.controller, f.other);
+    assert!(controlled.summary.attachment.generation > before.summary.attachment.generation);
+    let current_live = f.service.live.lock().await.get(&task_id).unwrap().clone();
+    assert!(Arc::ptr_eq(&live, &current_live));
+    assert!(Arc::ptr_eq(&live.session, &current_live.session));
+    assert_eq!(current_live.session.snapshot().native_session_id, native.native_session_id);
+    assert_eq!(current_live.session.snapshot().window, f.other);
+    assert_eq!(current_live.mcp.token, token);
+    assert_eq!(f.service.mcp_connections.resolve(&token).unwrap().context.connection_id, identity.context.connection_id);
+    assert!(identity.is_valid());
+    assert_eq!(f.factory.opens.load(Ordering::SeqCst), 1);
+
+    // A fresh heartbeat cannot restore the old window's control. Check both its
+    // old generation and a guessed current generation against the real owner.
+    let mut old_window = f.store.window(&f.scope(), &f.window.window_id).unwrap().unwrap();
+    let old_revision = old_window.revision.clone();
+    old_window.revision = uuid::Uuid::new_v4().to_string();
+    old_window.renewed_at_ms = now();
+    f.store.commit(&f.scope(), Some(&old_revision), &old_window, &ApplicationStoreChanges::default()).unwrap();
+    for control in [ctl(&before), ctl(&controlled)] {
+        let rejected = f.request(&f.window, AgentTaskCommand::Send { control, draft_version: controlled.draft.version });
+        assert!(f.service.command(f.host.clone(), NextHost::local_context(), rejected,
+            "http://fixture/mcp".into(), "fixture-only".into()).await.is_err());
+    }
+    let draft = f.command(f.request(&f.other, AgentTaskCommand::SaveDraft { control: ctl(&controlled), version: controlled.draft.version,
+        content: AgentDraftContent { text: "new controller instruction".into(), ..Default::default() } })).await.detail;
+    let sent = f.command(f.request(&f.other, AgentTaskCommand::Send { control: ctl(&draft), draft_version: draft.draft.version })).await;
+    let expected_sends = if stop { 2 } else { 1 };
+    wait_for_native_observation(|| f.factory.sends.load(Ordering::SeqCst) == expected_sends).await;
+    if stop {
+        let current = f.service.owner.detail(&f.scope(), &task_id).unwrap();
+        let stopped = f.command(f.request(&f.other, AgentTaskCommand::Stop { control: ctl(&current) })).await;
+        assert_eq!(f.settled(&stopped.receipt.request_id).await.status, "succeeded");
+    } else {
+        assert_eq!(f.settled(&sent.receipt.request_id).await.status, "succeeded");
+    }
+    assert_eq!(f.factory.opens.load(Ordering::SeqCst), 1);
+    assert_eq!(live.session.snapshot().native_session_id, native.native_session_id);
+    assert!(identity.is_valid());
+    assert_eq!(f.service.mcp_connections.resolve(&token).unwrap().context.connection_id, identity.context.connection_id);
+
+    let current = f.service.owner.detail(&f.scope(), &task_id).unwrap();
+    let disconnect = f.command(f.request(&f.other, AgentTaskCommand::Disconnect { control: ctl(&current) })).await;
+    assert_eq!(f.settled(&disconnect.receipt.request_id).await.status, "succeeded");
+    assert!(!identity.is_valid());
+    assert!(f.service.mcp_connections.resolve(&token).is_none());
+    let disconnected = f.service.owner.detail(&f.scope(), &task_id).unwrap();
+    let resume = f.command(f.request(&f.other, AgentTaskCommand::Resume { control: ctl(&disconnected) })).await;
+    assert_eq!(f.settled(&resume.receipt.request_id).await.status, "succeeded");
+    let resumed = f.service.live.lock().await.get(&task_id).unwrap().clone();
+    let resumed_identity = f.service.mcp_connections.resolve(&resumed.mcp.token).unwrap();
+    assert_ne!(resumed.mcp.token, token);
+    assert_ne!(resumed_identity.context.connection_id, identity.context.connection_id);
+    assert_eq!(resumed_identity.context.caller, identity.context.caller);
+    assert_eq!(resumed.session.snapshot().native_session_id, native.native_session_id);
+    assert_eq!(f.factory.opens.load(Ordering::SeqCst), 2);
+    f.service.close().await;
+}
+
+#[tokio::test]
+async fn idle_takeover_preserves_native_session_and_mcp_lease_but_fences_old_controller() {
+    assert_takeover_preserves_native_transport_until_disconnect(false).await;
+}
+
+#[tokio::test]
+async fn stop_takeover_preserves_native_session_and_mcp_lease_but_fences_old_controller() {
+    assert_takeover_preserves_native_transport_until_disconnect(true).await;
 }

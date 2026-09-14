@@ -9,7 +9,7 @@ pub(super) struct PreparedContext {
     pub images: Vec<ComponentImageInput>,
 }
 
-pub(super) async fn search(
+pub(crate) async fn search(
     host: &NextHost,
     context: &CallContext,
     request: &ComponentSourceSearch,
@@ -110,7 +110,7 @@ fn source_session(
     Ok(())
 }
 
-pub(super) async fn preview(
+pub(crate) async fn preview(
     host: &NextHost,
     context: &CallContext,
     request: &ComponentSourcePreviewRequest,
@@ -295,7 +295,7 @@ fn image_input(preview: &ComponentSourcePreview) -> Result<ComponentImageInput, 
         return Err(error("Image bytes do not match their owner identity"));
     }
     Ok(ComponentImageInput {
-        reference: serde_json::from_value(snapshot.selection.reference.clone()).map_err(error)?,
+        reference: ComponentImageSource::Scientific(serde_json::from_value(snapshot.selection.reference.clone()).map_err(error)?),
         mime_type: mime.into(),
         base64: base64.clone(),
         sha256,

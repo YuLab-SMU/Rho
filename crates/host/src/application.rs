@@ -16,6 +16,7 @@ pub(crate) fn error(error: ApplicationError) -> OperationError {
             capability: "application.control".into(),
             missing,
         },
+        ApplicationError::Busy { .. } => OperationError::HostBusy,
         ApplicationError::Budget(_) => OperationError::BudgetExceeded(error.to_string()),
         ApplicationError::Storage(_) => OperationError::Storage(error.to_string()),
         _ => OperationError::InvalidInput(error.to_string()),

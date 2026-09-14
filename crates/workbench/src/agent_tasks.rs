@@ -21,6 +21,12 @@ pub(super) async fn query(
     if selected.root.to_str() != Some(&request.project_root) {
         return failure(StatusCode::CONFLICT, "Project changed");
     }
+    if let rho_contract::AgentTaskQuery::ProjectList { archived, before, limit } = &request.query {
+        return match state.task_agents.project_task_page(&selected.host, &NextHost::local_context(), &request.project_root, *archived, before.as_deref(), *limit, &state.component_agents).await {
+            Ok(page) => Json(rho_contract::AgentTaskQueryResult::ProjectList { page }).into_response(),
+            Err(error) => failure(StatusCode::CONFLICT, error.to_string()),
+        };
+    }
     match state
         .task_agents
         .query(&selected.host, &NextHost::local_context(), request)

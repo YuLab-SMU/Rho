@@ -99,6 +99,9 @@ pub(crate) fn sources(plugins: &[Arc<dyn AgentContextProvider>]) -> Vec<AgentCon
         ("objects", "Objects"),
         ("plots", "Plots"),
         ("tables", "Tables"),
+        ("packages", "Packages"),
+        ("workspace", "Console / Workspace"),
+        ("environment", "R Sessions"),
     ]
     .into_iter()
     .map(|(id, name)| AgentContextSource {
@@ -156,6 +159,11 @@ pub(crate) async fn search(
             break;
         }
         let found=async {Ok::<Vec<AgentContextItem>,String>(match source.id.as_str(){
+            "packages"|"workspace"|"environment"=>{
+                let session = context["context"]["workspace_instance_id"].as_str().zip(context["context"]["native_session_id"].as_str()).map(|(id,native)|ComponentAgentSession{workspace_instance_id:id.into(),session_id:native.into()});
+                let page=Box::pin(crate::component_agents::context::search(reader.host,reader.context,&ComponentSourceSearch{project_root:reader.project.into(),window:window.clone(),session,source:source.id.clone(),text:text.into(),limit:remaining})).await.map_err(|e|e.to_string())?;
+                notices.extend(page.notices);page.items
+            },
             "files"=>{
                 let page=if text.trim().is_empty(){reader.query("project.list_directory",json!({"path":"","limit":remaining})).await?}else{reader.query("project.search_files",json!({"text":text,"show_hidden":false})).await?};
                 page["entries"].as_array().into_iter().flatten().filter(|e|e["kind"]=="regular").take(remaining as usize).filter_map(|e|{let path=e["path"].as_str()?;Some(item("files",path.into(),"Project file".into(),"file",json!({"path":path}),"text"))}).collect()
@@ -250,6 +258,12 @@ pub(crate) async fn preview(
         return Err("Context reference exceeds its budget".into());
     }
     let mut p = match s.source.as_str() {
+        "packages" | "workspace" | "environment" => {
+            let session = s.reference["workspace_instance_id"].as_str().zip(s.reference["expected_session"].as_str()).map(|(id,native)|ComponentAgentSession{workspace_instance_id:id.into(),session_id:native.into()});
+            let result = Box::pin(crate::component_agents::context::preview(reader.host,reader.context,&ComponentSourcePreviewRequest{project_root:reader.project.into(),window:window.clone(),session,selection:s.clone()},sending)).await.map_err(|e|e.to_string())?;
+            let snapshot=result.snapshot.ok_or_else(||result.error.unwrap_or_else(||"Source unavailable".into()))?;
+            AgentContextPreview{selection:snapshot.selection,title:snapshot.title,description:snapshot.description,text:snapshot.text,native_data:snapshot.native_data,columns:vec![],rows:vec![],image_base64:result.image_base64,image_mime_type:result.image_mime_type,inclusions:if s.source=="packages" {vec!["summary".into(),"selection".into()]} else {vec!["summary".into()]},truncated:snapshot.truncated}
+        }
         "files" => {
             let path = field(&s.reference, "path")?;
             let hash = s.reference["expected_sha256"].as_str();

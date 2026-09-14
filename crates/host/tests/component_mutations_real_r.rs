@@ -14,12 +14,73 @@ struct RunEngine {
     repeat: bool,
     results: Arc<Mutex<Vec<Value>>>,
 }
+
+struct BoundSessionReader;
+#[async_trait]
+impl ComponentAgentEngine for BoundSessionReader {
+    async fn execute(&self, request:ComponentEngineExecution)->ComponentEngineOutcome {
+        request.port.begin_model_call().await.unwrap();
+        request.port.append_text("Bound task session retained".into()).await.unwrap();
+        ComponentEngineOutcome::Completed
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires real Ark/R; task R-session binding is independent of the active Console selection"]
+async fn new_policy_continue_retains_bound_r_session_after_console_selection_changes() {
+    let mut f=Fixture::new("",false).await;
+    f.service.close().await;
+    f.service=ComponentAgentService::with_engine(Arc::new(ApplicationStore::open(&f._temp.path().join("components.sqlite")).unwrap()),Arc::new(BoundSessionReader));
+    let key=f.service.put_session_key(&f.host,&f.context,&f.project,&f.window,"fixture-only".into()).unwrap();
+    let mut settings=f.service.settings(&f.host,&f.context,&f.project).unwrap();
+    settings.connection.as_mut().unwrap().credential=key;
+    let settings=f.service.configure(&f.host,&f.context,&f.project,&f.window,&settings).await.unwrap();
+    let conversation=f.service.create(&f.host,&f.context,&f.project,&f.window,"bound-session",ComponentAgentProfile::Objects).unwrap();
+    let mut request=ComponentAgentStart{assets:None,continuation:None,request_id:"bound-first".into(),conversation_id:conversation.conversation_id,
+        conversation_version:conversation.version,window:f.window.clone(),model_settings_version:settings.version,text:"Explain this task's Main session".into(),sources:vec![],
+        grant:ComponentAgentGrant{permission_policy:Some(ComponentPermissionPolicy::Ask),mode:ComponentAgentMode::Explain,session:Some(f.session.clone()),documents:vec![],files:vec![]}};
+    let first=f.service.start(f.host.clone(),f.context.clone(),&f.project,request.clone()).await.unwrap();
+    assert_eq!(f.terminal(&first.run_id).await.state,ComponentAgentRunState::Completed);
+    let main:WorkspaceInstance=serde_json::from_value(f.host.query_snapshot(&f.context,QueryRequest{
+        capability:CapabilityRef::new("runtime.instance",1).unwrap(),arguments:json!({"workspace_instance_id":"main"})}).await.unwrap().data.unwrap()).unwrap();
+    let other=f.host.invoke(&f.context,Invocation{client_request_id:"other-console".into(),capability:CapabilityRef::new("runtime.create_instance",1).unwrap(),
+        arguments:json!({"name":"Other console","binding":main.binding,"start":true}),preconditions:vec![]}).await.unwrap();
+    assert_eq!(other.status,OperationStatus::Succeeded,"{:?}",other.error);
+    let other:WorkspaceInstance=serde_json::from_value(other.output.unwrap()).unwrap();
+    let mut selected=f.application_context.clone();let expected=selected.version.clone();
+    selected.version="other-console-selected".into();selected.workspace_instance_id=Some(other.workspace_instance_id.clone());selected.native_session_id=other.native_session_id.clone();
+    bridge(&f,ApplicationBridgeRequest::Sync{session:f.bridge.clone(),sync_id:"select-other-console".into(),changes:ApplicationChanges{
+        context:Some(ApplicationContextUpdate{expected_version:expected,context:selected}),..Default::default()}}).await;
+    let previous=f.service.reconcile(&f.host,&f.context,&f.project,&f.window,&first.run_id).await.unwrap();
+    request.request_id="bound-continue".into();request.text="Continue the explanation".into();
+    request.conversation_version=f.service.conversation(&f.host,&f.context,&f.project,&request.conversation_id).unwrap().version;
+    request.continuation=Some(ComponentContinuation{run_id:first.run_id,recovery_digest:previous.recovery.unwrap().digest});
+    let next=f.service.start(f.host.clone(),f.context.clone(),&f.project,request.clone()).await.unwrap();
+    let finished=f.terminal(&next.run_id).await;
+    assert_eq!(finished.state,ComponentAgentRunState::Completed,"{:?}",finished.reason);
+    assert_eq!(finished.request.grant.session,Some(f.session.clone()));
+    let checked=f.service.reconcile(&f.host,&f.context,&f.project,&f.window,&next.run_id).await.unwrap();
+    let stopped=f.host.invoke(&f.context,Invocation{client_request_id:"stop-bound-main".into(),capability:CapabilityRef::new("runtime.stop_instance",1).unwrap(),
+        arguments:json!({"workspace_instance_id":"main","expected_native_session_id":f.session.session_id,"discard_unsaved_objects":true}),preconditions:vec![]}).await.unwrap();
+    assert_eq!(stopped.status,OperationStatus::Succeeded,"{:?}",stopped.error);
+    request.request_id="stale-bound-continue".into();
+    request.conversation_version=f.service.conversation(&f.host,&f.context,&f.project,&request.conversation_id).unwrap().version;
+    request.continuation=Some(ComponentContinuation{run_id:next.run_id,recovery_digest:checked.recovery.unwrap().digest});
+    assert!(f.service.start(f.host.clone(),f.context.clone(),&f.project,request).await.is_err());
+    f.service.close().await;
+}
 #[async_trait]
 impl ComponentAgentEngine for RunEngine {
     async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome {
         let cancellation = request.cancellation.clone();
         let work = async {
             let turn = request.port.begin_model_call().await?;
+            if request.run.request.grant.permission_policy.is_some() && request.run.task_intent.is_none() {
+                let intent=request.port.prepare_tool(turn,"task-intent","rho_task_intent",json!({
+                    "request_excerpt":request.run.request.text,"actions":[{"action":"execute","document_id":null,"path":null}]
+                })).await?;
+                request.port.execute_tool(intent).await?;
+            }
             let ticket = request
                 .port
                 .prepare_tool(
@@ -241,7 +302,7 @@ impl Fixture {
                 self.host.clone(),
                 self.context.clone(),
                 &self.project,
-                ComponentAgentStart {
+                ComponentAgentStart { assets: None,
                     continuation: None,
                     request_id: "run-request".into(),
                     conversation_id: conversation.conversation_id,
@@ -250,6 +311,7 @@ impl Fixture {
                     model_settings_version: 1,
                     text: "Run the authorized test".into(),
                     grant: ComponentAgentGrant {
+                        permission_policy: None,
                         mode: ComponentAgentMode::Run,
                         session: Some(self.session.clone()),
                         documents: vec![],
@@ -566,6 +628,24 @@ async fn real_model_project_document_edit_save_and_run() {
 }
 
 #[tokio::test]
+#[ignore = "requires explicitly configured real model and Ark/R; generic Rho task creates its own script"]
+async fn real_model_generic_task_creates_saves_and_runs_script() {
+    documents_acceptance_scoped(true, false, false, false, ComponentAgentProfile::Project, false, Some(true), false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured real model and Ark/R; Objects entry opens an unselected script"]
+async fn real_model_objects_task_opens_edits_saves_and_runs_script() {
+    documents_acceptance_scoped(true, false, false, false, ComponentAgentProfile::Objects, false, Some(false), false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured real model and Ark/R; ordinary next turn remembers prior evidence without inherited authority"]
+async fn real_model_ordinary_follow_up_remembers_result_without_inheriting_authority() {
+    documents_acceptance_scoped(true, false, true, false, ComponentAgentProfile::Documents, false, None, true).await;
+}
+
+#[tokio::test]
 #[ignore = "requires real Ark/R; Project profile uses authorized document execution"]
 async fn project_profile_document_edit_save_and_run() {
     documents_acceptance(false, false, false, false, ComponentAgentProfile::Project).await;
@@ -591,6 +671,13 @@ async fn documents_acceptance_with_interruption(
     real_model: bool, repair: bool, continue_model: bool, produced_plot: bool,
     profile: ComponentAgentProfile, interrupt_model: bool,
 ) {
+    documents_acceptance_scoped(real_model, repair, continue_model, produced_plot, profile, interrupt_model, None, false).await;
+}
+
+async fn documents_acceptance_scoped(
+    real_model: bool, repair: bool, continue_model: bool, produced_plot: bool,
+    profile: ComponentAgentProfile, interrupt_model: bool, dynamic_target: Option<bool>, ordinary_follow_up: bool,
+) {
     assert!(!interrupt_model || (!real_model && repair));
     let f = Fixture::with_documents("", false, true, real_model, repair).await;
     let (color, hex) = [
@@ -611,7 +698,9 @@ async fn documents_acceptance_with_interruption(
         "invisible(counter)\n".into()
     };
     let text = initial.as_str();
-    std::fs::write(f._temp.path().join("analysis.R"), text).unwrap();
+    if dynamic_target != Some(true) {
+        std::fs::write(f._temp.path().join("analysis.R"), text).unwrap();
+    }
     let mut document = ApplicationDocument {
         document_id: "analysis".into(),
         version: "initial".into(),
@@ -626,12 +715,15 @@ async fn documents_acceptance_with_interruption(
         },
         readonly_reason: None,
     };
+    if dynamic_target == Some(true) {
+        document.text.clear(); document.base_text=None; document.base_hash=None;
+    }
     let mut context = f.application_context.clone();
     let previous = context.version.clone();
     context.version = "document-context".into();
     context.workspace_instance_id = Some("main".into());
     context.native_session_id = Some(f.session.session_id.clone());
-    context.active_document_id = Some("analysis".into());
+    context.active_document_id = dynamic_target.is_none().then(|| "analysis".into());
     bridge(
         &f,
         ApplicationBridgeRequest::Sync {
@@ -640,25 +732,35 @@ async fn documents_acceptance_with_interruption(
             changes: ApplicationChanges {
                 context: Some(ApplicationContextUpdate {
                     expected_version: previous,
-                    context,
+                    context: context.clone(),
                 }),
-                documents: vec![ApplicationDocumentUpdate {
+                documents: if dynamic_target.is_none() { vec![ApplicationDocumentUpdate {
                     expected_version: None,
                     expected_selection_version: None,
                     document: document.clone(),
-                }],
+                }] } else { vec![] },
                 removed_documents: vec![],
             },
         },
     )
     .await;
-    let preview=f.service.preview_source(&f.host,&f.context,ComponentSourcePreviewRequest{
+    let sources = if dynamic_target.is_none() {
+        let preview=f.service.preview_source(&f.host,&f.context,ComponentSourcePreviewRequest{
         project_root:f.project.clone(),window:f.window.clone(),session:Some(f.session.clone()),
         selection:AgentContextSelection{source:"editor".into(),label:"analysis.R".into(),inclusion:"text".into(),
             reference:json!({"window":f.window,"document":doc_ref(&document),"expected_sha256":rho_application::sha256(&document.text),"selection":document.selection})}
     }).await.unwrap();
     assert!(preview.error.is_none(), "{:?}", preview.error);
-    let sources = vec![preview.snapshot.unwrap().selection];
+        vec![preview.snapshot.unwrap().selection]
+    } else if profile == ComponentAgentProfile::Objects {
+        let preview=f.service.preview_source(&f.host,&f.context,ComponentSourcePreviewRequest{
+            project_root:f.project.clone(),window:f.window.clone(),session:Some(f.session.clone()),
+            selection:AgentContextSelection{source:"objects".into(),label:"counter".into(),inclusion:"selection".into(),
+                reference:json!({"workspace_instance_id":"main","expected_session":f.session.session_id,"name":"counter"})}
+        }).await.unwrap();
+        assert!(preview.error.is_none(),"{:?}",preview.error);
+        vec![preview.snapshot.unwrap().selection]
+    } else { vec![] };
     let conversation = f
         .service
         .create(
@@ -676,21 +778,25 @@ async fn documents_acceptance_with_interruption(
             f.host.clone(),
             f.context.clone(),
             &f.project,
-            ComponentAgentStart { continuation: None,
+            ComponentAgentStart { assets: None, continuation: None,
                 request_id: "document-request".into(),
                 conversation_id: conversation.conversation_id,
                 conversation_version: conversation.version,
                 window: f.window.clone(),
                 model_settings_version: 1,
-                text: if interrupt_model { "fixture-model-interruption".into() } else if repair { "First run the authorized document analysis (analysis.R) using application_run_file to observe its failure. Then inspect its original native failure and current draft, repair only the failing first line, and use application_run_file again to save and run the corrected script. Keep the counter increment and other code unchanged. The counter must increment exactly once across the entire workflow. Do not repeat the failed execution and do not create another document or use direct R.".into() } else { "Use the authorized document analysis (analysis.R) whose initial text is exactly invisible(counter) followed by a newline. First prepend counter <- counter + 1L followed by a newline using application_edit_document, then call application_save_document, then application_run_file. Execute exactly once. Wait for each native receipt and report whether it succeeded. Do not create another document or use direct R.".into() },
+                text: if let Some(create) = dynamic_target {
+                    if create { "Create a new project script analysis.R containing exactly counter <- counter + 1L followed by a newline, then invisible(counter) followed by a newline. Save it, then run the saved script in Main exactly once through its document owner. Report the original execution evidence. The counter must increment once. Do not use direct R execution.".into() }
+                    else { "Open the project script analysis.R. Its current content is invisible(counter) followed by a newline. Prepend counter <- counter + 1L followed by a newline, save the change, then run the saved script in Main exactly once through its document owner. Report the original execution evidence. The selected counter object is context; do not use direct R execution.".into() }
+                } else if interrupt_model { "fixture-model-interruption".into() } else if repair { "First run the authorized document analysis (analysis.R) using application_run_file to observe its failure. Then inspect its original native failure and current draft, repair only the failing first line, and use application_run_file again to save and run the corrected script. Keep the counter increment and other code unchanged. The counter must increment exactly once across the entire workflow. Do not repeat the failed execution and do not create another document or use direct R.".into() } else { "Use the authorized document analysis (analysis.R) whose initial text is exactly invisible(counter) followed by a newline. First prepend counter <- counter + 1L followed by a newline using application_edit_document, then call application_save_document, then application_run_file. Execute exactly once. Wait for each native receipt and report whether it succeeded. Do not create another document or use direct R.".into() },
                 grant: ComponentAgentGrant {
-                    mode: ComponentAgentMode::Run,
+                    permission_policy: real_model.then_some(ComponentPermissionPolicy::Ask),
+                    mode: if real_model { ComponentAgentMode::Explain } else { ComponentAgentMode::Run },
                     session: Some(f.session.clone()),
-                    documents: vec![ComponentDocumentGrant {
+                    documents: if dynamic_target.is_none() { vec![ComponentDocumentGrant {
                         document: doc_ref(&document),
                         path: document.path.clone(),
                         allow_save: true,
-                    }],
+                    }] } else { vec![] },
                     files: vec![],
                 },
                 sources,
@@ -702,6 +808,7 @@ async fn documents_acceptance_with_interruption(
     let mut edits = 0;
     let mut native_runs = 0;
     let mut failures = 0;
+    let mut opened = 0;
     let started = std::time::Instant::now();
     let mut renewed = std::time::Instant::now();
     let completed = tokio::time::timeout(
@@ -722,6 +829,8 @@ async fn documents_acceptance_with_interruption(
                     .service
                     .run(&f.host, &f.context, &f.project, &run.run_id)
                     .unwrap();
+                assert_ne!(state.state, ComponentAgentRunState::WaitingForPermission,
+                    "The explicit edit/save/run request must not be approved a second time: {:?}",state.permissions);
                 if state.state.is_terminal() {
                     if interrupt_model && parents.is_empty() {
                         assert_eq!(state.state, ComponentAgentRunState::Failed);
@@ -781,6 +890,20 @@ async fn documents_acceptance_with_interruption(
                     serde_json::to_value(&grant.request.action).unwrap()["kind"]
                 );
                 let mut changes = ApplicationChanges::default();
+                if let ApplicationAction::OpenDocument { path, expected_context_version }
+                    | ApplicationAction::CreateDocument { path: Some(path), expected_context_version, .. } = &grant.request.action {
+                    assert!(dynamic_target.is_some());
+                    assert_eq!(path,"analysis.R");
+                    assert_eq!(expected_context_version,&context.version);
+                    let expected = context.version.clone();
+                    context.version=uuid::Uuid::new_v4().to_string();
+                    context.active_document_id=Some(document.document_id.clone());
+                    changes.context=Some(ApplicationContextUpdate{expected_version:expected,context:context.clone()});
+                    changes.documents.push(ApplicationDocumentUpdate{
+                        expected_version:(opened>0).then(||document.version.clone()),
+                        expected_selection_version:(opened>0).then(||document.selection.version.clone()),document:document.clone()});
+                    opened+=1;
+                }
                 if let ApplicationAction::EditDocument {
                     document: reference,
                     edits: changeset,
@@ -931,6 +1054,7 @@ async fn documents_acceptance_with_interruption(
     assert_eq!(edits, 1);
     assert_eq!(native_runs, if repair { 2 } else { 1 });
     assert_eq!(failures, usize::from(repair));
+    if dynamic_target.is_some() { assert!(opened>0,"A task without selected documents must open/create its target through the owner"); }
     if repair {
         assert!(document.text.ends_with(&tail));
     }
@@ -956,7 +1080,8 @@ async fn documents_acceptance_with_interruption(
     }
     assert_eq!(parents.len(), usize::from(interrupt_model));
     let mutations: Vec<_> = tools.iter().filter(|t| t.mutation).collect();
-    assert_eq!(mutations.len(), if repair { 4 } else { 3 });
+    if dynamic_target.is_some() { assert!((3..=4).contains(&mutations.len()),"Unexpected mutations: {}",mutations.len()); }
+    else { assert_eq!(mutations.len(), if repair { 4 } else { 3 }); }
     assert!(
         mutations
             .iter()
@@ -999,6 +1124,20 @@ async fn documents_acceptance_with_interruption(
         .service
         .run(&f.host, &f.context, &f.project, &run.run_id)
         .unwrap();
+    if real_model {
+        assert_eq!(finished.request.grant.permission_policy,Some(ComponentPermissionPolicy::Ask));
+        assert_eq!(finished.request.grant.mode,ComponentAgentMode::Explain,"There is no work-mode switch in the new task path");
+        let intent=finished.task_intent.as_ref().expect("Task intent was captured from the original request");
+        assert_eq!(intent.request_id,finished.request.request_id);
+        assert!(finished.request.text.contains(&intent.request_excerpt));
+        assert!(finished.permissions.iter().all(|p| p.state==ComponentPermissionState::Allowed
+            && p.authorization==ComponentTaskAuthorization::UserRequest));
+        if dynamic_target.is_some() {
+            assert!(finished.request.grant.documents.is_empty());
+            assert_eq!(finished.document_grants.len(),1);
+            assert_eq!(finished.document_grants[0].path.as_deref(),Some("analysis.R"));
+        }
+    }
     println!(
         "model_calls={}, tool_calls={}, model_limit={}",
         finished.model_calls, finished.tool_calls, finished.budget.model_calls
@@ -1012,11 +1151,11 @@ async fn documents_acceptance_with_interruption(
         inspect_produced_plot(&f, &run.run_id, color, hex, real_model).await;
     }
     if continue_model {
-        let parent = f
+        let parent = if ordinary_follow_up {None} else {Some(f
             .service
             .reconcile(&f.host, &f.context, &f.project, &f.window, &run.run_id)
             .await
-            .unwrap();
+            .unwrap())};
         let mut request = run.request.clone();
         request.request_id = "real-model-continue".into();
         request.text="Continue with a concise confirmation of the prior saved and executed result. Cite the original R execution operation ID from the prior receipts. Do not edit the document or execute any code again.".into();
@@ -1027,7 +1166,7 @@ async fn documents_acceptance_with_interruption(
             .version;
         request.grant.documents[0].document = doc_ref(&document);
         request.sources = vec![];
-        request.continuation = Some(ComponentContinuation {
+        request.continuation = parent.map(|parent| ComponentContinuation {
             run_id: run.run_id.clone(),
             recovery_digest: parent.recovery.unwrap().digest,
         });
@@ -1067,6 +1206,13 @@ async fn documents_acceptance_with_interruption(
             "{:?}",
             child.reason
         );
+        if ordinary_follow_up {
+            assert!(child.request.continuation.is_none());
+            assert!(child.document_grants.is_empty());
+            assert!(child.task_intent.as_ref().is_none_or(|intent| intent.actions.is_empty()));
+            assert!(child.permissions.is_empty());
+            assert_eq!(child.context.as_ref().unwrap().history.as_ref().unwrap()["kind"],"conversation");
+        }
         let reused = f
             .service
             .tools(&f.host, &f.context, &f.project, &child.run_id)
@@ -1614,11 +1760,11 @@ async fn inspect_produced_plot(
             ComponentAgentProfile::Plots,
         )
         .unwrap();
-    let run=f.service.start(f.host.clone(),f.context.clone(),&f.project,ComponentAgentStart{
+    let run=f.service.start(f.host.clone(),f.context.clone(),&f.project,ComponentAgentStart{ assets: None,
         continuation:None,request_id:"inspect-produced-plot".into(),conversation_id:conversation.conversation_id,conversation_version:conversation.version,
         window:f.window.clone(),model_settings_version:1,
         text:"Inspect the actual selected image. Put its dominant fill color (one lowercase English word) on the first line. Then briefly cite the selected operation ID and output number. You may inspect image metadata with output_view if needed. Do not read the producing operation or source code, infer color from metadata, run R or modify anything.".into(),
-        grant:ComponentAgentGrant{mode:ComponentAgentMode::Explain,session:Some(f.session.clone()),documents:vec![],files:vec![]},
+        grant:ComponentAgentGrant{permission_policy:real_model.then_some(ComponentPermissionPolicy::Ask),mode:ComponentAgentMode::Explain,session:Some(f.session.clone()),documents:vec![],files:vec![]},
         sources:vec![snapshot.selection]
     }).await.unwrap();
     let done = tokio::time::timeout(if real_model { Duration::from_millis(run.budget.duration_ms.saturating_add(15_000)) } else { Duration::from_secs(20) }, async {
@@ -2100,6 +2246,72 @@ async fn another_requests_input_does_not_mark_the_queued_assistant_as_needing_in
 }
 
 #[tokio::test]
+#[ignore = "requires real Ark/R; two Rho tasks and a human Console share the original R queue"]
+async fn two_rho_tasks_and_manual_console_share_one_native_queue_without_input_misattribution() {
+    let f=Fixture::new("counter <- counter + 1L; paste0('agent-', counter)",false).await;
+    let mut manual=invoke("manual-console","invisible(readline('Manual queue gate: ')); counter <- counter + 1L; 'manual-1'");
+    manual.arguments["source"]=json!({"view_id":"console-main","label":"Console Main","kind":"console"});
+    let manual=f.host.invoke_accepted(&f.context,manual).await.unwrap();
+    let input=wait_input(&f).await;
+    assert_eq!(input.operation_id,manual.operation.operation_id);
+    let mut runs=Vec::new();
+    for id in ["queue-agent-one","queue-agent-two"] {
+        let conversation=f.service.create(&f.host,&f.context,&f.project,&f.window,id,ComponentAgentProfile::Objects).unwrap();
+        runs.push(f.service.start(f.host.clone(),f.context.clone(),&f.project,ComponentAgentStart{
+            assets:None,continuation:None,request_id:id.into(),conversation_id:conversation.conversation_id,
+            conversation_version:conversation.version,window:f.window.clone(),model_settings_version:1,
+            text:"Run the requested counter increment in Main and return its value".into(),sources:vec![],
+            grant:ComponentAgentGrant{permission_policy:Some(ComponentPermissionPolicy::Ask),mode:ComponentAgentMode::Explain,
+                session:Some(f.session.clone()),documents:vec![],files:vec![]}
+        }).await.unwrap());
+    }
+    let pending=tokio::time::timeout(Duration::from_secs(5),async{loop{
+        let state=console_state(&f).await;
+        if state.pending.len()==2 && runs.iter().all(|run|f.service.tools(&f.host,&f.context,&f.project,&run.run_id).unwrap().iter().any(|tool|tool.operation_id.is_some())) {
+            assert_eq!(state.current.as_ref().unwrap().operation_id,manual.operation.operation_id);
+            assert_eq!(state.input.as_ref().unwrap().operation_id,manual.operation.operation_id);
+            assert!(state.pause.is_none());break state.pending;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }}).await.unwrap();
+    // Exercise at least one existing native-input observation cycle while the
+    // manual request still owns stdin and both Agent operations remain queued.
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    for run in &runs {
+        assert_eq!(f.service.run(&f.host,&f.context,&f.project,&run.run_id).unwrap().state,ComponentAgentRunState::WaitingForR);
+        let tool=f.service.tools(&f.host,&f.context,&f.project,&run.run_id).unwrap().into_iter().find(|tool|tool.mutation).unwrap();
+        assert!(pending.iter().any(|queued|Some(&queued.operation_id)==tool.operation_id.as_ref()));
+        let native=f.host.get_operation(&f.context,tool.operation_id.as_ref().unwrap()).await.unwrap().unwrap();
+        assert_eq!(native.status,OperationStatus::Accepted);
+        assert_eq!(native.operation.caller.id,format!("component:{}",run.run_id));
+    }
+    f.host.dispatch(&f.context,HostRequest::RespondInput(RespondInput{session_id:input.session_id,
+        operation_id:input.operation_id,request_id:input.request_id,reply_id:"manual-releases-queue".into(),value:"continue".into()})).await.unwrap();
+    let manual_done=wait_operation(&f,&manual.operation.operation_id).await;
+    assert_eq!(manual_done.status,OperationStatus::Succeeded);
+    assert_eq!(manual_done.operation.caller,f.context.caller);
+    assert_eq!(manual_done.operation.normalized_arguments["source"]["kind"],"console");
+    assert_eq!(manual_done.output.as_ref().unwrap()["value"],"manual-1");
+    for (index,queued) in pending.iter().enumerate() {
+        let completed=wait_operation(&f,&queued.operation_id).await;
+        assert_eq!(completed.status,OperationStatus::Succeeded);
+        assert_eq!(completed.output.as_ref().unwrap()["value"],format!("agent-{}",index+2));
+        assert_eq!(completed.output.as_ref().unwrap()["session_id"],f.session.session_id);
+    }
+    for run in &runs {
+        assert_eq!(f.terminal(&run.run_id).await.state,ComponentAgentRunState::Completed);
+        let tools=f.service.tools(&f.host,&f.context,&f.project,&run.run_id).unwrap();
+        let mutations:Vec<_>=tools.iter().filter(|tool|tool.mutation).collect();assert_eq!(mutations.len(),1);
+        assert_eq!(mutations[0].phase,ComponentToolPhase::Resolved);
+        assert!(!serde_json::to_string(&tools).unwrap().contains("Manual queue gate"));
+    }
+    let proof=f.host.invoke(&f.context,invoke("verify-shared-queue","stopifnot(counter == 3L); invisible(NULL)")).await.unwrap();
+    assert_eq!(proof.status,OperationStatus::Succeeded);
+    assert!(console_state(&f).await.input.is_none());
+    f.service.close().await;
+}
+
+#[tokio::test]
 #[ignore = "requires real Ark/R; stopping native input must preserve another R instance"]
 async fn stop_native_input_preserves_work_in_another_r_session() {
     let f = Fixture::new(
@@ -2281,7 +2493,7 @@ async fn captured_document_input_is_marked_and_cancelled_by_its_original_operati
             f.host.clone(),
             f.context.clone(),
             &f.project,
-            ComponentAgentStart {
+            ComponentAgentStart { assets: None,
                 continuation: None,
                 request_id: "captured-input".into(),
                 conversation_id: conversation.conversation_id,
@@ -2290,6 +2502,7 @@ async fn captured_document_input_is_marked_and_cancelled_by_its_original_operati
                 model_settings_version: version,
                 text: "Run the captured selection".into(),
                 grant: ComponentAgentGrant {
+                    permission_policy: None,
                     mode: ComponentAgentMode::Run,
                     session: Some(f.session.clone()),
                     documents: vec![ComponentDocumentGrant {

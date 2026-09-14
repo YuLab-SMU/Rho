@@ -163,7 +163,7 @@ impl ComponentAgentService {
                 note: None,
             };
             match &tool.action {
-                ComponentToolAction::Query(_) | ComponentToolAction::Rejected { .. } | ComponentToolAction::PreviousResult { .. } => {
+                ComponentToolAction::TaskIntent(_) | ComponentToolAction::Query(_) | ComponentToolAction::Rejected { .. } | ComponentToolAction::PreviousResult { .. } => {
                     if tool.receipt.phase == ComponentToolPhase::Resolved {
                         entry.state = ComponentRecoveryState::Confirmed;
                     } else {
@@ -257,6 +257,18 @@ impl ComponentAgentService {
                                         .into_iter()
                                         .filter(|d| Some(&d.document_id) == target)
                                         .collect();
+                                    let opened_path = match &command.action {
+                                        ApplicationAction::OpenDocument { path, .. }
+                                        | ApplicationAction::CreateDocument { path: Some(path), .. } => Some(path),
+                                        _ => None,
+                                    };
+                                    if let Some(path) = opened_path {
+                                        entry.documents = receipt.applied_document_summaries.as_ref()
+                                            .into_iter().flatten()
+                                            .filter(|summary| summary.path.as_ref() == Some(path)
+                                                && receipt.applied_documents.as_ref().is_some_and(|documents| documents.contains(&summary.document)))
+                                            .map(|summary| summary.document.clone()).collect();
+                                    }
                                     entry.state = match receipt.state {
                                         ApplicationCommandState::Applied
                                         | ApplicationCommandState::Failed
@@ -272,6 +284,9 @@ impl ComponentAgentService {
                                         }
                                         _ => ComponentRecoveryState::Pending,
                                     };
+                                    if opened_path.is_some() && receipt.state == ApplicationCommandState::Applied && entry.documents.len() != 1 {
+                                        uncertain(&mut entry, "The original document's exact path and identity are missing or ambiguous in its Application receipt");
+                                    }
                                     if receipt
                                         .save
                                         .as_ref()
@@ -372,6 +387,36 @@ impl ComponentAgentService {
                 }
             }
             observations.push(entry);
+        }
+        // An applied Open/Create can outlive a missing component result. Recover
+        // only its exact owner-acknowledged target, following confirmed assistant
+        // edits/saves; unrelated later user edits cannot become an adopted grant.
+        let mut projected = run.run.clone();
+        projected.recovery = Some(ComponentAgentRecovery {version:1,digest:String::new(),checked_at_ms:now(),
+            unresolved_mutations:0,tools:observations.clone()});
+        let original = self.owner.store.component_tools(actor.scope(), id)?;
+        let has_opened = original.iter().any(|tool| matches!(&tool.action, ComponentToolAction::Control(command)
+            if matches!(command.action, ApplicationAction::OpenDocument { .. } | ApplicationAction::CreateDocument { .. })));
+        if has_opened {
+            // Application pages are capped at 50, even though a window may own
+            // 64 documents; use the same bounded pagination as Continue.
+            let current = self.current_document_context(host,&native,&run.run.request.window,true);
+            for entry in &mut observations {
+                if entry.state != ComponentRecoveryState::Confirmed || entry.application_state != Some(ApplicationCommandState::Applied) { continue; }
+                let path = original.iter().find(|tool| tool.receipt.receipt_id == entry.receipt_id)
+                    .and_then(|tool| match &tool.action {
+                        ComponentToolAction::Control(command) => match &command.action {
+                            ApplicationAction::OpenDocument {path,..} | ApplicationAction::CreateDocument {path:Some(path),..} => Some(path),
+                            _ => None,
+                        }, _ => None,
+                    });
+                let Some(path) = path else {continue;};
+                let matches = entry.documents.first().and_then(|document|
+                    self.owner.confirmed_document(actor.scope(), &projected, document).ok())
+                    .is_some_and(|expected| current.as_ref().is_ok_and(|context|
+                        context.documents.iter().any(|summary| summary.path.as_ref() == Some(path) && summary.document == expected)));
+                if !matches { uncertain(entry, "The opened document changed outside confirmed task actions, or its current owner reference is unavailable"); }
+            }
         }
         self.owner
             .record_recovery(actor.scope(), &run.run.run_id, observations, now())

@@ -59,13 +59,13 @@ pub(super) fn templates() -> ListResourceTemplatesResult {
     result
 }
 impl McpEdge {
-    pub(super) async fn native_view(&self, args: Value) -> Result<CallToolResult, OperationError> {
+    pub(super) async fn native_view_with_context(&self, context: &CallContext, args: Value) -> Result<CallToolResult, OperationError> {
         let _: ViewOutputArguments =
             serde_json::from_value(args.clone()).map_err(invalid_operation)?;
         let snapshot = self
             .host
             .query_snapshot(
-                &self.context,
+                context,
                 QueryRequest {
                     capability: CapabilityRef::new("output.view", 1)?,
                     arguments: args,
@@ -118,8 +118,9 @@ impl McpEdge {
         ];
         Ok(result)
     }
-    pub(super) async fn read_output_resource(
+    pub(super) async fn read_output_resource_with_context(
         &self,
+        context: &CallContext,
         uri: &str,
     ) -> Result<ReadResourceResult, OperationError> {
         let rest = uri
@@ -137,7 +138,7 @@ impl McpEdge {
             _ => return Err(invalid_operation("invalid output resource URI")),
         };
         let reference = token_reference(token)?;
-        let bytes = self.host.verified_output(&self.context, &reference).await?;
+        let bytes = self.host.verified_output(context, &reference).await?;
         let content = resource_content(uri, kind, offset, token, reference, &bytes)?;
         Ok(ReadResourceResult::new(vec![content]))
     }

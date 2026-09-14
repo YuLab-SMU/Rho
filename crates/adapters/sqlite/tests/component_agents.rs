@@ -67,7 +67,7 @@ impl Fixture {
             .owner
             .create(&self.actor, conversation, profile, 2)
             .unwrap();
-        ComponentAgentStart {
+        ComponentAgentStart { assets: None,
             continuation: None,
             request_id: format!("start-{}", conversation.conversation_id),
             conversation_id: conversation.conversation_id,
@@ -76,6 +76,7 @@ impl Fixture {
             model_settings_version: 1,
             text: "Explain this fixture".into(),
             grant: ComponentAgentGrant {
+                permission_policy: None,
                 mode,
                 session: Some(ComponentAgentSession {
                     workspace_instance_id: "main".into(),
@@ -152,6 +153,168 @@ fn mutation() -> ComponentToolAction {
             expected: json!("native-one"),
         }],
     })
+}
+
+#[test]
+fn task_intent_and_permission_are_frozen_durable_and_fenced_before_dispatch() {
+    let f = Fixture::new();
+    f.configure();
+    let mut request = f.request("permissions", ComponentAgentProfile::Objects, ComponentAgentMode::Explain);
+    request.grant.permission_policy = Some(ComponentPermissionPolicy::Ask);
+    request.text = "Explain this object".into();
+    let run = f.owner.start(&f.actor, request.clone(), 3).unwrap().run.run;
+    f.owner.claim(f.actor.scope(), &run.run_id, 4).unwrap();
+    f.owner.begin_model_call(f.actor.scope(), &run.run_id, 5).unwrap();
+    let intent = ComponentAgentTaskIntent {request_id: request.request_id.clone(),
+        request_excerpt:request.text.clone(),actions:vec![]};
+    let mut forged = intent.clone();
+    forged.request_excerpt = "Run this code".into();
+    assert!(f.owner.capture_task_intent(f.actor.scope(), &run.run_id, &forged, 6).is_err());
+    f.owner.capture_task_intent(f.actor.scope(), &run.run_id, &intent, 6).unwrap();
+    let mut expanded = intent.clone();
+    expanded.actions.push(ComponentIntentAction {action:ComponentRequestedAction::Execute, document_id:None,path:None});
+    assert!(f.owner.capture_task_intent(f.actor.scope(), &run.run_id, &expanded, 7).is_err());
+    let tool = f.owner.admit_tool(f.actor.scope(), &run.run_id, 1, "additional-r", mutation(), 7).unwrap();
+    assert!(f.owner.check_tool_dispatch(f.actor.scope(), &run.run_id, &tool.tool.receipt.receipt_id, 8).is_err());
+    let permission = f.owner.record_permission(f.actor.scope(), &run.run_id, &tool.tool.receipt.receipt_id,
+        "workspace_run_r", ComponentTaskAuthorization::Additional, false, 8).unwrap();
+    assert_eq!(permission.state, ComponentPermissionState::Pending);
+    assert_eq!(permission.title, "Run R code in Main");
+    assert!(f.owner.begin_model_call(f.actor.scope(), &run.run_id, 9).is_err());
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    let waiting = reopened.component_run(f.actor.scope(), &run.run_id).unwrap().unwrap();
+    assert_eq!(waiting.run.state, ComponentAgentRunState::WaitingForPermission);
+    assert_eq!(waiting.run.permissions[0].action_digest, tool.tool.receipt.action_digest);
+    let other = actor(&f.application, &f.context, "other-window", 9);
+    assert!(f.owner.decide_permission(&other, &run.run_id, &permission.decision_id, true, 10).is_err());
+    f.owner.decide_permission(&f.actor, &run.run_id, &permission.decision_id, true, 10).unwrap();
+    f.owner.decide_permission(&f.actor, &run.run_id, &permission.decision_id, true, 11).unwrap();
+    assert!(f.owner.decide_permission(&f.actor, &run.run_id, &permission.decision_id, false, 11).is_err());
+    f.owner.check_tool_dispatch(f.actor.scope(), &run.run_id, &tool.tool.receipt.receipt_id, 12).unwrap();
+    f.owner.stop(&f.actor, &run.run_id, 13).unwrap();
+    assert!(f.owner.check_tool_dispatch(f.actor.scope(), &run.run_id, &tool.tool.receipt.receipt_id, 14).is_err());
+}
+
+#[test]
+fn task_intent_paths_are_finite_and_native_session_cannot_be_invented() {
+    let f = Fixture::new(); f.configure();
+    let mut request = f.request("new-script", ComponentAgentProfile::Plots, ComponentAgentMode::Explain);
+    request.grant.permission_policy = Some(ComponentPermissionPolicy::FullAccess);
+    request.grant.session = None;
+    request.text = "Create a script to explain this plot".into();
+    let run = f.owner.start(&f.actor, request.clone(), 3).unwrap().run.run;
+    f.owner.claim(f.actor.scope(), &run.run_id, 4).unwrap();
+    let mut intent = ComponentAgentTaskIntent {request_id:request.request_id,request_excerpt:request.text,
+        actions:vec![ComponentIntentAction {action:ComponentRequestedAction::Create,document_id:None,path:Some("../escape.R".into())}]};
+    assert!(f.owner.capture_task_intent(f.actor.scope(), &run.run_id, &intent, 5).is_err());
+    intent.actions[0].path = Some("analysis/new-script.R".into());
+    intent.actions.push(ComponentIntentAction {action:ComponentRequestedAction::Execute,document_id:None,path:None});
+    assert!(f.owner.capture_task_intent(f.actor.scope(), &run.run_id, &intent, 5).is_err());
+    intent.actions.pop();
+    f.owner.capture_task_intent(f.actor.scope(), &run.run_id, &intent, 5).unwrap();
+    assert_eq!(run.budget.model_calls,12); assert_eq!(run.budget.tool_calls,16); assert_eq!(run.budget.duration_ms,600_000);
+}
+
+#[test]
+fn opened_document_receipt_binds_a_new_target_before_task_intent_without_a_write_approval() {
+    let f=Fixture::new(); f.configure();
+    let mut request=f.request("open-target",ComponentAgentProfile::Objects,ComponentAgentMode::Explain);
+    request.grant.permission_policy=Some(ComponentPermissionPolicy::Ask);
+    let run=f.owner.start(&f.actor,request.clone(),3).unwrap().run.run;
+    f.owner.claim(f.actor.scope(),&run.run_id,4).unwrap();
+    f.owner.begin_model_call(f.actor.scope(),&run.run_id,5).unwrap();
+    let tool=f.owner.admit_tool(f.actor.scope(),&run.run_id,1,"open",ComponentToolAction::Control(
+        ApplicationCommandRequest {window:f.actor.window().clone(),request_id:"prepared".into(),execution_target:None,
+            action:ApplicationAction::OpenDocument{path:"analysis.R".into(),expected_context_version:"view-v1".into()}}),6).unwrap().tool;
+    f.owner.check_tool_dispatch(f.actor.scope(),&run.run_id,&tool.receipt.receipt_id,6).unwrap();
+    f.owner.record_tool(f.actor.scope(),&run.run_id,&tool.receipt.receipt_id,ComponentToolUpdate::Accepted{
+        operation_id:None,application_request_id:Some(tool.receipt.client_request_id.clone())},7).unwrap();
+    let document=ApplicationDocumentRef{document_id:"opened".into(),document_version:"v1".into(),selection_version:"s1".into()};
+    let result=json!({"window":f.actor.window(),"request_id":tool.receipt.client_request_id,
+        "actor":{"kind":"agent","id":format!("component:{}",run.run_id)},"state":"applied",
+        "created_at_ms":6,"claim_expires_at_ms":30006,"applied_documents":[document],
+        "applied_document_summaries":[{"document":document,"path":"analysis.R","sha256":"a".repeat(64),
+            "base_text_present":true,"utf8_bytes":12,"dirty":false,"selection":{"anchor":0,"head":0,"version":"s1"}}]});
+    f.owner.record_tool(f.actor.scope(),&run.run_id,&tool.receipt.receipt_id,
+        ComponentToolUpdate::Resolved{result,evidence:vec![]},8).unwrap();
+    let saved=f.store.component_run(f.actor.scope(),&run.run_id).unwrap().unwrap();
+    assert_eq!(component_document_reference(&saved.run,"opened"),Some(&document));
+    assert_eq!(component_document_grant(&saved.run,"opened").unwrap().path.as_deref(),Some("analysis.R"));
+    assert!(saved.run.permissions.is_empty());
+    f.owner.capture_task_intent(f.actor.scope(),&run.run_id,&ComponentAgentTaskIntent{
+        request_id:request.request_id,request_excerpt:request.text,actions:vec![]},9).unwrap();
+}
+
+#[test]
+fn declining_or_stopping_a_permission_never_releases_its_native_action() {
+    for stop in [false,true] {
+        let f=Fixture::new(); f.configure();
+        let mut request=f.request("pending",ComponentAgentProfile::Objects,ComponentAgentMode::Explain);
+        request.grant.permission_policy=Some(ComponentPermissionPolicy::Ask);
+        let run=f.owner.start(&f.actor,request.clone(),3).unwrap().run.run;
+        f.owner.claim(f.actor.scope(),&run.run_id,4).unwrap();
+        f.owner.begin_model_call(f.actor.scope(),&run.run_id,5).unwrap();
+        f.owner.capture_task_intent(f.actor.scope(),&run.run_id,&ComponentAgentTaskIntent{
+            request_id:request.request_id,request_excerpt:request.text,actions:vec![]},6).unwrap();
+        let tool=f.owner.admit_tool(f.actor.scope(),&run.run_id,1,"additional",mutation(),7).unwrap().tool;
+        let permission=f.owner.record_permission(f.actor.scope(),&run.run_id,&tool.receipt.receipt_id,
+            "workspace_run_r",ComponentTaskAuthorization::Additional,false,8).unwrap();
+        if stop {
+            f.owner.stop(&f.actor,&run.run_id,9).unwrap();
+            assert!(f.owner.decide_permission(&f.actor,&run.run_id,&permission.decision_id,true,10).is_err());
+        } else {
+            let decided=f.owner.decide_permission(&f.actor,&run.run_id,&permission.decision_id,false,9).unwrap();
+            assert_eq!(decided.permissions[0].state,ComponentPermissionState::Denied);
+            let receipt=&f.store.component_tools(f.actor.scope(),&run.run_id).unwrap()[0].receipt;
+            assert_eq!(receipt.phase,ComponentToolPhase::Resolved);
+            assert_eq!(receipt.result.as_ref().unwrap()["accepted"],false);
+            assert!(receipt.operation_id.is_none());
+        }
+        assert!(f.owner.check_tool_dispatch(f.actor.scope(),&run.run_id,&tool.receipt.receipt_id,10).is_err());
+    }
+}
+
+#[test]
+fn offline_controller_cannot_approve_a_pending_native_action() {
+    let f=Fixture::new();f.configure();
+    let mut request=f.request("offline-permission",ComponentAgentProfile::Objects,ComponentAgentMode::Explain);
+    request.grant.permission_policy=Some(ComponentPermissionPolicy::Ask);
+    let run=f.owner.start(&f.actor,request.clone(),3).unwrap().run.run;
+    f.owner.claim(f.actor.scope(),&run.run_id,4).unwrap();f.owner.begin_model_call(f.actor.scope(),&run.run_id,5).unwrap();
+    f.owner.capture_task_intent(f.actor.scope(),&run.run_id,&ComponentAgentTaskIntent{request_id:request.request_id,request_excerpt:request.text,actions:vec![]},6).unwrap();
+    let tool=f.owner.admit_tool(f.actor.scope(),&run.run_id,1,"extra",mutation(),7).unwrap().tool;
+    let permission=f.owner.record_permission(f.actor.scope(),&run.run_id,&tool.receipt.receipt_id,"workspace_run_r",ComponentTaskAuthorization::Additional,false,8).unwrap();
+    assert!(matches!(f.owner.decide_permission(&f.actor,&run.run_id,&permission.decision_id,true,20_000),Err(ApplicationError::Offline)));
+    let saved=f.store.component_run(f.actor.scope(),&run.run_id).unwrap().unwrap();
+    assert_eq!(saved.run.state,ComponentAgentRunState::WaitingForPermission);
+    assert_eq!(saved.run.permissions[0].state,ComponentPermissionState::Pending);
+    assert!(f.store.component_tools(f.actor.scope(),&run.run_id).unwrap()[0].receipt.operation_id.is_none());
+}
+
+#[test]
+fn continue_retains_the_original_task_intent_without_accepting_broader_permissions() {
+    let f=Fixture::new();f.configure();
+    let mut request=f.request("intent-continuation",ComponentAgentProfile::Objects,ComponentAgentMode::Explain);
+    request.grant.permission_policy=Some(ComponentPermissionPolicy::Ask);
+    request.text="Create one script".into();
+    let first=f.owner.start(&f.actor,request.clone(),3).unwrap().run.run;
+    f.owner.claim(f.actor.scope(),&first.run_id,4).unwrap();
+    let intent=ComponentAgentTaskIntent{request_id:request.request_id.clone(),request_excerpt:request.text.clone(),
+        actions:vec![ComponentIntentAction{action:ComponentRequestedAction::Create,document_id:None,path:Some("one.R".into())}]};
+    f.owner.capture_task_intent(f.actor.scope(),&first.run_id,&intent,5).unwrap();
+    f.owner.finish(f.actor.scope(),&first.run_id,ComponentAgentRunState::Interrupted,None,6).unwrap();
+    let checked=f.owner.record_recovery(f.actor.scope(),&first.run_id,vec![],7).unwrap();
+    request.continuation=Some(ComponentContinuation{run_id:first.run_id,recovery_digest:checked.recovery.unwrap().digest});
+    request.request_id="continue-intent".into();request.text="Continue".into();
+    request.conversation_version=f.store.component_conversation(f.actor.scope(),&request.conversation_id).unwrap().unwrap().version;
+    let mut broader=request.clone();broader.grant.permission_policy=Some(ComponentPermissionPolicy::FullAccess);
+    assert!(f.owner.start(&f.actor,broader,8).is_err());
+    let next=f.owner.start(&f.actor,request.clone(),8).unwrap().run.run;
+    assert_eq!(next.task_intent.as_ref(),Some(&intent));
+    f.owner.claim(f.actor.scope(),&next.run_id,9).unwrap();
+    assert!(f.owner.capture_task_intent(f.actor.scope(),&next.run_id,&ComponentAgentTaskIntent{
+        request_id:request.request_id,request_excerpt:request.text,
+        actions:vec![ComponentIntentAction{action:ComponentRequestedAction::Create,document_id:None,path:Some("another.R".into())}]},10).is_err());
 }
 
 #[test]
@@ -538,7 +701,7 @@ fn stop_fences_model_and_tool_calls_but_preserves_late_owner_receipt() {
 fn disable_and_budgets_fail_before_admitting_new_work() {
     let f = Fixture::new();
     let run = f.running(ComponentAgentProfile::Objects, ComponentAgentMode::Explain);
-    for i in 0..8 {
+    for i in 0..16 {
         f.owner
             .admit_tool(f.actor.scope(), &run, 1, &format!("call-{i}"), query(), 6)
             .unwrap();
@@ -548,7 +711,7 @@ fn disable_and_budgets_fail_before_admitting_new_work() {
             .admit_tool(f.actor.scope(), &run, 1, "over-budget", query(), 6),
         Err(ApplicationError::Budget(_))
     ));
-    for _ in 0..3 {
+    for _ in 0..11 {
         f.owner.begin_model_call(f.actor.scope(), &run, 7).unwrap();
     }
     assert!(matches!(
@@ -985,7 +1148,7 @@ fn rejected_argument_attempts_are_durable_and_consume_tool_budget_without_native
         arguments_digest: "0".repeat(64),
         feedback: json!({"status":"rejected","accepted":false,"error":"Invalid parameters"}),
     };
-    for call in 0..8 {
+    for call in 0..16 {
         let admission = f
             .owner
             .admit_tool(
@@ -1008,7 +1171,7 @@ fn rejected_argument_attempts_are_durable_and_consume_tool_budget_without_native
     ));
     let reopened = ApplicationStore::open(&f.path).unwrap();
     let tools = reopened.component_tools(f.actor.scope(), &run).unwrap();
-    assert_eq!(tools.len(), 8);
+    assert_eq!(tools.len(), 16);
     assert!(
         tools
             .iter()
@@ -1651,6 +1814,7 @@ fn seed_inactive_payload(
     let mut index = 0;
     loop {
         let mut value = ComponentAgentConversation {
+            title: "Task".into(), archived: false, draft_content: AgentDraftContent::default(), draft_grant: None,
             conversation_id: format!("stored-{index}"),
             version: 1,
             draft_version: 1,
@@ -2090,4 +2254,106 @@ fn run_history_is_scoped_bounded_and_stable_across_tied_timestamps() {
     let other = f.request("other", ComponentAgentProfile::Workspace, ComponentAgentMode::Run);
     let other = f.owner.start(&f.actor, other, 15).unwrap().run.run;
     assert!(matches!(f.store.component_run_history(f.actor.scope(), "history", Some(&other.run_id), 1), Err(ApplicationError::NotFound)));
+}
+
+#[test]
+fn structured_diagnostic_events_survive_owner_restart_with_original_next_reads() {
+    let f = Fixture::new();
+    let run_id = f.running(ComponentAgentProfile::Project, ComponentAgentMode::Explain);
+    let diagnostic = Diagnostic { code: DiagnosticCode::ContentChanged, message: "The captured document changed".into(),
+        continuation: DiagnosticContinuation::RefreshObservation,
+        next_reads: vec![NextRead::query("application.read_document", "Inspect the identified document", json!({"document_id":"doc-one"}))] };
+    f.owner.record_diagnostic(f.actor.scope(), &run_id, diagnostic.clone(), 6).unwrap();
+    f.owner.finish(f.actor.scope(), &run_id, ComponentAgentRunState::Failed, Some(diagnostic.message.clone()), 7).unwrap();
+    let reopened = ApplicationStore::open(&f.path).unwrap();
+    let page = reopened.component_events(f.actor.scope(), &run_id, 0, 100).unwrap();
+    let saved = page.events.into_iter().find_map(|event| match event.content {
+        ComponentAgentEventContent::Diagnostic { diagnostic } => Some(diagnostic), _ => None,
+    }).unwrap();
+    assert_eq!(saved, diagnostic);
+}
+
+#[test]
+fn full_task_draft_and_metadata_share_existing_cas_and_survive_reopen() {
+    let f=Fixture::new();
+    let conversation=f.owner.create(&f.actor,"full-draft",ComponentAgentProfile::Workspace,2).unwrap();
+    let content=AgentDraftContent{text:"Compare the selected plot".into(),assets:vec![],context:vec![AgentContextSelection{source:"plots".into(),label:"Original plot".into(),reference:json!({"operation_id":"original-operation","sequence":1}),inclusion:"summary".into()}]};
+    let grant=ComponentAgentGrant{mode:ComponentAgentMode::Explain,permission_policy:Some(ComponentPermissionPolicy::Ask),session:Some(ComponentAgentSession{workspace_instance_id:"main".into(),session_id:"native-one".into()}),documents:vec![],files:vec![]};
+    f.owner.save_draft_content(&f.actor,"full-draft",conversation.draft_version,content.clone(),Some(grant.clone()),3).unwrap();
+    assert!(matches!(f.owner.save_draft_content(&f.actor,"full-draft",conversation.draft_version,AgentDraftContent::default(),None,4),Err(ApplicationError::Conflict)));
+    let saved=f.store.component_conversation(f.actor.scope(),"full-draft").unwrap().unwrap();
+    f.owner.update_task_metadata(&f.actor,"full-draft",saved.version,Some("Plot comparison".into()),Some(true),5).unwrap();
+    let reopened=ApplicationStore::open(&f.path).unwrap();
+    let actual=reopened.component_conversation(f.actor.scope(),"full-draft").unwrap().unwrap();
+    assert_eq!(actual.title,"Plot comparison"); assert!(actual.archived);
+    assert_eq!(actual.draft,content.text); assert_eq!(actual.draft_version,saved.draft_version);
+    assert_eq!(serde_json::to_value(&actual.draft_content).unwrap(),serde_json::to_value(content).unwrap());
+    assert_eq!(serde_json::to_value(actual.draft_grant).unwrap(),serde_json::to_value(Some(grant)).unwrap());
+    assert!(reopened.component_conversation(&ApplicationScope{project:"/other".into(),principal:f.actor.scope().principal.clone()},"full-draft").unwrap().is_none());
+}
+
+#[test]
+fn uploaded_assets_share_byte_storage_but_keep_owner_kind_scope_and_immutable_identity() {
+    let f = Fixture::new();
+    f.configure();
+    let request = f.request("asset-conversation", ComponentAgentProfile::Project, ComponentAgentMode::Explain);
+    let asset = AgentAsset { asset_id: "uploaded-one".into(), name: "notes.txt".into(), mime_type: "text/plain".into(), bytes: 3, sha256: "fixture-hash".into() };
+    f.owner.put_asset(&f.actor, "asset-conversation", &asset, b"one", 3).unwrap();
+    f.owner.put_asset(&f.actor, "asset-conversation", &asset, b"one", 4).unwrap();
+    assert!(matches!(f.owner.put_asset(&f.actor, "asset-conversation", &asset, b"two", 5), Err(ApplicationError::RequestConflict)));
+    assert_eq!(f.store.component_asset(f.actor.scope(), "asset-conversation", &asset.asset_id).unwrap().1, b"one");
+    assert!(matches!(f.store.agent_asset(f.actor.scope(), "component:asset-conversation", &asset.asset_id), Err(ApplicationError::NotFound)));
+    let foreign = ApplicationScope { project: f.actor.scope().project.clone(), principal: "another-principal".into() };
+    assert!(matches!(f.store.component_asset(&foreign, "asset-conversation", &asset.asset_id), Err(ApplicationError::NotFound)));
+    f.owner.save_draft_content(&f.actor, "asset-conversation", 1, AgentDraftContent { text: "read upload".into(), assets: vec![asset.asset_id.clone()], context: vec![] }, None, 6).unwrap();
+    let current = f.store.component_conversation(f.actor.scope(), "asset-conversation").unwrap().unwrap();
+    assert!(f.owner.remove_asset(&f.actor, "asset-conversation", &asset.asset_id, 1, 7).is_err());
+    f.owner.remove_asset(&f.actor, "asset-conversation", &asset.asset_id, current.draft_version, 8).unwrap();
+    assert!(f.store.component_conversation(f.actor.scope(), "asset-conversation").unwrap().unwrap().draft_content.assets.is_empty());
+    assert_eq!(f.store.component_asset(f.actor.scope(), &request.conversation_id, &asset.asset_id).unwrap().1, b"one");
+}
+
+#[test]
+fn archived_rho_task_rejects_new_drafts_runs_and_uploads_but_can_be_unarchived() {
+    let f=Fixture::new(); f.configure();
+    let mut request=f.request("archived-task",ComponentAgentProfile::Workspace,ComponentAgentMode::Explain);
+    f.owner.update_task_metadata(&f.actor,"archived-task",request.conversation_version,None,Some(true),3).unwrap();
+    let archived=f.store.component_conversation(f.actor.scope(),"archived-task").unwrap().unwrap();
+    request.conversation_version=archived.version;
+    assert!(f.owner.start(&f.actor,request.clone(),4).is_err());
+    assert!(f.owner.save_draft(&f.actor,"archived-task",archived.draft_version,"blocked".into(),4).is_err());
+    let asset=AgentAsset{asset_id:"00000000-0000-0000-0000-000000000005".into(),name:"a.txt".into(),mime_type:"text/plain".into(),bytes:3,sha256:"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".into()};
+    assert!(f.owner.put_asset(&f.actor,"archived-task",&asset,b"abc",4).is_err());
+    assert!(f.store.component_run_by_request(f.actor.scope(),&request.request_id).unwrap().is_none());
+    f.owner.update_task_metadata(&f.actor,"archived-task",archived.version,None,Some(false),5).unwrap();
+    f.owner.save_draft(&f.actor,"archived-task",archived.draft_version,"Allowed after unarchive".into(),6).unwrap();
+}
+
+
+#[test]
+fn pending_permission_summarizes_the_bound_file_target_without_changing_its_action() {
+    let f = Fixture::new();
+    f.configure();
+    let document = ApplicationDocumentRef { document_id: "document-one".into(), document_version: "v1".into(), selection_version: "selection-one".into() };
+    let mut request = f.request("target-summary", ComponentAgentProfile::Project, ComponentAgentMode::Explain);
+    request.grant.permission_policy = Some(ComponentPermissionPolicy::Ask);
+    request.grant.documents.push(ComponentDocumentGrant { document: document.clone(), allow_save: false, path: Some("scripts/analysis.R".into()) });
+    let run = f.owner.start(&f.actor, request.clone(), 3).unwrap().run.run;
+    f.owner.claim(f.actor.scope(), &run.run_id, 4).unwrap();
+    f.owner.begin_model_call(f.actor.scope(), &run.run_id, 5).unwrap();
+    f.owner.capture_task_intent(f.actor.scope(), &run.run_id, &ComponentAgentTaskIntent {
+        request_id: request.request_id, request_excerpt: request.text, actions: vec![],
+    }, 6).unwrap();
+    let tool = f.owner.admit_tool(f.actor.scope(), &run.run_id, 1, "save-selected-file",
+        ComponentToolAction::Control(ApplicationCommandRequest { window: f.actor.window().clone(), request_id: "input-id".into(), execution_target: None,
+            action: ApplicationAction::Save { document, target_path: Some("scripts/analysis.R".into()) } }), 7).unwrap().tool;
+    let original_action = serde_json::to_value(&tool.action).unwrap();
+    let permission = f.owner.record_permission(f.actor.scope(), &run.run_id, &tool.receipt.receipt_id,
+        "technical_tool_label", ComponentTaskAuthorization::Additional, false, 8).unwrap();
+    assert_eq!(permission.title, "Save scripts/analysis.R");
+    assert_eq!(permission.action_digest, tool.receipt.action_digest);
+    assert_eq!(serde_json::from_str::<serde_json::Value>(&permission.details).unwrap(), original_action);
+    let saved = f.store.component_tools(f.actor.scope(), &run.run_id).unwrap();
+    assert_eq!(serde_json::to_value(&saved[0].action).unwrap(), original_action);
+    assert_eq!(saved[0].receipt.action_digest, tool.receipt.action_digest);
 }

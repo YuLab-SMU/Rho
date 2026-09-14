@@ -157,6 +157,35 @@ impl ComponentAgentOwner {
             unresolved_mutations: unresolved,
             tools,
         });
+        let mut recovered_grants = Vec::new();
+        for entry in &run.run.recovery.as_ref().unwrap().tools {
+            if entry.state != ComponentRecoveryState::Confirmed || entry.application_state != Some(ApplicationCommandState::Applied) {continue;}
+            let action = original.iter().find(|tool| tool.receipt.receipt_id == entry.receipt_id)
+                .map(|tool| &tool.action).ok_or(ApplicationError::NotFound)?;
+            let path = match action {
+                ComponentToolAction::Control(command) => match &command.action {
+                    ApplicationAction::OpenDocument {path,..} | ApplicationAction::CreateDocument {path:Some(path),..} => path,
+                    _ => continue,
+                }, _ => continue,
+            };
+            if entry.documents.len() != 1 { return Err(invalid("A recovered document requires one exact owner reference")); }
+            let document = self.confirmed_document(scope, &run.run, &entry.documents[0])?;
+            recovered_grants.push(ComponentDocumentGrant {document, path:Some(path.clone()), allow_save:false});
+        }
+        for grant in recovered_grants {
+            if let Some(existing) = run.run.document_grants.iter_mut()
+                .find(|existing| existing.document.document_id == grant.document.document_id) {
+                if existing.path != grant.path {return Err(invalid("Recovered document path differs from the original target"));}
+                existing.document = grant.document.clone();
+            } else {
+                if run.run.document_grants.len() + run.run.request.grant.documents.len() >= 16 {
+                    return Err(ApplicationError::Budget("Task document target limit reached".into()));
+                }
+                run.run.document_grants.push(grant.clone());
+            }
+            run.run.document_versions.get_or_insert_with(Default::default)
+                .insert(grant.document.document_id.clone(), grant.document);
+        }
         run.run.updated_at_ms = now;
         run.run.event_cursor += 1;
         let event = ComponentAgentEvent {

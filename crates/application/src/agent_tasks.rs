@@ -22,6 +22,9 @@ pub struct AgentOwnedProcess {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredAgentTask {
+    /// Older supported tasks keep their original caller-scoped dedup namespace.
+    #[serde(default)]
+    pub task_mcp_identity: bool,
     pub task: AgentTask,
     pub attachment: AgentAttachment,
     pub revision: String,
@@ -46,6 +49,10 @@ pub struct AgentTaskWrite<'a> {
 }
 
 pub trait AgentTaskRepository: Send + Sync {
+    /// Bounded projection of the two existing task owners in one read snapshot.
+    fn project_agent_tasks(&self, _scope: &ApplicationScope, _archived: Option<bool>, _before: Option<&str>, _limit: usize, _native_host: &str, _rho_host: &str, _rho_live: &[String]) -> Result<ProjectAgentTaskPage, ApplicationError> {
+        Err(ApplicationError::Storage("Unified task reading is unavailable".into()))
+    }
     fn agent_task(
         &self,
         scope: &ApplicationScope,
@@ -296,6 +303,7 @@ impl AgentTaskOwner {
                 return Err(invalid("Select a native model"));
             }
             let task = StoredAgentTask {
+                task_mcp_identity: true,
                 task: AgentTask {
                     task_id: fresh(),
                     project_root: scope.project.clone(),
@@ -366,6 +374,9 @@ impl AgentTaskOwner {
             let expected = task.revision.clone();
             (task, draft, Some(expected))
         };
+        if task.task.archived && matches!(request.command, AgentTaskCommand::SaveDraft { .. } | AgentTaskCommand::Send { .. } | AgentTaskCommand::AddAsset { .. } | AgentTaskCommand::RemoveAsset { .. } | AgentTaskCommand::Configure { .. } | AgentTaskCommand::Connect { .. } | AgentTaskCommand::Resume { .. }) {
+            return Err(invalid("Unarchive this task before editing or sending"));
+        }
         let mut receipt = AgentCommandReceipt {
             request_id: request.request_id.clone(),
             task_id: task.task.task_id.clone(),

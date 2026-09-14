@@ -126,6 +126,7 @@ impl Work {
                                 return Ok(self
                                     .record(ComponentToolUpdate::Rejected {
                                         reason: failure.to_string(),
+                                        diagnostic: self.host.runtime.gateway.diagnostic(&self.context, &failure),
                                     })?
                                     .receipt
                                     .result
@@ -278,7 +279,7 @@ impl Work {
         &self,
         command: &ApplicationCommandRequest,
     ) -> Result<Value, ApplicationError> {
-        let owner = self.host.application_owner().map_err(error)?;
+        let owner = self.host.application_owner().map_err(|failure| native_error(&self.host, &self.context, failure))?;
         let lookup = || {
             owner.command_status(
                 &self.context,
@@ -319,6 +320,7 @@ impl Work {
                                 return Ok(self
                                     .record(ComponentToolUpdate::Rejected {
                                         reason: failure.to_string(),
+                                        diagnostic: self.host.runtime.gateway.diagnostic(&self.context, &failure),
                                     })?
                                     .receipt
                                     .result

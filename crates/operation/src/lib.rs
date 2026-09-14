@@ -344,6 +344,10 @@ pub struct OperationRecordFilter {
 
 #[async_trait]
 pub trait OperationJournal: Send + Sync {
+    /// An owner's exact actor filter, in addition to the authenticated principal.
+    async fn list_recent_for_caller(&self, _scope: &str, _principal: &CallerIdentity, _caller: &CallerIdentity, _args: &rho_contract::RecentOperationsArguments) -> Result<rho_contract::RecentOperations, OperationError> {
+        Err(OperationError::Unavailable("Caller-filtered operation history is unavailable".into()))
+    }
     async fn events_checkpoint(
         &self,
         scope: &str,
@@ -1063,6 +1067,14 @@ impl OperationGateway {
     ) -> Result<Option<OperationRecord>, OperationError> {
         require_read_scope(context)?;
         self.owner_record(context, operation_id).await
+    }
+    /// Task owners may find their original operations without changing read authority.
+    pub async fn recent_for_caller(&self, context: &CallContext, caller: &CallerIdentity, args: &rho_contract::RecentOperationsArguments) -> Result<rho_contract::RecentOperations, OperationError> {
+        require_read_scope(context)?;
+        caller.validate()?;
+        crate::recent::validate_recent_arguments(args)?;
+        let project = self.project_scope.as_deref().ok_or_else(|| OperationError::Unavailable("A project is required for task operation history".into()))?;
+        self.journal.list_recent_for_caller(project, context.principal(), caller, args).await
     }
     /// Trusted owner/control lookup. Public record reads use get_operation;
     /// cancellation and stdin retain their own native authority requirements.

@@ -71,7 +71,7 @@ impl CapabilityDocumentation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct NextRead {
     pub purpose: String,
@@ -117,7 +117,7 @@ pub enum DiagnosticContinuation {
     CorrectInput,
     None,
 }
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct Diagnostic {
     pub code: DiagnosticCode,

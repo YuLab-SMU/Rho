@@ -2,72 +2,71 @@
 use super::*;
 
 impl ComponentAgentService {
+    pub(super) fn current_document_context(&self, host: &NextHost, context: &CallContext,
+        window: &ApplicationWindowRef, allow_offline: bool) -> Result<ApplicationContext, ApplicationError> {
+        let owner=host.application_owner().map_err(error)?;
+        let mut snapshot=owner.context(context,ApplicationContextArguments{window:window.clone(),
+            allow_offline,after_document_id:None,limit:Some(50)},now())?;
+        if let Some(after)=snapshot.next_after_document_id.clone() {
+            let rest=owner.context(context,ApplicationContextArguments{window:window.clone(),
+                allow_offline,after_document_id:Some(after),limit:Some(50)},now())?;
+            if rest.context.version!=snapshot.context.version || rest.next_after_document_id.is_some() {
+                return Err(error("Window context changed or exceeded its document bound during validation"));
+            }
+            snapshot.documents.extend(rest.documents);
+            snapshot.next_after_document_id=None;
+        }
+        Ok(snapshot)
+    }
     pub(super) async fn validate_continued_targets(
         &self,
         host: &NextHost,
         context: &CallContext,
+        scope: &ApplicationScope,
         request: &ComponentAgentStart,
+        previous: &ComponentAgentRun,
     ) -> Result<(), ApplicationError> {
-        if request.grant.mode == ComponentAgentMode::Explain {
+        if request.grant.permission_policy.is_none() && request.grant.mode == ComponentAgentMode::Explain {
             return Ok(());
         }
-        let snapshot = host
-            .application_owner()
-            .map_err(error)?
-            .context(
-                context,
-                ApplicationContextArguments {
-                    window: request.window.clone(),
-                    allow_offline: false,
-                    after_document_id: None,
-                    limit: Some(50),
-                },
-                now(),
-            )
-            .map_err(error)?;
-        let mut documents = snapshot.documents.clone();
-        if let Some(after) = &snapshot.next_after_document_id {
-            let rest = host
-                .application_owner()
-                .map_err(error)?
-                .context(
-                    context,
-                    ApplicationContextArguments {
-                        window: request.window.clone(),
-                        allow_offline: false,
-                        after_document_id: Some(after.clone()),
-                        limit: Some(50),
-                    },
-                    now(),
-                )
-                .map_err(error)?;
-            if rest.context.version != snapshot.context.version {
-                return Err(error(
-                    "Window context changed during continuation validation",
-                ));
+        let snapshot=self.current_document_context(host,context,&request.window,false)?;
+        let documents=&snapshot.documents;
+        let mut targets = request.grant.documents.clone();
+        if request.grant.permission_policy.is_some() {
+            let mut inherited = previous.document_grants.clone();
+            for action in previous.task_intent.iter().flat_map(|intent| &intent.actions) {
+                if let Some(id) = &action.document_id
+                    && let Some(target) = component_document_grant(previous, id) {
+                    inherited.push(target.clone());
+                }
             }
-            documents.extend(rest.documents);
+            for mut target in inherited {
+                target.document = self.owner.confirmed_document(scope, previous, &target.document)?;
+                if !targets.iter().any(|existing| existing.document == target.document && existing.path == target.path) {
+                    targets.push(target);
+                }
+            }
         }
-        for target in &request.grant.documents {
+        for target in &targets {
             if !documents.iter().any(|d| {
                 d.document == target.document
                     && d.path == target.path
-                    && d.readonly_reason.is_none()
+                    && (request.grant.permission_policy.is_some() || d.readonly_reason.is_none())
             }) {
                 return Err(error(
                     "A continuation document changed or is unavailable; start a fresh request",
                 ));
             }
         }
-        if request.grant.mode == ComponentAgentMode::Run {
+        if request.grant.allows_execution() {
             let session = request
                 .grant
                 .session
                 .as_ref()
                 .ok_or_else(|| error("Continue requires the original R session"))?;
-            if snapshot.context.workspace_instance_id.as_deref()
+            if request.grant.permission_policy.is_none() && (snapshot.context.workspace_instance_id.as_deref()
                 != Some(&session.workspace_instance_id)
-                || snapshot.context.native_session_id.as_deref() != Some(&session.session_id)
+                || snapshot.context.native_session_id.as_deref() != Some(&session.session_id))
             {
                 return Err(error(
                     "The selected R target changed; start a fresh request",
@@ -125,8 +124,8 @@ impl ComponentAgentService {
             .map(|run| json!({"run_id":run.run.run_id,"text":run.run.request.text}))
             .collect::<Vec<_>>();
         requests.push(json!({"run_id":previous.run_id,"text":previous.request.text}));
-        let assistant_truncated = text.len() > 8192;
-        let assistant_text = if assistant_truncated {
+        let assistant_truncated = text.len() > 8192 || cursor < previous.event_cursor;
+        let assistant_text = if text.len() > 8192 {
             let mut start = text.len() - 8192;
             while !text.is_char_boundary(start) {
                 start += 1;

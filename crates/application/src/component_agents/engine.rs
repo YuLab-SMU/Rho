@@ -41,8 +41,12 @@ pub struct ComponentEngineExecution {
     pub cancellation: CancellationToken,
 }
 /// Verified image bytes are transient model input, never serialized in run records.
+pub enum ComponentImageSource {
+    Scientific(rho_contract::MediaReference),
+    Attachment { conversation_id: String, asset: rho_contract::AgentAsset },
+}
 pub struct ComponentImageInput {
-    pub reference: rho_contract::MediaReference,
+    pub reference: ComponentImageSource,
     pub mime_type: String,
     pub base64: String,
     pub sha256: String,
@@ -84,6 +88,8 @@ pub trait ComponentRunPort: Send + Sync {
         admission: ComponentToolAdmission,
     ) -> Result<Value, ApplicationError>;
     async fn append_text(&self, text: String) -> Result<(), ApplicationError>;
+    /// Record an owner-derived diagnostic in the task event history before stopping.
+    async fn record_diagnostic(&self, _diagnostic: rho_contract::Diagnostic) -> Result<(), ApplicationError> { Ok(()) }
     async fn record_usage(
         &self,
         input_tokens: Option<u64>,

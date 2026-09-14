@@ -675,6 +675,7 @@ impl NativeAgentSession for Connection {
                 );
                 bytes += bounded.len();
                 events.push(NativeEvent {
+            usage: None,
                     cursor: 0,
                     key: format!("native:{turn_id}:{item_id}"),
                     request_id: None,

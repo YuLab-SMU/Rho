@@ -26,6 +26,71 @@ pub enum ComponentAgentMode {
     Run,
 }
 
+/// Approval policy is independent of the work selected by the Agent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentPermissionPolicy {
+    Ask,
+    AutoApproval,
+    FullAccess,
+}
+
+/// The executing Agent interprets the user's request; no review model is called.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentTaskAuthorization {
+    UserRequest,
+    Additional,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentRequestedAction {
+    Create,
+    Edit,
+    Save,
+    Execute,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentIntentAction {
+    pub action: ComponentRequestedAction,
+    /// None denotes execution in the run's already bound R session.
+    pub document_id: Option<String>,
+    /// An exact project-relative destination, including a not-yet-created file.
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentAgentTaskIntent {
+    pub request_id: String,
+    pub request_excerpt: String,
+    pub actions: Vec<ComponentIntentAction>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentPermissionState {
+    Pending,
+    Allowed,
+    Denied,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentAgentPermission {
+    pub decision_id: String,
+    pub receipt_id: String,
+    pub action_digest: String,
+    pub tool: String,
+    pub title: String,
+    pub details: String,
+    pub authorization: ComponentTaskAuthorization,
+    pub policy: ComponentPermissionPolicy,
+    pub state: ComponentPermissionState,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentAgentSession {
@@ -52,10 +117,27 @@ pub struct ComponentFileGrant {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentAgentGrant {
+    /// Absent only in already recorded requests using the former work modes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub permission_policy: Option<ComponentPermissionPolicy>,
     pub mode: ComponentAgentMode,
     pub session: Option<ComponentAgentSession>,
     pub documents: Vec<ComponentDocumentGrant>,
     pub files: Vec<ComponentFileGrant>,
+}
+
+impl ComponentAgentGrant {
+    pub fn allows_edit(&self) -> bool {
+        self.permission_policy.is_some() || self.mode != ComponentAgentMode::Explain
+    }
+    pub fn allows_execution(&self) -> bool {
+        self.session.is_some()
+            && (self.permission_policy.is_some() || self.mode == ComponentAgentMode::Run)
+    }
+    pub fn allows_save(&self, document: &ComponentDocumentGrant) -> bool {
+        document.path.is_some() && (self.permission_policy.is_some() || document.allow_save)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -69,7 +151,10 @@ pub enum ComponentModelProtocol {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComponentCredentialRef {
     Environment { name: String },
+    /// Retained references from Hosts that used memory-only credentials.
     Session { key_id: String },
+    /// Immutable version in the user-local Rho configuration file.
+    LocalFile { key_id: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -92,12 +177,21 @@ pub struct ComponentModelSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct ComponentAgentConversation {
     pub conversation_id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub archived: bool,
     pub version: u64,
     /// User draft CAS is independent of streaming run/event updates.
     pub draft_version: u64,
     pub controller: ApplicationWindowRef,
     pub profile: ComponentAgentProfile,
     pub draft: String,
+    #[serde(default)]
+    pub draft_content: crate::AgentDraftContent,
+    #[serde(default)]
+    #[ts(optional)]
+    pub draft_grant: Option<ComponentAgentGrant>,
     pub active_run_id: Option<String>,
     pub created_at_ms: u64,
     pub updated_at_ms: u64,
@@ -106,6 +200,10 @@ pub struct ComponentAgentConversation {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentAgentStart {
+    /// Immutable user-uploaded attachment references; bytes stay in Application asset storage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub assets: Option<Vec<String>>,
     #[serde(default, skip_serializing_if="Option::is_none")]
     #[ts(optional)]
     pub continuation: Option<ComponentContinuation>,
@@ -132,6 +230,7 @@ pub enum ComponentAgentRunState {
     Queued,
     Running,
     WaitingForR,
+    WaitingForPermission,
     NeedsInput,
     Stopping,
     Completed,
@@ -160,6 +259,13 @@ pub struct ComponentAgentBudget {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct ComponentAgentRun {
+    #[serde(default)]
+    pub document_grants: Vec<ComponentDocumentGrant>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub task_intent: Option<ComponentAgentTaskIntent>,
+    #[serde(default)]
+    pub permissions: Vec<ComponentAgentPermission>,
     pub run_id: String,
     pub request: ComponentAgentStart,
     pub profile: ComponentAgentProfile,
@@ -275,6 +381,7 @@ pub enum ComponentToolPhase {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ComponentAgentEvidence {
+    Attachment { conversation_id: String, asset: crate::AgentAsset },
     Operation {
         operation_id: OperationId,
     },
@@ -316,6 +423,7 @@ pub struct ComponentToolReceipt {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ComponentAgentEventContent {
+    Diagnostic { diagnostic: crate::Diagnostic },
     Recovery {
         version: u64,
     },
@@ -359,6 +467,7 @@ pub struct ComponentAgentsQuery {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComponentAgentQuery {
+    Assets { conversation_id: String },
     Runs {
         conversation_id: String,
         before: Option<String>,
@@ -369,6 +478,7 @@ pub enum ComponentAgentQuery {
         request_id: String,
     },
     Settings,
+    CredentialStatus,
     Conversations {
         after: Option<String>,
         limit: u32,
@@ -416,6 +526,10 @@ pub struct ComponentAgentsCommand {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComponentAgentCommand {
+    AddAsset { conversation_id: String, asset_id: String, name: String, mime_type: String, data: String },
+    RemoveAsset { conversation_id: String, asset_id: String, draft_version: u64 },
+    Rename { conversation_id: String, expected_version: u64, title: String },
+    Archive { conversation_id: String, expected_version: u64, archived: bool },
     Reconcile {
         run_id: String,
     },
@@ -425,6 +539,11 @@ pub enum ComponentAgentCommand {
     },
     StopTest {
         request_id: String,
+    },
+    Decision {
+        run_id: String,
+        decision_id: String,
+        allow: bool,
     },
     Create {
         conversation_id: String,
@@ -442,6 +561,10 @@ pub enum ComponentAgentCommand {
     Configure {
         settings: ComponentModelSettings,
     },
+    RemoveCredential {
+        settings_version: u64,
+        key_id: String,
+    },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -449,15 +572,45 @@ pub struct ComponentAgentDraftUpdate {
     pub conversation_id: String,
     pub draft_version: u64,
     pub text: String,
+    #[serde(default)]
+    #[ts(optional)]
+    pub content: Option<crate::AgentDraftContent>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub grant: Option<ComponentAgentGrant>,
 }
 
-/// A separate transient endpoint prevents credentials entering pending command/draft records.
+/// A separate endpoint prevents plaintext entering pending command/draft records.
 #[derive(Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-pub struct ComponentSessionCredential {
+pub struct ComponentLocalCredential {
     pub project_root: String,
     pub window: ApplicationWindowRef,
     pub key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ComponentCredentialStatus {
+    pub credential: Option<ComponentCredentialRef>,
+    pub available: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentSubmissionState {
+    Rejected,
+    Accepted,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ComponentRequestFailure {
+    pub error: String,
+    pub diagnostic: crate::Diagnostic,
+    pub submission: ComponentSubmissionState,
+    pub request_id: Option<String>,
+    /// Present only when the active diagnostic belongs to the same visible scope.
+    pub existing_request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -512,4 +665,13 @@ pub struct ComponentSourceSearch {
 pub struct ComponentSourceSearchResult {
     pub items: Vec<crate::AgentContextItem>,
     pub notices: Vec<String>,
+}
+
+/// Reads uploaded user data from its conversation owner; never a scientific output reference.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReadComponentAgentAsset {
+    pub project_root: String,
+    pub conversation_id: String,
+    pub asset_id: String,
 }

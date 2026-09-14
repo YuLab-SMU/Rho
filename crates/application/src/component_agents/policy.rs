@@ -55,7 +55,7 @@ pub fn validate_component_model(
                 && name.len() <= 128
                 && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
                 && !name.as_bytes()[0].is_ascii_digit() => {}
-        ComponentCredentialRef::Session { key_id } if token(key_id) => {}
+        ComponentCredentialRef::Session { key_id } | ComponentCredentialRef::LocalFile { key_id } if token(key_id) => {}
         _ => return Err(invalid("Invalid credential reference")),
     }
     Ok(())
@@ -67,16 +67,17 @@ pub fn validate_component_grant(
 ) -> Result<(), ApplicationError> {
     use ComponentAgentMode::*;
     use ComponentAgentProfile::*;
-    if matches!(profile, Objects | Packages | Plots | Environment) && grant.mode != Explain {
+    if grant.permission_policy.is_none()
+        && matches!(profile, Objects | Packages | Plots | Environment) && grant.mode != Explain {
         return Err(invalid("This component only supports Explain"));
     }
     if grant.documents.len() > 16 || grant.files.len() > 16 {
         return Err(invalid("Too many authorized targets"));
     }
-    if grant.mode == Explain && (!grant.documents.is_empty() || !grant.files.is_empty()) {
+    if grant.permission_policy.is_none() && grant.mode == Explain && (!grant.documents.is_empty() || !grant.files.is_empty()) {
         return Err(invalid("Explain cannot grant writes"));
     }
-    if grant.mode == Run && grant.session.is_none() {
+    if grant.permission_policy.is_none() && grant.mode == Run && grant.session.is_none() {
         return Err(invalid("Run requires an explicit native R session"));
     }
     if let Some(session) = &grant.session
@@ -106,10 +107,18 @@ pub fn validate_component_grant(
             return Err(invalid("Invalid or duplicate file grant"));
         }
     }
-    if grant.mode == Edit && grant.documents.is_empty() && grant.files.is_empty() {
+    if grant.permission_policy.is_none() && grant.mode == Edit && grant.documents.is_empty() && grant.files.is_empty() {
         return Err(invalid("Edit requires an explicit document or file"));
     }
     Ok(())
+}
+
+pub fn component_query_available(run: &ComponentAgentRun, capability: &str) -> bool {
+    if run.request.grant.permission_policy.is_none() {
+        return component_query_allowed(run.profile, capability);
+    }
+    [ComponentAgentProfile::Project, ComponentAgentProfile::Environment]
+        .into_iter().any(|profile| component_query_allowed(profile, capability))
 }
 
 /// Profiles reference real registry IDs; capabilities not listed here stay unavailable.
@@ -188,6 +197,9 @@ pub(super) fn authorize_tool(
 ) -> Result<(), ApplicationError> {
     let denied = || invalid("Tool action exceeds the component request's authorization");
     match action {
+        ComponentToolAction::TaskIntent(intent) => {
+            validate_task_intent(run, intent)?;
+        }
         ComponentToolAction::PreviousResult{..}=>return Err(denied()),
         ComponentToolAction::Rejected {
             capability,
@@ -206,7 +218,7 @@ pub(super) fn authorize_tool(
         }
         ComponentToolAction::Query(query) => {
             if query.capability.version != 1
-                || !component_query_allowed(run.profile, &query.capability.id)
+                || !component_query_available(run, &query.capability.id)
             {
                 return Err(denied());
             }
@@ -240,16 +252,16 @@ pub(super) fn authorize_tool(
         ComponentToolAction::Invoke(invocation) => {
             invocation.validate().map_err(|_| denied())?;
             let resume = invocation.capability.id == "workspace.resume_queue";
-            if run.request.grant.mode != ComponentAgentMode::Run
+            if !run.request.grant.allows_execution()
                 || invocation.capability.version != 1
                 || (!resume
                     && (invocation.capability.id != "workspace.run_r"
-                        || !matches!(
+                        || (run.request.grant.permission_policy.is_none() && !matches!(
                             run.profile,
                             ComponentAgentProfile::Workspace | ComponentAgentProfile::Project
-                        )))
+                        ))))
                 || (resume
-                    && !matches!(
+                    && run.request.grant.permission_policy.is_none() && !matches!(
                         run.profile,
                         ComponentAgentProfile::Workspace
                             | ComponentAgentProfile::Project
@@ -284,9 +296,16 @@ pub(super) fn authorize_tool(
         }
         ComponentToolAction::Control(command) => {
             if command.window != run.request.window
-                || run.request.grant.mode == ComponentAgentMode::Explain
+                || !run.request.grant.allows_edit()
             {
                 return Err(denied());
+            }
+            if run.request.grant.permission_policy.is_some() {
+                match &command.action {
+                    ApplicationAction::OpenDocument { path: target, .. } if path(target) => return Ok(()),
+                    ApplicationAction::CreateDocument { path: Some(target), text, .. } if path(target) && text.is_empty() => return Ok(()),
+                    _ => {},
+                }
             }
             let (document, save, execute, target) = match &command.action {
                 ApplicationAction::EditDocument { document, .. } => (document, false, false, None),
@@ -301,19 +320,12 @@ pub(super) fn authorize_tool(
                 ApplicationAction::RunSelection { document } => (document, false, true, None),
                 _ => return Err(denied()),
             };
-            let grant = run
-                .request
-                .grant
-                .documents
-                .iter()
-                .find(|g| {
-                    g.document.document_id == document.document_id
-                        && super::component_document_reference(run, &document.document_id)
-                            == Some(document)
-                })
-                .ok_or_else(denied)?;
-            if (save && !grant.allow_save)
-                || (execute && run.request.grant.mode != ComponentAgentMode::Run)
+            let grant = super::component_document_grant(run, &document.document_id).ok_or_else(denied)?;
+            if super::component_document_reference(run, &document.document_id) != Some(document) {
+                return Err(denied());
+            }
+            if (save && !run.request.grant.allows_save(grant))
+                || (execute && !run.request.grant.allows_execution())
                 || target.is_some_and(|path| Some(path) != grant.path.as_deref())
             {
                 return Err(denied());
@@ -331,5 +343,38 @@ pub(super) fn authorize_tool(
             }
         }
     }
+    Ok(())
+}
+
+pub(super) fn validate_task_intent(
+    run: &ComponentAgentRun,
+    intent: &ComponentAgentTaskIntent,
+) -> Result<(), ApplicationError> {
+    if run.request.grant.permission_policy.is_none()
+        || intent.request_id != run.request.request_id
+        || intent.request_excerpt.trim().is_empty()
+        || !run.request.text.contains(&intent.request_excerpt)
+        || intent.actions.len() > 48
+        || serde_json::to_vec(intent).map_or(true, |bytes| bytes.len() > 64 * 1024)
+        || run.task_intent.as_ref().is_some_and(|saved| saved != intent)
+    {
+        return Err(invalid("Task intent must quote this user's request and cannot change once recorded"));
+    }
+    let mut targets = BTreeSet::new();
+    for action in &intent.actions {
+        if action.action == ComponentRequestedAction::Execute && run.request.grant.session.is_none() {
+            return Err(invalid("Task execution requires the original R session binding"));
+        }
+        match (&action.document_id, &action.path) {
+            (Some(id), None) if super::component_document_grant(run, id).is_some() => {}
+            (None, Some(target)) if path(target) => {}
+            (None, None) if action.action == ComponentRequestedAction::Execute => {}
+            _ => return Err(invalid("Task intent target is outside this request's documents")),
+        }
+        if action.document_id.is_some() || action.path.is_some() {
+            targets.insert((&action.document_id, &action.path));
+        }
+    }
+    if targets.len() > 16 { return Err(invalid("Task intent exceeds the document target limit")); }
     Ok(())
 }
