@@ -40,6 +40,35 @@ The proposed cross-product principles for interpreting this feedback are in
 
 ## User feedback
 
+### F22 — Every component needs a way to express thoughts about its content
+
+**User request (2026-09-14):** Every component should support annotations,
+including text selection with comments, freehand drawing, boxed regions and
+written explanations. The user wants to express thoughts about outputs directly,
+and wants Agents to understand the same content and annotations.
+
+**Required experience:** A common, lightweight entry works across components.
+Offer precise text, data or image anchors when the source supports them, and an
+accessible whole-item comment when it does not. Keep marks and comments with
+their original source/version; a changed file, regenerated output or ended
+session must not silently relocate them. Captured interactive views must remain
+distinguishable from live chart state. Include written explanations and source
+evidence for Agent reading, while accurately reporting unavailable image input
+or uncaptured interactive data. Saving or reading a note does not send a message
+or authorize scientific work. Adding notes to Agent preserves the existing draft.
+
+Annotation controls should also follow F21: reveal tools when needed, keep
+ordinary content readable and offer compact editing without persistent changes
+to the user's layout. Keyboard users need whole-item and quote comments without
+drawing; marker numbers, shapes and text must carry meaning without color alone.
+
+**Design response:** Proposed AN01–AN05 cover text comments, captured Viewer
+marks, 600 px editing and 320 px Agent inclusion, earlier-source/conflict/image
+states and anchors across components. The [Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
+and [Design section 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)
+are proposals pending user review. No annotation runtime implementation or
+acceptance is established by this design work.
+
 ### F21 — Framed controls overwhelm constrained workspaces
 
 **User report (2026-09-14):** The current interface has too many boxes. Large

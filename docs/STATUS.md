@@ -2,7 +2,19 @@
 
 Updated: 2026-09-14. This is the single current status summary. Git retains history.
 
-## Current focus: Help, Viewer and control-density review
+## Current focus: component annotations, Help, Viewer and lighter controls
+
+The user requested a shared annotation capability across components: text
+selection with comments, pen marks, regions, arrows and written explanations
+that people and Agents can inspect with the original content. Five proposed
+[Paper boards, AN01–AN05](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
+cover quoted text, captured interactive views, compact editing and Agent draft
+inclusion, source/version conflicts and shared component entry points. All five
+boards were visually inspected in Paper and are pending user review.
+[Design section 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)
+records the shared annotation layer, owner-issued anchors, accessible controls,
+original annotation/comment revisions captured at send and draft-only inclusion.
+Feedback F22 remains open.
 
 The user requested Paper designs for separate R Help and interactive HTML Viewer
 components, and less framed chrome in constrained workspaces. Seven proposed
@@ -14,8 +26,9 @@ All boards were visually inspected in Paper; they are pending user review.
 records shared HTML presentation, owner-issued sources for people and Agents,
 draft-only Ask, and layout preservation. Feedback F20/F21 remains open.
 
-This is design work only: no new Help/Viewer runtime implementation, product
-acceptance or Host restart is claimed. Existing installation scope remains below.
+This is design work only: no new annotation or Help/Viewer runtime implementation,
+product acceptance or Host restart is claimed. Existing installation scope remains
+below.
 
 ## macOS preview delivery scope
 

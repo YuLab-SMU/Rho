@@ -1720,3 +1720,152 @@ All seven boards were inspected using Paper screenshots for spacing, typography,
 contrast, alignment and clipping; the narrow Help view retains the same example
 parameters by wrapping them. These are editable design fixtures, not execution
 results or evidence that HTML content is supported by the running product.
+
+## 20. Component annotations for people and Agents — proposal
+
+The user requested a shared annotation capability on 2026-09-14 so each component
+can carry thoughts about its content: selected text with comments, freehand marks,
+boxed regions and written explanations that an Agent can read. The
+[annotation review page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
+contains five proposed boards pending user review. This extends the Help, Viewer
+and lighter-control proposals in section 19; those proposals remain pending review.
+It does not establish runtime implementation, product acceptance or Host restart.
+
+| Board | Review focus |
+| --- | --- |
+| AN01 | Text selection, retained quotation and a comment attached to the source |
+| AN02 | Captured Viewer with pen, rectangle, arrow and text tools; saved marks and explanation |
+| AN03 | 600 px editing flow and 320 px Agent draft inclusion without additional permanent panels |
+| AN04 | Earlier source, annotation revision conflict and unavailable model image input; no silent reanchoring |
+| AN05 | Universal component entry, source-specific anchors and accessible whole-item comments |
+
+### A shared layer with component-owned sources
+
+Annotations belong to Application and refer to content from its existing owner.
+Files, documents, native R observations, help topics, executions and artifacts
+retain their current ownership and identities. Saving a note or stroke does not
+alter their contents or scientific records. The shared layer uses the existing
+component registration and validated Host ports, with source-specific anchoring
+and reading supplied by each component; it does not create another scientific
+result database or an independent context platform.
+
+A saved annotation contains its identity and revision, author, source reference
+and version, anchor, written explanation, necessary capture references and
+creation/update times. Authorship and source identity come from the application
+and source owner, not model-authored provenance. The same existing caller,
+principal and project/private visibility checks apply to annotations, source
+previews and captures. Access to a visible annotation never expands access to its
+underlying source. Closing a panel does not delete its saved annotations or make
+them unreadable through the Host.
+
+Every component exposes **Annotate** and a keyboard-accessible **Comment on this
+item** action. Components add precise anchors only where their owner can provide
+them. A captured view is a valid, explicitly labeled fallback; it is not a claim
+that all underlying data or page interactions were captured.
+
+| Component/content | Preferred anchor and retained evidence |
+| --- | --- |
+| Editor and text documents | Document/file identity and version, selected range and original quotation |
+| Help | Actual package copy/version and topic, retained document version, quoted text or section |
+| Console and execution history | Original execution/output sequence and quoted range, including session evidence |
+| Files | Exact file reference and hash/observed version; text or image anchors when readable |
+| Objects and Tables | Native session, object observation, field and row/column references when available; selected displayed values |
+| Packages | Installed copy and package version, observed item/field or exact documentation topic |
+| Plots | Authoritative media reference, original image dimensions and marked region |
+| Interactive Viewer | Artifact or live-service source and captured view; selected data IDs or filters only when explicitly exposed |
+| Agent and other components | Exact task/message/item revision when available, otherwise a labeled whole-item or captured-view comment |
+
+### Express a thought without crowding the content
+
+Selecting text offers **Comment** beside the selection and retains the quoted
+text in the editor. **Annotate** reveals the shared **Select**, **Pen**,
+**Rectangle**, **Arrow** and **Text** tools when visual marking is supported.
+The tools are hidden during ordinary reading. Marks can share a written note;
+they do not require users to draw when a whole-item or selected-text comment
+expresses the thought more clearly. Optional **Question** and **Change request**
+labels can clarify intent without creating workflow or permission states.
+Whole-item notes can express an overall question without a selection. Comparing
+two outputs adds explicit related source references to the note, each retaining
+its own identity and visibility checks; it does not merge their scientific
+records. Users can collect several saved notes into one Agent draft while keeping
+each note's original source and revision.
+
+Saved marks use numbered pins, recognizable shapes and accompanying text rather
+than color alone. Pins and comments can be reached and opened with a keyboard,
+and selected-text comments support keyboard selection. The comment list provides
+a nonpointer route back to the quoted or marked source. Controls retain accessible
+labels and visible focus, including the active drawing tool.
+
+The optional annotation editor appears in the current component or its explicit
+focused view. At compact widths it replaces the current content temporarily and
+offers a clear return action, preserving the source's reading position and draft.
+It does not add a permanently docked comment column, shrink content text or change
+saved docking weights. The 600 px and 320 px examples use the same comment model
+and inclusion semantics as the wider views.
+
+### Capture visual intent and retain it when the source changes
+
+Freehand, region, arrow and text marks are attached to a frozen **Captured view**,
+with capture dimensions and normalized positions. Resizing the panel scales the
+capture and marks together. Entering this mode makes the frozen state explicit;
+returning to **Live view** resumes viewing the source without rerunning analysis.
+An unavailable capture offers a whole-item/quote comment and states the missing
+visual evidence rather than storing a blank image as a successful capture.
+
+Interactive selection, zoom or filter state is retained only when the component
+explicitly exposes it. The preview distinguishes that data from the image of the
+screen; a circle around a point does not establish its data identity. If a live
+service disconnects, the retained capture remains a capture, not a restored live
+session.
+
+**Esc** cancels an in-progress stroke first; when no stroke is active, it returns
+to the live/source view while retaining completed marks and note drafts. While
+an annotation tool is active, **Undo** affects that annotation layer only, never
+the editor's code or scientific work. Text editing retains its own ordinary undo
+behavior when focus is in the note field.
+
+Source updates never silently move a mark or quotation to a newer document,
+same-named object or regenerated chart. A retained note identifies **Earlier
+source** and offers its original quotation/capture. Explicit reassociation, when
+available, preserves the original reference and records the new annotation
+revision. An unavailable original source remains distinguishable from retained
+evidence. Application persistence uses version checks for note/mark changes;
+another window's edit produces a visible conflict and preserves local text and
+strokes. **Saved** means the revision is durably acknowledged, not merely drawn
+on screen.
+
+### The Agent receives the same expression and its evidence
+
+Source readers expose saved annotations with their original references through
+the existing Host and context-provider paths. Reading is independent of whether
+the component is mounted. Preview includes the written explanation, original
+quotation, source/version, marked capture and any available structural anchor,
+with bounded/truncated or unavailable content stated accurately.
+
+**Add to Agent** previews selected notes, then appends them to the current editable
+task draft with the existing CAS and reference-merge behavior. Existing text and
+attachments remain intact; the action neither sends a message nor changes the
+task's Agent. No-task, archived and read-only cases follow the unified new-task
+flow. Draft conflicts retain the local inclusion for review rather than replacing
+another window's draft.
+
+At send, the request captures the original selected annotation/comment revisions
+and their source evidence. Later edits do not silently change what an accepted
+request contains. Source or annotation changes discovered before send remain
+visible in preview; a newer revision is not substituted without review. Reading
+or saving a note starts no model call, example execution, analysis, save-to-source
+or service restart. Notes are context, not an additional approval layer: the
+execution Agent still interprets an explicitly sent user request under the
+existing permission policy, and source content cannot expand that authority.
+
+If the selected model cannot read images, the preview states **Image not included**
+and identifies the text/quotation/structural evidence it can receive. The visual
+annotation and draft remain available. Users may add an explanation or explicitly
+choose a supported model; a marks-only annotation is not silently reduced to
+text and reported as fully understood. These designs specify Rho's delivery of
+evidence, not independent acceptance of a third-party Agent's interpretation.
+
+All five Paper boards were inspected for spacing, readable text, contrast,
+alignment and clipping. The selected-text actions avoid covering the quotation;
+the compact capture has an explicit full-size entry. The drawings and example
+notes are design fixtures, not persisted product annotations or runtime evidence.
