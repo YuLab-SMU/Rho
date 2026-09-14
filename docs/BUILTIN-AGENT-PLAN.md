@@ -309,26 +309,22 @@ usage 缺失时写 unknown，不填零；不展示没有价格证据的费用估
 
 ## 9. Studio 交互提案与设计门
 
-采用各组件的 **Ask about…** 入口，激活现有 Agent 区域里的 **Rho Assistant** 视图。
-七个组件不各自增加一套聊天面板。入口附带当前选择，用户仍能查看、移除或补充上下文。
-每条组件对话保留来源与固定目标；新运行重新核实，切换组件不会把旧对话静默改绑定。
-现有外部任务保持原名称、历史、草稿和原生权限呈现。
+2026-09-14 用户要求撤销内置/外置界面分区。沿用原来的 **Agent** 面板，
+在 Agent 选择菜单中增加 **Rho**，与 Codex、Kimi、DeepSeek Harness 并列。
+任务列表、对话布局和输入框统一；模型设置进入 **Settings → Agents → Rho**。
+组件 **Ask about…** 入口附带当前选择，用户仍能查看、移除或补充上下文。
+来源不会静默切换任务的 Agent，也不会改变已接受运行的目标。
+后端保留各自的会话、执行与恢复机制；现有任务保留名称、历史、草稿和原生权限。
 
 界面显示：问题/来源 → 当前活动 → 解释或代码提案 → 真实执行与证据。
 Explain/Edit/Run 是可见能力选择，不显示 Rust trait、Operation envelope 等实现概念。
 对象比较、图像证据打开、文档修改沿用现有组件命令。
 
-实现 UI 之前，在现有 Paper 文件新增独立 Built-in Assistant 评审页，至少准备：
-
-1. B01：Objects 入口、已选来源和一个有证据的短回答。
-2. B02：Documents/Console 中建议、授权编辑运行、失败与成功证据。
-3. B03：Plots 比较、视觉模型不可用、源图定位。
-4. B04：外部任务与 Rho Assistant 的导航关系，关闭/重开不丢草稿。
-5. B05：模型设置、未配置与错误状态、清晰的远程数据去向。
-6. B06：窄面板、过期目标、停止/断线/恢复、双窗口冲突。
-
-需要用户审阅 Paper 后才能实现这项较大的交互扩展，这是根 AGENTS.md 的现有要求。
-当前计划不需要提前请求该批准；P0 后端可行性验证和本计划可先完成。
+独立 Built-in Assistant 评审页已按要求删除。所有相关设计归入原来的
+[Agent · 工作区任务设计评审](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2)：
+A03/A08 展示统一选择和 Rho 新任务；A15–A19 展示对象来源、编辑运行证据、
+双图比较、统一模型设置及窄面板恢复。具体约定见 [Design 第 18 节](RHO-DESIGN.md#18-rho-in-the-unified-agent-panel--review-revision)。
+当前完成 Paper 修订；前端接入尚未实施，修订画板留待用户审阅。
 设计验收检查 320 px 组件区域以及 600/1024/1440/1920 px 窗口，使用真实长度内容。
 产品文案用英文，中文输入保留已修复的原生 IME 组合行为。
 
@@ -342,7 +338,7 @@ Explain/Edit/Run 是可见能力选择，不显示 Rust trait、Operation envelo
 | --- | --- | --- | --- |
 | P0：Rig 可行性 | 在隔离试验中锁定 0.42；现成 runner + 动态只读工具 + ToolContext + 假 provider；测 build/features、流式、回调、取消、schema、图像与 max_turns | G0：不自研循环即可满足工具意图持久化/调用身份注入；fake tests 全过；一个实际配置服务的工具/图像 smoke 有独立记录，缺配置明确未验证 | 1–2 日 |
 | P1：边界与应用基础 | 更新架构规则；新 crate/contract/ports/store；run 与 tool receipt 准入、去重、模型配置及禁用路径 | G1：无模型也可测试全部准入与隔离；新表不影响原生 Agent 数据；依赖检查、契约/SQLite/应用测试通过 | 3–4 日 |
-| P2：只读纵向闭环 + Paper | Objects 起步，随后 Packages/Plots；共享上下文与证据，真实模型读真实 R；制作 B01–B06 并评审后实现共享 UI | G2：三类读取与来源定位可用；不新增科研 Operation；视图操作零模型请求；审阅与浏览器证据齐全 | 3–5 日 |
+| P2：只读纵向闭环 + Paper | Objects 起步，随后 Packages/Plots；共享上下文与证据，真实模型读真实 R；在统一 Agent 评审页维护组件场景并实现共享 UI | G2：三类读取与来源定位可用；不新增科研 Operation；视图操作零模型请求；审阅与浏览器证据齐全 | 3–5 日 |
 | P3：授权执行闭环 | Documents、Console/Workspace、Files/Project；Edit/Save/captured Run、直接受限 R 执行；原操作等待/失败与图像核验；Environment/R Sessions 解释入口 | G3：七入口可用；真实失败→修复→运行→图闭环；越权、过期草稿和跨会话请求均拒绝且不产生副作用 | 4–6 日 |
 | P4：恢复与资源纪律 | Stop、超时、重复模型 call、崩溃点、重连、双窗口、输入等待、禁用/Quit；预算和事件淘汰 | G4：每个崩溃窗口最多一次科研 dispatch；所有不确定状态保留；不取消他人工作，核心分析可独立运行 | 3–4 日 |
 | P5：完整验收与文档 | 回归现有外部 Agent/科学/Studio 能力；七 profile 场景、真实模型重复验收、性能比较、使用说明 | G5：下节矩阵全部有合适范围的证据；未测项如实列出；构建和安装/发布明确分开 | 3–5 日 |

@@ -769,18 +769,22 @@ boards. Page membership was verified from both page roots.
 | --- | --- |
 | A01 | 1440 × 900 workspace; 440 px Agent panel docked on the right |
 | A02 | 1060 × 800 window; 332 px Agent tab in the right inspection group |
-| A03 | 960 × 820 panel; 240 px task list and a compact New task runtime menu |
+| A03 | 960 × 820 panel; shared task list and New task menu with Rho, Codex, Kimi and DeepSeek Harness |
 | A04 | Another window's read-only view, saved draft and idle Take over |
 | A05 | Pending permission fixed immediately above the composer; editable next draft |
 | A06 | Resume in the task header; concise unconfirmed-turn and history-gap disclosures |
 | A07 | Closed panel, persistent top-bar badge and task reminder popover |
-| A08 | Empty task ready for input, with model/reasoning controls inside the composer |
+| A08 | Rho selected; empty task ready for input with its mode and model inside the shared composer |
 | A09 | Read-only conversation after the control window is lost; Stop Agent and take over |
 | A10 | Native permission-mode menu beside the input controls; illustrative three-mode catalog |
 | A11 | @ picker for specific files, objects, plots, table selections, code and plugin information |
 | A12 | Add-channel menu, selected component references, image/file attachments |
 | A13 | Variable native permission options, feedback field and explicit response confirmation |
 | A14 | Attached-context preview with source, bounded sample and inclusion scope |
+
+The 2026-09-14 revision updates A03/A08 and adds A15–A19 on this same page.
+Section 18 defines the requested integration; the original approval above does
+not establish implementation or user review of the revised drawings.
 
 The approved single-instance **Agent** panel uses the Studio panel chrome, Inter,
 white content surfaces, restrained borders and the existing semantic colors.
@@ -1473,55 +1477,75 @@ keyboard selection of sessions and buttons, blur never submitting, closing the
 management page preserving editor and Console drafts, and restore or launch status
 affecting only the target session.
 
-## 18. Built-in component assistant — approved interaction
+## 18. Rho in the unified Agent panel — review revision
 
-The six editable [Paper B01–B06 boards](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/A-0)
-are on the independent **Built-in Assistant · 组件助手交互评审** page. The user approved all six boards on 2026-09-13. This approval establishes the
-interaction scope; implementation and scientific evidence remain separate. The original
-Agent task page still contains its fourteen boards and 2,911 nodes; its content was
-not replaced. Example data, messages, plots and statuses are design fixtures.
+On 2026-09-14 the user rejected the split between Rho Assistant and external tasks
+and requested a single Agent interface with Rho added to the Agent selection.
+This supersedes the separate-interface direction approved on 2026-09-13.
+The independent Built-in Assistant page was deleted as requested. All nineteen
+editable boards now belong to [Agent · 工作区任务设计评审](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2).
+The revised drawings are ready for user review; application behavior is recorded
+separately in Status. Example data, messages and results remain design fixtures.
+
+### Shared interaction
+
+- The panel is named **Agent**. The existing New task Agent menu adds **Rho**
+  alongside Codex, Kimi and DeepSeek Harness. There is no built-in/external switch,
+  task grouping or second conversation area.
+- Tasks share the project list, active/archive navigation, narrow task selector,
+  message layout and composer. A task's Agent is metadata. Creating a Rho task
+  leads directly to input, using the same interaction as the other Agents.
+- Component **Ask about…** actions open that same panel with previewable/removable
+  context. Context does not silently change a task's Agent or retarget an accepted
+  run. The selected Agent and sources remain visible before sending.
+- Mode, model and available actions follow the selected Agent's capabilities.
+  Rho exposes Explain/Edit/Run where supported; native Agent permissions retain
+  their actual options in the existing composer location. This introduces no
+  additional approval step.
+- Rho model configuration belongs under **Settings → Agents → Rho**, with the
+  other Agents available in the same settings surface. Normal conversation shows
+  a concise configuration action when needed, with the draft retained.
+
+### Paper coverage
 
 | Board | Interaction |
 | --- | --- |
-| B01 | Objects Ask about… entry, selected source, short explanation and source link in a 1440 px workspace |
-| B02 | 1024 px workspace showing an error, applied document change, saved/run evidence and explicit Run scope at the composer |
-| B03 | Two plots, comparison answer, original-image and producing-run links |
-| B04 | 960 px Agent area with grouped Rho Assistant conversations and external tasks; retained draft after reopening |
-| B05 | Model settings, remote data destination, credential lifetime and explicit tests; separate unconfigured and unavailable-image input examples |
-| B06 | 600 px workspace with a 320 px assistant; expired sources, stop acknowledgement loss and another window's read-only conversation |
+| A03 | Rho in the existing Agent menu; Rho and other tasks in one list |
+| A08 | New Rho task using the original empty state and composer |
+| A15 | Objects Ask entry, selected source, explanation and source link; original task selector and composer |
+| A16 | Document fix/save/run evidence, selected document and Main session; Rho mode menu beside input |
+| A17 | Two selected plots, comparison answer and original-image/producing-run links |
+| A18 | Unified Agents settings, Rho model destination/credentials/tests, unconfigured and image-unavailable states |
+| A19 | 600 px workspace and 320 px Agent panel; expired context, stop-unconfirmed and another window's draft |
 
-Reuse the existing studio chrome and semantic tokens: 38 px panel header, 48 px
-conversation selector, Inter 14/22 px message text, 12/18 px metadata, 12 px composer
-padding and 8 px internal gaps. Controls use the existing blue accent; evidence and
-errors use existing semantic colors. Keep conversation content on the plain surface.
-The wide task rail starts at the existing 640 px panel breakpoint; narrow panels use
-the selector. The component view must remain usable at 320 px without dropping
-controls or changing scientific state. External tasks retain their native controls.
+A15–A19 reuse the scientific examples from the removed page, with the original
+Agent navigation and composer. Its grouped-navigation board was discarded.
+Reuse section 13's chrome, semantic tokens and 640 px task-rail breakpoint.
+Normal panels retain the compact two-row composer; wide panels use the existing
+inline controls. The 320 px case retains sources, model, mode and send state.
 
-Each Ask action opens the same Agent area with fixed, previewable/removable sources.
-Changing panels does not retarget an accepted run. Objects, Packages and Environment
-explanations remain read-only. Edit binds document versions; Run visibly includes
-the permitted save and the named R session. The example request to fix/save/run is
-one authorization, with no extra per-tool approval. Evidence links use original
-owner references, not a success sentence generated by the model.
+### Preserved capability and recovery rules
 
-Sources, capability mode, model and pending actions remain near the composer.
-Unavailable model/image input and expired targets preserve the draft. Users can
-explicitly change model, include only metadata, or refresh sources; no silent
-fallback changes the request. Stop-unconfirmed and connection-loss states offer
-Check status for the original run; confirmed interruption can then offer explicit
-Continue after context verification. Another window's draft is read-only until
-controlled takeover; a conflicting local draft remains available for comparison.
-Closing/reopening and task navigation never send model requests.
+Objects, Packages, Plots and Environment explanations remain read-only. Edit binds
+document versions; Run visibly includes permitted saving and the named R session.
+The request to fix/save/run is one authorization. Evidence links use original
+owner references. Backend conversation identities and recovery ownership need
+not be merged to provide one interface.
 
-Model settings apply to this project and are shared by its component conversations.
-The normal conversation does not contain a setup form. Keys are sent through the
-transient credential endpoint and the input is cleared, with only a set/unavailable
-indicator retained. Settings can use a session key or an explicit environment
-reference. Connection and image tests use clearly labeled synthetic input.
+Unavailable model/image input and expired sources preserve the draft. Users may
+explicitly change model, include only metadata or refresh sources. No silent
+fallback changes the request. Stop-unconfirmed offers Check status for the original
+run; confirmed interruption may offer Continue after context verification.
+Another window's draft is read-only until controlled takeover; conflicting local
+drafts remain available for comparison. Opening, closing and navigating tasks
+never sends a model request.
 
-All boards were reviewed with Paper screenshots for spacing, typography, contrast,
-alignment and clipping; B06 includes full 320 px controls. Read their JSX and computed
-styles for implementation values. The user approval above is separate from browser
-evidence, keyboard/IME checks and real-source behavior; executed acceptance and its
-limits are recorded in Status.
+Model settings apply to the project and its Rho tasks. Keys use the transient
+credential endpoint and the input is cleared; only a set/unavailable indicator
+remains. Session keys and explicit environment references remain supported.
+Connection and image tests use labeled synthetic input.
+
+The seven changed boards were inspected with Paper screenshots for typography,
+spacing, alignment, contrast and clipping. Page membership and removal of the old
+page were verified through Paper. This is design evidence, not browser or runtime
+acceptance of the pending front-end integration.

@@ -1,12 +1,28 @@
 # Rho: current state and focus
 
-Updated: 2026-09-13. This is the single current status summary. Git retains history.
+Updated: 2026-09-14. This is the single current status summary. Git retains history.
+
+## Current focus: unified Agent interface
+
+The user rejected the built-in/external front-end split on 2026-09-14 and requested
+Rho as another option in the original Agent interface. Paper's independent
+Built-in Assistant page has been removed. The existing
+[Agent review page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2)
+now contains nineteen boards: A03/A08 were revised and A15–A19 carry the integrated
+component-context, execution, model-settings and recovery examples. The seven
+changed boards were inspected through Paper screenshots; the new drawings await
+user review. [Design section 18](RHO-DESIGN.md#18-rho-in-the-unified-agent-panel--review-revision)
+is the current interaction direction.
+
+The application still implements the split described below. No UI code, Host or
+R session was changed for this design revision; no restart is needed. Existing
+functional acceptance does not resolve this usability feedback.
 
 ## Built-in component Agent implementation
 
-The [implementation plan](BUILTIN-AGENT-PLAN.md) is authorized. The user approved
-[Paper B01–B06](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/A-0) on
-2026-09-13. The Rig backend and the seven Studio entrances are now implemented.
+The [implementation plan](BUILTIN-AGENT-PLAN.md) is authorized. The initial component
+design was approved on 2026-09-13; its separate-interface direction is superseded
+by the current focus above. The Rig backend and seven Studio entrances are implemented.
 The first-version implementation and scoped acceptance are complete, with the
 verification limits below. No deployment or installation is implied.
 The user reviewed the launched local binary and confirmed it was usable on

@@ -40,6 +40,22 @@ The proposed cross-product principles for interpreting this feedback are in
 
 ## User feedback
 
+### F19 — Built-in Agent must use the existing Agent interface
+
+**User report (2026-09-14):** Adding the built-in Agent produced a severe sense of
+fragmentation. The user rejected exposing built-in versus external execution as
+separate front-end areas: adding an option to the original Agent selector should
+be sufficient for the interaction.
+
+**Required experience:** One Agent panel, task list, conversation layout and
+composer. Rho appears beside the other Agents; capability-specific modes and
+model settings use the existing control locations. Component Ask actions bring
+context into that same interface. The user explicitly requested removal of the
+Built-in Assistant Paper page and incorporation of its relevant scenarios into
+Agent · 工作区任务设计评审. [Design section 18](RHO-DESIGN.md#18-rho-in-the-unified-agent-panel--review-revision)
+records this revision. Paper changes do not establish implementation or close
+the reported usability problem.
+
 ### F18 — Runtime foundations need an understandable management experience
 
 **User request (2026-09-09):** Investigate the current implementation before
