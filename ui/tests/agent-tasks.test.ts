@@ -63,6 +63,22 @@ it('draft copies and selection are restored without replaying pending commands',
  vi.useFakeTimers();const f=fixture();await f.model.observeSummary();await f.model.loadDetail('a');f.model.select('a');f.model.editText('a','local draft');const snapshot=f.model.serialize();
  const g=fixture();g.model.restore(snapshot);expect(g.model.getSnapshot().selected).toBe('a');expect(g.model.getSnapshot().drafts.get('a')?.content.text).toBe('local draft');expect(g.ports.command).not.toHaveBeenCalled();
 });
+it.each(['send','save_draft'] as const)('handoff source reads distinguish pending %s from unsaved draft writes',async kind=>{
+ const f=fixture();await f.model.observeSummary();await f.model.loadDetail('a');
+ f.ports.handoffQuery=vi.fn(async()=>({kind:'source',source:{source:{kind:'native',task_id:'a'},title:'a',body:'Goal: Review\n\nConfirmed:\n\nNext:',context:[],revision:'v1',truncated:true,notices:[]}}));
+ f.model.restore({agentTasks:{pending:[{requestId:'original',taskId:'a',kind,localRevision:0,content:null}]}});
+ await f.model.handoffs.prepare({kind:'native',task_id:'a'});
+ if(kind==='send'){expect(f.ports.handoffQuery).toHaveBeenCalledOnce();expect(f.model.handoffs.editor({kind:'native',task_id:'a'})?.observation?.truncated).toBe(true);}
+ else{expect(f.ports.handoffQuery).not.toHaveBeenCalled();expect(f.model.handoffs.editor({kind:'native',task_id:'a'})?.error).toContain('Save or resolve');}
+ expect(f.ports.command).not.toHaveBeenCalled();
+});
+it('handoff targets use the shared active-task query without changing an archived source selection',async()=>{
+ const f=fixture();f.model.select('a');await f.model.loadDetail('a');f.model.filterArchived(true);
+ const query=vi.fn(async()=>({kind:'project_list' as const,page:{tasks:[],attention:[],attention_count:0,next:'next-page',running:0,permissions:0}}));f.ports.projectQuery=query;
+ await f.model.readHandoffTargets('current-page');
+ expect(query).toHaveBeenCalledWith({project_root:'/study',query:{kind:'project_list',archived:false,before:'current-page',limit:32}});
+ expect(f.model.getSnapshot().archived).toBe(true);expect(f.model.getSnapshot().selectedTask).toEqual({kind:'native',task_id:'a'});
+});
 
 it('a hidden mounted tab stops history polling while summaries remain available',async()=>{
  const f=fixture();f.model.show('agent');await f.model.observeSummary();f.model.select('a');f.model.viewsChanged({activeViewIds:['objects']});vi.mocked(f.ports.query).mockClear();await f.model.observeEvents();await f.model.observeSummary();

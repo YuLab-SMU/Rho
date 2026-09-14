@@ -59,6 +59,9 @@ pub struct AgentTaskService {
     context_providers: std::sync::RwLock<Vec<Arc<dyn crate::AgentContextProvider>>>,
 }
 impl AgentTaskService {
+    pub(crate) fn with_handoff_write<T>(&self, write: impl FnOnce() -> Result<T, ApplicationError>) -> Result<T, ApplicationError> {
+        self.owner.with_handoff_write(write)
+    }
     pub async fn project_task_page(&self, host: &NextHost, context: &CallContext, project: &str, archived: Option<bool>, before: Option<&str>, limit: u32, rho: &crate::ComponentAgentService) -> Result<ProjectAgentTaskPage, ApplicationError> {
         Self::validate_project(host, project)?;
         let scope = scope(project, context)?;

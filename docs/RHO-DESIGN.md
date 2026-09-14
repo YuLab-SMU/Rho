@@ -1486,9 +1486,10 @@ This supersedes the separate-interface direction approved on 2026-09-13.
 The independent Built-in Assistant page was deleted as requested. The original
 Agent boards and A15–A19 component scenarios belong to [Agent · 工作区任务设计评审](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2).
 The unified interaction is implemented in the current source; runtime and browser
-acceptance are recorded separately in Status. A20 adds a manual-handoff proposal
-that still awaits user review and implementation. Example data, messages and
-results remain design fixtures.
+acceptance are recorded separately in Status. The user reviewed and approved A20
+manual handoff on 2026-09-14. Its implementation follows the interaction below;
+verification is recorded in Status. Example data, messages and results remain
+design fixtures.
 
 ### Shared interaction
 
@@ -1521,13 +1522,41 @@ results remain design fixtures.
 | A17 | Two selected plots, comparison answer and original-image/producing-run links |
 | A18 | Unified Agents settings, persistent API key, model destination/tests, unconfigured and image-unavailable states |
 | A19 | 600 px workspace and 320 px Agent panel; expired context, stop-unconfirmed and another window's draft |
-| A20 | Manual handoff draft proposal; user review and implementation pending |
+| A20 | Approved manual handoff: editable preview, original references and append to an existing task draft |
 
 A15–A19 reuse the scientific examples from the removed page, with the original
 Agent navigation and composer. Its grouped-navigation board was discarded.
 Reuse section 13's chrome, semantic tokens and 640 px task-rail breakpoint.
 Normal panels retain the compact two-row composer; wide panels use the existing
 inline controls. The 320 px case retains sources, model, permissions and send state.
+
+### Manual handoff — approved
+
+The task menu opens **Prepare handoff** inside the same Agent panel, retaining
+its task navigation. The user edits one draft containing Goal, Confirmed and Next,
+previews/removes original source references, selects another task in the same
+project and sees its existing draft. A model's answer is not automatically treated
+as a confirmed scientific result; that field is left for explicit user review.
+
+**Add to draft** appends the reviewed text and merges references. It preserves the
+target's existing text, attachments and permission policy, and does not send a
+message or move scientific ownership. Read-only/archived source tasks remain
+readable; target draft editing follows its original owner's control and archive
+rules. Source uploads remain in their original task, with an explicit notice;
+asset IDs are not copied into a different task's attachments.
+
+Local unsaved target text is synchronized through its original owner before the
+target is reviewed. A saved draft version/control conflict preserves the handoff
+editor and asks for a fresh target observation. An unknown acknowledgement keeps
+the original complete request: Check receipt observes the committed result,
+without sending another message or silently creating a second request. Source
+refresh retains the user's edited text and deliberate reference removals.
+
+Source references retain their original window, native session and hashes.
+Known stale or incompatible references must be refreshed in the source, removed,
+or sent to a compatible target; handoff never rewrites an identity to bypass the
+existing reader's checks. Original operation references use the existing bounded
+Operation summary reader without starting R or new scientific work.
 
 ### Preserved capability and recovery rules
 
@@ -1558,7 +1587,7 @@ synthetic input. The current implementation uses LocalFile references backed by 
 user-local configuration file; existing Session records remain readable with their
 original lifetime. Accepted work retains its captured connection and key.
 
-### Current shared behavior and remaining proposal
+### Current shared behavior
 
 The source now uses one bounded project task projection for rows, archives, counts
 and attention. Native task/conversation owners keep their own execution and recovery
@@ -1586,11 +1615,12 @@ from mutation receipts. Native task attribution uses its verified caller; older
 shared-caller tasks remain Unknown. Usage keeps provider source/scope labels and
 unknown values, and replaces repeated totals instead of accumulating them.
 
-A20 proposes a human-reviewed handoff draft with sources and recovery references.
-Its presence in Paper is not implementation approval. The manual-handoff flow is
-pending and must not be presented as an implemented or verified capability.
+A20 manual handoff was explicitly reviewed and approved by the user. The source
+implements its editable preview, original references and receipt-backed draft
+append; executed integration evidence belongs in Status.
 
 The earlier seven changed boards were inspected with Paper screenshots for typography,
 spacing, alignment, contrast and clipping. Page membership and removal of the old
 page were verified through Paper. This is design evidence, not browser or runtime
-acceptance of the current implementation or the unreviewed A20 proposal.
+acceptance of the current implementation. A20 implementation is authorized by the
+user's explicit review, and is verified separately through Rho-owned tests.

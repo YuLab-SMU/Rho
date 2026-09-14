@@ -21,7 +21,9 @@ Rig integration and bounded extension to the external-Agent-only rule. The P0
 experiment, component context and authorized backend execution are implemented.
 The unified Agent interface, independent permission policy and local key storage
 are implemented in the current source. Scientific work still uses the existing
-owners. A20 manual handoff remains a proposal awaiting user review and implementation.
+owners. A20 manual handoff has been reviewed and authorized; it appends reviewed
+context to existing task drafts. Rho verifies its own integration and data behavior,
+not the independent performance of third-party Agents.
 The new 33-scenario real-model matrix is defined but has not run; the earlier
 27-scenario evidence remains the prior baseline. See Status for executed checks
 and the remaining acceptance limits.

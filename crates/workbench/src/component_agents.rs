@@ -26,7 +26,7 @@ fn failure(status: StatusCode, message: impl Into<String>) -> Response {
     })).into_response()
 }
 
-fn application_failure(
+pub(super) fn application_failure(
     error: ApplicationError,
     request_id: Option<String>,
     submission: Option<ComponentSubmissionState>,

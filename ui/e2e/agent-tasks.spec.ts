@@ -7,7 +7,7 @@ let directory:string,url:string,host:ReturnType<typeof spawn>,log:string;
 const pause=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 test.beforeAll(async()=>{
  directory=await mkdtemp(join(tmpdir(),'rho-task-browser-'));const project=join(directory,'study'),bin=join(directory,'bin');await mkdir(project);await mkdir(bin);await mkdir(join(directory,'kimi-home'));
- await writeFile(join(project,'notes.txt'),'Verified context fixture\nsecond line\n');await copyFile(resolve('e2e/fixtures/agents/kimi.cjs'),join(bin,'kimi'));await chmod(join(bin,'kimi'),0o755);log=join(directory,'native.jsonl');
+ await writeFile(join(project,'notes.txt'),'Verified context fixture\nsecond line\n');await writeFile(join(project,'analysis.R'),'plot(1:3)\n');await copyFile(resolve('e2e/fixtures/agents/kimi.cjs'),join(bin,'kimi'));await chmod(join(bin,'kimi'),0o755);log=join(directory,'native.jsonl');
  host=spawn(resolve('../target/debug/rho'),['--database',join(directory,'state.sqlite'),'--project',project,'workbench',...(process.env.RHO_BROWSER_DEV_ASSETS?['--dev-assets',resolve(process.env.RHO_BROWSER_DEV_ASSETS)]:[])],{env:{...process.env,PATH:`${bin}:${process.env.PATH}`,KIMI_CODE_HOME:join(directory,'kimi-home'),RHO_AGENT_FIXTURE_LOG:log},stdio:['ignore','pipe','pipe']});
  url=await new Promise<string>((resolve,reject)=>{let output='',errors='';const timer=setTimeout(()=>reject(new Error(`Host startup timed out: ${errors}`)),40000);host.stderr!.on('data',d=>errors+=d);host.stdout!.on('data',d=>{output+=d;const match=output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/);if(match){clearTimeout(timer);resolve(match[0]);}});host.once('exit',code=>{clearTimeout(timer);reject(new Error(`Host exited ${code}: ${errors}`));});});
 });
@@ -61,6 +61,53 @@ test('one project shares the Agent task list and selector while Kimi and unconfi
  expect(commands.filter(command=>['send','start','configure'].includes(command.kind))).toEqual([]);expect(modelTests).toEqual([]);
  expect((await nativeCalls()).filter(call=>call.method==='session/prompt').length).toBe(promptsBefore);expect(errors).toEqual([]);
  await page.screenshot({path:'../target/studio-browser/agent-mixed-project-tasks.png'});
+});
+
+test('manual handoff appends across Rho and native drafts and confirms a lost acknowledgement without sending',async({page})=>{
+ const calls:{path:string,body:any}[]=[];page.on('request',request=>{if(/\/api\/agents\/(tasks|components|handoff)\/command$/.test(request.url()))calls.push({path:new URL(request.url()).pathname,body:request.postDataJSON()});});
+ const promptsBefore=(await nativeCalls()).filter(call=>call.method==='session/prompt').length;
+ await openAgent(page);const panel=await newTask(page),input=panel.getByRole('textbox',{name:'Agent message',exact:true});
+ async function rename(title:string){await panel.getByRole('button',{name:'Task actions',exact:true}).click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();const titleInput=panel.getByRole('textbox',{name:'Task title',exact:true});await titleInput.fill(title);await titleInput.press('Enter');await expect(panel.locator('.at-task-header .at-title')).toHaveText(title);}
+ const nativeTitle='Handoff native target',rhoTitle='Handoff Rho source';
+ await rename(nativeTitle);await input.fill('Keep the native draft first.');
+ await panel.locator('input[type=file]').setInputFiles({name:'target.csv',mimeType:'text/csv',buffer:Buffer.from('a,b\n1,2\n')});await expect(panel.locator('.at-asset')).toContainText('target.csv');await expect(panel.locator('.at-draft-status')).toHaveText('Draft saved');
+ await panel.locator('button[aria-label="New task"]:visible').first().click();await page.getByRole('menuitem',{name:'Rho',exact:true}).click();await expect(input).toBeEditable();await rename(rhoTitle);
+ await input.fill('Keep the Rho source draft.');
+ await panel.locator('input[type=file]').setInputFiles({name:'source.csv',mimeType:'text/csv',buffer:Buffer.from('source,value\nA,3\n')});await expect(panel.locator('.at-asset')).toContainText('source.csv');
+ for(const filename of ['notes.txt','analysis.R']){
+  await panel.getByRole('button',{name:'Add context',exact:true}).click();const picker=panel.getByRole('dialog',{name:'Add workspace context'});
+  await picker.getByLabel('Context source type').selectOption('files');await picker.getByRole('button',{name:new RegExp(filename.replace('.','\\.'))}).click();await picker.getByRole('button',{name:'Add context',exact:true}).click();
+ }
+ await expect(panel.locator('.at-draft-status')).toHaveText('Draft saved');
+ await panel.getByRole('button',{name:'Task actions',exact:true}).click();await page.getByRole('menuitem',{name:'Prepare handoff',exact:true}).click();
+ const form=panel.getByRole('region',{name:'Prepare handoff',exact:true}),body=form.getByRole('textbox',{name:'Handoff draft',exact:true});await expect(body).toBeEditable();
+ await form.getByRole('combobox',{name:'Send context to',exact:true}).selectOption({label:`${nativeTitle} · Kimi Code`});await expect(form.getByRole('region',{name:'Existing target draft'})).toContainText('Keep the native draft first.');
+ await form.getByRole('button',{name:'notes.txt',exact:true}).click();await expect(form.getByRole('region',{name:'Handoff source preview'})).toContainText('Verified context fixture');await form.getByRole('button',{name:'Close handoff source preview'}).click();
+ await form.getByRole('button',{name:'Remove analysis.R from handoff',exact:true}).click();
+ const forward='Goal: Compare the values.\n\nConfirmed: I reviewed the attached notes.\n\nNext: Explain the difference.';await body.fill(forward);await body.press('Enter');expect(calls.filter(call=>call.path.endsWith('/handoff/command'))).toHaveLength(0);
+ // Verify the approved inline form in a constrained panel and a wide Agent workspace.
+ await page.setViewportSize({width:1100,height:800});await expect(form.getByRole('button',{name:'Add to draft',exact:true})).toBeEnabled();expect(await form.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await page.screenshot({path:'../target/studio-browser/agent-handoff-constrained.png'});
+ const group=page.locator('.flexlayout__tabset').filter({has:page.getByRole('tab',{name:'Agent',exact:true})});await group.getByRole('button',{name:'Maximize tab set',exact:true}).click();
+ await page.setViewportSize({width:386,height:900});await expect.poll(async()=>Math.round((await panel.boundingBox())!.width)).toBe(320);expect(await form.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+ const addBox=await form.getByRole('button',{name:'Add to draft',exact:true}).boundingBox(),formBox=await form.boundingBox();expect(addBox!.y+addBox!.height).toBeLessThanOrEqual(formBox!.y+formBox!.height);
+ await page.screenshot({path:'../target/studio-browser/agent-handoff-320.png'});await form.getByRole('region',{name:'Existing target draft'}).scrollIntoViewIfNeeded();await page.screenshot({path:'../target/studio-browser/agent-handoff-320-target.png'});
+ await page.setViewportSize({width:1440,height:900});await form.locator('.at-handoff-body').evaluate(node=>node.scrollTop=0);await page.screenshot({path:'../target/studio-browser/agent-handoff-wide.png'});
+ const list=panel.getByRole('complementary',{name:'Project tasks',exact:true});await list.locator('.at-task').filter({has:page.getByText(nativeTitle,{exact:true})}).click();await input.fill('Updated native draft remains first.');await expect(panel.locator('.at-draft-status')).toHaveText('Draft saved');
+ await list.locator('.at-task').filter({has:page.getByText(rhoTitle,{exact:true})}).click();await expect(body).toHaveValue(forward+'\n');
+ await form.getByRole('button',{name:'Add to draft',exact:true}).click();await expect(form.getByRole('alert')).toContainText('The target draft changed');await expect(form.getByRole('region',{name:'Existing target draft'})).toContainText('Updated native draft remains first.');await expect(body).toHaveValue(forward+'\n');expect(calls.filter(call=>call.path.endsWith('/handoff/command'))).toHaveLength(0);
+ await form.getByRole('button',{name:'Add to draft',exact:true}).click();await expect(form.getByText('Added to the target draft',{exact:true})).toBeVisible();await form.getByRole('button',{name:'Open target draft',exact:true}).click();
+ await expect(input).toHaveValue(new RegExp(`^Updated native draft remains first\\.[\\s\\S]*Goal: Compare the values\\.`));await expect(panel.locator('.at-assets')).toContainText('target.csv');await expect(panel.locator('.at-assets')).not.toContainText('source.csv');await expect(panel.locator('.at-context-chips')).toContainText('notes.txt');await expect(panel.locator('.at-context-chips')).not.toContainText('analysis.R');
+ await panel.getByRole('button',{name:'Task actions',exact:true}).click();await page.getByRole('menuitem',{name:'Prepare handoff',exact:true}).click();
+ await form.getByRole('combobox',{name:'Send context to',exact:true}).selectOption({label:`${rhoTitle} · Rho`});await expect(form.getByRole('region',{name:'Existing target draft'})).toContainText('Keep the Rho source draft.');
+ const reverse='Goal: Follow up in Rho.\n\nConfirmed: The native draft retained the reviewed context.\n\nNext: Review before sending.';await body.fill(reverse);
+ let aborted=false;await page.route('**/api/agents/handoff/command',async route=>{const response=await route.fetch();if(!aborted){aborted=true;await route.abort('failed');}else await route.fulfill({response});});
+ await form.getByRole('button',{name:'Add to draft',exact:true}).click();await expect(form.getByRole('button',{name:'Check receipt',exact:true})).toBeVisible();
+ const beforeReload=calls.filter(call=>call.path.endsWith('/handoff/command'));expect(beforeReload).toHaveLength(2);
+ await page.reload();await expect(form.getByRole('button',{name:'Check receipt',exact:true})).toBeVisible();await expect(body).toHaveValue(reverse);await expect(body).not.toBeEditable();
+ await form.getByRole('button',{name:'Check receipt',exact:true}).click();await expect(form.getByText('Added to the target draft',{exact:true})).toBeVisible();await page.screenshot({path:'../target/studio-browser/agent-handoff-receipt.png'});
+ await form.getByRole('button',{name:'Open target draft',exact:true}).click();await expect(input).toHaveValue(/^Keep the Rho source draft\.[\s\S]*Goal: Follow up in Rho\./);
+ expect(((await input.inputValue()).match(/Goal: Follow up in Rho\./g)??[])).toHaveLength(1);await expect(panel.locator('.at-assets')).toContainText('source.csv');await expect(panel.locator('.at-assets')).not.toContainText('target.csv');
+ expect(calls.filter(call=>call.path.endsWith('/handoff/command'))).toHaveLength(2);expect(calls.filter(call=>['start','send'].includes(call.body.command?.kind))).toEqual([]);expect((await nativeCalls()).filter(call=>call.method==='session/prompt').length).toBe(promptsBefore);
 });
 
 test('Agent activity bridges sending, native thinking and tool gaps in a constrained panel', async ({page}) => {

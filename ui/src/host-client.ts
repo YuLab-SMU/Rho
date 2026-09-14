@@ -30,6 +30,10 @@ import type { AgentTasksQuery } from "./generated/AgentTasksQuery";
 import type { AgentTaskQueryResult } from "./generated/AgentTaskQueryResult";
 import type { AgentTasksCommand } from "./generated/AgentTasksCommand";
 import type { AgentTaskCommandResult } from "./generated/AgentTaskCommandResult";
+import type { AgentHandoffsQuery } from "./generated/AgentHandoffsQuery";
+import type { AgentHandoffQueryResult } from "./generated/AgentHandoffQueryResult";
+import type { AgentHandoffCommand } from "./generated/AgentHandoffCommand";
+import type { AgentHandoffReceipt } from "./generated/AgentHandoffReceipt";
 import type { TestAgent } from "./generated/TestAgent";
 import type { AgentDiagnostic } from "./generated/AgentDiagnostic";
 import type { ReadAgentAsset } from "./generated/ReadAgentAsset";
@@ -113,7 +117,7 @@ export class HostClient {
   async request<T>(path: string, body?: unknown): Promise<T> {
     const method = (body as WorkbenchFrame | undefined)?.frame?.request?.method;
     const reading = body === undefined || path === "/api/state/read" || path === "/api/r/probe" || path === "/api/agents/tasks/query" ||
-      ["/api/agents/components/query", "/api/agents/components/context", "/api/agents/components/context/search"].includes(path) ||
+      ["/api/agents/components/query", "/api/agents/components/context", "/api/agents/components/context/search", "/api/agents/handoff/query"].includes(path) ||
       (path === "/api/host" && ["query_snapshot", "get_operation", "subscribe"].includes(method ?? ""));
     const controller = reading ? new AbortController() : undefined;
     if (controller) this.reads.add(controller);
@@ -148,6 +152,8 @@ export class HostClient {
   setupAgent(request: SetupAgent) { return this.request<LocalAgent>("/api/agents/setup", request); }
   agentTaskQuery(request: AgentTasksQuery) { return this.request<AgentTaskQueryResult>("/api/agents/tasks/query", request); }
   agentTaskCommand(request: AgentTasksCommand) { return this.request<AgentTaskCommandResult>("/api/agents/tasks/command", request); }
+  agentHandoffQuery(request: AgentHandoffsQuery) { return this.request<AgentHandoffQueryResult>("/api/agents/handoff/query", request); }
+  agentHandoffCommand(request: AgentHandoffCommand) { return this.request<AgentHandoffReceipt>("/api/agents/handoff/command", request); }
   componentQuery<Q extends ComponentAgentQuery>(request: ComponentAgentsQuery & { query: Q }) {
     return this.request<ComponentQueryReplies[Q["kind"]]>("/api/agents/components/query", request);
   }

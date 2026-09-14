@@ -1045,3 +1045,23 @@ evidence records. Optional environment and existing Host-memory references do no
 change the default persistence behavior.
 See [PRIVACY.md](../PRIVACY.md) and
 [SECURITY.md](../SECURITY.md) for data handling and reporting.
+
+## Human Agent handoff
+
+The approved manual-handoff action is an Application draft transaction. Its typed
+source/target references point to the existing native task and Rho conversation
+owners. The Host reads any additional native-task operation references through the
+existing caller-filtered journal and validates selected references through the
+existing source readers. Models cannot supply trusted provenance or handoff authority.
+
+The target's original owner lock serializes the write with draft saves and streamed
+observations. ApplicationStore rechecks source material, target draft version and
+controller in the same transaction that appends text, merges references, advances
+the original owner's version and records a bounded handoff receipt. Assets and
+permission/grant fields are preserved. The receipt provides idempotent replay and
+acknowledgement recovery; it is not another task lifecycle or scientific result store.
+
+Rho owns verification of that transport, persistence, scope and recovery contract.
+Third-party Agents' independent reasoning, answers, vision and lifecycle behavior
+are outside Rho's acceptance gate. Deterministic native-protocol fixtures can verify
+Rho's integration without requiring a third-party model run.

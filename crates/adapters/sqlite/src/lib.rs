@@ -2,6 +2,7 @@
 mod agent_tasks;
 mod agent_assets;
 mod project_agent_tasks;
+mod agent_handoffs;
 mod caller_records;
 mod component_agents;
 mod application;

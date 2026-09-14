@@ -7,6 +7,8 @@ import type { AgentTaskQueryResult } from "./generated/AgentTaskQueryResult";
 import type { DiscoverAgent } from "./generated/DiscoverAgent";
 import type { LocalAgent } from "./generated/LocalAgent";
 import type { ReadAgentAsset } from "./generated/ReadAgentAsset";
+import type { AgentHandoffPorts } from "./agent-handoff-ports";
+import type { ProjectAgentTaskRef } from "./generated/ProjectAgentTaskRef";
 
 export interface AgentAssetPreview { url: string; text: string | null }
 export interface AgentTaskPorts {
@@ -15,6 +17,10 @@ export interface AgentTaskPorts {
   window(): ApplicationWindowRef | null;
   query(request: AgentTasksQuery): Promise<AgentTaskQueryResult>;
   projectQuery?(request: AgentTasksQuery): Promise<AgentTaskQueryResult>;
+  handoffQuery?: AgentHandoffPorts["query"];
+  handoffCommand?: AgentHandoffPorts["command"];
+  synchronizeRhoDraft?(reference: ProjectAgentTaskRef & { kind: "rho" }): Promise<void>;
+  refreshRhoTask?(reference: ProjectAgentTaskRef & { kind: "rho" }): Promise<void>;
   command(request: AgentTasksCommand): Promise<AgentTaskCommandResult>;
   discover(request: DiscoverAgent): Promise<LocalAgent>;
   asset(request: ReadAgentAsset): Promise<AgentAssetPreview>;

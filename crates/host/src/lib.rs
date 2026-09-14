@@ -21,6 +21,8 @@ mod r_configuration;
 pub use r_configuration::{default_database, discover_r, probe_r};
 pub use rho_sqlite::ApplicationStore;
 mod agent_tasks;
+mod agent_handoffs;
+pub use agent_handoffs::AgentHandoffService;
 mod agent_connections;
 pub use agent_connections::{AgentMcpConnections, AgentMcpIdentity};
 mod component_agents;

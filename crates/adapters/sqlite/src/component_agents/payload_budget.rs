@@ -76,7 +76,7 @@ pub(super) fn initialize(connection: &Connection) -> Result<(), String> {
 
 /// Active rows and unresolved tool receipts retain their bounded completion space.
 /// The ledger stores sizes/identities only; raw values stay with their existing owner.
-pub(super) fn charged_bytes(
+pub(crate) fn charged_bytes(
     connection: &Connection,
     project: &str,
 ) -> Result<u64, ApplicationError> {
@@ -104,7 +104,7 @@ pub(super) fn charged_bytes(
         .ok_or_else(|| ApplicationError::Budget("Project payload size overflow".into()))
 }
 
-pub(super) fn enforce(
+pub(crate) fn enforce(
     tx: &Transaction<'_>,
     project: &str,
     before: u64,

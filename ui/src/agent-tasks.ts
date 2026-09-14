@@ -1,5 +1,6 @@
 import { Model, immutable, readonlyMap } from "./shared/model";
 import { message } from "./shared/ports";
+import { AgentHandoffs } from "./agent-handoffs";
 import type { AgentTaskPorts, AgentAssetPreview } from "./agent-task-ports";
 import type { AgentTaskSummary } from "./generated/AgentTaskSummary";
 import type { AgentTaskDetail } from "./generated/AgentTaskDetail";
@@ -49,6 +50,7 @@ interface AgentTaskSnapshot {
 
 /** Persistent task client, independent of R-session and panel lifetime. */
 export class AgentTasks extends Model<AgentTaskSnapshot> {
+  readonly handoffs: AgentHandoffs;
   private scientific = new Map<string,TaskScientificObservation>();
   private selectedTask: ProjectAgentTaskRef | null = null;
   private projectTasks: ProjectAgentTaskSummary[] = [];
@@ -88,7 +90,29 @@ export class AgentTasks extends Model<AgentTaskSnapshot> {
   private contextNotices: string[] = []; private contextPreview: AgentContextPreview | null = null;
   private contextLoading = false; private contextGeneration = 0;
   private previews = new Map<string, AgentAssetPreview>(); private assetFlights = new Set<string>();
-  constructor(private ports: AgentTaskPorts) { super(); }
+  constructor(private ports: AgentTaskPorts) {
+    super();
+    this.handoffs = new AgentHandoffs({ context: ports.context, window: ports.window,
+      query: request => { if (!ports.handoffQuery) throw new Error("Handoffs are unavailable."); return ports.handoffQuery(request); },
+      command: request => { if (!ports.handoffCommand) throw new Error("Handoffs are unavailable."); return ports.handoffCommand(request); },
+      synchronizeDraft: async reference => {
+        if (reference.kind === "rho") { await ports.synchronizeRhoDraft?.(reference); return; }
+        const local = this.drafts.get(reference.task_id);
+        if (local?.dirty) await this.flushDraft(reference.task_id);
+        if (local?.dirty || local?.conflict || this.hasPending(reference.task_id, "save_draft")) throw new Error("Save or resolve this task's current draft before preparing the handoff.");
+      },
+      refreshTarget: async reference => {
+        if (reference.kind === "rho") await ports.refreshRhoTask?.(reference); else await this.loadDetail(reference.task_id);
+        await this.observeProjectTasks();
+      },
+      preview: selection => this.previewContext(selection),
+      changed: required => {
+        const project = ports.context().project;
+        try { if (project) ports.writeLocal(project, this.serialize()); }
+        catch (error) { if (required) throw error; this.error = "Local handoff backup could not be saved. Keep this window open."; }
+        ports.changed(); this.publish();
+      } });
+  }
   protected readSnapshot(): AgentTaskSnapshot {
     return { scientific: readonlyMap(this.scientific), selectedTask: this.selectedTask, projectTasks: Object.freeze([...this.projectTasks]), taskAttention: this.taskAttention, lastAgent: this.lastAgent, attentionCount: this.attentionCount, observedAt: this.observedAt, tasks: Object.freeze([...this.tasks]), attention: this.attention, selected: this.selected, archived: this.archived, next: this.ports.projectQuery ? this.projectNext : this.next,
       details: readonlyMap(this.details), drafts: readonlyMap(new Map([...this.drafts].map(([id, d]) => [id, immutable(clone(d))]))),
@@ -108,6 +132,7 @@ export class AgentTasks extends Model<AgentTaskSnapshot> {
   viewsChanged({ activeViewIds }: { activeViewIds: readonly string[] }) { this.activeViews = new Set(activeViewIds); }
   get historyVisible() { return [...this.visible].some(id => this.activeViews === null || this.activeViews.has(id)); }
   clearError() { this.error = ""; this.publish(); }
+  reportError(error: unknown) { this.error = message(error); this.publish(); }
   get windowId() { return this.ports.windowId; }
   get connected() { return this.ports.context().connected && !!this.ports.window(); }
   hasPending(id: string, kind?: AgentTaskCommand["kind"]) { return [...this.pending.values()].some(p => p.taskId === id && (!kind || p.kind === kind)); }
@@ -163,6 +188,14 @@ export class AgentTasks extends Model<AgentTaskSnapshot> {
   filterArchived(value: boolean) { if (value === this.archived) return; this.archived = value; this.projectTasks = []; this.projectNext = null; this.projectExtended = false; this.tasks = []; this.next = null; this.extendedList = false; this.changed(); this.publish(); this.ports.schedule(); }
   async loadMore() { if (this.ports.projectQuery) { if (this.projectNext) await this.observeProjectTasks(this.projectNext); } else if (this.next) await this.list(this.next); }
   async refreshProjectTasks() { this.projectExtended = false; this.projectNext = null; await this.observeProjectTasks(); }
+  async readHandoffTargets(before: string | null = null) {
+    const project = this.ports.context().project, generation = this.generation;
+    if (!project) return null;
+    const result = await (this.ports.projectQuery ?? this.ports.query)({ project_root: project, query: { kind: "project_list", archived: false, before, limit: 32 } });
+    if (!this.guard(project, generation)) return null;
+    if (result.kind !== "project_list" || result.page.tasks.length > 32 || result.page.tasks.some(task => task.archived)) throw new Error("Invalid handoff target observation.");
+    return result.page;
+  }
   async observeProjectTasks(before: string | null = null) {
     const scope = this.ports.context(), generation = this.generation, archived = this.archived;
     if (!scope.project || !this.ports.projectQuery) return;
@@ -478,7 +511,7 @@ export class AgentTasks extends Model<AgentTaskSnapshot> {
   private stash() { const project = this.ports.context().project; if (project) { try { this.ports.writeLocal(project, this.serialize()); } catch { this.error = "Local draft backup is full. Keep this window open until drafts are saved."; } } }
   serialize(): Record<string, unknown> {
     return { agentTasks: { selectedTask: this.selectedTask, lastAgent: this.lastAgent, archived: this.archived, reading: Object.fromEntries(this.reading), preferred: this.preferred,
-      localDrafts: Object.fromEntries([...this.drafts].filter(([, d]) => d.dirty || d.conflict).map(([id, d]) => [id, clone(d)])), pending: [...this.pending.values()] } };
+      localDrafts: Object.fromEntries([...this.drafts].filter(([, d]) => d.dirty || d.conflict).map(([id, d]) => [id, clone(d)])), pending: [...this.pending.values()], handoffs: this.handoffs.serialize() } };
   }
   restore(value: unknown) {
     const project = this.ports.context().project;
@@ -486,7 +519,8 @@ export class AgentTasks extends Model<AgentTaskSnapshot> {
     const local = project ? (this.ports.readLocal(project) as { agentTasks?: unknown } | null)?.agentTasks : undefined;
     for (const raw of [saved, local]) {
       if (!raw || typeof raw !== "object") continue;
-      const data = raw as { selectedTask?: ProjectAgentTaskRef; lastAgent?: AgentProvider | "rho"; selected?: unknown; archived?: unknown; reading?: Record<string, ReadingPosition>; preferred?: Partial<Record<AgentProvider, string>>; localDrafts?: Record<string, LocalDraft>; pending?: Pending[] };
+      const data = raw as { selectedTask?: ProjectAgentTaskRef; lastAgent?: AgentProvider | "rho"; selected?: unknown; archived?: unknown; reading?: Record<string, ReadingPosition>; preferred?: Partial<Record<AgentProvider, string>>; localDrafts?: Record<string, LocalDraft>; pending?: Pending[]; handoffs?: unknown };
+      this.handoffs.restore(data.handoffs);
       if (typeof data.selected === "string") this.selectedTask = { kind: "native", task_id: data.selected };
       if (data.selectedTask && ((data.selectedTask.kind === "rho" && typeof data.selectedTask.conversation_id === "string") || (data.selectedTask.kind === "native" && typeof data.selectedTask.task_id === "string"))) { this.selectedTask = data.selectedTask; }
       if (data.lastAgent && ["rho","codex","kimi","deepseek"].includes(data.lastAgent)) this.lastAgent = data.lastAgent;
@@ -500,10 +534,11 @@ export class AgentTasks extends Model<AgentTaskSnapshot> {
   }
   reset() {
     this.generation++; this.contextGeneration++;
+    this.handoffs.reset();
     for (const timer of this.timers.values()) clearTimeout(timer);
     for (const p of this.previews.values()) this.ports.releaseAsset(p.url);
     this.scientific.clear(); this.selectedTask = null; this.projectTasks = []; this.taskAttention = []; this.attentionCount = 0; this.projectNext = null; this.projectExtended = false; this.lastAgent = "rho";
     this.tasks = []; this.attention = []; this.next = null; this.extendedList = false; this.archived = false; this.historyEpochs.clear(); this.eventSizes.clear(); this.saveFlights.clear(); this.creating = false; this.sources = []; this.contextItems = []; this.contextPreview = null; this.contextNotices = []; this.contextLoading = false; this.details.clear(); this.drafts.clear(); this.events.clear(); this.cursors.clear(); this.pending.clear(); this.reading.clear(); this.historyGap.clear(); this.earlier.clear(); this.nativeHistoryDone.clear(); this.nativeCursors.clear(); this.catalogs = {}; this.previews.clear(); this.assetFlights.clear(); this.saving.clear(); this.running = this.permissions = 0; this.summaryFlight = this.eventFlight = false; this.error = "";  this.publish();
   }
-  stop() { this.stash(); this.stopped = true; this.generation++; for (const timer of this.timers.values()) clearTimeout(timer); for (const p of this.previews.values()) this.ports.releaseAsset(p.url); this.dispose(); }
+  stop() { this.stash(); this.stopped = true; this.generation++; this.handoffs.dispose(); for (const timer of this.timers.values()) clearTimeout(timer); for (const p of this.previews.values()) this.ports.releaseAsset(p.url); this.dispose(); }
 }

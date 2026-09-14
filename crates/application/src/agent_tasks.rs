@@ -132,6 +132,13 @@ pub struct AgentTaskOwner {
     gate: Mutex<()>,
 }
 
+impl AgentTaskOwner {
+    pub fn with_handoff_write<T>(&self, write: impl FnOnce() -> Result<T, ApplicationError>) -> Result<T, ApplicationError> {
+        let _guard=self.gate.lock().map_err(|_| ApplicationError::Storage("Agent metadata lock poisoned".into()))?;
+        write()
+    }
+}
+
 pub fn agent_command_name(command: &AgentTaskCommand) -> &'static str {
     match command {
         AgentTaskCommand::Create { .. } => "create",

@@ -20,7 +20,7 @@ pub(crate) async fn search(
         return Err(error("Source search exceeds its budget"));
     }
     let reader = crate::AgentContextReader::new(&request.project_root, host, context);
-    if matches!(request.source.as_str(), "files" | "editor" | "plots") {
+    if matches!(request.source.as_str(), "files" | "editor" | "plots" | "operations") {
         let (items, notices) = crate::agent_context::search(
             &reader,
             &request.window,
@@ -140,7 +140,7 @@ pub(crate) async fn preview(
             Some(host.hold_runtime_instance(&session.workspace_instance_id,&session.session_id,"component-context","Component source preview").map_err(|e|e.to_string())?)
         } else {None};
         match selection.source.as_str() {
-            "files"|"editor"|"objects"|"tables"|"plots"=>crate::agent_context::preview(&reader,&request.window,selection,&[],sending).await,
+            "files"|"editor"|"objects"|"tables"|"plots"|"operations"=>crate::agent_context::preview(&reader,&request.window,selection,&[],sending).await,
             "packages"=>{
                 if sending && selection.reference["index_ref"].as_str().is_none() {return Err("Preview this package copy before including it".into());}
                 if !matches!(selection.inclusion.as_str(),"summary"|"selection") {return Err("Unsupported package inclusion".into());}
@@ -201,6 +201,9 @@ pub(crate) async fn preview(
         ));
     }
     let evidence = match preview.selection.source.as_str() {
+        "operations" => vec![ComponentAgentEvidence::Operation {
+            operation_id: serde_json::from_value(preview.selection.reference["operation_id"].clone()).map_err(error)?,
+        }],
         "files" => vec![ComponentAgentEvidence::File {
             path: preview.selection.reference["path"]
                 .as_str()

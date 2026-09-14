@@ -19,8 +19,12 @@ synchronization does not overwrite project files. The browser uses session stora
 for the current local access token. Closing a page does not cancel accepted work;
 reconnection queries the original request and retry is explicit.
 
-Native Agent platforms manage their own conversations, authentication and retention;
-Rho retains their application task references, drafts and bounded observations.
+Native Agent platforms manage their own conversations, authentication, retention
+and independent runtime lifecycle. They are responsible for their answers and image
+interpretation. Rho is responsible for connection identity, protocol delivery and its
+own permission, draft, receipt and recovery records; it retains bounded native status
+and usage observations without presenting unreported values as zero. Rho does not
+independently certify third-party Agent capabilities or answer quality.
 Optional component assistants additionally retain user requests, fixed authorization
 and model configuration references, tool receipts, bounded text events and usage in
 the Application store. The frozen task intent includes an exact excerpt of the

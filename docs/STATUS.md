@@ -9,7 +9,8 @@ current source uses the original Agent panel, task list and composer for Rho,
 Codex, Kimi and DeepSeek. The separate Built-in Assistant page has been removed
 from Paper; the [Agent review page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2)
 contains the approved unified interactions and a new **A20 manual handoff** preview.
-A20 is awaiting user review and has **not** been implemented. See
+A20 was reviewed and approved by the user and is now implemented with scoped
+Application/HTTP/browser verification. See
 [Design section 18](RHO-DESIGN.md#18-rho-in-the-unified-agent-panel--review-revision).
 
 ### Implemented in the current source
@@ -65,8 +66,29 @@ A20 is awaiting user review and has **not** been implemented. See
 
 ### Current verification and remaining acceptance
 
-The current binary, generated TypeScript, UI build/check and **423 frontend tests
-in 39 files** passed. Recovery tests passed **4/4**, including lost-create-result
+A20 is implemented: source/target previews share the existing task owners; edited
+handoff text and original references append to the target draft with CAS, under
+its original owner lock. Target text, attachments and permission/session settings
+are retained. Uploaded source attachments remain in the source task with an explicit
+notice. A missing acknowledgement retains the exact request and can be reconciled
+through its receipt. The default Goal falls back to the retained user message for
+completed native tasks, while Confirmed is never inferred from an assistant answer.
+
+Current A20 verification passed **6 SQLite integration tests** (including all four
+source/target owner combinations and transaction rollback), **21 Workbench HTTP
+checks**, and **438 frontend tests in 41 files**. The HTTP tests also verify original
+Operation references through the shared reader, reject stale file sources without
+a target write, and prove no model/session/scientific work starts during handoff.
+Generated bindings, embedded assets and the final binary build passed.
+Two final **embedded-client browser cases** passed: the shared mixed task list and
+full bidirectional handoff, including target draft conflict, existing attachments,
+source preview/removal, 320 px layout and lost-acknowledgement recovery after refresh.
+Log: `target/agent-handoff-embedded.log`; screenshots:
+`target/studio-browser/agent-handoff-{320,320-target,constrained,wide,receipt}.png`.
+The layout and receipt views were inspected. No independent third-party model
+acceptance was run for this change.
+
+The preceding unified-Agent baseline had **423 frontend tests in 39 files**. Recovery tests passed **4/4**, including lost-create-result
 recovery and real current-document validation before Continue admission. Host
 unit tests passed **47**, with one explicitly real-R test excluded from that run.
 The actual HTTP MCP identity suite passed **4/4**, covering isolation, revocation,
@@ -77,7 +99,7 @@ summary regression.
 Architecture, frontend boundaries, governance, vendor and vendor fixtures,
 Agent harness self-test and evidence-pack fixture checks passed.
 
-The complete `cargo test --workspace --locked -- --test-threads=1` run passed:
+Before the A20 addition, the complete `cargo test --workspace --locked -- --test-threads=1` run passed:
 **408 passed, 38 explicitly ignored**, followed by the final 40-test SQLite
 component suite for the later permission-title change. Log:
 `target/unified-agent-workspace.log`; the later scoped suite is in
@@ -126,29 +148,16 @@ remains historical baseline evidence in
 `target/component-matrix/2026-09-13T12-01-56.815Z/summary.json`; it does not verify
 the new permission or unified-UI implementation.
 
-Real native-provider verification is recorded in
-`target/agent-native-acceptance-2026-09-14/summary.json`:
+The user clarified that third-party Agents do **not** require independent acceptance
+by Rho. Rho verifies its own identity binding, protocol/data transport, draft
+handling, receipts, recovery and truthful usage display. Previous exploratory
+native-provider logs remain in `target/agent-native-acceptance-2026-09-14/`; they are
+not a third-party capability certification or a release gate. The prior Kimi image
+result is outside this scope and does not block completion.
 
-- Codex (`gpt-6-astra`) passed separate tasks, same-session Resume, crash recovery,
-  image input and a fresh MCP read. It reported native session-total token counters.
-- DeepSeek passed separate tasks, Resume, crash recovery and MCP reads. Its ACP
-  reported context occupancy/capacity; unreported consumed-token fields remain null.
-  The adapter does not advertise image input, so that case was not run.
-- Kimi 0.42.0 with its observed default `115-newapi/deepseek-v4.1-flash` passed
-  separate tasks, same-session recovery and MCP reads. Late ACP context usage was
-  captured without another model request. **Image interpretation failed**: it
-  answered `white` for a solid-red image. The previous test model
-  `b-ai/glm-5.3-flash` returned end-of-turn without text, also reproduced through
-  native ACP without Rho. Both failed attempts remain in the evidence directory.
-
-The isolated native Hosts were stopped and original configuration hashes matched.
-These results do not establish passing Kimi visual acceptance or Rho's pending
-real-model matrix.
-
-Manual handoff remains pending the explicit A20 review required by the approved
-plan, then implementation of its same-project, editable, append-to-draft/CAS
-transaction and recoverable receipt. It must not send, overwrite an existing
-user draft or transfer authorization.
+A20 verification covers Rho-owned draft persistence, transport and recovery. It
+does not send a prompt, overwrite existing text, copy another task's asset IDs or
+transfer authorization.
 
 All current acceptance runs use disposable projects. Existing user Hosts, R
 memory, drafts and native configuration are preserved. The running user Host has

@@ -716,6 +716,20 @@ do not automatically inherit prior authorization. Full drafts retain text, sourc
 attachment IDs, permission choice and R-session selection across panel navigation. Another window is read-only until **Take control**;
 conflicting drafts remain available for comparison. Archived tasks need unarchiving
 before new input/configuration work; accepted runs retain Stop and permission
-responses. The shared panel supports narrow,
-normal and wide layouts. A20's proposed manual handoff draft is still awaiting user
-review and implementation; it is not an available task-transfer command.
+responses. The shared panel supports narrow, normal and wide layouts.
+
+Use the task menu's **Prepare handoff** to review a Goal/Confirmed/Next draft and
+its original references, then choose another task in the same project. **Add to
+draft** appends the reviewed text and merges references while retaining the target's
+existing text, attachments and permission settings. It does not send to a model.
+A source task can be archived or controlled by another window; the target must be
+editable in the current window. Uploaded source attachments stay in the source;
+add any needed files separately to the target task.
+
+If the target draft changed, review the fresh draft before adding again. Refreshing
+the source/target keeps edited handoff text and deliberate reference removals.
+If confirmation is lost, **Check receipt** reads the original request's result;
+only an explicit retry uses that same request. Stale or incompatible source
+references must be refreshed in their original source, removed, or used with a
+compatible target. Handoff never rewrites window/session identities to bypass a
+reader check.

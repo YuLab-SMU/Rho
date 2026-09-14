@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 mod agent_tasks;
+mod agent_handoffs;
 mod component_agents;
 mod agents;
 mod settings;
@@ -88,6 +89,7 @@ struct AppState {
     mcp_manager: Arc<LocalSessionManager>,
     task_agents: Arc<rho_host::AgentTaskService>,
     component_agents: Arc<rho_host::ComponentAgentService>,
+    handoffs: Arc<rho_host::AgentHandoffService>,
     calls: Arc<Semaphore>,
     observations: Arc<Semaphore>,
     application: Arc<rho_host::ApplicationStore>,
@@ -519,6 +521,8 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/agents/test", post(agent_tasks::test))
         .route("/api/agents/tasks/query", post(agent_tasks::query))
         .route("/api/agents/tasks/asset", post(agent_tasks::asset))
+        .route("/api/agents/handoff/query", post(agent_handoffs::query))
+        .route("/api/agents/handoff/command", post(agent_handoffs::command))
         .route("/api/agents/components/query", post(component_agents::query))
         .route("/api/agents/components/command", post(component_agents::command))
         .route("/api/agents/components/credential", post(component_agents::credential))
@@ -644,6 +648,7 @@ pub async fn serve_with_assets(
         ),
         task_agents: rho_host::AgentTaskService::new(application.clone()),
         component_agents: rho_host::ComponentAgentService::new(application.clone()),
+        handoffs: Arc::new(rho_host::AgentHandoffService::new(application.clone())),
         calls: Arc::new(Semaphore::new(32)),
         observations: Arc::new(Semaphore::new(16)),
         application,
@@ -727,6 +732,7 @@ mod tests {
             mcp_manager: Arc::default(),
             task_agents: rho_host::AgentTaskService::new(application.clone()),
             component_agents: rho_host::ComponentAgentService::new(application.clone()),
+            handoffs: Arc::new(rho_host::AgentHandoffService::new(application.clone())),
             calls: Arc::new(Semaphore::new(32)),
             observations: Arc::new(Semaphore::new(16)),
             application,
@@ -1204,3 +1210,5 @@ mod tests {
 
 #[cfg(test)]
 mod mcp_identity_tests;
+#[cfg(test)]
+mod agent_handoff_tests;

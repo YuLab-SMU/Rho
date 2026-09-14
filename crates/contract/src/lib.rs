@@ -7,6 +7,8 @@ pub use agent_usage::*;
 pub use agent_task::*;
 mod project_agent_task;
 pub use project_agent_task::*;
+mod agent_handoff;
+pub use agent_handoff::*;
 mod component_agent;
 pub use component_agent::*;
 

@@ -42,7 +42,7 @@ impl ComponentActor {
     pub fn window(&self) -> &ApplicationWindowRef {
         &self.window
     }
-    fn validate(&self, now: u64) -> Result<(), ApplicationError> {
+    pub(crate) fn validate(&self, now: u64) -> Result<(), ApplicationError> {
         let current = self
             .application_store
             .window(&self.scope, &self.window.window_id)?
@@ -275,6 +275,13 @@ pub struct ComponentAgentOwner {
     pub store: Arc<dyn ComponentAgentRepository>,
     pub host_incarnation: String,
     gate: Mutex<()>,
+}
+
+impl ComponentAgentOwner {
+    pub fn with_handoff_write<T>(&self, write: impl FnOnce() -> Result<T, ApplicationError>) -> Result<T, ApplicationError> {
+        let _guard=self.gate.lock().map_err(|_| ApplicationError::Storage("Component metadata lock poisoned".into()))?;
+        write()
+    }
 }
 
 pub(crate) fn invalid(message: impl Into<String>) -> ApplicationError {

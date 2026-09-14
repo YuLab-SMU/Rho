@@ -2,6 +2,8 @@ import { useLayoutEffect, useRef } from "react";
 import type { ClipboardEventHandler } from "react";
 
 interface Props {
+  label?: string;
+  maxLength?: number;
   value: string;
   placeholder: string;
   readOnly: boolean;
@@ -56,8 +58,8 @@ export function AgentMessageInput(props: Props) {
     if (!props.readOnly && text.endsWith("@")) props.onMention();
   }
 
-  return <textarea ref={input} aria-label="Agent message" placeholder={props.placeholder}
-    defaultValue={initial.current} readOnly={props.readOnly} maxLength={32768} rows={3}
+  return <textarea ref={input} aria-label={props.label ?? "Agent message"} placeholder={props.placeholder}
+    defaultValue={initial.current} readOnly={props.readOnly} maxLength={props.maxLength ?? 32768} rows={3}
     onCompositionStart={() => { composing.current = true; endedAt.current = -Infinity; props.onComposingChange(true); }}
     onCompositionEnd={event => {
       composing.current = false; endedAt.current = performance.now();

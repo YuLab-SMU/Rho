@@ -98,6 +98,7 @@ pub(crate) fn sources(plugins: &[Arc<dyn AgentContextProvider>]) -> Vec<AgentCon
         ("editor", "Editor"),
         ("objects", "Objects"),
         ("plots", "Plots"),
+        ("operations", "Runs"),
         ("tables", "Tables"),
         ("packages", "Packages"),
         ("workspace", "Console / Workspace"),
@@ -198,6 +199,11 @@ pub(crate) async fn search(
                     }).collect()
 
             },
+            "operations"=>{
+                let page=reader.query("operation.list_recent",json!({"limit":remaining.min(20)})).await?;
+                let page:RecentOperations=serde_json::from_value(page).map_err(|e|e.to_string())?;
+                page.operations.into_iter().filter(|op| text.is_empty() || format!("{} {}",op.operation_id.as_str(),op.capability.id).to_lowercase().contains(&text.to_lowercase())).map(|op|item("operations",format!("Run {}",op.operation_id.as_str()),op.capability.id.clone(),"run",json!({"operation_id":op.operation_id}),"summary")).collect()
+            },
             "plots"=>{
                 let recent=reader.query("operation.list_recent",json!({"limit":10})).await?;let mut found=Vec::new();
                 for operation in recent["operations"].as_array().into_iter().flatten(){
@@ -258,6 +264,21 @@ pub(crate) async fn preview(
         return Err("Context reference exceeds its budget".into());
     }
     let mut p = match s.source.as_str() {
+        "operations" => {
+            if s.inclusion != "summary" { return Err("Run sources include only their bounded owner summary".into()); }
+            let id = field(&s.reference, "operation_id")?;
+            let page = reader.query("operation.list_recent", json!({"operation_id":id,"limit":1})).await?;
+            let page: RecentOperations = serde_json::from_value(page).map_err(|e|e.to_string())?;
+            let operation = page.operations.into_iter().find(|op|op.operation_id.as_str()==id)
+                .ok_or("The original run is unavailable to this task")?;
+            let mut p = preview_base(s, &["summary"]);
+            p.title = format!("Run {}", operation.operation_id.as_str());
+            p.description = format!("Original operation · {}",operation.capability.id);
+            p.selection.label = p.title.clone();
+            p.text = format!("Original operation {}: {}. This is an owner observation, not a new execution.",operation.operation_id.as_str(),serde_json::to_value(operation.status).map_err(|e|e.to_string())?.as_str().unwrap_or("unknown"));
+            p.native_data = serde_json::to_value(operation).map_err(|e|e.to_string())?;
+            p
+        }
         "packages" | "workspace" | "environment" => {
             let session = s.reference["workspace_instance_id"].as_str().zip(s.reference["expected_session"].as_str()).map(|(id,native)|ComponentAgentSession{workspace_instance_id:id.into(),session_id:native.into()});
             let result = Box::pin(crate::component_agents::context::preview(reader.host,reader.context,&ComponentSourcePreviewRequest{project_root:reader.project.into(),window:window.clone(),session,selection:s.clone()},sending)).await.map_err(|e|e.to_string())?;

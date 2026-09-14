@@ -122,12 +122,12 @@ Native/transport verification:
 | `test-process-recovery.mjs` | R-free native process crash/reconciliation |
 | `test-remote-protocol.mjs` | Local SSH/Slurm transcript fixtures; does not validate a remote cluster |
 | `test-remote-live.mjs` | Opt-in real jobs on an explicitly selected host/scratch directory; see Operations |
-| `test-agent-interface.mjs` | Independent local Codex sessions with prebuilt Rho/Ark, installed R, Chrome, UI dependencies and authenticated pinned Codex; self-test/debug modes are not acceptance |
-| `test-agent-clients.mjs` | Opt-in native Codex/Kimi/DeepSeek: two same-model tasks, request deduplication, same-ID resume and fresh MCP reads; installed/authenticated CLI and current binary required |
+| `test-agent-interface.mjs` | Optional client-driven observations of Rho interfaces using an explicitly selected Codex installation; deterministic self-tests cover the harness without calling a model |
+| `test-agent-clients.mjs` | Optional investigation of Rho integration with installed/authenticated Codex/Kimi/DeepSeek; real-provider answers are observations, not a Rho acceptance gate |
 | `test-deepseek-inbox.mjs` | Checks the installed, lock-matched native Inbox replay/clear implementation with a disposable journal; no provider calls or session scan |
-| `test-agent-task-recovery.mjs` | Disposable Host crash, explicit same-ID resume, retained draft/uncertain receipt, refreshed MCP and images; local ACP fixture by default, `--real-kimi`, `--real-codex`, `--real-deepseek` use the documented configured development models and verify fresh MCP delivery |
+| `test-agent-task-recovery.mjs` | Rho-owned recovery with a local ACP fixture by default: disposable Host crash, original identities, draft/receipt preservation, refreshed MCP and image-byte delivery; real-provider modes are optional investigations |
 
-Interactive Agent acceptance needs a disposable analysis project outside the Rho
+Interactive Rho integration checks need a disposable analysis project outside the Rho
 checkout's ancestry, so the native Agent does not inherit repository-development
 AGENTS.md instructions. Use a real analysis, verify its captured Editor script,
 original R operation and retained Plots media in the same live window. A successful
@@ -136,7 +136,8 @@ model-readable invalid arguments and prompt acceptance behind a failed-run queue
 pause, including duplicate-request identity and explicit queue recovery.
 
 These scripts live in `scripts/`. R tests accept `RHO_ARK` and `RHO_R_HOME` where
-applicable. Ignored or unavailable external-runtime checks are not passes.
+applicable. Ignored or unavailable checks are not passes; optional third-party Agent
+observations are separate from required Rho checks and do not block their completion.
 The shell scenarios are in `ui/e2e/shell.spec.ts`, with their own disposable Host.
 Keep independent suites isolated rather than raising the product's retained-window
 budget for tests. Geometry checks wait for ResizeObserver layout to settle.
@@ -147,22 +148,31 @@ the integration checkout, separate from disposable test projects.
 
 The approved workspace Agent task UI is in Design section 13. Focused Chrome tests
 are `ui/e2e/agent-tasks.spec.ts`; local native protocol fixtures never call a model.
-For the configured Kimi development model, explicitly run:
+Rho acceptance covers connection identity, protocol delivery, permission handling,
+drafts, original receipts, Rho's recovery behavior and faithful native-usage display.
+Deterministic protocol fixtures and HTTP/browser tests can establish these contracts.
+
+Third-party Agent capabilities, answer quality, image recognition and each platform's
+independent lifecycle belong to that platform. Rho does not independently qualify
+Codex, Kimi or DeepSeek. A Kimi image answer is not a completion gate for Rho;
+image tests at this boundary verify the bytes, metadata and references Rho delivers.
+Missing native text or usage stays missing, and a native end-of-turn is not evidence
+that a requested answer or scientific result exists.
+
+For the routine isolated recovery check, run:
 
 ```sh
-node scripts/test-agent-clients.mjs --real-model --provider kimi --kimi-model b-ai/glm-5.3-flash --allow-overview
-node scripts/test-agent-task-recovery.mjs --real-kimi
-# Other configured runtime recovery checks:
-node scripts/test-agent-task-recovery.mjs --real-codex
-node scripts/test-agent-task-recovery.mjs --real-deepseek
+node scripts/test-agent-task-recovery.mjs
 ```
 
-Both create and clean up independent test Hosts and preserve native config hashes.
-They must not be pointed at an existing research Host. The exact reviewed Kimi source
-is tag `@moonshot-ai/kimi-code@0.41.0`, commit
-`95478e8c7ba248fd2470d5bb151555ec7fedd19d`; adapter behavior is checked against actual
-handshake metadata and that version's ACP/session source. A live-model failure is
-not converted to a retry of its uncertain original request.
+The real-provider switches of this script and `test-agent-clients.mjs` remain
+available only for an explicitly requested integration investigation, not routine
+Rho acceptance. Such runs use independent test Hosts and preserve native config
+hashes; never point them at a research Host. Keep prior raw logs and failed attempts
+as recorded. Changing the acceptance scope does not change an old failure to a pass.
+The reviewed Kimi adapter source was tag `@moonshot-ai/kimi-code@0.41.0`, commit
+`95478e8c7ba248fd2470d5bb151555ec7fedd19d`; that provenance does not certify the
+third-party product or require its current models to pass an independent evaluation.
 
 ## Contract and source changes
 
@@ -183,11 +193,11 @@ through capture, save verification, execution and lost-acknowledgement recovery.
 Add affected paths/checks to governance and dependency maps, then regenerate DTOs
 and assets before verifying the current binary.
 
-## Independent Agent acceptance
+## Optional external-client observations
 
 For managed native task recovery, `node scripts/test-agent-task-recovery.mjs`
-runs an isolated protocol fixture. Add `--real-codex`, `--real-kimi` or
-`--real-deepseek` for a real provider. `--model EXACT_NATIVE_MODEL_ID` overrides
+runs an isolated protocol fixture. For a separately requested integration investigation,
+`--real-codex`, `--real-kimi` or `--real-deepseek` select a real provider. `--model EXACT_NATIVE_MODEL_ID` overrides
 the test session's model without changing the native platform's configuration.
 Use a model actually reported by that installation; retain failed attempts when
 changing it. These checks distinguish ordinary text/MCP recovery, image input and
@@ -209,7 +219,8 @@ node scripts/test-agent-interface.mjs --list
 node scripts/test-agent-interface.mjs --self-test
 ```
 
-After committing a clean tree and building matching DTOs/assets/binaries, run:
+For an explicitly requested client-driven experiment, first commit a clean tree
+and build matching DTOs/assets/binaries, then run:
 
 ```sh
 node scripts/test-agent-interface.mjs --final \
@@ -218,7 +229,8 @@ node scripts/test-agent-interface.mjs --final \
   --codex /absolute/path/to/pinned/codex
 ```
 
-`--final` requires ten core categories repeated three times, native/Rho Skill
+`--final` names this optional runner profile, not Rho's product completion gate.
+It runs ten core categories repeated three times, native/Rho Skill
 resource equivalence and two adaptation cases: 34 runs. Model/reasoning, Codex
 version and binary digests are fixed by the runner and recorded with the source
 tree. Each task has an 80-call, 1 MiB UTF-8 text and ten-minute budget; native image
@@ -226,12 +238,13 @@ bytes and actual token usage are counted separately. Read-only investigation cas
 cannot use `run_r` to bypass query interfaces. Programming/analysis cases can use
 the scientific execution capabilities their task permits.
 
-`--filter` and `--runs` are debugging options; their results do not establish final
-acceptance. Preserve every attempt, JSONL/tool/resource trajectory, original
+`--filter` and `--runs` are debugging options; their results do not establish the
+full optional experiment. Preserve every attempt, JSONL/tool/resource trajectory, original
 operation record, assertion, screenshot and artifact hash. Missing prerequisites,
 exceeded budgets, identity mixing, repeated execution, silent overwrites or false
-completeness are failures. Fix the interface/implementation and rerun on a new
-fixed version; do not encode an answer or mandatory tool sequence into the task
+completeness must remain visible in the record. Investigate whether a finding belongs
+to Rho or the third-party Agent. Fix Rho-owned defects with focused deterministic
+regressions; a new real-provider experiment needs its own explicit scope. When running one, do not encode an answer or mandatory tool sequence into the task
 prompt. Evidence defaults to `target/agent-interface/acceptance/`; summaries and
 outstanding verification belong in [Status](STATUS.md).
 

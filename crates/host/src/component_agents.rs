@@ -88,6 +88,9 @@ pub struct ComponentAgentService {
     keys: RwLock<BTreeMap<SecretScope, Arc<ComponentModelKey>>>,
 }
 impl ComponentAgentService {
+    pub(crate) fn with_handoff_write<T>(&self, write: impl FnOnce() -> Result<T, ApplicationError>) -> Result<T, ApplicationError> {
+        self.owner.with_handoff_write(write)
+    }
     pub fn host_incarnation(&self) -> &str { &self.owner.host_incarnation }
 
     pub async fn live_run_ids(&self) -> Vec<String> {

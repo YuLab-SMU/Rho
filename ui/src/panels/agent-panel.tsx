@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { useAgentTasks, useComponentAgents, useNavigation } from "../context";
+import { useAgentTasks, useAgentHandoffs, useComponentAgents, useNavigation } from "../context";
 import { Icon } from "../icons";
 import { AgentComposer } from "./agent-composer";
 import { RhoConversation } from "./component-agent-panel";
@@ -19,6 +19,7 @@ import { AgentActivity } from "./agent-activity";
 import { AgentAttachment } from "./agent-attachment";
 import { NativeScientificWork } from "./agent-scientific-work";
 import { AgentUsage } from "./agent-usage";
+import { AgentHandoffPreview } from "./agent-handoff";
 
 const providers: Record<AgentProvider, string> = { codex: "Codex", kimi: "Kimi Code", deepseek: "DeepSeek Harness" };
 const statusLabel: Record<string, string> = { queued: "Queued", waiting_for_r: "Waiting for R", needs_input: "Needs input", stopped: "Stopped", completed: "Ready", draft: "Draft", ready: "Ready", running: "Running", waiting_for_permission: "Needs permission", connecting: "Connecting", resuming: "Resuming", stopping: "Stopping", disconnected: "Disconnected", uncertain: "Needs review", interrupted: "Stopped", failed: "Failed" };
@@ -79,6 +80,7 @@ function TaskHeader({ task }: { task: AgentTaskSummary }) {
     {editable && !task.task.archived && ["disconnected", "uncertain"].includes(task.attachment.state) && task.task.native_session_id && <button className="primary" disabled={!owner.connected || owner.hasPending(id)} onClick={() => void owner.act(id, "resume")}>Resume</button>}
     <button className="at-icon" title="Agent Settings" aria-label="Agent Settings" onClick={() => navigation.openAgentSettings(task.task.provider)}><Icon name="settings" /></button>
     <Menu.Root><Menu.Trigger asChild><button className="at-icon" aria-label="Task actions"><Icon name="more" /></button></Menu.Trigger><Menu.Portal><Menu.Content className="at-menu" align="end" sideOffset={5}>
+      <Menu.Item className="at-menu-item" disabled={!owner.connected} onSelect={() => void owner.handoffs.prepare({ kind: "native", task_id: id }).catch(error => owner.reportError(error))}>Prepare handoff</Menu.Item>
       <Menu.Item className="at-menu-item" onSelect={() => setInspecting(!inspecting)}>Session details</Menu.Item>
       <Menu.Item className="at-menu-item" disabled={!editable} onSelect={() => setRenaming(true)}>Rename</Menu.Item>
       <Menu.Item className="at-menu-item" disabled={!editable} onSelect={() => void owner.archive(id, !task.task.archived)}>{task.task.archived ? "Unarchive" : "Archive"}</Menu.Item>
@@ -192,11 +194,11 @@ function Composer({ task }: { task: AgentTaskSummary }) {
   </div>;
 }
 export function AgentPanel({ viewId }: { viewId: string }) {
-  const owner = useAgentTasks(), rho = useComponentAgents(), navigation = useNavigation(), state = owner.getSnapshot(), rhoState = rho.getSnapshot(), task = state.selected ? owner.summary(state.selected) : null;
+  const owner = useAgentTasks(), handoffs = useAgentHandoffs(), rho = useComponentAgents(), navigation = useNavigation(), state = owner.getSnapshot(), rhoState = rho.getSnapshot(), task = state.selected ? owner.summary(state.selected) : null;
   useEffect(() => { owner.show(viewId); return () => owner.hide(viewId); }, [owner, viewId]);
   return <div className="agent-panel" aria-label="Agent panel"><TaskList /><main className="at-main"><TaskSelector />
     {state.error && <div className="at-error" role="alert"><span>{state.error}</span><button className="at-icon" aria-label="Dismiss Agent error" onClick={() => owner.clearError()}><Icon name="close" size={13} /></button></div>}
     {rhoState.error && <div className="at-error" role="alert"><span>{rhoState.error}</span><button className="at-icon" aria-label="Dismiss Rho error" onClick={() => rho.clearError()}><Icon name="close" size={13} /></button></div>}
-    {state.selectedTask?.kind === "rho" ? <RhoConversation key={state.selectedTask.conversation_id} id={state.selectedTask.conversation_id} /> : task ? <><TaskHeader task={task} /><NativeScientificWork key={`science:${task.task.task_id}`} task={task} /><Conversation task={task} /><Composer key={task.task.task_id} task={task} /></> : <div className="at-start"><Icon name="agent" size={28} /><h2>Work with an Agent</h2><NewTaskButton /><button onClick={() => navigation.setDialog("agents")}><Icon name="settings" />Agent Settings</button></div>}
+    {state.selectedTask && handoffs.editor(state.selectedTask)?.open ? <AgentHandoffPreview key={projectTaskKey(state.selectedTask)} source={state.selectedTask} /> : state.selectedTask?.kind === "rho" ? <RhoConversation key={state.selectedTask.conversation_id} id={state.selectedTask.conversation_id} /> : task ? <><TaskHeader task={task} /><NativeScientificWork key={`science:${task.task.task_id}`} task={task} /><Conversation task={task} /><Composer key={task.task.task_id} task={task} /></> : <div className="at-start"><Icon name="agent" size={28} /><h2>Work with an Agent</h2><NewTaskButton /><button onClick={() => navigation.setDialog("agents")}><Icon name="settings" />Agent Settings</button></div>}
   </main></div>;
 }

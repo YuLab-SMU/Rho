@@ -4,7 +4,7 @@ use rho_application::*;
 use rho_contract::*;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Serialize, de::DeserializeOwned};
-mod payload_budget;
+pub(crate) mod payload_budget;
 
 fn error(error: impl ToString) -> ApplicationError {
     ApplicationError::Storage(error.to_string())

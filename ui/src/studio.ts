@@ -280,6 +280,14 @@ export class Studio {
       window: () => this.application.getSnapshot().online ? this.application.window : null,
       query: request => client.agentTaskQuery(request), command: request => client.agentTaskCommand(request),
       projectQuery: request => client.agentTaskQuery(request),
+      handoffQuery: request => client.agentHandoffQuery(request), handoffCommand: request => client.agentHandoffCommand(request),
+      synchronizeRhoDraft: async reference => {
+        const owner = this.componentAgents, id = reference.conversation_id;
+        if (owner.getSnapshot().drafts.get(id)?.dirty) await owner.flushDraft(id);
+        const draft = owner.getSnapshot().drafts.get(id);
+        if (draft?.dirty || draft?.conflict != null) throw new Error("Save or resolve this task's current draft before preparing the handoff.");
+      },
+      refreshRhoTask: reference => this.componentAgents.observeConversation(reference.conversation_id),
       discover: request => client.discoverAgent(request),
       asset: async request => previewAgentAsset(await client.agentAsset(request)), releaseAsset: releaseAgentAsset,
       ...taskDraftCache(windowId), changed: this.persistence.changed,
