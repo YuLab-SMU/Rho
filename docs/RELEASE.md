@@ -20,10 +20,11 @@ HTML, CSS and JavaScript. R and Ark are external runtimes; the binary does not
 bundle their installations. Build frontend changes first using
 [Development](DEVELOPMENT.md).
 
-`.github/workflows/rho.yml` defines native source/transport checks.
+`.github/workflows/rho.yml` defines macOS arm64 native source/transport checks for
+pushes and pull requests. No active workflow starts Linux or Windows jobs.
 `.github/workflows/build-rho.yml` is a manually triggered macOS arm64 binary build
-that uploads an artifact. Its macOS 26 runner must verify the native architecture;
-it does not establish that the runner has the same patch version as the local
+that uploads an artifact. Both macOS 26 jobs verify the native architecture;
+this does not establish that the runner has the same patch version as the local
 baseline. Neither a workflow definition nor an older successful run proves that
 the current commit passed remote CI.
 

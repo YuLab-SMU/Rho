@@ -275,4 +275,4 @@ checksum-pinned archive. `prepare` writes a proposal under `target/`, so a patch
 failure or changed inherited dependency cannot silently update production source.
 Verification/preparation and the script regression tests can invoke Cargo metadata;
 serialize them with other Cargo invocations. CI is configured to run offline
-integrity and regression checks on each native build platform.
+integrity and regression checks on macOS arm64, the current CI target.

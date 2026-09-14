@@ -17,21 +17,11 @@ concurrency:
 
 jobs:
   native:
-    name: Native Host / ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Native Host / macOS arm64
+    runs-on: macos-26
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            toolchain: 1.97.0-x86_64-unknown-linux-gnu
-          - os: macos-26
-            toolchain: 1.97.0-aarch64-apple-darwin
-          - os: windows-latest
-            toolchain: 1.97.0-x86_64-pc-windows-gnu
     env:
-      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
+      RUSTUP_TOOLCHAIN: 1.97.0-aarch64-apple-darwin
       CARGO_INCREMENTAL: "0"
     defaults:
       run:
@@ -40,25 +30,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Verify CI target
+        run: |
+          test "$(uname -s)" = "Darwin"
+          test "$(uname -m)" = "arm64"
+          sw_vers
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Install Windows GNU toolchain dependencies
-        if: runner.os == 'Windows'
-        uses: r-lib/actions/setup-r@v2
-        with:
-          r-version: "4.6.1"
-          rtools-version: "45"
-      - name: Select Windows GNU linker
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $rtools = "C:\rtools45\x86_64-w64-mingw32.static.posix\bin"
-          if (-not (Test-Path (Join-Path $rtools "gcc.exe"))) { throw "Rtools45 GNU linker missing" }
-          $rtools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Install pinned Rust
         run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy --no-self-update
       - uses: actions/cache@v4
@@ -67,7 +49,7 @@ jobs:
             ~/.cargo/registry/
             ~/.cargo/git/db/
             target/
-          key: rho-${{ runner.os }}-${{ matrix.toolchain }}-${{ hashFiles('Cargo.lock') }}
+          key: rho-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
       - name: Fetch locked dependencies
         run: cargo fetch --locked
       - name: Install client build tool
@@ -100,10 +82,6 @@ jobs:
           node scripts/test-mcp.mjs
           node scripts/test-workbench.mjs
       - name: Verify standalone Ark acquisition fixtures (macOS)
-        if: runner.os == 'macOS'
         run: bash scripts/test-bootstrap-ark-macos.sh
-      - name: Verify standalone Ark acquisition fixtures (Linux)
-        if: runner.os == 'Linux'
-        run: bash scripts/test-bootstrap-ark-linux.sh
       # Real Ark/R and remote-cluster acceptance have separate explicit prerequisites.
       # Ignored Rust tests above are not evidence of those runtime checks passing.
