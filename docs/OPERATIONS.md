@@ -254,7 +254,7 @@ start fresh observations.
 Open **Agents** in the Studio app bar, Panels menu or command palette. The singleton
 panel opens on the right, or joins the inspection group in a narrower window.
 **New task** selects a runtime; model and reasoning controls stay with the message
-input. Its first Send creates the native session. Each task has its own draft,
+input. For a native Agent, its first Send creates the native session. Each task has its own draft,
 model choice and connection. A running task accepts a next draft, with no send queue.
 Closing, moving or refreshing the panel does not stop the Agent.
 
@@ -262,8 +262,9 @@ Permission modes reflect the chosen Agent's actual catalog. Action-specific requ
 appear immediately above the input; their native options stay in order. Top-bar badges
 remain while the panel is closed. **+**, attachments and **@** add images, UTF-8 files
 or previewed component information. Choose the inclusion scope before adding it;
-changed or expired sources require another preview. Binary limits are 8 MiB per
-attachment and 32 MiB/64 attachments per task. Unsupported inputs get an explicit error.
+changed or expired sources require another preview. Native task limits are 8 MiB per
+attachment and 32 MiB/64 attachments per task; Rho has the smaller text/image input
+limits described below. Unsupported inputs get an explicit error.
 
 All project windows share tasks; only the controlling window edits or sends.
 Use **Take over** for an idle task. If its operating window is gone while work is
@@ -643,44 +644,78 @@ alone cannot add a Host capability.
 
 ## Built-in component assistant
 
-Use **Ask about…** (the assistant icon in a component's title bar) from Objects,
-Packages, Plots, an open document, Console or Files. R Sessions has its own Ask
-button. All entrances open **Rho Assistant** in the existing Agent area. The
-**External tasks** tab retains the native CLI task workflow.
+Use **New task → Rho** in the shared **Agent** panel, or **Ask about…** from
+Objects, Packages, Plots, an open document, Console, Files or R Sessions. Rho and
+native Agents share the task list, active/archive navigation, conversation layout
+and composer. Ask adds previewable context without switching an existing task's
+Agent or changing an accepted run's target.
 
-Configure the project model under **Agent Settings → Rho Assistant**, or the
-assistant's model settings button. Enable the assistant, choose Anthropic Messages
-or OpenAI Chat Completions, and enter the service base URL and model ID. HTTPS is
-required except for HTTP loopback services. Questions and selected context go to
-that service. A session key is retained only in Host memory until that Host quits;
-an environment reference reads the named variable from the Host's environment.
-Neither value is stored in conversation text. Save before explicitly testing the
-connection or image input. Tests use synthetic content. Opening a panel does not
-send a model prompt or scan a local CLI.
+Configure the project connection under **Settings → Agents → Rho**. Enable Rho,
+choose Anthropic Messages or OpenAI Chat Completions, and enter the service base URL,
+model ID and API key. HTTPS is required except for HTTP loopback services. **Save**
+retains the key across restarts and the UI shows its saved availability without
+returning the raw value. The key can be replaced or removed. Environment-variable
+references remain optional; the variable must exist in the Host's environment.
+Existing Session references keep their older memory-only behavior and may need a
+new saved key after the Host restarts.
 
-Preview selected sources with their context chips; **＋ Context** finds other
-owner-backed sources. Objects must be resolved to a native observation. Plot images
-require a successful image test for the exact saved model connection; a plot's
-**summary** inclusion sends metadata instead. Changing the active component does
-not change an accepted request's sources or execution target.
+New keys live in `rho/model-credentials.json` under the user's configuration directory:
+`~/Library/Application Support` on macOS, `%APPDATA%` on Windows, and
+`$XDG_CONFIG_HOME` or `~/.config` on Linux. This ordinary local JSON file is outside
+the project. Project settings and conversation records store a reference. Removing
+or replacing the key affects new submissions; already accepted work retains its
+captured key. Disabling Rho is the separate control for stopping its active work.
 
-**Explain** is read-only. **Edit** and **Run** are available for Documents,
-Console/Workspace and Files/Project. Add an open document to authorize its exact
-version; select **Allow saving** for its existing project-relative destination.
-Run displays the bound R session. These choices are the request's authorization;
-there is no further per-tool approval. Scientific owners retain their existing
-version and scope checks. For an untitled script, choose its destination in Editor
-before authorizing saving. Open a project file as a document when it needs editing.
+Save the connection before explicitly testing it. **Test connection** and **Test
+image input** use synthetic content. Chat and Test share at most 10 admitted requests
+and 2 executing requests; only one Test can be admitted at a time. Opening the panel,
+viewing settings, uploading a file or inspecting a test result sends no model prompt.
 
-The answer retains its source references, native tool receipts and original run
-links. A model's success sentence does not replace an execution result. **Stop**
-requests cancellation; **Check status** reconciles the original work. Once original
-actions are resolved, enter a follow-up and explicitly **Continue** within the
-original scope. If the document changed outside those actions, select its current
-source and start a fresh request. An unknown submission keeps its original identity;
-checking it never replays it automatically.
+Preview selected sources from their chips and use **@** to add owner-backed context.
+Objects retain their native observation; scientific plot images retain their original
+media reference. Image input requires a successful image test for the exact saved
+connection. A plot's summary sends metadata instead. Rho also accepts actual uploaded
+UTF-8 text files (up to 32 KiB), PNG and JPEG images (up to 2 MiB each), including
+clipboard images. Attachment and scientific-source identities stay distinct. A request
+allows at most 16 sources/attachments in total and 2 images; text context remains
+bounded. Removing a chip from the next draft does not change an accepted request.
 
-Drafts and context selections survive panel navigation. Another window's
-conversation is read-only until **Take control**. Conflicting local text remains
-available for comparison and explicit resolution. On narrow windows, maximize the
-Agent group to keep all controls in view; the assistant also fits a 320 px panel.
+The composer selects **Ask**, **Auto approval** or **Full access**. Rho decides what
+to explain, edit or execute from the request. Ask reuses explicitly requested work;
+new additional actions require a concrete decision. Auto also permits its stated
+rules for project document work and execution in the bound R session. Full access
+permits other supported actions within the same project, document and session
+checks. No separate model reviews approvals, and the scientific owners do not ask
+again after authorization. Explain/Edit/Run and per-document Allow saving are not
+front-end work modes.
+
+A task can open an existing project script or create a new one without first adding
+it as context. Its exact path and native document reference are recorded through
+the document owner before edits or saves. Execution uses the accepted R-session
+binding, independently of the currently selected Console; missing or changed native
+sessions are not silently replaced. Package inspection stays read-only, while
+requested R analysis may use already installed packages. Package installation and
+environment-management boundaries still apply.
+
+**Scientific work** shows the original Operation status and target, independently
+of Agent Ready or response completion. Original plot links use owner-verified media.
+Native task views request a bounded recent observation; older shared-caller tasks
+show unknown attribution. Usage displays only reported source/scope values; missing
+counts stay Unknown and totals are not added together across repeated observations.
+
+**Stop** requests cancellation; **Check status** reconciles original work. Once
+original actions are resolved, enter a follow-up and explicitly **Continue** within
+the recorded task scope. Continue retains the frozen original intent and reuses
+confirmed results. Applied document Open/Create commands can recover their owner
+references even if the component result acknowledgement was lost. Unrelated later
+document changes require a fresh request. An unknown submission retains its original
+identity; checking it does not replay it automatically.
+
+Ordinary follow-ups use bounded saved conversation text and owner references; they
+do not automatically inherit prior authorization. Full drafts retain text, sources,
+attachment IDs, permission choice and R-session selection across panel navigation. Another window is read-only until **Take control**;
+conflicting drafts remain available for comparison. Archived tasks need unarchiving
+before new input/configuration work; accepted runs retain Stop and permission
+responses. The shared panel supports narrow,
+normal and wide layouts. A20's proposed manual handoff draft is still awaiting user
+review and implementation; it is not an available task-transfer command.

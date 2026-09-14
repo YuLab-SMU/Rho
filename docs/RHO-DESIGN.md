@@ -104,8 +104,9 @@ without requiring someone to trigger an error to learn it.
 Use reversible actions where possible, and make recovery local to the mistake.
 Restoring one collapsed group should not reset unrelated layout work. Routine
 view changes should not require confirmation; meaningful loss of unsaved work
-requires an appropriate recovery or explicit choice. Agent permissions remain
-with the external Agent platform; this principle does not create Rho approvals.
+requires an appropriate recovery or explicit choice. Agent permissions belong to
+the selected Agent runtime, including Rho; scientific owners do not add a second
+approval decision.
 
 **Failure signal:** A user discovers the action's real scope only after clicking,
 or must reset the entire workspace to correct one placement mistake.
@@ -1482,10 +1483,12 @@ affecting only the target session.
 On 2026-09-14 the user rejected the split between Rho Assistant and external tasks
 and requested a single Agent interface with Rho added to the Agent selection.
 This supersedes the separate-interface direction approved on 2026-09-13.
-The independent Built-in Assistant page was deleted as requested. All nineteen
-editable boards now belong to [Agent · 工作区任务设计评审](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2).
-The revised drawings are ready for user review; application behavior is recorded
-separately in Status. Example data, messages and results remain design fixtures.
+The independent Built-in Assistant page was deleted as requested. The original
+Agent boards and A15–A19 component scenarios belong to [Agent · 工作区任务设计评审](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2).
+The unified interaction is implemented in the current source; runtime and browser
+acceptance are recorded separately in Status. A20 adds a manual-handoff proposal
+that still awaits user review and implementation. Example data, messages and
+results remain design fixtures.
 
 ### Shared interaction
 
@@ -1518,6 +1521,7 @@ separately in Status. Example data, messages and results remain design fixtures.
 | A17 | Two selected plots, comparison answer and original-image/producing-run links |
 | A18 | Unified Agents settings, persistent API key, model destination/tests, unconfigured and image-unavailable states |
 | A19 | 600 px workspace and 320 px Agent panel; expired context, stop-unconfirmed and another window's draft |
+| A20 | Manual handoff draft proposal; user review and implementation pending |
 
 A15–A19 reuse the scientific examples from the removed page, with the original
 Agent navigation and composer. Its grouped-navigation board was discarded.
@@ -1550,9 +1554,43 @@ restarts. Show a masked value and Saved on this device; allow replacement/remova
 There is no lifetime selector or mandatory re-entry after restarting. Explicit
 environment references may remain optional. Keys stay out of conversation records,
 draft synchronization and diagnostic logs. Connection and image tests use labeled
-synthetic input. The current memory-only implementation is pending replacement.
+synthetic input. The current implementation uses LocalFile references backed by the
+user-local configuration file; existing Session records remain readable with their
+original lifetime. Accepted work retains its captured connection and key.
 
-The seven changed boards were inspected with Paper screenshots for typography,
+### Current shared behavior and remaining proposal
+
+The source now uses one bounded project task projection for rows, archives, counts
+and attention. Native task/conversation owners keep their own execution and recovery
+records. Rho draft CAS covers text, sources, uploaded attachment IDs and the next
+request's permission/session selection. Archive prevents new draft/submission and
+configuration work; it preserves the controls for an already accepted run. Ordinary
+follow-ups remember bounded saved conversation text and source/result references,
+without inheriting the previous request's authorization. The task's bound R session
+may differ from the currently selected Console; target changes are explicit.
+Upload previews label user files separately from scientific sources; actual PNG/JPEG bytes or UTF-8 text reach the selected model
+only on Send. Invalid or unsupported attachments preserve the draft.
+
+The executing Agent records the original request's intent once, with an exact quote,
+finite actions and named targets. Subsequent tools cannot alter that record or pass
+an approval-bypass flag. Ask can therefore complete an explicitly requested repair,
+save and run without asking again. Auto applies deterministic document/execution
+rules; unmatched additional actions become permission requests. Full access still
+respects Host containment and native preconditions. Package inspection stays
+read-only; requested R analysis can use already installed packages. This is not a
+user-visible work mode or a separate approval model.
+
+Scientific work shows actual Operation status and target, plus original Outputs
+links, separately from Agent Ready/response completion. Rho derives produced work
+from mutation receipts. Native task attribution uses its verified caller; older
+shared-caller tasks remain Unknown. Usage keeps provider source/scope labels and
+unknown values, and replaces repeated totals instead of accumulating them.
+
+A20 proposes a human-reviewed handoff draft with sources and recovery references.
+Its presence in Paper is not implementation approval. The manual-handoff flow is
+pending and must not be presented as an implemented or verified capability.
+
+The earlier seven changed boards were inspected with Paper screenshots for typography,
 spacing, alignment, contrast and clipping. Page membership and removal of the old
 page were verified through Paper. This is design evidence, not browser or runtime
-acceptance of the pending front-end integration.
+acceptance of the current implementation or the unreviewed A20 proposal.

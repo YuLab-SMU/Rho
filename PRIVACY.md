@@ -1,6 +1,6 @@
 # Rho Privacy Policy
 
-Last updated: 2026-09-12
+Last updated: 2026-09-14
 
 This page describes the current CLI, Studio and MCP entry points.
 
@@ -23,8 +23,16 @@ Native Agent platforms manage their own conversations, authentication and retent
 Rho retains their application task references, drafts and bounded observations.
 Optional component assistants additionally retain user requests, fixed authorization
 and model configuration references, tool receipts, bounded text events and usage in
-the Application store. Model text remains distinct from scientific results. Internal
-reasoning is not retained, and model-content telemetry is disabled.
+the Application store. The frozen task intent includes an exact excerpt of the
+original request and finite action/target references. Permission decisions retain
+the original action identity. Uploaded UTF-8 text, PNG and JPEG files are stored as
+Application assets with scoped identities and hashes, separately from text history;
+user uploads are not labeled as scientific outputs. Model text remains distinct
+from scientific results. Internal reasoning is not retained, and model-content telemetry is disabled. Ordinary Rho
+follow-ups include a bounded selection of saved prior requests, answers and owner
+references when sent to the configured model; old grants are not carried as new
+authorization, and raw tool-result JSON and binary bytes are not duplicated into
+that conversation summary.
 
 Code, arguments, output and diagnostics can contain private data or credentials
 printed by a program. Do not assume general-purpose redaction. Review material
@@ -36,13 +44,32 @@ The local workbench binds to 127.0.0.1. A per-run bearer token protects its
 scientific API and HTTP MCP endpoint. Keep the private launch URL and any URL
 file private. CLI and stdio MCP use the local operating-system account context.
 
-The optional component service accepts an explicitly configured model endpoint and
-an environment-variable credential reference or a key held in Host memory. Persistent
-settings and conversation records contain only the reference, not the raw key.
-Session keys expire when the Host ends; no native CLI authentication is discovered
-or imported. Component controls require the browser credential; MCP-only credentials
-cannot use them. Remote model endpoints require HTTPS, with explicit loopback HTTP
-allowed for local services. Automatic model HTTP redirects and retries are disabled.
+Rho accepts an explicitly configured model endpoint. Saving an API key writes the
+raw value to the user's local `rho/model-credentials.json` configuration file, outside
+the selected project. On macOS this is under `~/Library/Application Support`; Windows
+uses `%APPDATA%`; Linux uses `$XDG_CONFIG_HOME` or `~/.config`. Rho uses ordinary file
+permissions and atomic replacement; the JSON file is not encrypted by Rho. Project
+settings, conversations, synchronized drafts and diagnostics retain only the key
+reference and availability, not its value. Keys survive Host/application restarts
+until explicitly removed. Accepted work retains its captured credential if the
+setting is later replaced or removed.
+Replacing settings retains older credential versions because another saved
+configuration can still reference them. Remove key deletes the selected credential;
+Rho does not scan other Application databases to infer which versions are unused.
+
+An environment-variable reference remains optional. Existing Session references
+still point to Host memory and become unavailable when that Host ends; Rho does not
+import native CLI authentication to replace them. Component controls require the
+browser credential; MCP-only credentials cannot use them. Remote model endpoints
+require HTTPS, with explicit loopback HTTP allowed for local services. Automatic
+model HTTP redirects and retries are disabled.
+
+Managed external Agent connections have task-specific callers and private transport
+credentials. Reconnection replaces the transport credential without rewriting the
+caller's existing scientific records. Taking over an idle task changes its controller
+without recreating the native session or its MCP credential. Older tasks that used a shared caller retain
+that namespace, and Rho reports unavailable per-task attribution rather than
+inferring which historic operations belong to them.
 
 Rho does not provide an SSH password wizard or managed-key installation workflow. SSH authentication uses the
 existing connection configuration and its credential mechanism. Rho does not
@@ -54,8 +81,10 @@ The current implementation has no Rho-owned analytics, automatic crash upload,
 release update check or automatic installer download. The browser loads embedded
 assets and queries the local Host; it does not load a third-party frontend CDN.
 
-An explicit component assistant request sends its prompt and needed bounded tool
-observations to the selected model service. Ordinary project browsing, editing and
+An explicit Rho request sends its prompt, selected sources and uploaded attachments,
+plus needed bounded tool observations, to the selected model service. Uploading a
+file to the local Host alone does not send it to the model. Connection/image Tests
+use labeled synthetic content. Ordinary project browsing, editing and
 disabled/unconfigured assistant discovery do not invoke a model. Provider-side
 processing, billing and retention follow that service's terms; local Stop does not
 prove the remote request was withdrawn. Current implementation stages and verification
@@ -76,9 +105,12 @@ outputs. See the operator guide for its quarantine, restore and purge behavior.
 
 Stop the relevant Host before manually removing its application databases or
 runtime directory. Synchronized drafts live in the application store, so deleting
-that store removes the saved drafts as well. Removing the Rho executable does not remove project files,
-R libraries, browser storage or credentials managed by other tools. Git history
-and external scheduler records have their own lifetimes.
+that store removes saved drafts and its retained attachments as well. Rho model keys
+are in a separate user configuration file; removing the application database or
+executable does not remove them. Use the key removal control for the selected Rho
+connection. Removing the executable also leaves project files, R libraries, browser
+storage and credentials managed by other tools. Git history and external scheduler
+records have their own lifetimes.
 
 ## Reporting a problem
 

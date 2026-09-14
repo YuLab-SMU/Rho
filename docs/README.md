@@ -19,10 +19,12 @@ current product commitments. The [page index](INDEX.md) and
 The [built-in component Agent plan](BUILTIN-AGENT-PLAN.md) defines the authorized
 Rig integration and bounded extension to the external-Agent-only rule. The P0
 experiment, component context and authorized backend execution are implemented.
-The seven Studio entrances and first-version acceptance are implemented.
-The current design revision merges Rho into the original Agent interface;
-Paper is updated and the front-end integration remains pending. See Status for
-the review scope, executed evidence and remaining measurement limits.
+The unified Agent interface, independent permission policy and local key storage
+are implemented in the current source. Scientific work still uses the existing
+owners. A20 manual handoff remains a proposal awaiting user review and implementation.
+The new 33-scenario real-model matrix is defined but has not run; the earlier
+27-scenario evidence remains the prior baseline. See Status for executed checks
+and the remaining acceptance limits.
 
 ## Maintenance
 

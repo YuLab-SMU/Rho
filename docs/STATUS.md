@@ -2,175 +2,161 @@
 
 Updated: 2026-09-14. This is the single current status summary. Git retains history.
 
-## Current focus: unified Agent interface
+## Current focus: unified Agent interface and acceptance
 
-The user rejected the built-in/external front-end split on 2026-09-14 and requested
-Rho as another option in the original Agent interface. Paper's independent
-Built-in Assistant page has been removed. The existing
-[Agent review page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2)
-now contains nineteen boards: A03/A08 were revised and A15–A19 carry the integrated
-component-context, execution, model-settings and recovery examples. The seven
-changed boards were inspected through Paper screenshots; the new drawings await
-user review. [Design section 18](RHO-DESIGN.md#18-rho-in-the-unified-agent-panel--review-revision)
-is the current interaction direction. The user's follow-up also requires persistent
-API keys in local Rho configuration and ordinary permission selection. Paper now
-shows Ask/Auto approval/Full access, with explain/edit/run chosen by the Agent.
-The lifetime selector and work-mode controls have been removed from the drawings.
+The user approved implementation of the unified Agent plan on 2026-09-14. The
+current source uses the original Agent panel, task list and composer for Rho,
+Codex, Kimi and DeepSeek. The separate Built-in Assistant page has been removed
+from Paper; the [Agent review page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/6-2)
+contains the approved unified interactions and a new **A20 manual handoff** preview.
+A20 is awaiting user review and has **not** been implemented. See
+[Design section 18](RHO-DESIGN.md#18-rho-in-the-unified-agent-panel--review-revision).
 
-The application still implements the split, explicit capability modes and
-Host-memory/environment credentials described below. Persistent-key storage and
-Agent-chosen work remain pending along with the unified UI. No application code, Host or
-R session was changed for this design revision; no restart is needed. Existing
-functional acceptance does not resolve this usability feedback.
+### Implemented in the current source
 
-## Built-in component Agent implementation
+- One project/principal-filtered task projection reads the existing native task
+  and Rho conversation owners in a single snapshot, with stable pagination,
+  attention, rename/archive and full versioned drafts. Typed task references
+  dispatch commands to the original owner; Rho is not a native CLI provider.
+  Seven Ask entrances preserve the current editable task, append real source
+  references, retain text and never send or switch the existing task's Agent.
+- The unified composer preserves IME input, attachment uploads, per-task reading
+  position and the next draft while a response runs. Rho and native tasks share
+  settings entry points and permission controls. Scientific operation state is
+  read from original Operation records, independently of model response state.
+- Ask is the default. Explain/Edit/Run and Allow saving are removed from the UI.
+  The execution Agent records its interpretation of the original user request
+  once; Application freezes that bounded intent and stores action receipts and
+  parameter-bound permission decisions. Explicitly requested work proceeds;
+  additional work uses deterministic Ask/Auto approval/Full access rules in
+  `rho-agents`, without a second model reviewer. Component profiles only suggest
+  context. Current targets remain subject to native version/session/path checks.
+  Fresh messages from supported older drafts default to Ask; original pending
+  requests, Continue and Retry retain their original authority.
+- Rho can open or create an exact project document during a task, then edit,
+  save and execute through the existing Application bridge. Continue checks
+  authoritative current document/file/session evidence and unresolved receipts.
+  Lost acknowledgements of completed document creation reuse the original
+  receipt; later user edits are not silently adopted. Ordinary follow-up turns
+  receive bounded conversation history and source references without inheriting
+  previous permission grants.
+- API keys persist by default in the user's local `rho/model-credentials.json`,
+  independent of the project and Application database. Locked atomic writes and
+  settings CAS retain the previous valid configuration on failure. Accepted runs
+  freeze their configuration; queries/history/drafts return only references and
+  status. Replace/remove and optional environment references remain available.
+- Application failures over component HTTP preserve typed Diagnostic codes, submission certainty,
+  original request identity and visible verification reads. Duplicate diagnostic
+  Tests observe the original request. Model admission remains ten total/two
+  executing, with at most one queued/running Test. Task budgets are uniformly
+  twelve model calls, sixteen tool calls and ten minutes, independent of policy.
+- Managed native connections receive revocable task-bound MCP credentials.
+  HTTP initialization, RPC, GET and DELETE validate connection/session ownership;
+  actual transport replacement revokes the old lease while preserving task and
+  deduplication identity. In-place controller takeover preserves the native
+  session/lease and fences the old window. Legacy journal attribution is not guessed.
+  Native usage preserves source and scope, distinguishes context occupancy from
+  consumed tokens, retains unknown fields and does not add cumulative/replayed data.
+- Post-Send persistence failure retains uncertain acceptance and the original
+  draft/request. Disconnection flushes final events durably before releasing the
+  observation source. Per-task Weak gates preserve one live lock while allowing
+  unused entries to be reclaimed. No new scientific lifecycle or global R lock
+  was introduced.
 
-The [implementation plan](BUILTIN-AGENT-PLAN.md) is authorized. The initial component
-design was approved on 2026-09-13; its separate-interface direction is superseded
-by the current focus above. The Rig backend and seven Studio entrances are implemented.
-The first-version implementation and scoped acceptance are complete, with the
-verification limits below. No deployment or installation is implied.
-The user reviewed the launched local binary and confirmed it was usable on
-2026-09-13. The independent preview was then stopped through native session
-shutdown and Workbench Quit, retaining its recovery copy.
+### Current verification and remaining acceptance
 
-The optional `rho-agents` crate pins Rig 0.42; Application owns conversations,
-request identities, scopes and receipts. Host binds the existing scientific ports.
-Objects, Packages, Plots and Environment are Explain-only. Documents, Workspace and
-Project support explicitly scoped editing, saving and R execution. Exact document
-versions and destinations, native R session identities, retained operations and
-original output references remain authoritative. No scientific owner calls models.
+The current binary, generated TypeScript, UI build/check and **423 frontend tests
+in 39 files** passed. Recovery tests passed **4/4**, including lost-create-result
+recovery and real current-document validation before Continue admission. Host
+unit tests passed **47**, with one explicitly real-R test excluded from that run.
+The actual HTTP MCP identity suite passed **4/4**, covering isolation, revocation,
+Resume attribution and original-request deduplication. Native usage observation
+fixtures passed **6/6**. Workbench HTTP tests passed **19/19**, and SQLite tests
+passed **28 unit + 40 component tests**, including the final permission-target
+summary regression.
+Architecture, frontend boundaries, governance, vendor and vendor fixtures,
+Agent harness self-test and evidence-pack fixture checks passed.
 
-### Studio behavior
+The complete `cargo test --workspace --locked -- --test-threads=1` run passed:
+**408 passed, 38 explicitly ignored**, followed by the final 40-test SQLite
+component suite for the later permission-title change. Log:
+`target/unified-agent-workspace.log`; the later scoped suite is in
+`target/unified-agent-sqlite-final.log`.
+The additional real-R test with **two Rho tasks and a human Console in one native
+queue** passed, proving original FIFO order, separate operation callers/receipts
+and correct stdin attribution (`target/unified-agent-shared-r-queue.log`).
+Final generated-client/embedded-asset agreement and current binary build passed.
 
-Ask buttons live in existing component title bars; Environment/R Sessions has an
-Ask action in its page. All use the same Rho Assistant area, with grouped built-in
-conversations and external tasks, a narrow selector, owner-backed source search and
-preview, fixed context chips and separate model settings. Opening an existing panel
-never sends a model prompt or scans a CLI. The selected document is synchronized
-through the existing Application bridge before its version and checksum are read.
+The current frontend has passing evidence for ten native
+Agent and thirteen Rho browser scenarios, including the final five layout,
+attachment and IME regressions. The five viewport screenshots (320 px panel and
+600/1024/1440/1920 windows) plus real scientific Running/Succeeded screenshots
+were inspected. Pure width changes now resize the shared textarea without
+interrupting IME; saved long drafts remain fully visible.
 
-Explain is read-only. Edit/Run show the bounded targets and per-document save scope.
-Model settings expose the remote destination, Anthropic/OpenAI-compatible protocol,
-session-memory or environment credential reference, and explicit synthetic
-connection/image tests. Image input requires a passed test for the exact saved
-connection. Model text is displayed separately from native tool results and links.
-The shared native IME composer preserves preedit and saves only committed text.
-Long replies follow new output while at the bottom; manual earlier reading remains
-in place until Jump to latest is selected.
+These browser runs used current development assets with an isolated test Host.
+The two real-model browser cases were excluded. Initial Host/discovery startup
+timeouts were retained and affected cases passed on rerun without extending the
+original deadlines. After the final client check and binary build, five representative
+cases passed **using embedded assets**: same-project mixed tasks and unsent drafts,
+native IME, all requested widths, permission controls without work modes, and real
+R operation/plot navigation. Log: `target/unified-agent-embedded-browser.log`.
+The final embedded screenshots were inspected as well.
+Screenshots are `target/studio-browser/component-{320-panel,600,1024,1440,1920}.png`
+and `component-scientific-{running,complete}.png`. The same-project mixed list and
+selector are in `agent-mixed-project-{tasks,selector}.png`; both owners retain
+independent unsent drafts without starting a model. The last shared-input run is
+`target/studio-browser-unified-input-final`. In the measured fixture, Console
+input p95 was 32.2 ms idle / 32.0 ms during streaming and frame p95 was 16.7 ms in
+both phases. This is a bounded measurement, not a retained-memory claim.
 
-The client retains bounded local drafts, selected context and submission identities,
-with CAS conflict copies and project/window response fences. It never automatically
-replays an unknown submission. A completed initial HTTP rejection releases the
-retained draft only after an authoritative query proves no request was accepted;
-an uncertain retry cannot use that shortcut. Stop, Check status, takeover and
-Continue are explicit. Continue retains the original authorization and rechecks
-confirmed document references. Another window's draft is read-only until takeover.
-Maximizing a group removes the normal multi-column minimum width, keeping the
-assistant usable in a 320 px panel and a 600 px workspace.
+The complete `node scripts/test-real-r.mjs` run passed, including sixteen component
+mutation/recovery cases, real owner sources, R session state, cancellation,
+checkpoint protection, clean restart and persistent CLI behavior. Both
+`node scripts/test-mcp.mjs --real-r` and `node scripts/test-workbench.mjs --real-r`
+passed. Logs are `target/unified-agent-{real-r,mcp-real-r,workbench-real-r}.log`.
+Standalone output-media and R-checkpoint acceptance also passed.
 
-### Backend and recovery
+The new real-model matrix defines **33 cases** (the seven component contexts,
+repair flows, generic task creation and Objects-to-script work, each repeated
+three times), plus a separate ordinary follow-up regression. These have **not**
+run against a real model because this session has no supplied Rho credential.
+The prior **27/27** real-model matrix on `b288a081f2f862398eb907f5e6096ce616bfb59a`
+remains historical baseline evidence in
+`target/component-matrix/2026-09-13T12-01-56.815Z/summary.json`; it does not verify
+the new permission or unified-UI implementation.
 
-- Rig drives bounded model/tool execution. Tool intent precedes dispatch;
-  semantically identical mutations reuse original receipts across changed call IDs
-  and confirmed continuation ancestors. Repeated save acknowledgements cannot
-  create a second scientific execution.
-- Captured document edit/save/run uses Application's resident bridge. Literal
-  replacement computes owner-side UTF-16 ranges and rejects ambiguous/stale text.
-  Receipts return immutable document summaries with exact draft SHA-256 values.
-- A failed R operation pauses its native queue. Resume is explicit and restricted
-  to the original operation lineage; unrelated/manual work cannot be resumed.
-- Stop fences new calls; native tracking survives dropped model waits. Reconcile
-  observes the original operations/documents without replay or model calls.
-  Missing evidence remains uncertain. Takeover never cancels another R operation.
-- Source/image reads use native owners. Up to two bounded PNG/JPEG images are
-  transient model inputs; no image bytes or raw credentials enter conversation
-  storage. Package help uses the observed installed copy without loading/installing.
-- SQLite bounds total component payload at 64 MiB with reserved completion space.
-  Event pruning preserves request/tool identities. Indexed run history has stable
-  32-item pages; the browser bounds drafts, history, events and pending requests.
-- Model settings accept HTTPS or loopback HTTP; credentials resolve lazily.
-  Diagnostics retain exact configuration digests and use no scientific tool port.
-  Model concurrency, request duration, calls, text and image bytes remain bounded.
+Real native-provider verification is recorded in
+`target/agent-native-acceptance-2026-09-14/summary.json`:
 
-### Executed evidence
+- Codex (`gpt-6-astra`) passed separate tasks, same-session Resume, crash recovery,
+  image input and a fresh MCP read. It reported native session-total token counters.
+- DeepSeek passed separate tasks, Resume, crash recovery and MCP reads. Its ACP
+  reported context occupancy/capacity; unreported consumed-token fields remain null.
+  The adapter does not advertise image input, so that case was not run.
+- Kimi 0.42.0 with its observed default `115-newapi/deepseek-v4.1-flash` passed
+  separate tasks, same-session recovery and MCP reads. Late ACP context usage was
+  captured without another model request. **Image interpretation failed**: it
+  answered `white` for a solid-red image. The previous test model
+  `b-ai/glm-5.3-flash` returned end-of-turn without text, also reproduced through
+  native ACP without Rho. Both failed attempts remain in the evidence directory.
 
-- The fixed backend/model matrix passed **27/27** on
-  `b288a081f2f862398eb907f5e6096ce616bfb59a`, with seven profiles and two repair
-  workflows repeated three times. Service: Anthropic Messages,
-  `deepseek-v4.1-flash`. The final report is
-  `target/component-matrix/2026-09-13T12-01-56.815Z/summary.json`;
-  `matrixComplete=true` and `allPassed=true`. Its backend/source fingerprint is
-  `44cdf49e8a7c515b5d3f97c3c032ef15f6f16d2a03a4b181ac178770f450c2c4`.
-  Original failed matrices remain in their separate directories. The final fixtures
-  use explicit source citations, final-answer extraction, manual recovery policy
-  and the published run duration plus 15 seconds; they do not turn previous failures
-  into passes or establish error-free future model behavior. Subsequent production
-  changes only refine transcript following; engine/scientific owners are unchanged.
-- **Two real-model browser cases passed with the final embedded client**: reading
-  a native file and quoting its marker/source; and applying a real Editor change,
-  saving `analysis.R`, executing it through the resident Application bridge and
-  observing `[1] 42` in Console. Disk contents and original execution state were
-  checked independently of the model's answer. Log:
-  `target/component-browser-live-closed.log`. Screenshots:
-  `target/studio-browser/component-real-model{,-execution}.png`.
-  The earlier `component-browser-real-final` attempt is retained: its assertion
-  incorrectly matched a tool receipt's completion before the whole run completed.
-  The final checks target the run's own status.
-- **19 embedded-client Chrome scenarios passed**: all nine existing external-Agent
-  cases plus ten new component cases covering native source preview, streamed
-  responses, retained drafts, takeover, 320/600/1024/1440/1920 layouts, synthetic
-  connection/image diagnostics, stop/reconcile/Continue, rejected-scope correction,
-  exact document grants, native Chinese IME, long-reply follow/reading behavior
-  and comparative input/frame latency.
-  Log: `target/component-browser-final.log`. The two opt-in real-model cases skipped
-  in this default fixture run were executed separately above.
-- On the final embedded client, Console typing p95 was **32.2 ms idle / 31.9 ms
-  during an active model stream**; frame p95 was **16.7 / 16.8 ms** (75 key samples
-  per phase). Observed JS heap was 22.0 / 19.7 MB; this is a short measurement,
-  not a retained-memory/leak claim. The local protocol fixture uses the same Host
-  and input script. Report:
-  `target/component-browser-final/component-agents-typing-an-41baf--the-model-stream-is-active/performance.json`.
-- **395 frontend tests**, 25 boundary fixtures, typecheck, generated contracts,
-  embedded assets, current binary build, architecture/governance and vendor checks
-  passed. Logs include `target/component-ui-unit-final.log`,
-  `target/component-ui-scroll-host.log`, `target/component-ui-scroll-check.log`
-  and `target/component-final-*`. A macOS dynamic-library validation wait delayed
-  compilation; the scoped cache rebuild and final build completed without changing
-  platform security settings or dependencies.
-- The complete real-R suite passed in `target/component-complete-real-r-final.log`,
-  including captured sources/mutations, protected recovery copies and persistent
-  CLI state/cancellation/EOF. **MCP and Workbench real-R checks passed again** in
-  `target/component-final-{mcp,workbench}-real-r.log`, including shared principal
-  truth, pure queries, idempotency, cancellation/drain and native R/Environment reads.
-- Existing focused evidence covers cancellation/late delivery, duplicate mutation
-  identities, injected model failure after captured R failure, explicit Continue,
-  separate parent/child states and exactly-once native effects. The interrupted
-  repair regression passed all 15 native mutation cases in
-  `target/component-interrupted-repair-regression.log`. Store/history/HTTP,
-  protocol/tool limits and large result tests remain under `target/component-*`.
-  The external Agent crash/resume fixture passed in
-  `target/component-external-recovery-fixture.log`, preserving native identity,
-  uncertain receipt, draft and a fresh MCP connection. This is a protocol fixture,
-  not another live external-provider acceptance claim.
+The isolated native Hosts were stopped and original configuration hashes matched.
+These results do not establish passing Kimi visual acceptance or Rho's pending
+real-model matrix.
 
-The additional full-workspace Rust rerun was stopped after 14 minutes of mostly
-cold test-program startup, with no assertion failure observed before interruption.
-Its partial log is `target/component-final-workspace.log`; it is **not** a full pass.
-The earlier completed workspace baseline and subsequent affected-crate checks are
-retained evidence. This Studio integration does not change production Rust behavior;
-its changed real-model fixture deadlines were exercised by the final matrix.
+Manual handoff remains pending the explicit A20 review required by the approved
+plan, then implementation of its same-project, editable, append-to-draft/CAS
+transaction and recoverable receipt. It must not send, overwrite an existing
+user draft or transfer authorization.
 
-Strict Clippy retains pre-existing large Contract enums, SQLite range style,
-Workspace checkpoint style and Host style diagnostics. Selected checks passed with
-only reproduced existing categories allowed, without source-wide suppressions.
-The P0 isolated diagnostic measured 9,629,040 release bytes and 31 new normal package
-versions; see `target/component-agent-build-evidence.json`. That measurement does
-not establish the shipped application's release-size overhead.
-
-All real checks use disposable projects. Existing user Hosts, R memory, drafts and
-native configuration are preserved. No installation, signing or publication was
-performed. See [Operations](OPERATIONS.md#built-in-component-assistant) for use.
+All current acceptance runs use disposable projects. Existing user Hosts, R
+memory, drafts and native configuration are preserved. The running user Host has
+not been replaced. New backend capabilities require a current Host binary;
+a browser refresh alone does not update them. Inspect active tasks/R sessions and
+existing restart authorization before replacement. No installation, signing or
+publication was performed. See [Operations](OPERATIONS.md#built-in-component-assistant)
+for configuration and use.
 
 ## Multiple R sessions and recovery copies
 

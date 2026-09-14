@@ -147,8 +147,8 @@ async function run(options) {
     project_root: project, window, request_id, command,
   }, cleanup ? 5000 : 15_000, cleanup);
   const detail = async id => (await query({ kind: "get", task_id: id })).detail;
-  const events = async id => (await query({ kind: "events", task_id: id, after: 0, before: null, limit: 100 })).page.events;
-  const reply = async (id, requestId) => (await events(id)).filter(e => e.request_id === requestId && e.role === "assistant").at(-1)?.text.trim() || "";
+  const events = async id => (await query({ kind: "events", task_id: id, after: null, before: null, limit: 100 })).page.events;
+  const reply = async (id, requestId) => (await events(id)).filter(e => e.request_id === requestId && e.role === "assistant" && e.text.trim()).at(-1)?.text.trim() || "";
   const settled = async (id, requestId, { overview = false } = {}) => {
     const deadline = Date.now() + (overview ? 120_000 : 90_000);
     const decisions = new Set();
@@ -264,6 +264,21 @@ async function run(options) {
         assert.equal(await reply(task.id, task.requestId), path.basename(project));
         report({ provider, phase: "resumed-native-mcp-overview", actualOverviewReads: reads.length, projectMatches: true });
       }
+      // Some ACP providers publish usage_update after the terminal prompt reply.
+      // Observe that late record briefly without sending another native prompt.
+      let usage = [], usageDeadline = Date.now() + 2000;
+      do {
+        usage = (await Promise.all(submitted.map(task => events(task.id)))).flat().flatMap(event => event.usage ? [event.usage] : []);
+        if (usage.length || Date.now() >= usageDeadline) break;
+        await pause(100);
+      } while (true);
+      for (const observation of usage) {
+        assert.equal(typeof observation.source, "string");
+        assert.ok(["turn_total", "session_total", "context_window"].includes(observation.scope));
+        for (const field of ["input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens", "reasoning_tokens", "total_tokens", "context_used", "context_capacity"])
+          assert.ok(observation[field] === null || (Number.isSafeInteger(observation[field]) && observation[field] >= 0), `Invalid native usage ${field}`);
+      }
+      report({ provider, phase: "native-usage", available: usage.length > 0, observations: usage, missingCounters: "unknown" });
       for (const t of submitted) {
         const d = await detail(t.id), r = await command({ kind: "disconnect", control: control(d) });
         await settled(t.id, r.receipt.request_id); clients.delete(t.id);
@@ -272,6 +287,15 @@ async function run(options) {
     }
   } catch (error) {
     failure = error;
+    for (const id of clients) {
+      try {
+        const d = await detail(id), observed = await events(id);
+        report({ phase: "native-failure-observation", provider: d.summary.task.provider, model: d.summary.task.model,
+          state: d.summary.attachment.state, error: d.summary.attachment.error,
+          assistantMessages: observed.filter(event => event.role === "assistant" && event.text.trim()).length,
+          usage: observed.flatMap(event => event.usage ? [event.usage] : []), missingCounters: "unknown" });
+      } catch { report({ phase: "native-failure-observation", available: false, missingCounters: "unknown" }); }
+    }
   } finally {
     clearInterval(heartbeat);
     clearTimeout(maximum);

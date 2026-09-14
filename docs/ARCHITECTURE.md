@@ -65,15 +65,45 @@ The engine never opens SQLite or calls an R adapter. Host composes the engine an
 its narrow tool access port; all scientific reads/writes still use their real owner.
 Current implementation and unimplemented integration stages are in Status.
 
-The 2026-09-14 design correction requires Agent-selected work under the user's
-permission policy, with no front-end Explain/Edit/Run selector. Component sources
-provide context; they do not prescribe a work mode. Application records the
-effective authority; scientific owners continue mechanical checks without another
-approval layer. The explicit capability-grant implementation described below is
-pending adaptation. The same correction makes model API keys persistent by default
-in a local Rho configuration file outside the project, with references used in
-conversation/draft records. Host-memory keys remain the current implementation;
-the persistent configuration path is not implemented yet. See Design section 18.
+Rho is another Agent in the shared task interface. Component entries supply initial
+context; they do not select Explain/Edit/Run or restrict the task to that component.
+New requests carry an independent Ask, Auto approval or Full access policy. The
+executing Agent records its understanding once through `rho_task_intent`, quoting
+the original user request and naming finite create/edit/save/execute actions with
+exact document IDs or project-relative paths. Application freezes that record with
+the request ID. Business tool arguments cannot change the policy or assert an
+approval override. This is ordinary task interpretation by the executing Agent;
+there is no separate approval model or keyword-based authorization parser.
+
+Deterministic rules in `rho-agents` consume the saved intent and policy. Ask reuses
+explicit task authorization and asks about additional effectful actions. Auto also
+permits its explicit catalog of document create/edit/save and execution in the
+already bound R session; unmatched additional actions need a decision. Full access
+allows supported actions within the same mechanical boundaries. Decisions are
+persisted against the immutable action digest and controlling window. Scientific
+owners continue schema, identity, containment, native-session and version checks;
+they do not introduce another approval layer. Legacy mode fields remain readable
+for currently supported records and their original recovery semantics.
+
+Host supplies document Open/Create through the existing Application owner. Exact
+owner acknowledgements register targets for later editing and saving, so a new task
+or an Objects entry can work without preselected documents. Paths remain within the
+project and execution retains the accepted window's explicit R-session binding.
+Core Packages viewing and environment inspection keep their existing read-only
+boundaries. Authorized R analysis may use installed packages; installation, updates,
+removal and library/environment management remain outside the Agent tool scope.
+
+New API keys use a `LocalFile` reference backed by the user's local Rho configuration,
+outside the project. Configuration writes are locked and replaced atomically;
+ordinary file permissions protect the file, rather than a new credential vault.
+Project/principal settings and runs store references only. Environment references
+remain optional; existing Session references retain their original Host-memory
+semantics. Accepted requests retain their captured key across replacement/removal;
+new requests resolve the current setting. See Operations for the actual paths.
+Settings CAS does not garbage-collect credential versions: a different Host or
+custom Application database can retain an existing reference. Only explicit removal
+deletes the exact selected key ID, so a delayed settings writer cannot erase a
+newer writer's current credential.
 
 `ComponentAgentEngine` and `ComponentRunPort` are Application interfaces; the Rig
 implementation stays in `rho-agents` and the port implementation stays in Host.
@@ -94,9 +124,13 @@ Selected component context reuses the existing composer source readers. Preview
 records owner observation metadata; submission revalidates the same file/document,
 package-copy or object reference before capturing bounded context in the run.
 Cross-window document sources and mismatched native-session sources are refused.
-Captured text and evidence are durable application records. Verified image bytes
-remain transient inputs with original media references and preview digests, separate
-from the text budget and store. Binary output-view fields and native input prompts
+Captured text and evidence are durable application records. Scientific images use
+original MediaReferences and preview digests; their model input bytes are transient.
+User-uploaded attachments use Application-owned immutable bytes and asset IDs scoped
+to the project/principal/conversation. UTF-8 text, PNG and JPEG uploads are validated
+and their hashes are rechecked at submission. Typed `Scientific` and `Attachment`
+image origins keep uploaded files distinct from scientific outputs; attachment bytes
+are not copied into run JSON or text-event history. Binary output-view fields and native input prompts
 are explicitly omitted from model-facing text; projections identify that omission.
 
 Browser-only component query/command routes observe and admit these application
@@ -107,19 +141,20 @@ retains its Host lifetime; native science and its receipts outlive dropped model
 waits. Service closure participates in Workbench shutdown.
 
 Explicit model diagnostics have their own idempotent Application records. They
-use synthetic content and no scientific tool port, share the model concurrency
-budget, and retain the exact configuration digest. An image diagnostic for a
+use synthetic content and no scientific tool port, and retain the exact configuration
+digest. Chat and Test share a total admission limit of 10 and execution concurrency
+of 2. Test has a separate limit of one admitted request, including waiting work,
+so two diagnostics cannot occupy both execution slots. An image diagnostic for a
 different endpoint/model/credential reference does not authorize image input on
 the selected configuration. Source search and diagnostic observation do not send
 model requests; only the explicit Test action does.
 
-A user request binds its project/principal, window incarnation, profile, model
-configuration and native targets. Explain grants no writes; Edit binds named
-documents/files; Run requires an explicit R instance and native session. Profiles
-cannot turn package or environment explanation into installation or lifecycle
-changes. Application control is checked by action, document version and destination.
-The same already-authorized action does not ask for another approval. Query text,
-Skills and model output cannot enlarge authority or select credentials.
+A user request binds its project/principal, window incarnation, model configuration,
+permission policy, source/asset identities and native targets. Task intent cannot
+create a new credential, window or R-session identity. Application control remains
+checked by action, document version and destination. Query text, Skills, attachments
+and tool output are data, not authority. Current request budgets are independent of
+entry and policy: 12 model calls, 16 serial tool calls and a 10-minute deadline.
 
 Persist each request before scheduling and each tool intent before dispatch. Stable
 request IDs cross lost acknowledgements; reusing an ID with different content fails.
@@ -223,11 +258,21 @@ target validation; the reconciliation/takeover commands alone do not continue wo
 Explicit Continue uses `ComponentAgentStart.continuation` with the previous run ID
 and observed recovery digest. Host rechecks the original owners; Application checks
 the same conversation, terminal parent, unchanged digest and non-expanding grant.
-Write continuation requires the original window/session, confirmed document version
-lineage and current owner targets. Unresolved mutations prevent further writes; an
-explicit Explain request can retain and describe their uncertainty.
+Continuation revalidates the original window, document paths/versions and native
+R instance/session, including dynamically recovered targets. A task's R binding is
+independent of the Console currently selected in that window; its original session
+must still be valid. Unresolved mutations prevent write continuation. A separate
+read-only request may describe their recorded uncertainty without replaying them;
+legacy Explain records retain their former narrowing behavior.
 
-Continuation history retains user requests in a bounded ancestry (at most 32 runs),
+An ordinary next message in the same Rho conversation receives bounded recent
+context: at most eight saved turns within 24 KiB, with up to 2 KiB of prior user text,
+4 KiB of assistant text and eight/4 KiB of owner references per turn. Omitted text,
+references and older turns are labeled. Raw tool-result JSON, binary content,
+previous grants and frozen intents are not copied into this ordinary history. Its
+new request starts with fresh authorization from the current user message.
+
+Explicit continuation history retains user requests in a bounded ancestry (at most 32 runs),
 plus labeled partial assistant text, compact tool results and recovery references.
 Combined history and selected sources must fit the existing context limit; user
 request constraints are not silently truncated. Matching confirmed ancestor actions
@@ -237,10 +282,40 @@ resume can reference confirmed ancestor failures but retains its atomic operatio
 set fence. A fresh Start without a continuation reference is a new explicit action
 and can intentionally repeat work.
 
-Settings persist only non-secret configuration and explicit environment/session
-credential references. Remote endpoints require HTTPS; loopback HTTP is explicit.
+Application settings persist non-secret configuration and LocalFile/environment/legacy
+Session references. Raw LocalFile keys persist separately in the user configuration
+file. Remote endpoints require HTTPS; loopback HTTP is explicit.
 Endpoint credentials in URLs are rejected. A disabled or unconfigured assistant
 does not dispatch models. Content telemetry is disabled and reasoning is not stored.
+
+## Shared Agent task projection and scientific work
+
+Project task navigation is a bounded read projection of the existing native task and
+Rho conversation owners, identified by `ProjectAgentTaskRef::Native` or `Rho`. It does
+not create a third lifecycle or result database. Project/principal filtering precedes
+ordering, pagination and counts. The same observation provides active/archive rows,
+attention and running/permission counts; a service-gated live-run snapshot prevents
+new admissions being mistaken for interrupted work. Rho title/archive metadata and
+full draft text, sources, attachment IDs and next-request grant share Application
+CAS ownership. They do not modify an already accepted run. Archived tasks reject
+new draft/send, configuration, connection and upload work; already accepted runs retain Stop and
+pending-decision controls, and unarchiving remains a metadata action.
+
+Native `scientific_work` reads recent Operation summaries for an exact attributable
+task caller, with a caller index and bounded limit (1–20; Studio requests 8). Older
+shared-caller tasks return unknown attribution instead of a guessed task history.
+Studio resolves original Operation IDs through the existing Operations owner and
+uses verified Outputs MediaReferences for plot links. Subsequent status updates
+reuse the existing Studio event lane and Operations owner rather than a second
+scientific-status polling loop. Rho includes only mutation receipts in its
+produced-work view; reading an old operation does not claim it as a
+new output. Agent Ready/response completion stays separate from scientific status.
+
+Usage observations retain provider source and scope (session total, turn total or
+context window), including any reported cache/reasoning counts. New totals replace
+older observations of the same source/scope/session rather than being summed.
+Missing fields remain unknown. Rho run counters and native provider observations do
+not supply an invented cost estimate.
 
 ## Native Agent tasks and continuation
 
@@ -308,6 +383,18 @@ Native images and UTF-8 files are explicit inputs, not inferred output provenanc
 The native process receives a dedicated MCP-only bearer credential, which cannot
 access browser task-control endpoints. User credentials/global MCP settings stay
 with their native providers.
+New managed attachments bind Host-issued MCP credentials to `task:<task_id>`;
+isolated tests use `diagnostic:<request_id>`. Controller generations fence commands
+from an old window; changing a controller is not a transport replacement. Confirmed
+idle takeover, including takeover after stopping, keeps the existing native session
+and MCP lease. A connection identity/lease changes when the native transport is
+actually created, replaced or disconnected; the task caller stays stable. HTTP MCP validates
+that identity on every request, including session GET/DELETE and resources; replaced
+or revoked attachments cannot reuse it. Existing tasks marked with the older
+`local-mcp` namespace retain that caller when resumed so uncertain requests and
+idempotency records remain discoverable. Historical shared-caller work is not
+retroactively assigned to a task. Rho operations retain `component:<run_id>` callers.
+
 
 MCP `workspace.run_r` submissions default to `return_after_acceptance=true`, using the existing
 gateway acceptance path. An explicit false still requests the terminal result.
@@ -951,9 +1038,10 @@ rechecked init-session services from the owned fork/exec family; missing origina
 evidence, same-family uncertainty and positive ownership conflicts remain explicit
 failures. This proof covers managed helpers, not independently delegated service
 manager jobs or rollback of external effects.
-Native CLI credentials remain with their provider. The current component assistant
-uses explicit credential references or Host-memory keys. The pending persistent
-configuration design is described under Component assistant records and authority;
-key material remains outside conversation, draft-sync, log and evidence records.
+Native CLI credentials remain with their provider. Rho model keys saved through
+Studio persist in its user-local configuration file; Application records contain
+LocalFile references. Raw keys remain outside conversation, draft-sync, log and
+evidence records. Optional environment and existing Host-memory references do not
+change the default persistence behavior.
 See [PRIVACY.md](../PRIVACY.md) and
 [SECURITY.md](../SECURITY.md) for data handling and reporting.

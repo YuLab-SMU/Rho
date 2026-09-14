@@ -1,4 +1,5 @@
-// Explicit real-service acceptance: 7 profiles + 2 repair workflows, three repeats.
+// Explicit real-service acceptance: 7 entries + 2 repair workflows + 2 tasks
+// without preselected documents, all using the unified permission policy.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
@@ -14,18 +15,20 @@ const cases = [
     ["project", "project", "real_model_project_document_edit_save_and_run"],
     ["repair-document", "documents", "real_model_captured_document_failure_and_repair"],
     ["repair-plot", "documents", "real_model_repairs_document_and_reads_its_produced_plot"],
+    ["generic-new-task", "project", "real_model_generic_task_creates_saves_and_runs_script"],
+    ["objects-script", "objects", "real_model_objects_task_opens_edits_saves_and_runs_script"],
   ].map(([id, profile, test]) => ({ id, profile, command: ["cargo", "test", "-p", "rho-host", "--test", "component_mutations_real_r", test, "--locked", "--", "--ignored", "--exact", "--nocapture"] })),
 ];
 const args = process.argv.slice(2);
 const selected = args.find(arg => arg.startsWith("--case="))?.slice(7);
 assert.ok(args.every(arg => arg === "--run" || arg === "--self-test" || arg.startsWith("--case=")), "Use --run [--case=ID] or --self-test");
 assert.ok(!selected || cases.some(test => test.id === selected), "Unknown matrix case");
-assert.equal(cases.length * 3, 27);
+assert.equal(cases.length * 3, 33);
 assert.equal(new Set(cases.map(test => test.profile)).size, 7);
-assert.equal(new Set(cases.map(test => test.id)).size, 9);
+assert.equal(new Set(cases.map(test => test.id)).size, 11);
 if (args.includes("--self-test")) {
   assert.ok(cases.every(test => test.command.includes("--locked")));
-  console.log("Matrix definition: seven profiles, two complete repair workflows, three repeats, 27 scenarios; no model requests.");
+  console.log("Matrix definition: seven entries, two complete repair workflows, two tasks without preselected documents, Ask policy, three repeats, 33 scenarios; no model requests.");
   process.exit(0);
 }
 if (!args.includes("--run")) {
@@ -51,7 +54,7 @@ const report = {
   head: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root }).toString().trim(),
   backendSourceSha256: source,
   model: { protocol: process.env.RHO_COMPONENT_MODEL_PROTOCOL ?? "openai_completions", baseUrl: process.env.RHO_COMPONENT_MODEL_BASE_URL, id: process.env.RHO_COMPONENT_MODEL_ID, credentialEnvironment: process.env.RHO_COMPONENT_MODEL_KEY_ENV },
-  expectedScenarios: 27, selectedCase: selected ?? null, attempts: [],
+  expectedScenarios: 33, selectedCase: selected ?? null, permissionPolicy: "ask", attempts: [],
   matrixComplete: false, allPassed: false,
   note: "Backend scenario evidence only; UI review, UI performance and full workspace regression are separate gates. Synthetic diagnostics are additional model calls.",
 };

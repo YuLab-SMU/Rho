@@ -185,6 +185,15 @@ and assets before verifying the current binary.
 
 ## Independent Agent acceptance
 
+For managed native task recovery, `node scripts/test-agent-task-recovery.mjs`
+runs an isolated protocol fixture. Add `--real-codex`, `--real-kimi` or
+`--real-deepseek` for a real provider. `--model EXACT_NATIVE_MODEL_ID` overrides
+the test session's model without changing the native platform's configuration.
+Use a model actually reported by that installation; retain failed attempts when
+changing it. These checks distinguish ordinary text/MCP recovery, image input and
+reported native usage. A successful native end-of-turn alone is not proof of an
+answer, correct image interpretation or token usage being reported.
+
 [`test-agent-interface.mjs`](../scripts/test-agent-interface.mjs) and
 [`scripts/agent-interface/`](../scripts/agent-interface/) are development tests,
 not a product Agent harness. They run isolated Codex sessions via `codex exec --json`
