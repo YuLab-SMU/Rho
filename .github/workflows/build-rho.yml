@@ -1,4 +1,4 @@
-name: Build Rho binary
+name: Build Rho macOS preview binary
 
 on:
   workflow_dispatch:
@@ -8,40 +8,20 @@ permissions:
 
 jobs:
   binary:
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-26
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            toolchain: 1.97.0-x86_64-unknown-linux-gnu
-            binary: target/release/rho
-          - os: macos-26
-            toolchain: 1.97.0-aarch64-apple-darwin
-            binary: target/release/rho
-          - os: windows-latest
-            toolchain: 1.97.0-x86_64-pc-windows-gnu
-            binary: target/release/rho.exe
     env:
-      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain }}
+      RUSTUP_TOOLCHAIN: 1.97.0-aarch64-apple-darwin
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Install Windows GNU toolchain dependencies
-        if: runner.os == 'Windows'
-        uses: r-lib/actions/setup-r@v2
-        with:
-          r-version: "4.6.1"
-          rtools-version: "45"
-      - name: Select Windows GNU linker
-        if: runner.os == 'Windows'
-        shell: pwsh
+      - name: Verify preview target
+        shell: bash
         run: |
-          $rtools = "C:\rtools45\x86_64-w64-mingw32.static.posix\bin"
-          if (-not (Test-Path (Join-Path $rtools "gcc.exe"))) { throw "Rtools45 GNU linker missing" }
-          $rtools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          test "$(uname -s)" = "Darwin"
+          test "$(uname -m)" = "arm64"
+          sw_vers
       - name: Install pinned Rust
         shell: bash
         run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --no-self-update
@@ -49,8 +29,8 @@ jobs:
         run: cargo build --release --locked
       - uses: actions/upload-artifact@v4
         with:
-          name: rho-${{ matrix.os }}-${{ github.sha }}
-          path: ${{ matrix.binary }}
+          name: rho-macos-arm64-${{ github.sha }}
+          path: target/release/rho
           if-no-files-found: error
       # This produces a binary artifact only. No installer, signing, Release,
       # update-site publication, deployment or automatic installation occurs.

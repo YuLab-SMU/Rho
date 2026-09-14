@@ -2,7 +2,17 @@
 
 Updated: 2026-09-14. This is the single current status summary. Git retains history.
 
-## Current focus: unified Agent interface and acceptance
+## Current focus: macOS preview delivery
+
+The user has limited initial installation and experience delivery to the same
+environment as this machine: **macOS 26.5.2 (25F84), Apple Silicon arm64**. The
+next delivery work is one complete macOS installation/startup/configuration path;
+multi-platform packaging and additional compatibility targets are out of scope.
+The manual binary-build workflow now targets macOS arm64 only. No new installer,
+signing, notarization or publication is claimed by this scope change. See
+[Build and release](RELEASE.md) for the current artifact and delivery boundary.
+
+## Unified Agent implementation and acceptance
 
 The user approved implementation of the unified Agent plan on 2026-09-14. The
 current source uses the original Agent panel, task list and composer for Rho,
