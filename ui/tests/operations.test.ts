@@ -294,3 +294,17 @@ it.each(["succeeded", "failed", "cancelled", "uncertain"] as const)("publishes a
   await f.operations.consumeEvents();
   expect(changed).toHaveBeenCalledExactlyOnceWith({ epoch: 1, project: "/a", operationId: "op-1", capability: "workspace.run_r", status, cursor: 1 });
 });
+
+it("newly linked task operations keep following original queued and running events after the Agent is ready", async () => {
+  const f=fixture(); await baseline(f);
+  const original={...record(401),status:"accepted" as const,updated_at_ms:401};
+  original.operation.caller={kind:"agent",id:"task:finished-agent"};
+  f.records.set("op-401",original); await f.operations.ensureOperation("op-401");
+  expect(f.operations.getRecord("op-401")?.status).toBe("accepted");
+  f.records.set("op-401",{...original,status:"running",updated_at_ms:402}); f.events.push(event(1,"op-401"));
+  await f.operations.consumeEvents(); expect(f.operations.getRecord("op-401")?.status).toBe("running");
+  f.records.set("op-401",{...original,status:"succeeded",outcome:"succeeded",updated_at_ms:403}); f.events.push(event(2,"op-401"));
+  await f.operations.consumeEvents(); expect(f.operations.getRecord("op-401")?.status).toBe("succeeded");
+  expect(f.operations.getRecord("op-401")?.operation.operation_id).toBe("op-401");
+  expect(f.ports.invoke).not.toHaveBeenCalled(); expect(f.ports.cancel).not.toHaveBeenCalled();
+});

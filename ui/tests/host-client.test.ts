@@ -139,3 +139,12 @@ it("prepares masked Codex and generic MCP configuration only for this Workbench 
   }
   expect(() => host.agentConfiguration({ ...data, suggested_server_name: 'rho_12345]\nmalicious = "x"' }, "codex", false)).toThrow();
 });
+
+it("retains structured component failures without reducing recovery decisions to HTTP status", async () => {
+  const diagnostic = { code: "busy", message: "A model test is already running", continuation: "inspect_original", next_reads: [] };
+  vi.stubGlobal("fetch", vi.fn(async () => response({ error: "legacy detail", diagnostic, submission: "rejected", request_id: "new-test", existing_request_id: "original-test" }, false, 429)));
+  await expect(client().componentModelTest({ project_root: "/study", window: { window_id: "w", incarnation: "i" }, request_id: "new-test", model_settings_version: 1, kind: "connection" })).rejects.toMatchObject({
+    message: diagnostic.message, diagnostic, status: 429, submission: "rejected", requestId: "new-test", existingRequestId: "original-test",
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});

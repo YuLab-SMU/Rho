@@ -24,12 +24,14 @@ export class Navigation extends Model<{ dialog: Dialog; operationId: string | nu
   private documentListeners = new Map<string, Set<(action: DocumentAction) => void>>();
   private pending = new Map<string, DocumentAction>();
   private generation = 0;
+  agentSettingsTarget: import("./generated/AgentProvider").AgentProvider | "rho" | null = null;
   runtimePage: { instanceId: string | null; tab: RuntimeTab } = { instanceId: null, tab: "overview" };
   constructor(private ports: NavigationPorts) { super(); }
   protected readSnapshot() { return { dialog: this.dialog, operationId: this.operationId }; }
   openOperation(operationId: string) { this.operationId = operationId; this.ports.show("console"); this.publish(); }
   acknowledgeOperation(operationId: string) { if (this.operationId === operationId) { this.operationId = null; this.publish(); } }
-  setDialog(dialog: Dialog) { this.dialog = dialog; this.publish(); }
+  setDialog(dialog: Dialog) { this.dialog = dialog; if (dialog !== "agents") this.agentSettingsTarget = null; this.publish(); }
+  openAgentSettings(agent: import("./generated/AgentProvider").AgentProvider | "rho") { this.agentSettingsTarget = agent; this.setDialog("agents"); }
   openSessions(instanceId: string | null = null, tab: RuntimeTab = "overview") {
     this.runtimePage = { instanceId, tab }; this.setDialog("sessions");
   }

@@ -42,10 +42,28 @@ import type { ComponentSourcePreviewRequest } from "./generated/ComponentSourceP
 import type { ComponentSourcePreview } from "./generated/ComponentSourcePreview";
 import type { ComponentSourceSearch } from "./generated/ComponentSourceSearch";
 import type { ComponentSourceSearchResult } from "./generated/ComponentSourceSearchResult";
-import type { ComponentSessionCredential } from "./generated/ComponentSessionCredential";
+import type { ReadComponentAgentAsset } from "./generated/ReadComponentAgentAsset";
+import type { ComponentLocalCredential } from "./generated/ComponentLocalCredential";
 import type { ComponentCredentialRef } from "./generated/ComponentCredentialRef";
 import type { ComponentModelTestRequest } from "./generated/ComponentModelTestRequest";
 import type { ComponentModelDiagnostic } from "./generated/ComponentModelDiagnostic";
+
+import type { ComponentRequestFailure } from "./generated/ComponentRequestFailure";
+import type { Diagnostic } from "./generated/Diagnostic";
+
+export class HostRequestError extends Error {
+  readonly status: number;
+  readonly diagnostic?: Diagnostic;
+  readonly submission?: ComponentRequestFailure["submission"];
+  readonly requestId?: string;
+  readonly existingRequestId?: string;
+  constructor(status: number, detail: Partial<ComponentRequestFailure> & { diagnostics?: string[] } | null) {
+    super(detail?.diagnostic?.message ?? detail?.error ?? detail?.diagnostics?.join("\n") ?? `Host HTTP ${status}`);
+    this.name = "HostRequestError"; this.status = status; this.diagnostic = detail?.diagnostic;
+    this.submission = detail?.submission; this.requestId = detail?.request_id ?? undefined;
+    this.existingRequestId = detail?.existing_request_id ?? undefined;
+  }
+}
 
 export function json(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue;
@@ -113,14 +131,7 @@ export class HostClient {
     });
     const value: unknown = await response.json();
     if (!response.ok) {
-      const detail = value as { error?: string; diagnostics?: string[] } | null;
-      const error = new Error(
-        detail?.error ??
-          detail?.diagnostics?.join("\n") ??
-          `Host HTTP ${response.status}`,
-      );
-      Object.assign(error, { status: response.status });
-      throw error;
+      throw new HostRequestError(response.status, value as Partial<ComponentRequestFailure> & { diagnostics?: string[] } | null);
     }
     return value as T;
     } finally {
@@ -141,11 +152,16 @@ export class HostClient {
     return this.request<ComponentQueryReplies[Q["kind"]]>("/api/agents/components/query", request);
   }
   componentCommand<C extends ComponentAgentCommand>(request: ComponentAgentsCommand & { command: C }) {
-    return this.request<ComponentCommandReplies[C["kind"]]>("/api/agents/components/command", request);
+    return this.request<ComponentCommandReplies[C["kind"]]>(request.command.kind === "add_asset" ? "/api/agents/components/asset/upload" : "/api/agents/components/command", request);
+  }
+  async componentAsset(request: ReadComponentAgentAsset) {
+    const response = await fetch("/api/agents/components/asset", { method: "POST", headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
+    if (!response.ok) throw new HostRequestError(response.status, await response.json());
+    return response.blob();
   }
   componentSourcePreview(request: ComponentSourcePreviewRequest) { return this.request<ComponentSourcePreview>("/api/agents/components/context", request); }
   componentSourceSearch(request: ComponentSourceSearch) { return this.request<ComponentSourceSearchResult>("/api/agents/components/context/search", request); }
-  componentCredential(request: ComponentSessionCredential) { return this.request<{ credential: ComponentCredentialRef }>("/api/agents/components/credential", request); }
+  componentCredential(request: ComponentLocalCredential) { return this.request<{ credential: ComponentCredentialRef }>("/api/agents/components/credential", request); }
   componentModelTest(request: ComponentModelTestRequest) { return this.request<{ diagnostic: ComponentModelDiagnostic }>("/api/agents/components/test", request); }
   testAgent(request: TestAgent) { return this.request<AgentDiagnostic>("/api/agents/test", request); }
   async agentAsset(request: ReadAgentAsset) {

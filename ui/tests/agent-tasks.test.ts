@@ -87,3 +87,41 @@ it('retains text committed by an IME after takeover as a local conflict without 
  await f.model.loadDetail('a');f.model.commitComposition('a','local 中文',{text:'local ',assets:['original-image'],context:[]});
  expect(f.model.getSnapshot().drafts.get('a')?.conflict).toEqual({text:'local 中文',assets:['original-image'],context:[]});expect(f.records.get('a')!.draft.content.text).toBe('new controller draft');expect(f.ports.command).not.toHaveBeenCalled();
 });
+
+it('unified navigation keeps typed identities, pagination and restored selection without sending',async()=>{
+ const f=fixture(); const rho={reference:{kind:"rho" as const,conversation_id:"a"},provider:null,title:"Rho task",created_at_ms:2,updated_at_ms:2,archived:false,state:"draft",has_draft:true,permissions:0,attention_reason:null,history_gap:false};
+ const native={...rho,reference:{kind:"native" as const,task_id:"a"},provider:"kimi" as const,title:"Native task",created_at_ms:1};
+ f.ports.projectQuery=vi.fn(async request=>({kind:"project_list",page:{tasks:request.query.kind==='project_list'&&request.query.before?[native]:[rho],attention:[],next:request.query.kind==='project_list'&&request.query.before?null:'cursor',running:0,permissions:0,attention_count:0}}));
+ await f.model.observeSummary(); expect(f.model.getSnapshot().selectedTask).toEqual(rho.reference); expect(f.model.getSnapshot().selected).toBe(null);
+ await f.model.loadMore(); expect(f.model.getSnapshot().projectTasks.map(t=>t.title)).toEqual(['Rho task','Native task']);
+ f.model.chooseTask(native.reference); await f.model.loadDetail('a'); f.model.chooseTask(rho.reference); f.model.rememberAgent('rho');
+ const saved=f.model.serialize(); const restored=new AgentTasks(f.ports); models.push(restored); restored.restore(saved);
+ expect(restored.getSnapshot().selectedTask).toEqual(rho.reference); expect(restored.getSnapshot().selected).toBe(null); expect(restored.getSnapshot().lastAgent).toBe('rho');
+ expect(f.ports.command).not.toHaveBeenCalled(); expect(f.ports.discover).not.toHaveBeenCalled();
+});
+
+it('archived native tasks keep control actions available but cannot edit or send a draft',async()=>{
+ const f=fixture();f.records.get('a')!.summary.task.archived=true;await f.model.loadDetail('a');
+ expect(f.model.canControl('a')).toBe(true);expect(f.model.canEdit('a')).toBe(false);
+ f.model.editText('a','blocked');await f.model.send('a');
+ expect(f.model.getSnapshot().drafts.get('a')?.content.text).toBe('');expect(f.ports.command).not.toHaveBeenCalled();
+});
+
+it('a late recovered native create cannot replace the current Rho selection or start native history polling',async()=>{
+ const f=fixture(); f.model.show('agent');
+ f.model.restore({agentTasks:{selectedTask:{kind:'rho',conversation_id:'rho-current'},pending:[{requestId:'late-create',taskId:null,kind:'create',localRevision:0,content:null}]}});
+ f.receipts.set('late-create',receipt('late-create','a','create'));
+ await f.model.observeSummary(); await f.model.observeEvents();
+ expect(f.model.getSnapshot().selectedTask).toEqual({kind:'rho',conversation_id:'rho-current'}); expect(f.model.getSnapshot().selected).toBe(null);
+ expect(vi.mocked(f.ports.query).mock.calls.some(([request])=>request.query.kind==='events')).toBe(false);
+ expect(f.model.serialize()).not.toHaveProperty('agentTasks.selected');
+});
+it('a delayed new-task acknowledgement preserves a selection made while creation was in progress',async()=>{
+ const f=fixture(),pending=deferred<AgentTaskCommandResult>();
+ vi.mocked(f.ports.discover).mockResolvedValue({provider:'kimi',models:[{id:'model',name:'Model',efforts:[],default_effort:null}],selected_model:'model',error:null} as never);
+ vi.mocked(f.ports.command).mockReturnValueOnce(pending.promise);
+ const creating=f.model.newTask('kimi'); await vi.waitFor(()=>expect(f.ports.command).toHaveBeenCalledOnce());
+ f.model.chooseTask({kind:'rho',conversation_id:'rho-current'});
+ const call=vi.mocked(f.ports.command).mock.calls[0][0]; pending.resolve({receipt:receipt(call.request_id,'a','create'),detail:detail('a')}); await creating;
+ expect(f.model.getSnapshot().selectedTask).toEqual({kind:'rho',conversation_id:'rho-current'}); expect(f.model.getSnapshot().selected).toBe(null);
+});

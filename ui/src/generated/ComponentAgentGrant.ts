@@ -3,5 +3,10 @@ import type { ComponentAgentMode } from "./ComponentAgentMode";
 import type { ComponentAgentSession } from "./ComponentAgentSession";
 import type { ComponentDocumentGrant } from "./ComponentDocumentGrant";
 import type { ComponentFileGrant } from "./ComponentFileGrant";
+import type { ComponentPermissionPolicy } from "./ComponentPermissionPolicy";
 
-export type ComponentAgentGrant = { mode: ComponentAgentMode, session: ComponentAgentSession | null, documents: Array<ComponentDocumentGrant>, files: Array<ComponentFileGrant>, };
+export type ComponentAgentGrant = {
+/**
+ * Absent only in already recorded requests using the former work modes.
+ */
+permission_policy?: ComponentPermissionPolicy, mode: ComponentAgentMode, session: ComponentAgentSession | null, documents: Array<ComponentDocumentGrant>, files: Array<ComponentFileGrant>, };

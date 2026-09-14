@@ -2,13 +2,16 @@
 import type { ApplicationDocumentRef } from "./ApplicationDocumentRef";
 import type { ComponentAgentBudget } from "./ComponentAgentBudget";
 import type { ComponentAgentContext } from "./ComponentAgentContext";
+import type { ComponentAgentPermission } from "./ComponentAgentPermission";
 import type { ComponentAgentProfile } from "./ComponentAgentProfile";
 import type { ComponentAgentRecovery } from "./ComponentAgentRecovery";
 import type { ComponentAgentRunState } from "./ComponentAgentRunState";
 import type { ComponentAgentStart } from "./ComponentAgentStart";
+import type { ComponentAgentTaskIntent } from "./ComponentAgentTaskIntent";
+import type { ComponentDocumentGrant } from "./ComponentDocumentGrant";
 import type { ComponentModelConnection } from "./ComponentModelConnection";
 
-export type ComponentAgentRun = { run_id: string, request: ComponentAgentStart, profile: ComponentAgentProfile, state: ComponentAgentRunState,
+export type ComponentAgentRun = { document_grants: Array<ComponentDocumentGrant>, task_intent?: ComponentAgentTaskIntent, permissions: Array<ComponentAgentPermission>, run_id: string, request: ComponentAgentStart, profile: ComponentAgentProfile, state: ComponentAgentRunState,
 /**
  * Fixed configuration for this run. Contains references, never credentials.
  */

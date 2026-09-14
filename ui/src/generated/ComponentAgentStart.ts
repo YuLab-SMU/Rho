@@ -4,4 +4,8 @@ import type { ApplicationWindowRef } from "./ApplicationWindowRef";
 import type { ComponentAgentGrant } from "./ComponentAgentGrant";
 import type { ComponentContinuation } from "./ComponentContinuation";
 
-export type ComponentAgentStart = { continuation?: ComponentContinuation, request_id: string, conversation_id: string, conversation_version: number, window: ApplicationWindowRef, model_settings_version: number, text: string, grant: ComponentAgentGrant, sources: Array<AgentContextSelection>, };
+export type ComponentAgentStart = {
+/**
+ * Immutable user-uploaded attachment references; bytes stay in Application asset storage.
+ */
+assets?: Array<string>, continuation?: ComponentContinuation, request_id: string, conversation_id: string, conversation_version: number, window: ApplicationWindowRef, model_settings_version: number, text: string, grant: ComponentAgentGrant, sources: Array<AgentContextSelection>, };

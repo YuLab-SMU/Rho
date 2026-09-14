@@ -8,13 +8,60 @@ const pause=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 test.beforeAll(async()=>{
  directory=await mkdtemp(join(tmpdir(),'rho-task-browser-'));const project=join(directory,'study'),bin=join(directory,'bin');await mkdir(project);await mkdir(bin);await mkdir(join(directory,'kimi-home'));
  await writeFile(join(project,'notes.txt'),'Verified context fixture\nsecond line\n');await copyFile(resolve('e2e/fixtures/agents/kimi.cjs'),join(bin,'kimi'));await chmod(join(bin,'kimi'),0o755);log=join(directory,'native.jsonl');
- host=spawn(resolve('../target/debug/rho'),['--database',join(directory,'state.sqlite'),'--project',project,'workbench'],{env:{...process.env,PATH:`${bin}:${process.env.PATH}`,KIMI_CODE_HOME:join(directory,'kimi-home'),RHO_AGENT_FIXTURE_LOG:log},stdio:['ignore','pipe','pipe']});
+ host=spawn(resolve('../target/debug/rho'),['--database',join(directory,'state.sqlite'),'--project',project,'workbench',...(process.env.RHO_BROWSER_DEV_ASSETS?['--dev-assets',resolve(process.env.RHO_BROWSER_DEV_ASSETS)]:[])],{env:{...process.env,PATH:`${bin}:${process.env.PATH}`,KIMI_CODE_HOME:join(directory,'kimi-home'),RHO_AGENT_FIXTURE_LOG:log},stdio:['ignore','pipe','pipe']});
  url=await new Promise<string>((resolve,reject)=>{let output='',errors='';const timer=setTimeout(()=>reject(new Error(`Host startup timed out: ${errors}`)),40000);host.stderr!.on('data',d=>errors+=d);host.stdout!.on('data',d=>{output+=d;const match=output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/);if(match){clearTimeout(timer);resolve(match[0]);}});host.once('exit',code=>{clearTimeout(timer);reject(new Error(`Host exited ${code}: ${errors}`));});});
 });
 test.afterAll(async()=>{if(host?.exitCode===null){host.kill('SIGINT');await Promise.race([new Promise(r=>host.once('exit',r)),pause(12000)]);if(host.exitCode===null)host.kill('SIGKILL');}if(directory)await rm(directory,{recursive:true,force:true});});
 async function nativeCalls(){try{return (await readFile(log,'utf8')).trim().split('\n').filter(Boolean).map(s=>JSON.parse(s));}catch{return[];}}
 async function openAgent(page:import('@playwright/test').Page){await page.goto(url);await page.getByRole('button',{name:'Agents',exact:true}).click();await expect(page.getByLabel('Agent panel',{exact:true})).toBeVisible();}
 async function newTask(page:import('@playwright/test').Page){const panel=page.getByLabel('Agent panel',{exact:true}),action=panel.locator('button[aria-label="New task"]:visible').first();await action.click();await page.getByRole('menuitem',{name:'Kimi Code',exact:true}).click();await expect(action).toBeEnabled();await expect(panel.getByRole('textbox',{name:'Agent message',exact:true})).toBeEditable();return panel;}
+
+test('one project shares the Agent task list and selector while Kimi and unconfigured Rho retain unsent drafts',async({page})=>{
+ const commands:{backend:string,project:string,kind:string}[]=[],modelTests:string[]=[],errors:string[]=[];
+ page.on('pageerror',error=>errors.push(error.message));
+ page.on('request',request=>{
+  const backend=request.url().match(/\/api\/agents\/(tasks|components)\/command$/)?.[1];
+  if(backend){const body=request.postDataJSON();commands.push({backend,project:body.project_root,kind:body.command.kind});}
+  if(request.url().endsWith('/api/agents/components/test'))modelTests.push(request.url());
+ });
+ const promptsBefore=(await nativeCalls()).filter(call=>call.method==='session/prompt').length;
+ await openAgent(page);const panel=await newTask(page),input=panel.getByRole('textbox',{name:'Agent message',exact:true});
+ const nativeTitle='Kimi draft in shared project',rhoTitle='Rho draft in shared project';
+ async function rename(title:string){
+  await panel.getByRole('button',{name:'Task actions',exact:true}).click();await page.getByRole('menuitem',{name:'Rename',exact:true}).click();
+  const titleInput=panel.getByRole('textbox',{name:'Task title',exact:true});await titleInput.fill(title);await titleInput.press('Enter');
+  await expect(panel.locator('.at-task-header .at-title')).toHaveText(title);
+ }
+ await rename(nativeTitle);await input.fill('Native draft stays unsent.');await expect(panel.locator('.at-draft-status')).toHaveText('Draft saved');
+ await panel.locator('button[aria-label="New task"]:visible').first().click();
+ await expect(page.getByRole('menuitem')).toHaveText(['Rho','Codex','Kimi Code','DeepSeek Harness']);
+ await page.getByRole('menuitem',{name:'Rho',exact:true}).click();
+ await expect(input).toBeEditable();await expect(panel.getByRole('button',{name:'Configure Rho',exact:true})).toBeVisible();
+ await rename(rhoTitle);await input.fill('Rho draft stays unsent.');await expect(panel.locator('.at-draft-status')).toHaveText('Draft saved');
+ await expect(panel.getByRole('button',{name:'Send message',exact:true})).toBeDisabled();
+ await panel.getByRole('button',{name:`Select task: ${rhoTitle}`,exact:true}).click();
+ const nativeItem=page.getByRole('menuitem').filter({has:page.getByText(nativeTitle,{exact:true})});
+ const rhoItem=page.getByRole('menuitem').filter({has:page.getByText(rhoTitle,{exact:true})});
+ await expect(nativeItem).toContainText('Kimi Code');await expect(rhoItem).toContainText('Rho');
+ await page.screenshot({path:'../target/studio-browser/agent-mixed-project-selector.png'});
+ await nativeItem.click();await expect(input).toHaveValue('Native draft stays unsent.');
+ await panel.getByRole('button',{name:`Select task: ${nativeTitle}`,exact:true}).click();await rhoItem.click();await expect(input).toHaveValue('Rho draft stays unsent.');
+ const group=page.locator('.flexlayout__tabset').filter({has:page.getByRole('tab',{name:'Agent',exact:true})});
+ await group.getByRole('button',{name:'Maximize tab set',exact:true}).click();
+ const list=panel.getByLabel('Project tasks',{exact:true});await expect(list).toBeVisible();
+ const nativeRow=list.locator('.at-task').filter({has:page.getByText(nativeTitle,{exact:true})});
+ const rhoRow=list.locator('.at-task').filter({has:page.getByText(rhoTitle,{exact:true})});
+ await expect(nativeRow).toContainText('Kimi Code');await expect(rhoRow).toContainText('Rho');
+ await nativeRow.click();await expect(input).toHaveValue('Native draft stays unsent.');
+ await rhoRow.click();await expect(input).toHaveValue('Rho draft stays unsent.');await expect(rhoRow).toHaveAttribute('aria-current','true');
+ await expect(panel).toHaveCount(1);await expect(page.getByRole('tab',{name:'Agent',exact:true})).toHaveCount(1);
+ for(const name of ['Rho Assistant','External tasks','Assistant'])await expect(page.getByRole('button',{name,exact:true})).toHaveCount(0);
+ await expect(page.getByRole('tab',{name:'Assistant',exact:true})).toHaveCount(0);
+ const created=commands.filter(command=>command.kind==='create');expect(created.map(command=>command.backend)).toEqual(['tasks','components']);expect(new Set(created.map(command=>command.project)).size).toBe(1);
+ expect(commands.filter(command=>['send','start','configure'].includes(command.kind))).toEqual([]);expect(modelTests).toEqual([]);
+ expect((await nativeCalls()).filter(call=>call.method==='session/prompt').length).toBe(promptsBefore);expect(errors).toEqual([]);
+ await page.screenshot({path:'../target/studio-browser/agent-mixed-project-tasks.png'});
+});
 
 test('Agent activity bridges sending, native thinking and tool gaps in a constrained panel', async ({page}) => {
  await page.setViewportSize({width:1100,height:800});await openAgent(page);const panel=await newTask(page),input=panel.getByRole('textbox',{name:'Agent message',exact:true});
@@ -46,8 +93,9 @@ test('native modes and permission responses remain at the composer with independ
  const permissionBox=await request.boundingBox(),composerBox=await panel.locator('.at-composer').boundingBox();expect(permissionBox!.y+permissionBox!.height).toBeLessThanOrEqual(composerBox!.y);expect(composerBox!.y-permissionBox!.y-permissionBox!.height).toBeLessThan(20);
  await input.fill('a separate next draft');await page.screenshot({path:'../target/studio-browser/agent-tasks-permission.png'});
  await panel.getByRole('button',{name:'Task actions',exact:true}).click();await page.getByRole('menuitem',{name:'Archive',exact:true}).click();await expect(panel.getByText('· Archived',{exact:true})).toBeVisible();
- await page.getByRole('tab',{name:'Agent',exact:true}).locator('.flexlayout__tab_button_trailing').click();await expect(panel).toHaveCount(0);await page.getByRole('button',{name:'1 Agent permissions pending',exact:true}).click();await page.getByRole('menuitem').filter({hasText:'please request permission'}).click();await expect(request).toBeVisible();
+ await page.getByRole('tab',{name:'Agent',exact:true}).locator('.flexlayout__tab_button_trailing').click();await expect(panel).toHaveCount(0);await page.getByRole('button',{name:'1 Agent tasks need attention',exact:true}).click();await page.getByRole('menuitem').filter({hasText:'please request permission'}).click();await expect(request).toBeVisible();
  await request.getByRole('button',{name:'Approve once',exact:true}).click();await expect(panel.getByText('Permission handled.',{exact:true})).toBeVisible();await expect(input).toHaveValue('a separate next draft');
+ await panel.getByRole('button',{name:'Task actions',exact:true}).click();await page.getByRole('menuitem',{name:'Unarchive',exact:true}).click();
  await panel.getByRole('button',{name:'Permission mode',exact:true}).click();for(const name of ['Default','Plan','Auto','YOLO'])await expect(page.getByRole('menuitem').filter({has:page.getByText(name,{exact:true})})).toBeVisible();
  await page.getByRole('menuitem').filter({has:page.getByText('Auto',{exact:true})}).click();await expect(panel.getByRole('button',{name:'Permission mode',exact:true})).toContainText('Auto');
  expect((await nativeCalls()).some(c=>c.method==='session/set_mode')).toBe(true);

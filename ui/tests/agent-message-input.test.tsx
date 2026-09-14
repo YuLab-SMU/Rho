@@ -33,3 +33,17 @@ it("forwards composition completion for conflict retention if control changes be
   fireEvent.change(input,{target:{value:'local 中文'}});fireEvent.compositionEnd(input,{data:'中文'});
   expect(p.onCompositionCommit).toHaveBeenCalledWith('local 中文');expect(p.onChange).not.toHaveBeenCalled();
 });
+
+it("remeasures on panel-width changes without rewriting an active native preedit",()=>{
+  let resized!:()=>void;
+  vi.stubGlobal("ResizeObserver",class{constructor(callback:()=>void){resized=callback;}observe(){}disconnect(){}});
+  try {
+    const p=props(),view=render(<AgentMessageInput {...p} value="A saved multiline draft"/>),input=view.getByRole("textbox") as HTMLTextAreaElement;
+    let width=400;
+    Object.defineProperty(input,"clientWidth",{get:()=>width}); Object.defineProperty(input,"scrollHeight",{get:()=>width<250?88:54});
+    resized();expect(input.style.height).toBe("54px");width=220;resized();expect(input.style.height).toBe("88px");
+    fireEvent.compositionStart(input);fireEvent.change(input,{target:{value:"A saved multiline draft zhong"}});width=400;resized();
+    expect(input.style.height).toBe("88px");expect(input.value).toContain("zhong");expect(p.onCompositionCommit).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(input,{data:"中"});expect(input.style.height).toBe("54px");
+  } finally {cleanup();vi.unstubAllGlobals();}
+});

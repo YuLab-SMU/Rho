@@ -14,6 +14,7 @@ export interface AgentTaskPorts {
   context(): RequestContext;
   window(): ApplicationWindowRef | null;
   query(request: AgentTasksQuery): Promise<AgentTaskQueryResult>;
+  projectQuery?(request: AgentTasksQuery): Promise<AgentTaskQueryResult>;
   command(request: AgentTasksCommand): Promise<AgentTaskCommandResult>;
   discover(request: DiscoverAgent): Promise<LocalAgent>;
   asset(request: ReadAgentAsset): Promise<AgentAssetPreview>;

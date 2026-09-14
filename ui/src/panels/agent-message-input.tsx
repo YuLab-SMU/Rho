@@ -39,6 +39,15 @@ export function AgentMessageInput(props: Props) {
     committed.current = props.value;
     resize();
   });
+  useLayoutEffect(() => {
+    const element = input.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth !== measured.current.width) resize();
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   function commit(text: string, composition = false) {
     if (text === committed.current) return;
     committed.current = text;

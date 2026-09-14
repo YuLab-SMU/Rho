@@ -4,8 +4,10 @@ import type { AgentContextItem } from "./AgentContextItem";
 import type { AgentContextPreview } from "./AgentContextPreview";
 import type { AgentContextSource } from "./AgentContextSource";
 import type { AgentNativeHistoryPage } from "./AgentNativeHistoryPage";
+import type { AgentScientificWork } from "./AgentScientificWork";
 import type { AgentTaskDetail } from "./AgentTaskDetail";
 import type { AgentTaskEventPage } from "./AgentTaskEventPage";
 import type { AgentTaskSummary } from "./AgentTaskSummary";
+import type { ProjectAgentTaskPage } from "./ProjectAgentTaskPage";
 
-export type AgentTaskQueryResult = { "kind": "context_sources", sources: Array<AgentContextSource>, } | { "kind": "context_items", items: Array<AgentContextItem>, notices: Array<string>, } | { "kind": "context_preview", preview: AgentContextPreview, } | { "kind": "native_history", page: AgentNativeHistoryPage, } | { "kind": "list", tasks: Array<AgentTaskSummary>, attention: Array<AgentTaskSummary>, next: string | null, running: number, permissions: number, } | { "kind": "detail", detail: AgentTaskDetail, } | { "kind": "events", page: AgentTaskEventPage, } | { "kind": "receipt", receipt: AgentCommandReceipt | null, };
+export type AgentTaskQueryResult = { "kind": "scientific_work", work: AgentScientificWork, } | { "kind": "project_list", page: ProjectAgentTaskPage, } | { "kind": "context_sources", sources: Array<AgentContextSource>, } | { "kind": "context_items", items: Array<AgentContextItem>, notices: Array<string>, } | { "kind": "context_preview", preview: AgentContextPreview, } | { "kind": "native_history", page: AgentNativeHistoryPage, } | { "kind": "list", tasks: Array<AgentTaskSummary>, attention: Array<AgentTaskSummary>, next: string | null, running: number, permissions: number, } | { "kind": "detail", detail: AgentTaskDetail, } | { "kind": "events", page: AgentTaskEventPage, } | { "kind": "receipt", receipt: AgentCommandReceipt | null, };

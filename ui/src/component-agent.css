@@ -1,13 +1,3 @@
-.ca-shell{height:100%;min-height:0;display:flex;flex-direction:column;container-type:inline-size;container-name:component-agent}
-.ca-switch{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--color-border);flex-shrink:0}
-.ca-switch button{font-size:12px;min-height:28px}.ca-switch .selected{background:var(--color-accent-soft);color:var(--color-accent)}
-.ca-body{display:flex;flex:1;min-height:0;min-width:0}.ca-body>.agent-panel{flex:1}
-.ca-rail{width:240px;flex-shrink:0;background:var(--color-subtle);border-right:1px solid var(--color-border);overflow:auto}
-.ca-rail h3{font-size:12px;font-weight:500;padding:12px 16px 6px;color:var(--color-muted);margin:0}
-.ca-rail button{display:flex;flex-direction:column;align-items:flex-start;width:100%;padding:10px 16px;text-align:left;white-space:normal;border-radius:0;gap:4px}.ca-rail button.selected{background:var(--color-accent-soft)}
-.ca-main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;position:relative}
-.ca-selector{min-height:48px;padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--color-border)}
-.ca-selector select{min-width:0;flex:1}.ca-selector button{flex-shrink:0}
 .ca-meta{font-size:12px;line-height:18px;color:var(--color-muted);padding:8px 12px;overflow-wrap:anywhere}
 .ca-history{flex:1;min-height:0;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:18px;overscroll-behavior:contain}
 .ca-turn{flex-shrink:0;font-size:14px;line-height:22px;overflow-wrap:anywhere}.ca-question{background:var(--color-accent-soft);padding:10px 12px;border-radius:6px;white-space:pre-wrap;margin-bottom:16px}
@@ -15,8 +5,6 @@
 .ca-answer{white-space:pre-wrap}.ca-turn small,.ca-turn summary,.ca-tool{font-size:12px;line-height:18px;color:var(--color-muted)}
 .ca-tool{border-top:1px solid var(--color-border);padding:8px 0}.ca-tool pre{max-height:180px;overflow:auto;white-space:pre-wrap}
 .ca-evidence{font-size:12px;color:var(--color-accent);padding:3px 6px;max-width:100%;white-space:normal;text-align:left}
-.ca-composer{border-top:1px solid var(--color-border);padding:12px;display:flex;flex-direction:column;gap:8px;max-height:60%;overflow:auto;flex-shrink:0}
-.ca-composer textarea{width:100%;min-height:78px;resize:none;padding:10px;border:1px solid var(--color-border);border-radius:6px;font:inherit;font-size:14px;line-height:22px;background:var(--color-surface);color:var(--color-text)}
 .ca-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ca-actions>small{flex:1;min-width:80px;overflow-wrap:anywhere}
 .ca-actions button{min-height:30px;padding:5px 10px;font-size:12px}.ca-actions select{max-width:100%}
 .ca-sources{display:flex;gap:6px;flex-wrap:wrap}.ca-source{display:flex;max-width:100%;border:1px solid var(--color-border);border-radius:4px}
@@ -32,4 +20,3 @@
 .ca-settings input,.ca-settings select{padding:8px 10px;border:1px solid var(--color-border);border-radius:4px;min-width:0;background:var(--color-surface);color:var(--color-text)}
 .ca-settings .ca-check{flex-direction:row;align-items:center}.ca-diagnostic{border-top:1px solid var(--color-border);padding-top:12px;display:flex;flex-direction:column;gap:6px}
 .ca-ask{color:var(--color-accent);gap:6px;flex-shrink:0}
-@container component-agent (max-width:639px){.ca-rail{display:none}.ca-history{padding:14px}.ca-composer{max-height:65%}}

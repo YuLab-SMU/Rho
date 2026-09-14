@@ -15,7 +15,7 @@ function NativeCard({ provider }: { provider: AgentProvider }) {
   const { name, source, mark } = providers[provider];
   useEffect(() => { setEffort(selected?.efforts.includes(catalog?.selected_effort ?? "") ? catalog!.selected_effort : selected?.default_effort ?? null); }, [catalog, selected]);
   const disabled = waiting || !!catalog?.setup_required || !!catalog?.error || !model || !session.ready;
-  return <article className={`agent-card${expanded ? " selected" : ""}`} aria-label={`${name} connection`}>
+  return <article data-agent={provider} className={`agent-card${expanded ? " selected" : ""}`} aria-label={`${name} connection`}>
     <div className="agent-row native-provider-row"><button className="native-provider-title" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}><span className={`agent-mark ${provider}-mark`}>{provider === "codex" ? <Icon name="terminal" size={25} /> : mark}</span><span className="agent-name"><strong>{name}</strong><small>{source}{catalog?.version ? ` · ${catalog.version}` : ""}</small></span></button><button className="agent-secondary pill" disabled={disabled} onClick={() => void native.test(provider, model, effort)}>Test</button></div>
     {expanded && <div className="agent-options">
       {waiting && <p role="status" className="agent-caption">{state.installing === provider ? "Installing the connection component…" : state.connecting === provider ? "Testing an isolated session…" : "Reading native models…"}</p>}

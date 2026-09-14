@@ -107,3 +107,22 @@
 .at-event-inputs{display:flex;flex-wrap:wrap;gap:6px;font-size:12px}.at-sent-asset,.at-sent-context{max-width:100%;border:1px solid var(--color-border);border-radius:5px;padding:5px 8px}.at-sent-asset summary,.at-sent-context{display:flex;align-items:center;gap:6px;cursor:pointer}.at-sent-asset>img{max-width:100%;max-height:180px;object-fit:contain;margin-top:8px}.at-sent-asset>pre{max-height:150px;overflow:auto;font-size:12px;margin-top:8px}.at-sent-context{cursor:default;flex-wrap:wrap}.at-sent-context small{color:var(--color-muted)}
 
 .at-session-details{padding:10px 16px;border-bottom:1px solid var(--color-border);font-size:12px;max-height:200px;overflow:auto;flex-shrink:0}.at-session-details header{display:flex;align-items:center;justify-content:space-between}.at-session-details dl{display:grid;grid-template-columns:100px 1fr;gap:8px;margin:8px 0}.at-session-details dt{color:var(--color-muted)}.at-session-details dd{margin:0;overflow-wrap:anywhere}
+
+.at-model-select{font-size:12px;color:var(--color-muted);min-width:0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 0;gap:5px}.at-conversation .ca-turn{display:flex;flex-direction:column;gap:16px}.at-main{position:relative}
+
+.at-usage{padding-top:12px}.at-usage>p,.at-usage small{font-size:12px;color:var(--color-muted)}.at-usage-row{display:contents}.at-usage dd{font-variant-numeric:tabular-nums}
+
+.at-session-picker{display:flex;align-items:center;gap:6px;color:var(--color-muted);font-size:12px}.at-session-picker select{min-width:0;max-width:180px;font-size:12px;padding:3px 6px;border:1px solid var(--color-border);border-radius:4px}
+
+.at-scientific-work{padding:8px 24px;border-bottom:1px solid var(--color-border);font-size:12px;color:var(--color-muted);flex-shrink:0;max-height:25vh;overflow:auto}.at-conversation .at-scientific-work{padding:8px 0;max-height:none}.at-scientific-work summary{cursor:pointer}.at-scientific-operation{display:flex;flex-direction:column;gap:4px;padding:8px 0}.at-scientific-operation p,.at-scientific-work p{margin:5px 0;overflow-wrap:anywhere}
+
+.at-scientific-operation small{overflow-wrap:anywhere}
+
+/* Keep controls and saved-draft status inside short panels; only the input body scrolls. */
+.at-composer-region{flex:0 1 auto;min-height:0;max-height:60%}
+.at-composer{flex:1 1 auto;min-height:124px;overflow:hidden}
+.at-composer-content{display:flex;flex-direction:column;gap:12px;flex:1 1 auto;min-width:0;min-height:0;overflow:auto}
+.at-composer-tools,.at-draft-status{flex-shrink:0}
+@container agent (max-height:440px){.at-main{overflow:hidden}.at-composer-region{overflow:visible;max-height:calc(100cqh - 86px)}.at-composer{min-height:0}.at-composer-content{gap:6px}.at-composer-tools{position:static;padding-top:4px}.at-asset,.at-context-chip{flex-shrink:0}}
+
+.at-composer-content>textarea{flex-shrink:0}

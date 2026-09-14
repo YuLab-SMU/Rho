@@ -279,16 +279,19 @@ export class Studio {
     this.agentTasks = new AgentTasks({ context: this.session.context, windowId,
       window: () => this.application.getSnapshot().online ? this.application.window : null,
       query: request => client.agentTaskQuery(request), command: request => client.agentTaskCommand(request),
+      projectQuery: request => client.agentTaskQuery(request),
       discover: request => client.discoverAgent(request),
       asset: async request => previewAgentAsset(await client.agentAsset(request)), releaseAsset: releaseAgentAsset,
       ...taskDraftCache(windowId), changed: this.persistence.changed,
       schedule: () => { this.coordinator.wake("agent-task-summary"); this.coordinator.wake("agent-task-events"); } });
     this.componentAgents = new ComponentAgents({ context: this.session.context,
+      selectedConversation: () => { const selected = this.agentTasks.getSnapshot().selectedTask; return selected?.kind === "rho" ? selected.conversation_id : null; },
       synchronizeContext: () => this.application.flush(),
       window: () => this.application.getSnapshot().online ? this.application.window : null,
       query: request => client.componentQuery(request), command: request => client.componentCommand(request),
       sourceSearch: request => client.componentSourceSearch(request),
       sourcePreview: request => client.componentSourcePreview(request),
+      asset: async request => previewAgentAsset(await client.componentAsset(request)), releaseAsset: releaseAgentAsset,
       credential: request => client.componentCredential(request), test: request => client.componentModelTest(request),
       initial: (profile, viewId) => {
         const workspace = profile === "environment" && viewId && this.runtimeSessions.getInstance(viewId) ? this.workspaceFor(viewId) : this.workspaceForView(viewId), native = this.session.contextFor(workspace.id).session;
