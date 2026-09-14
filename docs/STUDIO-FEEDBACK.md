@@ -48,13 +48,20 @@ separate front-end areas: adding an option to the original Agent selector should
 be sufficient for the interaction.
 
 **Required experience:** One Agent panel, task list, conversation layout and
-composer. Rho appears beside the other Agents; capability-specific modes and
+composer. Rho appears beside the other Agents; permission controls and
 model settings use the existing control locations. Component Ask actions bring
 context into that same interface. The user explicitly requested removal of the
 Built-in Assistant Paper page and incorporation of its relevant scenarios into
 Agent · 工作区任务设计评审. [Design section 18](RHO-DESIGN.md#18-rho-in-the-unified-agent-panel--review-revision)
 records this revision. Paper changes do not establish implementation or close
 the reported usability problem.
+
+**Follow-up (2026-09-14):** The user rejected the session-only API key design and
+the replacement of permissions with Explain/Edit/Run. Save the key in local Rho
+configuration by default and reuse it after restart. The composer continues to
+select a permission policy. The Agent, including Rho, decides whether to explain,
+edit or execute according to the request; users should not manually select these
+work categories. This corrects both the Paper revision and its implementation plan.
 
 ### F18 — Runtime foundations need an understandable management experience
 

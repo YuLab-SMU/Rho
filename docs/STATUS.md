@@ -12,9 +12,14 @@ now contains nineteen boards: A03/A08 were revised and A15–A19 carry the integ
 component-context, execution, model-settings and recovery examples. The seven
 changed boards were inspected through Paper screenshots; the new drawings await
 user review. [Design section 18](RHO-DESIGN.md#18-rho-in-the-unified-agent-panel--review-revision)
-is the current interaction direction.
+is the current interaction direction. The user's follow-up also requires persistent
+API keys in local Rho configuration and ordinary permission selection. Paper now
+shows Ask/Auto approval/Full access, with explain/edit/run chosen by the Agent.
+The lifetime selector and work-mode controls have been removed from the drawings.
 
-The application still implements the split described below. No UI code, Host or
+The application still implements the split, explicit capability modes and
+Host-memory/environment credentials described below. Persistent-key storage and
+Agent-chosen work remain pending along with the unified UI. No application code, Host or
 R session was changed for this design revision; no restart is needed. Existing
 functional acceptance does not resolve this usability feedback.
 

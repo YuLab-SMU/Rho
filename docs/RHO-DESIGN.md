@@ -774,7 +774,7 @@ boards. Page membership was verified from both page roots.
 | A05 | Pending permission fixed immediately above the composer; editable next draft |
 | A06 | Resume in the task header; concise unconfirmed-turn and history-gap disclosures |
 | A07 | Closed panel, persistent top-bar badge and task reminder popover |
-| A08 | Rho selected; empty task ready for input with its mode and model inside the shared composer |
+| A08 | Rho selected; empty task ready for input with permissions and model inside the shared composer |
 | A09 | Read-only conversation after the control window is lost; Stop Agent and take over |
 | A10 | Native permission-mode menu beside the input controls; illustrative three-mode catalog |
 | A11 | @ picker for specific files, objects, plots, table selections, code and plugin information |
@@ -1498,10 +1498,11 @@ separately in Status. Example data, messages and results remain design fixtures.
 - Component **Ask about…** actions open that same panel with previewable/removable
   context. Context does not silently change a task's Agent or retarget an accepted
   run. The selected Agent and sources remain visible before sending.
-- Mode, model and available actions follow the selected Agent's capabilities.
-  Rho exposes Explain/Edit/Run where supported; native Agent permissions retain
-  their actual options in the existing composer location. This introduces no
-  additional approval step.
+- The composer selector controls **permissions**: Ask, Auto approval and Full
+  access in the Rho review, with other Agents retaining their native options.
+  It does not choose Explain/Edit/Run. Rho decides whether to explain, edit or
+  execute from the user's request under the selected permission policy, just as
+  the other Agents do. Already-authorized work does not gain a second approval.
 - Rho model configuration belongs under **Settings → Agents → Rho**, with the
   other Agents available in the same settings surface. Normal conversation shows
   a concise configuration action when needed, with the draft retained.
@@ -1513,24 +1514,26 @@ separately in Status. Example data, messages and results remain design fixtures.
 | A03 | Rho in the existing Agent menu; Rho and other tasks in one list |
 | A08 | New Rho task using the original empty state and composer |
 | A15 | Objects Ask entry, selected source, explanation and source link; original task selector and composer |
-| A16 | Document fix/save/run evidence, selected document and Main session; Rho mode menu beside input |
+| A16 | Agent-chosen fix/save/run with evidence, selected document and Main session; ordinary permission menu beside input |
 | A17 | Two selected plots, comparison answer and original-image/producing-run links |
-| A18 | Unified Agents settings, Rho model destination/credentials/tests, unconfigured and image-unavailable states |
+| A18 | Unified Agents settings, persistent API key, model destination/tests, unconfigured and image-unavailable states |
 | A19 | 600 px workspace and 320 px Agent panel; expired context, stop-unconfirmed and another window's draft |
 
 A15–A19 reuse the scientific examples from the removed page, with the original
 Agent navigation and composer. Its grouped-navigation board was discarded.
 Reuse section 13's chrome, semantic tokens and 640 px task-rail breakpoint.
 Normal panels retain the compact two-row composer; wide panels use the existing
-inline controls. The 320 px case retains sources, model, mode and send state.
+inline controls. The 320 px case retains sources, model, permissions and send state.
 
 ### Preserved capability and recovery rules
 
-Objects, Packages, Plots and Environment explanations remain read-only. Edit binds
-document versions; Run visibly includes permitted saving and the named R session.
-The request to fix/save/run is one authorization. Evidence links use original
-owner references. Backend conversation identities and recovery ownership need
-not be merged to provide one interface.
+Component sources supply context rather than a user-selected work mode. Inspecting
+a source is read-only; an Agent may then choose relevant editing or execution to
+fulfill the request under its permission policy. Edits bind document versions and
+destinations; execution binds the named R session. Existing owner boundaries,
+including read-only Core Packages, still apply. The request to fix/save/run is one
+authorization. Evidence links use original owner references. Backend conversation
+identities and recovery ownership need not be merged to provide one interface.
 
 Unavailable model/image input and expired sources preserve the draft. Users may
 explicitly change model, include only metadata or refresh sources. No silent
@@ -1540,10 +1543,14 @@ Another window's draft is read-only until controlled takeover; conflicting local
 drafts remain available for comparison. Opening, closing and navigating tasks
 never sends a model request.
 
-Model settings apply to the project and its Rho tasks. Keys use the transient
-credential endpoint and the input is cleared; only a set/unavailable indicator
-remains. Session keys and explicit environment references remain supported.
-Connection and image tests use labeled synthetic input.
+Model settings apply to the project and its Rho tasks. The user's 2026-09-14
+correction makes API keys persistent by default in the local Rho configuration
+file, outside project/versioned files. Save retains the key across application
+restarts. Show a masked value and Saved on this device; allow replacement/removal.
+There is no lifetime selector or mandatory re-entry after restarting. Explicit
+environment references may remain optional. Keys stay out of conversation records,
+draft synchronization and diagnostic logs. Connection and image tests use labeled
+synthetic input. The current memory-only implementation is pending replacement.
 
 The seven changed boards were inspected with Paper screenshots for typography,
 spacing, alignment, contrast and clipping. Page membership and removal of the old

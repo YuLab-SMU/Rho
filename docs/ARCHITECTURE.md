@@ -65,6 +65,16 @@ The engine never opens SQLite or calls an R adapter. Host composes the engine an
 its narrow tool access port; all scientific reads/writes still use their real owner.
 Current implementation and unimplemented integration stages are in Status.
 
+The 2026-09-14 design correction requires Agent-selected work under the user's
+permission policy, with no front-end Explain/Edit/Run selector. Component sources
+provide context; they do not prescribe a work mode. Application records the
+effective authority; scientific owners continue mechanical checks without another
+approval layer. The explicit capability-grant implementation described below is
+pending adaptation. The same correction makes model API keys persistent by default
+in a local Rho configuration file outside the project, with references used in
+conversation/draft records. Host-memory keys remain the current implementation;
+the persistent configuration path is not implemented yet. See Design section 18.
+
 `ComponentAgentEngine` and `ComponentRunPort` are Application interfaces; the Rig
 implementation stays in `rho-agents` and the port implementation stays in Host.
 Model-facing schemas are derived from current descriptors without modifying the
@@ -941,7 +951,9 @@ rechecked init-session services from the owned fork/exec family; missing origina
 evidence, same-family uncertainty and positive ownership conflicts remain explicit
 failures. This proof covers managed helpers, not independently delegated service
 manager jobs or rollback of external effects.
-Native CLI credentials remain with their provider. Component assistants use
-explicit credential references or Host-memory keys, never a persisted raw key or
-another approval store. See [PRIVACY.md](../PRIVACY.md) and
+Native CLI credentials remain with their provider. The current component assistant
+uses explicit credential references or Host-memory keys. The pending persistent
+configuration design is described under Component assistant records and authority;
+key material remains outside conversation, draft-sync, log and evidence records.
+See [PRIVACY.md](../PRIVACY.md) and
 [SECURITY.md](../SECURITY.md) for data handling and reporting.
