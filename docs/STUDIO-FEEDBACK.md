@@ -62,8 +62,15 @@ ordinary content readable and offer compact editing without persistent changes
 to the user's layout. Keyboard users need whole-item and quote comments without
 drawing; marker numbers, shapes and text must carry meaning without color alone.
 
+**Version clarification:** The user confirmed that annotations belong to a
+specific artifact version. Once that artifact updates, its previous annotations
+are historical. Keep Current version and History separate; viewing the latest
+version must not overlay old marks. Continuing the idea on a newer version creates
+a new linked annotation while retaining the original. Agent reads identify the
+historical version and its original evidence.
+
 **Design response:** Proposed AN01–AN05 cover text comments, captured Viewer
-marks, 600 px editing and 320 px Agent inclusion, earlier-source/conflict/image
+marks, 600 px editing and 320 px Agent inclusion, historical-version/conflict/image
 states and anchors across components. The [Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
 and [Design section 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)
 are proposals pending user review. No annotation runtime implementation or

@@ -1736,7 +1736,7 @@ It does not establish runtime implementation, product acceptance or Host restart
 | AN01 | Text selection, retained quotation and a comment attached to the source |
 | AN02 | Captured Viewer with pen, rectangle, arrow and text tools; saved marks and explanation |
 | AN03 | 600 px editing flow and 320 px Agent draft inclusion without additional permanent panels |
-| AN04 | Earlier source, annotation revision conflict and unavailable model image input; no silent reanchoring |
+| AN04 | Version-bound historical annotations, annotation revision conflict and unavailable model image input |
 | AN05 | Universal component entry, source-specific anchors and accessible whole-item comments |
 
 ### A shared layer with component-owned sources
@@ -1824,11 +1824,23 @@ an annotation tool is active, **Undo** affects that annotation layer only, never
 the editor's code or scientific work. Text editing retains its own ordinary undo
 behavior when focus is in the note field.
 
-Source updates never silently move a mark or quotation to a newer document,
-same-named object or regenerated chart. A retained note identifies **Earlier
-source** and offers its original quotation/capture. Explicit reassociation, when
-available, preserves the original reference and records the new annotation
-revision. An unavailable original source remains distinguishable from retained
+The user clarified that an annotation's lifecycle is bound to its artifact
+version. When the owner publishes a new content version, notes on the previous
+version become **Historical annotations**. This is normal history, not a broken
+anchor requiring repair. **Current version** shows that version's notes; **History**
+opens the original version with its notes and retained quotation/capture. The
+current content never acquires old marks automatically. History membership follows
+the original owner's content identity/version, not a new global revision counter
+or changes to panel size, docking, reading position or display zoom. Capture
+identity and dimensions are anchoring evidence; a new viewport never relocates
+old marks to another capture.
+
+An annotation's own text/mark revision does not change its source-version binding.
+To continue an idea on the new version, explicitly create a new annotation there
+with a link to the historical note and its revision; the old annotation stays
+with its original version. If the source changes while a note is being drafted,
+that draft remains bound to the original version and is labeled historical before
+saving or inclusion. An unavailable original source remains distinguishable from retained
 evidence. Application persistence uses version checks for note/mark changes;
 another window's edit produces a visible conflict and preserves local text and
 strokes. **Saved** means the revision is durably acknowledged, not merely drawn
@@ -1840,7 +1852,13 @@ Source readers expose saved annotations with their original references through
 the existing Host and context-provider paths. Reading is independent of whether
 the component is mounted. Preview includes the written explanation, original
 quotation, source/version, marked capture and any available structural anchor,
-with bounded/truncated or unavailable content stated accurately.
+with bounded/truncated or unavailable content stated accurately. Historical notes
+are explicitly identified and read with their original version's evidence; they
+are never presented as comments on the latest output. Source updates preserve
+historical references already in a task draft instead of replacing or dropping
+them. An Agent can compare old and current versions only when both references are
+explicitly available. Subsequent edits or execution still validate the actual
+current target; historical evidence cannot serve as a current precondition.
 
 **Add to Agent** previews selected notes, then appends them to the current editable
 task draft with the existing CAS and reference-merge behavior. Existing text and

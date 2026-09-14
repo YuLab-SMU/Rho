@@ -9,11 +9,13 @@ selection with comments, pen marks, regions, arrows and written explanations
 that people and Agents can inspect with the original content. Five proposed
 [Paper boards, AN01–AN05](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
 cover quoted text, captured interactive views, compact editing and Agent draft
-inclusion, source/version conflicts and shared component entry points. All five
+inclusion, historical versions, edit conflicts and shared component entry points. All five
 boards were visually inspected in Paper and are pending user review.
 [Design section 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)
 records the shared annotation layer, owner-issued anchors, accessible controls,
 original annotation/comment revisions captured at send and draft-only inclusion.
+The user confirmed version-bound annotation history: artifact updates make old
+notes historical; new versions receive new linked notes rather than moved marks.
 Feedback F22 remains open.
 
 The user requested Paper designs for separate R Help and interactive HTML Viewer
