@@ -48,8 +48,14 @@
 .runtime-run-list button, .runtime-history-row { display: flex; flex-direction: column; gap: 8px; text-align: left; width: 100%; margin-bottom: 8px; overflow-wrap: anywhere; }
 .runtime-run-detail { min-width: 0; padding: 20px; }
 .runtime-copies { display: grid; grid-template-columns: 310px minmax(0, 1fr); border: 1px solid var(--color-border); border-radius: 8px; overflow: clip; }
-.workspace-recovery-notices { flex-shrink: 0; min-height: 0; max-height: 40vh; overflow: auto; padding: 0 16px; }
-.workspace-recovery-notices .runtime-notice { margin: 8px 0; }
+/* Workspace notices are status chrome, not a second application page. Keep them compact
+   so Files/Editor/Console remain visible; detailed recovery review stays in Runtime. */
+.workspace-recovery-notices { flex-shrink: 0; min-height: 0; max-height: 156px; overflow: auto; padding: 0 16px; }
+.workspace-recovery-notices .runtime-notice { margin: 6px 0; padding: 8px 12px; border-radius: 4px; font-size: 12px; line-height: 17px; }
+.workspace-recovery-notices .runtime-notice h3 { font-size: 14px; line-height: 19px; margin: 0 0 3px; }
+.workspace-recovery-notices .runtime-notice p { margin: 2px 0; line-height: 17px; }
+.workspace-recovery-notices .runtime-actions { gap: 6px; }
+.workspace-recovery-notices .runtime-actions button { min-height: 26px; padding: 3px 8px; font-size: 12px; }
 .workspace-recovery-notices:empty { display: none; }
 .runtime-copy-list { background: var(--color-subtle); border-right: 1px solid var(--color-border); padding: 16px 12px; }
 .runtime-copy-list button { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; margin-bottom: 8px; padding: 16px 12px; }
