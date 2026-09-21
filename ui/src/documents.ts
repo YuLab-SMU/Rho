@@ -477,11 +477,14 @@ export class Documents extends Model<DocumentsSnapshot> {
     const d = this.entries.get(typeof ref === "string" ? ref : ref.id);
     return !!d && isR(d.draft.path) && !this.stopped && this.ports.canRun() && !d.saving && !d.draft.readonly;
   }
-  canRunFile(ref: DocumentRef, captured = this.resolve(ref).raw) { return this.canRun(ref) && !!captured.trim() && !captured.includes("\0"); }
+  canRunFile(ref: DocumentRef, captured = this.resolve(ref).raw) {
+    const d = this.resolve(ref);
+    return this.canRun(ref) && !d.runningFile && !!captured.trim() && !captured.includes("\0");
+  }
   canRunSelection(ref: DocumentRef) {
     const d = this.resolve(ref), range = d.state.selection.main;
     const code = range.empty ? d.state.doc.lineAt(range.head).text : d.state.sliceDoc(range.from, range.to);
-    return this.canRun(ref) && !!code.trim() && !code.includes("\0");
+    return this.canRun(ref) && !d.runningFile && !!code.trim() && !code.includes("\0");
   }
   async save(ref: DocumentRef, captured = this.resolve(ref).raw, target = this.resolve(ref).draft.path, overwrite = false) {
     const d = this.resolve(ref);
