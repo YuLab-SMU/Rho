@@ -23,6 +23,10 @@ pub use rho_sqlite::ApplicationStore;
 mod agent_tasks;
 mod agent_handoffs;
 pub use agent_handoffs::AgentHandoffService;
+mod annotations;
+pub use annotations::AnnotationService;
+mod html_views;
+pub use html_views::HtmlViewTokens;
 mod agent_connections;
 pub use agent_connections::{AgentMcpConnections, AgentMcpIdentity};
 mod component_agents;
@@ -163,6 +167,7 @@ struct HostRuntime {
     workspace: Option<Arc<WorkspaceRunHandler>>,
     instances: Option<Arc<instances::InstanceOwner>>,
     application: Option<Arc<rho_application::ApplicationOwner>>,
+    annotations: Option<Arc<rho_application::AnnotationOwner>>,
     output_owner: Option<Arc<rho_workspace::WorkspaceOutputHandler>>,
     skills: Option<Arc<rho_skills::SkillOwner>>,
     method_binding_gate: tokio::sync::Mutex<()>,
@@ -725,6 +730,7 @@ impl NextHost {
                 workspace: None,
                 instances: None,
                 application: None,
+                annotations: None,
                 output_owner: None,
                 skills: None,
                 method_binding_gate: tokio::sync::Mutex::new(()),
@@ -806,6 +812,9 @@ impl NextHost {
                 )
             })
             .transpose()?;
+        let annotation_owner = application_store
+            .clone()
+            .map(|store| Arc::new(rho_application::AnnotationOwner::new(store)));
         let application_owner =
             application_store
                 .zip(output_project.clone())
@@ -1081,6 +1090,7 @@ impl NextHost {
                 workspace: workspace_owner,
                 instances: instance_owner,
                 application: application_owner,
+                annotations: annotation_owner,
                 output_owner,
                 skills: skill_owner,
                 method_binding_gate: tokio::sync::Mutex::new(()),
@@ -1126,6 +1136,10 @@ impl NextHost {
     /// again by its owner when a control is admitted.
     pub fn capabilities_for(&self, context: &CallContext) -> Vec<CapabilityDescriptor> {
         port_contracts::visible(self.capabilities(), context)
+    }
+
+    pub(crate) fn annotations(&self) -> Option<&Arc<rho_application::AnnotationOwner>> {
+        self.runtime.annotations.as_ref()
     }
 
     fn application_owner(&self) -> Result<&Arc<rho_application::ApplicationOwner>, OperationError> {

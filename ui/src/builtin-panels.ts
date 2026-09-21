@@ -5,10 +5,12 @@ export const builtinPanels = {
   console: { name: "Console", renderer: "console", instances: "multiple", menu: true, minWidth: 240, preferredGroup: "console-group" },
   objects: { name: "Objects", renderer: "objects", instances: "single", menu: true, minWidth: 200, preferredGroup: "objects-group" },
   packages: { name: "Packages", renderer: "packages", instances: "single", menu: true, minWidth: 200, preferredGroup: "objects-group" },
+  help: { name: "Help", renderer: "help", instances: "single", menu: true, minWidth: 320, preferredGroup: "objects-group" },
   plots: { name: "Plots", renderer: "plots", instances: "multiple", menu: true, minWidth: 200, preferredGroup: "plots-group" },
+  viewer: { name: "Viewer", renderer: "viewer", instances: "single", menu: true, minWidth: 320, preferredGroup: "plots-group" },
   agent: { name: "Agent", renderer: "agent", instances: "single", menu: true, minWidth: 280, preferredGroup: "objects-group" },
   document: { name: "Document", renderer: "document", instances: "multiple", menu: false, minWidth: 240, preferredGroup: "editor-group" },
-  viewer: { name: "Object Viewer", renderer: "viewer", instances: "multiple", menu: false, minWidth: 320, preferredGroup: "editor-group" },
+  "object-viewer": { name: "Object Viewer", renderer: "object-viewer", instances: "multiple", menu: false, minWidth: 320, preferredGroup: "editor-group" },
 } as const;
 
 export type BuiltinPanel = keyof typeof builtinPanels;

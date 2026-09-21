@@ -286,9 +286,6 @@ impl OutputStore {
     /// Append a rendered help document exactly once after its observation writer
     /// has finished. It is a text artifact and cannot become a plot.
     pub fn append_text(&self, id: &OperationId, text: &str) -> Result<MediaReference, String> {
-        if text.len() > MAX_MEDIA {
-            return Err("help text exceeds the 16 MiB artifact bound".into());
-        }
         let (events, gap) = self.log(id)?;
         if gap {
             return Err("cannot append help to an incomplete output log".into());
@@ -304,6 +301,41 @@ impl OutputStore {
             }
             return Err("help artifact already exists with different content".into());
         }
+        self.append_artifact(id, text.as_bytes(), "text/plain", "text_artifact", &events)
+    }
+
+    /// Append an HTML document the run handed to the viewer. Several documents may
+    /// belong to one run; each keeps its own sequence and hash.
+    pub fn append_html(&self, id: &OperationId, html: &[u8]) -> Result<MediaReference, String> {
+        let (events, gap) = self.log(id)?;
+        if gap {
+            return Err("cannot append an HTML document to an incomplete output log".into());
+        }
+        let sha256 = digest(html);
+        if let Some(reference) = events
+            .iter()
+            .filter(|event| event.kind == "media")
+            .filter_map(|event| event.media.as_ref())
+            .find(|reference| reference.mime_type == "text/html" && reference.sha256 == sha256 && reference.byte_size == html.len() as u64)
+        {
+            return Ok(reference.clone());
+        }
+        self.append_artifact(id, html, "text/html", "media", &events)
+    }
+
+    fn append_artifact(
+        &self,
+        id: &OperationId,
+        bytes: &[u8],
+        mime_type: &str,
+        kind: &str,
+        events: &[OutputEvent],
+    ) -> Result<MediaReference, String> {
+        if bytes.len() > MAX_MEDIA {
+            return Err(format!("{mime_type} artifact exceeds the 16 MiB bound"));
+        }
+        let sha256 = digest(bytes);
+        let text = bytes;
         let directory = self.directory(id);
         let log = self.checked(&directory, "events.jsonl")?;
         let log_size = std::fs::metadata(&log).map_err(err)?.len();
@@ -316,13 +348,13 @@ impl OutputStore {
             || events.len() >= 4095
             || media_bytes + text.len() as u64 > MAX_RUN_MEDIA as u64
         {
-            return Err("output budget cannot retain complete help text".into());
+            return Err("output budget cannot retain the complete artifact".into());
         }
         let sequence = events.last().map_or(1, |event| event.sequence + 1);
         let reference = MediaReference {
             operation_id: id.clone(),
             sequence,
-            mime_type: "text/plain".into(),
+            mime_type: mime_type.into(),
             byte_size: text.len() as u64,
             sha256,
             display_id: None,
@@ -332,7 +364,7 @@ impl OutputStore {
             .create_new(true)
             .open(directory.join(format!("{sequence}.bin")))
             .map_err(err)?;
-        file.write_all(text.as_bytes()).map_err(err)?;
+        file.write_all(text).map_err(err)?;
         file.sync_all().map_err(err)?;
         let mut writer = OutputWriter {
             directory,
@@ -343,7 +375,7 @@ impl OutputStore {
             media_bytes: media_bytes as usize,
             truncated: false,
         };
-        writer.event("text_artifact", None, Some(reference.clone()))?;
+        writer.event(kind, None, Some(reference.clone()))?;
         writer.finish()?;
         Ok(reference)
     }
@@ -498,7 +530,7 @@ impl rho_workspace::WorkspaceOutputs for OutputStore {
             .filter(|e| {
                 e.media
                     .as_ref()
-                    .is_some_and(|reference| reference.mime_type.starts_with("image/"))
+                    .is_some_and(|reference| reference.mime_type.starts_with("image/") || reference.mime_type == "text/html")
             })
             .filter_map(|e| {
                 e.media.map(|reference| rho_contract::MediaSummary {

@@ -174,11 +174,11 @@ impl QueryHandler for WorkspaceOutputHandler {
             OutputQueryKind::ReadText => {
                 let args: ReadOutputTextArguments =
                     serde_json::from_value(value.clone()).map_err(invalid)?;
-                if args.reference.mime_type != "text/plain"
+                if !matches!(args.reference.mime_type.as_str(), "text/plain" | "text/html")
                     || !(1..=65536).contains(&args.limit_bytes)
                 {
                     return Err(invalid(
-                        "text artifact reads require text/plain and limit 1..=65536",
+                        "text artifact reads require text/plain or text/html and limit 1..=65536",
                     ));
                 }
                 serde_json::to_value(args).map_err(invalid)
@@ -595,8 +595,8 @@ fn text_page(
     bytes: &[u8],
     args: &ReadOutputTextArguments,
 ) -> Result<OutputTextPage, OperationError> {
-    if args.reference.mime_type != "text/plain" || !(1..=65536).contains(&args.limit_bytes) {
-        return Err(invalid("text/plain output and limit 1..=65536 required"));
+    if !matches!(args.reference.mime_type.as_str(), "text/plain" | "text/html") || !(1..=65536).contains(&args.limit_bytes) {
+        return Err(invalid("text/plain or text/html output and limit 1..=65536 required"));
     }
     let text = std::str::from_utf8(bytes).map_err(invalid)?;
     let start = usize::try_from(args.offset).map_err(invalid)?;

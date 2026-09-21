@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 mod agent_tasks;
 mod agent_handoffs;
+mod annotations;
 mod component_agents;
 mod agents;
 mod settings;
@@ -90,6 +91,8 @@ struct AppState {
     task_agents: Arc<rho_host::AgentTaskService>,
     component_agents: Arc<rho_host::ComponentAgentService>,
     handoffs: Arc<rho_host::AgentHandoffService>,
+    annotations: Arc<rho_host::AnnotationService>,
+    html_views: Arc<rho_host::HtmlViewTokens>,
     calls: Arc<Semaphore>,
     observations: Arc<Semaphore>,
     application: Arc<rho_host::ApplicationStore>,
@@ -124,7 +127,9 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
     {
         return failure(StatusCode::FORBIDDEN, "foreign Origin");
     }
-    let public_asset = matches!(request.uri().path(), "/" | "/app.js" | "/style.css");
+    let html_view = request.method() == axum::http::Method::GET
+        && request.uri().path().starts_with("/view/html/");
+    let public_asset = matches!(request.uri().path(), "/" | "/app.js" | "/style.css") || html_view;
     let credential = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok());
@@ -181,7 +186,10 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
     headers.insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
     headers.insert("referrer-policy", "no-referrer".parse().unwrap());
     headers.insert("x-content-type-options", "nosniff".parse().unwrap());
-    headers.insert("content-security-policy", format!("default-src 'none'; script-src 'self'; style-src 'self' 'nonce-{}'; style-src-attr 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", state.nonce).parse().unwrap());
+    // Isolated HTML views declare their own policy; the shell policy admits them as frames.
+    if !headers.contains_key("content-security-policy") {
+        headers.insert("content-security-policy", format!("default-src 'none'; script-src 'self'; style-src 'self' 'nonce-{}'; style-src-attr 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", state.nonce).parse().unwrap());
+    }
     response
 }
 
@@ -523,6 +531,10 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/agents/tasks/asset", post(agent_tasks::asset))
         .route("/api/agents/handoff/query", post(agent_handoffs::query))
         .route("/api/agents/handoff/command", post(agent_handoffs::command))
+        .route("/api/annotations/query", post(annotations::query))
+        .route("/api/annotations/capture", post(annotations::capture))
+        .route("/api/html/token", post(annotations::html_token))
+        .route("/view/html/{token}", get(annotations::html_view))
         .route("/api/agents/components/query", post(component_agents::query))
         .route("/api/agents/components/command", post(component_agents::command))
         .route("/api/agents/components/credential", post(component_agents::credential))
@@ -564,6 +576,10 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
             post(component_agents::asset_upload)
                 .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(3 * 1024 * 1024))
                 .layer(RequestBodyLimitLayer::new(3 * 1024 * 1024))))
+        .merge(Router::new().route("/api/annotations/command",
+            post(annotations::command)
+                .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(12 * 1024 * 1024))
+                .layer(RequestBodyLimitLayer::new(12 * 1024 * 1024))))
         .layer(middleware::from_fn_with_state(state.clone(), boundary))
         .with_state(state)
 }
@@ -649,6 +665,8 @@ pub async fn serve_with_assets(
         task_agents: rho_host::AgentTaskService::new(application.clone()),
         component_agents: rho_host::ComponentAgentService::new(application.clone()),
         handoffs: Arc::new(rho_host::AgentHandoffService::new(application.clone())),
+        annotations: Arc::new(rho_host::AnnotationService::new(application.clone())),
+        html_views: Arc::default(),
         calls: Arc::new(Semaphore::new(32)),
         observations: Arc::new(Semaphore::new(16)),
         application,
@@ -733,6 +751,8 @@ mod tests {
             task_agents: rho_host::AgentTaskService::new(application.clone()),
             component_agents: rho_host::ComponentAgentService::new(application.clone()),
             handoffs: Arc::new(rho_host::AgentHandoffService::new(application.clone())),
+            annotations: Arc::new(rho_host::AnnotationService::new(application.clone())),
+            html_views: Arc::default(),
             calls: Arc::new(Semaphore::new(32)),
             observations: Arc::new(Semaphore::new(16)),
             application,
@@ -1212,3 +1232,5 @@ mod tests {
 mod mcp_identity_tests;
 #[cfg(test)]
 mod agent_handoff_tests;
+#[cfg(test)]
+mod annotation_tests;

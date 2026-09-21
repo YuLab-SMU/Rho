@@ -9,6 +9,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::new()
         .with_out_dir(directory)
         .with_large_int("number");
+    AnnotationsQuery::export_all(&config)?;
+    AnnotationQueryResult::export_all(&config)?;
+    AnnotationsCommand::export_all(&config)?;
+    AnnotationCommandReceipt::export_all(&config)?;
+    ReadAnnotationCapture::export_all(&config)?;
+    HtmlSurfaceRef::export_all(&config)?;
+    HtmlViewTokenRequest::export_all(&config)?;
+    HtmlViewToken::export_all(&config)?;
     CancelOperation::export_all(&config)?;
     RunRArguments::export_all(&config)?;
     RuntimeInstances::export_all(&config)?;

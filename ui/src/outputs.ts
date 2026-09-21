@@ -39,15 +39,18 @@ export class Outputs extends Model<OutputSnapshot> {
     // Do not expose an output until its authoritative operation sort identity is known.
     const known = (id: string) => !!this.deps.operations.getRecord(id) && Number.isSafeInteger(this.deps.operations.getSummary(id)?.cursor);
     const events = new Map([...this.events].filter(([id]) => known(id)));
-    const media = [...this.media.values()].filter((reference) => known(reference.operation_id)).sort((a, b) =>
+    const ordered = [...this.media.values()].filter((reference) => known(reference.operation_id)).sort((a, b) =>
       this.deps.operations.getSummary(a.operation_id)!.cursor - this.deps.operations.getSummary(b.operation_id)!.cursor ||
       a.operation_id.localeCompare(b.operation_id) || a.sequence - b.sequence,
     );
+    // Static graphics stay with Plots; retained HTML documents belong to the Viewer.
+    const media = ordered.filter((reference) => reference.mime_type.startsWith("image/"));
+    const html = ordered.filter((reference) => reference.mime_type === "text/html");
     return {
       events: readonlyMap(events), notices: readonlyMap(this.notices), errors: readonlyMap(this.errors),
       cursors: readonlyMap(new Map([...this.streams].map(([id, state]) => [id, state.cursor]))),
       completed: readonlySet(new Set([...this.streams].filter(([, state]) => state.complete).map(([id]) => id))),
-      media: Object.freeze(media), times: readonlyMap(this.times), records: readonlyMap(this.deps.operations.records()),
+      media: Object.freeze(media), html: Object.freeze(html), times: readonlyMap(this.times), records: readonlyMap(this.deps.operations.records()),
       historyLoading: this.historyRequested || [...this.mediaScans.values()].some((state) => !state.blocked) || this.requestedReferences.size > 0,
       historyError: this.historyError,
     };

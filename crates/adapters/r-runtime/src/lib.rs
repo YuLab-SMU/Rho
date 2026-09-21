@@ -181,11 +181,13 @@ impl ArkRuntime {
         }).unwrap_or_default();
         let handshake=runtime.data_root.join("installation-handshake.json");
         let handshake_code=format!("jsonlite::write_json(list(r_home=normalizePath(R.home(),winslash='/',mustWork=TRUE),r_version=as.character(getRversion()),platform=R.version$platform),{},auto_unbox=TRUE);",quote(&handshake.to_string_lossy())?);
+        let viewer_pending = runtime.data_root.join("viewer-pending");
         let bootstrap = format!(
-            "local({{ requireNamespace('jsonlite'); requireNamespace('tools'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e); setwd({}); {library_setup} {helper_setup} {handshake_code} invisible(TRUE) }})",
+            "local({{ requireNamespace('jsonlite'); requireNamespace('tools'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e, viewer = e$rho_viewer({})); setwd({}); {library_setup} {helper_setup} {handshake_code} invisible(TRUE) }})",
             quote(&format!(
                 "{BRIDGE}\n{QUERIES}\n{PACKAGES}\n{OBJECTS}\n{PACKAGE_INDEX}\n{TOOLS}\n{CHECKPOINTS}"
             ))?,
+            quote(&viewer_pending.to_string_lossy())?,
             quote(&project.to_string_lossy())?
         );
         let bootstrap_output = runtime
@@ -735,6 +737,26 @@ impl WorkspaceRuntime for ArkRuntime {
 }
 
 impl ArkRuntime {
+    /// Retain viewer documents written during a run, oldest first. Files that
+    /// cannot be retained stay on disk with the error rather than being dropped.
+    fn drain_viewer(&self, id: &rho_contract::OperationId) -> Result<Vec<rho_contract::MediaReference>, String> {
+        let pending = self.data_root.join("viewer-pending");
+        let mut names: Vec<_> = match std::fs::read_dir(&pending) {
+            Ok(entries) => entries.filter_map(Result::ok).map(|entry| entry.path()).filter(|path| path.extension().is_some_and(|ext| ext == "html")).collect(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
+            Err(error) => return Err(error.to_string()),
+        };
+        names.sort();
+        let mut references = Vec::new();
+        for path in names {
+            let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+            let reference = self.outputs.append_html(id, &bytes)?;
+            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+            references.push(reference);
+        }
+        Ok(references)
+    }
+
     async fn execute_action(
         &self,
         operation: &Operation,
@@ -745,6 +767,14 @@ impl ArkRuntime {
         let (mut response, mut captured, result_path) = self
             .bridge_call(operation.operation_id.as_str(), action, cancellation)
             .await?;
+        if action_name == "execute" {
+            // Documents the run handed to the viewer belong to this run: the lane
+            // serializes executions, so pending files cannot come from another one.
+            match self.drain_viewer(&operation.operation_id) {
+                Ok(references) => captured.displays.extend(references),
+                Err(error) => { captured.observation_error.get_or_insert(error); }
+            }
+        }
         if action_name == "help"
             && response.outcome == OperationOutcome::Succeeded
             && let Some(text) = response.value.get("text").and_then(Value::as_str)

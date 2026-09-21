@@ -6,6 +6,15 @@ use ts_rs::TS;
 fn page_bytes() -> u32 {
     16384
 }
+/// Rendering format. HTML is produced by the static `tools::Rd2HTML` stage and is
+/// suitable for a sanitized document view; text remains the bounded default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum HelpFormat {
+    #[default]
+    Text,
+    Html,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ReadPackageHelpArguments {
@@ -21,6 +30,8 @@ pub struct ReadPackageHelpArguments {
     pub offset_utf8: u64,
     #[serde(default = "page_bytes")]
     pub limit_bytes: u32,
+    #[serde(default)]
+    pub format: HelpFormat,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct PackageHelpPage {
@@ -35,4 +46,9 @@ pub struct PackageHelpPage {
     pub total_bytes: u64,
     pub complete: bool,
     pub help_files: Vec<PackageFileIdentity>,
+    #[serde(default)]
+    pub format: HelpFormat,
+    /// Present for HTML: the package version recorded in the observed copy.
+    #[serde(default)]
+    pub version: Option<String>,
 }

@@ -36,6 +36,8 @@ export const usePackages = () => { const { id } = useRuntimeBinding(); return us
 export const useOutputs = () => useModule(studio.outputs);
 export const useMediaCache = () => useModule(studio.mediaCache);
 export const usePlots = () => useModule(studio.plots);
+export const useHelp = () => useModule(studio.help);
+export const useViewer = () => useModule(studio.viewer);
 export const useLayout = () => useModule(studio.layout);
 const scopedNavigation = new Map<string, typeof studio.navigation>();
 export const useNavigation = () => {

@@ -49,6 +49,7 @@ impl ApplicationStore {
         crate::agent_tasks::initialize(&connection)?;
         crate::component_agents::initialize(&connection)?;
         crate::agent_handoffs::initialize(&connection)?;
+        crate::annotations::initialize(&connection)?;
         crate::runtime_instances::initialize(&connection)?;
         Ok(Self(Mutex::new(connection)))
     }

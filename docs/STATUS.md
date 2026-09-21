@@ -1,36 +1,56 @@
 # Rho: current state and focus
 
-Updated: 2026-09-14. This is the single current status summary. Git retains history.
+Updated: 2026-09-21. This is the single current status summary. Git retains history.
 
-## Current focus: component annotations, Help, Viewer and lighter controls
+## Current implementation: Help, Viewer, and annotation infrastructure
 
-The user requested a shared annotation capability across components: text
-selection with comments, pen marks, regions, arrows and written explanations
-that people and Agents can inspect with the original content. Five proposed
-[Paper boards, AN01–AN05](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
-cover quoted text, captured interactive views, compact editing and Agent draft
-inclusion, historical versions, edit conflicts and shared component entry points. All five
-boards were visually inspected in Paper and are pending user review.
-[Design section 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)
-records the shared annotation layer, owner-issued anchors, accessible controls,
-original annotation/comment revisions captured at send and draft-only inclusion.
+The annotation, Help and Viewer runtime foundations are implemented and verified
+with HTTP/Application/SQLite tests. Help reads package Rd files through the same
+exact-copy reader people use; nothing is loaded or executed. HTML Viewer captures
+the R `viewer()` option with inlined local assets; saved artifacts are retrieved
+through the same output reader. Annotations freeze evidence through the validated
+preview path that Ask already uses; each revision is bound to the observed source
+version. Agent context sources now include `help`, `viewer` and `annotations`.
+
+**Implemented in the current source:**
+
+- Help reads package Rd topics converted to text or HTML (Rd2HTML with dynamic=TRUE
+  relative links), paginated to 512 KiB chunks. Studio Help panel displays HTML help
+  with navigation history. Package inspector "Documentation" button opens the package
+  overview in the Help panel. Agent context includes full text or first 12 lines.
+- Viewer captures the R `viewer(url)` option with tokenized isolated document URLs.
+  Pending HTML output is inlined with local images/CSS/JS converted to data: URIs
+  to preserve standalone rendering; external https: URLs pass through untouched.
+  Agent context includes the retained text/html source or a byte-count summary.
+- Annotations freeze evidence through the existing `component_source_preview` at
+  selection start. Each revision binds to the observed source version and lineage ID;
+  later source changes keep old notes historical. SQLite repository tracks CAS
+  preconditions, tombstone deletions and 8 MiB captured-view budget. Agent context
+  includes note text, anchor, fragment and optional captured PNG/JPEG.
+- The shared ApplicationViewType enum adds Help, Html (for saved HTML documents),
+  and ObjectViewer (for the proposed table detail). Studio layout wires Help and
+  Viewer panels with open/history/refresh controls.
+
+**Not implemented in this iteration:**
+
+- Studio annotation UI: no Annotate or Comment affordances exist yet, and Agent
+  drafts cannot add annotation references. The schema and Host service support
+  Freeze/Capture/Create/Update/Delete/Preview/Evidence; the Studio wiring is deferred.
+- Lighter chrome: the proposed continuous surfaces and quiet toolbars from Paper
+  boards HV01–HV07 are not implemented. The existing chrome remains unchanged.
+- Viewer panel "Open in system browser" is a stub; the Host does not serve isolated
+  HTML views outside Studio, and no external URL assignment exists yet.
+- Help navigation within topics (internal # anchors) is not intercepted; clicking
+  one reloads the whole panel rather than scrolling to the fragment identifier.
+
 The user confirmed version-bound annotation history: artifact updates make old
 notes historical; new versions receive new linked notes rather than moved marks.
-Feedback F22 remains open.
-
-The user requested Paper designs for separate R Help and interactive HTML Viewer
-components, and less framed chrome in constrained workspaces. Seven proposed
-[Paper boards, HV01–HV07](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/B-0)
-cover 1440/1024/600 px workspaces, 320 px panels, source previews, lighter existing
-controls, package documentation entry/search and unavailable/disconnected states.
-All boards were visually inspected in Paper; they are pending user review.
+Five annotation Paper boards (AN01–AN05) and seven Help/Viewer boards (HV01–HV07)
+are pending final user visual review.
+[Design section 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)
+records the shared annotation layer, and
 [Design section 19](RHO-DESIGN.md#19-r-help-interactive-viewer-and-lighter-controls--proposal)
-records shared HTML presentation, owner-issued sources for people and Agents,
-draft-only Ask, and layout preservation. Feedback F20/F21 remains open.
-
-This is design work only: no new annotation or Help/Viewer runtime implementation,
-product acceptance or Host restart is claimed. Existing installation scope remains
-below.
+records Help and Viewer interactions.
 
 ## macOS preview delivery scope
 

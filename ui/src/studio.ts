@@ -16,6 +16,8 @@ import { Files } from "./files";
 import { Outputs } from "./outputs";
 import { MediaCache } from "./media-cache";
 import { Plots } from "./plots";
+import { Help } from "./help";
+import { Viewer } from "./viewer";
 import { PanelLayout } from "./layout-model";
 import { Navigation } from "./navigation";
 import { Agents } from "./agents";
@@ -52,6 +54,8 @@ export class Studio {
   readonly outputs: Outputs;
   readonly mediaCache: MediaCache;
   readonly plots: Plots;
+  readonly help: Help;
+  readonly viewer: Viewer;
   readonly layout: PanelLayout;
   readonly navigation: Navigation;
   readonly persistence: ApplicationPersistence;
@@ -127,6 +131,10 @@ export class Studio {
     this.mediaCache = new MediaCache({ context: this.session.context, query, adapter: browserMedia, schedule: () => this.coordinator.wake("media") });
     this.plots = new Plots({ outputs: this.outputs, changed: this.persistence.changed,
       openPlot: (id, name) => this.layout.show("plots", id, name), showPlots: () => this.layout.show("plots") });
+    this.help = new Help({ context: this.session.context, query, changed: this.persistence.changed,
+      schedule: () => this.coordinator.wake("help") });
+    this.viewer = new Viewer({ outputs: this.outputs, changed: this.persistence.changed,
+      openViewer: (id, name) => this.layout.show("viewer", id, name) });
     this.navigation = new Navigation({ context: this.session.context, show: this.layout.show.bind(this.layout),
       bindView: (view, id) => { if (this.runtimeSessions.getInstance(id)) this.runtimeSessions.pinView(view, id); },
       openDocument: this.documents.open.bind(this.documents), createDocument: this.documents.create.bind(this.documents),
@@ -341,7 +349,7 @@ export class Studio {
         if (this.phase === "ready") this.phase = "checkpoint";
         this.session.setReady(false);
         this.operations.reset(); this.runtimeSessions.reset(); this.resetWorkspaces(); this.files.reset(); this.startupContinuation = false;
-        this.documents.reset(); this.outputs.reset(); this.mediaCache.reset(); this.plots.reset(); this.layout.resetState(); this.navigation.reset();
+        this.documents.reset(); this.outputs.reset(); this.mediaCache.reset(); this.plots.reset(); this.help.reset(); this.viewer.reset(); this.layout.resetState(); this.navigation.reset();
         this.application.reset(); this.agents.reset(); this.nativeAgents.reset();
         this.agentTasks.reset();
         this.componentAgents.reset();
@@ -397,6 +405,7 @@ export class Studio {
     this.coordinator.register("agents", 2000, async () => { if (!this.stopped) await this.agents.observe(); });
     this.coordinator.register("native-agents", 500, async () => { if (!this.stopped) await this.nativeAgents.observe(); });
     this.coordinator.register("agent-task-summary", 1000, async () => { if (!this.stopped) await this.agentTasks.observeSummary(); });
+    this.coordinator.register("help", 500, ready(() => this.help.observe()));
     this.coordinator.register("agent-task-events", 250, async () => { if (!this.stopped) await this.agentTasks.observeEvents(); });
     this.coordinator.register("pending", 2000, ready(async () => {
       await this.operations.reconcilePending(); await this.operations.ensureReferences(this.workspaceOperationIds());

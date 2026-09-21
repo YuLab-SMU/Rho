@@ -24,6 +24,8 @@ export interface OutputSnapshot {
   readonly cursors: ReadonlyMap<string, number>;
   readonly completed: ReadonlySet<string>;
   readonly media: readonly MediaReference[];
+  /** Retained text/html outputs in the same authoritative order as `media`. */
+  readonly html: readonly MediaReference[];
   readonly times: ReadonlyMap<string, number>;
   readonly records: ReadonlyMap<string, OperationRecord>;
   readonly historyLoading: boolean;

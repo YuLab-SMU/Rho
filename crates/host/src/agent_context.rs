@@ -101,6 +101,9 @@ pub(crate) fn sources(plugins: &[Arc<dyn AgentContextProvider>]) -> Vec<AgentCon
         ("operations", "Runs"),
         ("tables", "Tables"),
         ("packages", "Packages"),
+        ("help", "Help"),
+        ("viewer", "Viewer"),
+        ("annotations", "Annotations"),
         ("workspace", "Console / Workspace"),
         ("environment", "R Sessions"),
     ]
@@ -451,6 +454,131 @@ pub(crate) async fn preview(
                         .map(|c| c.values.get(i).map(scalar).unwrap_or_default())
                         .collect(),
                 );
+            }
+            p
+        }
+        "help" => {
+            // The same exact-copy reader people use; nothing is loaded or executed.
+            if !matches!(s.inclusion.as_str(), "text" | "summary") {
+                return Err("Help sources include topic text or a summary".into());
+            }
+            let mut args = s.reference.clone();
+            let object = args.as_object_mut().ok_or("Help reference must be an object")?;
+            object.remove("index_ref");
+            object.insert("limit_bytes".into(), json!(32768));
+            object.insert("offset_utf8".into(), json!(0));
+            object.remove("expected_help_files");
+            object.insert("format".into(), json!("text"));
+            let data = reader.query("workspace.read_help", args).await?;
+            let page: PackageHelpPage = serde_json::from_value(data.clone()).map_err(|e| e.to_string())?;
+            if !page.found {
+                return Err(format!("Help topic {} is not documented in this installed copy", page.topic));
+            }
+            let mut p = preview_base(s, &["text", "summary"]);
+            p.title = format!("{}::{}", page.package, page.topic);
+            p.selection.label = p.title.clone();
+            p.description = format!(
+                "Help · {} {} · {}",
+                page.package,
+                page.version.clone().unwrap_or_default(),
+                page.library_path
+            );
+            p.truncated = !page.complete;
+            p.text = if s.inclusion == "summary" {
+                page.text.lines().take(12).collect::<Vec<_>>().join("\n")
+            } else {
+                page.text.clone()
+            };
+            p.native_data = json!({
+                "package": page.package, "topic": page.topic, "library_path": page.library_path,
+                "version": page.version, "help_files": page.help_files, "observation_id": page.observation_id,
+                "complete": page.complete, "total_bytes": page.total_bytes,
+            });
+            p
+        }
+        "viewer" => {
+            if !matches!(s.inclusion.as_str(), "summary" | "text") {
+                return Err("Viewer sources include a summary or the retained HTML text".into());
+            }
+            let r: MediaReference = serde_json::from_value(
+                s.reference.get("reference").cloned().unwrap_or_else(|| s.reference.clone()),
+            )
+            .map_err(|_| "Invalid viewer artifact reference")?;
+            if r.mime_type != "text/html" {
+                return Err("Viewer sources are retained text/html outputs".into());
+            }
+            let mut p = preview_base(s, &["summary", "text"]);
+            p.title = format!("HTML output {}", r.sequence);
+            p.description = format!("Viewer · Run {} · Output {} · saved artifact", r.operation_id.as_str(), r.sequence);
+            p.selection.reference = json!({"reference": r});
+            let data = reader
+                .query("output.read_text", json!({"reference": r, "offset": 0, "limit_bytes": 65536}))
+                .await?;
+            let page: OutputTextPage = serde_json::from_value(data).map_err(|e| e.to_string())?;
+            p.truncated = !page.complete;
+            p.text = if s.inclusion == "summary" {
+                format!("Retained HTML document · {} bytes. Browser selection, zoom or filter state is not exposed.", r.byte_size)
+            } else {
+                page.text
+            };
+            p.native_data = json!({"reference": r, "state": "saved", "complete": page.complete});
+            p
+        }
+        "annotations" => {
+            let annotation: AnnotationRevisionRef = serde_json::from_value(
+                s.reference.get("annotation").cloned().unwrap_or(Value::Null),
+            )
+            .map_err(|_| "Annotation reference needs an annotation_id and revision")?;
+            if !matches!(s.inclusion.as_str(), "summary" | "text" | "image") {
+                return Err("Annotation sources include their note, evidence and optional capture".into());
+            }
+            let owner = reader.host.annotations().ok_or("Annotations are unavailable in this Host")?;
+            let scope = reader.host.application_owner().map_err(|e| e.to_string())?.scope(reader.context).map_err(|e| e.to_string())?;
+            let (revision, evidence) = owner.read(&scope, &annotation).map_err(|e| e.to_string())?;
+            if revision.deleted {
+                return Err("This annotation was deleted".into());
+            }
+            let mut p = preview_base(s, &["summary", "text", "image"]);
+            p.title = if revision.note.trim().is_empty() {
+                format!("Marks on {}", evidence.source.title)
+            } else {
+                revision.note.lines().next().unwrap_or_default().chars().take(80).collect()
+            };
+            p.selection.label = p.title.clone();
+            p.selection.reference = json!({"annotation": revision.annotation, "source_id": evidence.source.source_id, "source_version": evidence.source.source_version});
+            p.description = format!(
+                "Annotation · {} · version {} · by {}",
+                evidence.source.title,
+                evidence.source.source_version.chars().take(24).collect::<String>(),
+                revision.author.id
+            );
+            let anchor = serde_json::to_value(&evidence.anchor).map_err(|e| e.to_string())?;
+            p.text = format!(
+                "Note: {}\nLabels: {}\nSource: {} ({:?}) version {}\nAnchor: {}\nEvidence: {}\nThis note is bound to the source version above; it is not a comment on any later version.",
+                revision.note,
+                revision.labels.join(", "),
+                evidence.source.title,
+                evidence.source.owner,
+                evidence.source.source_version,
+                anchor,
+                evidence.fragment
+            );
+            p.native_data = json!({
+                "revision": revision, "source": evidence.source, "anchor": evidence.anchor,
+                "fragment": evidence.fragment, "selection": evidence.selection,
+            });
+            if let AnnotationAnchor::CapturedView { capture } = &evidence.anchor
+                && s.inclusion == "image"
+            {
+                let (stored, bytes) = owner.capture(&scope, &capture.capture_id).map_err(|e| e.to_string())?;
+                if bytes.len() > 2 * 1024 * 1024 {
+                    return Err("The captured view exceeds the 2 MiB image budget; include the note text instead".into());
+                }
+                p.image_base64 = Some(STANDARD.encode(&bytes));
+                p.image_mime_type = Some(stored.mime_type.clone());
+                p.native_data["preview_sha256"] = json!(stored.sha256);
+                p.native_data["capture"] = json!(stored);
+                p.native_data["marks"] = json!(revision.marks);
             }
             p
         }

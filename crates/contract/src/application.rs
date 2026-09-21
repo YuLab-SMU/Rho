@@ -81,9 +81,13 @@ pub enum ApplicationViewType {
     Console,
     Objects,
     Viewer,
+    #[serde(rename = "object-viewer")]
+    ObjectViewer,
     Packages,
     Plots,
     Agent,
+    Help,
+    Html,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

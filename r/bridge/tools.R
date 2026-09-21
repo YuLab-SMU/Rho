@@ -86,9 +86,11 @@ rho_help_text_page <- function(text, offset, limit) {
 }
 
 # Exact-copy help for the Query lane. Missing providers remain unavailable.
+# HTML uses the same static Rd stage; no dynamic sections or examples run.
 rho_read_help <- function(payload) {
+  html <- identical(payload$format, "html")
   get_help <- rho_readonly_binding("utils", ".getHelpFile")
-  render <- rho_readonly_binding("tools", "Rd2txt")
+  render <- rho_readonly_binding("tools", if (html) "Rd2HTML" else "Rd2txt")
   capture <- rho_readonly_binding("utils", "capture.output")
   copy <- rho_package_exact_copy(payload)
   path <- copy$path
@@ -98,13 +100,92 @@ rho_read_help <- function(payload) {
   if (!is.null(payload$expected_help_files) && !identical(help_files, payload$expected_help_files)) rho_object_error("content_changed", "Help files changed between pages.")
   entry <- rho_help_exact_entry(path, payload$topic)
   found <- length(entry) == 1L
-  text <- if (found) paste(capture(render(get_help(entry[[1L]]), stages = character(), options = list(underline_titles = FALSE))), collapse = "\n") else ""
+  text <- if (!found) "" else if (html) {
+    # dynamic = TRUE emits relative ../../<pkg>/help/<topic> links that the client
+    # resolves through the same exact-copy reader; nothing is fetched from R's httpd.
+    suppressWarnings(paste(capture(render(get_help(entry[[1L]]), package = c(payload$package, copy$copy$version),
+                         stages = character(), dynamic = TRUE, no_links = FALSE, stylesheet = "")), collapse = "\n"))
+  } else {
+    paste(capture(render(get_help(entry[[1L]]), stages = character(), options = list(underline_titles = FALSE))), collapse = "\n")
+  }
   text <- enc2utf8(text)
   if (nchar(text, type = "bytes") > 16 * 1024 * 1024) rho_object_error("budget_exhausted", "Rendered help exceeds 16 MiB.")
   if (!identical(index_files, rho_package_index_files(path)) || !identical(help_files, rho_help_exact_files(path))) rho_object_error("content_changed", "Package help changed during reading.")
   c(list(observation_id = payload$observation_id, package = payload$package, library_path = payload$library_path,
-         topic = payload$topic, found = found, help_files = help_files),
+         topic = payload$topic, found = found, help_files = help_files,
+         format = if (html) "html" else "text", version = copy$copy$version),
     rho_help_text_page(text, payload$offset_utf8, payload$limit_bytes))
+}
+
+# Viewer hook. htmltools/htmlwidgets call getOption("viewer")(url) with a temporary
+# HTML file. Local script/style/image dependencies are inlined so the retained
+# document stands alone; nothing is fetched remotely and no service is started.
+rho_inline_html <- function(path, budget = 16 * 1024 * 1024) {
+  root <- normalizePath(dirname(path), winslash = "/", mustWork = TRUE)
+  html <- paste(readLines(path, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
+  used <- nchar(html, type = "bytes")
+  local_file <- function(reference) {
+    reference <- sub("[?#].*$", "", reference)
+    if (!nzchar(reference) || grepl("^(https?:|data:|blob:|//|/)", reference)) return(NULL)
+    candidate <- tryCatch(normalizePath(file.path(root, utils::URLdecode(reference)), winslash = "/", mustWork = TRUE), error = function(e) NULL)
+    if (is.null(candidate) || !startsWith(candidate, paste0(root, "/"))) return(NULL)
+    info <- file.info(candidate)
+    if (is.na(info$size) || info$isdir) return(NULL)
+    if (used + info$size > budget) stop("Viewer document with dependencies exceeds 16 MiB.")
+    used <<- used + info$size
+    candidate
+  }
+  replace_all <- function(text, pattern, make) {
+    matches <- gregexpr(pattern, text, perl = TRUE)[[1L]]
+    if (matches[[1L]] == -1L) return(text)
+    pieces <- regmatches(text, list(matches))[[1L]]
+    replacements <- vapply(pieces, make, character(1L), USE.NAMES = FALSE)
+    regmatches(text, list(matches)) <- list(replacements)
+    text
+  }
+  html <- replace_all(html, "<script\\b[^>]*\\bsrc\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>\\s*</script>", function(tag) {
+    src <- sub(".*\\bsrc\\s*=\\s*[\"']([^\"']+)[\"'].*", "\\1", tag, perl = TRUE)
+    file <- local_file(src)
+    if (is.null(file)) return(tag)
+    code <- paste(readLines(file, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
+    paste0("<script>", gsub("</script", "<\\/script", code, fixed = TRUE), "</script>")
+  })
+  html <- replace_all(html, "<link\\b[^>]*\\bhref\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>", function(tag) {
+    if (!grepl("stylesheet", tag, ignore.case = TRUE)) return(tag)
+    href <- sub(".*\\bhref\\s*=\\s*[\"']([^\"']+)[\"'].*", "\\1", tag, perl = TRUE)
+    file <- local_file(href)
+    if (is.null(file)) return(tag)
+    css <- paste(readLines(file, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
+    paste0("<style>", gsub("</style", "<\\/style", css, fixed = TRUE), "</style>")
+  })
+  html <- replace_all(html, "<img\\b[^>]*\\bsrc\\s*=\\s*[\"']([^\"']+)[\"']", function(tag) {
+    src <- sub(".*\\bsrc\\s*=\\s*[\"']([^\"']+)[\"'].*", "\\1", tag, perl = TRUE)
+    file <- local_file(src)
+    if (is.null(file)) return(tag)
+    type <- switch(tolower(tools::file_ext(file)), png = "image/png", jpg = "image/jpeg", jpeg = "image/jpeg", gif = "image/gif", svg = "image/svg+xml", NULL)
+    if (is.null(type)) return(tag)
+    bytes <- readBin(file, "raw", file.info(file)$size)
+    sub(src, paste0("data:", type, ";base64,", jsonlite::base64_enc(bytes)), tag, fixed = TRUE)
+  })
+  html
+}
+
+rho_viewer <- function(pending_dir) {
+  force(pending_dir)
+  function(url, height = NULL, ...) {
+    if (!is.character(url) || length(url) != 1L || grepl("^https?://", url)) {
+      # A running service (for example Shiny) is not a retained document.
+      cat("Rho Viewer: live services are not captured; open ", url, " in a browser.\n", sep = "", file = stderr())
+      return(invisible(NULL))
+    }
+    path <- sub("^file://", "", url)
+    if (!file.exists(path)) return(invisible(NULL))
+    html <- rho_inline_html(path)
+    dir.create(pending_dir, showWarnings = FALSE, recursive = TRUE)
+    target <- file.path(pending_dir, paste0(format(Sys.time(), "%Y%m%d%H%M%OS6"), "-", basename(tempfile("view")), ".html"))
+    writeLines(enc2utf8(html), target, useBytes = TRUE)
+    invisible(NULL)
+  }
 }
 
 rho_lint <- function(payload) {

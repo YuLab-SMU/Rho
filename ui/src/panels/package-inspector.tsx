@@ -1,4 +1,4 @@
-import { usePackages, useSession } from "../context";
+import { usePackages, useSession, useHelp, useLayout } from "../context";
 import { packageCopyKey, packageLink } from "../packages";
 import type { PackageEntry } from "../generated/PackageEntry";
 import type { PackageGroup } from "../generated/PackageGroup";
@@ -137,6 +137,7 @@ export function PackageInspector({
   inline?: boolean;
 }) {
   const p = usePackages(), session = useSession();
+  const help = useHelp(), layout = useLayout();
   const detail = p.details.get(group.name);
   const copies = detail?.copies ?? [];
   const primary =
@@ -176,6 +177,20 @@ export function PackageInspector({
           >
             {packageState(group)}
           </span>
+          <button
+            className="package-doc-button"
+            onClick={() => {
+              const ctx = session.context();
+              const sess = ctx.session;
+              if (!sess || !selectedCopy?.library_path) return;
+              help.open(group.name, group.name, selectedCopy.library_path, sess);
+              layout.show("help");
+            }}
+            disabled={!selectedCopy?.library_path || !session.context().session}
+            title="View package documentation"
+          >
+            Documentation
+          </button>
         </div>
       )}
       {!inline && (

@@ -61,6 +61,10 @@ pub mod instances;
 pub use instances::*;
 mod recovery_protection;
 pub use recovery_protection::*;
+mod annotation;
+pub use annotation::*;
+mod html_surface;
+pub use html_surface::*;
 
 use std::collections::BTreeSet;
 
