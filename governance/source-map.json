@@ -205,6 +205,7 @@
         "Cargo.toml",
         "Cargo.lock",
         "rust-toolchain.toml",
+        "examples/**",
         "crates/**",
         "r/**",
         "scripts/check-architecture.mjs",

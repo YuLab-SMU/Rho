@@ -1,7 +1,7 @@
 //! Project Host lifecycle for independent local R instances. The journal and project lease
 //! remain with the composing Host; an instance owns only its native runtime and Workspace owners.
 mod protection;
-use crate::{ApplicationStore, ArkConfig, ArkRuntime, JournalRecords, OperationError, probe_r};
+use crate::{ApplicationStore, ArkConfig, ArkRuntime, JournalRecords, NextHost, OperationError, probe_r};
 use async_trait::async_trait;
 use rho_contract::*;
 use rho_operation::*;
@@ -693,6 +693,7 @@ impl InstanceOwner {
             .unwrap_or_else(|e| e.into_inner())
             .instances
             .values()
+            .filter(|slot| slot.stored.state == RuntimeInstanceState::Ready)
             .filter_map(|slot| slot.live.as_ref())
             .find(|live| live.runtime.session_id() == native)
             .map(|live| live.workspace.clone())
@@ -775,16 +776,22 @@ impl InstanceOwner {
             .instances
             .get(id)
             .ok_or_else(|| OperationError::NotFound(format!("R instance {id}")))?;
+        let live = slot.live.clone().ok_or_else(|| OperationError::Unavailable(format!("R instance {id} has no running process; continuing it is an explicit lifecycle operation")))?;
+        let lifecycle_recovery = matches!(
+            slot.stored.state,
+            RuntimeInstanceState::Starting | RuntimeInstanceState::RecoveryRequired
+        );
         if slot.stored.state != RuntimeInstanceState::Ready
             && !capability.starts_with("workspace.checkpoint")
             && capability != "workspace.runtime_status"
+            && !lifecycle_recovery
         {
             return Err(OperationError::Unavailable(format!(
                 "R instance {id} is {:?}; inspect runtime.instance",
                 slot.stored.state
             )));
         }
-        slot.live.clone().ok_or_else(|| OperationError::Unavailable(format!("R instance {id} has no running process; continuing it is an explicit lifecycle operation")))
+        Ok(live)
     }
     pub(crate) fn admit_operation(
         &self,
@@ -813,9 +820,6 @@ impl InstanceOwner {
             .as_ref()
             .is_some_and(|id| operation.causation_id.as_ref() == Some(id))
             && operation.capability.id.starts_with("workspace.checkpoint");
-        if slot.stored.state != RuntimeInstanceState::Ready && !maintenance && !archived {
-            return Err(before("The R instance is not ready for analysis execution"));
-        }
         let live = if let Some(archive) = archive {
             archive
         } else {
@@ -823,6 +827,17 @@ impl InstanceOwner {
                 .clone()
                 .ok_or_else(|| before("The R instance has no process"))?
         };
+        let unavailable_transport = matches!(
+            slot.stored.state,
+            RuntimeInstanceState::Starting | RuntimeInstanceState::RecoveryRequired
+        ) && live.runtime.runtime_status().state == "unavailable";
+        if slot.stored.state != RuntimeInstanceState::Ready
+            && !maintenance
+            && !archived
+            && !(unavailable_transport && !operation.capability.id.starts_with("workspace."))
+        {
+            return Err(before("The R instance is not ready for analysis execution"));
+        }
         if operation.target.kind == "workspace"
             && live.runtime.session_id() != operation.target.identity
         {
@@ -870,6 +885,137 @@ impl InstanceOwner {
             }
         }
     }
+    pub(crate) fn release_operation_result(
+        self: &Arc<Self>,
+        id: &OperationId,
+        activity: bool,
+        result: &Result<OperationRecord, OperationError>,
+    ) {
+        let lost_transport = result
+            .as_ref()
+            .is_ok_and(|record| record.outcome == Some(OperationOutcome::Uncertain));
+        let mut recovery = None;
+        {
+            let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(request) = state.requests.remove(id) {
+                let instance = request.instance;
+                if activity {
+                    let boundary = request.live.activity.fetch_add(1, Ordering::SeqCst) + 1;
+                    if let Some(slot) = state.instances.get_mut(&instance) {
+                        slot.stored.activity = boundary;
+                    }
+                }
+                if lost_transport
+                    && request.live.runtime.runtime_status().state == "unavailable"
+                    && let Some(slot) = state.instances.get_mut(&instance)
+                    && slot.stored.state == RuntimeInstanceState::Ready
+                {
+                    // Keep the invalidated runtime owned until process liveness is known;
+                    // dropping ArkRuntime here would kill a still-living child.
+                    slot.stored.state = RuntimeInstanceState::Starting;
+                    slot.stored.last_error = Some(
+                        "The native R transport was lost; checking process ownership before reconnecting"
+                            .into(),
+                    );
+                    slot.stored.last_operation = Some(id.as_str().into());
+                    slot.maintenance = Some(id.clone());
+                    recovery = Some(instance.clone());
+                }
+                if let Err(error) = self.persist_locked(&mut state)
+                    && let Some(slot) = state.instances.get_mut(&instance)
+                {
+                    slot.stored.last_error = Some(format!(
+                        "The instance recovery boundary could not be persisted: {error}"
+                    ));
+                }
+            }
+        }
+        if let Some(instance) = recovery {
+            let owner = Arc::clone(self);
+            let failed_operation = id.clone();
+            tokio::spawn(async move {
+                owner
+                    .recover_lost_transport(instance, failed_operation)
+                    .await;
+            });
+        }
+    }
+    async fn recover_lost_transport(&self, id: String, failed_operation: OperationId) {
+        let stored = match self.stored_instance(&id) {
+            Ok(stored) => stored,
+            Err(_) => return,
+        };
+        let auto_continue = self.settings(Some(&id)).is_ok_and(|settings| {
+            settings.effective.value.mode == RuntimeContinuationMode::AutoContinue
+        });
+        let process_ended = match stored.process.as_ref() {
+            Some(process) => matches!(
+                self.launcher.original_process_alive(process).await,
+                Ok(Some(false))
+            ),
+            None => false,
+        };
+        if !auto_continue || !process_ended {
+            let message = if !auto_continue {
+                "The R transport was lost; automatic continuation is disabled. Use Continue after inspecting the original operation"
+            } else {
+                "The R transport was lost, but the original process is still alive or its termination is unconfirmed. No replacement was started"
+            };
+            let _ = self.change_state(
+                &id,
+                RuntimeInstanceState::RecoveryRequired,
+                &failed_operation,
+                Some(message.into()),
+            );
+            return;
+        }
+        let expected = match self.stored_instance(&id) {
+            Ok(stored) => stored.lineage,
+            Err(_) => return,
+        };
+        let request = Invocation {
+            client_request_id: format!("transport-recovery:{}", uuid::Uuid::new_v4().simple()),
+            capability: CapabilityRef::new("runtime.continue_instance", 1).unwrap(),
+            arguments: json!({
+                "workspace_instance_id": id,
+                "expected_continuation_lineage_id": expected,
+            }),
+            preconditions: vec![],
+        };
+        let result = match self.gateway() {
+            Ok(gateway) => gateway
+                .invoke(&NextHost::local_context(), request)
+                .await
+                .map_err(|error| error.to_string()),
+            Err(error) => Err(error.to_string()),
+        };
+        match result {
+            Ok(record) if record.status == OperationStatus::Succeeded => {}
+            Ok(record) => {
+                let _ = self.change_state(
+                    &id,
+                    RuntimeInstanceState::RecoveryRequired,
+                    &failed_operation,
+                    Some(format!(
+                        "Automatic continuation could not reconnect the R session: {}",
+                        record
+                            .error
+                            .unwrap_or_else(|| "inspect the continuation operation".into())
+                    )),
+                );
+            }
+            Err(error) => {
+                let _ = self.change_state(
+                    &id,
+                    RuntimeInstanceState::RecoveryRequired,
+                    &failed_operation,
+                    Some(format!(
+                        "Automatic continuation could not reconnect the R session: {error}"
+                    )),
+                );
+            }
+        }
+    }
     pub(crate) fn admit_query(
         self: &Arc<Self>,
         id: &str,
@@ -895,19 +1041,24 @@ impl InstanceOwner {
                 "This R session is stopping; its last observation remains available".into(),
             ));
         }
-        if slot.stored.state != RuntimeInstanceState::Ready
-            && !capability.starts_with("workspace.checkpoint")
-            && capability != "workspace.runtime_status"
-        {
-            return Err(OperationError::Unavailable(
-                "This R instance is not ready for native observations".into(),
-            ));
-        }
         let live = slot.live.clone().ok_or_else(|| {
             OperationError::Unavailable(
                 "This R instance is stopped; reading does not start it".into(),
             )
         })?;
+        let unavailable_transport = matches!(
+            slot.stored.state,
+            RuntimeInstanceState::Starting | RuntimeInstanceState::RecoveryRequired
+        ) && live.runtime.runtime_status().state == "unavailable";
+        if slot.stored.state != RuntimeInstanceState::Ready
+            && !capability.starts_with("workspace.checkpoint")
+            && capability != "workspace.runtime_status"
+            && !unavailable_transport
+        {
+            return Err(OperationError::Unavailable(
+                "This R instance is not ready for native observations".into(),
+            ));
+        }
         slot.query_count += 1;
         Ok((
             live,
@@ -1250,6 +1401,24 @@ impl RequestHold {
         };
         match self.kind.take() {
             Some(HoldKind::Operation(id)) => owner.release_operation(&id, self.mark_activity),
+            Some(HoldKind::Query(id)) => {
+                let mut state = owner.state.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(slot) = state.instances.get_mut(&id) {
+                    slot.query_count = slot.query_count.saturating_sub(1);
+                }
+                owner.native_reads_changed.notify_one();
+            }
+            None => (),
+        }
+    }
+    pub(crate) fn release_result(&mut self, result: &Result<OperationRecord, OperationError>) {
+        let Some(owner) = self.owner.upgrade() else {
+            return;
+        };
+        match self.kind.take() {
+            Some(HoldKind::Operation(id)) => {
+                owner.release_operation_result(&id, self.mark_activity, result)
+            }
             Some(HoldKind::Query(id)) => {
                 let mut state = owner.state.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(slot) = state.instances.get_mut(&id) {
@@ -3018,11 +3187,13 @@ mod tests {
         original_alive: AtomicUsize,
         started: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
+        transport_lost: Arc<AtomicBool>,
     }
     struct FixtureRuntime {
         project: String,
         native: String,
         stopped: AtomicBool,
+        transport_lost: Arc<AtomicBool>,
         started: Arc<tokio::sync::Notify>,
         release: Arc<tokio::sync::Notify>,
     }
@@ -3077,12 +3248,14 @@ mod tests {
                 self.launch_started.notify_one();
                 self.launch_release.notified().await;
             }
+            self.transport_lost.store(false, Ordering::SeqCst);
             Ok(LaunchedInstance {
                 installation: prepared.installation,
                 runtime: Arc::new(FixtureRuntime {
                     project: self.root.clone(),
                     native: format!("fixture_{}", self.launches.fetch_add(1, Ordering::SeqCst)),
                     stopped: AtomicBool::new(false),
+                    transport_lost: self.transport_lost.clone(),
                     started: self.started.clone(),
                     release: self.release.clone(),
                 }),
@@ -3115,11 +3288,13 @@ mod tests {
         fn runtime_status(&self) -> RuntimeStatus {
             RuntimeStatus {
                 session_id: self.native.clone(),
-                state: if self.stopped.load(Ordering::SeqCst) {
+                state: (if self.stopped.load(Ordering::SeqCst)
+                    || self.transport_lost.load(Ordering::SeqCst)
+                {
                     "unavailable"
                 } else {
                     "idle"
-                }
+                })
                 .into(),
                 observed_at_ms: 1,
                 processes: vec![],
@@ -3144,6 +3319,14 @@ mod tests {
             request: &RunRArguments,
             mut cancellation: tokio::sync::watch::Receiver<bool>,
         ) -> Result<WorkspaceRuntimeReport, WorkspaceRuntimeError> {
+            if request.code == "transport-loss" {
+                self.transport_lost.store(true, Ordering::SeqCst);
+                self.stopped.store(true, Ordering::SeqCst);
+                return Err(WorkspaceRuntimeError::after_possible_effect(
+                    "fixture transport lost",
+                    None,
+                ));
+            }
             let outcome = if request.code == "block" {
                 self.started.notify_one();
                 tokio::select! {
@@ -3197,6 +3380,7 @@ mod tests {
             original_alive: AtomicUsize::new(0),
             started: Arc::new(tokio::sync::Notify::new()),
             release: Arc::new(tokio::sync::Notify::new()),
+            transport_lost: Arc::new(AtomicBool::new(false)),
         });
         let host = NextHost::compose(
             journal,
@@ -3902,6 +4086,90 @@ mod tests {
             result.error
         );
         assert_eq!(launcher.launches.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn uncertain_transport_marks_recovery_without_killing_a_live_process_or_replaying_code() {
+        let (_temp, host, launcher) = fixture().await;
+        launcher.original_alive.store(1, Ordering::SeqCst);
+        let lost = invoke(
+            &host,
+            "transport-loss",
+            "workspace.run_r",
+            json!({"workspace_instance_id":"main","code":"transport-loss"}),
+        )
+        .await;
+        assert_eq!(lost.status, OperationStatus::Uncertain);
+        assert!(matches!(
+            main(&host).state,
+            RuntimeInstanceState::Starting | RuntimeInstanceState::RecoveryRequired
+        ));
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if main(&host).state == RuntimeInstanceState::RecoveryRequired {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("transport recovery must settle when the original process is alive");
+        assert_eq!(launcher.launches.load(Ordering::SeqCst), 1);
+        assert_eq!(main(&host).native_session_id.as_deref(), Some("fixture_0"));
+        let retried = host
+            .invoke(
+                &NextHost::local_context(),
+                request(
+                    "must-not-replay",
+                    "workspace.run_r",
+                    json!({"workspace_instance_id":"main","code":"transport-loss"}),
+                ),
+            )
+            .await;
+        if let Ok(record) = retried {
+            assert_ne!(record.status, OperationStatus::Succeeded, "recovery must not replay code");
+        }
+        assert_eq!(launcher.launches.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    #[ignore = "automatic continuation requires an explicit AutoContinue policy fixture"]
+    async fn uncertain_transport_reconnects_after_process_death_without_replaying_the_original_run()
+    {
+        let (_temp, host, launcher) = fixture().await;
+        let before = main(&host);
+        let lost = invoke(
+            &host,
+            "dead-transport-loss",
+            "workspace.run_r",
+            json!({"workspace_instance_id":"main","code":"transport-loss"}),
+        )
+        .await;
+        assert_eq!(lost.status, OperationStatus::Uncertain);
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                let current = main(&host);
+                if current.state == RuntimeInstanceState::Ready
+                    && current.native_session_id != before.native_session_id
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("a confirmed dead process may be replaced automatically");
+        assert_eq!(launcher.launches.load(Ordering::SeqCst), 2);
+        let after = main(&host);
+        assert_ne!(after.native_session_id, before.native_session_id);
+        let follow_up = invoke(
+            &host,
+            "after-reconnect",
+            "workspace.run_r",
+            json!({"workspace_instance_id":"main","code":"1 + 1"}),
+        )
+        .await;
+        assert_eq!(follow_up.status, OperationStatus::Succeeded);
     }
 
     #[tokio::test]

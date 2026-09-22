@@ -19,7 +19,8 @@ import { useConsole, useOperations, useSession, useOutputs, useMediaCache, useOb
 import { mediaKey } from "../output-ports";
 import { Modal } from "../primitives";
 import { message, sameScope } from "../shared/ports";
-import { locallyIncomplete, rSupport } from "../r-language";
+import { rSupport } from "../r-language";
+import { IncompleteRCodeError } from "../operations";
 import { observedText } from "../console-text";
 import type { RunROutput } from "../generated/RunROutput";
 const statuses: Record<string, string> = {
@@ -74,7 +75,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     transcriptParent = useRef<HTMLDivElement>(null),
     input = useRef<EditorView | null>(null),
     transcript = useRef<EditorView | null>(null),
-    submit = useRef<(force: boolean) => void>(() => {});
+    submit = useRef<() => void>(() => {});
   const [error, setError] = useState(""),
     [submitting, setSubmitting] = useState(false),
     [dialog, setDialog] = useState<"history" | "details" | "queue" | null>(
@@ -344,7 +345,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
             if (v.compositionStarted || composition.current || composingKey.current) return false;
             if (completionStatus(v.state) === "active" && acceptCompletion(v))
               return true;
-            submit.current(false);
+            submit.current();
             return true;
           },
         },
@@ -352,7 +353,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
         {
           key: "Mod-Enter",
           run: (v) => {
-            if (!v.compositionStarted && !composition.current && !composingKey.current) submit.current(true);
+            if (!v.compositionStarted && !composition.current && !composingKey.current) submit.current();
             return true;
           },
         },
@@ -451,32 +452,12 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
     if (input.current && input.current.state.doc.toString() !== draft.input)
       replaceInput(draft.input);
   });
-  async function run(force: boolean) {
+  async function run() {
     const v = input.current,
       code = v?.state.doc.toString() ?? "";
     if (!v || v.compositionStarted || composition.current || submitting || !code.trim()) return;
     const scope = session.context();
     setError("");
-    if (!force) {
-      let incomplete = locallyIncomplete(code),
-        indent = "";
-      if (session.runtime?.state === "idle" && session.project) {
-        try {
-          const result = await consoleModel.checkCode(code);
-          if (result) {
-            incomplete = result.status === "incomplete";
-            indent = result.indent;
-          }
-        } catch {
-          /* Native execution remains the parser authority. */
-        }
-      }
-      if (input.current !== v || v.compositionStarted || composition.current || !sameScope(scope, session.context(), true) || v.state.doc.toString() !== code) return;
-      if (incomplete) {
-        v.dispatch(v.state.replaceSelection("\n" + indent));
-        return;
-      }
-    }
     setSubmitting(true);
     try {
       await consoleModel.run(code, viewId);
@@ -488,13 +469,15 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
       }
       historyIndex.current = -1;
     } catch (e) {
-      if (input.current === v && sameScope(scope, session.context(), true)) setError(message(e));
+      if (e instanceof IncompleteRCodeError && input.current === v && sameScope(scope, session.context(), true)) {
+        v.dispatch(v.state.replaceSelection("\n" + e.indent));
+      } else if (input.current === v && sameScope(scope, session.context(), true)) setError(message(e));
     } finally {
       if (input.current === v && sameScope(scope, session.context(), true)) setSubmitting(false);
     }
   }
-  submit.current = (force) => {
-    void run(force);
+  submit.current = () => {
+    void run();
   };
   const pendingInput = consoleModel.consoleState?.input;
   useEffect(() => {
@@ -661,7 +644,7 @@ export function ConsolePanel({ viewId = "console" }: { viewId?: string }) {
         <button
           className="primary"
           disabled={submitting || !operations.canRun || !draft.input.trim()}
-          onClick={() => void run(true)}
+          onClick={() => void run()}
         >
           {operations.queueing ? "Queue" : "Run"}
         </button>

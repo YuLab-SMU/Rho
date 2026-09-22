@@ -11,6 +11,9 @@ import type { RunSource } from "./generated/RunSource";
 import type { ConsoleState } from "./generated/ConsoleState";
 import type { OutboxRecord } from "./generated/OutboxRecord";
 
+export class IncompleteRCodeError extends Error {
+  constructor(readonly indent: string) { super("The selected R code is incomplete. Complete the block or run the full file."); }
+}
 export interface PendingRequest { invocation: Invocation; operationId?: string; ignored?: boolean; error?: string }
 interface OperationsPorts {
   context(): RequestContext;
@@ -40,6 +43,7 @@ export class Operations extends Model<OperationsSnapshot> {
   private pendingRequests: PendingRequest[] = [];
   private unavailable = new Set<string>();
   private loading = new Map<string, Promise<OperationRecord | null>>();
+  private runLocks = new Map<string, symbol>();
   private _cursor = 0;
   private _recentCursor: number | null = null;
   private _initialized = false;
@@ -71,7 +75,7 @@ export class Operations extends Model<OperationsSnapshot> {
   }
   canRunIn(id?: string) {
     const context = id && this.ports.contextFor ? this.ports.contextFor(id) : this.ports.context();
-    return !!context.project && context.connected && context.ready !== false && ["idle", "busy"].includes(context.runtimeState ?? "") &&
+    return !this.runLocks.has(id ?? context.workspaceInstanceId ?? "main") && !!context.project && context.connected && context.ready !== false && ["idle", "busy"].includes(context.runtimeState ?? "") &&
       (this.ports.execution(id)?.pending.length ?? 0) < 32 && context.capabilities.includes("workspace.run_r");
   }
   get queueing() { return this.queueingIn(); }
@@ -122,12 +126,12 @@ export class Operations extends Model<OperationsSnapshot> {
   }
   reset() {
     this.generation++; this.stopped = false;
-    this.recordsMap.clear(); this.summariesMap.clear(); this.unavailable.clear(); this.loading.clear();
+    this.recordsMap.clear(); this.summariesMap.clear(); this.unavailable.clear(); this.loading.clear(); this.runLocks.clear();
     this.pendingRequests = []; this._cursor = 0; this._recentCursor = null; this._initialized = false; this.checkpointEstablished = false;
     this._error = ""; this.consuming = false; this.historyLoading = null; this.publish();
   }
   sessionChanged() {
-    this.generation++; this.loading.clear(); this.consuming = false; this.historyLoading = null;
+    this.generation++; this.loading.clear(); this.runLocks.clear(); this.consuming = false; this.historyLoading = null;
     let changed = false;
     for (const pending of this.pendingRequests) if (!pending.error) {
       pending.error = "The session changed while this request was unconfirmed. Check the original request; code is not replayed.";
@@ -359,17 +363,45 @@ export class Operations extends Model<OperationsSnapshot> {
       throw error;
     }
   }
-  async run(code: string, source: RunSource = { view_id: "console", label: "Console", kind: "console" }, target?: RuntimeTarget, instanceId?: string) {
+  private async preflightRun(scope: RequestContext, instanceId: string | undefined, code: string) {
+    if (!scope.project) throw new Error("R is reconnecting/unavailable.");
+    const args = instanceId ? { code, workspace_instance_id: instanceId } : { code };
+    let result: Awaited<ReturnType<QueryPort>>;
+    try { result = await this.ports.query(scope.project, "workspace.check_code", args); }
+    catch { throw new Error("R is reconnecting/unavailable. Code was not submitted."); }
+    if (result.status === "busy") throw new Error("R is busy. Code could not be checked and was not queued. Try again when R is idle.");
+    if (result.status !== "ready" || result.completeness !== "complete" || !result.data || typeof result.data !== "object" || Array.isArray(result.data))
+      throw new Error("R is reconnecting/unavailable. Code was not submitted.");
+    const { status, indent } = result.data as { status?: unknown; indent?: unknown };
+    if (status === "incomplete") throw new IncompleteRCodeError(typeof indent === "string" ? indent : "");
+    if (status === "invalid" || status === "error") throw new Error("R parser rejected the selected code.");
+    if (status !== "complete") throw new Error("R is reconnecting/unavailable. Code was not submitted.");
+  }
+  async run(code: string, source: RunSource = { view_id: "console", label: "Console", kind: "console" }, target?: RuntimeTarget, instanceId?: string, prepare?: () => Promise<void>) {
     instanceId = target?.workspaceInstanceId ?? instanceId ?? this.ports.context().workspaceInstanceId;
     const scope = instanceId && this.ports.contextFor ? this.ports.contextFor(instanceId) : this.ports.context();
+    const lockId = instanceId ?? "main";
+    if (this.runLocks.has(lockId)) throw new Error("A run is already being submitted for this R session.");
     if (!this.canRunIn(instanceId) || !code.trim()) throw new Error((this.ports.execution(instanceId)?.pending.length ?? 0) >= 32 ? "Queue full (32 pending runs). Your input is retained." : "R is unavailable. Your input is retained.");
     if (code.includes("\0")) throw new Error("R code cannot contain NUL.");
     if (target && target.nativeSessionId !== scope.session) throw new Error("The captured R session changed. The saved code was not submitted.");
-    const session = target?.nativeSessionId ?? this.ports.execution(instanceId)?.session_id ?? scope.session;
-    const record = await this.invoke("workspace.run_r", { code, output_mode: "console", source, ...(instanceId ? { workspace_instance_id: instanceId } : {}) },
-      session ? [{ kind: "workspace.session", subject: "active", expected: session }] : []);
-    if (record.status === "failed" && record.output === null) throw new Error(record.error ?? "Run was rejected");
-    return record;
+    const generation = this.generation;
+    const current = () => !this.stopped && generation === this.generation && sameScope(scope,
+      instanceId && this.ports.contextFor ? this.ports.contextFor(instanceId) : this.ports.context(), true);
+    const token = Symbol(lockId); this.runLocks.set(lockId, token); this.publish();
+    try {
+      await this.preflightRun(scope, instanceId, code);
+      if (!current()) throw new Error("The project or R session changed. The code was not submitted.");
+      await prepare?.();
+      if (!current()) throw new Error("The project or R session changed. The code was not submitted.");
+      const session = target?.nativeSessionId ?? this.ports.execution(instanceId)?.session_id ?? scope.session;
+      const record = await this.invoke("workspace.run_r", { code, output_mode: "console", source, ...(instanceId ? { workspace_instance_id: instanceId } : {}) },
+        session ? [{ kind: "workspace.session", subject: "active", expected: session }] : []);
+      if (record.status === "failed" && record.output === null) throw new Error(record.error ?? "Run was rejected");
+      return record;
+    } finally {
+      if (this.runLocks.get(lockId) === token) { this.runLocks.delete(lockId); this.publish(); }
+    }
   }
   reviewOperation(id: string) { return this.ensureOperation(id); }
   async cancel(id?: string, onlyPending = false, workspaceInstanceId?: string) {
@@ -379,5 +411,5 @@ export class Operations extends Model<OperationsSnapshot> {
       (target ? operationWorkspaceInstance(r) === target : r.operation.target.identity === scope.session))?.operation.operation_id;
     if (scope.project && id) await this.ports.cancel(scope.project, id, onlyPending);
   }
-  stop() { this.stopped = true; this.generation++; this.loading.clear(); this.consuming = false; }
+  stop() { this.stopped = true; this.generation++; this.loading.clear(); this.runLocks.clear(); this.consuming = false; this.publish(); }
 }

@@ -16,7 +16,7 @@ export interface DocumentPorts extends ResourcePorts {
   canRun(): boolean;
   queueing(): boolean;
   invoke(capability: string, args: unknown, preconditions?: Precondition[]): Promise<OperationRecord>;
-  run(code: string, source: RunSource, target?: RuntimeTarget): Promise<OperationRecord>;
+  run(code: string, source: RunSource, target?: RuntimeTarget, prepare?: () => Promise<void>): Promise<OperationRecord>;
   captureTarget?(): RuntimeTarget;
   openDocument(id: string, name: string): void;
   renameDocument(id: string, name: string): void;

@@ -1,39 +1,20 @@
 import { useViewer, useOutputs } from "../context";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import type { MediaReference } from "../generated/MediaReference";
 import { mediaKey } from "../output-ports";
 
 export function ViewerPanel() {
   const viewer = useViewer();
   const outputs = useOutputs();
-  const snapshot = viewer.getSnapshot();
-  const outputSnapshot = outputs.getSnapshot();
-  const { selected, history } = snapshot;
-  const html = outputSnapshot.html;
-  const [iframeSrc, setIframeSrc] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
+  const viewerSnapshot = viewer.getSnapshot();
+  const html = outputs.getSnapshot().html;
+  const { selected, history, path, loading, error } = viewerSnapshot;
   const reference = viewer.selectedReference();
+  const referenceKey = reference ? mediaKey(reference) : null;
 
   useEffect(() => {
-    if (!reference) {
-      setIframeSrc(null);
-      return;
-    }
-    const token = (window as any).__rho_bearer;
-    if (!token) {
-      setError("No authentication token available");
-      return;
-    }
-    const params = new URLSearchParams({
-      operation_id: reference.operation_id.toString(),
-      sequence: reference.sequence.toString(),
-      sha256: reference.sha256,
-      mime_type: reference.mime_type,
-    });
-    setIframeSrc(`/api/html-view?${params}&bearer=${encodeURIComponent(token)}`);
-    setError(null);
-  }, [reference]);
+    if (reference) void viewer.ensurePath(reference);
+  }, [viewer, referenceKey]);
 
   if (!selected || !reference) {
     return (
@@ -41,15 +22,6 @@ export function ViewerPanel() {
         <div className="panel-empty-icon">🌐</div>
         <div className="panel-empty-message">No HTML output selected</div>
         <div className="panel-empty-hint">Run code that produces HTML output</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="panel-error">
-        <div className="panel-error-icon">⚠</div>
-        <div className="panel-error-message">{error}</div>
       </div>
     );
   }
@@ -76,10 +48,7 @@ export function ViewerPanel() {
         </button>
         <button
           className="viewer-refresh"
-          onClick={() => {
-            const iframe = document.querySelector(".viewer-frame") as HTMLIFrameElement;
-            if (iframe) iframe.src = iframe.src;
-          }}
+          onClick={() => viewer.refresh(reference)}
           title="Refresh"
         >
           Refresh
@@ -103,11 +72,14 @@ export function ViewerPanel() {
           })}
         </div>
       )}
-      {iframeSrc && (
+      {error && <div className="panel-error viewer-error"><div className="panel-error-icon">⚠</div><div className="panel-error-message">{error}</div></div>}
+      {!error && loading && <div className="panel-empty viewer-loading">Opening HTML output…</div>}
+      {path && !error && (
         <iframe
           className="viewer-frame"
-          src={iframeSrc}
-          sandbox="allow-scripts allow-same-origin"
+          src={path}
+          sandbox="allow-scripts"
+          referrerPolicy="no-referrer"
           title="HTML Viewer"
         />
       )}

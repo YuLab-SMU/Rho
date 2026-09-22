@@ -22,6 +22,17 @@ Studio discovers installed R and Ark and provides configuration in Settings.
 Files remain available without usable R. Runtimes and R packages are not installed
 automatically.
 
+For a guided real project, use **Open Rho Demo** on the welcome page, or launch
+it directly after building:
+
+```sh
+target/debug/rho --demo-project workbench
+```
+
+The demo is a materialized Gapminder project. Run `run_demo.R` in Editor to
+populate real R objects, Plots output, generated files and an HTML report for
+Viewer. It uses base R and does not install packages or send Agent requests.
+
 The binary embeds its HTML, CSS, JavaScript and bundled frontend assets; Node is
 not required to run it. The server listens on `127.0.0.1`. Its authenticated `/mcp`
 endpoint shares the live session with Studio; standalone stdio MCP is also available.

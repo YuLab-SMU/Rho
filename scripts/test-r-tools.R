@@ -47,6 +47,42 @@ local({
 syntax <- dispatch("format", list(code = "x <- ("))
 stopifnot(identical(syntax$outcome, "failed"), is.null(syntax$value))
 
+local({
+  stopifnot(requireNamespace("htmltools", quietly = TRUE), requireNamespace("htmlwidgets", quietly = TRUE))
+  methods <- base::get(".__S3MethodsTable__.", envir = base::get(".BaseNamespaceEnv", envir = baseenv()))
+  had_method <- base::exists("print.htmlwidget", envir = methods, inherits = FALSE)
+  previous_method <- if (had_method) base::get("print.htmlwidget", envir = methods) else NULL
+  pending <- tempfile("rho-widget-")
+  dir.create(pending)
+  previous_viewer <- options(viewer = bridge$rho_viewer(pending))
+  on.exit({
+    options(previous_viewer)
+    if (had_method) base::assign("print.htmlwidget", previous_method, envir = methods) else base::rm("print.htmlwidget", envir = methods)
+    if (base::exists("rho_tool_widget", envir = .GlobalEnv, inherits = FALSE)) base::rm("rho_tool_widget", envir = .GlobalEnv)
+    unlink(pending, recursive = TRUE)
+  }, add = TRUE)
+  bridge$rho_install_htmlwidget_print()
+  method <- base::get("print.htmlwidget", envir = methods)
+  stopifnot(identical(body(method), body(bridge$rho_print_htmlwidget)),
+            identical(attr(method, "positron.s3_override", exact = TRUE), TRUE),
+            identical(attr(method, ".positron.s3_override", exact = TRUE), TRUE))
+  widget <- htmlwidgets::createWidget("rho_test", list(value = 1), sizingPolicy = htmlwidgets::sizingPolicy())
+  assign("rho_tool_widget", widget, envir = .GlobalEnv)
+  stopifnot(identical(print(widget, view = FALSE), widget), !length(list.files(pending, pattern = "\\.html$")))
+  stopifnot(identical(print(widget, view = TRUE), widget), length(list.files(pending, pattern = "\\.html$")) == 1L)
+  base::assign("print.htmlwidget", function(...) stop("Ark reattached method"), envir = methods)
+  bridge$rho_htmlwidget_onload()
+  method <- base::get("print.htmlwidget", envir = methods)
+  stopifnot(identical(body(method), body(bridge$rho_print_htmlwidget)),
+            identical(attr(method, "positron.s3_override", exact = TRUE), TRUE),
+            identical(attr(method, ".positron.s3_override", exact = TRUE), TRUE))
+  printed <- dispatch("execute", list(code = "print(rho_tool_widget, view = TRUE)"))
+  stopifnot(identical(printed$outcome, "succeeded"), length(list.files(pending, pattern = "\\.html$")) == 2L)
+  failed <- dispatch("execute", list(code = "stop('UI comm is not connected')"))
+  stopifnot(identical(failed$outcome, "failed"), identical(failed$error, "UI comm is not connected"))
+})
+message("Native R htmlwidget override, print semantics, reattachment and ordinary failure checks passed.")
+
 # A deterministic missing-dependency path; never modify an installed library.
 bridge$requireNamespace <- function(...) FALSE
 for (action in c("lint", "format")) {

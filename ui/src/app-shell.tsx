@@ -341,9 +341,10 @@ export function AppShell() {
             <div className="welcome-mark">rho</div>
             <h1>Your scientific workspace</h1>
             <p>Open a project to write R, explore objects and inspect plots.</p>
-            <button className="primary" onClick={() => setDialog("project")}>
-              Open Project
+            <button className="primary" disabled={session.switching} onClick={() => void session.openDemoProject().catch(() => {})}>
+              Open Rho Demo
             </button>
+            <button onClick={() => setDialog("project")}>Open Project</button>
             <button onClick={() => setDialog("settings")}>Configure R</button>
             {session.recent.map((p) => (
               <button

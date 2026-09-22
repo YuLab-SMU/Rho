@@ -30,6 +30,23 @@ ends the R processes this Host started; an exiting Host cannot leave them reacha
 and they are not reattached by a later one. Closing a browser page cancels nothing and
 leaves R running.
 
+### Open the bundled demo
+
+The welcome page's **Open Rho Demo** action materializes a writable copy of the
+Gapminder example under the user's Rho data directory and opens it like any other
+project. Existing files in that copy are preserved. The same path can be opened
+from the command line:
+
+```sh
+target/debug/rho --demo-project workbench
+```
+
+Set `RHO_DEMO_PROJECT=/absolute/path/to/demo` to choose a development or test
+materialization path. The project includes base-R scripts, provenance, an optional
+Quarto source file and a generated HTML report workflow. Opening it does not run R,
+install packages or contact an Agent; run `run_demo.R` explicitly to create live
+objects, plot output and Viewer evidence.
+
 ## Select R
 
 Workbench selection uses explicit launch arguments, a saved user choice, available

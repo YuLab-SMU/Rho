@@ -78,7 +78,9 @@ and reviews do not require edits, builds, status updates, or commits.
 
 1. Inspect `git status` and the relevant source/tests. Preserve unrelated changes.
 2. Run `node scripts/governance.mjs impact --changed-auto` for mapped checks.
-3. Make a coherent change and iterate with the closest useful test.
+3. Make a coherent change and iterate with the closest useful test. Follow the
+   testing tiers and reporting rules in `docs/DEVELOPMENT.md` § Testing SOP; do not
+   rerun the entire workspace for every small edit.
 4. Run affected checks once behavior settles; inspect the diff and report only
    commands that ran. Investigate a pre-change baseline when needed to attribute
    a failure. Reuse passing results that cover the current changes; rerun only
@@ -91,6 +93,16 @@ and reviews do not require edits, builds, status updates, or commits.
 - Cargo invocations share `target/`: never run two Cargo build/test/check commands
   in parallel. Type generation invokes Cargo too. Wait for completion; do not
   poll background tests with sleeps.
+- Testing is tiered as documented in `docs/DEVELOPMENT.md` § Testing SOP: use
+  focused crate/test-file checks while iterating and affected-module or
+  cross-boundary checks once behavior settles. The full workspace suite is an
+  optional audit; run it only for an explicit release/user request. Incremental
+  compilation does not limit `cargo test --workspace` to changed crates; that
+  command still executes every workspace test target.
+- A timed-out, ignored, skipped, or unavailable check is not a pass. Report the
+  exact command and status separately, retain evidence, and do not hide a timeout
+  behind a narrower rerun. An incomplete optional workspace audit does not block
+  normal completion when the affected checks have passed.
 - Rust changes: use `cargo test -p <crate> <filter> --locked` while iterating.
 - Contract DTO or generator changes: run `npm run generate --prefix ui` before
   the client checks. Client changes: run `npm run build --prefix ui`, then

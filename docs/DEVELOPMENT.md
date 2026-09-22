@@ -18,6 +18,101 @@ Cargo commands share `target/`. Run only one Cargo build/test/check process at a
 time, including client type generation, which invokes Cargo. Wait for background
 commands to complete instead of polling them with sleep loops.
 
+## Testing SOP
+
+Use the smallest test tier that proves the current change. A small change must not
+rerun the entire workspace by default; expand the scope only when the dependency or
+owner boundary requires it.
+
+### Test tiers
+
+- **L0 — focused iteration.** Run the nearest test or filter while editing:
+  `cargo test -p <crate> <filter> --locked` or
+  `npm run test --prefix ui -- <test-file>`. Use this for a local function, model,
+  or component change.
+- **L1 — affected module.** After behavior settles, run the complete affected crate
+  or frontend suite, plus `typecheck` for client changes. Typical commands are
+  `cargo test -p rho-r-runtime --locked`, `cargo test -p rho-host --lib --locked`,
+  `npm run test --prefix ui`, `npm run typecheck --prefix ui`,
+  `npm run build --prefix ui`, and `npm run check --prefix ui`.
+- **L2 — cross-boundary acceptance.** Use this for Host/Operation/Runtime,
+  Contract, recovery, output, Viewer, Plot, Console or document execution changes.
+  Run the affected Rust and UI suites, a disposable real-R check, and the relevant
+  isolated browser case. Build the current binary before browser tests.
+- **L3 — merge/release gate.** Run the complete serial Rust workspace suite and
+  all required product checks only for merge, release, or an explicitly requested
+  full regression.
+
+### Common L2 commands
+
+HTML widget, Viewer and Plot changes should cover both native and browser paths:
+
+```sh
+Rscript --vanilla scripts/test-r-tools.R
+RHO_ARK="$PWD/target/debug/ark" \
+RHO_R_HOME=/Library/Frameworks/R.framework/Resources \
+cargo test -p rho-host --test html_widgets_real_r --locked -- --ignored --nocapture
+npm run test --prefix ui -- viewer.test.ts
+npm run test:browser --prefix ui -- e2e/widget.spec.ts
+```
+
+Runtime/recovery changes should cover the focused Host tests and the R-free process
+recovery check:
+
+```sh
+cargo test -p rho-host --lib --locked
+node scripts/test-process-recovery.mjs
+```
+
+Real R acceptance uses disposable projects and explicit bindings. The complete
+native matrix is:
+
+```sh
+node scripts/test-real-r.mjs
+```
+
+Skipped or unavailable real-R, browser, external-provider, and environment checks
+are not passes. Run them only with their documented prerequisites; preserve the
+failure log when the prerequisite is missing.
+
+### Optional workspace audit
+
+The complete workspace audit is intentionally not part of every development
+completion. Run these commands serially for a release, a periodic audit, or when
+the user explicitly requests the full workspace result:
+
+```sh
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked -- --test-threads=1
+cargo build --locked
+```
+
+The workspace command uses incremental compilation, but it still executes every
+workspace test target. `--test-threads=1` makes tests serial within each target;
+it does not restrict the run to crates changed by the last edit. A time-budget
+limit or an incomplete audit therefore does not block normal completion when the
+affected-module and cross-boundary checks have passed.
+
+### Timeouts and reporting
+
+A test process that reaches its time budget is **incomplete**, not passed. Record the
+last completed target and retain its log. Do not turn an ignored, skipped,
+unavailable, or timed-out check into a pass by rerunning a narrower command; report
+the two results separately. Compare a failure with a pre-change baseline before
+attributing it to the current edit.
+
+A completion report should list:
+
+```text
+Implementation: affected owners and user-visible behavior
+Focused checks: exact commands and results
+Cross-boundary checks: exact commands and prerequisites
+Workspace audit: passed, incomplete, or not run
+Unresolved: failures, ignored checks, timeouts and their evidence
+Workspace: unrelated changes preserved; commit status
+```
+
 ## Frontend iteration
 
 The client uses React, FlexLayout and CodeMirror with Rust-generated contracts.

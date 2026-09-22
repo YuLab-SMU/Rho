@@ -33,6 +33,7 @@ function fixture() {
   let scope: RequestContext = { epoch: 1, project: "/a", session: "session-a", runtimeState: "idle", connected: true, capabilities: ["workspace.run_r"] };
   const records = new Map<string, OperationRecord>(), events: OutboxRecord[] = [], notifications = new Notifications();
   const query = vi.fn(async (_project: string, id: string, args: unknown = {}) => {
+    if (id === "workspace.check_code") return observed({ status: "complete", indent: "" });
     if (id === "operation.events_checkpoint") return observed({ sequence: events.at(-1)?.sequence ?? 0 });
     const input = args as { operation_id?: string; client_request_id?: string; before_cursor?: number | null; limit?: number };
     const items = [...records.values()].map(summary).filter((s) => (!input.operation_id || s.operation_id === input.operation_id)
@@ -72,6 +73,89 @@ it("instance projections share original records but scope history, run admission
   expect(f.ports.invoke.mock.calls.at(-1)![1]).toMatchObject({ arguments: { workspace_instance_id: "scratch", code: "x <- 3" },
     preconditions: [{ kind: "workspace.session", subject: "active", expected: "r-scratch" }] });
 });
+
+it("rejects duplicate submissions per workspace instance and releases the lock", async () => {
+  const f = fixture(), waiting = deferred<OperationRecord>();
+  f.ports.invoke.mockReturnValueOnce(waiting.promise);
+  const first = f.operations.run("x <- 1");
+  await vi.waitFor(() => expect(f.ports.invoke).toHaveBeenCalledTimes(1));
+  expect(f.operations.canRun).toBe(false);
+  await expect(f.operations.run("x <- 2")).rejects.toThrow("already being submitted");
+  waiting.resolve(record(1, "/a", f.ports.invoke.mock.calls[0][1].client_request_id));
+  await first;
+  expect(f.operations.canRun).toBe(true);
+  await f.operations.run("x <- 3");
+  expect(f.ports.invoke).toHaveBeenCalledTimes(2);
+});
+
+it("isolates run-submission locks between workspace instances", async () => {
+  const f = fixture(), waiting = deferred<OperationRecord>();
+  Object.assign(f.ports, {
+    contextFor: (id: string) => ({ ...f.ports.context(), workspaceInstanceId: id, session: `r-${id}`, runtimeState: "idle" }),
+    execution: (id?: string) => ({ session_id: `r-${id ?? "main"}`, current: null, pending: [], pause: null, input: null }),
+  });
+  f.ports.invoke.mockReturnValueOnce(waiting.promise);
+  const first = f.operations.run("x <- 1", undefined, undefined, "main");
+  await vi.waitFor(() => expect(f.ports.invoke).toHaveBeenCalledTimes(1));
+  await f.operations.forInstance("scratch").run("x <- 2");
+  expect(f.ports.invoke).toHaveBeenCalledTimes(2);
+  waiting.resolve(record(1, "/a", f.ports.invoke.mock.calls[0][1].client_request_id));
+  await first;
+});
+
+it("checks idle R code before invoking the operation", async () => {
+  const f = fixture(); await f.operations.run("x <- 1");
+  expect(f.ports.query).toHaveBeenCalledWith("/a", "workspace.check_code", { code: "x <- 1" });
+  expect(f.ports.query.mock.invocationCallOrder[0]).toBeLessThan(f.ports.invoke.mock.invocationCallOrder[0]);
+});
+
+it("holds one lock from delayed check through file preparation", async () => {
+  const f = fixture(), check = deferred<QuerySnapshot>(), save = deferred<void>(); let preparing = false;
+  f.ports.query.mockReturnValueOnce(check.promise);
+  const first = f.operations.run("x <- 1", { view_id: "file", label: "file", kind: "file" }, undefined, undefined, async () => { preparing = true; await save.promise; });
+  expect(f.operations.canRun).toBe(false);
+  await expect(f.operations.run("x <- 2", { view_id: "console", label: "Console", kind: "console" })).rejects.toThrow("already being submitted");
+  check.resolve(observed({ status: "complete", indent: "" }));
+  await vi.waitFor(() => expect(preparing).toBe(true));
+  await expect(f.operations.run("x <- 3")).rejects.toThrow("already being submitted");
+  save.resolve(); await first;
+  expect(f.ports.invoke).toHaveBeenCalledTimes(1);
+});
+
+it("refuses to queue code when busy R cannot preflight it", async () => {
+  const f = fixture(); f.setScope({ runtimeState: "busy" });
+  f.ports.query.mockResolvedValueOnce({ ...observed(null), status: "busy" });
+  await expect(f.operations.run("x <- 1")).rejects.toThrow("could not be checked and was not queued");
+  expect(f.ports.invoke).not.toHaveBeenCalled(); expect(f.operations.canRun).toBe(true);
+});
+
+it("does not invoke after the captured check scope becomes stale", async () => {
+  const f = fixture(), check = deferred<QuerySnapshot>(); f.ports.query.mockReturnValueOnce(check.promise);
+  const running = f.operations.run("x <- 1");
+  f.setScope({ epoch: 2, project: "/b" });
+  check.resolve(observed({ status: "complete", indent: "" }));
+  await expect(running).rejects.toThrow(/project or R session changed/);
+  expect(f.ports.invoke).not.toHaveBeenCalled(); expect(f.operations.canRun).toBe(true);
+});
+
+it.each([
+  ["incomplete", "The selected R code is incomplete. Complete the block or run the full file."],
+  ["invalid", "parser"],
+  ["unavailable", "R is reconnecting/unavailable"],
+] as const)("does not invoke when the R code check is %s", async (status, error) => {
+  const f = fixture();
+  f.ports.query.mockResolvedValueOnce(status === "unavailable" ? { ...observed(null), status: "unavailable" } : observed({ status, indent: "" }));
+  await expect(f.operations.run("x <- 1")).rejects.toThrow(error);
+  expect(f.ports.invoke).not.toHaveBeenCalled();
+  expect(f.operations.canRun).toBe(true);
+});
+
+it("maps a failed idle R code check to unavailable without invoking", async () => {
+  const f = fixture(); f.ports.query.mockRejectedValueOnce(new Error("transport down"));
+  await expect(f.operations.run("x <- 1")).rejects.toThrow("R is reconnecting/unavailable");
+  expect(f.ports.invoke).not.toHaveBeenCalled();
+});
+
 async function baseline(f: ReturnType<typeof fixture>) { await f.operations.beginBaseline(); f.operations.finishBaseline(); }
 
 it("captures checkpoint before baseline reads and fills the operation inserted during initialization", async () => {

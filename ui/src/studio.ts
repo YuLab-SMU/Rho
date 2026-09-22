@@ -86,6 +86,7 @@ export class Studio {
       ...state, query, notifications: this.notifications,
       info: client.info.bind(client), rConfiguration: client.rConfiguration.bind(client),
       selectProject: client.selectProject.bind(client), probeR: client.probeR.bind(client), applyR: client.applyR.bind(client),
+      selectDemoProject: client.selectDemoProject?.bind(client),
       quitWorkbench: client.quitWorkbench.bind(client),
       transition: { before: () => this.suspend(), after: (changed) => this.initialize(changed), failed: () => this.resumeAfterFailure() },
     });
@@ -115,7 +116,7 @@ export class Studio {
     this.documents = new Documents({ ...resource("files"),
       canRun: () => this.operations.canRun, queueing: () => this.operations.queueing,
       invoke: (id, args, preconditions) => this.operations.invoke(id, nativeWorkspaceCapabilities.has(id) ? workspaceArguments(this.session.workspaceInstanceId, args) : args, preconditions),
-      run: this.operations.run.bind(this.operations), captureTarget: () => this.captureSelectedTarget(),
+      run: (code, source, target, prepare) => this.operations.run(code, source, target, undefined, prepare), captureTarget: () => this.captureSelectedTarget(),
       openDocument: (id, name) => this.layout.show("document", id, name, { documentId: id }),
       renameDocument: (id, name) => this.layout.rename(id, name), closeDocument: (id) => this.layout.close(id),
       closeVersion: () => this.layout.getSnapshot().closeVersion,
@@ -133,8 +134,9 @@ export class Studio {
       openPlot: (id, name) => this.layout.show("plots", id, name), showPlots: () => this.layout.show("plots") });
     this.help = new Help({ context: this.session.context, query, changed: this.persistence.changed,
       schedule: () => this.coordinator.wake("help") });
-    this.viewer = new Viewer({ outputs: this.outputs, changed: this.persistence.changed,
-      openViewer: (id, name) => this.layout.show("viewer", id, name) });
+    this.viewer = new Viewer({ outputs: this.outputs, context: this.session.context,
+      htmlViewToken: client.htmlViewToken ? client.htmlViewToken.bind(client) : async () => { throw new Error("HTML Viewer transport is unavailable."); },
+      changed: this.persistence.changed, openViewer: (id, name) => this.layout.show("viewer", id, name) });
     this.navigation = new Navigation({ context: this.session.context, show: this.layout.show.bind(this.layout),
       bindView: (view, id) => { if (this.runtimeSessions.getInstance(id)) this.runtimeSessions.pinView(view, id); },
       openDocument: this.documents.open.bind(this.documents), createDocument: this.documents.create.bind(this.documents),
@@ -336,7 +338,7 @@ export class Studio {
     this.consolePersistence = this.workspaceFragment("console", "runtimeConsoleViews");
     this.objectPersistence = this.workspaceFragment("objects", "runtimeObjectViews");
     this.packagePersistence = this.workspaceFragment("packages", "runtimePackageViews");
-    for (const fragment of [this.operations, this.runtimeSessions, this.consolePersistence, this.files, this.objectPersistence, this.packagePersistence, this.plots, this.layout, this.agentTasks])
+    for (const fragment of [this.operations, this.runtimeSessions, this.consolePersistence, this.files, this.objectPersistence, this.packagePersistence, this.plots, this.viewer, this.layout, this.agentTasks])
       this.persistence.register(fragment);
     this.documentPersistence = { serialize: () => ({}),
       restorationKey: () => ({ active: this.documents.active, documents: this.documents.applicationDocuments().map((d) => [d.document_id, d.version, d.selection.version]) }),
@@ -504,7 +506,8 @@ export class Studio {
     await this.agentTasks.flushAll();
     await this.application.flush();
     await this.persistence.flush();
-    if (this.persistence.unsynced) throw new Error(this.persistence.syncError || "Drafts are not synced. The project was not switched.");
+    if (this.persistence.unsynced && this.session.project)
+      throw new Error(this.persistence.syncError || "Drafts are not synced. The project was not switched.");
     this.lifecycle++;
     this.booting = null;
     this.session.setReady(false);

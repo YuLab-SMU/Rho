@@ -1,0 +1,9 @@
+{
+  "source": "https://raw.githubusercontent.com/jennybc/gapminder/5864ccaf4d4d59ca578c098a1400d2fed20584c0/inst/extdata/gapminder.tsv",
+  "version": "1.0.1",
+  "source_sha256": "f74275b4a2f4a7c8e3a09a752f9d6e43d1759d78d5cbfdebaaa3e1a6efc68f78",
+  "csv_sha256": "a89295c2cc9740b95146bf71adb1c4da350822735557b70abbbc53d7ffb6936f",
+  "rows": 1704,
+  "conversion": "TSV to comma-separated CSV, UTF-8, LF; field values unchanged",
+  "attribution": "Gapminder data excerpt by Jennifer Bryan, https://github.com/jennybc/gapminder"
+}

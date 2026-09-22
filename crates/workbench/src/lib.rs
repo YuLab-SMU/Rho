@@ -6,6 +6,9 @@ mod component_agents;
 mod agents;
 mod settings;
 mod mcp_sessions;
+mod demo_project;
+
+pub use demo_project::materialize_demo_project;
 
 use std::{
     io::Write,
@@ -243,6 +246,18 @@ async fn select_project(
         Ok(root) => root,
         Err(error) => return failure(StatusCode::BAD_REQUEST, error),
     };
+    select_project_root(&state, root).await
+}
+
+async fn select_demo_project(State(state): State<AppState>) -> Response {
+    let root = match demo_project::materialize_demo_project() {
+        Ok(root) => root,
+        Err(error) => return failure(StatusCode::INTERNAL_SERVER_ERROR, error),
+    };
+    select_project_root(&state, root).await
+}
+
+async fn select_project_root(state: &AppState, root: PathBuf) -> Response {
     // A write guard excludes new UI calls and new MCP sessions throughout teardown/open.
     let Ok(mut hosting) = state.hosting.try_write() else {
         return failure(
@@ -543,6 +558,7 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/agents/components/test", post(component_agents::test_model))
         .route("/api/agents/components/asset", post(component_agents::asset))
         .route("/api/project", post(select_project))
+        .route("/api/project/demo", post(select_demo_project))
         .route("/api/r", get(settings::read_r).post(settings::apply_r))
         .route("/api/r/probe", post(settings::probe))
         .route("/api/state/read", post(settings::read_state))

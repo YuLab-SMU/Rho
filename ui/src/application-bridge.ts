@@ -350,6 +350,10 @@ export class ApplicationBridge extends Model<{ online: boolean; initialized: boo
     this.renewing = task; return task;
   }
   async flush() {
+    // There is no project-scoped bridge to synchronize before the first project
+    // is opened. The welcome screen can still have local layout state, which is
+    // restored and persisted once a project scope exists.
+    if (!this.ports.scope().project) return;
     await this.step();
     if (!this.session || !this.initialized) throw new Error(this.error || "Application drafts have not been synchronized.");
     const scope = this.ports.scope(), generation = this.generation;

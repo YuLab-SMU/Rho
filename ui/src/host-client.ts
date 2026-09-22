@@ -15,6 +15,8 @@ import type { ApplicationState } from "./generated/ApplicationState";
 import type { RConfiguration } from "./generated/RConfiguration";
 import type { RSelection } from "./generated/RSelection";
 import type { RProbe } from "./generated/RProbe";
+import type { HtmlViewToken } from "./generated/HtmlViewToken";
+import type { MediaReference } from "./generated/MediaReference";
 import type { JsonValue } from "./generated/serde_json/JsonValue";
 import type { ApplicationBridgeSession } from "./generated/ApplicationBridgeSession";
 import type { ApplicationBridgeRequest } from "./generated/ApplicationBridgeRequest";
@@ -191,6 +193,12 @@ export class HostClient {
   }
   selectProject(project_root: string) {
     return this.request<WorkbenchInfo>("/api/project", { project_root });
+  }
+  selectDemoProject() {
+    return this.request<WorkbenchInfo>("/api/project/demo", {});
+  }
+  htmlViewToken(project_root: string, reference: MediaReference) {
+    return this.request<HtmlViewToken>("/api/html/token", { project_root, reference });
   }
   rConfiguration() {
     return this.request<RConfiguration>("/api/r");

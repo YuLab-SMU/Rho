@@ -121,6 +121,7 @@ Sources:
 - `Cargo.toml`
 - `crates/**`
 - `docs/ARCHITECTURE.md`
+- `examples/**`
 - `patches/jet/**`
 - `r/**`
 - `rust-toolchain.toml`

@@ -174,12 +174,10 @@ rho_viewer <- function(pending_dir) {
   force(pending_dir)
   function(url, height = NULL, ...) {
     if (!is.character(url) || length(url) != 1L || grepl("^https?://", url)) {
-      # A running service (for example Shiny) is not a retained document.
-      cat("Rho Viewer: live services are not captured; open ", url, " in a browser.\n", sep = "", file = stderr())
-      return(invisible(NULL))
+      stop("This HTML widget needs a live R UI connection that is not available in Rho.", call. = FALSE)
     }
     path <- sub("^file://", "", url)
-    if (!file.exists(path)) return(invisible(NULL))
+    if (!file.exists(path)) stop("This HTML widget needs a live R UI connection that is not available in Rho.", call. = FALSE)
     html <- rho_inline_html(path)
     dir.create(pending_dir, showWarnings = FALSE, recursive = TRUE)
     target <- file.path(pending_dir, paste0(format(Sys.time(), "%Y%m%d%H%M%OS6"), "-", basename(tempfile("view")), ".html"))
@@ -187,6 +185,38 @@ rho_viewer <- function(pending_dir) {
     invisible(NULL)
   }
 }
+
+rho_print_htmlwidget <- function(x, ..., view = interactive()) {
+  viewer <- getOption("viewer")
+  viewer_func <- if (is.null(viewer)) utils::browseURL else {
+    function(url) {
+      height <- x$sizingPolicy$viewer$paneHeight
+      if (identical(height, "maximize")) height <- -1
+      viewer(url, height = height)
+    }
+  }
+  htmltools::html_print(htmltools::as.tags(x, standalone = TRUE), viewer = if (view) viewer_func)
+  invisible(x)
+}
+
+rho_install_htmlwidget_print <- function(...) {
+  if (!requireNamespace("htmltools", quietly = TRUE)) return(invisible(FALSE))
+  base_namespace <- base::get(".BaseNamespaceEnv", envir = baseenv())
+  methods <- base::get(".__S3MethodsTable__.", envir = base_namespace)
+  method <- rho_print_htmlwidget
+  attr(method, "positron.s3_override") <- TRUE
+  attr(method, ".positron.s3_override") <- TRUE
+  base::assign("print.htmlwidget", method, envir = methods)
+  invisible(TRUE)
+}
+
+rho_htmlwidget_onload <- function(...) {
+  rho_install_htmlwidget_print()
+}
+
+base::setHook(base::packageEvent("htmlwidgets", "onLoad"), rho_htmlwidget_onload, action = "append")
+base::setHook("positron.session_reconnect", rho_htmlwidget_onload, action = "append")
+if ("htmlwidgets" %in% base::loadedNamespaces()) rho_install_htmlwidget_print()
 
 rho_lint <- function(payload) {
   if (!requireNamespace("lintr", quietly = TRUE)) {

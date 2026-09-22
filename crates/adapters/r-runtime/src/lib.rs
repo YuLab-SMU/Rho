@@ -40,6 +40,7 @@ const PACKAGE_INDEX: &str = include_str!("../../../../r/bridge/package-index.R")
 const CHECKPOINTS: &str = include_str!("../../../../r/bridge/checkpoint.R");
 const TOOLS: &str = include_str!("../../../../r/bridge/tools.R");
 const OUTPUT_LIMIT: usize = 1024 * 1024;
+const RUN_CONNECTION_LOST: &str = "R session connection was lost. The run result is not confirmed. Inspect the original run before retrying.";
 
 pub struct ArkConfig {
     pub checkpoint_helper_path: Option<PathBuf>,
@@ -191,7 +192,7 @@ impl ArkRuntime {
             quote(&project.to_string_lossy())?
         );
         let bootstrap_output = runtime
-            .evaluate(bootstrap, watch::channel(false).1, None)
+            .evaluate(bootstrap, watch::channel(false).1, None, None)
             .await
             .map_err(|e| e.message)?;
         if let Some(error) = bootstrap_output.protocol_error {
@@ -227,6 +228,41 @@ impl ArkRuntime {
         Ok(client)
     }
 
+    fn transport_error(
+        &self,
+        operation_id: Option<&rho_contract::OperationId>,
+        request_id: Option<&str>,
+        detail: String,
+        result_path: Option<&Path>,
+    ) -> WorkspaceRuntimeError {
+        self.invalidate();
+        let recovery = json!({
+            "session_id": self.session_id,
+            "operation_id": operation_id,
+            "request_id": request_id,
+            "failure": detail,
+            "result_path": result_path,
+            "action": "observe_owner_before_any_retry"
+        });
+        match operation_id {
+            Some(_) => WorkspaceRuntimeError::after_possible_effect(RUN_CONNECTION_LOST, Some(recovery)),
+            None => WorkspaceRuntimeError::query_error(
+                "unavailable",
+                "The R session became unavailable while refreshing this read-only query; refresh after reconnecting.",
+            ),
+        }
+    }
+
+    fn evaluation_client(
+        &self,
+        operation_id: Option<&rho_contract::OperationId>,
+        result_path: Option<&Path>,
+    ) -> Result<Arc<Client>, WorkspaceRuntimeError> {
+        self.client().map_err(|error| {
+            self.transport_error(operation_id, None, error.message, result_path)
+        })
+    }
+
     fn invalidate(&self) {
         self.input.lock().unwrap_or_else(|e| e.into_inner()).take();
         self.client.lock().unwrap_or_else(|e| e.into_inner()).take();
@@ -237,12 +273,13 @@ impl ArkRuntime {
         code: String,
         mut cancellation: watch::Receiver<bool>,
         operation_id: Option<&rho_contract::OperationId>,
+        result_path: Option<&Path>,
     ) -> Result<CapturedOutput, WorkspaceRuntimeError> {
         let mut writer = operation_id
             .map(|id| self.outputs.begin(id))
             .transpose()
             .map_err(before)?;
-        let client = self.client()?;
+        let client = self.evaluation_client(operation_id, result_path)?;
         let mut listener = client.listen(ListenFilter::default());
         let message: JupyterMessage = ExecuteRequest {
             code,
@@ -255,7 +292,7 @@ impl ArkRuntime {
         .into();
         let request_id = message.header.msg_id.clone();
         let stream = client.request(message).map_err(|error| {
-            WorkspaceRuntimeError::after_possible_effect(error.to_string(), None)
+            self.transport_error(operation_id, Some(&request_id), error.to_string(), result_path)
         })?;
         drop(stream);
         let mut captured = CapturedOutput::default();
@@ -268,6 +305,16 @@ impl ArkRuntime {
         let mut waiting_input = false;
         let mut interrupt_deadline = deadline + Duration::from_secs(5);
         loop {
+            let bridge_failed = result_path.is_some_and(|path| {
+                read_bridge_response(path, &request_id, 128 * 1024 * 1024).is_ok_and(|response| {
+                    matches!(response.outcome, OperationOutcome::Failed | OperationOutcome::Cancelled)
+                })
+            });
+            if bridge_failed {
+                self.input.lock().unwrap_or_else(|e| e.into_inner()).take();
+                if let Some(writer) = &mut writer && let Err(error) = writer.finish() { captured.observation_error = Some(error); }
+                return Ok(captured);
+            }
             if waiting_input {
                 let mut input = self.input.lock().unwrap_or_else(|e| e.into_inner());
                 if let Some(active) = input.as_mut()
@@ -286,15 +333,21 @@ impl ArkRuntime {
                 && !interrupted
                 && self.closing.load(std::sync::atomic::Ordering::Acquire)
             {
-                client.interrupt().await.map_err(|e| {
-                    WorkspaceRuntimeError::after_possible_effect(e.to_string(), None)
-                })?;
+                client
+                    .interrupt()
+                    .await
+                    .map_err(|e| self.transport_error(operation_id, Some(&request_id), e.to_string(), result_path))?;
                 interrupted = true;
                 interrupt_deadline = Instant::now() + Duration::from_secs(5);
             }
             tokio::select! {
-                frame = listener.recv() => {
-                    let Some(frame) = frame else { break };
+                biased;
+                frame = tokio::time::timeout(Duration::from_millis(100), listener.recv()) => {
+                    let frame = match frame {
+                        Ok(Some(frame)) => frame,
+                        Ok(None) => break,
+                        Err(_) => continue,
+                    };
                     if frame.message.parent_header.as_ref().map(|h| h.msg_id.as_str()) != Some(request_id.as_str()) {
                         continue;
                     }
@@ -314,7 +367,16 @@ impl ArkRuntime {
                         JupyterMessageContent::ExecuteReply(result) => {
                             reply = true;
                             let value = serde_json::to_value(result).unwrap_or(Value::Null);
-                            if value["status"] != "ok" { captured.protocol_error = Some(value); }
+                            if value["status"] != "ok" {
+                                captured.protocol_error = Some(value);
+                                self.input.lock().unwrap_or_else(|e| e.into_inner()).take();
+                                if let Some(writer) = &mut writer
+                                    && let Err(error) = writer.finish()
+                                {
+                                    captured.observation_error = Some(error);
+                                }
+                                return Ok(captured);
+                            }
                         }
                         JupyterMessageContent::StreamContent(stream) => {
                             if let Some(writer) = &mut writer
@@ -360,8 +422,13 @@ impl ArkRuntime {
 
                         _ => {}
                     }
-                    if idle && reply {
-                        self.input.lock().unwrap_or_else(|e|e.into_inner()).take();
+                    let bridge_failed = result_path.is_some_and(|path| {
+                        read_bridge_response(path, &request_id, 128 * 1024 * 1024).is_ok_and(|response| {
+                            matches!(response.outcome, OperationOutcome::Failed | OperationOutcome::Cancelled)
+                        })
+                    });
+                    if (idle && reply) || bridge_failed {
+                        self.input.lock().unwrap_or_else(|e| e.into_inner()).take();
                         if let Some(writer) = &mut writer && let Err(error) = writer.finish() { captured.observation_error = Some(error); }
                         return Ok(captured);
                     }
@@ -370,26 +437,24 @@ impl ArkRuntime {
                 change = cancellation.changed(), if cancellation_open && !interrupted => {
                     if change.is_err() { cancellation_open = false; }
                     else if *cancellation.borrow() {
-                        client.interrupt().await.map_err(|error| WorkspaceRuntimeError::after_possible_effect(error.to_string(), None))?;
+                        client.interrupt().await.map_err(|error| self.transport_error(operation_id, Some(&request_id), error.to_string(), result_path))?;
                         interrupted = true;
                         interrupt_deadline = Instant::now() + Duration::from_secs(5);
                     }
                 }
                 _ = tokio::time::sleep_until(deadline), if !interrupted && !waiting_input => {
-                    client.interrupt().await.map_err(|error| WorkspaceRuntimeError::after_possible_effect(error.to_string(), None))?;
+                    client.interrupt().await.map_err(|error| self.transport_error(operation_id, Some(&request_id), error.to_string(), result_path))?;
                     interrupted = true;
                     interrupt_deadline = Instant::now() + Duration::from_secs(5);
                 }
                 _ = tokio::time::sleep_until(interrupt_deadline), if interrupted => { break; }
             }
         }
-        self.invalidate();
-        Err(WorkspaceRuntimeError::after_possible_effect(
-            "Ark stopped responding before both execute_reply and idle were observed",
-            Some(
-                json!({"session_id": self.session_id, "request_id": request_id,
-                "action": "session_invalidated_observe_outputs_before_retry"}),
-            ),
+        Err(self.transport_error(
+            operation_id,
+            Some(&request_id),
+            "Ark stopped responding before both execute_reply and idle were observed".into(),
+            result_path,
         ))
     }
 }
@@ -404,7 +469,7 @@ struct CapturedOutput {
     protocol_error: Option<Value>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BridgeResponse {
     protocol_version: u16,
@@ -414,6 +479,54 @@ struct BridgeResponse {
     value: Value,
     conditions: Vec<rho_contract::WorkspaceCondition>,
     conditions_truncated: bool,
+}
+
+enum BridgeReadError {
+    Missing,
+    Io,
+    TooLarge,
+    Malformed,
+    Correlation,
+}
+
+impl BridgeReadError {
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::Missing => "missing_result",
+            Self::Io => "result_read_failed",
+            Self::TooLarge => "result_too_large",
+            Self::Malformed => "malformed_result",
+            Self::Correlation => "correlation_mismatch",
+        }
+    }
+
+}
+
+fn read_bridge_response(
+    result_path: &Path,
+    request_id: &str,
+    response_limit: usize,
+) -> Result<BridgeResponse, BridgeReadError> {
+    let file = std::fs::File::open(result_path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            BridgeReadError::Missing
+        } else {
+            BridgeReadError::Io
+        }
+    })?;
+    let mut bytes = Vec::new();
+    file.take((response_limit + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|_| BridgeReadError::Io)?;
+    if bytes.len() > response_limit {
+        return Err(BridgeReadError::TooLarge);
+    }
+    let response: BridgeResponse =
+        serde_json::from_slice(&bytes).map_err(|_| BridgeReadError::Malformed)?;
+    if response.protocol_version != 1 || response.request_id != request_id {
+        return Err(BridgeReadError::Correlation);
+    }
+    Ok(response)
 }
 
 #[derive(Serialize)]
@@ -833,6 +946,35 @@ impl ArkRuntime {
 }
 
 impl ArkRuntime {
+    fn bridge_error(
+        &self,
+        operation_id: &str,
+        readonly: bool,
+        kind: &str,
+        detail: Option<Value>,
+        result_path: &Path,
+    ) -> WorkspaceRuntimeError {
+        self.invalidate();
+        if readonly {
+            return WorkspaceRuntimeError::query_error(
+                "unavailable",
+                "The R session became unavailable while refreshing this read-only query; refresh after reconnecting.",
+            );
+        }
+        WorkspaceRuntimeError::after_possible_effect(
+            RUN_CONNECTION_LOST,
+            Some(json!({
+                "session_id": self.session_id,
+                "operation_id": operation_id,
+                "request_id": operation_id,
+                "result_path": result_path,
+                "failure_kind": kind,
+                "detail": detail,
+                "action": "observe_owner_before_any_retry"
+            })),
+        )
+    }
+
     async fn bridge_call(
         &self,
         id: &str,
@@ -874,37 +1016,30 @@ impl ArkRuntime {
                 quote(&result_path.to_string_lossy()).map_err(before)?
             )
         };
+        let readonly = recording.is_none();
         let captured = self
-            .evaluate(code, cancellation, recording.as_ref())
+            .evaluate(code, cancellation, recording.as_ref(), Some(&result_path))
             .await?;
-        if let Some(error) = &captured.protocol_error {
-            return Err(WorkspaceRuntimeError::after_possible_effect(
-                format!("Ark execution protocol returned an error: {error}"),
-                Some(
-                    json!({"session_id": self.session_id, "result_path":result_path,
-                    "action":"observe_owner_before_any_retry"}),
-                ),
-            ));
+        if let Some(error) = captured.protocol_error.clone() {
+            match read_bridge_response(&result_path, id, response_limit) {
+                Ok(response) => return Ok((response, captured, result_path)),
+                Err(confirmation) => {
+                    return Err(self.bridge_error(
+                        id,
+                        readonly,
+                        "protocol_error",
+                        Some(json!({
+                            "kernel_error": error,
+                            "result_confirmation": confirmation.kind(),
+                        })),
+                        &result_path,
+                    ));
+                }
+            }
         }
-        let read_report = || -> Result<BridgeResponse, String> {
-            let mut bytes = Vec::new();
-            std::fs::File::open(&result_path)
-                .map_err(|e| e.to_string())?
-                .take((response_limit + 1) as u64)
-                .read_to_end(&mut bytes)
-                .map_err(|e| e.to_string())?;
-            if bytes.len() > response_limit {
-                return Err("R bridge response exceeded byte limit".into());
-            }
-            let response: BridgeResponse =
-                serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-            if response.protocol_version != 1 || response.request_id != id {
-                return Err("R bridge response correlation mismatch".into());
-            }
-            Ok(response)
-        };
-        let response = read_report().map_err(|error| WorkspaceRuntimeError::after_possible_effect(error,
-            Some(json!({"session_id":self.session_id, "result_path":result_path, "kernel_error":captured.protocol_error}))))?;
+        let response = read_bridge_response(&result_path, id, response_limit).map_err(|error| {
+            self.bridge_error(id, readonly, error.kind(), None, &result_path)
+        })?;
         Ok((response, captured, result_path))
     }
 }
@@ -946,4 +1081,57 @@ fn push_bounded(output: &mut String, incoming: &str, truncated: &mut bool) {
     }
     output.push_str(&incoming[..end]);
     *truncated |= end < incoming.len();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_bridge_result_is_a_typed_transport_failure() {
+        let temp = tempfile::tempdir().unwrap();
+        let error = read_bridge_response(&temp.path().join("missing.json"), "request", OUTPUT_LIMIT)
+            .unwrap_err();
+        assert!(matches!(error, BridgeReadError::Missing));
+        assert_eq!(error.kind(), "missing_result");
+    }
+
+    #[test]
+    fn malformed_bridge_result_is_not_exposed_as_json_parser_detail() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("response.json");
+        std::fs::write(&path, b"{not-json").unwrap();
+        let error = read_bridge_response(&path, "request", OUTPUT_LIMIT).unwrap_err();
+        assert!(matches!(error, BridgeReadError::Malformed));
+        assert_eq!(error.kind(), "malformed_result");
+    }
+
+    #[test]
+    fn bridge_result_confirmation_rejects_oversized_and_mismatched_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("response.json");
+        let response = json!({
+            "protocol_version": 1,
+            "request_id": "other",
+            "outcome": "succeeded",
+            "error": null,
+            "value": null,
+            "conditions": [],
+            "conditions_truncated": false
+        });
+        std::fs::write(&path, serde_json::to_vec(&response).unwrap()).unwrap();
+        let error = read_bridge_response(&path, "request", OUTPUT_LIMIT).unwrap_err();
+        assert!(matches!(error, BridgeReadError::Correlation));
+        assert_eq!(error.kind(), "correlation_mismatch");
+        let bytes = serde_json::to_vec(&response).unwrap();
+        std::fs::write(&path, &bytes).unwrap();
+        let error = read_bridge_response(&path, "other", bytes.len() - 1).unwrap_err();
+        assert!(matches!(error, BridgeReadError::TooLarge));
+        assert_eq!(error.kind(), "result_too_large");
+    }
+
+    #[test]
+    fn effectful_connection_loss_uses_the_friendly_message() {
+        assert_eq!(RUN_CONNECTION_LOST, "R session connection was lost. The run result is not confirmed. Inspect the original run before retrying.");
+    }
 }

@@ -13,6 +13,7 @@ interface SessionPorts {
   info(): Promise<WorkbenchInfo>;
   rConfiguration(): Promise<RConfiguration>;
   selectProject(path: string): Promise<WorkbenchInfo>;
+  selectDemoProject?(): Promise<WorkbenchInfo>;
   probeR(selection: RSelection): Promise<RProbe>;
   applyR(selection: RSelection, endSession: boolean): Promise<RConfiguration>;
   quitWorkbench?(project: string): Promise<{ quitting: boolean }>;
@@ -250,13 +251,20 @@ export class Session extends Model<SessionSnapshot> {
     return result;
   }
   async selectProject(path: string) {
+    return this.switchProject(() => this.ports.selectProject(path));
+  }
+  async openDemoProject() {
+    if (!this.ports.selectDemoProject) throw new Error("The demo project is unavailable in this Workbench");
+    return this.switchProject(() => this.ports.selectDemoProject!());
+  }
+  private async switchProject(select: () => Promise<WorkbenchInfo>) {
     if (this._switching) throw new Error("A project or R switch is already in progress");
     this._switching = true; this.publish();
     let epoch = this._epoch;
     try {
       await this.ports.transition.before();
       if (this.stopped || epoch !== this._epoch) return;
-      const info = await this.ports.selectProject(path);
+      const info = await select();
       if (this.stopped || epoch !== this._epoch) return;
       epoch = ++this._epoch;
       this._info = immutable(info); this._runtime = null; this.hostMismatch = false; this.mismatchMessage = "";

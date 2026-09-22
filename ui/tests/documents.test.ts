@@ -10,6 +10,7 @@ import { Documents, filePatch, sha256 } from "../src/documents";
 import type { Draft } from "../src/documents";
 import type { DocumentPorts, ResourceIdentity } from "../src/resource-ports";
 import type { OperationRecord } from "../src/generated/OperationRecord";
+import type { QuerySnapshot } from "../src/generated/QuerySnapshot";
 
 function draft(raw: string, path: string | null = "中文 文件.R"): Draft {
   return { id: "document-one", path, raw: raw.replace(/^\uFEFF/, ""), bom: raw.startsWith("\uFEFF"),
@@ -20,7 +21,16 @@ function fixture(raw = "x <- 1\n") {
   let scope: ResourceIdentity = { epoch: 1, project: "/project", session: "session", runtimeState: "idle", connected: true,
     capabilities: ["workspace.run_r"] };
   let closeVersion = 0;
-  const query = vi.fn(), invoke = vi.fn(), run = vi.fn().mockResolvedValue({}), fileSaved = vi.fn(), show = vi.fn();
+  const query = vi.fn(async (_project: string, id: string): Promise<QuerySnapshot> => id === "workspace.check_code"
+    ? { target: { kind: "workspace", identity: "session" }, source: "R", observed_at_ms: 1, status: "ready", completeness: "complete", data: { status: "complete", indent: "" }, notices: [], next_reads: [], diagnostics: [] }
+    : undefined as never), invoke = vi.fn(), fileSaved = vi.fn(), show = vi.fn();
+  let submitted = false;
+  const run = vi.fn(async (code: string, _source: unknown, target?: { workspaceInstanceId?: string }, prepare?: () => Promise<void>) => {
+    const result = await query(scope.project!, "workspace.check_code", target?.workspaceInstanceId ? { code, workspace_instance_id: target.workspaceInstanceId } : { code });
+    if (result.status !== "ready" || !result.data) throw new Error("R is reconnecting/unavailable.");
+    if ((result.data as { status?: string }).status === "incomplete") throw new Error("The selected R code is incomplete. Complete the block or run the full file.");
+    await prepare?.(); submitted = true; return {} as OperationRecord;
+  });
   const ports: DocumentPorts = {
     context: () => scope, query, invoke, run, fileSaved, schedule: vi.fn(), changed: vi.fn(), canRun: () => true,
     queueing: () => false, openDocument: show, renameDocument: vi.fn(), closeDocument: vi.fn(), closeVersion: () => closeVersion,
@@ -28,7 +38,7 @@ function fixture(raw = "x <- 1\n") {
   };
   const documents = new Documents(ports);
   documents.restore({ active: "document-one", items: [draft(raw)] });
-  return { documents, query, invoke, run, fileSaved, show, ports,
+  return { documents, query, invoke, run, fileSaved, show, ports, submitted: () => submitted,
     d: () => documents.getDocumentSnapshot("document-one")!,
     scope: (change: Partial<ResourceIdentity>) => { scope = { ...scope, ...change }; },
     closeViews: () => { closeVersion++; } };
@@ -77,7 +87,7 @@ describe("document byte and save discipline", () => {
     expect(fileSaved).toHaveBeenCalledWith("/project", "中文 文件.R", hash);
   });
   it.each(["failed", "uncertain", "wrong-digest", "network"])("never runs a file after %s save", async (mode) => {
-    const { documents, d, invoke, run } = fixture(); documents.replace(d(), "x <- 2\n");
+    const { documents, d, invoke, run, submitted } = fixture(); documents.replace(d(), "x <- 2\n");
     invoke.mockImplementation(async () => {
       if (mode === "network") throw new Error("network interrupted");
       return saved(mode === "wrong-digest" ? "sha256:wrong" : await sha256(d().raw),
@@ -85,14 +95,43 @@ describe("document byte and save discipline", () => {
     });
     await expect(documents.runFile(d())).rejects.toThrow();
     expect(invoke).toHaveBeenCalledTimes(1); expect(invoke.mock.calls[0][0]).toBe("project.apply_patch");
-    expect(run).not.toHaveBeenCalled(); expect(d().dirty).toBe(true); expect(d().saving).toBe(false);
+    expect(run).toHaveBeenCalledTimes(1); expect(submitted()).toBe(false); expect(d().dirty).toBe(true); expect(d().saving).toBe(false);
   });
   it("runs exactly the click snapshot after a confirmed save despite later typing", async () => {
     const { documents, d, invoke, run } = fixture(); documents.replace(d(), "x <- 2\n");
     invoke.mockImplementation(async () => { documents.replace(d(), "x <- 999\n"); return saved(await sha256("x <- 2\n")); });
     await documents.runFile(d());
-    expect(run).toHaveBeenCalledWith("x <- 2\n", { view_id: d().id, kind: "file", label: "中文 文件.R" });
+    expect(run.mock.calls[0].slice(0, 2)).toEqual(["x <- 2\n", { view_id: d().id, kind: "file", label: "中文 文件.R" }]);
     expect(d().raw).toBe("x <- 999\n"); expect(d().dirty).toBe(true);
+  });
+  it("checks the captured full file before saving and does not submit incomplete code", async () => {
+    const f = fixture(); f.documents.replace(f.d(), "if (TRUE) {\n");
+    f.query.mockResolvedValueOnce({ ...({ target: { kind: "workspace", identity: "session" }, source: "R", observed_at_ms: 1,
+      status: "ready", completeness: "complete", data: { status: "incomplete", indent: "  " }, notices: [], next_reads: [], diagnostics: [] } as QuerySnapshot) });
+    await expect(f.documents.runFile(f.d())).rejects.toThrow("The selected R code is incomplete");
+    expect(f.query).toHaveBeenCalledWith("/project", "workspace.check_code", { code: "if (TRUE) {\n" });
+    expect(f.invoke).not.toHaveBeenCalled(); expect(f.run).toHaveBeenCalledTimes(1); expect(f.d().dirty).toBe(true);
+  });
+  it("checks the captured selection before submitting incomplete code", async () => {
+    const f = fixture("if (TRUE) {\n");
+    f.query.mockResolvedValueOnce({ ...({ target: { kind: "workspace", identity: "session" }, source: "R", observed_at_ms: 1,
+      status: "ready", completeness: "complete", data: { status: "incomplete", indent: "  " }, notices: [], next_reads: [], diagnostics: [] } as QuerySnapshot) });
+    await expect(f.documents.runSelection(f.d())).rejects.toThrow("The selected R code is incomplete");
+    expect(f.query).toHaveBeenCalledWith("/project", "workspace.check_code", { code: "if (TRUE) {" });
+    expect(f.run).toHaveBeenCalledTimes(1); expect(f.invoke).not.toHaveBeenCalled();
+  });
+  it("preserves a captured R target when selection changes during its check", async () => {
+    const f = fixture();
+    const target = Object.freeze({ workspaceInstanceId: "main", nativeSessionId: "r-main", continuationLineageId: "lineage-main" });
+    f.ports.captureTarget = () => target; f.scope({ workspaceInstanceId: "main", session: "r-main", nativeEpoch: 1 });
+    let release!: (value: QuerySnapshot) => void;
+    f.query.mockImplementationOnce(() => new Promise<QuerySnapshot>((resolve) => { release = resolve; }));
+    const running = f.documents.runSelection(f.d());
+    f.scope({ workspaceInstanceId: "scratch", session: "r-scratch", nativeEpoch: 1 });
+    release({ target: { kind: "workspace", identity: "r-main" }, source: "R", observed_at_ms: 1, status: "ready", completeness: "complete",
+      data: { status: "complete", indent: "" }, notices: [], next_reads: [], diagnostics: [] });
+    await running;
+    expect(f.run.mock.calls[0].slice(0, 3)).toEqual(["x <- 1", expect.objectContaining({ kind: "line" }), target]);
   });
   it("captures the R destination before saving and preserves it when the user selects another session", async () => {
     const f = fixture(); f.documents.replace(f.d(), "x <- 2\n");
@@ -104,7 +143,7 @@ describe("document byte and save discipline", () => {
       return saved(await sha256("x <- 2\n"));
     });
     await f.documents.runFile(f.d());
-    expect(f.run).toHaveBeenCalledWith("x <- 2\n", expect.objectContaining({ kind: "file" }), target);
+    expect(f.run.mock.calls[0].slice(0, 3)).toEqual(["x <- 2\n", expect.objectContaining({ kind: "file" }), target]);
     expect(f.d().runningFile).toBe(false); expect(f.d().dirty).toBe(false);
   });
   it("keeps concurrent edits when formatting returns and offers the captured comparison", async () => {
@@ -157,12 +196,12 @@ it("late save failure and cleanup cannot change a restored same-id draft", async
   expect(d().raw).toBe("new project"); expect(d().error).toBe(""); expect(d().saving).toBe(false);
 });
 it("same-project R restart prevents Run File from submitting saved code and retains drafts", async () => {
-  const { documents, d, invoke, scope, run } = fixture(); documents.replace(d(), "x <- 2\n");
+  const { documents, d, invoke, scope, run, submitted } = fixture(); documents.replace(d(), "x <- 2\n");
   invoke.mockImplementation(async () => {
     scope({ session: "restarted" }); documents.sessionChanged(); return saved(await sha256("x <- 2\n"));
   });
   await expect(documents.runFile(d())).rejects.toThrow("discarded");
-  expect(run).not.toHaveBeenCalled(); expect(d().raw).toBe("x <- 2\n"); expect(d().runningFile).toBe(false);
+  expect(run).toHaveBeenCalledTimes(1); expect(submitted()).toBe(false); expect(d().raw).toBe("x <- 2\n"); expect(d().runningFile).toBe(false);
 });
 it("stopping during a read drops its result and notifications", async () => {
   const { documents, query } = fixture(); let release!: (value: unknown) => void;

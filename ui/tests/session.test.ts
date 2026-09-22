@@ -28,6 +28,7 @@ function fixture() {
   const ports = {
     info: vi.fn(async () => info(project)), rConfiguration: vi.fn(async () => r),
     selectProject: vi.fn(async (next: string) => { project = next; return info(project); }),
+    selectDemoProject: vi.fn(async () => { project = "/demo"; return info(project); }),
     probeR: vi.fn(async (_selection: RSelection) => probe), applyR: vi.fn(async (_selection: RSelection, _end: boolean) => r),
     query: vi.fn(async (_project: string, _id: string, _args?: unknown) => runtime()),
     readState: vi.fn(async (_project: string | null, key: string): Promise<ApplicationState> => ({ key, version: "v1", value: ["/a"] })),
@@ -120,6 +121,14 @@ it("waits for draft synchronization before switching and leaves the current sess
   await expect(f.session.selectProject("/b")).rejects.toThrow("drafts not synchronized");
   expect(f.ports.selectProject).not.toHaveBeenCalled(); expect(f.session.project).toBe("/a"); expect(f.session.context().session).toBe("native-a");
   expect(f.session.switching).toBe(false); expect(f.ports.transition.failed).toHaveBeenCalledTimes(1);
+});
+
+it("opens the bundled demo through the same project transition", async () => {
+  const f = fixture(); await f.session.start(); await f.session.refreshRuntime();
+  await f.session.openDemoProject();
+  expect(f.ports.selectDemoProject).toHaveBeenCalledOnce();
+  expect(f.session.project).toBe("/demo"); expect(f.session.switching).toBe(false);
+  expect(f.ports.transition.after).toHaveBeenCalledWith(true);
 });
 
 it("prevents two concurrent switches and cleans up switching after failure", async () => {

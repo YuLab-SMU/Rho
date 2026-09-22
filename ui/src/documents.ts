@@ -542,12 +542,12 @@ export class Documents extends Model<DocumentsSnapshot> {
     const runtimeTarget = this.ports.captureTarget?.(), guard = this.guard(d, "run", runtimeTarget === undefined);
     d.runningFile = true; this.changed(d, false);
     try {
-      const saved = await this.save(ref, captured, target, overwrite);
-      guard.assert();
-      if (!this.ports.context().connected) throw new Error("Disconnected. The saved code was not submitted.");
-      const source = { view_id: d.draft.id, label: target ?? d.name, kind: "file" };
-      if (runtimeTarget) await this.ports.run(saved, source, runtimeTarget);
-      else await this.ports.run(saved, source);
+      const source = { view_id: d.draft.id, label: target ?? d.name, kind: "file" } as const;
+      await this.ports.run(captured, source, runtimeTarget, async () => {
+        await this.save(ref, captured, target, overwrite);
+        guard.assert();
+        if (!this.ports.context().connected) throw new Error("Disconnected. The saved code was not submitted.");
+      });
       guard.assert();
     } finally { if (guard.current()) { d.runningFile = false; this.changed(d, false); } }
   }
@@ -555,7 +555,9 @@ export class Documents extends Model<DocumentsSnapshot> {
     if (!this.canRunSelection(ref)) return;
     const d = this.resolve(ref), selection = d.state.selection.main;
     const code = selection.empty ? d.state.doc.lineAt(selection.head).text : d.state.sliceDoc(selection.from, selection.to);
-    await this.ports.run(code, { view_id: d.draft.id, label: d.draft.path ?? d.name, kind: selection.empty ? "line" : "selection" });
+    const runtimeTarget = this.ports.captureTarget?.(), guard = this.guard(d, "run", runtimeTarget === undefined);
+    await this.ports.run(code, { view_id: d.draft.id, label: d.draft.path ?? d.name, kind: selection.empty ? "line" : "selection" }, runtimeTarget);
+    guard.assert();
   }
   async format(ref: DocumentRef) {
     if (!this.canRun(ref) || this.ports.queueing()) return;

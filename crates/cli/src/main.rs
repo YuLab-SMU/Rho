@@ -21,6 +21,9 @@ struct Cli {
     /// Explicit test-only runtime; does not run R.
     #[arg(long, conflicts_with = "ark")]
     demo: bool,
+    /// Materialize and open the bundled real Rho example project.
+    #[arg(long, conflicts_with_all = ["project", "demo", "remote_host", "remote_root", "slurm_cluster"])]
+    demo_project: bool,
     #[arg(long)]
     ark: Option<PathBuf>,
     #[arg(long)]
@@ -219,6 +222,7 @@ async fn run() -> Result<(), CliFailure> {
     let context = NextHost::local_context();
     if let Some(path) = &cli.connect_url_file {
         if cli.demo
+            || cli.demo_project
             || cli.ark.is_some()
             || cli.r_home.is_some()
             || cli.checkpoint_helper.is_some()
@@ -260,14 +264,20 @@ async fn run() -> Result<(), CliFailure> {
         if cli.demo {
             return Err("workbench requires a real project/runtime; --demo is test-only".into());
         }
-        if cli.project.is_none() && (cli.environment.is_some() || cli.remote_host.is_some()) {
+        let demo_project = if cli.demo_project {
+            Some(rho_workbench::materialize_demo_project()?)
+        } else {
+            None
+        };
+        let project = demo_project.as_deref().or(cli.project.as_deref());
+        if project.is_none() && (cli.environment.is_some() || cli.remote_host.is_some()) {
             return Err(
                 "--project is required for an initial environment or remote binding".into(),
             );
         }
         return rho_workbench::serve_with_assets(
             cli.profile()?,
-            cli.project.as_deref(),
+            project,
             *port,
             url_file.as_deref(),
             dev_assets.as_deref(),

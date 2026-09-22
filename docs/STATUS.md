@@ -1,6 +1,35 @@
 # Rho: current state and focus
 
-Updated: 2026-09-21. This is the single current status summary. Git retains history.
+Updated: 2026-09-22. This is the single current status summary. Git retains history.
+
+## Bundled real Rho demo project
+
+The welcome page and `rho --demo-project workbench` now materialize a writable,
+base-R Gapminder project with provenance, reusable scripts and an optional
+Quarto source. Running `run_demo.R` creates real workspace objects, PNG plots,
+processed RDS files and an isolated HTML Viewer report; opening the demo does
+not run R, install packages or contact an Agent. The embedded browser acceptance
+case opens the demo, runs the file, and verifies Objects, Plots, Viewer,
+Packages and Agent panels.
+
+## Ark console widgets and execution safety
+
+Rho's Ark 0.1.252 console now installs a Rho-owned `print.htmlwidget` path after
+Ark's Positron override. Standalone widget HTML is inlined and retained as a
+`text/html` artifact without a `positron.ui` comm; the Studio Viewer mints a
+short-lived isolated HTML capability and keeps HTML separate from Plot PNG
+outputs. Normal bridge-level R errors remain failed Operations, while missing
+or invalid transport/result confirmation is uncertain and retains recovery
+material without automatic replay.
+
+Console, Run Selection and Run File share one per-session submission gate and
+R parser preflight. Incomplete, invalid, busy or unavailable checks do not
+create a run Operation; a captured File run holds the same gate through its
+save. Transport loss fences the old session and preserves the original
+uncertain Operation; a live/unconfirmed native process is never replaced
+silently. Focused real-R, HTML-widget/Plot, Viewer browser, recovery, frontend
+and Rust checks have passed. The broad serial workspace run remains subject to
+its external time budget; ignored real-R cases remain explicitly ignored.
 
 ## Current implementation: Help, Viewer, and annotation infrastructure
 

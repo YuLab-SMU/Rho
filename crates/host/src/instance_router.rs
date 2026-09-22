@@ -221,7 +221,7 @@ impl ExecutionLease for RoutedLease {
     fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
         self.hold.mark_activity = self.potentially_mutating;
         // Activity is visible before the real owner's lane/queue permits a subsequent capture.
-        self.hold.release();
+        self.hold.release_result(result);
         self.inner.completed(result);
     }
 }
@@ -259,6 +259,26 @@ impl QueryHandler for RoutedQuery {
         let (live, _hold) = self
             .owner
             .admit_query(&id, &self.descriptor.capability.id)?;
+        if self.descriptor.capability.id != "workspace.checkpoints"
+            && live.runtime.runtime_status().state == "unavailable"
+        {
+            return Ok(QuerySnapshot {
+                next_reads: Vec::new(),
+                diagnostics: Vec::new(),
+                target: TargetRef {
+                    kind: "workspace".into(),
+                    identity: live.runtime.session_id().into(),
+                },
+                source: "host/instance".into(),
+                observed_at_ms: SystemClock.now_ms()?,
+                status: QueryStatus::Unavailable,
+                completeness: ObservationCompleteness::Unknown,
+                data: None,
+                notices: vec![
+                    "The R session is unavailable after a transport loss; inspect recovery before retrying reads.".into(),
+                ],
+            });
+        }
         let mut snapshot = live
             .registry
             .query_handler(&self.descriptor.capability)?
