@@ -1,8 +1,8 @@
-use crate::{CapabilityRegistry, OperationError};
+use crate::{RegistrySnapshot, OperationError};
 use rho_contract::*;
 use serde_json::{Value, json};
 
-impl CapabilityRegistry {
+impl RegistrySnapshot {
     /// Navigation is response metadata. A navigation defect cannot change the
     /// execution result, release an accepted action, or pause a native queue.
     pub(crate) fn public_record(

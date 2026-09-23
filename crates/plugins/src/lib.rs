@@ -6,9 +6,11 @@ mod repository;
 mod backend;
 mod runtime;
 mod instance_records;
+mod operations;
 pub use package::*;
 pub use repository::*;
 pub use runtime::*;
+pub use operations::*;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PluginError {
@@ -32,6 +34,8 @@ pub enum PluginError {
     Unavailable(String),
     #[error(transparent)]
     Transport(#[from] rho_plugin_sdk::SdkError),
+    #[error("plugin response violates its contract: {message}")]
+    InvalidResponse { message: String, response: Box<rho_plugin_protocol::RpcBody> },
 }
 
 pub(crate) fn ensure(condition: bool, message: impl Into<String>) -> Result<(), PluginError> {

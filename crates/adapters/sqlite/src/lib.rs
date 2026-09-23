@@ -331,9 +331,7 @@ impl OperationJournal for SqliteOperationJournal {
             &operation.caller.id,
             &operation.client_request_id,
         )? {
-            if existing.operation.invocation_digest != operation.invocation_digest
-                || existing.operation.capability != operation.capability
-            {
+            if !existing.operation.same_request(operation) {
                 return Err(OperationError::IdempotencyConflict);
             }
             transaction.commit().map_err(storage)?;
@@ -1679,7 +1677,7 @@ mod tests {
     use super::*;
 
     fn operation(id: &str, request: &str, digest: &str) -> Operation {
-        Operation {
+        Operation { admission: None,
             principal: None,
             operation_id: OperationId::new(id).unwrap(),
             client_request_id: request.to_string(),
@@ -1951,6 +1949,38 @@ mod tests {
             panic!("retry should return the original operation");
         };
         assert_eq!(existing.operation.operation_id, first.operation_id);
+    }
+
+    #[tokio::test]
+    async fn identical_raw_request_keeps_first_preparation_and_rejects_foreign_scope() {
+        let journal = SqliteOperationJournal::open_in_memory().unwrap();
+        let mut first = operation("op_prepared", "request_prepared", "sha256:normalized-one");
+        first.admission = Some(rho_contract::OperationAdmission {
+            request_digest:"sha256:raw-original".into(), owner_context:json!({"native":"first"}),
+            descriptor:rho_contract::CapabilityDescriptor {
+                capability:first.capability.clone(), domain:first.domain.clone(), kind:rho_contract::CapabilityKind::Operation,
+                input_schema:json!({}),output_schema:json!({}),recovery_schema:json!({}),
+                documentation:rho_contract::builtin_documentation("host.overview"), required_scopes:Default::default(),
+                potential_effects:first.potential_effects.clone(),idempotency:rho_contract::IdempotencyClass::CallerScoped,
+                retry:rho_contract::RetryClass::Never,cancellation:rho_contract::CancellationClass::Unsupported,
+            },
+        });
+        journal.admit(&first).await.unwrap();
+        let mut raced = first.clone();
+        raced.operation_id = OperationId::new("op_raced").unwrap();
+        raced.invocation_digest = "sha256:normalized-two".into();
+        raced.normalized_arguments = json!({"code":"different native qualification"});
+        raced.admission.as_mut().unwrap().owner_context = json!({"native":"second"});
+        let Admission::Existing(existing) = journal.admit(&raced).await.unwrap() else {panic!("first admission wins")};
+        assert_eq!(existing.operation,first);
+        raced.idempotency_scope = Some("/another-project".into());
+        assert_eq!(journal.admit(&raced).await.unwrap_err(),OperationError::IdempotencyConflict);
+        raced.idempotency_scope = None;
+        raced.principal = Some(CallerIdentity {kind:CallerKind::Human,id:"foreign".into()});
+        assert_eq!(journal.admit(&raced).await.unwrap_err(),OperationError::IdempotencyConflict);
+        raced.principal = None;
+        raced.admission.as_mut().unwrap().request_digest = "sha256:different-raw".into();
+        assert_eq!(journal.admit(&raced).await.unwrap_err(),OperationError::IdempotencyConflict);
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -279,6 +279,12 @@ and validation must never invoke a build recipe. Focused foundation checks are
 `cargo test -p rho-plugin-protocol --locked`,
 `cargo test -p rho-plugin-sdk --locked` and `cargo test -p rho-plugins --locked`.
 For runtime iteration use `cargo test -p rho-plugins --test backend_runtime --locked`.
+Its `operation_bridge` filter exercises the actual process through the generic
+Operation/Query gateways and SQLite journal: fixed preflight qualification,
+principal/revision containment, removal during execution, cancellation,
+invalid candidates, crash without replay and original-record cleanup.
+Registry changes also require `cargo test -p rho-operation --lib --locked`;
+shared Operation DTO changes require affected journal/Host checks and generation.
 Its external Python fixture exercises actual independent processes and requires
 Python 3 on PATH. `node scripts/test-plugin-backend.mjs` copies the public Rust
 crates outside the repository and compiles the example with no private source;

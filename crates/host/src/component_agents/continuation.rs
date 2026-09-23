@@ -108,14 +108,31 @@ impl ComponentAgentService {
             cursor = page.cursor;
         }
         let mut result_budget = 24 * 1024usize;
-        let tools=self.owner.store.component_tools(scope,&previous.run_id)?.into_iter().map(|tool|{
-            let result=tool.receipt.result.filter(|value|{
-                let size=serde_json::to_vec(value).map_or(usize::MAX,|v|v.len());
-                if size>4096 || size>result_budget {false}else{result_budget-=size;true}
-            });
-            json!({"receipt_id":tool.receipt.receipt_id,"capability":tool.receipt.capability,"operation_id":tool.receipt.operation_id,
-                "application_request_id":tool.receipt.application_request_id,"result":result,"omitted_result":result.is_none()})
-        }).collect::<Vec<_>>();
+        let tools = self.owner.store.component_tools(scope, &previous.run_id)?
+            .into_iter().map(|tool| {
+                let mut omitted_result_fields = Vec::new();
+                let result = tool.receipt.result.map(|mut value| {
+                    // Full admission contracts belong in original-record reads.
+                    // Keep terminal evidence and native request identities useful
+                    // within the history budget instead of dropping the result.
+                    // Never interpret a query's arbitrary scientific JSON here.
+                    if matches!(&tool.action, ComponentToolAction::Invoke(_))
+                        && serde_json::from_value::<OperationRecord>(value.clone()).is_ok()
+                        && let Some(operation) = value.get_mut("operation").and_then(Value::as_object_mut)
+                        && operation.remove("admission").is_some()
+                    {
+                        omitted_result_fields.push("operation.admission");
+                    }
+                    value
+                }).filter(|value| {
+                    let size = serde_json::to_vec(value).map_or(usize::MAX, |v| v.len());
+                    if size > 4096 || size > result_budget { false }
+                    else { result_budget -= size; true }
+                });
+                json!({"receipt_id":tool.receipt.receipt_id,"capability":tool.receipt.capability,"operation_id":tool.receipt.operation_id,
+                    "application_request_id":tool.receipt.application_request_id,"result":result,"omitted_result":result.is_none(),
+                    "omitted_result_fields":omitted_result_fields})
+            }).collect::<Vec<_>>();
         let mut requests = self
             .owner
             .ancestor_runs(scope, previous)?

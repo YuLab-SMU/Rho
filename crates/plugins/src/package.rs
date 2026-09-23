@@ -372,6 +372,11 @@ fn validate_schemas(manifest: &PluginManifest) -> Result<(), PluginError> {
         jsonschema::validator_for(schema)
             .map_err(|e| PluginError::Invalid(format!("invalid contribution schema: {e}")))?;
     }
+    for cap in &manifest.capabilities {
+        for example in &cap.examples {
+            crate::runtime::validate_value(&cap.input_schema, example, "discovery example")?;
+        }
+    }
     let validator = jsonschema::validator_for(&manifest.configuration_schema)
         .map_err(|e| PluginError::Invalid(e.to_string()))?;
     ensure(

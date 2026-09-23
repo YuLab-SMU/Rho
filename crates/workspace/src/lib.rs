@@ -523,7 +523,7 @@ mod tests {
     }
 
     fn operation(preconditions: Vec<Precondition>) -> Operation {
-        Operation {
+        Operation { admission: None,
             principal: None,
             operation_id: OperationId::new("op_test").unwrap(),
             client_request_id: "request_test".to_string(),

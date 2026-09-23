@@ -38,10 +38,19 @@ def query_result(request, data, **kwargs):
     send(request, "query_result", {"data": data, "completeness": "complete", "source": None}, **kwargs)
 
 
-def commit(request, cancelled=False, invalid=False):
+def commit(request, cancelled=False, invalid=False, call=None):
+    args = call["arguments"] if call else {}
+    facts = [{"schema": "fixture.fact", "key": "" if args.get("action") == "badfact" else "same-native-key",
+              "value": args}] if call else []
+    output = {"label": configuration.get("label")}
+    if call:
+        output.update({"operation_id":call["operation_id"], "arguments":args,
+                       "owner_context":call.get("owner_context"), "preconditions":call["preconditions"]})
+    evidence = [{"owner":identity, "resource":"unverified", "digest":"sha256:" + "0" * 64,
+                 "media_type":"text/plain", "bytes":1}] if args.get("action") == "evidence" else []
     send(request, "commit_plan", {"outcome": "cancelled" if cancelled else "succeeded",
-         "output": None if cancelled or invalid else {"label": configuration.get("label")},
-         "error": None, "recovery": None, "facts": [], "evidence": [], "cancellation_confirmed": cancelled})
+         "output": None if cancelled or invalid else output,
+         "error": None, "recovery": None, "facts": facts, "evidence": evidence, "cancellation_confirmed": cancelled})
 
 
 frame = read()
@@ -70,6 +79,11 @@ while True:
             break
     elif kind == "query":
         args = data["arguments"]
+        if data["binding"]["capability"]["id"] == "fixture.prepare":
+            query_result(request, {"arguments": {**args["arguments"], "normalized":True},
+                "target": "different" if configuration.get("retarget") else args["target"] or "native-selected",
+                "owner_context":{"native_session":"fixed-session"}})
+            continue
         action = args.get("action", "echo")
         if action == "spoof":
             query_result(request, {}, spoof=True)
@@ -106,6 +120,8 @@ while True:
             os._exit(17)
         elif action == "badcommit":
             commit(request, invalid=True)
+        elif action in ("commit", "badfact", "evidence"):
+            commit(request, call=data)
         else:
             pending[request] = data
     elif kind == "cancel":

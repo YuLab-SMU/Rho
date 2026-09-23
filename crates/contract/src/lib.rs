@@ -306,6 +306,8 @@ impl TargetRef {
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 pub enum EffectHint {
+    /// Consult the plugin's captured contract for its domain-defined effects.
+    PluginDefined,
     NeedsNetwork,
     MayWriteProject,
     MayMutateRuntime,
@@ -408,8 +410,38 @@ pub struct Operation {
     pub causation_id: Option<OperationId>,
     pub trace_parent: Option<String>,
     pub accepted_at_ms: i64,
+    /// Captured by Operation admission, never accepted from a plugin result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub admission: Option<OperationAdmission>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+pub struct OperationAdmission {
+    /// Canonical original request before owner preparation/normalization.
+    pub request_digest: String,
+    /// Exact contract retained after dynamic contribution removal or replacement.
+    pub descriptor: CapabilityDescriptor,
+    /// Validated owner qualification, captured separately from user arguments.
+    pub owner_context: Value,
 }
 impl Operation {
+    /// Preparation may resolve a newer native state while an identical raw
+    /// request is racing with admission. The already-admitted operation wins.
+    pub fn same_request(&self, other: &Self) -> bool {
+        self.caller == other.caller
+            && self.principal() == other.principal()
+            && self.idempotency_scope == other.idempotency_scope
+            && self.client_request_id == other.client_request_id
+            && self.capability == other.capability
+            && (self.invocation_digest == other.invocation_digest
+                || self
+                    .admission
+                    .as_ref()
+                    .zip(other.admission.as_ref())
+                    .is_some_and(|(a, b)| a.request_digest == b.request_digest))
+    }
     pub fn principal(&self) -> &CallerIdentity {
         self.principal.as_ref().unwrap_or(&self.caller)
     }

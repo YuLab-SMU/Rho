@@ -28,7 +28,7 @@ mod tests {
     fn actor(id:&str)->CallerIdentity {CallerIdentity{kind:CallerKind::Agent,id:id.into()}}
     fn principal(id:&str)->CallerIdentity {CallerIdentity{kind:CallerKind::Human,id:id.into()}}
     fn operation(id:&str,caller:&str)->Operation {
-        Operation{operation_id:OperationId::new(id).unwrap(),client_request_id:id.into(),caller:actor(caller),principal:Some(principal("alice")),capability:CapabilityRef::new("workspace.run_r",1).unwrap(),domain:"workspace".into(),target:TargetRef{kind:"workspace".into(),identity:"original-session".into()},normalized_arguments:json!({"workspace_instance_id":"main","expected_session":"original-session"}),invocation_digest:id.into(),idempotency_scope:Some("/project".into()),preconditions:vec![],potential_effects:Default::default(),correlation_id:id.into(),causation_id:None,trace_parent:None,accepted_at_ms:1}
+        Operation { admission: None,operation_id:OperationId::new(id).unwrap(),client_request_id:id.into(),caller:actor(caller),principal:Some(principal("alice")),capability:CapabilityRef::new("workspace.run_r",1).unwrap(),domain:"workspace".into(),target:TargetRef{kind:"workspace".into(),identity:"original-session".into()},normalized_arguments:json!({"workspace_instance_id":"main","expected_session":"original-session"}),invocation_digest:id.into(),idempotency_scope:Some("/project".into()),preconditions:vec![],potential_effects:Default::default(),correlation_id:id.into(),causation_id:None,trace_parent:None,accepted_at_ms:1}
     }
     #[tokio::test]
     async fn caller_filter_preserves_principal_and_project_before_pagination() {

@@ -1,4 +1,6 @@
 use rho_plugin_protocol::*;
+#[path = "fixtures/operation_bridge.rs"]
+mod operation_bridge;
 use rho_plugins::*;
 use serde_json::{Value, json};
 use std::{
@@ -37,7 +39,7 @@ fn fixture(path: &Path, version: &str, requires: bool) -> PluginArchive {
     let capability = |id, kind, effects, cancellation| {
         json!({
             "capability": {"id": id, "version": 1}, "kind": kind, "title": id, "description": "Runtime fixture",
-            "input_schema": {"type":"object"}, "output_schema": {"type":"object"}, "recovery_schema": true,
+            "input_schema": {"type":"object"}, "examples":[{}], "output_schema": {"type":"object"}, "recovery_schema": true,
             "required_scopes": ["fixture:read"], "effects": effects, "cancellation": cancellation
         })
     };
@@ -98,6 +100,7 @@ fn call(lease: &ProviderLease, args: Value, operation: bool) -> PluginCall {
         scopes: ["fixture:read".into()].into(),
         arguments: args,
         preconditions: json!({}),
+        owner_context: Value::Null,
         operation_id: operation.then(|| "operation-original".into()),
     }
 }

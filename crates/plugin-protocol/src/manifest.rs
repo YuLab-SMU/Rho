@@ -99,11 +99,16 @@ pub struct CapabilityContribution {
     pub title: String,
     pub description: String,
     pub input_schema: Value,
+    /// Valid scientific arguments used in discovery; the Host adds provider binding.
+    pub examples: Vec<Value>,
     pub output_schema: Value,
     pub recovery_schema: Value,
     pub required_scopes: BTreeSet<String>,
     pub effects: BTreeSet<String>,
     pub cancellation: CancellationSupport,
+    /// Optional read-only owner preflight, invoked before Operation admission.
+    #[serde(default)]
+    pub preflight: Option<CapabilityKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
@@ -283,6 +288,10 @@ impl PluginManifest {
             )?;
             bounded_text(&cap.title, 128, "capability title")?;
             bounded_text(&cap.description, 4096, "capability description")?;
+            require(
+                !cap.examples.is_empty() && cap.examples.len() <= 16,
+                "capabilities require 1–16 input examples",
+            )?;
             for schema in [&cap.input_schema, &cap.output_schema, &cap.recovery_schema] {
                 schema_shape(schema)?;
             }
@@ -300,6 +309,15 @@ impl PluginManifest {
             }
         }
         let mut requirements = BTreeSet::new();
+        for cap in &self.capabilities {
+            if let Some(preflight) = &cap.preflight {
+                require(
+                    cap.kind != CapabilityKind::Query
+                        && capabilities.get(preflight) == Some(&CapabilityKind::Query),
+                    "operation preflight must name a declared query in the same plugin",
+                )?;
+            }
+        }
         for req in &self.requires {
             require(
                 req.capability.version > 0 && requirements.insert(&req.capability),

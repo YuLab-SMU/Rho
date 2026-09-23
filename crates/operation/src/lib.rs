@@ -11,6 +11,10 @@ mod navigation;
 mod query;
 mod record;
 mod schema;
+mod registry;
+mod registry_snapshot;
+pub use registry::{CapabilityRegistry, ContributionBatch, RegistrationRevision};
+pub use registry_snapshot::RegistrySnapshot;
 pub use query::{QueryGateway, QueryHandler};
 pub use record::OperationGetHandler;
 
@@ -20,7 +24,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use rho_contract::{
-    CallContext, CallerIdentity, CancellationClass, CapabilityDescriptor, CapabilityKind,
+    CallContext, CallerIdentity, CancellationClass, CapabilityDescriptor,
     CapabilityRef, ContractError, EffectObservation, Invocation, Operation, OperationEventRecord,
     OperationId, OperationOutcome, OperationRecord, OutboxRecord, TargetRef,
 };
@@ -294,6 +298,20 @@ pub async fn wait_cancellation(receiver: &mut tokio::sync::watch::Receiver<bool>
 
 #[async_trait]
 pub trait OperationHandler: Send + Sync {
+    /// Bind a concrete owner and perform read-only native preparation before
+    /// admission. A returned handler is retained through execution and commit.
+    /// Model output cannot change the registered schema, scopes or effect class.
+    async fn bind(
+        &self,
+        _context: &CallContext,
+        _arguments: &Value,
+        _preconditions: &[rho_contract::Precondition],
+    ) -> Result<Option<Arc<dyn OperationHandler>>, OperationError> {
+        Ok(None)
+    }
+    fn execution_context(&self) -> Value {
+        Value::Null
+    }
     fn admitted(&self, _operation: &Operation) -> Result<(), HandlerError> {
         Ok(())
     }
@@ -490,329 +508,6 @@ impl OperationIdGenerator for UuidOperationIdGenerator {
     }
 }
 
-#[derive(Default)]
-pub struct CapabilityRegistry {
-    handlers: BTreeMap<CapabilityRef, Arc<dyn OperationHandler>>,
-    queries: BTreeMap<CapabilityRef, Arc<dyn QueryHandler>>,
-    schemas: BTreeMap<CapabilityRef, schema::CapabilitySchemas>,
-    descriptors: BTreeMap<CapabilityRef, CapabilityDescriptor>,
-}
-
-impl CapabilityRegistry {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    pub fn register_control(
-        &mut self,
-        descriptor: CapabilityDescriptor,
-    ) -> Result<(), OperationError> {
-        descriptor.validate()?;
-        if descriptor.kind != CapabilityKind::Control {
-            return Err(OperationError::Contract(
-                "control metadata requires Control kind".into(),
-            ));
-        }
-        let capability = descriptor.capability.clone();
-        if self.schemas.contains_key(&capability) {
-            return Err(OperationError::DuplicateCapability(
-                capability.display_key(),
-            ));
-        }
-        self.schemas.insert(
-            capability.clone(),
-            schema::CapabilitySchemas::new(&descriptor)?,
-        );
-        self.descriptors
-            .insert(capability.clone(), descriptor.clone());
-        Ok(())
-    }
-
-    pub fn register(&mut self, handler: Arc<dyn OperationHandler>) -> Result<(), OperationError> {
-        handler.descriptor().validate()?;
-        if handler.descriptor().kind != CapabilityKind::Operation {
-            return Err(OperationError::Contract(
-                "operation handler requires an Operation descriptor".into(),
-            ));
-        }
-        let capability = handler.descriptor().capability.clone();
-        if self.schemas.contains_key(&capability) {
-            return Err(OperationError::DuplicateCapability(
-                capability.display_key(),
-            ));
-        }
-        let mut descriptor = handler.descriptor().clone();
-        descriptor.recovery_schema =
-            rho_contract::operation_recovery_schema(descriptor.recovery_schema);
-        let schemas = schema::CapabilitySchemas::new(&descriptor)?;
-        for example in &descriptor.documentation.examples {
-            let normalized = handler
-                .normalize_arguments(&example.arguments)
-                .map_err(|e| {
-                    OperationError::Contract(format!(
-                        "{} example normalization failed: {e}",
-                        capability.display_key()
-                    ))
-                })?;
-            schemas.input(&normalized).map_err(|e| {
-                OperationError::Contract(format!(
-                    "{} normalized example violates its input schema: {e}",
-                    capability.display_key()
-                ))
-            })?;
-        }
-        self.schemas.insert(capability.clone(), schemas);
-        self.descriptors.insert(capability.clone(), descriptor);
-        self.handlers.insert(capability, handler);
-        Ok(())
-    }
-
-    pub fn register_query(&mut self, handler: Arc<dyn QueryHandler>) -> Result<(), OperationError> {
-        let descriptor = handler.descriptor();
-        descriptor.validate()?;
-        if descriptor.kind != CapabilityKind::Query || !descriptor.potential_effects.is_empty() {
-            return Err(OperationError::Contract(
-                "query descriptors must be reads without declared effects".into(),
-            ));
-        }
-        let capability = descriptor.capability.clone();
-        if self.schemas.contains_key(&capability) {
-            return Err(OperationError::DuplicateCapability(
-                capability.display_key(),
-            ));
-        }
-        let schemas = schema::CapabilitySchemas::new(handler.descriptor())?;
-        for example in &descriptor.documentation.examples {
-            let normalized = handler
-                .normalize_arguments(&example.arguments)
-                .map_err(|e| {
-                    OperationError::Contract(format!(
-                        "{} example normalization failed: {e}",
-                        capability.display_key()
-                    ))
-                })?;
-            schemas.input(&normalized).map_err(|e| {
-                OperationError::Contract(format!(
-                    "{} normalized example violates its input schema: {e}",
-                    capability.display_key()
-                ))
-            })?;
-        }
-        self.schemas.insert(capability.clone(), schemas);
-        self.descriptors
-            .insert(capability.clone(), descriptor.clone());
-        self.queries.insert(capability, handler);
-        Ok(())
-    }
-
-    pub fn query_handler(
-        &self,
-        capability: &CapabilityRef,
-    ) -> Result<Arc<dyn QueryHandler>, OperationError> {
-        self.queries
-            .get(capability)
-            .cloned()
-            .ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))
-    }
-
-    pub fn handler(
-        &self,
-        capability: &CapabilityRef,
-    ) -> Result<Arc<dyn OperationHandler>, OperationError> {
-        self.handlers
-            .get(capability)
-            .cloned()
-            .ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))
-    }
-
-    pub fn descriptors(&self) -> Vec<CapabilityDescriptor> {
-        self.descriptors.values().cloned().collect()
-    }
-    pub fn descriptor(&self, capability: &CapabilityRef) -> Option<&CapabilityDescriptor> {
-        self.descriptors.get(capability)
-    }
-    pub fn validate_control_input(
-        &self,
-        context: &CallContext,
-        capability: &CapabilityRef,
-        arguments: &Value,
-    ) -> Result<(), OperationError> {
-        context.validate()?;
-        let descriptor = self
-            .descriptors
-            .get(capability)
-            .filter(|d| d.kind == CapabilityKind::Control)
-            .ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))?;
-        let missing = descriptor
-            .required_scopes
-            .difference(&context.scopes)
-            .cloned()
-            .collect::<Vec<_>>();
-        if !missing.is_empty() {
-            return Err(OperationError::AccessDenied {
-                capability: capability.display_key(),
-                missing,
-            });
-        }
-        self.schemas
-            .get(capability)
-            .expect("registered schema")
-            .input(arguments)
-    }
-    pub fn validate_control_output(
-        &self,
-        capability: &CapabilityRef,
-        output: &Value,
-    ) -> Result<(), OperationError> {
-        if !self
-            .descriptors
-            .get(capability)
-            .is_some_and(|d| d.kind == CapabilityKind::Control)
-        {
-            return Err(OperationError::UnknownCapability(capability.display_key()));
-        }
-        self.schemas
-            .get(capability)
-            .expect("registered schema")
-            .output(output)
-    }
-
-    pub fn validate_links(&mut self) -> Result<(), OperationError> {
-        let kinds = self
-            .descriptors
-            .iter()
-            .map(|(reference, d)| (reference.clone(), d.kind))
-            .collect::<BTreeMap<_, _>>();
-        for descriptor in self.descriptors.values_mut() {
-            for related in &descriptor.documentation.related_capabilities {
-                if !kinds.contains_key(related) {
-                    return Err(OperationError::Contract(format!(
-                        "{} links to unregistered {}",
-                        descriptor.capability.display_key(),
-                        related.display_key()
-                    )));
-                }
-            }
-            for condition in &mut descriptor.documentation.preconditions {
-                if let Some(reference) = condition.read_from.as_ref() {
-                    reference.validate()?;
-                    match kinds.get(reference) {
-                        Some(CapabilityKind::Query) => (),
-                        Some(_) => {
-                            return Err(OperationError::Contract(format!(
-                                "precondition read_from must be read-only: {}",
-                                reference.display_key()
-                            )));
-                        }
-                        None => {
-                            condition.requirement.push_str(&format!(" The reading source {} is unavailable in this Host configuration; discovery does not start that owner or a runtime.", reference.display_key()));
-                            condition.read_from = None;
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn validate_query_result(
-        &self,
-        capability: &CapabilityRef,
-        snapshot: &rho_contract::QuerySnapshot,
-    ) -> Result<(), OperationError> {
-        let schemas = self
-            .schemas
-            .get(capability)
-            .ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))?;
-        if let Some(data) = &snapshot.data {
-            schemas.output(data)?;
-        } else if snapshot.status == rho_contract::QueryStatus::Ready {
-            schemas.output(&Value::Null)?;
-        }
-        self.validate_reads(&snapshot.next_reads)?;
-        for diagnostic in &snapshot.diagnostics {
-            self.validate_reads(&diagnostic.next_reads)?;
-        }
-        Ok(())
-    }
-    fn validate_reads(&self, reads: &[rho_contract::NextRead]) -> Result<(), OperationError> {
-        for read in reads {
-            let descriptor = self.descriptors.get(&read.capability).ok_or_else(|| {
-                OperationError::Contract(format!(
-                    "next read is not registered: {}",
-                    read.capability.display_key()
-                ))
-            })?;
-            if descriptor.kind != CapabilityKind::Query {
-                return Err(OperationError::Contract(
-                    "next_reads may only identify read-only queries".into(),
-                ));
-            }
-            self.schemas
-                .get(&read.capability)
-                .expect("registered schema")
-                .read(read)?;
-        }
-        Ok(())
-    }
-    fn filter_reads(&self, context: &CallContext, reads: &mut Vec<rho_contract::NextRead>) {
-        reads.retain(|read| {
-            self.descriptors
-                .get(&read.capability)
-                .is_none_or(|d| d.required_scopes.is_subset(&context.scopes))
-        });
-    }
-    pub fn prepare_query_result(
-        &self,
-        context: &CallContext,
-        capability: &CapabilityRef,
-        snapshot: &mut rho_contract::QuerySnapshot,
-    ) -> Result<(), OperationError> {
-        if capability.id == "operation.get"
-            && let Some(data) = snapshot.data.as_ref()
-        {
-            let mut result: rho_contract::OperationGetResult = serde_json::from_value(data.clone())
-                .map_err(|e| OperationError::Contract(e.to_string()))?;
-            if let Some(record) = &mut result.record {
-                self.decorate_record(context, record)?;
-            }
-            if let Some(contract) = &mut result.output_contract {
-                if result
-                    .record
-                    .as_ref()
-                    .is_none_or(|record| record.operation.capability != contract.capability)
-                {
-                    return Err(OperationError::Contract(
-                        "record query schema association does not match the original capability"
-                            .into(),
-                    ));
-                }
-                let visible = self.descriptors.get(&contract.capability).is_some_and(|d| {
-                    d.kind == CapabilityKind::Operation
-                        && d.required_scopes.is_subset(&context.scopes)
-                });
-                contract.describe = if visible {
-                    self.read_link(
-                        context,
-                        "host.describe",
-                        "Read the exact capability contract associated with this original result",
-                        json!({"capability":contract.capability}),
-                    )?
-                } else {
-                    None
-                };
-            }
-            snapshot.data = Some(
-                serde_json::to_value(result)
-                    .map_err(|e| OperationError::Contract(e.to_string()))?,
-            );
-        }
-        self.filter_reads(context, &mut snapshot.next_reads);
-        for diagnostic in &mut snapshot.diagnostics {
-            self.filter_reads(context, &mut diagnostic.next_reads);
-        }
-        self.validate_query_result(capability, snapshot)
-    }
-}
 
 pub struct OperationGateway {
     admission: tokio::sync::Mutex<()>,
@@ -820,13 +515,18 @@ pub struct OperationGateway {
     journal: Arc<dyn OperationJournal>,
     clock: Arc<dyn Clock>,
     id_generator: Arc<dyn OperationIdGenerator>,
-    active: Arc<Mutex<BTreeMap<OperationId, tokio::sync::watch::Sender<bool>>>>,
+    active: Arc<Mutex<BTreeMap<OperationId, ActiveExecution>>>,
     project_scope: Option<String>,
+}
+
+struct ActiveExecution {
+    cancel: tokio::sync::watch::Sender<bool>,
+    handler: Arc<dyn OperationHandler>,
 }
 
 struct ActiveOperation {
     id: OperationId,
-    active: Arc<Mutex<BTreeMap<OperationId, tokio::sync::watch::Sender<bool>>>>,
+    active: Arc<Mutex<BTreeMap<OperationId, ActiveExecution>>>,
 }
 
 impl Drop for ActiveOperation {
@@ -877,9 +577,49 @@ impl OperationGateway {
         mut accepted: Option<tokio::sync::oneshot::Sender<OperationRecord>>,
     ) -> Result<OperationRecord, OperationError> {
         context.validate()?;
+        let registry = self.registry.snapshot();
         invocation.validate()?;
-        let handler = self.registry.handler(&invocation.capability)?;
-        let descriptor = handler.descriptor();
+        let request_digest = invocation_digest(
+            &invocation.capability,
+            &invocation.arguments,
+            &invocation.preconditions,
+            self.project_scope.as_deref(),
+            Some(context.principal()),
+        )?;
+        if let Some(existing) = self
+            .journal
+            .get_request(
+                &context.caller,
+                context.principal(),
+                self.project_scope.as_deref(),
+                &invocation.client_request_id,
+            )
+            .await?
+            && let Some(admission) = &existing.operation.admission
+            && admission.request_digest == request_digest
+        {
+            let missing = admission
+                .descriptor
+                .required_scopes
+                .difference(&context.scopes)
+                .cloned()
+                .collect::<Vec<_>>();
+            if !missing.is_empty() {
+                return Err(OperationError::AccessDenied {
+                    capability: invocation.capability.display_key(),
+                    missing,
+                });
+            }
+            let existing = registry.public_record(context, existing);
+            if let Some(sender) = accepted.take() {
+                let _ = sender.send(existing.clone());
+            }
+            return Ok(existing);
+        }
+        let handler = registry.handler(&invocation.capability)?;
+        let descriptor = registry
+            .descriptor(&invocation.capability)
+            .expect("registered descriptor");
         let missing = descriptor
             .required_scopes
             .difference(&context.scopes)
@@ -892,12 +632,23 @@ impl OperationGateway {
             });
         }
 
-        let schemas = self
-            .registry
+        let schemas = registry
             .schemas
             .get(&invocation.capability)
             .expect("registered schema");
         schemas.input(&invocation.arguments)?;
+        let handler = handler
+            .bind(context, &invocation.arguments, &invocation.preconditions)
+            .await?
+            .unwrap_or(handler);
+        let mut bound_contract = handler.descriptor().clone();
+        bound_contract.recovery_schema =
+            rho_contract::operation_recovery_schema(bound_contract.recovery_schema);
+        if !registry::same_contract(descriptor, &bound_contract) {
+            return Err(OperationError::Contract(
+                "prepared handler changed its registered contract or authority".into(),
+            ));
+        }
         let normalized_arguments = handler.normalize_arguments(&invocation.arguments)?;
         schemas.input(&normalized_arguments)?;
         Invocation {
@@ -907,6 +658,14 @@ impl OperationGateway {
         .validate()?;
         let target = handler.resolve_target(&normalized_arguments)?;
         target.validate()?;
+        let owner_context = handler.execution_context();
+        if serde_json::to_vec(&owner_context)
+            .map_or(true, |bytes| bytes.len() > rho_contract::MAX_ARGUMENT_BYTES)
+        {
+            return Err(OperationError::BudgetExceeded(
+                "prepared owner context exceeds the admission limit".into(),
+            ));
+        }
         let idempotency_scope = handler.idempotency_scope();
         let invocation_digest = invocation_digest(
             &invocation.capability,
@@ -941,12 +700,17 @@ impl OperationGateway {
             causation_id: context.causation_id.clone(),
             trace_parent: context.trace_parent.clone(),
             accepted_at_ms,
+            admission: Some(rho_contract::OperationAdmission {
+                request_digest,
+                descriptor: descriptor.clone(),
+                owner_context,
+            }),
         };
 
         let admission_lock = self.admission.lock().await;
         let admitted_record = match self.journal.admit(&operation).await? {
             Admission::Existing(existing) => {
-                let existing = self.registry.public_record(context, existing);
+                let existing = registry.public_record(context, existing);
                 info!(
                     operation_id = existing.operation.operation_id.as_str(),
                     capability = existing.operation.capability.id,
@@ -965,7 +729,13 @@ impl OperationGateway {
         self.active
             .lock()
             .unwrap_or_else(|error| error.into_inner())
-            .insert(operation_id.clone(), cancel);
+            .insert(
+                operation_id.clone(),
+                ActiveExecution {
+                    cancel,
+                    handler: handler.clone(),
+                },
+            );
         let _active = ActiveOperation {
             id: operation_id.clone(),
             active: self.active.clone(),
@@ -973,12 +743,17 @@ impl OperationGateway {
         drop(admission_lock);
         if let Err(error) = admission_result {
             return self
-                .commit_result(&operation, CommitPlan::from_handler_error(error), false)
+                .commit_result(
+                    &registry,
+                    &operation,
+                    CommitPlan::from_handler_error(error),
+                    false,
+                )
                 .await
-                .map(|record| self.registry.public_record(context, record));
+                .map(|record| registry.public_record(context, record));
         }
         if let Some(sender) = accepted.take() {
-            let admitted_record = self.registry.public_record(context, admitted_record);
+            let admitted_record = registry.public_record(context, admitted_record);
             let _ = sender.send(admitted_record);
         }
         let mut lease = match handler
@@ -988,9 +763,14 @@ impl OperationGateway {
             Ok(lease) => lease,
             Err(error) => {
                 return self
-                    .commit_result(&operation, CommitPlan::from_handler_error(error), false)
+                    .commit_result(
+                        &registry,
+                        &operation,
+                        CommitPlan::from_handler_error(error),
+                        false,
+                    )
                     .await
-                    .map(|record| self.registry.public_record(context, record));
+                    .map(|record| registry.public_record(context, record));
             }
         };
         self.journal
@@ -1014,18 +794,18 @@ impl OperationGateway {
                 CommitPlan::from_handler_error(error)
             }
         };
-        let result = self.commit_result(&operation, plan, true).await;
+        let result = self.commit_result(&registry, &operation, plan, true).await;
         lease.completed(&result);
-        result.map(|record| self.registry.public_record(context, record))
+        result.map(|record| registry.public_record(context, record))
     }
     async fn commit_result(
         &self,
+        registry: &RegistrySnapshot,
         operation: &Operation,
         plan: CommitPlan,
         execution_started: bool,
     ) -> Result<OperationRecord, OperationError> {
-        let plan = self
-            .registry
+        let plan = registry
             .checked_plan(operation, plan, execution_started)?;
         let record = self
             .journal
@@ -1147,9 +927,27 @@ impl OperationGateway {
             .owner_record(context, operation_id)
             .await?
             .ok_or_else(|| OperationError::NotFound(operation_id.as_str().to_string()))?;
-        let handler = self.registry.handler(&operation.operation.capability)?;
-        let missing = handler
-            .descriptor()
+        let retained = self
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .get(operation_id)
+            .map(|active| active.handler.clone());
+        let descriptor = retained
+            .as_ref()
+            .map(|handler| handler.descriptor().clone())
+            .or_else(|| {
+                operation
+                    .operation
+                    .admission
+                    .as_ref()
+                    .map(|admission| admission.descriptor.clone())
+            })
+            .or_else(|| self.registry.descriptor(&operation.operation.capability))
+            .ok_or_else(|| {
+                OperationError::UnknownCapability(operation.operation.capability.display_key())
+            })?;
+        let missing = descriptor
             .required_scopes
             .difference(&context.scopes)
             .cloned()
@@ -1160,12 +958,16 @@ impl OperationGateway {
                 missing,
             });
         }
-        if handler.descriptor().cancellation == CancellationClass::Unsupported {
+        if descriptor.cancellation == CancellationClass::Unsupported {
             return Err(OperationError::CancellationUnsupported(
                 operation.operation.capability.display_key(),
             ));
         }
-        if only_if_pending && !handler.cancel_pending(&operation.operation) {
+        if only_if_pending
+            && !retained
+                .as_ref()
+                .is_some_and(|handler| handler.cancel_pending(&operation.operation))
+        {
             return Err(OperationError::InvalidInput("The run has started or ended. Refresh its state; use Interrupt explicitly for a running operation.".into()));
         }
         let mut outcome = self
@@ -1179,12 +981,11 @@ impl OperationGateway {
                 .unwrap_or_else(|error| error.into_inner())
                 .get(operation_id)
         {
-            sender.send_replace(true);
+            sender.cancel.send_replace(true);
         }
         outcome.operation = self.registry.public_record(context, outcome.operation);
         Ok(outcome)
     }
-
     pub async fn recover_incomplete(&self) -> Result<Vec<OperationRecord>, OperationError> {
         self.journal.recover_incomplete(self.clock.now_ms()?).await
     }
@@ -1274,6 +1075,7 @@ fn invocation_digest(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rho_contract::CapabilityKind;
     use std::collections::BTreeSet;
 
     #[test]

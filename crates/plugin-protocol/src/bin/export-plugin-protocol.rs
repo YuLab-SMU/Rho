@@ -16,6 +16,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     RevisionDifference::export_all(&types)?;
     PluginInstance::export_all(&types)?;
     PluginInstancePage::export_all(&types)?;
+    PluginRequest::export_all(&types)?;
+    PluginPreflightRequest::export_all(&types)?;
+    PluginPreflightResult::export_all(&types)?;
     RpcFrame::export_all(&types)?;
     ScenarioRevision::export_all(&types)?;
     WindowScenario::export_all(&types)?;

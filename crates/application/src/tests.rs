@@ -878,7 +878,7 @@ fn operation_record(
     OperationRecord {
         next_reads: None,
         diagnostics: None,
-        operation: Operation {
+        operation: Operation { admission: None,
             operation_id: OperationId::new(format!("operation-{domain}")).unwrap(),
             client_request_id: invocation.client_request_id.clone(),
             caller: original.caller.clone(),

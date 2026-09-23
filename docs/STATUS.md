@@ -33,33 +33,47 @@ the recovery CLI reads historical instance records without reconnecting.
 `rho-plugin-sdk` supplies independently usable Rust transport/initialization
 helpers and an example backend. Python fixtures exercise the language-neutral wire.
 
-This runtime is **not yet composed into the scientific Host/Operation gateways**.
-The existing Host and scientific UI still use their prior owners. Isolated iframe
-views, the TypeScript UI SDK, live scenarios and Plugin Studio are still pending.
-Next is gateway/container integration, followed by the complete R/Viewer vertical
-path, all-feature migration and the approved Studio workflows.
+The generic `PluginCapabilityBridge` now uses the real Operation/Query gateways
+and their existing SQLite journal. The registry publishes owner batches atomically;
+accepted operations retain their original handler and contract after removal.
+Optional native preflight freezes qualified arguments/target/context before
+admission, and the captured original request returns its existing record after
+unload without another preflight or execution. Facts are instance-qualified;
+invalid responses retain their candidate, and resource claims require an
+authoritative verifier. Lost lifecycle completion notifications can release a
+reference only after reading the original terminal journal record.
+
+The bridge is **not yet wired into scientific Host startup and official ports**.
+The existing Host and scientific UI still use their prior owners. Durable staging
+and explicit recommit of a candidate after journal-write failure remain pending;
+the current bridge retains the protecting operation reference while commit is
+unconfirmed. The generic resource store, isolated iframe container, TypeScript UI
+SDK, live scenarios and Plugin Studio are also pending. Next is commit recovery
+and Host/container integration, followed by the complete R/Viewer vertical path,
+all-feature migration and the approved Studio workflows.
 Remove the replaced fixed composition before final acceptance; a permanent dual
 architecture is not an accepted outcome. New repository paths do not read or
 migrate abandoned storage. Existing user Hosts and R memory have not been restarted.
 
-Foundation verification passed: protocol unit/contract tests (7), repository
-tests (9), and local CLI recovery tests (2); public TypeScript consumption in an
-external strict NodeNext project; type generation, client build/check,
-architecture and plugin-boundary checks, and governance checks/fixtures.
-Commands are recorded in Development's focused plugin checks. No real-R or
-browser acceptance is claimed for the new architecture yet. Earlier scientific
-acceptance below is baseline evidence, not verification of the plugin migration.
+Current substrate verification passed: Operation tests (24), SQLite tests (29),
+actual backend/bridge process tests (13), public protocol tests (7), backend SDK
+tests (6), package repository tests (9), and recovery CLI tests (2). They cover
+coexisting revisions, explicit/frozen bindings, atomic publication, removal while
+executing, original-request races, confirmed versus unconfirmed cancellation,
+crash without replay, invalid candidate retention, reverse-call scope and cleanup.
+External Rust and strict NodeNext SDK consumption, generation, client build/check,
+architecture, plugin/frontend boundaries and governance checks also passed.
 
-Backend runtime checks have passed 9 actual-process cases, including coexisting
-versions, explicit binding, held admission, unconfirmed/confirmed cancellation,
-crash without replay, forged/out-of-order/oversized messages, scoped reverse calls,
-invalid commit plans, interrupted initialization, conflicting contracts and failed
-cleanup. Oversized input is rejected before touching a healthy backend's pipe.
-Public SDK transport/initialization tests (6), external Rust SDK compilation,
-protocol tests (7), repository tests (9), recovery CLI tests (2), generated
-TypeScript/schema consumption, client build/check, architecture and governance
-checks all passed. These are substrate checks; scientific gateway integration,
-real-R migration and iframe/browser acceptance remain outstanding.
+Existing-science regression passed: Host observer/recovery tests, 70 affected
+frontend tests, `node scripts/test-real-r.mjs`, and the isolated Chrome case
+`real Console, settings and docking shell` against the rebuilt binary. The R
+suite initially exposed three document-continuation failures: verbose admission
+metadata exceeded the history result bound and hid a native pause identity.
+History now explicitly omits that metadata from its bounded projection, retaining
+the original full journal record; the complete R suite passed after the fix.
+The new architecture's scientific Host wiring, real-R plugin migration and iframe
+acceptance remain outstanding. These legacy regressions do not certify those
+unfinished paths. Focused commands are documented in Development.
 
 ## Bundled real Rho demo project
 

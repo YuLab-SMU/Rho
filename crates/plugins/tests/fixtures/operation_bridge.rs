@@ -1,0 +1,331 @@
+use super::*;
+use rho_contract as host;
+use rho_operation::{
+    CapabilityRegistry, OperationGateway, OperationJournal, QueryGateway, SystemClock,
+    UuidOperationIdGenerator,
+};
+use rho_sqlite::SqliteOperationJournal;
+
+struct Harness {
+    _temp: tempfile::TempDir,
+    repo: Arc<Mutex<PluginRepository>>,
+    runtime: Arc<PluginRuntime>,
+    instance: PluginInstance,
+    bridge: PluginCapabilityBridge,
+    registry: Arc<CapabilityRegistry>,
+    journal: Arc<SqliteOperationJournal>,
+    gateway: Arc<OperationGateway>,
+    queries: QueryGateway,
+    context: host::CallContext,
+}
+impl Harness {
+    async fn new(configuration: Value, preflight: bool) -> Self {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("plugin");
+        let mut archive = fixture(&path, "1.0", false);
+        if preflight {
+            let manifest_path = path.join("plugin.json");
+            let mut manifest: Value =
+                serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+            let mut prepare = manifest["capabilities"][0].clone();
+            prepare["capability"]["id"] = json!("fixture.prepare");
+            manifest["capabilities"]
+                .as_array_mut()
+                .unwrap()
+                .push(prepare);
+            manifest["capabilities"][1]["preflight"] = json!({"id":"fixture.prepare","version":1});
+            fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+            archive = snapshot_directory(&path, None, "native-test").unwrap();
+        }
+        let scope = temp.path().to_str().unwrap().to_owned();
+        let context = host::CallContext {
+            caller: host::CallerIdentity {
+                kind: host::CallerKind::Agent,
+                id: "agent-a".into(),
+            },
+            principal: Some(host::CallerIdentity {
+                kind: host::CallerKind::Human,
+                id: "account-a".into(),
+            }),
+            scopes: ["fixture:read".into(), "operation.read".into()].into(),
+            connection_id: "test".into(),
+            correlation_id: None,
+            causation_id: None,
+            trace_parent: None,
+        };
+        let mut repo = PluginRepository::open(&temp.path().join("store")).unwrap();
+        repo.import(&archive).unwrap();
+        let repo = Arc::new(Mutex::new(repo));
+        let runtime = Arc::new(runtime(repo.clone()));
+        let mut activation = activation(&archive, configuration);
+        activation.project = plugin_project_id(&scope);
+        activation.principal = plugin_principal_id(context.principal());
+        let instance = runtime.activate(activation).await.unwrap();
+        let bridge = PluginCapabilityBridge::new(
+            runtime.clone(),
+            scope.clone(),
+            Arc::new(NoPluginResources),
+        );
+        let registry = Arc::new(CapabilityRegistry::new());
+        bridge.refresh(&registry).unwrap();
+        let journal = Arc::new(SqliteOperationJournal::open_in_memory().unwrap());
+        let gateway = Arc::new(
+            OperationGateway::new(
+                registry.clone(),
+                journal.clone(),
+                Arc::new(SystemClock),
+                Arc::new(UuidOperationIdGenerator),
+            )
+            .with_project_scope(Some(scope)),
+        );
+        let queries = QueryGateway::new(registry.clone());
+        Self {
+            _temp: temp,
+            repo,
+            runtime,
+            instance,
+            bridge,
+            registry,
+            journal,
+            gateway,
+            queries,
+            context,
+        }
+    }
+    fn payload(&self, capability: &str, arguments: Value) -> Value {
+        json!(PluginRequest {
+            binding: ProviderBinding {
+                capability: key(capability),
+                provider: self.instance.identity.clone(),
+                project: self.instance.project.clone(),
+                target: Some("native-target".into())
+            },
+            arguments,
+            preconditions: json!({"native_revision":"original"})
+        })
+    }
+    fn invocation(&self, id: &str, arguments: Value) -> host::Invocation {
+        host::Invocation {
+            capability: host::CapabilityRef::new("fixture.run", 1).unwrap(),
+            client_request_id: id.into(),
+            arguments: self.payload("fixture.run", arguments),
+            preconditions: vec![],
+        }
+    }
+    async fn read(
+        &self,
+        args: Value,
+    ) -> Result<host::QuerySnapshot, rho_operation::OperationError> {
+        self.queries
+            .query(
+                &self.context,
+                host::QueryRequest {
+                    capability: host::CapabilityRef::new("fixture.read", 1).unwrap(),
+                    arguments: self.payload("fixture.read", args),
+                },
+            )
+            .await
+    }
+}
+
+#[tokio::test]
+async fn operation_bridge_freezes_binding_commits_once_and_returns_original_after_unload() {
+    let h = Harness::new(json!({"label":"bound"}), true).await;
+    let query = h.read(json!({"message":"中文"})).await.unwrap();
+    assert_eq!(query.data.unwrap()["arguments"]["message"], "中文");
+    let invocation = h.invocation("one", json!({"action":"commit"}));
+    let record = h
+        .gateway
+        .invoke(&h.context, invocation.clone())
+        .await
+        .unwrap();
+    assert_eq!(record.status, host::OperationStatus::Succeeded);
+    let output = record.output.as_ref().unwrap();
+    assert_eq!(
+        output["operation_id"],
+        record.operation.operation_id.as_str()
+    );
+    assert_eq!(output["arguments"]["normalized"], true);
+    assert_eq!(output["owner_context"]["native_session"], "fixed-session");
+    assert_eq!(output["preconditions"]["native_revision"], "original");
+    assert_eq!(
+        record.operation.admission.as_ref().unwrap().owner_context["binding"]["provider"]["instance"],
+        h.instance.identity.instance.as_str()
+    );
+    let facts = h
+        .journal
+        .facts_for_operation(&record.operation.operation_id)
+        .await
+        .unwrap();
+    assert_eq!(facts.len(), 1);
+    assert_eq!(
+        facts[0].value["owner"]["revision"],
+        h.instance.identity.revision.as_str()
+    );
+    // Simulate losing only the lifecycle completion notification after a real
+    // terminal commit. Cleanup must consult that journal, not a caller's result.
+    h.repo
+        .lock()
+        .unwrap()
+        .retain(
+            "operation",
+            &format!(
+                "{}:{}",
+                h.instance.identity.instance,
+                record.operation.operation_id.as_str()
+            ),
+            &h.instance.identity.revision,
+        )
+        .unwrap();
+    assert!(h.runtime.release(&h.instance.identity).await.is_err());
+    let mut foreign = h.context.clone();
+    foreign.principal.as_mut().unwrap().id = "foreign".into();
+    assert!(
+        h.bridge
+            .reconcile_reference(h.journal.as_ref(), &foreign, &record.operation.operation_id)
+            .await
+            .is_err()
+    );
+    h.bridge
+        .reconcile_reference(
+            h.journal.as_ref(),
+            &h.context,
+            &record.operation.operation_id,
+        )
+        .await
+        .unwrap();
+    h.runtime.release(&h.instance.identity).await.unwrap();
+    h.bridge.refresh(&h.registry).unwrap();
+    assert!(h.registry.descriptors().is_empty());
+    assert!(
+        !h.gateway
+            .request_cancellation(&h.context, &record.operation.operation_id)
+            .await
+            .unwrap()
+            .accepted
+    );
+    let replay = h.gateway.invoke(&h.context, invocation).await.unwrap();
+    assert_eq!(replay.operation.operation_id, record.operation.operation_id);
+    assert_eq!(replay.output, record.output);
+    assert_eq!(
+        h.journal
+            .facts_for_operation(&record.operation.operation_id)
+            .await
+            .unwrap(),
+        facts
+    );
+    h.repo
+        .lock()
+        .unwrap()
+        .remove(&h.instance.identity.revision)
+        .unwrap();
+}
+
+#[tokio::test]
+async fn operation_bridge_retains_running_provider_and_cancellation_does_not_imply_stop() {
+    let h = Harness::new(json!({"cancel_confirmed":false}), false).await;
+    // Retain an existing query lease so it can report owner completion during drain.
+    let reader = h
+        .runtime
+        .resolve(
+            &key("fixture.read"),
+            &h.instance.project,
+            &h.instance.principal,
+            Some(&h.instance.identity),
+        )
+        .unwrap();
+    let gateway = h.gateway.clone();
+    let context = h.context.clone();
+    let invocation = h.invocation("held", json!({"action":"hold"}));
+    let (accepted, ack) = tokio::sync::oneshot::channel();
+    let work = tokio::spawn(async move {
+        gateway
+            .invoke_notifying(&context, invocation, Some(accepted))
+            .await
+    });
+    let record = ack.await.unwrap();
+    wait_pending(&h.runtime).await;
+    assert!(h.runtime.release(&h.instance.identity).await.is_err());
+    h.bridge.refresh(&h.registry).unwrap();
+    assert!(h.registry.descriptors().is_empty());
+    let cancel = h
+        .gateway
+        .request_cancellation(&h.context, &record.operation.operation_id)
+        .await
+        .unwrap();
+    assert!(cancel.accepted);
+    assert!(!work.is_finished());
+    let mut finish = call(&reader, json!({"action":"finish"}), false);
+    finish.principal = h.instance.principal.clone();
+    reader.call(finish).await.unwrap();
+    let result = work.await.unwrap().unwrap();
+    assert_eq!(result.status, host::OperationStatus::Succeeded);
+    assert!(result.cancellation_requested);
+    drop(reader);
+    h.runtime.release(&h.instance.identity).await.unwrap();
+}
+
+#[tokio::test]
+async fn operation_bridge_preserves_invalid_candidate_and_crash_is_never_replayed() {
+    let h = Harness::new(json!({}), false).await;
+    for action in ["badcommit", "badfact", "evidence"] {
+        let record = h
+            .gateway
+            .invoke(&h.context, h.invocation(action, json!({"action":action})))
+            .await
+            .unwrap();
+        assert_eq!(record.status, host::OperationStatus::Uncertain);
+        assert!(record.recovery.as_ref().unwrap()["candidate"].is_object());
+        assert!(
+            h.journal
+                .facts_for_operation(&record.operation.operation_id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+    let marker = h._temp.path().join("once");
+    let request = h.invocation("crash", json!({"action":"crash","marker":marker}));
+    let record = h.gateway.invoke(&h.context, request.clone()).await.unwrap();
+    assert_eq!(record.status, host::OperationStatus::Uncertain);
+    h.bridge.refresh(&h.registry).unwrap();
+    let original = h.gateway.invoke(&h.context, request).await.unwrap();
+    assert_eq!(
+        original.operation.operation_id,
+        record.operation.operation_id
+    );
+    assert_eq!(fs::read_to_string(marker).unwrap(), "executed\n");
+}
+
+#[tokio::test]
+async fn operation_bridge_rejects_foreign_bindings_and_preflight_retargeting_before_admission() {
+    let h = Harness::new(json!({"retarget":true}), true).await;
+    let mut context = h.context.clone();
+    context.principal.as_mut().unwrap().id = "account-b".into();
+    let query = host::QueryRequest {
+        capability: host::CapabilityRef::new("fixture.read", 1).unwrap(),
+        arguments: h.payload("fixture.read", json!({})),
+    };
+    assert!(h.queries.query(&context, query).await.is_err());
+    assert!(
+        h.gateway
+            .invoke(
+                &h.context,
+                h.invocation("retarget", json!({"action":"commit"}))
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        h.gateway
+            .owner_request_record(&h.context, "retarget")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let mut forged = h.invocation("forged", json!({}));
+    forged.arguments["binding"]["provider"]["revision"] =
+        json!(format!("sha256:{}", "0".repeat(64)));
+    assert!(h.gateway.invoke(&h.context, forged).await.is_err());
+    h.runtime.release(&h.instance.identity).await.unwrap();
+}

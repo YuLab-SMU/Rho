@@ -4,4 +4,12 @@ import type { CapabilityKey } from "./CapabilityKey.js";
 import type { CapabilityKind } from "./CapabilityKind.js";
 import type { JsonValue } from "./serde_json/JsonValue.js";
 
-export type CapabilityContribution = { capability: CapabilityKey, kind: CapabilityKind, title: string, description: string, input_schema: JsonValue, output_schema: JsonValue, recovery_schema: JsonValue, required_scopes: Array<string>, effects: Array<string>, cancellation: CancellationSupport, };
+export type CapabilityContribution = { capability: CapabilityKey, kind: CapabilityKind, title: string, description: string, input_schema: JsonValue,
+/**
+ * Valid scientific arguments used in discovery; the Host adds provider binding.
+ */
+examples: Array<JsonValue>, output_schema: JsonValue, recovery_schema: JsonValue, required_scopes: Array<string>, effects: Array<string>, cancellation: CancellationSupport,
+/**
+ * Optional read-only owner preflight, invoked before Operation admission.
+ */
+preflight: CapabilityKey | null, };

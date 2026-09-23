@@ -23,7 +23,7 @@ async fn query(observer: &rho_host::QueryObserver, id: &str, args: Value) -> Val
     result.data.unwrap()
 }
 fn record(root: &Path, id: &str) -> Operation {
-    Operation {
+    Operation { admission: None,
         operation_id: OperationId::new(id).unwrap(),
         client_request_id: id.into(),
         caller: NextHost::local_context().caller,

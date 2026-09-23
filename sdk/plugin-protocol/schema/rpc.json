@@ -133,6 +133,9 @@
             "null"
           ]
         },
+        "owner_context": {
+          "default": null
+        },
         "preconditions": true,
         "principal": {
           "type": "string"

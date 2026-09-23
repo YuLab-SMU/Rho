@@ -23,7 +23,7 @@ assert.deepEqual(cli.targets.filter(target => target.kind.includes("bin")).map(t
 const allowed = {
   "rho-plugin-protocol": [],
   "rho-plugin-sdk": ["rho-plugin-protocol"],
-  "rho-plugins": ["rho-plugin-protocol", "rho-plugin-sdk"],
+  "rho-plugins": ["rho-plugin-protocol", "rho-plugin-sdk", "rho-contract", "rho-operation"],
   "rho-contract": [],
   "rho-operation": ["rho-contract"],
   "rho-application": ["rho-contract"],
@@ -60,6 +60,7 @@ for (const pkg of metadata.packages) {
         `${pkg.name} depends on code outside Next: ${dep.name}`);
     }
     if (dep.name.startsWith("rho-")) {
+      if (pkg.name === "rho-plugins" && dep.name === "rho-sqlite" && dep.kind === "dev") continue;
       assert.ok(allowed[pkg.name].includes(dep.name),
         `${pkg.name} -> ${dep.name} bypasses the declared ownership boundary`);
     }

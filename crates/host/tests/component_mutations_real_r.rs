@@ -473,6 +473,8 @@ impl ComponentAgentEngine for DocumentEngine {
             if request.run.request.continuation.is_some() && !interrupted_repair {
                 let history=request.run.context.as_ref().unwrap().history.as_ref().unwrap();
                 let resume=history["tools"].as_array().unwrap().iter().find(|t|t["capability"]=="workspace.resume_queue").unwrap();
+                assert_eq!(resume["omitted_result"],false,"native resume identity must survive verbose admission metadata");
+                assert_eq!(resume["omitted_result_fields"],json!(["operation.admission"]));
                 let pause=resume["result"]["operation"]["normalized_arguments"]["pause_id"].clone();
                 let ticket=request.port.prepare_tool(turn,"prior-resume","workspace_resume_queue",json!({"pause_id":pause})).await?;
                 let result=request.port.execute_tool(ticket).await?;
@@ -1095,6 +1097,7 @@ async fn documents_acceptance_scoped(
             let record: OperationRecord =
                 serde_json::from_value(tool.result.clone().unwrap()).unwrap();
             assert_eq!(record.status, OperationStatus::Succeeded);
+            assert!(record.operation.admission.is_some(),"history compaction must preserve the original recorded contract");
             continue;
         }
         let receipt: ApplicationCommandReceipt =

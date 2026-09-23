@@ -857,7 +857,7 @@ mod media_authority_tests {
         let record = OperationRecord {
             next_reads: None,
             diagnostics: None,
-            operation: Operation {
+            operation: Operation { admission: None,
                 operation_id: reference.operation_id.clone(),
                 client_request_id: "request".into(),
                 caller,

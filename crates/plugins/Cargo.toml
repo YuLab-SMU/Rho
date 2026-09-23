@@ -9,6 +9,9 @@ repository.workspace = true
 [dependencies]
 rho-plugin-protocol = { path = "../plugin-protocol" }
 rho-plugin-sdk = { path = "../plugin-sdk" }
+rho-operation = { path = "../operation" }
+rho-contract = { path = "../contract" }
+schemars.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 serde.workspace = true
@@ -22,3 +25,4 @@ uuid.workspace = true
 jsonschema.workspace = true
 
 [dev-dependencies]
+rho-sqlite = { path = "../adapters/sqlite" }

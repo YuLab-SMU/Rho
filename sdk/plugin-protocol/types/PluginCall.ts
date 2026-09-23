@@ -4,4 +4,4 @@ import type { ProviderBinding } from "./ProviderBinding.js";
 import type { RequestId } from "./RequestId.js";
 import type { JsonValue } from "./serde_json/JsonValue.js";
 
-export type PluginCall = { request: RequestId, binding: ProviderBinding, principal: PrincipalId, scopes: Array<string>, arguments: JsonValue, preconditions: JsonValue, operation_id: string | null, };
+export type PluginCall = { request: RequestId, binding: ProviderBinding, principal: PrincipalId, scopes: Array<string>, arguments: JsonValue, preconditions: JsonValue, owner_context: JsonValue, operation_id: string | null, };

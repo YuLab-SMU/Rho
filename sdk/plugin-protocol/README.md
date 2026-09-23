@@ -49,6 +49,28 @@ An unavailable process, closed connection or cancellation acknowledgement with
 `confirmed:false` cannot mean success or confirmed cancellation. Reconnection
 does not authorize replay. Reverse calls require the delegated instance grants.
 
+Each capability declares 1–16 valid scientific input `examples` for discovery.
+Host callers submit `PluginRequest`: `binding`, `arguments`, and owner-defined
+`preconditions`. A binding names the capability version, exact instance/revision/
+artifact, project and optional native target. The Host derives the authenticated
+principal and scopes; a backend cannot supply or expand them.
+
+An operation may name a same-package query as `preflight`. That query receives
+`PluginPreflightRequest` and must return a complete `PluginPreflightResult` with
+normalized arguments, native target and owner qualification. It must not start
+work or perform effects. A supplied target cannot be changed by preflight. The
+Host freezes the result before Operation admission and sends the qualification
+as `PluginCall.owner_context` along with the original Operation ID. Queries carry
+no Operation ID. Duplicate original requests read their saved record without
+running preflight again.
+
+The core bridge wraps native recovery as `plugin_owner_recovery`; transport and
+contract failures retain their original candidate under a distinct boundary
+recovery. Proposed resource evidence is accepted only after the resource owner
+verifies its identity, visibility and digest. The default bridge configuration
+rejects resource references until that owner is configured. It does not fetch
+arbitrary remote data to satisfy a plugin's claim.
+
 UI views use isolated iframes and an instance-bound message channel. They receive
 public theme, menu, focus, shortcut, view and resource services, never the Host's
 general credential or parent DOM access. Native backends and build scripts are

@@ -55,6 +55,27 @@ plans to the one core Operation owner; no adapter or plugin commits scientific
 truth through an independent result database. Active work, documents, scenarios,
 branches and checkpoints protect their referenced revisions from removal.
 
+The Operation registry publishes owner-scoped contribution batches by
+compare-and-swap. Queries and invocations keep one immutable handler/schema
+snapshot through response validation and commit. Unregistering a provider removes
+new admission routes, not accepted work. Reusing a capability version cannot
+change its schema, authority or effect contract. An optional read-only owner
+preflight fixes normalized arguments, native target and qualification before
+admission; the registered contract still bounds that qualified handler.
+
+The generic plugin bridge receives a public `PluginRequest` with an exact binding,
+scientific arguments and native preconditions. Project and principal are derived
+from Host context, not supplied authority. The original raw request digest and
+registered descriptor are captured by Operation, so the same request can return
+its record after provider removal without another preflight or execution.
+Bounded Agent history may omit the admission snapshot with an explicit field
+omission marker while retaining the operation identity and scientific result;
+the original journal record remains complete and independently readable.
+Backend recovery is namespaced separately from Host boundary failures. Facts are
+qualified by instance; resource evidence requires the authoritative resource
+owner's verification. A completion acknowledgement lost after journal commit can
+release its lifecycle reference only by reading that original terminal record.
+
 UI isolation uses a sandboxed iframe per view and an instance-bound channel;
 backend isolation uses a process per activated service instance with bounded,
 versioned bidirectional RPC and separate logs. Neither native code nor build

@@ -149,11 +149,28 @@
           },
           "uniqueItems": true
         },
+        "examples": {
+          "description": "Valid scientific arguments used in discovery; the Host adds provider binding.",
+          "type": "array",
+          "items": true
+        },
         "input_schema": true,
         "kind": {
           "$ref": "#/$defs/CapabilityKind"
         },
         "output_schema": true,
+        "preflight": {
+          "description": "Optional read-only owner preflight, invoked before Operation admission.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CapabilityKey"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "recovery_schema": true,
         "required_scopes": {
           "type": "array",
@@ -173,6 +190,7 @@
         "title",
         "description",
         "input_schema",
+        "examples",
         "output_schema",
         "recovery_schema",
         "required_scopes",

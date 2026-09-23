@@ -75,7 +75,36 @@ pub struct PluginCall {
     pub scopes: BTreeSet<String>,
     pub arguments: Value,
     pub preconditions: Value,
+    #[serde(default)]
+    pub owner_context: Value,
     pub operation_id: Option<String>,
+}
+
+/// Public Host payload: provider selection is separate from scientific arguments.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginRequest {
+    pub binding: ProviderBinding,
+    pub arguments: Value,
+    #[serde(default)]
+    pub preconditions: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginPreflightRequest {
+    pub capability: CapabilityKey,
+    pub arguments: Value,
+    pub target: Option<String>,
+    pub preconditions: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginPreflightResult {
+    pub arguments: Value,
+    pub target: Option<String>,
+    pub owner_context: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]

@@ -32,8 +32,9 @@ impl QueryGateway {
         request: QueryRequest,
     ) -> Result<QuerySnapshot, OperationError> {
         context.validate()?;
+        let registry = self.registry.snapshot();
         request.validate()?;
-        let handler = self.registry.query_handler(&request.capability)?;
+        let handler = registry.query_handler(&request.capability)?;
         let missing = handler
             .descriptor()
             .required_scopes
@@ -46,14 +47,14 @@ impl QueryGateway {
                 missing,
             });
         }
-        self.registry
+        registry
             .schemas
             .get(&request.capability)
             .expect("registered schema")
             .input(&request.arguments)?;
         let capability = request.capability.clone();
         let arguments = handler.normalize_arguments(&request.arguments)?;
-        self.registry
+        registry
             .schemas
             .get(&capability)
             .expect("registered schema")
@@ -64,7 +65,7 @@ impl QueryGateway {
         }
         .validate()?;
         let mut snapshot = handler.query_for(context, &arguments).await?;
-        self.registry
+        registry
             .prepare_query_result(context, &capability, &mut snapshot)?;
         snapshot.target.validate()?;
         if serde_json::to_vec(&snapshot).map_or(true, |bytes| bytes.len() > 1024 * 1024) {

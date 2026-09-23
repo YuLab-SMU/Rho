@@ -1,8 +1,8 @@
-use crate::{CapabilityRegistry, CommitPlan, OperationError, UncommittedEvidence, evidence_sha256};
+use crate::{RegistrySnapshot, CommitPlan, OperationError, UncommittedEvidence, evidence_sha256};
 use rho_contract::*;
 use serde_json::Value;
 
-impl CapabilityRegistry {
+impl RegistrySnapshot {
     /// Validation happens before journal commit. An owner contract fault after
     /// execution preserves the entire candidate as recovery and commits no facts.
     pub(crate) fn checked_plan(

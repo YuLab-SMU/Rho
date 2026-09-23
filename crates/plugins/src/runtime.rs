@@ -260,6 +260,26 @@ impl PluginRuntime {
             .collect()
     }
 
+    pub fn contributions(&self, project: &ProjectId) -> Vec<CapabilityContribution> {
+        let mut capabilities = BTreeMap::new();
+        for entry in self.entries.lock().unwrap().values() {
+            let state = entry.state.lock().unwrap();
+            if &state.record.project == project && state.record.state == InstanceState::Active {
+                for contribution in &entry.manifest.capabilities {
+                    capabilities.entry(contribution.capability.clone()).or_insert_with(|| contribution.clone());
+                }
+            }
+        }
+        capabilities.into_values().collect()
+    }
+
+    pub(crate) fn hold_operation(&self, identity: &InstanceRef, operation: &str) -> Result<(), PluginError> {
+        self.repository.lock().unwrap().retain("operation", &format!("{}:{operation}",identity.instance), &identity.revision)
+    }
+    pub(crate) fn release_operation(&self, identity: &InstanceRef, operation: &str) -> Result<(), PluginError> {
+        self.repository.lock().unwrap().release_reference("operation", &format!("{}:{operation}",identity.instance), &identity.revision)
+    }
+
     /// Pin before Operation admission; retain this lease through the journal's
     /// terminal commit (including a pending commit). Scene/view changes cannot
     /// redirect or release it. Only the existing Operation owner executes writes.
@@ -346,6 +366,9 @@ impl PluginRuntime {
                 state.pins == 0 && state.pending == 0,
                 "instance still owns accepted calls",
             )?;
+            let prefix = format!("operation:{}:", identity.instance);
+            ensure(!self.repository.lock().unwrap().references(&identity.revision)?.iter().any(|reference| reference.starts_with(&prefix)),
+                "instance has an operation awaiting authoritative completion")?;
         }
         entry
             .process
@@ -413,7 +436,9 @@ impl ProviderLease {
             },
         )?;
         let reply = self.entry.process.get().unwrap().call(call, query).await?;
-        validate_reply(&self.contribution, &self.identity, &reply)?;
+        if let Err(error) = validate_reply(&self.contribution, &self.identity, &reply) {
+            return Err(PluginError::InvalidResponse {message:error.to_string(),response:Box::new(reply)});
+        }
         Ok(reply)
     }
 

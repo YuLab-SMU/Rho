@@ -20,7 +20,7 @@ fn crash_worker() {
         .unwrap();
     let journal = SqliteOperationJournal::open(&path).unwrap();
     runtime.block_on(async {
-        let operation = Operation {
+        let operation = Operation { admission: None,
             principal: None,
             operation_id: OperationId::new("op_crashed").unwrap(),
             client_request_id: "interrupted".into(),

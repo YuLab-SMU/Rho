@@ -248,6 +248,7 @@ fn symlinks_missing_source_case_collisions_and_effectful_queries_are_rejected() 
         arguments: vec![],
     });
     manifest.capabilities.push(CapabilityContribution {
+        preflight: None,
         capability: CapabilityKey {
             id: ContributionId::new("example.read").unwrap(),
             version: 1,
@@ -256,6 +257,7 @@ fn symlinks_missing_source_case_collisions_and_effectful_queries_are_rejected() 
         title: "Read".into(),
         description: "Read without starting work".into(),
         input_schema: json!({}),
+        examples: vec![json!({})],
         output_schema: json!({}),
         recovery_schema: json!({}),
         required_scopes: Default::default(),

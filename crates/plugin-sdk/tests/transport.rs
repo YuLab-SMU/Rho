@@ -153,6 +153,7 @@ async fn sdk_initialization_and_call_validation_keep_the_host_binding() {
     );
     let request = RequestId::new("read").unwrap();
     let call = PluginCall {
+        owner_context: serde_json::Value::Null,
         request: request.clone(),
         binding: ProviderBinding {
             capability: CapabilityKey {
