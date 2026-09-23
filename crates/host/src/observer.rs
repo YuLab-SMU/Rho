@@ -122,7 +122,7 @@ impl QueryObserver {
             )
         });
         if let (Some(events), Some(gateway)) = (events, &gateway) {
-            events.bind(gateway);
+            events.bind(gateway, &registry);
         }
         Ok(Self {
             queries: QueryGateway::new(registry.clone()),
@@ -177,13 +177,24 @@ pub(crate) fn register_project_queries(
     Ok(owner)
 }
 /// The same journal-backed record/evidence/event queries are used in both modes.
+pub(crate) struct RecordPorts {
+    events: Arc<port_contracts::EventsHandler>,
+    get: Arc<rho_operation::OperationGetHandler>,
+}
+impl RecordPorts {
+    pub(crate) fn bind(&self, gateway: &Arc<OperationGateway>, registry: &Arc<CapabilityRegistry>) {
+        self.events.bind(gateway);
+        self.get.bind_registry(registry);
+    }
+}
+
 pub(crate) fn register_record_queries(
     registry: &mut CapabilityRegistry,
     journal: Arc<dyn OperationJournal>,
     project: Option<String>,
     has_workspace: bool,
     writable: bool,
-) -> Result<Arc<port_contracts::EventsHandler>, OperationError> {
+) -> Result<RecordPorts, OperationError> {
     if let Some(project) = &project {
         registry.register_query(Arc::new(
             rho_operation::OperationEventsCheckpointHandler::new(journal.clone(), project.clone()),
@@ -197,12 +208,14 @@ pub(crate) fn register_record_queries(
         journal.clone(),
         project.clone(),
     )))?;
-    registry.register_query(Arc::new(rho_operation::OperationGetHandler::new(
+    let get = Arc::new(rho_operation::OperationGetHandler::new(
         journal.clone(),
         project.clone(),
         &registry.descriptors(),
-    )?))?;
-    port_contracts::register(registry, journal, project, has_workspace, writable)
+    )?);
+    registry.register_query(get.clone())?;
+    let events = port_contracts::register(registry, journal, project, has_workspace, writable)?;
+    Ok(RecordPorts { events, get })
 }
 
 /// All historical media/text reads stay with the existing Output owner and journal visibility port.

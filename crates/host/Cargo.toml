@@ -12,6 +12,7 @@ jsonschema.workspace = true
 rho-agent-client = { path = "../agent-client" }
 async-trait.workspace = true
 rho-contract = { path = "../contract" }
+rho-plugins = { path = "../plugins" }
 rho-operation = { path = "../operation" }
 rho-application = { path = "../application" }
 rho-skills = { path = "../skills" }
@@ -37,6 +38,7 @@ uuid.workspace = true
 fs4 = { version = "1", default-features = false, features = ["sync"] }
 
 [dev-dependencies]
+rho-plugin-protocol = { path = "../plugin-protocol" }
 axum.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true

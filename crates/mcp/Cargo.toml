@@ -13,6 +13,7 @@ rho-contract = { path = "../contract" }
 rho-host = { path = "../host" }
 rmcp.workspace = true
 schemars.workspace = true
+sha2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
@@ -20,6 +21,8 @@ tokio-util.workspace = true
 futures.workspace = true
 
 [dev-dependencies]
+rho-plugin-protocol = { path = "../plugin-protocol" }
+rho-plugins = { path = "../plugins" }
 axum.workspace = true
 tempfile.workspace = true
 rmcp = { workspace = true, features = ["client"] }

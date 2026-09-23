@@ -104,6 +104,7 @@ pub(crate) fn protected_path_candidates(database: &Path) -> Vec<PathBuf> {
         .join("runtime-preferences.sqlite");
     let mut paths = vec![
         database.to_path_buf(),
+        rho_plugins::repository_path(database),
         application.clone(),
         preferences.clone(),
     ];

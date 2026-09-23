@@ -40,7 +40,7 @@ const allowed = {
   "rho-git": ["rho-project", "rho-process"],
   "rho-sqlite": ["rho-contract", "rho-operation", "rho-application"],
   "rho-r-runtime": ["rho-contract", "rho-workspace"],
-  "rho-host": ["rho-agents", "rho-agent-client", "rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
+  "rho-host": ["rho-plugins", "rho-agents", "rho-agent-client", "rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
   "rho-mcp": ["rho-contract", "rho-host"],
   "rho-agent-client": ["rho-contract"],
   "rho-workbench": ["rho-contract", "rho-host", "rho-mcp"],
@@ -60,6 +60,7 @@ for (const pkg of metadata.packages) {
         `${pkg.name} depends on code outside Next: ${dep.name}`);
     }
     if (dep.name.startsWith("rho-")) {
+      if (["rho-host", "rho-mcp"].includes(pkg.name) && ["rho-plugin-protocol", "rho-plugins"].includes(dep.name) && dep.kind === "dev") continue;
       if (pkg.name === "rho-plugins" && dep.name === "rho-sqlite" && dep.kind === "dev") continue;
       assert.ok(allowed[pkg.name].includes(dep.name),
         `${pkg.name} -> ${dep.name} bypasses the declared ownership boundary`);

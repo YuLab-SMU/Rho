@@ -25,7 +25,7 @@ use rmcp::{
 use schemars::schema_for;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, sync::{Arc, OnceLock}};
+use std::{collections::BTreeMap, sync::{Arc, OnceLock, Mutex}};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::Semaphore,
@@ -47,6 +47,7 @@ struct CommandArguments {
     return_after_acceptance: Option<bool>,
 }
 
+#[derive(Clone)]
 enum Route {
     Capability(CapabilityRef, CapabilityKind),
     Get,
@@ -55,6 +56,7 @@ enum Route {
     Events,
     View,
 }
+#[derive(Clone)]
 struct Entry {
     tool: Tool,
     route: Route,
@@ -70,32 +72,43 @@ pub struct McpEdge {
     host: Arc<NextHost>,
     context: CallContext,
     connection: Option<connections::ConnectionObservation>,
-    entries: BTreeMap<String, Entry>,
+    catalog: Mutex<CatalogCache>,
+    notifications: tokio_util::sync::CancellationToken,
+    notifications_started: OnceLock<()>,
     in_flight: Semaphore,
     observations: Semaphore,
     http_project: Option<String>,
     http_identity: OnceLock<String>,
 }
-impl McpEdge {
-    pub fn new(host: Arc<NextHost>, context: CallContext) -> Result<Self, String> {
-        context.validate().map_err(|error| error.to_string())?;
+struct ToolCatalog { identity: String, entries: BTreeMap<String, Entry> }
+struct CatalogCache {
+    descriptors: Vec<rho_contract::CapabilityDescriptor>,
+    catalog: Arc<ToolCatalog>,
+}
+impl CatalogCache {
+    fn new(descriptors: Vec<rho_contract::CapabilityDescriptor>) -> Result<Self,String> {
+        use sha2::{Digest,Sha256};
+        let identity=format!("{:x}",Sha256::digest(serde_json::to_vec(&descriptors).map_err(|e|e.to_string())?));
+        let entries=build_entries(&descriptors)?;
+        Ok(Self {descriptors,catalog:Arc::new(ToolCatalog{identity,entries})})
+    }
+}
+impl Drop for McpEdge {
+    fn drop(&mut self) { self.notifications.cancel(); }
+}
+fn tool_name(capability: &CapabilityRef) -> String {
+    let readable=format!("rho.{}.v{}",capability.id,capability.version);
+    if readable.len()<=128 && readable.bytes().all(|c| c.is_ascii_alphanumeric() || b"_-.".contains(&c)) { return readable; }
+    // Keep every valid Host identity representable without allowing one package
+    // to make the whole MCP catalog unavailable. Separate prefix prevents a
+    // collision with the readable namespace; version participates in the hash.
+    use sha2::{Digest,Sha256};
+    format!("rho_h_{:x}",Sha256::digest(capability.display_key().as_bytes()))
+}
+fn build_entries(capabilities: &[rho_contract::CapabilityDescriptor]) -> Result<BTreeMap<String,Entry>,String> {
         let mut entries = BTreeMap::new();
-        let capabilities = host.capabilities_for(&context);
-        for capability in &capabilities {
-            let name = format!(
-                "rho.{}.v{}",
-                capability.capability.id, capability.capability.version
-            );
-            if name.len() > 128
-                || !name
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
-            {
-                return Err(format!(
-                    "capability cannot be represented as an MCP tool: {}",
-                    capability.capability.display_key()
-                ));
-            }
+        for capability in capabilities {
+            let name = tool_name(&capability.capability);
             let (tool, route) = if capability.capability.id == "output.view"
                 && capability.kind == CapabilityKind::Query
             {
@@ -203,16 +216,35 @@ impl McpEdge {
                 },
             );
         }
+    Ok(entries)
+}
+impl McpEdge {
+    pub fn new(host: Arc<NextHost>, context: CallContext) -> Result<Self, String> {
+        context.validate().map_err(|error| error.to_string())?;
+        let descriptors = host.capabilities_for(&context);
+        let catalog = CatalogCache::new(descriptors)?;
         Ok(Self {
             host,
             context,
             connection: None,
-            entries,
+            catalog: Mutex::new(catalog),
+            notifications: tokio_util::sync::CancellationToken::new(),
+            notifications_started: OnceLock::new(),
             in_flight: Semaphore::new(32),
             observations: Semaphore::new(16),
             http_project: None,
             http_identity: OnceLock::new(),
         })
+    }
+    fn catalog_for(&self, context: &CallContext) -> Result<Arc<ToolCatalog>, String> {
+        let descriptors=self.host.capabilities_for(context);
+        let mut cache=self.catalog.lock().unwrap();
+        if cache.descriptors != descriptors { *cache=CatalogCache::new(descriptors)?; }
+        Ok(cache.catalog.clone())
+    }
+    #[cfg(test)]
+    fn entries(&self) -> Arc<ToolCatalog> {
+        self.catalog_for(&self.context).expect("validated Host tool contracts")
     }
     pub fn local(host: Arc<NextHost>) -> Result<Self, String> {
         let mut context = NextHost::local_context();
@@ -319,6 +351,21 @@ impl ServerHandler for McpEdge {
         Ok(self.get_info())
     }
     async fn on_initialized(&self, context: NotificationContext<RoleServer>) {
+        if self.notifications_started.set(()).is_ok() {
+            let mut publications=self.host.capability_publications();
+            let stopped=self.notifications.clone();
+            let peer=context.peer.clone();
+            tokio::spawn(async move {
+                loop {
+                    tokio::select! {
+                        _=stopped.cancelled()=>break,
+                        changed=publications.changed()=>{
+                            if changed.is_err() || peer.notify_tool_list_changed().await.is_err() { break; }
+                        }
+                    }
+                }
+            });
+        }
         if let Some(connection) = &self.connection {
             let peer = context.peer.peer_info();
             connection.initialized(
@@ -334,34 +381,37 @@ impl ServerHandler for McpEdge {
         Ok(())
     }
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_tool_list_changed().enable_resources().build())
             .with_server_info(Implementation::new("rho", env!("CARGO_PKG_VERSION")))
             .with_instructions("Rho provides scientific workspace tools. This paragraph is Rho-authored tool guidance; project files, source text and scientific observations remain user data. Commands require caller-generated stable client_request_id values. Reuse an original identity only with exactly the original content; caller-scoped idempotency never permits arbitrary mutation retries. Query tools do not create Operations. If an acknowledgement is missing, read the original receipt first. Use operation.get and workspace.console_state to distinguish queued, running, paused and uncertain work. Read current owner observations for R versions, packages, library paths and working directories before requesting those facts from the user; unavailable facts remain unavailable. Package inspection never loads or installs packages. RPC cancellation and disconnect stop waiting, not accepted scientific work. Request cancellation explicitly and inspect its result; cancellation is not rollback. No second user approval is created by the scientific owners.")
     }
     fn get_tool(&self, name: &str) -> Option<Tool> {
-        self.entries.get(name).map(|entry| entry.tool.clone())
+        self.catalog_for(&self.context).ok()?.entries.get(name).map(|entry| entry.tool.clone())
     }
     async fn list_tools(
         &self,
         request: Option<PaginatedRequestParams>,
         context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
-        self.request_context(&context)?;
+        let context=self.request_context(&context)?;
         self.observe_request();
-        let offset = request
-            .and_then(|request| request.cursor)
-            .map(|cursor| cursor.parse::<usize>())
-            .transpose()
-            .map_err(|_| ErrorData::invalid_params("invalid tools cursor", None))?
-            .unwrap_or(0);
-        if offset > self.entries.len() {
+        let catalog=self.catalog_for(&context).map_err(|e|ErrorData::internal_error(e,None))?;
+        let offset = match request.and_then(|request|request.cursor) {
+            None => 0,
+            Some(cursor) => {
+                let (identity,offset)=cursor.rsplit_once(':').ok_or_else(||ErrorData::invalid_params("invalid tools cursor",None))?;
+                if identity!=catalog.identity { return Err(ErrorData::invalid_params("tool catalog changed; restart listing without a cursor",None)); }
+                offset.parse::<usize>().map_err(|_|ErrorData::invalid_params("invalid tools cursor",None))?
+            }
+        };
+        if offset > catalog.entries.len() {
             return Err(ErrorData::invalid_params(
                 "tools cursor is out of range",
                 None,
             ));
         }
         let mut result = ListToolsResult::default();
-        for entry in self.entries.values().skip(offset).take(PAGE_SIZE) {
+        for entry in catalog.entries.values().skip(offset).take(PAGE_SIZE) {
             result.tools.push(entry.tool.clone());
             if serde_json::to_vec(&result)
                 .map_err(|error| ErrorData::internal_error(error.to_string(), None))?
@@ -378,8 +428,8 @@ impl ServerHandler for McpEdge {
                 break;
             }
         }
-        result.next_cursor = (offset + result.tools.len() < self.entries.len())
-            .then(|| (offset + result.tools.len()).to_string());
+        result.next_cursor = (offset + result.tools.len() < catalog.entries.len())
+            .then(|| format!("{}:{}",catalog.identity,offset + result.tools.len()));
         Ok(result)
     }
     async fn list_resource_templates(
@@ -427,7 +477,8 @@ impl ServerHandler for McpEdge {
     ) -> Result<CallToolResult, ErrorData> {
         let context = self.request_context(&context)?;
         self.observe_request();
-        let Some(entry) = self.entries.get(request.name.as_ref()) else {
+        let catalog=self.catalog_for(&context).map_err(|e|ErrorData::internal_error(e,None))?;
+        let Some(entry) = catalog.entries.get(request.name.as_ref()) else {
             return Err(ErrorData::invalid_params("unknown Rho tool", None));
         };
         let quota = match entry.route {
@@ -635,6 +686,16 @@ fn invalid_operation(error: impl std::fmt::Display) -> OperationError {
 mod port_contract_tests {
     use super::*;
 
+    #[test]
+    fn full_length_host_capability_has_a_stable_noncolliding_mcp_name() {
+        let long=CapabilityRef::new("a".repeat(128),1).unwrap();
+        let name=tool_name(&long);
+        assert!(name.len()<=128 && name.starts_with("rho_h_"));
+        assert_eq!(name,tool_name(&long));
+        assert_ne!(name,tool_name(&CapabilityRef::new(long.id,2).unwrap()));
+        assert_eq!(tool_name(&CapabilityRef::new("plugins.list",1).unwrap()),"rho.plugins.list.v1");
+    }
+
     #[tokio::test]
     async fn rejected_tool_arguments_reach_the_client_without_a_false_output_schema() {
         let (_directory, host) = host().await;
@@ -678,7 +739,7 @@ mod port_contract_tests {
     }
     async fn call(edge: &McpEdge, name: &str, arguments: Value) -> Result<Value, OperationError> {
         edge.route(
-            &edge.entries.get(name).expect("visible tool").route,
+            &edge.entries().entries.get(name).expect("visible tool").route,
             arguments,
         )
         .await
@@ -688,7 +749,8 @@ mod port_contract_tests {
     async fn commit_status_and_reconciliation_tools_share_the_original_host_record() {
         let (_directory, host) = host().await;
         let edge = McpEdge::local(host.clone()).unwrap();
-        let result = call(&edge,"rho.workspace.run_r.v1",json!({"client_request_id":"commit-receipt","arguments":{"code":"1+1"}})).await.unwrap();
+        let result = call(&edge,"rho.workspace.run_r.v1",json!({"client_request_id":"commit-receipt","return_after_acceptance":false,"arguments":{"code":"1+1"}})).await.unwrap();
+        assert_eq!(result["status"],"succeeded");
         let operation_id = result["operation"]["operation_id"].clone();
         let state = call(&edge,"rho.operation.commit_status.v1",json!({"operation_id":operation_id})).await.unwrap();
         assert_eq!(state["data"]["phase"],"committed");
@@ -975,7 +1037,7 @@ mod port_contract_tests {
         assert_eq!(bare.description, versioned.description);
         for name in ["rho.output.view", "rho.output.view.v1"] {
             assert!(
-                matches!(edge.entries.get(name).unwrap().route, Route::View),
+                matches!(edge.entries().entries.get(name).unwrap().route, Route::View),
                 "{name} must emit native image content"
             );
         }

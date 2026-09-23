@@ -385,7 +385,7 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "operation" | "scenario" | "document" | "checkpoint"
+                "instance" | "operation" | "management" | "scenario" | "document" | "checkpoint"
             ),
             "unknown reference owner",
         )?;
@@ -424,7 +424,7 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "operation" | "scenario" | "document" | "checkpoint"
+                "instance" | "operation" | "management" | "scenario" | "document" | "checkpoint"
             ),
             "unknown reference owner",
         )?;

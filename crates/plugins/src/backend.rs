@@ -325,7 +325,7 @@ async fn run(
                             // The reverse call receives only the grant's scopes,
                             // never all capabilities of the original caller.
                             parent.scopes = grant.scopes.clone();
-                            Some(DelegatedPluginCall { provider: prepared.record.identity.clone(), parent,
+                            Some(DelegatedPluginCall { request: frame.request.clone(), provider: prepared.record.identity.clone(), parent,
                                 grant: grant.clone(), query_only: query, arguments })
                         }
                         _ => None,

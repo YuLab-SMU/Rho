@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use rho_contract::*;
 use schemars::schema_for;
 use serde_json::{Value, json};
-use std::{collections::BTreeSet, sync::Arc};
+use std::{collections::BTreeSet, sync::{Arc, OnceLock, Weak}};
 
 pub(crate) async fn visible_record(
     journal: &dyn OperationJournal,
@@ -23,6 +23,7 @@ pub struct OperationGetHandler {
     journal: Arc<dyn OperationJournal>,
     project: Option<String>,
     known: BTreeSet<CapabilityRef>,
+    registry: OnceLock<Weak<crate::CapabilityRegistry>>,
     descriptor: CapabilityDescriptor,
 }
 impl OperationGetHandler {
@@ -63,8 +64,18 @@ impl OperationGetHandler {
                 .filter(|d| d.kind == CapabilityKind::Operation)
                 .map(|d| d.capability.clone())
                 .collect(),
+            registry: OnceLock::new(),
             descriptor,
         })
+    }
+    pub fn bind_registry(&self, registry: &Arc<crate::CapabilityRegistry>) {
+        self.registry.set(Arc::downgrade(registry)).expect("record query binds once");
+    }
+    fn registered(&self, capability: &CapabilityRef) -> bool {
+        match self.registry.get() {
+            Some(registry) => registry.upgrade().is_some_and(|registry| registry.descriptor(capability).is_some_and(|d| d.kind == CapabilityKind::Operation)),
+            None => self.known.contains(capability),
+        }
     }
 }
 #[async_trait]
@@ -99,7 +110,7 @@ impl QueryHandler for OperationGetHandler {
         .await?;
         let output_contract = record.as_ref().map(|r| RecordedOperationContract {
             capability: r.operation.capability.clone(),
-            availability: if self.known.contains(&r.operation.capability) {
+            availability: if self.registered(&r.operation.capability) {
                 RecordedContractAvailability::Registered
             } else {
                 RecordedContractAvailability::OwnerUnavailableInThisHost

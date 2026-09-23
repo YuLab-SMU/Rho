@@ -4,16 +4,6 @@ use rho_plugins::{PluginError, PluginRepository, read_archive, snapshot_director
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
-pub fn default_store() -> PathBuf {
-    if let Some(root) = std::env::var_os("XDG_DATA_HOME") {
-        return PathBuf::from(root).join("rho/plugins-v1");
-    }
-    if let Some(root) = std::env::var_os("HOME") {
-        return PathBuf::from(root).join("Library/Application Support/rho/plugins-v1");
-    }
-    PathBuf::from(".rho-plugins-v1")
-}
-
 #[derive(Debug, Subcommand)]
 pub enum PluginCommand {
     /// Observe installed versions. An absent repository remains absent.

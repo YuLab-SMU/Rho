@@ -111,8 +111,8 @@ impl Cli {
 enum Command {
     /// Recover and develop plugin packages without starting a scientific Host.
     Plugins {
-        #[arg(long, default_value_os_t = plugins::default_store())]
-        store: PathBuf,
+        #[arg(long)]
+        store: Option<PathBuf>,
         #[command(subcommand)]
         command: plugins::PluginCommand,
     },
@@ -231,7 +231,8 @@ async fn run() -> Result<(), CliFailure> {
         if cli.connect_url_file.is_some() {
             return Err("Plugin recovery commands address a local --store; they do not use --connect-url-file".into());
         }
-        let result = plugins::run(store, command).map_err(|e| e.to_string())?;
+        let repository = store.clone().unwrap_or_else(|| rho_plugins::repository_path(&cli.database));
+        let result = plugins::run(&repository, command).map_err(|e| e.to_string())?;
         return print_json(&json!({"ok":true,"mode":"plugin_repository","result":result}))
             .map_err(Into::into);
     }

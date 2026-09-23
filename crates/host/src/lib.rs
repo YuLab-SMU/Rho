@@ -170,12 +170,14 @@ struct HostRuntime {
     annotations: Option<Arc<rho_application::AnnotationOwner>>,
     output_owner: Option<Arc<rho_workspace::WorkspaceOutputHandler>>,
     skills: Option<Arc<rho_skills::SkillOwner>>,
+    plugins: Option<Arc<rho_plugins::PluginService>>,
     method_binding_gate: tokio::sync::Mutex<()>,
     _project_lease: Option<Arc<ProjectLease>>,
 }
 
 #[derive(Default)]
 struct HostDomains {
+    plugin_store: Option<PathBuf>,
     host_skills: Option<std::path::PathBuf>,
     skill_exclusions: Vec<std::path::PathBuf>,
     application_store: Option<Arc<ApplicationStore>>,
@@ -269,6 +271,7 @@ impl NextHost {
         Self::compose(
             journal,
             HostDomains {
+                plugin_store: Some(rho_plugins::repository_path(database)),
                 host_skills: host_skills.map(Path::to_path_buf),
                 skill_exclusions: excluded,
                 application_store: Some(Arc::new(
@@ -508,6 +511,7 @@ impl NextHost {
         Self::compose(
             journal,
             HostDomains {
+                plugin_store: Some(rho_plugins::repository_path(database)),
                 host_skills: host_skills.map(Path::to_path_buf),
                 skill_exclusions: excluded,
                 application_store: Some(Arc::new(
@@ -660,6 +664,7 @@ impl NextHost {
         Self::compose(
             journal,
             HostDomains {
+                plugin_store: Some(rho_plugins::repository_path(database)),
                 host_skills: host_skills.map(Path::to_path_buf),
                 skill_exclusions: excluded,
                 application_store: Some(Arc::new(
@@ -693,6 +698,9 @@ impl NextHost {
                 "application.read".into(),
                 "application.control".into(),
                 "skill.read".into(),
+                rho_plugins::PLUGINS_READ_SCOPE.into(),
+                rho_plugins::PLUGINS_WRITE_SCOPE.into(),
+                rho_plugins::PLUGINS_RUN_SCOPE.into(),
                 RUN_R_SCOPE.into(),
                 WORKSPACE_READ_SCOPE.into(),
                 PROJECT_READ_SCOPE.into(),
@@ -736,6 +744,7 @@ impl NextHost {
                 annotations: None,
                 output_owner: None,
                 skills: None,
+                plugins: None,
                 method_binding_gate: tokio::sync::Mutex::new(()),
                 _project_lease: None,
             }),
@@ -779,6 +788,7 @@ impl NextHost {
         id_generator: Arc<dyn OperationIdGenerator>,
     ) -> Result<Self, OperationError> {
         let HostDomains {
+            plugin_store,
             host_skills,
             skill_exclusions,
             application_store,
@@ -1061,6 +1071,10 @@ impl NextHost {
                 )))?;
             }
         }
+        let plugins = plugin_store.zip(output_project.clone())
+            .map(|(store, project)| rho_plugins::PluginService::open(&store, project, journal.clone()))
+            .transpose()?;
+        if let Some(plugins) = &plugins { plugins.register(&mut registry)?; }
         let event_port = observer::register_record_queries(
             &mut registry,
             journal.clone(),
@@ -1075,7 +1089,8 @@ impl NextHost {
             OperationGateway::new(registry.clone(), journal, clock, id_generator)
                 .with_project_scope(output_project),
         );
-        event_port.bind(&gateway);
+        event_port.bind(&gateway, &registry);
+        if let Some(plugins) = &plugins { plugins.bind(&registry, &gateway); }
         if let Some(owner) = &instance_owner {
             let probe = application_owner
                 .clone()
@@ -1086,26 +1101,31 @@ impl NextHost {
         if auto_continue && let Some(owner) = &instance_owner {
             owner.continue_default().await?;
         }
-        Ok(Self {
-            runtime: Arc::new(HostRuntime {
-                gateway,
-                queries: Arc::new(QueryGateway::new(registry.clone())),
-                registry,
-                workspace: workspace_owner,
-                instances: instance_owner,
-                application: application_owner,
-                annotations: annotation_owner,
-                output_owner,
-                skills: skill_owner,
-                method_binding_gate: tokio::sync::Mutex::new(()),
-                _project_lease: project_lease,
-            }),
-            recovered_on_open,
-            tasks: tokio_util::task::TaskTracker::new(),
-        })
+        let tasks = tokio_util::task::TaskTracker::new();
+        let runtime = Arc::new(HostRuntime {
+            gateway,
+            queries: Arc::new(QueryGateway::new(registry.clone())),
+            registry,
+            workspace: workspace_owner,
+            instances: instance_owner,
+            application: application_owner,
+            annotations: annotation_owner,
+            output_owner,
+            skills: skill_owner,
+            plugins,
+            method_binding_gate: tokio::sync::Mutex::new(()),
+            _project_lease: project_lease,
+        });
+        if let Some(plugins) = &runtime.plugins { plugins.bind_lifetime(&runtime, &tasks); }
+        Ok(Self { runtime, recovered_on_open, tasks })
+    }
+
+    pub fn capability_publications(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.runtime.registry.subscribe_publications()
     }
 
     pub fn capabilities(&self) -> Vec<CapabilityDescriptor> {
+        self.refresh_plugin_registrations();
         self.runtime.gateway.registry_descriptors()
     }
     /// Continue the project's default R instance. A deferred open makes files,
@@ -1218,11 +1238,20 @@ impl NextHost {
         &self.recovered_on_open
     }
 
+    fn refresh_plugin_registrations(&self) {
+        if let Some(plugins) = &self.runtime.plugins {
+            // Native failure can withdraw capabilities; this observes only state
+            // already held by the owner, and never starts or repairs a process.
+            if let Err(error) = plugins.refresh() { eprintln!("plugin registration refresh: {error}"); }
+        }
+    }
+
     pub async fn invoke(
         &self,
         context: &CallContext,
         invocation: Invocation,
     ) -> Result<OperationRecord, OperationError> {
+        self.refresh_plugin_registrations();
         // The host owns execution. Dropping an edge's response future must not abandon
         // the result commit or release the runtime lane while R is still working.
         let runtime = self.runtime.clone();
@@ -1244,6 +1273,7 @@ impl NextHost {
         context: &CallContext,
         invocation: Invocation,
     ) -> Result<OperationRecord, OperationError> {
+        self.refresh_plugin_registrations();
         let runtime = self.runtime.clone();
         let context = context.clone();
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1266,6 +1296,7 @@ impl NextHost {
         context: &CallContext,
         request: QueryRequest,
     ) -> Result<QuerySnapshot, OperationError> {
+        self.refresh_plugin_registrations();
         let runtime = self.runtime.clone();
         let context = context.clone();
         // Keep the Workspace lane until the read has finished, even if an edge disconnects.
@@ -1333,6 +1364,7 @@ impl NextHost {
         }
         self.tasks.close();
         self.tasks.wait().await;
+        if let Some(plugins) = &self.runtime.plugins { plugins.drain().await; }
         // Accepted work has drained. The native adapter has no drop teardown, so an
         // exiting Host must end the R processes it started rather than orphan them.
         if let Some(instances) = &self.runtime.instances {
@@ -1355,6 +1387,11 @@ impl NextHost {
             runtime.registry.validate_control_input(&context, &capability, &json!(args))?;
             let record = runtime.gateway.reconcile_commit(&context, &args).await?;
             runtime.registry.validate_control_output(&capability, &json!(record))?;
+            if let Some(plugins) = &runtime.plugins {
+                if let Err(error) = plugins.complete_record(&context, &record).await {
+                    eprintln!("committed operation retains plugin protections; use plugins.reconcile_references: {error}");
+                }
+            }
             Ok(record)
         }).await.map_err(|error| OperationError::Storage(format!("commit reconciliation task ended: {error}")))?
     }
@@ -1457,7 +1494,8 @@ fn protected_project_paths(database: &Path) -> Result<Vec<std::path::PathBuf>, O
         .parent()
         .unwrap_or(Path::new("."))
         .join("runtime-preferences.sqlite");
-    let mut excluded = vec![database.clone(), application.clone(), preferences.clone()];
+    let plugins = application.parent().unwrap_or(Path::new(".")).join("plugins-v1");
+    let mut excluded = vec![database.clone(), application.clone(), preferences.clone(), plugins];
     for store in [application, preferences] {
         for suffix in ["-journal", "-wal", "-shm"] {
             let mut path = store.as_os_str().to_os_string();

@@ -54,33 +54,54 @@ clean quit from discarding their execution leases. Recovery attempts remain owne
 by the Host across edge disconnection. Query-only observers can inspect durable
 candidates without recovering them or exposing a reconciliation control.
 
-The plugin bridge is **not yet wired into scientific Host startup and official
-ports**. The existing Host and scientific UI still use their prior owners. The
+Active Hosts now compose the package/lifecycle owner and dynamic bridge through
+their shared ports. `plugins.*` queries expose bounded repository and scoped
+instance observations; activation, release, branch changes, removal and reference
+reconciliation use normal Operations. The CLI defaults to the same repository
+beside its configured database. Installed packages are never activated implicitly.
+Native reverse calls retain the original principal and parent, enforce declared
+scopes/query-only authority, and remain tracked through Host shutdown. MCP
+projects current scoped contracts, not a startup-only tool list, and receives
+registry/lifecycle change notifications with content-bound page cursors.
+
+The existing scientific owners and UI have not yet migrated into packages. The
 generic resource store, isolated iframe container, TypeScript UI SDK, live
-scenarios and Plugin Studio are also pending. Next is Host/container integration,
+scenarios and Plugin Studio remain pending. Next is resource/container integration,
 followed by the complete R/Viewer vertical path,
 all-feature migration and the approved Studio workflows.
 Remove the replaced fixed composition before final acceptance; a permanent dual
 architecture is not an accepted outcome. New repository paths do not read or
 migrate abandoned storage. Existing user Hosts and R memory have not been restarted.
+The lifecycle ports require the rebuilt Host; refreshing only the client cannot
+add them to an older process. Inspect live work and preserve its R session before
+any separately authorized replacement.
 
-Current commit-recovery verification passed: Operation tests (24), SQLite tests
-(33), actual backend/bridge process tests (14), Host observer/port/recovery tests,
-and MCP tests (13). Fault injection covers failed staging, failed terminal writes,
-raw evidence retention, changed candidates, restart without a provider, exact
-repeated completion, late cancellation, original authority and retained native
-leases. Protocol, backend SDK and repository code are unchanged from their earlier
-passing standalone checks. Client generation/build/check, 70 affected frontend
-tests, architecture, plugin/frontend boundaries and governance checks passed.
+Current verification passed: public protocol tests (7), Rust SDK transport tests
+(6), repository tests (9), backend/bridge process tests (14), Operation tests
+(24), Host library tests (48), Host observer/port/recovery/plugin integration tests
+(14), MCP library tests (14) plus its actual plugin-connection test, and CLI
+package recovery tests (3). External TypeScript and Rust consumers compile using
+only the public packages. Generation, client build/check, architecture,
+plugin boundaries and governance checks passed. The broader regression corrected
+two stale test assumptions: commit-pending diagnostics expose both authorized
+reads, and terminal-result comparisons must explicitly await completion.
+
+The new Host tests exercise external immutable revisions, exact provider binding,
+principal-filtered observations, original records after unload, collision cleanup,
+and delegated queries/operations with no scope expansion. The actual MCP test
+connects before activation, observes new tools and changed cursors, invokes the
+backend, and receives withdrawal notifications after release and native failure.
 
 Existing-science regression passed: `node scripts/test-real-r.mjs`,
-`node scripts/test-process-recovery.mjs`, and the isolated Chrome case
-`real Console, settings and docking shell` against the rebuilt binary. The R
-suite covers its configured local native paths; optional real-model and alternate
-R-installation cases remain outside this run. The new architecture's scientific
-Host wiring, real-R plugin migration and iframe acceptance remain outstanding.
-These existing-science regressions do not certify those unfinished paths. Focused
-commands are documented in Development.
+`node scripts/test-mcp.mjs`, `node scripts/test-process-recovery.mjs`, and the
+isolated Chrome case `real Console, settings and docking shell` against the
+rebuilt binary. The real-R suite also runs the recovery-copy check that the
+ordinary Host library suite skips; its other ignored automatic-continuation
+fixture remains unexecuted. Optional real-model and alternate R-installation
+cases remain outside this run. These results verify the new plugin Host/MCP path
+and the existing scientific flows. Real-R plugin migration and iframe acceptance
+remain outstanding and are not certified by the existing-science regressions.
+Focused commands are documented in Development.
 
 ## Bundled real Rho demo project
 

@@ -31,6 +31,7 @@ struct RegistryState {
 #[derive(Default)]
 pub struct CapabilityRegistry {
     state: RwLock<RegistryState>,
+    publication: tokio::sync::watch::Sender<u64>,
 }
 impl CapabilityRegistry {
     pub fn new() -> Self {
@@ -38,6 +39,11 @@ impl CapabilityRegistry {
     }
     pub fn snapshot(&self) -> Arc<RegistrySnapshot> {
         self.state.read().unwrap().current.clone()
+    }
+
+    /// Metadata notifications only; this is not a scientific revision/precondition.
+    pub fn subscribe_publications(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.publication.subscribe()
     }
 
     // Startup composition remains explicit. Dynamic packages use replace_batch.
@@ -181,6 +187,7 @@ impl CapabilityRegistry {
         state.contracts.extend(prepared.descriptors);
         state.groups.insert(owner.into(), (generation, owned));
         state.current = Arc::new(next);
+        self.publication.send_modify(|revision| *revision = revision.wrapping_add(1));
         Ok(RegistrationRevision {
             owner: owner.into(),
             generation,

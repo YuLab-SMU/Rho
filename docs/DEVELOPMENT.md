@@ -63,6 +63,7 @@ recovery check:
 cargo test -p rho-operation -p rho-sqlite --lib --locked
 cargo test -p rho-host --test port_contracts --test observer --test recovery --locked
 cargo test -p rho-plugins --test backend_runtime --locked
+cargo test -p rho-host -p rho-mcp --test plugins --locked
 cargo test -p rho-host --lib --locked
 node scripts/test-process-recovery.mjs
 ```
@@ -281,7 +282,8 @@ Host/Studio modules. Plugin source is snapshotted before use; import, inspection
 and validation must never invoke a build recipe. Focused foundation checks are
 `cargo test -p rho-plugin-protocol --locked`,
 `cargo test -p rho-plugin-sdk --locked` and `cargo test -p rho-plugins --locked`.
-For runtime iteration use `cargo test -p rho-plugins --test backend_runtime --locked`.
+For runtime iteration use `cargo test -p rho-plugins --test backend_runtime --locked
+cargo test -p rho-host -p rho-mcp --test plugins --locked`.
 Its `operation_bridge` filter exercises the actual process through the generic
 Operation/Query gateways and SQLite journal: fixed preflight qualification,
 principal/revision containment, removal during execution, cancellation,

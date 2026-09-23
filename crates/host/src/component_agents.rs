@@ -1477,9 +1477,12 @@ mod diagnostic_tests {
         let visible = native_error(&host, &allowed, failure.clone()).diagnostic();
         assert_eq!(visible.code, DiagnosticCode::OutcomeUncertain);
         assert_eq!(visible.continuation, DiagnosticContinuation::InspectOriginal);
-        assert_eq!(visible.next_reads.len(), 1);
-        assert_eq!(visible.next_reads[0].arguments["operation_id"], "original-operation");
-        let mut denied = allowed; denied.scopes.clear();
+        assert_eq!(visible.next_reads.iter().map(|read|read.capability.id.as_str()).collect::<Vec<_>>(),
+            vec!["operation.get","operation.commit_status"]);
+        assert!(visible.next_reads.iter().all(|read|read.arguments["operation_id"] == "original-operation"));
+        // Other granted scopes, including plugin lifecycle authority, cannot
+        // reveal the original identity reads without operation.read.
+        let mut denied = allowed; denied.scopes.remove("operation.read");
         let hidden = native_error(&host, &denied, failure).diagnostic();
         assert_eq!(hidden.code, DiagnosticCode::OutcomeUncertain);
         assert!(hidden.next_reads.is_empty());

@@ -76,6 +76,29 @@ qualified by instance; resource evidence requires the authoritative resource
 owner's verification. A completion acknowledgement lost after journal commit can
 release its lifecycle reference only by reading that original terminal record.
 
+Active Host composition exposes the same `rho-plugins` repository and lifecycle
+owner through the ordinary Query/Operation ports. The repository is `plugins-v1`
+beside the configured journal; the recovery CLI derives the same location unless
+`--store` is explicit. Startup neither imports packages nor activates recorded
+instances. Instance observations filter project/principal before pagination and
+separate current-Host ownership from historical state and recorded process IDs.
+Lifecycle admission retains managed revisions until the original terminal commit.
+
+Native reverse calls use the same gateways with the original principal, a plugin
+actor, the manifest's existing-authority grants and the original parent Operation
+as causation. Query parents cannot delegate mutations or controls. Delegated work
+is owned by the Host task tracker and retains the Host lifetime across disconnect.
+Core result reconciliation can retire original plugin protections; failure to
+retire one does not replace the already committed scientific result.
+
+Registry publication notifications are catalog metadata, never scientific
+preconditions. MCP caches only projections of current scoped descriptors, sends
+tool-list changes on publication, and binds pagination to the descriptor content.
+Capabilities too long for a readable MCP name receive a stable hash name in a
+separate namespace; their original Host identity and dispatch remain unchanged.
+Native lifecycle failure withdraws new routes through an event-driven owner
+observation; this does not reconnect, restart or replay a provider.
+
 UI isolation uses a sandboxed iframe per view and an instance-bound channel;
 backend isolation uses a process per activated service instance with bounded,
 versioned bidirectional RPC and separate logs. Neither native code nor build

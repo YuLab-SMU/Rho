@@ -86,12 +86,23 @@ impl PluginCapabilityBridge {
         &self,
         registry: &CapabilityRegistry,
     ) -> Result<RegistrationRevision, OperationError> {
+        self.refresh_including(registry, None)
+    }
+    pub fn publish(&self, registry: &CapabilityRegistry, instance: &InstanceRef) -> Result<RegistrationRevision, OperationError> {
+        let revision = self.refresh_including(registry, Some(instance))?;
+        if let Err(error) = self.shared.runtime.publish_instance(instance) {
+            self.refresh(registry)?;
+            return Err(unavailable(error));
+        }
+        Ok(revision)
+    }
+    fn refresh_including(&self, registry: &CapabilityRegistry, pending: Option<&InstanceRef>) -> Result<RegistrationRevision, OperationError> {
         let mut registration = self.registration.lock().unwrap();
         let mut batch = ContributionBatch {
             operations: vec![],
             queries: vec![],
         };
-        for cap in self.shared.runtime.contributions(&self.shared.project) {
+        for cap in self.shared.runtime.contributions_including(&self.shared.project, pending) {
             let descriptor = descriptor(&cap, &self.shared.project)?;
             let handler = Arc::new(RoutingHandler {
                 shared: self.shared.clone(),

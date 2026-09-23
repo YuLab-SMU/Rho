@@ -33,6 +33,25 @@ files, traversal, case collisions, undeclared blobs and digest mismatches are
 rejected. Limits are 8,192 file entries and 256 MiB decoded package bytes.
 Archives can be unbuilt source checkpoints; activation needs a complete artifact.
 
+## Host lifecycle ports
+
+Active Hosts expose package/lifecycle DTOs from this package through their ordinary
+Query and Operation ports. `plugins.repository` identifies the store and backend
+target; `plugins.list`/`plugins.inspect` describe immutable installed content.
+`plugins.activate` takes `ActivatePlugin`, and `plugins.resolve` returns the exact
+`ProviderBinding` used in `PluginRequest`. `plugins.release` drains that selected
+instance. A stored `PluginInstanceObservation` does not establish process liveness;
+check `observed_in_this_host` together with its lifecycle state. Instance pages
+are scoped to the current project and original principal before pagination.
+
+The recovery CLI and active Host use `plugins-v1` beside the configured database,
+with an explicit CLI `--store` override. Importing or observing a revision never
+activates it. Lifecycle operations use stable caller request identities and the
+same authoritative Operation journal as contributed capabilities. The official
+MCP connection updates its tool catalog after provider publication or failure;
+page cursors cannot cross changed catalogs. The UI SDK and resource delivery
+implementation remain separate from these public type definitions.
+
 ## Runtime protocol
 
 Each control message is one UTF-8 JSON `RpcFrame` of at most 1 MiB. A connection

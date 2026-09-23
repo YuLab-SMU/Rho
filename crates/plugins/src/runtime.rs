@@ -8,7 +8,7 @@ use std::{
     fs,
     io::Write,
     path::PathBuf,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, Ordering}},
     time::Duration,
 };
 use tempfile::TempDir;
@@ -51,6 +51,7 @@ impl Default for BackendPolicy {
 /// `query_only` prevents a query backend from delegating a scientific write.
 #[derive(Debug, Clone)]
 pub struct DelegatedPluginCall {
+    pub request: RequestId,
     pub provider: InstanceRef,
     pub parent: PluginCall,
     pub grant: CapabilityRequirement,
@@ -90,6 +91,7 @@ pub(crate) struct BackendState {
 pub(crate) type SharedBackendState = Arc<Mutex<BackendState>>;
 
 struct Entry {
+    published: AtomicBool,
     manifest: PluginManifest,
     state: SharedBackendState,
     process: OnceLock<backend::ProcessClient>,
@@ -103,6 +105,7 @@ pub struct PluginRuntime {
     entries: Mutex<BTreeMap<PluginInstanceId, Arc<Entry>>>,
     policy: BackendPolicy,
     services: Arc<dyn PluginHostServices>,
+    lifecycle: tokio::sync::watch::Sender<u64>,
 }
 
 impl PluginRuntime {
@@ -116,14 +119,23 @@ impl PluginRuntime {
             entries: Mutex::new(BTreeMap::new()),
             policy,
             services,
+            lifecycle: tokio::sync::watch::channel(0).0,
         }
     }
+
+    pub(crate) fn subscribe_lifecycle(&self) -> tokio::sync::watch::Receiver<u64> { self.lifecycle.subscribe() }
 
     pub async fn activate(
         &self,
         request: BackendActivation,
     ) -> Result<PluginInstance, PluginError> {
-        let prepared = PreparedBackend::new(&self.repository, request)?;
+        self.activate_identified(request, PluginInstanceId::new(format!("plugin-{}", Uuid::new_v4().simple()))?, true).await
+    }
+
+    /// Host publication stages readiness before exposing any new invocation route.
+    pub async fn activate_identified(&self, request: BackendActivation, identity: PluginInstanceId, publish: bool) -> Result<PluginInstance, PluginError> {
+        let mut prepared = PreparedBackend::new(&self.repository, request, identity)?;
+        prepared.lifecycle = Some(self.lifecycle.clone());
         let identity = prepared.record.identity.clone();
         // Failure before readiness has no published registrations. The prepared
         // lease keeps the revision while native code is being initialized.
@@ -136,6 +148,7 @@ impl PluginRuntime {
             log: vec![],
         }));
         let entry = Arc::new(Entry {
+            published: AtomicBool::new(publish),
             manifest,
             state: state.clone(),
             process: OnceLock::new(),
@@ -261,16 +274,29 @@ impl PluginRuntime {
     }
 
     pub fn contributions(&self, project: &ProjectId) -> Vec<CapabilityContribution> {
+        self.contributions_including(project, None)
+    }
+    pub(crate) fn contributions_including(&self, project: &ProjectId, pending: Option<&InstanceRef>) -> Vec<CapabilityContribution> {
         let mut capabilities = BTreeMap::new();
         for entry in self.entries.lock().unwrap().values() {
             let state = entry.state.lock().unwrap();
-            if &state.record.project == project && state.record.state == InstanceState::Active {
+            if &state.record.project == project && state.record.state == InstanceState::Active
+                && (entry.published.load(Ordering::Acquire) || pending == Some(&state.record.identity)) {
                 for contribution in &entry.manifest.capabilities {
                     capabilities.entry(contribution.capability.clone()).or_insert_with(|| contribution.clone());
                 }
             }
         }
         capabilities.into_values().collect()
+    }
+
+    pub(crate) fn publish_instance(&self, identity: &InstanceRef) -> Result<(), PluginError> {
+        let entries = self.entries.lock().unwrap();
+        let entry = entries.get(&identity.instance).ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
+        let state = entry.state.lock().unwrap();
+        ensure(state.record.identity == *identity && state.record.state == InstanceState::Active, "ready instance ended before Host publication")?;
+        entry.published.store(true, Ordering::Release);
+        Ok(())
     }
 
     pub(crate) fn hold_operation(&self, identity: &InstanceRef, operation: &str) -> Result<(), PluginError> {
@@ -294,6 +320,7 @@ impl PluginRuntime {
         let mut candidates = entries.values().filter(|entry| {
             let state = entry.state.lock().unwrap();
             state.record.state == InstanceState::Active
+                && entry.published.load(Ordering::Acquire)
                 && &state.record.project == project
                 && &state.record.principal == principal
                 && selected.is_none_or(|id| id == &state.record.identity)
@@ -576,11 +603,13 @@ pub(crate) struct PreparedBackend {
     pub executable: PathBuf,
     pub repository: Arc<Mutex<PluginRepository>>,
     pub retain_after_drop: bool,
+    lifecycle: Option<tokio::sync::watch::Sender<u64>>,
 }
 impl PreparedBackend {
     fn new(
         repository: &Arc<Mutex<PluginRepository>>,
         request: BackendActivation,
+        identity: PluginInstanceId,
     ) -> Result<Self, PluginError> {
         let mut repo = repository.lock().unwrap();
         let archive = repo.export(&request.revision)?;
@@ -650,7 +679,7 @@ impl PreparedBackend {
         let executable = directory.path().join(backend.executable.as_str());
         let record = PluginInstance {
             identity: InstanceRef {
-                instance: PluginInstanceId::new(format!("plugin-{}", Uuid::new_v4().simple()))?,
+                instance: identity,
                 plugin: manifest.id.clone(),
                 revision: request.revision,
                 artifact: request.artifact,
@@ -678,6 +707,7 @@ impl PreparedBackend {
             executable,
             repository: repository.clone(),
             retain_after_drop: false,
+            lifecycle: None,
         })
     }
     pub fn release_reference(&mut self) -> Result<(), PluginError> {
@@ -689,6 +719,7 @@ impl PreparedBackend {
         Ok(())
     }
     pub fn persist_state(&self, state: &SharedBackendState) {
+        if let Some(lifecycle)=&self.lifecycle { lifecycle.send_modify(|revision| *revision=revision.wrapping_add(1)); }
         let record = state.lock().unwrap().record.clone();
         if let Err(error) = self.repository.lock().unwrap().record_instance(&record) {
             state.lock().unwrap().record.diagnostic = Some(format!(

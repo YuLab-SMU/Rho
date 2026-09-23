@@ -3,6 +3,8 @@
 
 mod identity;
 mod manifest;
+mod management;
+pub use management::*;
 mod runtime;
 mod scenario;
 mod visual;

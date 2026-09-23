@@ -50,7 +50,7 @@ pub(crate) fn register(
         })?;
     let cancel_output =
         cancellation_result_schema(&get.output_schema).map_err(OperationError::Contract)?;
-    if registry.descriptors().iter().any(|descriptor| {
+    if writable || registry.descriptors().iter().any(|descriptor| {
         descriptor.kind == CapabilityKind::Operation
             && descriptor.cancellation != CancellationClass::Unsupported
     }) {

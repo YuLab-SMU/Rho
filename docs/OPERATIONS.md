@@ -773,8 +773,9 @@ reader check.
 The new plugin repository is separate from scientific project storage. Core
 package recovery does not require a project, an R installation, or the plugin
 management interface. No command below starts a scientific Host or loads plugin
-code. The default store is `$XDG_DATA_HOME/rho/plugins-v1` when set, otherwise
-`$HOME/Library/Application Support/rho/plugins-v1` on the current macOS target.
+code. The default store is `plugins-v1` beside the configured `--database`,
+matching active Host composition. With the default database on macOS this is
+`$HOME/Library/Application Support/rho/plugins-v1`; `--store` overrides it.
 Use an explicit disposable store for development:
 
 ```sh
@@ -801,9 +802,38 @@ idempotent for identical immutable content and does not grant additional scopes.
 List leaves an absent repository absent. The repository never reads an old Rho
 project database or automatically reinstalls removed delivered packages.
 
-`remove REVISION` lists protecting instance, operation, document, scenario,
+`remove REVISION` lists protecting instance, operation, management, document, scenario,
 checkpoint, dependency and branch references instead of deleting a used revision.
 `branch-head BRANCH` reads a branch; `advance-branch BRANCH EXPECTED NEXT` uses
 compare-and-swap and requires NEXT's parent to be EXPECTED. This changes a branch
-pointer, not a running instance or selected scenario. Application, builds,
-activation and full Plugin Studio integration are tracked separately in Status.
+pointer, not a running instance or selected scenario. Builds, scenario application
+and full Plugin Studio integration are tracked separately in Status.
+
+Active Hosts expose `plugins.repository`, `plugins.list`, `plugins.inspect`,
+`plugins.instances`, `plugins.instance`, `plugins.resolve`, `plugins.branch_head`
+and `plugins.compare` as bounded queries. The repository query reports the exact
+store and native artifact target. Package viewing does not start code. Instance
+lists show only the caller's project/principal; `observed_in_this_host` must be
+read together with lifecycle state, and does not itself establish process liveness.
+
+`plugins.activate` accepts an installed revision, artifact, target, alias and
+configuration through the normal Operation port. It validates configuration and
+all declared grants against existing caller authority before admission, waits
+for exact readiness, then publishes the backend's complete capability batch.
+Use `plugins.resolve` to select a provider and pass the returned `binding`,
+scientific `arguments` and native `preconditions` to that capability. Multiple
+matching instances require explicit selection. No package origin gains extra scope.
+
+`plugins.release`, `plugins.remove`, `plugins.branch`, `plugins.advance_branch`
+and `plugins.reconcile_references` also use normal Operations and stable
+`client_request_id` values. Release drains accepted work; an error does not prove
+cleanup. Reconciliation takes the original terminal `operation_id` and retires
+its protections without repeating native work. The CLI recovery interface still
+handles archive import/export and source snapshots; active Host import/build/UI
+flows are not implemented by this lifecycle slice.
+
+These ports are shared by connected CLI, HTTP and official MCP. An existing MCP
+connection receives tool-list change notifications when providers appear,
+disappear or fail. A changed catalog invalidates its old page cursor; restart
+listing without a cursor. Existing accepted records retain their original contract
+and remain readable using `operation.get` after their provider is removed.

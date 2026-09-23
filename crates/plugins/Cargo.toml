@@ -13,6 +13,7 @@ rho-operation = { path = "../operation" }
 rho-contract = { path = "../contract" }
 schemars.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
