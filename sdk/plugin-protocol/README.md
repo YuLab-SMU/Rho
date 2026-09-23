@@ -6,7 +6,8 @@ Rust source of these definitions is the independently packageable
 `rho-plugin-protocol` crate. Other languages can implement the same JSON protocol.
 
 `schema/manifest.json`, `schema/archive.json`, `schema/rpc.json`,
-`schema/scenario.json` and `schema/visual-document.json` define the wire shapes.
+`schema/scenario.json`, `schema/visual-document.json`, and the two
+`schema/resource-transfer-*.json` documents define the wire shapes.
 Semantic checks (identity formats, references, scope, schema compilation, digests,
 limits and lifecycle) also run in the receiving owner. JSON Schema alone does not
 grant authority or establish runtime availability.
@@ -49,8 +50,8 @@ with an explicit CLI `--store` override. Importing or observing a revision never
 activates it. Lifecycle operations use stable caller request identities and the
 same authoritative Operation journal as contributed capabilities. The official
 MCP connection updates its tool catalog after provider publication or failure;
-page cursors cannot cross changed catalogs. The UI SDK and resource delivery
-implementation remain separate from these public type definitions.
+page cursors cannot cross changed catalogs. The UI SDK remains separate from
+these public type definitions.
 
 ## Runtime protocol
 
@@ -86,9 +87,30 @@ running preflight again.
 The core bridge wraps native recovery as `plugin_owner_recovery`; transport and
 contract failures retain their original candidate under a distinct boundary
 recovery. Proposed resource evidence is accepted only after the resource owner
-verifies its identity, visibility and digest. The default bridge configuration
-rejects resource references until that owner is configured. It does not fetch
-arbitrary remote data to satisfy a plugin's claim.
+verifies its identity, visibility and digest. Active Hosts compose this resource
+owner; a standalone bridge with `NoPluginResources` deliberately rejects evidence.
+No verifier fetches arbitrary remote data to satisfy a plugin's claim.
+
+The optional initialization `resource_channel` is an ephemeral per-instance Unix
+socket and credential. Data headers are BE u32 lengths plus at most 16 KiB JSON;
+`ResourceTransferRequest` and `ResourceTransferResponse` define the language-neutral
+protocol. Raw upload/read bytes use this separate socket, not control/stdout.
+Uploads inherit the active parent's exact instance/project/principal, verify the
+declared length and SHA-256, and become visible only after complete atomic retention.
+A query may retain observation bytes without committing scientific facts. Backend
+channels read only their own instance's resources; cross-owner reads require a
+granted Host query. See the public [backend SDK](../../crates/plugin-sdk/README.md)
+for framing and streaming examples.
+
+`resources.list` takes `ResourceList` and returns a scoped `ResourcePage`;
+`resources.inspect` takes `ResourceInspect` and verifies the full reference;
+`resources.read` takes `ResourceRead` and returns `ResourceChunk`. Host queries
+require `resources.read` plus original project/principal visibility, even after
+a provider is released. Read offsets and cursors count bytes, not characters.
+Limits are 256 MiB per upload, 256 KiB per read, four concurrent transfers per Host,
+512 MiB retained per instance and 2 GiB / 16,384 entries per store. A failed or
+partial upload is not evidence; lost acknowledgement does not delete complete
+retained bytes. Identical uploads resolve to the same immutable resource identity.
 
 UI views use isolated iframes and an instance-bound message channel. They receive
 public theme, menu, focus, shortcut, view and resource services, never the Host's

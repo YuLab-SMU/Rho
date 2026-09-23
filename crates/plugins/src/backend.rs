@@ -118,6 +118,12 @@ pub(crate) async fn start(
     policy: BackendPolicy,
 ) -> Result<ProcessClient, PluginError> {
     let identity = prepared.record.identity.clone();
+    #[cfg(unix)]
+    let data_channel = services.resources().map(crate::resource_channel::DataChannel::start).transpose()?;
+    #[cfg(unix)]
+    let resource_channel = data_channel.as_ref().map(|c| c.endpoint.clone());
+    #[cfg(not(unix))]
+    let resource_channel = None;
     let mut command = Command::new(&prepared.executable);
     command
         .args(&prepared.manifest.backend.as_ref().unwrap().arguments)
@@ -180,6 +186,7 @@ pub(crate) async fn start(
                 RpcBody::Initialize {
                     instance: prepared.record.clone(),
                     grants: prepared.grants.clone(),
+                    resource_channel,
                 },
             )
             .await
@@ -229,6 +236,8 @@ pub(crate) async fn start(
         policy,
         reader_task,
         log_task,
+        #[cfg(unix)]
+        data_channel,
     ));
     Ok(ProcessClient { sender })
 }
@@ -255,6 +264,7 @@ async fn run(
     policy: BackendPolicy,
     _reader_task: TaskGuard<()>,
     _log_task: TaskGuard<()>,
+    #[cfg(unix)] data_channel: Option<crate::resource_channel::DataChannel>,
 ) {
     let mut pending: BTreeMap<RequestId, Pending> = BTreeMap::new();
     let mut reverse = BTreeSet::new();
@@ -272,6 +282,8 @@ async fn run(
                             let _ = response.send(Err("backend pending-call quota reached before dispatch".into())); continue;
                         }
                         call.request = request.clone();
+                        #[cfg(unix)]
+                        if let Some(channel) = &data_channel { channel.session.insert(&call); }
                         let body = if query { RpcBody::Query(call.clone()) } else { RpcBody::Invoke(call.clone()) };
                         (body, Pending { kind: PendingKind::Call { call, query }, response })
                     }
@@ -288,6 +300,10 @@ async fn run(
                     CommandMessage::Release { response } => {
                         if !pending.is_empty() || !reverse.is_empty() {
                             let _ = response.send(Err("backend still has active calls".into())); continue;
+                        }
+                        #[cfg(unix)]
+                        if data_channel.as_ref().is_some_and(|channel| !channel.session.close_if_idle()) {
+                            let _ = response.send(Err("backend still has active resource transfers".into())); continue;
                         }
                         let released = release(&mut child, &mut writer, &mut frames, request, &policy).await;
                         let released = released.and_then(|()| prepared.release_reference().map_err(|e| e.to_string()));
@@ -345,6 +361,8 @@ async fn run(
                         code: "access_denied".into(), message: "reverse call has no active parent or declared grant in scope".into(), recovery: None }, &policy).await { break error; }
                     continue;
                 }
+                #[cfg(unix)]
+                if let Some(channel) = &data_channel { channel.session.remove(&frame.request); }
                 let Some(expected) = pending.remove(&frame.request) else { break "unsolicited or repeated backend response".into(); };
                 state.lock().unwrap().pending = pending.len();
                 let valid = match (&expected.kind, &frame.body) {

@@ -699,6 +699,7 @@ impl NextHost {
                 "application.control".into(),
                 "skill.read".into(),
                 rho_plugins::PLUGINS_READ_SCOPE.into(),
+                rho_plugins::RESOURCES_READ_SCOPE.into(),
                 rho_plugins::PLUGINS_WRITE_SCOPE.into(),
                 rho_plugins::PLUGINS_RUN_SCOPE.into(),
                 RUN_R_SCOPE.into(),

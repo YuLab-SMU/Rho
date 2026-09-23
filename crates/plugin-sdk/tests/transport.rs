@@ -133,6 +133,7 @@ async fn sdk_initialization_and_call_validation_keep_the_host_binding() {
             RpcBody::Initialize {
                 instance: instance.clone(),
                 grants: vec![],
+                resource_channel: None,
             },
         )
         .await

@@ -16,9 +16,9 @@ try {
   // Retain the existing dependency lock, without network resolution/upgrades.
   fs.copyFileSync(path.join(root, "Cargo.lock"), path.join(temp, "Cargo.lock"));
   execFileSync("cargo", ["check", "--manifest-path", path.join(temp, "Cargo.toml"),
-    "-p", "rho-plugin-sdk", "--example", "echo-backend", "--offline",
+    "-p", "rho-plugin-sdk", "--examples", "--offline",
     "--target-dir", path.join(root, "target")], { stdio: "inherit" });
-  console.log("External Rust backend compiles with only the public protocol and SDK.");
+  console.log("External Rust echo and resource backends compile with only the public protocol and SDK.");
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }

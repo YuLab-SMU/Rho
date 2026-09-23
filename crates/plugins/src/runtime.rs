@@ -61,6 +61,7 @@ pub struct DelegatedPluginCall {
 
 #[async_trait]
 pub trait PluginHostServices: Send + Sync {
+    fn resources(&self) -> Option<Arc<crate::PluginResources>> { None }
     async fn call(&self, call: DelegatedPluginCall) -> Result<Value, String>;
 }
 
@@ -696,6 +697,11 @@ impl PreparedBackend {
             RpcBody::Initialize {
                 instance: record.clone(),
                 grants: request.grants.clone(),
+                resource_channel: Some(ResourceChannel {
+                    version: RESOURCE_CHANNEL_VERSION,
+                    socket: "x".repeat(104),
+                    token: "x".repeat(64),
+                }),
             },
         )?;
         repo.register_instance(&record)?;

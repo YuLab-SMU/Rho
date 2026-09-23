@@ -64,9 +64,23 @@ scopes/query-only authority, and remain tracked through Host shutdown. MCP
 projects current scoped contracts, not a startup-only tool list, and receives
 registry/lifecycle change notifications with content-bound page cursors.
 
+The generic resource owner now retains immutable, instance/project/principal-bound
+bytes in a separate protected store. Native uploads use an ephemeral per-instance
+Unix socket and an active parent request; raw bytes stay off control/stdout.
+Complete length/digest verification precedes atomic retention. Transfer leases
+retain Host concurrency slots through storage, including after a lost connection;
+the store enforces instance and total byte/count limits. Incomplete uploads never become evidence, and identical uploads
+resolve to the same resource. The bridge verifies retained bytes before publishing
+query sources or committing scientific evidence. `resources.list`, `inspect` and
+`read` use the shared Query port, filter original project/principal, and require
+`resources.read`. Complete bytes remain readable after provider release, package
+removal and Host restart; the list supports discovery after lost acknowledgement.
+The public Rust SDK includes streaming resource methods and an independent example;
+the public package includes data-channel types and language-neutral schemas.
+
 The existing scientific owners and UI have not yet migrated into packages. The
-generic resource store, isolated iframe container, TypeScript UI SDK, live
-scenarios and Plugin Studio remain pending. Next is resource/container integration,
+isolated iframe container, TypeScript UI SDK, live scenarios and Plugin Studio
+remain pending. Next is container and UI-only instance integration,
 followed by the complete R/Viewer vertical path,
 all-feature migration and the approved Studio workflows.
 Remove the replaced fixed composition before final acceptance; a permanent dual
@@ -76,21 +90,26 @@ The lifecycle ports require the rebuilt Host; refreshing only the client cannot
 add them to an older process. Inspect live work and preserve its R session before
 any separately authorized replacement.
 
-Current verification passed: public protocol tests (7), Rust SDK transport tests
-(6), repository tests (9), backend/bridge process tests (14), Operation tests
-(24), Host library tests (48), Host observer/port/recovery/plugin integration tests
-(14), MCP library tests (14) plus its actual plugin-connection test, and CLI
-package recovery tests (3). External TypeScript and Rust consumers compile using
-only the public packages. Generation, client build/check, architecture,
-plugin boundaries and governance checks passed. The broader regression corrected
-two stale test assumptions: commit-pending diagnostics expose both authorized
-reads, and terminal-result comparisons must explicitly await completion.
+Current resource verification passed: public protocol tests (7), Rust SDK
+transport tests (6), resource store/channel tests (8), repository tests (9),
+backend/bridge process tests (14), Host library tests (48) and plugin integration
+tests (4), plus MCP library tests (14) and its actual plugin-connection test.
+External TypeScript and Rust echo/resource consumers compile using only the public
+packages. Generation, client build/check, architecture, plugin boundaries and
+governance checks passed. The prior foundation's unchanged Operation tests (24), Host observer/port/recovery tests (11) and CLI
+package recovery tests (3) remain the preceding baseline.
 
 The new Host tests exercise external immutable revisions, exact provider binding,
 principal-filtered observations, original records after unload, collision cleanup,
 and delegated queries/operations with no scope expansion. The actual MCP test
 connects before activation, observes new tools and changed cursors, invokes the
 backend, and receives withdrawal notifications after release and native failure.
+Resource tests cover multi-megabyte transfers off the control pipe, exact owner
+and principal visibility, incomplete uploads, wrong digests, corruption, quotas,
+revoked channels, acknowledgement loss and unsupported-store rejection without
+modification. The external Host fixture verifies original committed evidence,
+refuses forged evidence without publishing facts, and reads retained resources
+after provider release, package removal and Host restart.
 
 Existing-science regression passed: `node scripts/test-real-r.mjs`,
 `node scripts/test-mcp.mjs`, `node scripts/test-process-recovery.mjs`, and the

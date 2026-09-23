@@ -4,6 +4,8 @@ import json
 import os
 import struct
 import sys
+import socket
+import hashlib
 
 sequence = 0
 identity = None
@@ -53,10 +55,32 @@ def commit(request, cancelled=False, invalid=False, call=None):
          "error": None, "recovery": None, "facts": facts, "evidence": evidence, "cancellation_confirmed": cancelled})
 
 
+def retain_resource(request, args):
+    size = args.get("bytes", 2100003)
+    payload = (bytes(range(251)) * ((size + 250) // 251))[:size]
+    header = {"version": 1, "token": resource_channel["token"], "parent_request": request,
+              "transfer": {"type": "put", "data": {"bytes": len(payload),
+                  "digest": "sha256:" + hashlib.sha256(payload).hexdigest(),
+                  "media_type": "application/octet-stream"}}}
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as transfer:
+        transfer.connect(resource_channel["socket"])
+        encoded = json.dumps(header).encode()
+        transfer.sendall(struct.pack(">I", len(encoded)) + encoded)
+        transfer.sendall(payload)
+        transfer.shutdown(socket.SHUT_WR)
+        with transfer.makefile("rb") as response:
+            size = struct.unpack(">I", response.read(4))[0]
+            result = json.loads(response.read(size))
+    if result["type"] != "stored":
+        raise RuntimeError(result)
+    return result["data"]
+
+
 frame = read()
 identity = frame["body"]["data"]["instance"]["identity"]
 connection = frame["connection"]
 configuration = frame["body"]["data"]["instance"]["configuration"]
+resource_channel = frame["body"]["data"].get("resource_channel")
 if configuration.get("mode") == "init_hang":
     import time
     time.sleep(60)
@@ -85,7 +109,10 @@ while True:
                 "owner_context":{"native_session":"fixed-session"}})
             continue
         action = args.get("action", "echo")
-        if action == "spoof":
+        if action == "resource_put":
+            reference = retain_resource(request, args)
+            send(request, "query_result", {"data": {"reference": reference}, "completeness": "complete", "source": reference})
+        elif action == "spoof":
             query_result(request, {}, spoof=True)
         elif action == "disorder":
             query_result(request, {}, disorder=True)
@@ -118,6 +145,14 @@ while True:
             with open(data["arguments"]["marker"], "a") as marker:
                 marker.write("executed\n")
             os._exit(17)
+        elif action == "resource_commit":
+            reference = retain_resource(request, data["arguments"])
+            evidence = dict(reference)
+            if data["arguments"].get("forged"):
+                evidence["digest"] = "sha256:" + "0" * 64
+            send(request, "commit_plan", {"outcome": "succeeded", "output": {"reference": reference}, "error": None,
+                "recovery": None, "facts": [{"schema": "fixture.resource", "key": "original", "value": reference}],
+                "evidence": [evidence], "cancellation_confirmed": False})
         elif action == "badcommit":
             commit(request, invalid=True)
         elif action in ("commit", "badfact", "evidence"):

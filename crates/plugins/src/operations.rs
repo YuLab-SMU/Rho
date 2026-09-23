@@ -434,7 +434,12 @@ impl OperationHandler for BoundHandler {
         };
         match reply {
             RpcBody::CommitPlan(plan) => {
+                // A plan may mention the same immutable output more than once.
+                // Verify identical references once; differing claims still undergo
+                // their own authoritative check and cannot reuse that result.
+                let mut verified = std::collections::BTreeSet::new();
                 for reference in &plan.evidence {
+                    if !verified.insert(serde_json::to_string(reference).expect("resource reference serializes")) { continue; }
                     if let Err(error) = self
                         .shared
                         .resources

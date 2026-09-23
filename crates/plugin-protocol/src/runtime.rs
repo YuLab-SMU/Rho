@@ -161,6 +161,8 @@ pub enum RpcBody {
     Initialize {
         instance: PluginInstance,
         grants: Vec<CapabilityRequirement>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        resource_channel: Option<ResourceChannel>,
     },
     Ready {
         revision: RevisionId,

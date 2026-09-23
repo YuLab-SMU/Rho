@@ -6,6 +6,8 @@ mod manifest;
 mod management;
 pub use management::*;
 mod runtime;
+mod resources;
+pub use resources::*;
 mod scenario;
 mod visual;
 

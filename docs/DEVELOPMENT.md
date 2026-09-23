@@ -63,6 +63,7 @@ recovery check:
 cargo test -p rho-operation -p rho-sqlite --lib --locked
 cargo test -p rho-host --test port_contracts --test observer --test recovery --locked
 cargo test -p rho-plugins --test backend_runtime --locked
+cargo test -p rho-plugins --lib --test resources --locked
 cargo test -p rho-host -p rho-mcp --test plugins --locked
 cargo test -p rho-host --lib --locked
 node scripts/test-process-recovery.mjs

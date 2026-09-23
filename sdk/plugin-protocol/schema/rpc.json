@@ -290,6 +290,29 @@
         "project"
       ]
     },
+    "ResourceChannel": {
+      "description": "An ephemeral, instance-only data transport. Never a general Host credential.\nConnect once per transfer; send a BE u32 JSON length, the header, then raw\nupload bytes, and close the write half. Responses use the same header framing.",
+      "type": "object",
+      "properties": {
+        "socket": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "socket",
+        "token"
+      ]
+    },
     "ResourceReference": {
       "type": "object",
       "properties": {
@@ -336,6 +359,16 @@
                 },
                 "instance": {
                   "$ref": "#/$defs/PluginInstance"
+                },
+                "resource_channel": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ResourceChannel"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "additionalProperties": false,

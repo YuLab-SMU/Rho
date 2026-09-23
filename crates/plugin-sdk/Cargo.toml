@@ -9,10 +9,15 @@ description = "Public asynchronous backend SDK for the Rho plugin protocol"
 
 [dependencies]
 rho-plugin-protocol = { version = "0.1.0", path = "../plugin-protocol" }
-tokio = { version = "1.0", features = ["io-util", "io-std", "sync", "rt", "macros"] }
+tokio = { version = "1.0", features = ["io-util", "io-std", "sync", "rt", "macros", "net"] }
 thiserror = "2.0"
 serde_json = "1.0"
+serde = "1.0"
 
 [[example]]
 name = "echo-backend"
 path = "examples/echo.rs"
+
+[[example]]
+name = "resource-backend"
+path = "examples/resource.rs"

@@ -76,6 +76,27 @@ qualified by instance; resource evidence requires the authoritative resource
 owner's verification. A completion acknowledgement lost after journal commit can
 release its lifecycle reference only by reading that original terminal record.
 
+The generic resource owner retains immutable bytes in `resources-v1.sqlite3`
+inside the protected plugin repository. A separate per-instance Unix socket
+carries raw data; control/stdout remains available for calls and cancellation.
+Its ephemeral credential and an active parent request fix the exact instance,
+project and principal. The backend supplies a declaration and bytes, never a
+local path to read or a claimed owner. Complete bytes, length and SHA-256 must
+agree before atomic retention; partial staging is anonymous and disposable.
+Retention is not a scientific commit. Only the original Operation's validated
+commit plan can publish its evidence and facts.
+
+Resource transfer leases prevent release while accepted data is still being
+stored. Each Host permits four transfers, and the store enforces bounded object,
+instance, total-byte and record-count quotas. Complete identical uploads resolve
+to the same identity without overwriting corruption. Failed acknowledgement does
+not delete complete stored bytes; `resources.list` exposes scoped, bounded
+references for inspection. `resources.inspect` verifies content, and
+`resources.read` returns bounded chunks through the common Query port using
+`resources.read` scope plus original project/principal visibility. Native data
+channels read only their own instance's resources. Bytes outlive backend release
+and Host restart; reads do not activate code, recover work or fetch external URLs.
+
 Active Host composition exposes the same `rho-plugins` repository and lifecycle
 owner through the ordinary Query/Operation ports. The repository is `plugins-v1`
 beside the configured journal; the recovery CLI derives the same location unless

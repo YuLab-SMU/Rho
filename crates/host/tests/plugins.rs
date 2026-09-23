@@ -55,6 +55,204 @@ fn observation(record: &OperationRecord) -> PluginInstanceObservation {
 }
 
 #[tokio::test]
+async fn retained_plugin_resources_share_host_visibility_and_survive_provider_and_host_release() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir(&project).unwrap();
+    let db = temp.path().join("state/state.sqlite");
+    let archive = fixture::package(&temp.path().join("external"), "1", false);
+    let mut repository = PluginRepository::open(&repository_path(&db)).unwrap();
+    repository.import(&archive).unwrap();
+    let context = NextHost::local_context();
+    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let instance = observation(
+        &run(
+            &host,
+            &context,
+            "resource-activate",
+            "plugins.activate",
+            activation(&archive, "resource"),
+        )
+        .await,
+    );
+    let binding = query(&host,&context,"plugins.resolve",json!({"capability":{"id":"fixture.read","version":1},"instance":instance.instance.identity})).await;
+    let data = query(
+        &host,
+        &context,
+        "fixture.read",
+        json!({"binding":binding,"arguments":{"action":"resource_put"}}),
+    )
+    .await;
+    let reference = data["reference"].clone();
+    assert_eq!(reference["bytes"], 2100003);
+    let listed = query(
+        &host,
+        &context,
+        "resources.list",
+        json!({"owner":instance.instance.identity,"after":null,"limit":1}),
+    )
+    .await;
+    assert_eq!(listed["items"][0], reference);
+    assert_eq!(listed["total"], 1);
+    assert_eq!(
+        query(
+            &host,
+            &context,
+            "resources.inspect",
+            json!({"reference":reference})
+        )
+        .await,
+        reference
+    );
+    let read = json!({"reference":reference,"offset":65530,"limit":100000});
+    let chunk = query(&host, &context, "resources.read", read.clone()).await;
+    assert_eq!(chunk["next"], 165530);
+    assert_eq!(
+        STANDARD.decode(chunk["base64"].as_str().unwrap()).unwrap(),
+        (65530..165530).map(|i| (i % 251) as u8).collect::<Vec<_>>()
+    );
+    let mut stranger = context.clone();
+    stranger.caller.id = "another-principal".into();
+    assert_eq!(
+        query(
+            &host,
+            &stranger,
+            "resources.list",
+            json!({"owner":null,"after":null,"limit":1})
+        )
+        .await["total"],
+        0
+    );
+    let mut missing_scope = context.clone();
+    missing_scope.scopes.remove("resources.read");
+    for caller in [&stranger, &missing_scope] {
+        assert!(
+            host.query_snapshot(
+                caller,
+                QueryRequest {
+                    capability: CapabilityRef::new("resources.read", 1).unwrap(),
+                    arguments: read.clone()
+                }
+            )
+            .await
+            .is_err()
+        );
+    }
+    let binding = query(&host,&context,"plugins.resolve",json!({"capability":{"id":"fixture.run","version":1},"instance":instance.instance.identity})).await;
+    let invocation = invocation(
+        "resource-science",
+        "fixture.run",
+        json!({"binding":binding,"arguments":{"action":"resource_commit","bytes":500001}}),
+    );
+    let record = host.invoke(&context, invocation.clone()).await.unwrap();
+    assert_eq!(record.status, OperationStatus::Succeeded);
+    let result_reference = record.output.as_ref().unwrap()["reference"].clone();
+    let events = host
+        .events(&context, &record.operation.operation_id)
+        .await
+        .unwrap();
+    let evidence = events
+        .iter()
+        .find(|event| event.kind == "effect.observed" && event.payload["kind"] == "plugin.evidence")
+        .unwrap();
+    assert_eq!(
+        evidence.payload["detail"]["references"][0],
+        result_reference
+    );
+    let forged = run(
+        &host,
+        &context,
+        "resource-forged",
+        "fixture.run",
+        json!({"binding":binding,"arguments":{"action":"resource_commit","bytes":5,"forged":true}}),
+    )
+    .await;
+    assert_eq!(forged.status, OperationStatus::Uncertain);
+    assert!(forged.output.is_none());
+    assert!(
+        host.facts_for_operation(&context, &forged.operation.operation_id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(forged.recovery.is_some());
+    observation(
+        &run(
+            &host,
+            &context,
+            "resource-release",
+            "plugins.release",
+            json!({"instance":instance.instance.identity}),
+        )
+        .await,
+    );
+    let removed = run(
+        &host,
+        &context,
+        "resource-remove",
+        "plugins.remove",
+        json!({"revision":archive.revision.id}),
+    )
+    .await;
+    assert_eq!(removed.status, OperationStatus::Succeeded);
+    assert!(repository.revision(&archive.revision.id).is_err());
+    assert_eq!(
+        query(
+            &host,
+            &context,
+            "resources.inspect",
+            json!({"reference":result_reference})
+        )
+        .await,
+        result_reference
+    );
+    host.drain().await;
+    drop(host);
+    let reopened = NextHost::open_project(&db, &project).await.unwrap();
+    assert!(
+        reopened
+            .capabilities()
+            .iter()
+            .all(|d| d.capability.id != "fixture.read")
+    );
+    assert_eq!(
+        query(&reopened, &context, "resources.read", read).await,
+        chunk
+    );
+    assert_eq!(
+        reopened
+            .invoke(&context, invocation)
+            .await
+            .unwrap()
+            .operation
+            .operation_id,
+        record.operation.operation_id
+    );
+    assert_eq!(
+        query(
+            &reopened,
+            &context,
+            "operation.get",
+            json!({"operation_id":record.operation.operation_id})
+        )
+        .await["record"]["status"],
+        json!("succeeded")
+    );
+    assert_eq!(
+        query(
+            &reopened,
+            &context,
+            "resources.inspect",
+            json!({"reference":result_reference})
+        )
+        .await,
+        result_reference
+    );
+    reopened.drain().await;
+}
+
+#[tokio::test]
 async fn official_host_ports_bind_revisions_visibility_commit_and_release_without_r() {
     let temp = tempfile::tempdir().unwrap();
     let project = temp.path().join("project");

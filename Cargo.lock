@@ -6145,6 +6145,7 @@ name = "rho-plugin-sdk"
 version = "0.1.0"
 dependencies = [
  "rho-plugin-protocol",
+ "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",

@@ -7,6 +7,10 @@ mod backend;
 mod runtime;
 mod instance_records;
 mod operations;
+mod resources;
+pub use resources::*;
+#[cfg(unix)]
+mod resource_channel;
 mod service;
 mod service_handlers;
 pub use service::*;

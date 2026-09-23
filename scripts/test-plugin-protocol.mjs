@@ -22,7 +22,7 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext",
     "--target", "ES2022", path.join(temp, "consumer.mts")], { stdio: "inherit" });
-  for (const name of ["manifest", "archive", "rpc", "scenario", "visual-document"]) {
+  for (const name of ["manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "scenario", "visual-document"]) {
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
     assert.ok(schema.$schema && schema.$defs, `missing standalone schema: ${name}`);
   }

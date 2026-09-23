@@ -1,5 +1,6 @@
 use crate::{service::*, *};
 use async_trait::async_trait;
+use base64::{Engine, engine::general_purpose::STANDARD};
 use rho_contract as host;
 use rho_operation::*;
 use rho_plugin_protocol::*;
@@ -42,6 +43,9 @@ pub(crate) fn register(
     registry: &mut CapabilityRegistry,
 ) -> Result<(), OperationError> {
     for id in [
+        "resources.list",
+        "resources.inspect",
+        "resources.read",
         "plugins.repository",
         "plugins.list",
         "plugins.inspect",
@@ -76,6 +80,21 @@ pub(crate) fn register(
 }
 fn descriptor(id: &str) -> host::CapabilityDescriptor {
     let (input, output, example, summary, operation, scope) = match id {
+        "resources.list" => (
+            schema_for!(ResourceList).to_value(), schema_for!(ResourcePage).to_value(),
+            json!({"owner":null,"after":null,"limit":20}),
+            "List retained resources within the original project and principal", false, RESOURCES_READ_SCOPE,
+        ),
+        "resources.inspect" => (
+            schema_for!(ResourceInspect).to_value(), schema_for!(ResourceReference).to_value(),
+            json!({"reference":{"owner":instance(),"resource":"resource-example","digest":digest(),"media_type":"text/plain","bytes":0}}),
+            "Verify retained bytes and exact resource ownership", false, RESOURCES_READ_SCOPE,
+        ),
+        "resources.read" => (
+            schema_for!(ResourceRead).to_value(), schema_for!(ResourceChunk).to_value(),
+            json!({"reference":{"owner":instance(),"resource":"resource-example","digest":digest(),"media_type":"text/plain","bytes":0},"offset":0,"limit":65536}),
+            "Read a bounded chunk of a retained resource", false, RESOURCES_READ_SCOPE,
+        ),
         "plugins.repository" => (
             schema_for!(Empty).to_value(),
             json!({"type":"object","required":["root","project","backend_target"],"properties":{"root":{"type":"string"},"project":{"type":"string"},"backend_target":{"type":"string"}},"additionalProperties":false}),
@@ -190,7 +209,7 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         ),
         _ => unreachable!(),
     };
-    host::CapabilityDescriptor {
+    let mut descriptor = host::CapabilityDescriptor {
         kind:if operation {host::CapabilityKind::Operation}else{host::CapabilityKind::Query},capability:key(id),domain:"plugins".into(),input_schema:input,output_schema:output,recovery_schema:json!({"type":["object","null"]}),
         required_scopes:BTreeSet::from([scope.into()]),potential_effects:match id {"plugins.activate"=>BTreeSet::from([host::EffectHint::MaySpawnProcess,host::EffectHint::MayMutateRuntime]),"plugins.release"=>BTreeSet::from([host::EffectHint::MayMutateRuntime]),_=>BTreeSet::new()},
         idempotency:if operation {host::IdempotencyClass::CallerScoped}else{host::IdempotencyClass::Pure},retry:if operation {host::RetryClass::ReconcileFirst}else{host::RetryClass::Safe},cancellation:host::CancellationClass::Unsupported,
@@ -202,7 +221,16 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             cancellation_rule:"Disconnect does not undo lifecycle work or confirm process cleanup.".into(),preconditions:vec![],examples:vec![host::CapabilityExample{arguments:example,result_explanation:"Exact immutable identities and native lifecycle observations; no authority is inferred from package content.".into()}],
             related_capabilities:vec![key("plugins.list"),key("plugins.instances")],related_skills:vec![],position_units:vec!["Offsets and byte bounds are bytes, not tokens. Page item limits are 1–100.".into()],
         },
+    };
+    if id.starts_with("resources.") {
+        descriptor.domain = "resources".into();
+        descriptor.documentation.owner = "resources".into();
+        descriptor.documentation.when_to_use = vec!["Read an exact retained resource reference, including after its provider has exited.".into()];
+        descriptor.documentation.limitations = vec!["Reads require the original project and principal plus resources.read. A reference is not a credential; fields must match retained identity exactly.".into(), "Reads do not start a provider, fetch a URL, read a backend-supplied path, or commit scientific results.".into()];
+        descriptor.documentation.related_capabilities = vec![key("resources.inspect"),key("resources.read")];
+        descriptor.documentation.position_units = vec!["offset and limit are bytes. Read limit is 1–262144; next is the next byte offset, or null at EOF.".into()];
     }
+    descriptor
 }
 fn digest() -> String {
     format!("sha256:{}", "0".repeat(64))
@@ -212,6 +240,9 @@ fn instance() -> Value {
 }
 fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
     match id {
+        "resources.list" => normalize::<ResourceList>(value),
+        "resources.inspect" => normalize::<ResourceInspect>(value),
+        "resources.read" => normalize::<ResourceRead>(value),
         "plugins.repository" => normalize::<Empty>(value),
         "plugins.list" => normalize::<PluginCatalogArguments>(value),
         "plugins.inspect" | "plugins.remove" => normalize::<PluginRevisionArguments>(value),
@@ -250,6 +281,28 @@ impl QueryHandler for Read {
     ) -> Result<host::QuerySnapshot, OperationError> {
         let service = &self.service;
         let data = match self.id {
+            "resources.list" | "resources.inspect" | "resources.read" => {
+                let resources = service.resources.clone();
+                let project = service.project.clone();
+                let principal = plugin_principal_id(context.principal());
+                let value = value.clone();
+                let inspect = self.id == "resources.inspect";
+                let list = self.id == "resources.list";
+                tokio::task::spawn_blocking(move || -> Result<Value, OperationError> {
+                    if list {
+                        let args: ResourceList = decode(&value)?;
+                        Ok(json!(resources.list(&project,&principal,&args).map_err(error)?))
+                    } else if inspect {
+                        let args: ResourceInspect = decode(&value)?;
+                        Ok(json!(resources.inspect(&project, &principal, &args.reference).map_err(error)?))
+                    } else {
+                        let args: ResourceRead = decode(&value)?;
+                        let bytes = resources.read(&project, &principal, &args).map_err(error)?;
+                        let end = args.offset + bytes.len() as u64;
+                        Ok(json!(ResourceChunk { next: (end < args.reference.bytes).then_some(end), reference: args.reference, offset: args.offset, base64: STANDARD.encode(bytes) }))
+                    }
+                }).await.map_err(error)??
+            },
             "plugins.repository" => {
                 json!({"root":service.repository.lock().unwrap().root(),"project":service.project,"backend_target":backend_target()})
             }
@@ -352,10 +405,10 @@ impl QueryHandler for Read {
         };
         Ok(host::QuerySnapshot {
             target: host::TargetRef {
-                kind: "plugin_repository".into(),
+                kind: if self.id.starts_with("resources.") { "plugin_resources" } else { "plugin_repository" }.into(),
                 identity: service.scope.clone(),
             },
-            source: "plugins/repository-and-native-lifecycle".into(),
+            source: if self.id.starts_with("resources.") { "resources/retained-bytes" } else { "plugins/repository-and-native-lifecycle" }.into(),
             observed_at_ms: SystemClock.now_ms()?,
             status: host::QueryStatus::Ready,
             completeness: host::ObservationCompleteness::Complete,

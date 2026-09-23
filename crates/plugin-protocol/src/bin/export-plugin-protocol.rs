@@ -32,6 +32,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     AdvancePluginBranch::export_all(&types)?;
     PluginBranchArguments::export_all(&types)?;
     ComparePluginRevisions::export_all(&types)?;
+    ResourceInspect::export_all(&types)?;
+    ResourceList::export_all(&types)?;
+    ResourcePage::export_all(&types)?;
+    ResourceChunk::export_all(&types)?;
+    ResourceTransferRequest::export_all(&types)?;
+    ResourceTransferResponse::export_all(&types)?;
     RpcFrame::export_all(&types)?;
     ScenarioRevision::export_all(&types)?;
     WindowScenario::export_all(&types)?;
@@ -41,6 +47,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("manifest", schemars::schema_for!(PluginManifest)),
         ("archive", schemars::schema_for!(PluginArchive)),
         ("rpc", schemars::schema_for!(RpcFrame)),
+        ("resource-transfer-request", schemars::schema_for!(ResourceTransferRequest)),
+        ("resource-transfer-response", schemars::schema_for!(ResourceTransferResponse)),
         ("scenario", schemars::schema_for!(ScenarioRevision)),
         ("visual-document", schemars::schema_for!(VisualDocument)),
     ] {

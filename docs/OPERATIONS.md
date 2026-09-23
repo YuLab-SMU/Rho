@@ -837,3 +837,21 @@ connection receives tool-list change notifications when providers appear,
 disappear or fail. A changed catalog invalidates its old page cursor; restart
 listing without a cursor. Existing accepted records retain their original contract
 and remain readable using `operation.get` after their provider is removed.
+
+Retained plugin output bytes are available through `resources.list`,
+`resources.inspect` and `resources.read` on the same Query port. All require
+`resources.read` scope and the original project/principal; possession of a
+reference is insufficient. Lists accept an optional exact `owner`, optional
+`after` resource ID and a `limit` of 1–100. They expose completed retained bytes,
+including uploads whose acknowledgement was lost. Inspection takes `reference`
+and verifies its complete content. Reads take `reference`, a byte `offset` and
+`limit` of 1–262144, returning base64 bytes and the next offset or null at EOF.
+These reads work after provider release and Host restart without activating code.
+
+Backend initialization includes an instance-only resource channel for uploading
+bytes independently of control messages. Files are limited to 256 MiB, with four
+simultaneous transfers per Host; retained limits are 512 MiB per instance and
+2 GiB / 16,384 resources per store. Quotas preserve existing bytes and report
+rejection. There is no automatic eviction of historical evidence. UI asset
+delivery and preview containers are separate remaining work; this resource
+transport does not itself implement the approved Viewer or Studio interactions.

@@ -14,6 +14,8 @@ use std::{
     sync::{Arc, Mutex, OnceLock, Weak},
 };
 
+pub const RESOURCES_READ_SCOPE: &str = "resources.read";
+
 pub const PLUGINS_READ_SCOPE: &str = "plugins.read";
 pub const PLUGINS_WRITE_SCOPE: &str = "plugins.write";
 pub const PLUGINS_RUN_SCOPE: &str = "plugins.run";
@@ -37,6 +39,7 @@ pub fn backend_target() -> String {
 pub struct PluginService {
     pub(crate) repository: Arc<Mutex<PluginRepository>>,
     pub(crate) runtime: Arc<PluginRuntime>,
+    pub(crate) resources: Arc<PluginResources>,
     pub(crate) bridge: PluginCapabilityBridge,
     pub(crate) scope: String,
     pub(crate) project: ProjectId,
@@ -54,7 +57,9 @@ impl PluginService {
         journal: Arc<dyn OperationJournal>,
     ) -> Result<Arc<Self>, OperationError> {
         let repository = Arc::new(Mutex::new(PluginRepository::open(store).map_err(error)?));
+        let resources = Arc::new(PluginResources::open(store).map_err(error)?);
         let services = Arc::new(Services {
+            resources: resources.clone(),
             project: plugin_project_id(&project),
             scope: project.clone(),
             registry: OnceLock::new(),
@@ -71,10 +76,11 @@ impl PluginService {
         let bridge = PluginCapabilityBridge::new(
             runtime.clone(),
             project.clone(),
-            Arc::new(NoPluginResources),
+            resources.clone(),
         );
         Ok(Arc::new(Self {
             repository,
+            resources,
             runtime,
             bridge,
             scope: project.clone(),
@@ -281,6 +287,7 @@ impl PluginService {
 }
 
 pub(crate) struct Services {
+    resources: Arc<PluginResources>,
     project: ProjectId,
     scope: String,
     registry: OnceLock<Weak<CapabilityRegistry>>,
@@ -291,6 +298,7 @@ pub(crate) struct Services {
 }
 #[async_trait]
 impl PluginHostServices for Services {
+    fn resources(&self) -> Option<Arc<PluginResources>> { Some(self.resources.clone()) }
     async fn call(&self, call: DelegatedPluginCall) -> Result<Value, String> {
         self.delegate(call).await.map_err(|e| e.to_string())
     }

@@ -2,6 +2,8 @@
 #![forbid(unsafe_code)]
 
 mod transport;
+mod resources;
+pub use resources::*;
 pub use rho_plugin_protocol as protocol;
 pub use transport::*;
 
@@ -24,6 +26,7 @@ pub enum SdkError {
 pub struct BackendConnection<R, W> {
     pub instance: PluginInstance,
     pub grants: Vec<CapabilityRequirement>,
+    pub resource_channel: Option<ResourceChannel>,
     pub reader: RpcReader<R>,
     pub writer: RpcWriter<W>,
     initialization_request: RequestId,
@@ -36,7 +39,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> BackendConnection<R, W> {
         let frame = read_frame(&mut input)
             .await?
             .ok_or_else(|| SdkError::Invalid("Host disconnected before initialization".into()))?;
-        let RpcBody::Initialize { instance, grants } = &frame.body else {
+        let RpcBody::Initialize { instance, grants, resource_channel } = &frame.body else {
             return Err(SdkError::Invalid(
                 "first frame must initialize the backend".into(),
             ));
@@ -54,6 +57,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> BackendConnection<R, W> {
         Ok(Self {
             instance: instance.clone(),
             grants: grants.clone(),
+            resource_channel: resource_channel.clone(),
             reader: RpcReader::with_guard(input, guard),
             writer: RpcWriter::new(output, frame.instance, frame.connection),
             initialization_request: frame.request,
