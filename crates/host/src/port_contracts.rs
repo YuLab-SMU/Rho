@@ -11,6 +11,7 @@ use std::{
     sync::{Arc, OnceLock, Weak},
 };
 
+pub(crate) const RECONCILE: &str = "operation.reconcile_commit";
 pub(crate) const CANCEL: &str = "operation.request_cancellation";
 pub(crate) const INPUT: &str = "workspace.respond_input";
 pub(crate) const EVENTS: &str = "operation.events";
@@ -37,8 +38,10 @@ pub(crate) fn visible(
 
 pub(crate) fn register(
     registry: &mut CapabilityRegistry,
+    journal: Arc<dyn rho_operation::OperationJournal>,
     project: Option<String>,
     has_workspace: bool,
+    writable: bool,
 ) -> Result<Arc<EventsHandler>, OperationError> {
     let get = registry
         .descriptor(&CapabilityRef::new("operation.get", 1)?)
@@ -56,7 +59,13 @@ pub(crate) fn register(
     if has_workspace {
         registry.register_control(input_descriptor())?;
     }
+    if writable {
+        registry.register_control(reconcile_descriptor(&get.output_schema))?;
+    }
+    let commit_status = Arc::new(rho_operation::OperationCommitStatusHandler::new(journal, project.clone()));
+    registry.register_query(commit_status.clone())?;
     let events = Arc::new(EventsHandler {
+        commit_status,
         project,
         gateway: OnceLock::new(),
         descriptor: events_descriptor(),
@@ -101,6 +110,31 @@ fn cancel_descriptor(output_schema: Value) -> CapabilityDescriptor {
         },
     }
 }
+fn reconcile_descriptor(get_schema: &Value) -> CapabilityDescriptor {
+    CapabilityDescriptor {
+        kind: CapabilityKind::Control, capability: reference(RECONCILE), domain: "operation".into(),
+        input_schema: schema_for!(ReconcileOperationCommit).to_value(),
+        output_schema: json!({"$defs":get_schema["$defs"],"allOf":[get_schema["properties"]["record"],{"type":"object"}]}),
+        recovery_schema: json!({"type":"null"}), required_scopes: BTreeSet::new(),
+        potential_effects: BTreeSet::from([EffectHint::CommitsOperation]),
+        idempotency: IdempotencyClass::CallerScoped, retry: RetryClass::ReconcileFirst,
+        cancellation: CancellationClass::Unsupported,
+        documentation: CapabilityDocumentation {
+            summary: "Complete the original operation's retained commit".into(),
+            purpose: "Commit the exact already-validated result retained by the original journal. Uses the captured original authority and native result, without acquiring a provider or repeating scientific execution.".into(),
+            when_to_use: vec!["operation.commit_status reports a volatile or durable reference, or a terminal commit acknowledgement was lost.".into()],
+            limitations: vec!["Requires the original principal, project and captured capability scopes. Caller-supplied replacement plans are never accepted. A changed digest is rejected. Storage failure leaves the original result pending.".into()],
+            owner: "operation gateway and journal".into(),
+            effects: "Atomically commits the retained result, facts, evidence and events to the original operation. Releases the original execution lease only after authoritative terminal agreement.".into(),
+            retry_rule: "Use the exact original reference. An already committed matching reference returns its original terminal record without writing facts or events again.".into(),
+            cancellation_rule: "This control does not cancel, rerun or roll back scientific execution.".into(),
+            preconditions: vec![CapabilityPrecondition { parameter:"reference".into(), requirement:"Use the exact digest and size from operation.commit_status for this OperationId.".into(), read_from:Some(reference("operation.commit_status")) }],
+            examples:vec![CapabilityExample { arguments:json!({"reference":{"operation_id":"operation-example","sha256":format!("sha256:{}","0".repeat(64)),"byte_size":4096}}), result_explanation:"The original terminal OperationRecord, with no new operation or native execution.".into() }],
+            related_capabilities:vec![reference("operation.get"),reference("operation.commit_status")], related_skills:vec![], position_units:vec![],
+        },
+    }
+}
+
 fn input_descriptor() -> CapabilityDescriptor {
     let mut input_schema = schema_for!(RespondInput).to_value();
     for field in ["session_id", "request_id", "reply_id"] {
@@ -162,12 +196,14 @@ fn events_descriptor() -> CapabilityDescriptor {
 /// Composition binds this adapter to the already-created gateway once. It has
 /// no independent journal, execution state, permission policy or recovery loop.
 pub(crate) struct EventsHandler {
+    commit_status: Arc<rho_operation::OperationCommitStatusHandler>,
     project: Option<String>,
     gateway: OnceLock<Weak<OperationGateway>>,
     descriptor: CapabilityDescriptor,
 }
 impl EventsHandler {
     pub(crate) fn bind(&self, gateway: &Arc<OperationGateway>) {
+        self.commit_status.bind(&gateway.commit_recovery());
         self.gateway
             .set(Arc::downgrade(gateway))
             .expect("event port binds once");

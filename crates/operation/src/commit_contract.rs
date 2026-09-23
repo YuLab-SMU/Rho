@@ -49,13 +49,21 @@ impl RegistrySnapshot {
             if fact.domain != operation.domain
                 || [&fact.domain, &fact.schema, &fact.key]
                     .iter()
-                    .any(|s| s.is_empty() || s.len() > 512 || s.trim() != s.as_str())
+                    .any(|s| s.is_empty() || s.len() > 512 || s.trim() != s.as_str() || s.chars().any(char::is_control))
             {
                 violation(
                     "facts",
                     "A fact has invalid identity fields or belongs to another scientific owner."
                         .into(),
                 );
+                break;
+            }
+        }
+        for event in &plan.events {
+            if event.kind.is_empty() || event.kind.len() > 160
+                || event.kind.trim() != event.kind || event.kind.chars().any(char::is_control)
+                || !event.kind.starts_with(&format!("{}.", operation.domain)) {
+                violation("events", "An event has invalid identity or belongs to another owner.".into());
                 break;
             }
         }

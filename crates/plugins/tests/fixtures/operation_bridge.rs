@@ -68,7 +68,7 @@ impl Harness {
         );
         let registry = Arc::new(CapabilityRegistry::new());
         bridge.refresh(&registry).unwrap();
-        let journal = Arc::new(SqliteOperationJournal::open_in_memory().unwrap());
+        let journal = Arc::new(SqliteOperationJournal::open(temp.path().join("operations.sqlite")).unwrap());
         let gateway = Arc::new(
             OperationGateway::new(
                 registry.clone(),
@@ -328,4 +328,32 @@ async fn operation_bridge_rejects_foreign_bindings_and_preflight_retargeting_bef
         json!(format!("sha256:{}", "0".repeat(64)));
     assert!(h.gateway.invoke(&h.context, forged).await.is_err());
     h.runtime.release(&h.instance.identity).await.unwrap();
+}
+
+#[tokio::test]
+async fn operation_bridge_retains_provider_until_original_durable_result_is_committed() {
+    let h = Harness::new(json!({}), true).await;
+    let connection = rusqlite::Connection::open(h._temp.path().join("operations.sqlite")).unwrap();
+    connection.execute_batch("CREATE TRIGGER fail_commit BEFORE UPDATE OF status ON operations WHEN NEW.status='succeeded' BEGIN SELECT RAISE(ABORT,'injected plugin commit failure'); END;").unwrap();
+    let invocation = h.invocation("commit-recovery", json!({"action":"commit"}));
+    let error = h.gateway.invoke(&h.context, invocation.clone()).await.unwrap_err();
+    let rho_operation::OperationError::CommitPending {operation_id,..} = error else { panic!("expected retained native result") };
+    let receipt = h.journal.commit_receipt(&operation_id).await.unwrap().unwrap();
+    assert!(!receipt.committed);
+    let cancellation = h.gateway.request_cancellation(&h.context, &operation_id).await.unwrap();
+    assert!(cancellation.accepted);
+    assert_eq!(cancellation.operation.status, host::OperationStatus::Running);
+    assert!(h.journal.facts_for_operation(&operation_id).await.unwrap().is_empty());
+    assert!(h.runtime.release(&h.instance.identity).await.is_err());
+    connection.execute_batch("DROP TRIGGER fail_commit").unwrap();
+    let result = h.gateway.reconcile_commit(&h.context, &host::ReconcileOperationCommit {reference:receipt.reference}).await.unwrap();
+    assert_eq!(result.status,host::OperationStatus::Succeeded);
+    assert!(result.cancellation_requested, "a later cancellation request cannot overwrite a known native result");
+    assert_eq!(h.journal.facts_for_operation(&operation_id).await.unwrap().len(),1);
+    h.runtime.release(&h.instance.identity).await.unwrap();
+    h.bridge.refresh(&h.registry).unwrap();
+    assert!(h.registry.descriptors().is_empty());
+    let original = h.gateway.invoke(&h.context, invocation).await.unwrap();
+    assert_eq!(original.operation.operation_id, operation_id);
+    assert_eq!(original.output, result.output);
 }

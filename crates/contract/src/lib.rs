@@ -17,6 +17,8 @@ pub use checkpoints::*;
 
 mod query;
 pub use query::*;
+mod commit_recovery;
+pub use commit_recovery::*;
 mod host;
 pub use host::*;
 mod workbench;
@@ -306,6 +308,8 @@ impl TargetRef {
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
 pub enum EffectHint {
+    /// Commit an already-executed result to its original Operation journal.
+    CommitsOperation,
     /// Consult the plugin's captured contract for its domain-defined effects.
     PluginDefined,
     NeedsNetwork,

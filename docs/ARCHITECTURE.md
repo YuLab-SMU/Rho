@@ -569,6 +569,25 @@ A domain handler returns a CommitPlan. The foundation commits the operation
 transition, domain facts and outbox events in one transaction. Adapters do not
 commit their own result databases. Terminal outcomes are immutable.
 
+The gateway retains the checked candidate and native execution lease before a
+storage write. The same journal stages that immutable candidate (including exact
+raw fault evidence when present) separately from the terminal transaction; staging
+does not publish scientific facts or terminal events. A failed stage remains
+explicitly volatile, and a failed terminal transaction leaves a durable candidate.
+Retention slots are reserved before admission; quota exhaustion cannot evict an
+already-executed result. A live pending result prevents a clean Host quit.
+
+`operation.commit_status` is a read-only, project/principal-scoped observation.
+`operation.reconcile_commit` accepts only the original OperationId/digest/size,
+checks the captured original scopes, and completes the already-validated candidate
+without resolving a provider, taking a new native target or replaying execution.
+Successful commit atomically retires pending payloads and keeps a digest receipt;
+repeating an exact committed reference returns the original record without duplicate
+facts or events. The execution lease receives completion once, after authoritative
+terminal agreement. Startup preserves staged candidates as Reconciling instead of
+overwriting them with a generic crash result. Unstaged interrupted work keeps its
+existing uncertain/not-started recovery. Queries never stage or reconcile results.
+
 A cancellation request is a request, not proof of termination. Errors and confirmed
 cancellation do not imply rollback of assignments, files or remote effects. When
 effects may have occurred but the outcome cannot be confirmed, retain uncertainty

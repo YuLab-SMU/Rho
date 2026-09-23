@@ -5,6 +5,8 @@ pub use recent::{RecentOperationsHandler, validate_recent_arguments};
 mod checkpoint;
 pub use checkpoint::OperationEventsCheckpointHandler;
 mod commit_contract;
+mod commit_recovery;
+pub use commit_recovery::{CommitRecovery, CommitReceipt, OperationCommitStatusHandler, commit_reference};
 mod evidence;
 pub use evidence::{OperationEvidenceHandler, evidence_sha256};
 mod navigation;
@@ -183,7 +185,7 @@ pub struct DomainFactMutation {
     pub value: Value,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitPlan {
     pub outcome: OperationOutcome,
     pub output: Option<Value>,
@@ -194,6 +196,7 @@ pub struct CommitPlan {
     pub events: Vec<PlannedEvent>,
     /// Raw fault evidence is written atomically with this terminal commit in the
     /// same journal. Normal domain outputs are never duplicated here.
+    #[serde(skip)]
     pub uncommitted_evidence: Option<UncommittedEvidence>,
 }
 #[derive(Clone)]
@@ -401,6 +404,23 @@ pub trait OperationJournal: Send + Sync {
         at_ms: i64,
     ) -> Result<OperationRecord, OperationError>;
 
+    /// Stage an immutable result in the same authoritative journal before its
+    /// terminal transaction. No facts or terminal events are published here.
+    async fn stage_commit(
+        &self,
+        operation_id: &OperationId,
+        plan: &CommitPlan,
+        at_ms: i64,
+    ) -> Result<CommitReceipt, OperationError>;
+    async fn commit_receipt(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<Option<CommitReceipt>, OperationError>;
+    async fn read_commit_candidate(
+        &self,
+        reference: &rho_contract::OperationCommitReference,
+    ) -> Result<CommitPlan, OperationError>;
+
     async fn commit(
         &self,
         operation_id: &OperationId,
@@ -517,6 +537,7 @@ pub struct OperationGateway {
     id_generator: Arc<dyn OperationIdGenerator>,
     active: Arc<Mutex<BTreeMap<OperationId, ActiveExecution>>>,
     project_scope: Option<String>,
+    commits: Arc<CommitRecovery>,
 }
 
 struct ActiveExecution {
@@ -545,11 +566,13 @@ impl OperationGateway {
         clock: Arc<dyn Clock>,
         id_generator: Arc<dyn OperationIdGenerator>,
     ) -> Self {
+        let commits = Arc::new(CommitRecovery::new(journal.clone(), clock.clone()));
         Self {
             registry,
             journal,
             clock,
             id_generator,
+            commits,
             admission: tokio::sync::Mutex::new(()),
             active: Arc::new(Mutex::new(BTreeMap::new())),
             project_scope: None,
@@ -707,6 +730,7 @@ impl OperationGateway {
             }),
         };
 
+        let _commit_slot = self.commits.reserve(&operation_id)?;
         let admission_lock = self.admission.lock().await;
         let admitted_record = match self.journal.admit(&operation).await? {
             Admission::Existing(existing) => {
@@ -748,6 +772,7 @@ impl OperationGateway {
                     &operation,
                     CommitPlan::from_handler_error(error),
                     false,
+                    None,
                 )
                 .await
                 .map(|record| registry.public_record(context, record));
@@ -756,7 +781,7 @@ impl OperationGateway {
             let admitted_record = registry.public_record(context, admitted_record);
             let _ = sender.send(admitted_record);
         }
-        let mut lease = match handler
+        let lease = match handler
             .acquire_execution(&operation, cancelled.clone())
             .await
         {
@@ -768,6 +793,7 @@ impl OperationGateway {
                         &operation,
                         CommitPlan::from_handler_error(error),
                         false,
+                        None,
                     )
                     .await
                     .map(|record| registry.public_record(context, record));
@@ -794,8 +820,7 @@ impl OperationGateway {
                 CommitPlan::from_handler_error(error)
             }
         };
-        let result = self.commit_result(&registry, &operation, plan, true).await;
-        lease.completed(&result);
+        let result = self.commit_result(&registry, &operation, plan, true, Some(lease)).await;
         result.map(|record| registry.public_record(context, record))
     }
     async fn commit_result(
@@ -804,18 +829,24 @@ impl OperationGateway {
         operation: &Operation,
         plan: CommitPlan,
         execution_started: bool,
+        lease: Option<Box<dyn ExecutionLease>>,
     ) -> Result<OperationRecord, OperationError> {
         let plan = registry
             .checked_plan(operation, plan, execution_started)?;
-        let record = self
-            .journal
-            .commit(&operation.operation_id, &plan, self.clock.now_ms()?)
-            .await
-            .map_err(|error| OperationError::CommitPending {
-                operation_id: operation.operation_id.clone(),
-                detail: error.to_string(),
-            })?;
-        Ok(record)
+        self.commits.submit(&operation.operation_id, plan, lease).await
+    }
+
+    pub fn commit_recovery(&self) -> Arc<CommitRecovery> {
+        self.commits.clone()
+    }
+
+    pub async fn reconcile_commit(
+        &self,
+        context: &CallContext,
+        args: &rho_contract::ReconcileOperationCommit,
+    ) -> Result<OperationRecord, OperationError> {
+        self.commits.reconcile(context, self.project_scope.as_deref(), args).await
+            .map(|record| self.registry.snapshot().public_record(context, record))
     }
 
     pub fn registry_descriptors(&self) -> Vec<CapabilityDescriptor> {
@@ -835,6 +866,10 @@ impl OperationGateway {
                 json!({"operation_id":operation_id}),
             )
         {
+            diagnostic.next_reads.push(read);
+        }
+        if let OperationError::CommitPending { operation_id, .. } = error
+            && let Ok(Some(read)) = self.registry.read_link(context, "operation.commit_status", "Inspect retained result durability and its exact reconciliation reference", json!({"operation_id":operation_id})) {
             diagnostic.next_reads.push(read);
         }
         diagnostic

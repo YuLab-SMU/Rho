@@ -609,6 +609,9 @@ fn control_request(id: &str, args: Value) -> Result<HostRequest, OperationError>
         "application.bind_method" => {
             HostRequest::BindMethod(serde_json::from_value(args).map_err(invalid_operation)?)
         }
+        "operation.reconcile_commit" => HostRequest::ReconcileCommit(
+            serde_json::from_value(args).map_err(invalid_operation)?,
+        ),
         "operation.request_cancellation" => {
             let input: rho_contract::CancelOperation =
                 serde_json::from_value(args).map_err(invalid_operation)?;
@@ -679,6 +682,20 @@ mod port_contract_tests {
             arguments,
         )
         .await
+    }
+
+    #[tokio::test]
+    async fn commit_status_and_reconciliation_tools_share_the_original_host_record() {
+        let (_directory, host) = host().await;
+        let edge = McpEdge::local(host.clone()).unwrap();
+        let result = call(&edge,"rho.workspace.run_r.v1",json!({"client_request_id":"commit-receipt","arguments":{"code":"1+1"}})).await.unwrap();
+        let operation_id = result["operation"]["operation_id"].clone();
+        let state = call(&edge,"rho.operation.commit_status.v1",json!({"operation_id":operation_id})).await.unwrap();
+        assert_eq!(state["data"]["phase"],"committed");
+        let before = host.outbox(&NextHost::local_context(),0,100).await.unwrap();
+        let original = call(&edge,"rho.operation.reconcile_commit.v1",json!({"reference":state["data"]["reference"]})).await.unwrap();
+        assert_eq!(original,result);
+        assert_eq!(host.outbox(&NextHost::local_context(),0,100).await.unwrap(),before);
     }
 
     #[tokio::test]

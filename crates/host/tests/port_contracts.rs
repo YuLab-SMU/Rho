@@ -647,3 +647,39 @@ async fn composed_payload_namespaces_preserve_conflicting_shapes_and_literal_ref
         }
     }
 }
+
+#[tokio::test]
+async fn commit_recovery_ports_preserve_native_result_authority_and_do_not_rerun() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("journal.sqlite");
+    let journal = Arc::new(SqliteOperationJournal::open(&path).unwrap());
+    let runtime = Arc::new(DeterministicWorkspaceRuntime::default());
+    let host = NextHost::with_components(journal.clone(),runtime.clone(),Arc::new(SystemClock),Arc::new(UuidOperationIdGenerator)).await.unwrap();
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection.execute_batch("CREATE TRIGGER fail_terminal BEFORE UPDATE OF status ON operations WHEN NEW.status='succeeded' BEGIN SELECT RAISE(ABORT,'injected commit failure'); END;").unwrap();
+    let context = NextHost::local_context();
+    let error = host.invoke(&context,invocation("commit-once")).await.unwrap_err();
+    let OperationError::CommitPending {operation_id,..} = error else { panic!("expected original uncommitted result") };
+    assert_eq!(runtime.execution_count(),1);
+    assert!(!host.is_idle(), "pending result must prevent a clean quit from dropping its lease");
+    assert!(host.prepare_workbench_quit().await.is_err());
+    let snapshot = query(&host,&context,"operation.commit_status",json!({"operation_id":operation_id})).await.unwrap();
+    let status: OperationCommitStatus = serde_json::from_value(snapshot.data.unwrap()).unwrap();
+    assert_eq!(status.phase,OperationCommitPhase::Durable);
+    let args = ReconcileOperationCommit {reference:status.reference.unwrap()};
+    let mut read_only=context.clone(); read_only.scopes=BTreeSet::from(["operation.read".into()]);
+    assert!(matches!(host.dispatch(&read_only,HostRequest::ReconcileCommit(args.clone())).await,Err(OperationError::AccessDenied{..})));
+    connection.execute_batch("DROP TRIGGER fail_terminal").unwrap();
+    let first = host.dispatch(&context,HostRequest::ReconcileCommit(args.clone())).await.unwrap();
+    let terminal: OperationRecord = serde_json::from_value(first.clone()).unwrap();
+    assert_eq!(terminal.status,OperationStatus::Succeeded);
+    assert!(host.is_idle());
+    let checkpoint = query(&host,&context,"operation.events",json!({"after_sequence":0,"limit":100})).await.unwrap();
+    let repeated = host.dispatch(&context,HostRequest::ReconcileCommit(args)).await.unwrap();
+    assert_eq!(first,repeated);
+    assert_eq!(query(&host,&context,"operation.events",json!({"after_sequence":0,"limit":100})).await.unwrap().data,checkpoint.data);
+    assert_eq!(runtime.execution_count(),1);
+    let status = query(&host,&context,"operation.commit_status",json!({"operation_id":operation_id})).await.unwrap();
+    assert_eq!(status.data.unwrap()["phase"],"committed");
+    assert_eq!(host.invoke(&context,invocation("commit-once")).await.unwrap().operation.operation_id,operation_id);
+}

@@ -11,6 +11,9 @@ pub use application::ApplicationStore;
 mod runtime_instances;
 pub use runtime_instances::RuntimeInstancePage;
 mod filtered_records;
+mod commit_candidates;
+#[cfg(test)]
+mod commit_recovery_tests;
 
 use std::fs::{File, OpenOptions, TryLockError};
 use std::path::Path;
@@ -215,6 +218,7 @@ impl SqliteOperationJournal {
                 ",
             )
             .map_err(storage)?;
+        connection.execute_batch(commit_candidates::SCHEMA).map_err(storage)?;
         Ok(Self {
             connection: Mutex::new(connection),
             _writer_lock: None,
@@ -417,6 +421,16 @@ impl OperationJournal for SqliteOperationJournal {
         Ok(record)
     }
 
+    async fn stage_commit(&self, id: &OperationId, plan: &CommitPlan, at_ms: i64) -> Result<rho_operation::CommitReceipt, OperationError> {
+        commit_candidates::stage(self, id, plan, at_ms)
+    }
+    async fn commit_receipt(&self, id: &OperationId) -> Result<Option<rho_operation::CommitReceipt>, OperationError> {
+        commit_candidates::receipt(&*self.connection()?, id)
+    }
+    async fn read_commit_candidate(&self, reference: &rho_contract::OperationCommitReference) -> Result<CommitPlan, OperationError> {
+        commit_candidates::read(self, reference)
+    }
+
     async fn commit(
         &self,
         operation_id: &OperationId,
@@ -428,33 +442,16 @@ impl OperationJournal for SqliteOperationJournal {
         let transaction =
             Transaction::new(&mut connection, TransactionBehavior::Immediate).map_err(storage)?;
         let current = required_operation(&transaction, operation_id)?;
-        if current.status.is_terminal() {
-            return Err(OperationError::LifecycleConflict(format!(
-                "terminal operation {} cannot be committed again",
-                operation_id.as_str()
-            )));
+        let reference = rho_operation::commit_reference(operation_id, plan)?;
+        if let Some(receipt) = commit_candidates::receipt(&transaction, operation_id)? {
+            if receipt.reference != reference {
+                return Err(OperationError::ContentChanged("commit differs from the original immutable candidate".into()));
+            }
+            if current.status.is_terminal() && receipt.committed {
+                return Ok(current);
+            }
         }
-        let before_start = current.status == OperationStatus::Accepted
-            && matches!(
-                plan.outcome,
-                OperationOutcome::Failed | OperationOutcome::Cancelled
-            )
-            && plan.output.is_none()
-            && plan.facts.is_empty()
-            && plan.effect_observations.is_empty()
-            && plan.events.is_empty();
-        if !before_start
-            && !matches!(
-                current.status,
-                OperationStatus::Running | OperationStatus::Reconciling
-            )
-        {
-            return Err(OperationError::LifecycleConflict(format!(
-                "operation {} cannot commit from {:?}",
-                operation_id.as_str(),
-                current.status
-            )));
-        }
+        commit_candidates::validate(&current, plan)?;
 
         if let Some(evidence) = &plan.uncommitted_evidence {
             let fault: ContractFailureRecovery =
@@ -578,6 +575,7 @@ impl OperationJournal for SqliteOperationJournal {
             at_ms,
         )?;
 
+        commit_candidates::committed(&transaction, &reference, at_ms)?;
         let record = required_operation(&transaction, operation_id)?;
         transaction.commit().map_err(storage)?;
         Ok(record)
@@ -657,6 +655,16 @@ impl OperationJournal for SqliteOperationJournal {
         let mut recovered = Vec::new();
         for (raw_id, previous_status) in identities {
             let operation_id = OperationId::new(raw_id)?;
+            if commit_candidates::receipt(&transaction, &operation_id)?.is_some_and(|r| !r.committed) {
+                // A checked native result exists. Startup records its pending
+                // commit without replacing it, committing facts or replaying work.
+                if previous_status != "reconciling" {
+                    transaction.execute("UPDATE operations SET status='reconciling',updated_at_ms=MAX(updated_at_ms,?2) WHERE operation_id=?1", params![operation_id.as_str(),at_ms]).map_err(storage)?;
+                    append_event_and_outbox(&transaction, &operation_id, "operation.commit_pending", &json!({"previous_status":previous_status,"status":"reconciling"}), at_ms)?;
+                }
+                recovered.push(required_operation(&transaction, &operation_id)?);
+                continue;
+            }
             let (status, outcome, error, recovery) = if previous_status == "accepted" {
                 (
                     OperationStatus::Failed,
@@ -1630,7 +1638,7 @@ mod evidence_tests {
         ));
     }
     #[tokio::test]
-    async fn forced_terminal_write_failure_rolls_back_evidence_and_never_claims_persistence() {
+    async fn forced_terminal_write_failure_retains_candidate_without_committing_scientific_truth() {
         let journal = Arc::new(SqliteOperationJournal::open_in_memory().unwrap());
         let (gateway, _, owner) = fixture(journal.clone());
         journal.connection().unwrap().execute_batch("CREATE TRIGGER fail_contract_terminal BEFORE UPDATE OF status ON operations WHEN NEW.status='uncertain' BEGIN SELECT RAISE(ABORT,'injected terminal write failure'); END;").unwrap();
@@ -1663,6 +1671,22 @@ mod evidence_tests {
         }
         let repeated = gateway.invoke(&context(), request()).await.unwrap();
         assert_eq!(repeated.status, OperationStatus::Running);
+        assert_eq!(owner.executed.load(Ordering::SeqCst), 1);
+        let receipt = journal.commit_receipt(&operation_id).await.unwrap().unwrap();
+        assert!(!receipt.committed);
+        let candidate = journal.read_commit_candidate(&receipt.reference).await.unwrap();
+        let evidence = candidate.uncommitted_evidence.as_ref().unwrap();
+        assert_eq!(rho_operation::evidence_sha256(&evidence.bytes), evidence.reference.sha256);
+        let original = evidence.bytes.clone();
+        drop(gateway);
+        journal.connection().unwrap().execute_batch("DROP TRIGGER fail_contract_terminal").unwrap();
+        let restored = OperationGateway::new(Arc::new(CapabilityRegistry::new()), journal.clone(), Arc::new(SystemClock), Arc::new(UuidOperationIdGenerator))
+            .with_project_scope(Some("/evidence-project".into()));
+        let terminal = restored.reconcile_commit(&context(), &ReconcileOperationCommit {reference:receipt.reference}).await.unwrap();
+        assert_eq!(terminal.status, OperationStatus::Uncertain);
+        assert!(journal.facts_for_operation(&operation_id).await.unwrap().is_empty());
+        let page = journal.read_evidence(&OperationReadEvidenceArguments {reference:evidence.reference.clone(), offset:0, limit_bytes:65536}).await.unwrap();
+        assert_eq!(page.bytes, original[..65536]);
         assert_eq!(owner.executed.load(Ordering::SeqCst), 1);
     }
 }
@@ -2026,12 +2050,12 @@ mod tests {
                 .len(),
             1
         );
-        assert!(
-            journal
-                .commit(&operation.operation_id, &plan, 4)
-                .await
-                .is_err()
-        );
+        let events = journal.events(&operation.operation_id).await.unwrap();
+        let same = journal.commit(&operation.operation_id, &plan, 4).await.unwrap();
+        assert_eq!(same.updated_at_ms, record.updated_at_ms);
+        assert_eq!(journal.events(&operation.operation_id).await.unwrap(), events);
+        plan.output = Some(json!({"answer":3}));
+        assert!(journal.commit(&operation.operation_id, &plan, 5).await.is_err());
     }
 
     #[tokio::test(flavor = "current_thread")]

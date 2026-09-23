@@ -68,7 +68,7 @@ pub async fn serve(
                 }
                 if tasks.len() >= MAX_IN_FLIGHT {
                     // A full execution queue must not prevent requesting cancellation.
-                    if matches!(&frame.request, HostRequest::RequestCancellation { .. } | HostRequest::RespondInput(_)) || matches!(&frame.request,HostRequest::QuerySnapshot(query) if query.capability.id == "workspace.console_state") {
+                    if matches!(&frame.request, HostRequest::RequestCancellation { .. } | HostRequest::RespondInput(_) | HostRequest::ReconcileCommit(_)) || matches!(&frame.request,HostRequest::QuerySnapshot(query) if matches!(query.capability.id.as_str(), "workspace.console_state" | "operation.commit_status")) {
                         let reply = dispatch(host.clone(), frame).await;
                         emit(&mut output, reply, &mut output_error, &mut ended).await;
                     } else {

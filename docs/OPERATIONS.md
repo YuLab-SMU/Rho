@@ -249,10 +249,27 @@ Errors include typed diagnostics; failed/uncertain operations retain their ident
 and outcome. `rho.output.view` additionally returns native image content and an
 original/manifest resource link, without duplicating image bytes in text metadata.
 The shared descriptors include `operation.get`, `operation.request_cancellation`,
-`workspace.respond_input` and `operation.events`. Existing bare MCP aliases use
+`operation.commit_status`, `operation.reconcile_commit`, `workspace.respond_input`
+and `operation.events`. Existing bare MCP aliases use
 the same contracts and owners. `operation.events` returns an explicit continuation
 page; the legacy `rho.events.poll` projects that page to its original event list.
 Events are cursor pages, not a push-delivery guarantee.
+
+If a command reports `CommitPending`, keep its original OperationId. Query
+`operation.commit_status@1` with `{"operation_id":"..."}`. `volatile` means the
+result is retained only by the current Host; `durable` means its exact candidate
+is stored, while scientific facts are still uncommitted. A normal close remains
+blocked while a live result needs reconciliation. Do not replay the calculation.
+After the storage issue is resolved, submit the returned `reference` through the
+Host request `{"method":"reconcile_commit","params":{"reference":...}}`
+(or the MCP tool `rho.operation.reconcile_commit.v1`). This checks the original
+project, principal and capability scopes and returns the original terminal record.
+An exact repeated reconciliation does not execute native work or write another
+terminal event. `committed` confirms that digest's terminal receipt; `unavailable`
+means a terminal record has no retained commit receipt, not that replay is safe.
+Standalone query-only observers expose status, but no reconciliation control and
+no visibility into another Host's volatile memory. A surviving durable candidate
+can be reconciled after a Host restart even when its plugin provider is absent.
 
 The local MCP actor and human caller share the OS user's principal while retaining
 separate actor identity. Tool arguments and client initialization names do not

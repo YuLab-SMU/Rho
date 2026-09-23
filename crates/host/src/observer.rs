@@ -102,6 +102,7 @@ impl QueryObserver {
                 journal.clone(),
                 project_scope.clone(),
                 false,
+                false,
             )?)
         } else {
             None
@@ -181,6 +182,7 @@ pub(crate) fn register_record_queries(
     journal: Arc<dyn OperationJournal>,
     project: Option<String>,
     has_workspace: bool,
+    writable: bool,
 ) -> Result<Arc<port_contracts::EventsHandler>, OperationError> {
     if let Some(project) = &project {
         registry.register_query(Arc::new(
@@ -196,11 +198,11 @@ pub(crate) fn register_record_queries(
         project.clone(),
     )))?;
     registry.register_query(Arc::new(rho_operation::OperationGetHandler::new(
-        journal,
+        journal.clone(),
         project.clone(),
         &registry.descriptors(),
     )?))?;
-    port_contracts::register(registry, project, has_workspace)
+    port_contracts::register(registry, journal, project, has_workspace, writable)
 }
 
 /// All historical media/text reads stay with the existing Output owner and journal visibility port.

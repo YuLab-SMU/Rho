@@ -43,37 +43,44 @@ invalid responses retain their candidate, and resource claims require an
 authoritative verifier. Lost lifecycle completion notifications can release a
 reference only after reading the original terminal journal record.
 
-The bridge is **not yet wired into scientific Host startup and official ports**.
-The existing Host and scientific UI still use their prior owners. Durable staging
-and explicit recommit of a candidate after journal-write failure remain pending;
-the current bridge retains the protecting operation reference while commit is
-unconfirmed. The generic resource store, isolated iframe container, TypeScript UI
-SDK, live scenarios and Plugin Studio are also pending. Next is commit recovery
-and Host/container integration, followed by the complete R/Viewer vertical path,
+Core commit recovery now retains the checked native result and execution lease,
+stages its exact candidate in the existing journal, and commits scientific facts
+only in the original terminal transaction. Host/CLI/MCP expose read-only
+`operation.commit_status` and exact-reference `operation.reconcile_commit`.
+Storage failures distinguish volatile from durable results; restart preserves a
+durable candidate for explicit completion without a provider or reexecution.
+Repeated completion uses a digest receipt, and live pending results prevent a
+clean quit from discarding their execution leases. Recovery attempts remain owned
+by the Host across edge disconnection. Query-only observers can inspect durable
+candidates without recovering them or exposing a reconciliation control.
+
+The plugin bridge is **not yet wired into scientific Host startup and official
+ports**. The existing Host and scientific UI still use their prior owners. The
+generic resource store, isolated iframe container, TypeScript UI SDK, live
+scenarios and Plugin Studio are also pending. Next is Host/container integration,
+followed by the complete R/Viewer vertical path,
 all-feature migration and the approved Studio workflows.
 Remove the replaced fixed composition before final acceptance; a permanent dual
 architecture is not an accepted outcome. New repository paths do not read or
 migrate abandoned storage. Existing user Hosts and R memory have not been restarted.
 
-Current substrate verification passed: Operation tests (24), SQLite tests (29),
-actual backend/bridge process tests (13), public protocol tests (7), backend SDK
-tests (6), package repository tests (9), and recovery CLI tests (2). They cover
-coexisting revisions, explicit/frozen bindings, atomic publication, removal while
-executing, original-request races, confirmed versus unconfirmed cancellation,
-crash without replay, invalid candidate retention, reverse-call scope and cleanup.
-External Rust and strict NodeNext SDK consumption, generation, client build/check,
-architecture, plugin/frontend boundaries and governance checks also passed.
+Current commit-recovery verification passed: Operation tests (24), SQLite tests
+(33), actual backend/bridge process tests (14), Host observer/port/recovery tests,
+and MCP tests (13). Fault injection covers failed staging, failed terminal writes,
+raw evidence retention, changed candidates, restart without a provider, exact
+repeated completion, late cancellation, original authority and retained native
+leases. Protocol, backend SDK and repository code are unchanged from their earlier
+passing standalone checks. Client generation/build/check, 70 affected frontend
+tests, architecture, plugin/frontend boundaries and governance checks passed.
 
-Existing-science regression passed: Host observer/recovery tests, 70 affected
-frontend tests, `node scripts/test-real-r.mjs`, and the isolated Chrome case
+Existing-science regression passed: `node scripts/test-real-r.mjs`,
+`node scripts/test-process-recovery.mjs`, and the isolated Chrome case
 `real Console, settings and docking shell` against the rebuilt binary. The R
-suite initially exposed three document-continuation failures: verbose admission
-metadata exceeded the history result bound and hid a native pause identity.
-History now explicitly omits that metadata from its bounded projection, retaining
-the original full journal record; the complete R suite passed after the fix.
-The new architecture's scientific Host wiring, real-R plugin migration and iframe
-acceptance remain outstanding. These legacy regressions do not certify those
-unfinished paths. Focused commands are documented in Development.
+suite covers its configured local native paths; optional real-model and alternate
+R-installation cases remain outside this run. The new architecture's scientific
+Host wiring, real-R plugin migration and iframe acceptance remain outstanding.
+These existing-science regressions do not certify those unfinished paths. Focused
+commands are documented in Development.
 
 ## Bundled real Rho demo project
 

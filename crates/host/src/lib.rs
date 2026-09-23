@@ -321,6 +321,9 @@ impl NextHost {
                 )
                 .await?,
             ),
+            HostRequest::ReconcileCommit(args) => {
+                serde_json::to_value(self.reconcile_commit(context, &args).await?)
+            }
             HostRequest::RespondInput(reply) => {
                 let capability = rho_contract::CapabilityRef::new(port_contracts::INPUT, 1)?;
                 // Values exist only for transient schema validation. Never put
@@ -1063,6 +1066,7 @@ impl NextHost {
             journal.clone(),
             output_project.clone(),
             has_workspace,
+            true,
         )?;
         registry.validate_links()?;
         let registry = Arc::new(registry);
@@ -1298,14 +1302,14 @@ impl NextHost {
     }
     /// Hosting lifecycle only: keep accepted work alive after an edge disconnects.
     pub fn is_idle(&self) -> bool {
-        self.tasks.is_empty()
+        self.tasks.is_empty() && !self.runtime.gateway.commit_recovery().has_retained_results()
     }
 
     /// The caller must first stop accepting new work through every edge.
     pub async fn prepare_workbench_quit(&self) -> Result<(), OperationError> {
         if !self.is_idle() {
             return Err(OperationError::Unavailable(
-                "Accepted work is still running; inspect its original operations before quitting"
+                "Accepted work or an uncommitted result remains; inspect and reconcile its original operation before quitting"
                     .into(),
             ));
         }
@@ -1334,6 +1338,25 @@ impl NextHost {
         if let Some(instances) = &self.runtime.instances {
             instances.shutdown_instances().await;
         }
+    }
+
+    pub async fn reconcile_commit(
+        &self,
+        context: &CallContext,
+        args: &rho_contract::ReconcileOperationCommit,
+    ) -> Result<OperationRecord, OperationError> {
+        // The Host owns the completion attempt even if its requesting edge
+        // disconnects. Quit must wait for the original lease callback as well.
+        let runtime = self.runtime.clone();
+        let context = context.clone();
+        let args = args.clone();
+        self.tasks.spawn(async move {
+            let capability = rho_contract::CapabilityRef::new(port_contracts::RECONCILE, 1)?;
+            runtime.registry.validate_control_input(&context, &capability, &json!(args))?;
+            let record = runtime.gateway.reconcile_commit(&context, &args).await?;
+            runtime.registry.validate_control_output(&capability, &json!(record))?;
+            Ok(record)
+        }).await.map_err(|error| OperationError::Storage(format!("commit reconciliation task ended: {error}")))?
     }
 
     pub async fn request_cancellation(

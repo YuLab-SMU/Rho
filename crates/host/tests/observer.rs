@@ -151,9 +151,11 @@ async fn orphan_accepted_and_running_records_are_observed_without_recovery_or_da
         .mark_running(&running.operation_id, 2)
         .await
         .unwrap();
+    journal.stage_commit(&running.operation_id, &rho_operation::CommitPlan::succeeded(json!({"answer":42})), 3).await.unwrap();
     drop(journal);
     let before = fs::read(&database).unwrap();
     let observer = NextHost::open_query_observer(&database, Some(&root)).unwrap();
+    assert!(!observer.capabilities().iter().any(|d| d.capability.id == "operation.reconcile_commit"));
     for (original, status) in [
         (&accepted, OperationStatus::Accepted),
         (&running, OperationStatus::Running),
@@ -177,6 +179,8 @@ async fn orphan_accepted_and_running_records_are_observed_without_recovery_or_da
         );
         assert_eq!(observed.operation.principal(), original.principal());
         assert_eq!(observed.status, status);
+        let commit = query(&observer, "operation.commit_status", json!({"operation_id":original.operation_id})).await;
+        assert_eq!(commit["phase"], if status == OperationStatus::Running { "durable" } else { "awaiting_result" });
     }
     query(&observer, "host.overview", json!({})).await;
     drop(observer);

@@ -364,6 +364,7 @@ fn transport_failure(effectful: bool, request: Option<&Value>, message: &str) ->
             Some("invoke") if params["client_request_id"].is_string()=>reads.push(NextRead::query("operation.list_recent","Find the original request before deciding on any further action",json!({"client_request_id":params["client_request_id"],"limit":20}))),
             Some("application_control")=>reads.push(NextRead::query("application.command_status","Inspect the original application receipt",json!({"window":params["window"],"request_id":params["request_id"]}))),
             Some("bind_method")=>reads.push(NextRead::query("host.resolve_context","Inspect the method binding version",json!({"working_directory":params["binding"]["working_directory"],"external_task_ref":params["binding"]["external_task_ref"]}))),
+            Some("reconcile_commit") if params["reference"]["operation_id"].is_string()=>reads.push(NextRead::query("operation.commit_status","Inspect the original commit receipt",json!({"operation_id":params["reference"]["operation_id"]}))),
             Some("request_cancellation")|Some("respond_input") if params["operation_id"].is_string()=>reads.push(NextRead::query("operation.get","Inspect the original scientific operation",json!({"operation_id":params["operation_id"]}))),
             _=>{},
         }

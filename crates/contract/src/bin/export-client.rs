@@ -321,6 +321,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     CancellationRequestOutcome::export_all(&config)?;
     BindMethodRequest::export_all(&config)?;
     OperationGetArguments::export_all(&config)?;
+    OperationCommitStatus::export_all(&config)?;
+    ReconcileOperationCommit::export_all(&config)?;
     OperationGetResult::export_all(&config)?;
     OperationReadEvidenceArguments::export_all(&config)?;
     OperationEvidencePage::export_all(&config)?;

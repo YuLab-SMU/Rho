@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 struct JournalState {
     records: BTreeMap<OperationId, OperationRecord>,
     plans: Vec<CommitPlan>,
+    candidates: BTreeMap<OperationId, CommitPlan>,
     recovery_reads: usize,
 }
 #[derive(Default)]
@@ -60,6 +61,21 @@ impl OperationJournal for TestJournal {
         record.status = OperationStatus::Running;
         record.updated_at_ms = at;
         Ok(record.clone())
+    }
+    async fn stage_commit(&self, id: &OperationId, plan: &CommitPlan, _: i64) -> Result<CommitReceipt, OperationError> {
+        let reference = commit_reference(id, plan)?;
+        self.0.lock().unwrap().candidates.insert(id.clone(), plan.clone());
+        Ok(CommitReceipt { reference, committed: false })
+    }
+    async fn commit_receipt(&self, id: &OperationId) -> Result<Option<CommitReceipt>, OperationError> {
+        let state = self.0.lock().unwrap();
+        state.candidates.get(id).map(|plan| Ok(CommitReceipt { reference: commit_reference(id, plan)?, committed: state.records[id].status.is_terminal() })).transpose()
+    }
+    async fn read_commit_candidate(&self, reference: &OperationCommitReference) -> Result<CommitPlan, OperationError> {
+        let state = self.0.lock().unwrap();
+        let plan = state.candidates.get(&reference.operation_id).ok_or_else(|| OperationError::NotFound("candidate".into()))?;
+        if commit_reference(&reference.operation_id, plan)? != *reference { return Err(OperationError::ContentChanged("candidate".into())); }
+        Ok(plan.clone())
     }
     async fn commit(
         &self,
@@ -598,7 +614,7 @@ async fn a_malformed_owner_result_retains_every_candidate_value_without_committi
     );
     assert!(!recovery.automatic_reexecution);
     assert!(recovery.execution_started);
-    assert_eq!(recovery.violations.len(), 2);
+    assert_eq!(recovery.violations.len(), 3);
     jsonschema::options()
         .offline()
         .build(&advertised)

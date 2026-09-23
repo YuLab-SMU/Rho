@@ -21,6 +21,7 @@ pub enum HostRequest {
         #[ts(optional)]
         only_if_pending: Option<bool>,
     },
+    ReconcileCommit(crate::ReconcileOperationCommit),
     RespondInput(RespondInput),
     QuerySnapshot(QueryRequest),
     ApplicationControl(crate::ApplicationCommandRequest),
