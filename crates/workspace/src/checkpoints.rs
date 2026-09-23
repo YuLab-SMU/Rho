@@ -7,7 +7,7 @@ use rho_operation::{
     OperationError, OperationHandler, OperationJournal, PlannedEvent, QueryHandler, SystemClock,
 };
 use schemars::schema_for;
-use serde::{Deserialize, Serialize};
+
 use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,
@@ -26,24 +26,12 @@ pub trait CheckpointBudget: Send + Sync {
         max_bytes: u64,
     ) -> Result<Box<dyn CheckpointReservation>, HandlerError>;
 }
-pub trait CheckpointArtifactLease: Send + Sync {}
-impl<T: Send + Sync> CheckpointArtifactLease for T {}
+pub use rho_r_api::{CheckpointArtifactLease, CheckpointArtifact, CheckpointControlEvidence};
 
 pub trait CheckpointReservation: Send {
     fn completed(&mut self, result: &Result<OperationRecord, OperationError>);
 }
 
-pub struct CheckpointArtifact {
-    pub report: CheckpointNativeReport,
-    pub sha256: String,
-    pub byte_size: u64,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CheckpointControlEvidence {
-    pub operation_id: OperationId,
-    pub report: CheckpointControlReport,
-    pub at_ms: i64,
-}
 pub struct WorkspaceCheckpointOwner {
     runtime: Arc<dyn WorkspaceRuntime>,
     lane: Arc<tokio::sync::Mutex<()>>,

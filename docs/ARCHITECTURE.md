@@ -33,6 +33,16 @@ independent; execution must use immutable artifact bytes, never a development
 directory. Import verifies containment, source/lock/build declarations, schemas,
 inventories and digests without running a build or loading code.
 
+The R domain contracts now live in `plugins/r/api`; the native Ark/R implementation
+and its R bridge live in `plugins/r/backend/engine`. They depend only on public
+plugin contracts and third-party libraries, not Host or Operation implementation.
+The native owner receives an opaque original Operation identity and returns bounded
+observations, output evidence and recovery material. It never receives a journal
+handle. The existing in-process Host temporarily uses `rho-r-runtime` as a thin
+adapter to this one implementation; this adapter is removed with the old scientific
+composition when the complete RPC path replaces it. Relocating the owner does not
+by itself establish plugin activation or R/Viewer vertical acceptance.
+
 The public Rust transport SDK is `rho-plugin-sdk`. Backend RPC uses a four-byte
 big-endian length followed by at most 1 MiB of JSON, with one ordered writer and
 one dedicated reader per direction. A cancelled partial write fences the channel.
@@ -1162,17 +1172,18 @@ package inspection.
 | `crates/operation` | Operation and Query gateways, handler/journal ports and commit discipline |
 | `crates/workspace`, `project`, `environment`, `execution` | Scientific owners and native port definitions |
 | `crates/application`, `skills` | Application context/control and method/source ports, separate from scientific execution |
-| `crates/adapters/` | SQLite, Git, R, package, process and SSH/Slurm implementations |
+| `crates/adapters/` | SQLite, Git, package, process and SSH/Slurm implementations; transitional adapter to the R package |
+| `plugins/r/api`, `plugins/r/backend/engine` | Public R data/native ports and the sole Ark/R implementation |
 | `crates/host` | Concrete composition and runtime configuration |
 | `crates/agent-client` | Bounded native Codex app-server / Kimi and DeepSeek ACP clients; no scientific handlers or Agent behavior loop |
 | `crates/agents` | Optional Rig integration; only Application/contract ports, no scientific owners or native adapter dependencies |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
-| `r/bridge`, `r/environment` | Native R execution, bounded observation and environment helpers |
+| `plugins/r/backend/engine/r/bridge`, `r/environment` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |
 | `.agents/skills/` | Standard method packages, read by native clients or the shared Skills owner |
 
 Jet is a pinned external core-library dependency in `vendor/jet-core`, excluded
-from the production workspace's members. Only the native R adapter depends on it.
+from the production workspace's members. Only the package-owned R engine depends on it.
 The snapshot is generated from a checksum-pinned upstream commit plus the ordered
 patches in `patches/jet`; its license and upstream identity stay separate from
 Rho-original code. No Jet CLI, Lua frontend or second application is incorporated.

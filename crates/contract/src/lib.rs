@@ -82,6 +82,8 @@ pub const MAX_SCOPE_COUNT: usize = 64;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ContractError {
+    #[error("{0}")]
+    PublicProtocol(#[from] rho_plugin_protocol::ProtocolError),
     #[error("{field} must contain between 1 and {maximum} bytes")]
     InvalidText { field: &'static str, maximum: usize },
     #[error("{field} contains unsupported characters")]
@@ -118,24 +120,7 @@ fn validate_token(value: &str, field: &'static str) -> Result<(), ContractError>
     Ok(())
 }
 
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
-)]
-#[serde(transparent)]
-#[derive(ts_rs::TS)]
-pub struct OperationId(String);
-
-impl OperationId {
-    pub fn new(value: impl Into<String>) -> Result<Self, ContractError> {
-        let value = value.into();
-        validate_token(&value, "operation_id")?;
-        Ok(Self(value))
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
+pub use rho_plugin_protocol::OperationId;
 
 #[derive(
     Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,

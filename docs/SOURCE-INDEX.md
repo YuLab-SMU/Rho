@@ -92,6 +92,7 @@ Sources:
 - `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
 - `scripts/test-plugin-ui.mjs`
+- `scripts/test-r-plugin-engine.mjs`
 - `sdk/**`
 
 Checks:
@@ -103,6 +104,8 @@ Checks:
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
+- `plugins.r-engine`: `["cargo","test","-p","rho-r-engine","--locked"]`
+- `plugins.r-independent`: `["node","scripts/test-r-plugin-engine.mjs"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`

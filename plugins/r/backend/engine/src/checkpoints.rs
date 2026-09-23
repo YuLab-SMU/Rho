@@ -1,8 +1,8 @@
 //! Native immutable checkpoint artifacts. Files are evidence; the Workspace journal
 //! decides publication, visibility, pinning and deletion.
 use super::*;
-use rho_contract::*;
-use rho_workspace::{CheckpointArtifact, CheckpointControlEvidence};
+use rho_r_api::*;
+use rho_r_api::{CheckpointArtifact, CheckpointControlEvidence};
 use std::{
     fs::{self, OpenOptions},
     io::{Read, Write},
@@ -16,7 +16,7 @@ impl CheckpointStore {
     pub(super) async fn artifact_lease(
         &self,
         id: &OperationId,
-    ) -> Box<dyn rho_workspace::CheckpointArtifactLease> {
+    ) -> Box<dyn rho_r_api::CheckpointArtifactLease> {
         type ArtifactLocks = HashMap<PathBuf, std::sync::Weak<tokio::sync::Mutex<()>>>;
         static LOCKS: std::sync::OnceLock<Mutex<ArtifactLocks>> = std::sync::OnceLock::new();
         let lock = {
@@ -381,24 +381,24 @@ pub fn verify_checkpoint_helper(path: &Path, r_home: &Path) -> Result<PathBuf, S
 impl ArkRuntime {
     pub(super) async fn capture_checkpoint(
         &self,
-        op: &Operation,
+        op: &OperationId,
         args: &CheckpointCaptureArguments,
         cancel: watch::Receiver<bool>,
-    ) -> Result<CheckpointArtifact, WorkspaceRuntimeError> {
+    ) -> Result<CheckpointArtifact, NativeError> {
         if !self.checkpoint_ready {
             return Err(before("Checkpoint native component unavailable"));
         }
-        let path = self.checkpoints.prepare(&op.operation_id).map_err(before)?;
+        let path = self.checkpoints.prepare(&op).map_err(before)?;
         let payload = json!({"path":path,"max_bytes":args.max_bytes,"max_seconds":args.max_seconds,"project_root":self.project_root,"include_names":args.include_names,"exclude_names":args.exclude_names,"include_patterns":args.include_patterns,"exclude_patterns":args.exclude_patterns});
         let (response, _, _) = self
             .bridge_call(
-                op.operation_id.as_str(),
+                op.as_str(),
                 BridgeAction::CheckpointCapture(&payload),
                 cancel,
             )
             .await?;
         if response.outcome != OperationOutcome::Succeeded {
-            let mut error = WorkspaceRuntimeError::before_effect(
+            let mut error = NativeError::before_effect(
                 response
                     .error
                     .unwrap_or_else(|| "Checkpoint capture failed".into()),
@@ -411,7 +411,7 @@ impl ArkRuntime {
         let report: CheckpointNativeReport =
             serde_json::from_value(response.value).map_err(before)?;
         let store = self.checkpoints.clone();
-        let id = op.operation_id.clone();
+        let id = op.clone();
         let limit = args.max_bytes;
         let (sha256, byte_size) =
             tokio::task::spawn_blocking(move || store.finish_payload(&id, limit))
@@ -426,10 +426,10 @@ impl ArkRuntime {
     }
     pub(super) async fn restore_checkpoint(
         &self,
-        op: &Operation,
+        op: &OperationId,
         manifest: &CheckpointManifest,
         cancel: watch::Receiver<bool>,
-    ) -> Result<CheckpointNativeRestoreReport, WorkspaceRuntimeError> {
+    ) -> Result<CheckpointNativeRestoreReport, NativeError> {
         if !self.checkpoint_ready {
             return Err(before("Checkpoint native component unavailable"));
         }
@@ -445,18 +445,18 @@ impl ArkRuntime {
         let payload = json!({"path":self.checkpoints.dir(&manifest.checkpoint_id).join("payload.rds"),"r_version":manifest.report.r_version,"platform":manifest.report.platform,"library_paths":manifest.report.library_paths,"package_inventory_digest":manifest.report.package_inventory_digest,"saved_names":manifest.report.saved_names,"project_root":self.project_root,"working_directory":manifest.report.working_directory,"safe_options":manifest.report.safe_options,"required_core_namespaces":manifest.report.required_core_namespaces,"required_class_namespaces":manifest.report.required_class_namespaces,"max_bytes":16u64*1024*1024*1024});
         let (response, _, _) = self
             .bridge_call(
-                op.operation_id.as_str(),
+                op.as_str(),
                 BridgeAction::CheckpointRestore(&payload),
                 cancel,
             )
             .await?;
         if response.outcome != OperationOutcome::Succeeded {
-            let mut error = WorkspaceRuntimeError::after_possible_effect(
+            let mut error = NativeError::after_possible_effect(
                 response
                     .error
                     .unwrap_or_else(|| "Checkpoint restore failed".into()),
                 Some(json!(CheckpointRecovery {
-                    operation_id: op.operation_id.clone(),
+                    operation_id: op.clone(),
                     native_session_id: self.session_id.clone(),
                     action: "inspect_candidate_before_retry".into(),
                     automatic_reexecution: false
@@ -468,12 +468,12 @@ impl ArkRuntime {
             return Err(error);
         }
         serde_json::from_value(response.value)
-            .map_err(|e| WorkspaceRuntimeError::after_possible_effect(e.to_string(), None))
+            .map_err(|e| NativeError::after_possible_effect(e.to_string(), None))
     }
     pub(super) fn publish_checkpoint(
         &self,
         manifest: &CheckpointManifest,
-    ) -> Result<(), WorkspaceRuntimeError> {
+    ) -> Result<(), NativeError> {
         self.checkpoints
             .write_json(
                 &self
@@ -487,7 +487,7 @@ impl ArkRuntime {
     pub(super) fn write_checkpoint_control(
         &self,
         evidence: &CheckpointControlEvidence,
-    ) -> Result<(), WorkspaceRuntimeError> {
+    ) -> Result<(), NativeError> {
         let filename = format!(
             "{:x}.control.json",
             Sha256::digest(evidence.operation_id.as_str().as_bytes())
@@ -683,7 +683,7 @@ impl CheckpointArchiveRuntime {
     }
 }
 #[async_trait]
-impl WorkspaceRuntime for CheckpointArchiveRuntime {
+impl NativeRuntime for CheckpointArchiveRuntime {
     fn session_id(&self) -> &str {
         "checkpoint-archive"
     }
@@ -696,20 +696,20 @@ impl WorkspaceRuntime for CheckpointArchiveRuntime {
     async fn checkpoint_artifact_lease(
         &self,
         id: &OperationId,
-    ) -> Result<Box<dyn rho_workspace::CheckpointArtifactLease>, WorkspaceRuntimeError> {
+    ) -> Result<Box<dyn rho_r_api::CheckpointArtifactLease>, NativeError> {
         Ok(self.store.artifact_lease(id).await)
     }
     async fn checkpoint_original_manifest(
         &self,
         id: &OperationId,
-    ) -> Result<Option<CheckpointManifest>, WorkspaceRuntimeError> {
+    ) -> Result<Option<CheckpointManifest>, NativeError> {
         self.store.original_manifest(id).map_err(before)
     }
     async fn checkpoint_adopt(
         &self,
         source: &CheckpointManifest,
         adopted: &CheckpointManifest,
-    ) -> Result<(), WorkspaceRuntimeError> {
+    ) -> Result<(), NativeError> {
         let store = self.store.clone();
         let source = source.clone();
         let adopted = adopted.clone();
@@ -720,7 +720,7 @@ impl WorkspaceRuntime for CheckpointArchiveRuntime {
     }
     async fn checkpoint_candidates(
         &self,
-    ) -> Result<Vec<CheckpointManifest>, WorkspaceRuntimeError> {
+    ) -> Result<Vec<CheckpointManifest>, NativeError> {
         let store = self.store.clone();
         tokio::task::spawn_blocking(move || store.candidates())
             .await
@@ -730,13 +730,13 @@ impl WorkspaceRuntime for CheckpointArchiveRuntime {
     async fn checkpoint_control_evidence(
         &self,
         id: &OperationId,
-    ) -> Result<Vec<CheckpointControlEvidence>, WorkspaceRuntimeError> {
+    ) -> Result<Vec<CheckpointControlEvidence>, NativeError> {
         self.store.controls(id).map_err(before)
     }
     async fn checkpoint_write_control(
         &self,
         evidence: &CheckpointControlEvidence,
-    ) -> Result<(), WorkspaceRuntimeError> {
+    ) -> Result<(), NativeError> {
         let filename = format!(
             "{:x}.control.json",
             Sha256::digest(evidence.operation_id.as_str().as_bytes())
@@ -754,13 +754,13 @@ impl WorkspaceRuntime for CheckpointArchiveRuntime {
     async fn checkpoint_present(
         &self,
         manifest: &CheckpointManifest,
-    ) -> Result<bool, WorkspaceRuntimeError> {
+    ) -> Result<bool, NativeError> {
         self.store.present(manifest).map_err(before)
     }
     async fn checkpoint_verify(
         &self,
         manifest: &CheckpointManifest,
-    ) -> Result<bool, WorkspaceRuntimeError> {
+    ) -> Result<bool, NativeError> {
         let store = self.store.clone();
         let manifest = manifest.clone();
         tokio::task::spawn_blocking(move || store.verify(&manifest))
@@ -779,9 +779,9 @@ impl WorkspaceRuntime for CheckpointArchiveRuntime {
     }
     async fn execute(
         &self,
-        _: &Operation,
+        _: &OperationId,
         _: &RunRArguments,
-    ) -> Result<WorkspaceRuntimeReport, WorkspaceRuntimeError> {
+    ) -> Result<NativeReport, NativeError> {
         Err(before(
             "This is a read-only checkpoint archive, not a live R process",
         ))
@@ -789,7 +789,7 @@ impl WorkspaceRuntime for CheckpointArchiveRuntime {
 }
 
 impl ArkRuntime {
-    pub(super) async fn shutdown_confirmed(&self) -> Result<(), WorkspaceRuntimeError> {
+    pub(super) async fn shutdown_confirmed(&self) -> Result<(), NativeError> {
         let Some((pid, recorded_start)) = self.native_process else {
             return Err(before(
                 "Original native process identity is unavailable; stop cannot be confirmed",
@@ -803,7 +803,7 @@ impl ArkRuntime {
         let mut client = {
             let mut slot = self.client.lock().unwrap_or_else(|e| e.into_inner());
             let Some(existing) = slot.as_ref() else {
-                return Err(WorkspaceRuntimeError::after_possible_effect(
+                return Err(NativeError::after_possible_effect(
                     "Original R process still exists but its native handle is unavailable",
                     Some(
                         json!({"session_id":self.session_id,"pid":pid,"process_start":recorded_start}),
@@ -837,7 +837,7 @@ impl ArkRuntime {
                 return Ok(());
             }
             if Instant::now() >= deadline {
-                return Err(WorkspaceRuntimeError::after_possible_effect(
+                return Err(NativeError::after_possible_effect(
                     "Original R process still exists after shutdown deadline",
                     Some(
                         json!({"session_id":self.session_id,"pid":pid,"process_start":identity,"action":"inspect_original_process_before_replacement"}),
@@ -848,7 +848,7 @@ impl ArkRuntime {
         }
     }
 }
-pub(super) async fn process_start(pid: u32) -> Result<Option<u64>, WorkspaceRuntimeError> {
+pub(super) async fn process_start(pid: u32) -> Result<Option<u64>, NativeError> {
     tokio::task::spawn_blocking(move || {
         let mut system = sysinfo::System::new();
         system.refresh_processes_specifics(

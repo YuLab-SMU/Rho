@@ -1,10 +1,10 @@
 # Native library contract checks; Host/Operation acceptance lives in real_r.rs.
 bridge <- new.env(parent = asNamespace("utils"))
-sys.source("r/bridge/objects.R", bridge)
-sys.source("r/bridge/packages.R", bridge)
-sys.source("r/bridge/package-index.R", bridge)
-sys.source("r/bridge/dispatch.R", bridge)
-sys.source("r/bridge/tools.R", bridge)
+sys.source("plugins/r/backend/engine/r/bridge/objects.R", bridge)
+sys.source("plugins/r/backend/engine/r/bridge/packages.R", bridge)
+sys.source("plugins/r/backend/engine/r/bridge/package-index.R", bridge)
+sys.source("plugins/r/backend/engine/r/bridge/dispatch.R", bridge)
+sys.source("plugins/r/backend/engine/r/bridge/tools.R", bridge)
 dispatch <- function(action, payload) {
   bridge$rho_dispatch(list(protocol_version = 1L, request_id = "native-tools",
                           action = action, payload = payload))

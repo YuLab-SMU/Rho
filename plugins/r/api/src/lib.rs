@@ -1,0 +1,27 @@
+//! Public R-domain data contracts. No Host, journal, or runtime implementation.
+#![forbid(unsafe_code)]
+pub use rho_plugin_protocol::OperationId;
+pub mod scientific;
+pub use scientific::*;
+pub mod objects;
+pub use objects::*;
+pub mod package_index;
+pub use package_index::*;
+pub mod package_help;
+pub use package_help::*;
+pub mod observations;
+pub use observations::*;
+pub mod media;
+pub use media::*;
+pub mod console;
+pub use console::*;
+pub mod instances;
+pub use instances::*;
+pub mod checkpoints;
+pub use checkpoints::*;
+pub mod query;
+pub use query::*;
+pub mod tools;
+pub use tools::*;
+pub mod native;
+pub use native::*;

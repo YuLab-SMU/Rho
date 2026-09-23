@@ -91,7 +91,29 @@ builds from the public SDK outside the checkout and uses the ordinary package an
 lifecycle paths. Public types now ship as `.d.ts` declarations so consumers keep
 their own source-root boundary.
 
-The existing scientific owners and fixed Studio panels have not yet migrated into
+The R data/native contracts now live in `plugins/r/api`, and its sole native
+implementation and R bridge live in `plugins/r/backend/engine`. Neither imports
+private core modules. The existing Host uses a thin adapter to that implementation
+while the full RPC composition is built. All seven relocated R bridge files retain
+their original bytes. The engine passes 14 unit tests both in-tree and in a copied
+tree outside the checkout containing only public contracts and pinned Jet. That
+independent tree also passes a real-R test for session state, Unicode output,
+retained HTML and confirmed native shutdown. It reuses the installed compiler and
+offline lock; it does not install tools or connect to existing sessions.
+
+The extraction also passes the public protocol (8), contract (4), Operation (24)
+and Workspace (12) tests, client generation and build/check. The affected Host
+library (48), observer (4) and plugin (6) tests pass, as do the MCP library (14)
+and actual plugin-connection test. Architecture, plugin boundaries, pinned-Jet
+integrity and governance checks pass. The exact command
+`cargo test -p rho-host --lib --test observer --test plugins --locked` reports
+58 passed and 2 ignored; ignored tests are not counted as passes. The explicit
+real-R suite separately passes the recovery-copy case; automatic continuation
+remains unexecuted. An installable R backend entry, original-Operation
+RPC integration and retained-resource Viewer remain outstanding; source extraction
+and direct native tests do not establish complete plugin vertical acceptance.
+
+The remaining scientific owners and fixed Studio panels have not yet migrated into
 packages. The standalone generic frame is the container conformance surface;
 its integration into plugin/scenario layouts remains part of the active work.
 Next is the complete R/Viewer vertical path, all-feature migration, live scenarios
@@ -104,7 +126,7 @@ The lifecycle ports require the rebuilt Host; refreshing only the client cannot
 add them to an older process. Inspect live work and preserve its R session before
 any separately authorized replacement.
 
-Current affected verification passed: public protocol tests (7), Rust SDK
+The completed container stage passed: public protocol tests (7), Rust SDK
 transport tests (6), resource store/channel tests (8), repository tests (9),
 backend/bridge process tests (14), Host library tests (48) and plugin integration
 tests (6), Workbench library tests (26), plus MCP library tests (14) and its actual plugin-connection test.
@@ -113,8 +135,8 @@ packages. The public UI SDK additionally verifies MessagePort identity/order,
 quotas, Unicode, disposal and retention of structured error/recovery diagnostics.
 Generation, client build/check, 456 frontend tests across 42 files, architecture,
 plugin boundaries and governance checks passed. The ordinary Host library run
-still has two ignored real-R recovery fixtures; these are not counted as passes. The prior foundation's unchanged Operation tests (24), Host observer/port/recovery tests (11) and CLI
-package recovery tests (3) remain the preceding baseline.
+still has two ignored real-R recovery fixtures; these are not counted as passes. Host observer/port/recovery tests (11) and CLI
+package recovery tests (3) were the preceding foundation baseline.
 
 The new Host tests exercise external immutable revisions, exact provider binding,
 principal-filtered observations, original records after unload, collision cleanup,
@@ -128,21 +150,25 @@ modification. The external Host fixture verifies original committed evidence,
 refuses forged evidence without publishing facts, and reads retained resources
 after provider release, package removal and Host restart.
 
-The isolated Chrome `plugin-view.spec.ts` case now passes against the rebuilt
-binary with a package created outside the checkout after that build. It verifies
+The container-stage isolated Chrome `plugin-view.spec.ts` case passed against that
+stage’s rebuilt binary with a package created outside the checkout after that build. It verifies
 top-level module initialization, an opaque iframe, parent/storage/API isolation,
 Unicode input, durable state, a save completing while a query response is held,
 refresh with a resumed sequence, undeclared-capability rejection and credential
 revocation. Its 1440 px and 390 px screenshots were inspected without clipping or
 missing glyphs. Host tests also cover out-of-order HTTP arrivals, original native
 completion after view closure, cancellation without an extra read requirement and
-explicit UI-only release after Host restart. The current change reran the isolated
+explicit UI-only release after Host restart. The container stage also passed the isolated
 Chrome case `real Console, settings and docking shell` successfully.
 
-The preceding existing-science baseline remains `node scripts/test-real-r.mjs`,
-`node scripts/test-mcp.mjs` and `node scripts/test-process-recovery.mjs`. The real-R suite also runs the recovery-copy check that the
-ordinary Host library suite skips; its other ignored automatic-continuation
-fixture remains unexecuted. Optional real-model and alternate R-installation
+The current R extraction passed `node scripts/test-real-r.mjs`, including native
+queries, Console/stdin/cancellation, authorized Agent execution, Host/MCP fact
+parity, independent session recovery, recovery-copy library protection and CLI
+execution/read-only result retrieval. The ordinary Host library run still ignores
+two real-R fixtures; the explicit real-R suite executes the recovery-copy case,
+while its automatic-continuation fixture remains unexecuted. The unchanged
+`node scripts/test-mcp.mjs` and `node scripts/test-process-recovery.mjs` remain the
+preceding baseline. Optional real-model and alternate R-installation
 cases remain outside this run. These results verify the new plugin Host/MCP path
 and the existing scientific flows. Real-R plugin migration, scenario layout
 integration and complete iframe interaction acceptance (OS IME, shared shortcuts,

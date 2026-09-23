@@ -1,7 +1,7 @@
 # Each phase runs in a distinct --vanilla process; no live user session is used.
 local({
   bridge <- new.env(parent=baseenv())
-  sys.source("r/bridge/checkpoint.R",bridge)
+  sys.source("plugins/r/backend/engine/r/bridge/checkpoint.R",bridge)
   bridge$rho_checkpoint_initialize(Sys.getenv("RHO_CHECKPOINT_TEST_LIBRARY"))
   directory <- Sys.getenv("RHO_CHECKPOINT_FIXTURE_DIRECTORY")
   payload <- file.path(directory,"objects.rds")

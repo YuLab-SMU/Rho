@@ -24,13 +24,15 @@ const allowed = {
   "rho-plugin-protocol": [],
   "rho-plugin-sdk": ["rho-plugin-protocol"],
   "rho-plugins": ["rho-plugin-protocol", "rho-plugin-sdk", "rho-contract", "rho-operation"],
-  "rho-contract": [],
-  "rho-operation": ["rho-contract"],
+  "rho-r-api": ["rho-plugin-protocol"],
+  "rho-r-engine": ["rho-r-api", "rho-plugin-protocol"],
+  "rho-contract": ["rho-plugin-protocol", "rho-r-api"],
+  "rho-operation": ["rho-contract", "rho-plugin-protocol"],
   "rho-application": ["rho-contract"],
   "rho-agents": ["rho-application", "rho-contract"],
   "rho-skills": ["rho-contract", "rho-operation"],
   "rho-adapter-skills": ["rho-contract", "rho-operation", "rho-skills"],
-  "rho-workspace": ["rho-contract", "rho-operation"],
+  "rho-workspace": ["rho-contract", "rho-operation", "rho-r-api"],
   "rho-project": ["rho-contract", "rho-operation"],
   "rho-environment": ["rho-contract", "rho-operation"],
   "rho-execution": ["rho-contract", "rho-operation"],
@@ -39,7 +41,7 @@ const allowed = {
   "rho-r-environment": ["rho-environment", "rho-operation", "rho-process"],
   "rho-git": ["rho-project", "rho-process"],
   "rho-sqlite": ["rho-contract", "rho-operation", "rho-application"],
-  "rho-r-runtime": ["rho-contract", "rho-workspace"],
+  "rho-r-runtime": ["rho-contract", "rho-workspace", "rho-r-api", "rho-r-engine", "rho-plugin-protocol"],
   "rho-host": ["rho-plugin-protocol", "rho-plugins", "rho-agents", "rho-agent-client", "rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
   "rho-mcp": ["rho-contract", "rho-host"],
   "rho-agent-client": ["rho-contract"],
@@ -51,13 +53,17 @@ for (const pkg of metadata.packages) {
   assert.ok(Object.hasOwn(allowed, pkg.name), `Unclassified production owner: ${pkg.name}`);
   for (const dep of pkg.dependencies) {
     if (dep.path) {
-      if (pkg.name === "rho-r-runtime" && dep.name === "jet_core") {
+      if (pkg.name === "rho-r-engine" && dep.name === "jet_core") {
         assert.equal(path.resolve(dep.path), path.resolve(root, "vendor/jet-core"));
         continue;
       }
-      const relative = path.relative(path.join(root, "crates"), dep.path);
-      assert.ok(relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
-        `${pkg.name} depends on code outside Next: ${dep.name}`);
+      if (["rho-r-api", "rho-r-engine"].includes(dep.name)) {
+        assert.equal(path.resolve(dep.path), path.resolve(root, dep.name === "rho-r-api" ? "plugins/r/api" : "plugins/r/backend/engine"));
+      } else {
+        const relative = path.relative(path.join(root, "crates"), dep.path);
+        assert.ok(relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
+          `${pkg.name} depends on code outside Next: ${dep.name}`);
+      }
     }
     if (dep.name.startsWith("rho-")) {
       if (["rho-host", "rho-mcp"].includes(pkg.name) && ["rho-plugin-protocol", "rho-plugins"].includes(dep.name) && dep.kind === "dev") continue;

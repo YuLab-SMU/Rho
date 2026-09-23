@@ -1,7 +1,7 @@
 root <- getwd()
 bridge <- new.env(parent = asNamespace("utils")); bridge$can_inspect_bindings <- requireNamespace("rlang", quietly = TRUE)
 stopifnot(bridge$can_inspect_bindings, requireNamespace("jsonlite", quietly = TRUE))
-for (file in c("packages.R", "objects.R", "package-index.R", "tools.R", "dispatch.R")) sys.source(file.path(root, "r/bridge", file), bridge)
+for (file in c("packages.R", "objects.R", "package-index.R", "tools.R", "dispatch.R")) sys.source(file.path(root, "plugins/r/backend/engine/r/bridge", file), bridge)
 local({
   base <- tempfile("rho-package-index-"); dir.create(base); on.exit(unlink(base, recursive = TRUE), add = TRUE)
   libs <- file.path(base, c("lib1", "lib2")); for (lib in libs) dir.create(lib)

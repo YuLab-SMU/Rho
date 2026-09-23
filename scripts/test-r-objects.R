@@ -2,7 +2,7 @@ args <- commandArgs(trailingOnly = TRUE)
 root <- if (length(args)) args[[1L]] else getwd()
 bridge <- new.env(parent = asNamespace("utils")); bridge$can_inspect_bindings <- requireNamespace("rlang", quietly = TRUE)
 stopifnot(bridge$can_inspect_bindings, requireNamespace("jsonlite", quietly = TRUE))
-for (file in c("query.R", "objects.R", "dispatch.R")) sys.source(file.path(root, "r/bridge", file), bridge)
+for (file in c("query.R", "objects.R", "dispatch.R")) sys.source(file.path(root, "plugins/r/backend/engine/r/bridge", file), bridge)
 local({
   modifyList <- function(x, y, keep.null = TRUE) { x[names(y)] <- y; x }
   scope <- list(project = "/isolated", principal = "test", session = "test-session")

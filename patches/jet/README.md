@@ -1,6 +1,6 @@
 # Jet core: pinned source and local patches
 
-Rho uses Jet's core library through `rho-r-runtime`. The snapshot in
+Rho uses Jet's core library through `rho-r-engine` in `plugins/r/backend/engine`. The snapshot in
 [`vendor/jet-core`](../../vendor/jet-core/UPSTREAM.md) contains the complete core
 crate's Rust sources (including their unit tests), a standalone Cargo manifest and
 the original upstream license. Jet CLI, Lua/Neovim, sample kernels, release tooling

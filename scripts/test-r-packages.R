@@ -1,7 +1,7 @@
 # Read-only inventory against temporary DESCRIPTION fixtures; no installation.
 local({
   bridge <- new.env(parent = asNamespace("utils"))
-  sys.source("r/bridge/packages.R", bridge)
+  sys.source("plugins/r/backend/engine/r/bridge/packages.R", bridge)
   directory <- tempfile("rho-package-query-")
   dir.create(directory)
   original <- .libPaths()

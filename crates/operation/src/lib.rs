@@ -126,6 +126,12 @@ impl OperationError {
     }
 }
 
+impl From<rho_plugin_protocol::ProtocolError> for OperationError {
+    fn from(error: rho_plugin_protocol::ProtocolError) -> Self {
+        Self::Contract(error.to_string())
+    }
+}
+
 impl From<ContractError> for OperationError {
     fn from(value: ContractError) -> Self {
         Self::Contract(value.to_string())

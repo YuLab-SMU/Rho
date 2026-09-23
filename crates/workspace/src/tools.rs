@@ -2,73 +2,13 @@ use super::{RunROutput, WorkspaceRunHandler, runtime_error};
 use async_trait::async_trait;
 use rho_contract::{CapabilityDescriptor, CapabilityRef, Operation, TargetRef};
 use rho_operation::{CommitPlan, HandlerError, OperationError, OperationHandler};
-use schemars::{JsonSchema, schema_for};
-use serde::{Deserialize, Serialize};
+use schemars::schema_for;
+use serde::Serialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
 const MAX_TOOL_CODE_BYTES: usize = 64 * 1024;
-fn default_package() -> String {
-    "base".into()
-}
-fn default_help_limit() -> u32 {
-    16384
-}
-fn default_lint_limit() -> u32 {
-    100
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct HelpArguments {
-    #[schemars(length(min = 1, max = 128))]
-    pub topic: String,
-    #[serde(default = "default_package")]
-    #[schemars(length(min = 1, max = 128))]
-    pub package: String,
-    /// Exact installed copy from workspace.packages/package_index.
-    #[serde(default)]
-    pub library_path: Option<String>,
-    #[serde(default)]
-    pub observation_id: Option<String>,
-    /// Static file identities returned by workspace.package_index.
-    #[serde(default)]
-    pub expected_index_files: Option<Vec<rho_contract::PackageFileIdentity>>,
-    #[serde(default = "default_help_limit")]
-    #[schemars(range(min = 1, max = 32768))]
-    pub max_chars: u32,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct LintArguments {
-    #[schemars(length(max = 65536))]
-    pub code: String,
-    #[serde(default = "default_lint_limit")]
-    #[schemars(range(min = 1, max = 200))]
-    pub limit: u32,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct FormatArguments {
-    #[schemars(length(max = 65536))]
-    pub code: String,
-}
-
-#[derive(Debug, Clone)]
-pub enum WorkspaceToolRequest {
-    Help(HelpArguments),
-    Lint(LintArguments),
-    Format(FormatArguments),
-}
-impl WorkspaceToolRequest {
-    pub fn action(&self) -> &'static str {
-        match self {
-            Self::Help(_) => "help",
-            Self::Lint(_) => "lint",
-            Self::Format(_) => "format",
-        }
-    }
-}
+pub use rho_r_api::{HelpArguments, LintArguments, FormatArguments, WorkspaceToolRequest};
 #[derive(Clone, Copy)]
 pub enum WorkspaceToolKind {
     Help,

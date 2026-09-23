@@ -239,6 +239,21 @@
         "node",
         "scripts/test-plugin-ui.mjs"
       ]
+    },
+    "plugins.r-engine": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-r-engine",
+        "--locked"
+      ]
+    },
+    "plugins.r-independent": {
+      "command": [
+        "node",
+        "scripts/test-r-plugin-engine.mjs"
+      ]
     }
   },
   "areas": {
@@ -376,7 +391,8 @@
         "scripts/test-plugin-protocol.mjs",
         "scripts/test-plugin-backend.mjs",
         "scripts/test-plugin-ui.mjs",
-        "scripts/fixtures/plugin-ui.mjs"
+        "scripts/fixtures/plugin-ui.mjs",
+        "scripts/test-r-plugin-engine.mjs"
       ],
       "checks": [
         "docs.index",
@@ -389,7 +405,9 @@
         "plugins.boundaries",
         "plugins.boundary-tests",
         "plugins.public-types",
-        "plugins.ui-sdk"
+        "plugins.ui-sdk",
+        "plugins.r-engine",
+        "plugins.r-independent"
       ]
     }
   }

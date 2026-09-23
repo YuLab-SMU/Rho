@@ -7,17 +7,10 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-base64 = "0.22.1"
-sysinfo.workspace = true
 async-trait.workspace = true
-jet_core = { path = "../../../vendor/jet-core" }
 rho-contract = { path = "../../contract" }
 rho-workspace = { path = "../../workspace" }
-serde.workspace = true
-serde_json.workspace = true
-sha2.workspace = true
+rho-r-api = { path = "../../../plugins/r/api" }
+rho-r-engine = { path = "../../../plugins/r/backend/engine" }
+rho-plugin-protocol = { path = "../../plugin-protocol" }
 tokio.workspace = true
-uuid.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true

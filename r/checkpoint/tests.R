@@ -1,5 +1,5 @@
 bridge <- new.env(parent = baseenv())
-sys.source("r/bridge/checkpoint.R", bridge)
+sys.source("plugins/r/backend/engine/r/bridge/checkpoint.R", bridge)
 bridge$rho_checkpoint_initialize(Sys.getenv("RHO_CHECKPOINT_TEST_LIBRARY"))
 local({
   fixture <- dyn.load(Sys.getenv("RHO_CHECKPOINT_ALTREP_FIXTURE"))

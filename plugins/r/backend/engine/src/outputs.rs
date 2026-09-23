@@ -2,7 +2,7 @@ use base64::{
     Engine, alphabet,
     engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig},
 };
-use rho_contract::{
+use rho_r_api::{
     MediaReference, OperationId, OutputEvent, OutputEvents, OutputEventsArguments, OutputPage,
     ReadOutputArguments,
 };
@@ -509,7 +509,7 @@ fn err(e: impl std::fmt::Display) -> String {
 }
 
 #[async_trait::async_trait]
-impl rho_workspace::WorkspaceOutputs for OutputStore {
+impl rho_r_api::NativeOutputs for OutputStore {
     async fn verified_original(&self, reference: &MediaReference) -> Result<Arc<[u8]>, String> {
         OutputStore::verified_original(self, reference)
     }
@@ -522,7 +522,7 @@ impl rho_workspace::WorkspaceOutputs for OutputStore {
     async fn list_outputs(
         &self,
         args: &OutputEventsArguments,
-    ) -> Result<rho_contract::MediaPage, String> {
+    ) -> Result<rho_r_api::MediaPage, String> {
         let (events, gap) = self.log(&args.operation_id)?;
         let mut media: Vec<_> = events
             .into_iter()
@@ -533,7 +533,7 @@ impl rho_workspace::WorkspaceOutputs for OutputStore {
                     .is_some_and(|reference| reference.mime_type.starts_with("image/") || reference.mime_type == "text/html")
             })
             .filter_map(|e| {
-                e.media.map(|reference| rho_contract::MediaSummary {
+                e.media.map(|reference| rho_r_api::MediaSummary {
                     reference,
                     observed_at_ms: e.observed_at_ms,
                 })
@@ -542,7 +542,7 @@ impl rho_workspace::WorkspaceOutputs for OutputStore {
             .collect();
         let has_more = media.len() > args.limit as usize;
         media.truncate(args.limit as usize);
-        Ok(rho_contract::MediaPage {
+        Ok(rho_r_api::MediaPage {
             operation_id: args.operation_id.clone(),
             next_sequence: media
                 .last()
@@ -680,7 +680,7 @@ mod evidence_cache_tests {
     }
     #[tokio::test]
     async fn text_artifact_is_discoverable_but_never_a_plot() {
-        use rho_workspace::WorkspaceOutputs;
+        use rho_r_api::NativeOutputs;
         let temp = tempfile::tempdir().unwrap();
         let store = OutputStore::open(temp.path(), "project").unwrap();
         let id = OperationId::new("op-help").unwrap();

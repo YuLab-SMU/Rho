@@ -11,6 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let types = Config::new()
         .with_out_dir(root.join("types"))
         .with_large_int("number");
+    OperationId::export_all(&types)?;
     PluginArchive::export_all(&types)?;
     PluginRevisionPage::export_all(&types)?;
     RevisionDifference::export_all(&types)?;

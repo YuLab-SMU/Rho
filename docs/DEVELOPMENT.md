@@ -32,7 +32,7 @@ owner boundary requires it.
   or component change.
 - **L1 — affected module.** After behavior settles, run the complete affected crate
   or frontend suite, plus `typecheck` for client changes. Typical commands are
-  `cargo test -p rho-r-runtime --locked`, `cargo test -p rho-host --lib --locked`,
+  `cargo test -p rho-r-engine --lib --locked`, `cargo test -p rho-host --lib --locked`,
   `npm run test --prefix ui`, `npm run typecheck --prefix ui`,
   `npm run build --prefix ui`, and `npm run check --prefix ui`.
 - **L2 — cross-boundary acceptance.** Use this for Host/Operation/Runtime,
@@ -275,6 +275,18 @@ The reviewed Kimi adapter source was tag `@moonshot-ai/kimi-code@0.41.0`, commit
 third-party product or require its current models to pass an independent evaluation.
 
 ## Contract and source changes
+
+The R owner source is under `plugins/r/api` and `plugins/r/backend/engine`.
+Iterate with `cargo test -p rho-r-engine --lib --locked`; after changes to its public
+types, also cover the current `rho-contract`, `rho-operation` and `rho-workspace`
+consumers and regenerate client contracts. `node scripts/test-r-plugin-engine.mjs`
+constructs a standalone tree outside the checkout and runs the native owner's
+unit tests with no private core source. Add `--real-r` with explicit `RHO_ARK` and
+`RHO_R_HOME` to run its disposable native acceptance. These checks invoke Cargo;
+run them serially with all other Cargo and generation commands. The script keeps
+pinned dependency versions from the existing lock and resolves offline; it does
+not install tools. The existing `node scripts/test-real-r.mjs` suite verifies the
+remaining Host composition against the same relocated native implementation.
 
 The public plugin contracts live in `crates/plugin-protocol` and generate the
 standalone `sdk/plugin-protocol` TypeScript/schema package through the same

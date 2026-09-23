@@ -91,41 +91,7 @@ pub struct WorkspaceRuntimeReport {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone)]
-pub struct WorkspaceRuntimeError {
-    pub message: String,
-    pub effect_may_have_occurred: bool,
-    pub recovery: Option<Value>,
-    pub query_code: Option<Box<str>>,
-}
-
-impl WorkspaceRuntimeError {
-    pub fn query_error(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            effect_may_have_occurred: false,
-            recovery: None,
-            query_code: Some(code.into().into_boxed_str()),
-        }
-    }
-    pub fn before_effect(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            effect_may_have_occurred: false,
-            recovery: None,
-            query_code: None,
-        }
-    }
-
-    pub fn after_possible_effect(message: impl Into<String>, recovery: Option<Value>) -> Self {
-        Self {
-            message: message.into(),
-            effect_may_have_occurred: true,
-            recovery,
-            query_code: None,
-        }
-    }
-}
+pub use rho_r_api::NativeError as WorkspaceRuntimeError;
 
 #[async_trait]
 pub trait WorkspaceRuntime: Send + Sync {

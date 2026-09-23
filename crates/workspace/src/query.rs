@@ -12,96 +12,12 @@ use rho_contract::{
     ObserveObjectArguments, PackageIndexArguments, PackageIndexPage, ReadObjectArguments,
 };
 use rho_operation::{Clock, OperationError, QueryHandler, SystemClock};
-use schemars::{JsonSchema, schema_for};
-use serde::{Deserialize, Serialize};
+use schemars::schema_for;
+
 use serde_json::Value;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct WorkspaceQueryScope {
-    pub project: String,
-    pub principal: String,
-    pub session: String,
-}
-#[derive(Debug, Clone, Serialize)]
-pub struct ScopedWorkspaceArguments<T> {
-    #[serde(flatten)]
-    pub arguments: T,
-    pub scope: WorkspaceQueryScope,
-}
-impl<T> ScopedWorkspaceArguments<T> {
-    fn unbound(arguments: T) -> Self {
-        Self {
-            arguments,
-            scope: WorkspaceQueryScope {
-                project: String::new(),
-                principal: String::new(),
-                session: String::new(),
-            },
-        }
-    }
-}
-
+pub use rho_r_api::{WorkspaceQueryScope, ScopedWorkspaceArguments, SnapshotArguments, InspectArguments, WorkspaceQuery, WORKSPACE_READ_SCOPE, SNAPSHOT_QUERY_ID, INSPECT_QUERY_ID, MAX_SNAPSHOT_ITEMS, MAX_PREVIEW_ITEMS};
 use std::{collections::BTreeSet, sync::Arc};
-
-pub const WORKSPACE_READ_SCOPE: &str = "workspace.read";
-pub const SNAPSHOT_QUERY_ID: &str = "workspace.snapshot";
-pub const INSPECT_QUERY_ID: &str = "workspace.inspect_object";
-pub const MAX_SNAPSHOT_ITEMS: u32 = 200;
-pub const MAX_PREVIEW_ITEMS: u32 = 100;
-
-fn default_limit() -> u32 {
-    MAX_SNAPSHOT_ITEMS
-}
-fn default_preview_items() -> u32 {
-    20
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct SnapshotArguments {
-    #[serde(default = "default_limit")]
-    #[schemars(range(min = 1, max = 200))]
-    pub limit: u32,
-    #[serde(default)]
-    pub expected_session: Option<String>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct InspectArguments {
-    #[schemars(length(min = 1, max = 1024))]
-    pub name: String,
-    #[serde(default = "default_preview_items")]
-    #[schemars(range(min = 1, max = 100))]
-    pub max_items: u32,
-    #[serde(default)]
-    pub expected_session: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub enum WorkspaceQuery {
-    Snapshot(SnapshotArguments),
-    InspectObject(InspectArguments),
-    Packages(PackageQueryArguments),
-    ListObjects(ScopedWorkspaceArguments<ListObjectsArguments>),
-    ObserveObject(ScopedWorkspaceArguments<ObserveObjectArguments>),
-    ReadObject(ScopedWorkspaceArguments<ReadObjectArguments>),
-    PackageIndex(ScopedWorkspaceArguments<PackageIndexArguments>),
-    ReadHelp(ScopedWorkspaceArguments<rho_contract::ReadPackageHelpArguments>),
-}
-impl WorkspaceQuery {
-    fn expected_session(&self) -> Option<&str> {
-        match self {
-            Self::Snapshot(arguments) => arguments.expected_session.as_deref(),
-            Self::InspectObject(arguments) => arguments.expected_session.as_deref(),
-            Self::Packages(arguments) => arguments.expected_session.as_deref(),
-            Self::ListObjects(a) => Some(&a.arguments.expected_session),
-            Self::ObserveObject(a) => Some(&a.arguments.expected_session),
-            Self::ReadObject(a) => Some(&a.arguments.expected_session),
-            Self::PackageIndex(a) => Some(&a.arguments.expected_session),
-            Self::ReadHelp(a) => Some(&a.arguments.expected_session),
-        }
-    }
-}
 
 pub struct WorkspaceObservation {
     pub session_id: String,

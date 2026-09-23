@@ -100,6 +100,20 @@ fn package_path(value: &str) -> Result<(), ProtocolError> {
     )
 }
 
+// Journal identities predate plugin instance names and permit namespaced tokens.
+// They remain opaque to domain owners; only the original Operation allocates them.
+fn operation_id(value: &str) -> Result<(), ProtocolError> {
+    require(
+        !value.is_empty()
+            && value.len() <= 160
+            && value
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b".-_:/".contains(&c)),
+        "operation identity must contain 1–160 safe ASCII bytes",
+    )
+}
+identity!(OperationId, operation_id);
+
 identity!(PluginId, name);
 identity!(ContributionId, name);
 identity!(InstanceAlias, name);
@@ -129,6 +143,21 @@ impl PackagePath {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn operation_identity_preserves_namespaces_and_validates_deserialization() {
+        for value in ["original/run:1", "abc_DEF-123", &"a".repeat(160)] {
+            let id = OperationId::new(value).unwrap();
+            assert_eq!(
+                serde_json::from_value::<OperationId>(serde_json::json!(value)).unwrap(),
+                id
+            );
+        }
+        for value in ["", "bad identity", "line\nend", &"a".repeat(161)] {
+            assert!(OperationId::new(value).is_err());
+            assert!(serde_json::from_value::<OperationId>(serde_json::json!(value)).is_err());
+        }
+    }
+
     #[test]
     fn hostile_paths_and_deserialized_identities_are_rejected() {
         for path in [

@@ -1,7 +1,7 @@
 # A real read-only help query must preserve R state and exact file identities.
 stopifnot(requireNamespace("tools", quietly=TRUE), requireNamespace("jsonlite", quietly=TRUE), requireNamespace("rlang", quietly=TRUE))
 bridge <- new.env(parent=asNamespace("utils")); bridge$can_inspect_bindings <- TRUE
-for (file in c("packages.R", "objects.R", "package-index.R", "tools.R", "dispatch.R")) sys.source(file.path("r/bridge",file),bridge)
+for (file in c("packages.R", "objects.R", "package-index.R", "tools.R", "dispatch.R")) sys.source(file.path("plugins/r/backend/engine/r/bridge",file),bridge)
 local({
   text <- "A中文😀éZ"; offset <- 0; pages <- character()
   repeat {
