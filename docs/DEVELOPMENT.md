@@ -283,8 +283,8 @@ Host/Studio modules. Plugin source is snapshotted before use; import, inspection
 and validation must never invoke a build recipe. Focused foundation checks are
 `cargo test -p rho-plugin-protocol --locked`,
 `cargo test -p rho-plugin-sdk --locked` and `cargo test -p rho-plugins --locked`.
-For runtime iteration use `cargo test -p rho-plugins --test backend_runtime --locked
-cargo test -p rho-host -p rho-mcp --test plugins --locked`.
+For runtime iteration use `cargo test -p rho-plugins --test backend_runtime --locked`
+and `cargo test -p rho-host -p rho-mcp --test plugins --locked`.
 Its `operation_bridge` filter exercises the actual process through the generic
 Operation/Query gateways and SQLite journal: fixed preflight qualification,
 principal/revision containment, removal during execution, cancellation,
@@ -296,6 +296,12 @@ Python 3 on PATH. `node scripts/test-plugin-backend.mjs` copies the public Rust
 crates outside the repository and compiles the example with no private source;
 it invokes Cargo, so run it serially with every other Cargo command. Public
 TypeScript consumption is checked by `node scripts/test-plugin-protocol.mjs`.
+`node scripts/test-plugin-ui.mjs` compiles the public UI SDK outside the checkout
+and exercises its channel using real MessagePorts. After client generation/build
+and `cargo build --locked`, use `npm run test:browser --prefix ui --
+e2e/plugin-view.spec.ts` for the independent UI-only package, opaque iframe,
+scoped reads, state persistence, Unicode input and revocation. The fixture uses a
+disposable project, not a user's active scientific session.
 These do not replace later real-science and
 iframe/browser acceptance for the full migration.
 

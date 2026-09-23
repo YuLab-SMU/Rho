@@ -40,6 +40,8 @@ pub struct PluginService {
     pub(crate) repository: Arc<Mutex<PluginRepository>>,
     pub(crate) runtime: Arc<PluginRuntime>,
     pub(crate) resources: Arc<PluginResources>,
+    pub(crate) views: Mutex<BTreeMap<ViewInstanceId, crate::views::LiveView>>,
+    pub(crate) view_sequences: tokio::sync::watch::Sender<u64>,
     pub(crate) bridge: PluginCapabilityBridge,
     pub(crate) scope: String,
     pub(crate) project: ProjectId,
@@ -81,6 +83,8 @@ impl PluginService {
         Ok(Arc::new(Self {
             repository,
             resources,
+            views: Mutex::new(BTreeMap::new()),
+            view_sequences: tokio::sync::watch::channel(0).0,
             runtime,
             bridge,
             scope: project.clone(),
@@ -274,6 +278,7 @@ impl PluginService {
     }
     pub async fn drain(&self) {
         let _guard = self.gate.lock().await;
+        self.close_live_views();
         for observation in self.runtime.observe() {
             if matches!(
                 observation.instance.state,

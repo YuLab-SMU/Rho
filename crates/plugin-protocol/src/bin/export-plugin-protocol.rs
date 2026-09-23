@@ -38,6 +38,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ResourceChunk::export_all(&types)?;
     ResourceTransferRequest::export_all(&types)?;
     ResourceTransferResponse::export_all(&types)?;
+    OpenPluginView::export_all(&types)?;
+    UpdatePluginView::export_all(&types)?;
+    PluginViewArguments::export_all(&types)?;
+    PluginViewConnection::export_all(&types)?;
+    PluginViewMessage::export_all(&types)?;
     RpcFrame::export_all(&types)?;
     ScenarioRevision::export_all(&types)?;
     WindowScenario::export_all(&types)?;
@@ -47,6 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("manifest", schemars::schema_for!(PluginManifest)),
         ("archive", schemars::schema_for!(PluginArchive)),
         ("rpc", schemars::schema_for!(RpcFrame)),
+        ("view-message", schemars::schema_for!(PluginViewMessage)),
         ("resource-transfer-request", schemars::schema_for!(ResourceTransferRequest)),
         ("resource-transfer-response", schemars::schema_for!(ResourceTransferResponse)),
         ("scenario", schemars::schema_for!(ScenarioRevision)),

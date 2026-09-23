@@ -547,3 +547,470 @@ async fn backend_delegation_uses_shared_query_and_operation_ports() {
     );
     host.drain().await;
 }
+
+fn ui_package(path: &std::path::Path) -> PluginArchive {
+    fs::create_dir_all(path.join("dist")).unwrap();
+    fs::write(
+        path.join("index.html"),
+        "<!doctype html><h1>External view</h1>",
+    )
+    .unwrap();
+    fs::copy(path.join("index.html"), path.join("dist/index.html")).unwrap();
+    fs::write(path.join("deps.lock"), "No dependencies").unwrap();
+    fs::write(path.join("BUILD.md"), "Copy index.html to dist/index.html").unwrap();
+    fs::write(path.join("plugin.json"),serde_json::to_vec(&json!({
+        "protocol_version":1,"id":"example.view","name":"External view","version":"1","description":"Independent isolated view","license":"MIT",
+        "source":{"files":["index.html"],"lockfiles":["deps.lock"],"build_instructions":"BUILD.md","build":null},
+        "dependencies":{},"requires":[{"capability":{"id":"plugins.list","version":1},"scopes":["plugins.read"]}],
+        "views":[{"id":"view","title":"External view","entrypoint":"dist/index.html","state_schema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"configuration_schema":{"type":"object","additionalProperties":false},"resource_kinds":[]}],
+        "capabilities":[],"contexts":[],"backend":null,"configuration_schema":{"type":"object","additionalProperties":false},"default_configuration":{}
+    })).unwrap()).unwrap();
+    rho_plugins::snapshot_directory(path, None, "ui-web").unwrap()
+}
+
+#[tokio::test]
+async fn ui_only_views_have_scoped_channels_durable_state_and_independent_instance_lifetimes() {
+    use rho_plugin_protocol::{PluginViewConnection, PluginViewMessage, PluginViewRecord};
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir(&project).unwrap();
+    let db = temp.path().join("state/state.sqlite");
+    let archive = ui_package(&temp.path().join("external-ui"));
+    let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
+    repo.import(&archive).unwrap();
+    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let context = NextHost::local_context();
+    let args = json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":"ui-web","alias":"ui","configuration":{}});
+    let instance =
+        observation(&run(&host, &context, "ui-activate", "plugins.activate", args).await);
+    assert!(instance.process_id.is_none());
+    assert!(instance.observed_in_this_host);
+    assert!(host.invoke(&context,invocation("oversized-view","views.open",json!({"instance":instance.instance.identity,"contribution":"view","window":"window-a","configuration":{},"state":{"text":"x".repeat(256*1024)}}))).await.is_err());
+    let record=run(&host,&context,"view-open","views.open",json!({"instance":instance.instance.identity,"contribution":"view","window":"window-a","configuration":{},"state":{"text":"中文 α"}})).await;
+    assert_eq!(
+        record.status,
+        OperationStatus::Succeeded,
+        "{:?}",
+        record.error
+    );
+    let view: PluginViewRecord = serde_json::from_value(record.output.unwrap()).unwrap();
+    let connection: PluginViewConnection = serde_json::from_value(
+        query(
+            &host,
+            &context,
+            "views.connection",
+            json!({"view":view.view}),
+        )
+        .await,
+    )
+    .unwrap();
+    assert!(
+        !serde_json::to_string(&record.operation)
+            .unwrap()
+            .contains(&connection.call_token)
+    );
+    let message = |sequence, body: Value| {
+        serde_json::from_value::<PluginViewMessage>(json!({"protocol_version":1,"connection":connection.connection,"view":view.view,"sequence":sequence,"request":format!("request-{sequence}"),"body":body})).unwrap()
+    };
+    let list = json!({"type":"query","capability":{"id":"plugins.list","version":1},"arguments":{"after":null,"limit":10}});
+    assert!(
+        host.dispatch_plugin_view(
+            &context,
+            "window-b",
+            &connection.call_token,
+            message(1, list.clone())
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        host.dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.asset_token,
+            message(1, list.clone())
+        )
+        .await
+        .is_err()
+    );
+    let mut stranger = context.clone();
+    stranger.caller.id = "stranger".into();
+    assert!(
+        host.dispatch_plugin_view(
+            &stranger,
+            "window-a",
+            &connection.call_token,
+            message(1, list.clone())
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        host.dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.call_token,
+            message(1, list.clone())
+        )
+        .await
+        .is_ok()
+    );
+    assert!(
+        host.dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.call_token,
+            message(1, list.clone())
+        )
+        .await
+        .is_err()
+    );
+    // The same broad scope cannot grant an undeclared capability.
+    assert!(host.dispatch_plugin_view(&context,"window-a",&connection.call_token,message(2,json!({"type":"query","capability":{"id":"plugins.instances","version":1},"arguments":{"limit":10}}))).await.is_err());
+    let ordered: PluginViewRecord = serde_json::from_value(run(&host,&context,"ordered-open","views.open",json!({"instance":instance.instance.identity,"contribution":"view","window":"window-a","configuration":{},"state":{"text":""}})).await.output.unwrap()).unwrap();
+    let ordered_connection: PluginViewConnection = serde_json::from_value(query(&host,&context,"views.connection",json!({"view":ordered.view})).await).unwrap();
+    let ordered_message=|sequence|serde_json::from_value::<PluginViewMessage>(json!({"protocol_version":1,"connection":ordered_connection.connection,"view":ordered.view,"sequence":sequence,"request":format!("ordered-{sequence}"),"body":list})).unwrap();
+    let mut second=Box::pin(host.dispatch_plugin_view(&context,"window-a",&ordered_connection.call_token,ordered_message(2)));
+    assert!(tokio::time::timeout(std::time::Duration::from_millis(25),second.as_mut()).await.is_err());
+    let (second,first)=tokio::join!(second,host.dispatch_plugin_view(&context,"window-a",&ordered_connection.call_token,ordered_message(1)));
+    assert!(first.is_ok() && second.is_ok());
+    assert_eq!(run(&host,&context,"ordered-close","views.close",json!({"view":ordered.view})).await.status,OperationStatus::Succeeded);
+    let saved = host
+        .dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.call_token,
+            message(
+                3,
+                json!({"type":"set_state","expected_version":0,"state":{"text":"kept Ω"}}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(saved["status"], "succeeded");
+    assert_eq!(saved["output"]["state_version"], 1);
+    let stale = run(
+        &host,
+        &context,
+        "stale-state",
+        "views.update",
+        json!({"view":view.view,"expected_version":0,"state":{"text":"stale"}}),
+    )
+    .await;
+    assert_ne!(stale.status, OperationStatus::Succeeded);
+    let asset = host
+        .plugin_view_asset(
+            connection.connection.as_str(),
+            &connection.asset_token,
+            "dist/index.html",
+        )
+        .unwrap();
+    assert!(
+        String::from_utf8(asset.bytes)
+            .unwrap()
+            .contains("External view")
+    );
+    assert!(
+        host.plugin_view_asset(
+            connection.connection.as_str(),
+            &connection.asset_token,
+            "dist/../plugin.json"
+        )
+        .is_err()
+    );
+    assert!(
+        host.plugin_view_asset(
+            connection.connection.as_str(),
+            &connection.asset_token,
+            "index.html"
+        )
+        .is_err()
+    );
+    assert!(
+        host.plugin_view_asset(
+            connection.connection.as_str(),
+            &connection.call_token,
+            "dist/index.html"
+        )
+        .is_err()
+    );
+    assert!(repo.remove(&archive.revision.id).is_err());
+    let closed = run(
+        &host,
+        &context,
+        "view-close",
+        "views.close",
+        json!({"view":view.view}),
+    )
+    .await;
+    assert_eq!(closed.status, OperationStatus::Succeeded);
+    assert!(
+        host.plugin_view_asset(
+            connection.connection.as_str(),
+            &connection.asset_token,
+            "dist/index.html"
+        )
+        .is_err()
+    );
+    assert!(
+        host.dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.call_token,
+            message(4, list)
+        )
+        .await
+        .is_err()
+    );
+    let still = query(
+        &host,
+        &context,
+        "plugins.instance",
+        json!({"instance":instance.instance.identity}),
+    )
+    .await;
+    assert_eq!(still["instance"]["state"], "active");
+    let released = run(
+        &host,
+        &context,
+        "ui-release",
+        "plugins.release",
+        json!({"instance":instance.instance.identity}),
+    )
+    .await;
+    assert_eq!(
+        released.status,
+        OperationStatus::Succeeded,
+        "{:?}",
+        released.error
+    );
+    repo.remove(&archive.revision.id).unwrap();
+    drop(host);
+    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let stored = query(&host, &context, "views.inspect", json!({"view":view.view})).await;
+    assert_eq!(stored["state"]["text"], "kept Ω");
+    assert_eq!(stored["closed"], true);
+    assert!(
+        host.query_snapshot(
+            &context,
+            QueryRequest {
+                capability: CapabilityRef::new("views.connection", 1).unwrap(),
+                arguments: json!({"view":view.view})
+            }
+        )
+        .await
+        .is_err()
+    );
+    repo.import(&archive).unwrap();
+    let historical=observation(&run(&host,&context,"ui-historical","plugins.activate",json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":"ui-web","alias":"historical","configuration":{}})).await);
+    let old_view=run(&host,&context,"view-historical","views.open",json!({"instance":historical.instance.identity,"contribution":"view","window":"window-a","configuration":{},"state":{"text":"saved before disconnect"}})).await.output.unwrap();
+    drop(host);
+    let host = NextHost::open_project(&db, &project).await.unwrap();
+    assert_eq!(
+        query(
+            &host,
+            &context,
+            "plugins.instance",
+            json!({"instance":historical.instance.identity})
+        )
+        .await["observed_in_this_host"],
+        false
+    );
+    assert_eq!(
+        run(
+            &host,
+            &context,
+            "close-historical",
+            "views.close",
+            json!({"view":old_view["view"]})
+        )
+        .await
+        .status,
+        OperationStatus::Succeeded
+    );
+    assert_eq!(
+        run(
+            &host,
+            &context,
+            "release-historical",
+            "plugins.release",
+            json!({"instance":historical.instance.identity})
+        )
+        .await
+        .status,
+        OperationStatus::Succeeded
+    );
+    repo.remove(&archive.revision.id).unwrap();
+}
+
+#[tokio::test]
+async fn closing_a_view_does_not_cancel_or_retarget_its_accepted_native_operation() {
+    use rho_plugin_protocol::{PluginViewConnection, PluginViewMessage, PluginViewRecord};
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir(&project).unwrap();
+    let db = temp.path().join("state.sqlite");
+    let native = fixture::package(&temp.path().join("native"), "1", false);
+    let ui_path = temp.path().join("ui");
+    ui_package(&ui_path);
+    let mut manifest: Value =
+        serde_json::from_slice(&fs::read(ui_path.join("plugin.json")).unwrap()).unwrap();
+    manifest["requires"] =
+        json!([{"capability":{"id":"fixture.run","version":1},"scopes":["plugins.run"]}]);
+    fs::write(
+        ui_path.join("plugin.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    let ui = rho_plugins::snapshot_directory(&ui_path, None, "ui-web").unwrap();
+    let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
+    repo.import(&native).unwrap();
+    repo.import(&ui).unwrap();
+    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let context = NextHost::local_context();
+    let native_instance = observation(
+        &run(
+            &host,
+            &context,
+            "native-start",
+            "plugins.activate",
+            activation(&native, "native"),
+        )
+        .await,
+    );
+    let ui_instance=observation(&run(&host,&context,"ui-start","plugins.activate",json!({"revision":ui.revision.id,"artifact":ui.artifacts[0].id,"target":"ui-web","alias":"ui","configuration":{}})).await);
+    let view:PluginViewRecord=serde_json::from_value(run(&host,&context,"open","views.open",json!({"instance":ui_instance.instance.identity,"contribution":"view","window":"window-a","configuration":{},"state":{"text":""}})).await.output.unwrap()).unwrap();
+    let connection: PluginViewConnection = serde_json::from_value(
+        query(
+            &host,
+            &context,
+            "views.connection",
+            json!({"view":view.view}),
+        )
+        .await,
+    )
+    .unwrap();
+    let binding=query(&host,&context,"plugins.resolve",json!({"capability":{"id":"fixture.run","version":1},"instance":native_instance.instance.identity})).await;
+    let message = |sequence, body| {
+        serde_json::from_value::<PluginViewMessage>(json!({"protocol_version":1,"connection":connection.connection,"view":view.view,"sequence":sequence,"request":format!("message-{sequence}"),"body":body})).unwrap()
+    };
+    let accepted=host.dispatch_plugin_view(&context,"window-a",&connection.call_token,message(1,json!({"type":"invoke","request_id":"x".repeat(128),"capability":{"id":"fixture.run","version":1},"arguments":{"binding":binding,"arguments":{"action":"hold"}},"preconditions":[]}))).await.unwrap();
+    let record: OperationRecord = serde_json::from_value(accepted).unwrap();
+    assert!(!record.status.is_terminal());
+    let foreign = run(
+        &host,
+        &context,
+        "foreign-read",
+        "plugins.branch",
+        json!({"revision":ui.revision.id,"name":"branch"}),
+    )
+    .await;
+    assert!(
+        host.dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.call_token,
+            message(
+                2,
+                json!({"type":"get_operation","operation_id":foreign.operation.operation_id})
+            )
+        )
+        .await
+        .is_err()
+    );
+    let own = host
+        .dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.call_token,
+            message(
+                3,
+                json!({"type":"get_operation","operation_id":record.operation.operation_id}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        own["operation"]["operation_id"],
+        json!(record.operation.operation_id)
+    );
+    let mut no_read = context.clone();
+    no_read.scopes.remove("operation.read");
+    let cancellation = host
+        .dispatch_plugin_view(
+            &no_read,
+            "window-a",
+            &connection.call_token,
+            message(
+                4,
+                json!({"type":"cancel","operation_id":record.operation.operation_id}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cancellation["accepted"], true);
+    assert_eq!(
+        run(
+            &host,
+            &context,
+            "close",
+            "views.close",
+            json!({"view":view.view})
+        )
+        .await
+        .status,
+        OperationStatus::Succeeded
+    );
+    assert_eq!(
+        run(
+            &host,
+            &context,
+            "release-ui",
+            "plugins.release",
+            json!({"instance":ui_instance.instance.identity})
+        )
+        .await
+        .status,
+        OperationStatus::Succeeded
+    );
+    let binding=query(&host,&context,"plugins.resolve",json!({"capability":{"id":"fixture.read","version":1},"instance":native_instance.instance.identity})).await;
+    // A read roundtrip establishes that the backend received the accepted call;
+    // finish is an explicit fixture control that completes the original request.
+    query(
+        &host,
+        &context,
+        "fixture.read",
+        json!({"binding":binding,"arguments":{"action":"finish"}}),
+    )
+    .await;
+    let completed = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let current = host
+                .get_operation(&context, &record.operation.operation_id)
+                .await
+                .unwrap()
+                .unwrap();
+            if current.status.is_terminal() {
+                break current;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(completed.status, OperationStatus::Succeeded);
+    assert_eq!(completed.operation.caller.id, view.view.as_str());
+    assert_eq!(completed.operation.principal(), context.principal());
+    assert_eq!(
+        run(
+            &host,
+            &context,
+            "release-native",
+            "plugins.release",
+            json!({"instance":native_instance.instance.identity})
+        )
+        .await
+        .status,
+        OperationStatus::Succeeded
+    );
+}

@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginViewMessage",
+  "type": "object",
+  "properties": {
+    "body": {
+      "$ref": "#/$defs/PluginViewRequest"
+    },
+    "connection": {
+      "type": "string"
+    },
+    "protocol_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "request": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "view": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "connection",
+    "view",
+    "sequence",
+    "request",
+    "body"
+  ],
+  "$defs": {
+    "CapabilityKey": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "PluginViewRequest": {
+      "description": "Every request crosses the containing shell's scoped Host port. No browser\ncredential, project root or user identity is accepted from the iframe.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "arguments": true,
+            "capability": {
+              "$ref": "#/$defs/CapabilityKey"
+            },
+            "type": {
+              "type": "string",
+              "const": "query"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "capability",
+            "arguments"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "arguments": true,
+            "capability": {
+              "$ref": "#/$defs/CapabilityKey"
+            },
+            "preconditions": {
+              "type": "array",
+              "items": true
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "invoke"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "request_id",
+            "capability",
+            "arguments",
+            "preconditions"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operation_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "get_operation"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operation_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operation_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "cancel"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operation_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_version": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "state": true,
+            "type": {
+              "type": "string",
+              "const": "set_state"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "expected_version",
+            "state"
+          ]
+        }
+      ]
+    }
+  }
+}

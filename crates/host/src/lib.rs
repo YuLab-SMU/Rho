@@ -26,6 +26,7 @@ pub use agent_handoffs::AgentHandoffService;
 mod annotations;
 pub use annotations::AnnotationService;
 mod html_views;
+mod plugin_views;
 pub use html_views::HtmlViewTokens;
 mod agent_connections;
 pub use agent_connections::{AgentMcpConnections, AgentMcpIdentity};

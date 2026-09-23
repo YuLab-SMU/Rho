@@ -136,3 +136,7 @@ credential bytes remain with the credential owner, outside revision and scenario
 storage. History is not a rollback mechanism for scientific effects or R memory.
 
 Regenerate these artifacts from the repository with `npm run generate --prefix ui`.
+
+Public types are emitted as `.d.ts` declarations with ESM `.js` specifiers. They
+contain no runtime implementation and do not force a consumer to widen its
+TypeScript source root. The external conformance check pins a separate `rootDir`.

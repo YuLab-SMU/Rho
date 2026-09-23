@@ -55,8 +55,8 @@ fn fixture(path: &Path, version: &str, requires: bool) -> PluginArchive {
     })).unwrap()).unwrap();
     snapshot_directory(path, None, "native-test").unwrap()
 }
-fn activation(archive: &PluginArchive, configuration: Value) -> BackendActivation {
-    BackendActivation {
+fn activation(archive: &PluginArchive, configuration: Value) -> PluginActivation {
+    PluginActivation {
         revision: archive.revision.id.clone(),
         artifact: archive.artifacts[0].id.clone(),
         target: "native-test".into(),

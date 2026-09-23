@@ -78,11 +78,25 @@ removal and Host restart; the list supports discovery after lost acknowledgement
 The public Rust SDK includes streaming resource methods and an independent example;
 the public package includes data-channel types and language-neutral schemas.
 
-The existing scientific owners and UI have not yet migrated into packages. The
-isolated iframe container, TypeScript UI SDK, live scenarios and Plugin Studio
-remain pending. Next is container and UI-only instance integration,
-followed by the complete R/Viewer vertical path,
-all-feature migration and the approved Studio workflows.
+The generic view container and public TypeScript UI SDK are implemented. UI-only
+packages activate under `ui-web` without a process. The same Operation gateway
+owns opening, closing and versioned state updates; state survives closure and
+Host restart, while connection reads never recreate a view. Each iframe has an
+opaque origin, a private MessagePort, independent asset/call credentials, explicit
+window/principal/grant checks and ordered bounded messages. The call credential
+stays in the containing shell. Closing revokes only the view and leaves accepted
+native work on its original Operation. Historical UI-only instances can be
+explicitly released after closing their retained views. The independent fixture
+builds from the public SDK outside the checkout and uses the ordinary package and
+lifecycle paths. Public types now ship as `.d.ts` declarations so consumers keep
+their own source-root boundary.
+
+The existing scientific owners and fixed Studio panels have not yet migrated into
+packages. The standalone generic frame is the container conformance surface;
+its integration into plugin/scenario layouts remains part of the active work.
+Next is the complete R/Viewer vertical path, all-feature migration, live scenarios
+and the approved Plugin Studio workflows. Management and Studio still need to
+become ordinary plugins.
 Remove the replaced fixed composition before final acceptance; a permanent dual
 architecture is not an accepted outcome. New repository paths do not read or
 migrate abandoned storage. Existing user Hosts and R memory have not been restarted.
@@ -90,13 +104,16 @@ The lifecycle ports require the rebuilt Host; refreshing only the client cannot
 add them to an older process. Inspect live work and preserve its R session before
 any separately authorized replacement.
 
-Current resource verification passed: public protocol tests (7), Rust SDK
+Current affected verification passed: public protocol tests (7), Rust SDK
 transport tests (6), resource store/channel tests (8), repository tests (9),
 backend/bridge process tests (14), Host library tests (48) and plugin integration
-tests (4), plus MCP library tests (14) and its actual plugin-connection test.
+tests (6), Workbench library tests (26), plus MCP library tests (14) and its actual plugin-connection test.
 External TypeScript and Rust echo/resource consumers compile using only the public
-packages. Generation, client build/check, architecture, plugin boundaries and
-governance checks passed. The prior foundation's unchanged Operation tests (24), Host observer/port/recovery tests (11) and CLI
+packages. The public UI SDK additionally verifies MessagePort identity/order,
+quotas, Unicode, disposal and retention of structured error/recovery diagnostics.
+Generation, client build/check, 456 frontend tests across 42 files, architecture,
+plugin boundaries and governance checks passed. The ordinary Host library run
+still has two ignored real-R recovery fixtures; these are not counted as passes. The prior foundation's unchanged Operation tests (24), Host observer/port/recovery tests (11) and CLI
 package recovery tests (3) remain the preceding baseline.
 
 The new Host tests exercise external immutable revisions, exact provider binding,
@@ -111,15 +128,26 @@ modification. The external Host fixture verifies original committed evidence,
 refuses forged evidence without publishing facts, and reads retained resources
 after provider release, package removal and Host restart.
 
-Existing-science regression passed: `node scripts/test-real-r.mjs`,
-`node scripts/test-mcp.mjs`, `node scripts/test-process-recovery.mjs`, and the
-isolated Chrome case `real Console, settings and docking shell` against the
-rebuilt binary. The real-R suite also runs the recovery-copy check that the
+The isolated Chrome `plugin-view.spec.ts` case now passes against the rebuilt
+binary with a package created outside the checkout after that build. It verifies
+top-level module initialization, an opaque iframe, parent/storage/API isolation,
+Unicode input, durable state, a save completing while a query response is held,
+refresh with a resumed sequence, undeclared-capability rejection and credential
+revocation. Its 1440 px and 390 px screenshots were inspected without clipping or
+missing glyphs. Host tests also cover out-of-order HTTP arrivals, original native
+completion after view closure, cancellation without an extra read requirement and
+explicit UI-only release after Host restart. The current change reran the isolated
+Chrome case `real Console, settings and docking shell` successfully.
+
+The preceding existing-science baseline remains `node scripts/test-real-r.mjs`,
+`node scripts/test-mcp.mjs` and `node scripts/test-process-recovery.mjs`. The real-R suite also runs the recovery-copy check that the
 ordinary Host library suite skips; its other ignored automatic-continuation
 fixture remains unexecuted. Optional real-model and alternate R-installation
 cases remain outside this run. These results verify the new plugin Host/MCP path
-and the existing scientific flows. Real-R plugin migration and iframe acceptance
-remain outstanding and are not certified by the existing-science regressions.
+and the existing scientific flows. Real-R plugin migration, scenario layout
+integration and complete iframe interaction acceptance (OS IME, shared shortcuts,
+docking/drag and clipboard) remain outstanding. The current generic-container
+checks do not certify those remaining workflows.
 Focused commands are documented in Development.
 
 ## Bundled real Rho demo project

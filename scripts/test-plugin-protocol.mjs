@@ -11,8 +11,10 @@ try {
   // A consumer outside this checkout must not need core types or Studio's
   // bundler-specific resolution. This also catches extensionless ESM imports.
   fs.cpSync(path.join(root, "sdk/plugin-protocol"), path.join(temp, "protocol"), { recursive: true });
-  fs.writeFileSync(path.join(temp, "consumer.mts"), `
-import type { PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage } from "./protocol/index.js";
+  const consumer = path.join(temp, "consumer");
+  fs.mkdirSync(consumer);
+  fs.writeFileSync(path.join(consumer, "consumer.mts"), `
+import type { PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage } from "../protocol/index.js";
 const frame: RpcFrame = { protocol_version: 1, connection: "channel", instance: "instance",
   sequence: 1, request: "request", body: { type: "release" } };
 export function inspect(manifest: PluginManifest, visual: VisualDocument, page: PluginRevisionPage) {
@@ -21,8 +23,8 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
 `);
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext",
-    "--target", "ES2022", path.join(temp, "consumer.mts")], { stdio: "inherit" });
-  for (const name of ["manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "scenario", "visual-document"]) {
+    "--target", "ES2022", "--rootDir", consumer, path.join(consumer, "consumer.mts")], { stdio: "inherit" });
+  for (const name of ["manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "scenario", "visual-document"]) {
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
     assert.ok(schema.$schema && schema.$defs, `missing standalone schema: ${name}`);
   }

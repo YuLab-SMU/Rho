@@ -120,8 +120,33 @@ separate namespace; their original Host identity and dispatch remain unchanged.
 Native lifecycle failure withdraws new routes through an event-driven owner
 observation; this does not reconnect, restart or replay a provider.
 
-UI isolation uses a sandboxed iframe per view and an instance-bound channel;
-backend isolation uses a process per activated service instance with bounded,
+UI-only packages use the same immutable instance repository and lifecycle without
+creating a placeholder process. `views.open`, `views.update` and `views.close`
+are ordinary Operations; state updates compare the view's own version and schema.
+Open views retain their exact revision independently of native operation leases.
+Stored view state survives closure and Host restart, but a read never recreates
+its connection. Explicit release can retire a historical UI-only instance because
+its exact manifest establishes that no native backend was created; native failure
+still requires established cleanup. Closing a view never releases its backend.
+
+The public `sdk/plugin-ui` client uses an opaque sandboxed iframe per view and a
+private MessagePort addressed to its exact document and bootstrap nonce. The
+containing shell retains the call credential; the iframe receives only view
+identity, configuration and state. Immutable asset access has a separate token,
+16 MiB per-file quota and response sandbox, including direct navigation. Only
+that scoped GET route admits null Origin; generic Host API access remains private.
+The core checks principal/window/connection/message ordering and declared grants,
+then delegates to the same Host ports. HTTP arrival reordering has a bounded wait;
+acceptance order does not serialize completion or block controls behind slow reads.
+Self-state is limited to the connected
+view. Result reads and cancellation are limited to that view's own Operations;
+read authority comes from the original parent, and cancellation keeps its original
+native scope rule. Closing revokes both credentials, while accepted operations
+keep their fixed provider and original commit owner. Browser subresources are
+restricted; neither iframe self-navigation nor trusted native code is claimed to
+have an OS network sandbox.
+
+Backend isolation uses a process per activated service instance with bounded,
 versioned bidirectional RPC and separate logs. Neither native code nor build
 scripts have an OS filesystem/network sandbox. Registration becomes visible only
 after successful initialization. Draining first revokes new calls, then releases

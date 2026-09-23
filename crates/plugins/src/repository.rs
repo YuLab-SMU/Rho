@@ -39,7 +39,8 @@ impl PluginRepository {
             CREATE TABLE IF NOT EXISTS revision_refs(owner_kind TEXT NOT NULL, owner TEXT NOT NULL, revision TEXT NOT NULL, PRIMARY KEY(owner_kind,owner,revision));
             CREATE INDEX IF NOT EXISTS revision_refs_target ON revision_refs(revision);
             CREATE TABLE IF NOT EXISTS branches(id TEXT PRIMARY KEY, plugin TEXT NOT NULL, head TEXT NOT NULL REFERENCES revisions(id), name TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS plugin_instances(id TEXT PRIMARY KEY, document TEXT NOT NULL);")?;
+            CREATE TABLE IF NOT EXISTS plugin_instances(id TEXT PRIMARY KEY, document TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS plugin_views(id TEXT PRIMARY KEY, project TEXT NOT NULL, principal TEXT NOT NULL, document TEXT NOT NULL);")?;
         Ok(Self { root, connection })
     }
 
@@ -385,7 +386,7 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "operation" | "management" | "scenario" | "document" | "checkpoint"
+                "instance" | "view" | "operation" | "management" | "scenario" | "document" | "checkpoint"
             ),
             "unknown reference owner",
         )?;
@@ -424,7 +425,7 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "operation" | "management" | "scenario" | "document" | "checkpoint"
+                "instance" | "view" | "operation" | "management" | "scenario" | "document" | "checkpoint"
             ),
             "unknown reference owner",
         )?;

@@ -7,6 +7,7 @@ mod agents;
 mod settings;
 mod mcp_sessions;
 mod demo_project;
+mod plugin_views;
 
 pub use demo_project::materialize_demo_project;
 
@@ -119,6 +120,7 @@ fn failure(status: StatusCode, error: impl Into<String>) -> Response {
 
 async fn boundary(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
     let deleting = request.method() == axum::http::Method::DELETE;
+    let plugin_asset = request.method() == axum::http::Method::GET && request.uri().path().starts_with("/view/plugin/");
     let headers = request.headers();
     if headers.get(header::HOST).and_then(|h| h.to_str().ok()) != Some(&state.authority) {
         return failure(StatusCode::FORBIDDEN, "unexpected local Host");
@@ -126,13 +128,13 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
     if headers.get_all(header::ORIGIN).iter().count() > 1
         || headers
             .get(header::ORIGIN)
-            .is_some_and(|h| h.to_str().ok() != Some(&state.origin))
+            .is_some_and(|h| h.to_str().ok() != Some(&state.origin) && !(plugin_asset && h.to_str().ok() == Some("null")))
     {
         return failure(StatusCode::FORBIDDEN, "foreign Origin");
     }
     let html_view = request.method() == axum::http::Method::GET
         && request.uri().path().starts_with("/view/html/");
-    let public_asset = matches!(request.uri().path(), "/" | "/app.js" | "/style.css") || html_view;
+    let public_asset = matches!(request.uri().path(), "/" | "/app.js" | "/style.css") || html_view || plugin_asset;
     let credential = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok());
@@ -362,12 +364,7 @@ async fn dispatch(
         .get("x-rho-studio-window")
         .and_then(|v| v.to_str().ok())
     {
-        if window.is_empty()
-            || window.len() > 128
-            || !window
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
-        {
+        if rho_plugin_protocol::WindowId::new(window).is_err() {
             return failure(
                 StatusCode::BAD_REQUEST,
                 "invalid Studio window transport identity",
@@ -550,6 +547,8 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/annotations/capture", post(annotations::capture))
         .route("/api/html/token", post(annotations::html_token))
         .route("/view/html/{token}", get(annotations::html_view))
+        .route("/view/plugin/{connection}/{token}/{*path}", get(plugin_views::asset))
+        .route("/api/plugin-view", post(plugin_views::dispatch))
         .route("/api/agents/components/query", post(component_agents::query))
         .route("/api/agents/components/command", post(component_agents::command))
         .route("/api/agents/components/credential", post(component_agents::credential))

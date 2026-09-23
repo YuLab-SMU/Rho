@@ -201,10 +201,19 @@
       ]
     },
     "plugins.backend-sdk": {
-      "command": ["cargo", "test", "-p", "rho-plugin-sdk", "--locked"]
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-plugin-sdk",
+        "--locked"
+      ]
     },
     "plugins.external-backend": {
-      "command": ["node", "scripts/test-plugin-backend.mjs"]
+      "command": [
+        "node",
+        "scripts/test-plugin-backend.mjs"
+      ]
     },
     "plugins.boundaries": {
       "command": [
@@ -223,6 +232,12 @@
       "command": [
         "node",
         "scripts/test-plugin-protocol.mjs"
+      ]
+    },
+    "plugins.ui-sdk": {
+      "command": [
+        "node",
+        "scripts/test-plugin-ui.mjs"
       ]
     }
   },
@@ -359,7 +374,9 @@
         "scripts/plugin-protocol.mjs",
         "scripts/check-plugin-boundaries.mjs",
         "scripts/test-plugin-protocol.mjs",
-        "scripts/test-plugin-backend.mjs"
+        "scripts/test-plugin-backend.mjs",
+        "scripts/test-plugin-ui.mjs",
+        "scripts/fixtures/plugin-ui.mjs"
       ],
       "checks": [
         "docs.index",
@@ -371,7 +388,8 @@
         "plugins.external-backend",
         "plugins.boundaries",
         "plugins.boundary-tests",
-        "plugins.public-types"
+        "plugins.public-types",
+        "plugins.ui-sdk"
       ]
     }
   }

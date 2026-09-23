@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { MessageChannel } from "node:worker_threads";
+import { compilePublicUiSdk } from "./fixtures/plugin-ui.mjs";
+const directory=fs.mkdtempSync(path.join(os.tmpdir(),"rho-public-ui-"));
+try {
+  const sdk=await import(pathToFileURL(compilePublicUiSdk(directory)).href);
+  const init={protocol_version:1,connection:"connection",view:{view:"view",state:{text:""},state_version:0}};
+  const channel=new MessageChannel(),client=new sdk.PluginViewClient(channel.port1,init);
+  let response=0;
+  channel.port2.on("message",message=>channel.port2.postMessage({protocol_version:1,connection:"connection",view:"view",sequence:++response,request:message.request,ok:true,result:message.body}));
+  const result=await client.query({id:"fixture.read",version:1},{text:"中文 Ω"});
+  assert.equal(result.arguments.text,"中文 Ω");
+  await assert.rejects(client.query({id:"fixture.read",version:1},{text:"x".repeat(sdk.MAX_UI_MESSAGE_BYTES)}),/quota/);
+  client.dispose();channel.port2.close();
+  await assert.rejects(client.operation("op"),/closed/);
+  const staleChannel=new MessageChannel(),stale=new sdk.PluginViewClient(staleChannel.port1,init);
+  staleChannel.port2.on("message",message=>staleChannel.port2.postMessage({protocol_version:1,connection:"another",view:"view",sequence:1,request:message.request,ok:true,result:null}));
+  await assert.rejects(stale.query({id:"fixture.read",version:1},{}),/identity or sequence/);
+  stale.dispose();staleChannel.port2.close();
+  const errorChannel=new MessageChannel(),errorClient=new sdk.PluginViewClient(errorChannel.port1,init);
+  errorChannel.port2.on("message",message=>errorChannel.port2.postMessage({protocol_version:1,connection:"connection",view:"view",sequence:1,request:message.request,ok:false,error:"Original commit remains pending",diagnostic:{operation_id:"original-op",recovery:{retained:true}}}));
+  await assert.rejects(errorClient.operation("original-op"),error=>error instanceof sdk.ViewRequestError && error.diagnostic.operation_id==="original-op" && error.diagnostic.recovery.retained);
+  errorClient.dispose();errorChannel.port2.close();
+  const quotaChannel=new MessageChannel(),quota=new sdk.PluginViewClient(quotaChannel.port1,init);
+  const pending=Array.from({length:sdk.MAX_UI_PENDING},()=>quota.operation("op").catch(e=>e));
+  await assert.rejects(quota.operation("op"),/quota/);
+  quota.dispose();quotaChannel.port2.close();await Promise.all(pending);
+  console.log("External public UI SDK compiles; Unicode, quotas, stale connections and disposal verified.");
+} finally {fs.rmSync(directory,{recursive:true,force:true});}

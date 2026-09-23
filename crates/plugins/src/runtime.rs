@@ -14,12 +14,12 @@ use std::{
 use tempfile::TempDir;
 use uuid::Uuid;
 
-pub const MAX_BACKEND_INSTANCES: usize = 64;
+pub const MAX_PLUGIN_INSTANCES: usize = 64;
 pub const MAX_PENDING_PLUGIN_CALLS: usize = 128;
 pub const MAX_BACKEND_LOG_BYTES: usize = 64 * 1024;
 
 /// Filled by a validated Host port, never by a backend's own initialization data.
-pub struct BackendActivation {
+pub struct PluginActivation {
     pub revision: RevisionId,
     pub artifact: ArtifactId,
     pub target: String,
@@ -128,14 +128,14 @@ impl PluginRuntime {
 
     pub async fn activate(
         &self,
-        request: BackendActivation,
+        request: PluginActivation,
     ) -> Result<PluginInstance, PluginError> {
         self.activate_identified(request, PluginInstanceId::new(format!("plugin-{}", Uuid::new_v4().simple()))?, true).await
     }
 
     /// Host publication stages readiness before exposing any new invocation route.
-    pub async fn activate_identified(&self, request: BackendActivation, identity: PluginInstanceId, publish: bool) -> Result<PluginInstance, PluginError> {
-        let mut prepared = PreparedBackend::new(&self.repository, request, identity)?;
+    pub async fn activate_identified(&self, request: PluginActivation, identity: PluginInstanceId, publish: bool) -> Result<PluginInstance, PluginError> {
+        let mut prepared = PreparedInstance::new(&self.repository, request, identity)?;
         prepared.lifecycle = Some(self.lifecycle.clone());
         let identity = prepared.record.identity.clone();
         // Failure before readiness has no published registrations. The prepared
@@ -161,8 +161,8 @@ impl PluginRuntime {
                 entry.state.lock().unwrap().record.state != InstanceState::Released
             });
             ensure(
-                entries.len() < MAX_BACKEND_INSTANCES,
-                "backend instance quota reached",
+                entries.len() < MAX_PLUGIN_INSTANCES,
+                "plugin instance quota reached",
             )?;
             entries.insert(identity.instance.clone(), entry.clone());
         }
@@ -191,6 +191,17 @@ impl PluginRuntime {
             state: state.clone(),
             repository: self.repository.clone(),
         };
+        if prepared.manifest.backend.is_none() {
+            // UI-only instances own the same durable identity and revision lease.
+            // They never spawn a process merely to publish view contributions.
+            prepared.retain_after_drop = true;
+            let mut current = state.lock().unwrap();
+            let mut record = current.record.clone();
+            record.state = InstanceState::Active;
+            self.repository.lock().unwrap().record_instance(&record)?;
+            current.record = record.clone();
+            return Ok(record);
+        }
         let process = match backend::start(
             prepared,
             state.clone(),
@@ -394,16 +405,23 @@ impl PluginRuntime {
                 state.pins == 0 && state.pending == 0,
                 "instance still owns accepted calls",
             )?;
+            let view_prefix = format!("view:{}:", identity.instance);
+            ensure(!self.repository.lock().unwrap().references(&identity.revision)?.iter().any(|reference| reference.starts_with(&view_prefix)),
+                "instance still has open views; close those views before releasing it")?;
             let prefix = format!("operation:{}:", identity.instance);
             ensure(!self.repository.lock().unwrap().references(&identity.revision)?.iter().any(|reference| reference.starts_with(&prefix)),
                 "instance has an operation awaiting authoritative completion")?;
         }
-        entry
-            .process
-            .get()
-            .ok_or_else(|| PluginError::Unavailable("backend was never activated".into()))?
-            .release()
-            .await
+        if let Some(process) = entry.process.get() {
+            process.release().await
+        } else {
+            ensure(entry.manifest.backend.is_none(), "backend release is unconfirmed")?;
+            let mut state = entry.state.lock().unwrap();
+            state.record.state = InstanceState::Released;
+            self.repository.lock().unwrap().record_instance(&state.record)?;
+            self.lifecycle.send_modify(|revision| *revision = revision.wrapping_add(1));
+            Ok(())
+        }
     }
 }
 
@@ -596,30 +614,26 @@ fn preflight_control(instance: &PluginInstanceId, body: RpcBody) -> Result<(), P
     Ok(())
 }
 
-pub(crate) struct PreparedBackend {
+pub(crate) struct PreparedInstance {
     pub record: PluginInstance,
     pub manifest: PluginManifest,
     pub grants: Vec<CapabilityRequirement>,
     pub directory: TempDir,
-    pub executable: PathBuf,
+    pub executable: Option<PathBuf>,
     pub repository: Arc<Mutex<PluginRepository>>,
     pub retain_after_drop: bool,
     lifecycle: Option<tokio::sync::watch::Sender<u64>>,
 }
-impl PreparedBackend {
+impl PreparedInstance {
     fn new(
         repository: &Arc<Mutex<PluginRepository>>,
-        request: BackendActivation,
+        request: PluginActivation,
         identity: PluginInstanceId,
     ) -> Result<Self, PluginError> {
         let mut repo = repository.lock().unwrap();
         let archive = repo.export(&request.revision)?;
         validate_archive(&archive)?;
         let manifest = archive.revision.manifest.clone();
-        let backend = manifest
-            .backend
-            .as_ref()
-            .ok_or_else(|| PluginError::Invalid("package has no backend".into()))?;
         let artifact = archive
             .artifacts
             .iter()
@@ -677,7 +691,7 @@ impl PreparedBackend {
                 }))?;
             }
         }
-        let executable = directory.path().join(backend.executable.as_str());
+        let executable = manifest.backend.as_ref().map(|backend| directory.path().join(backend.executable.as_str()));
         let record = PluginInstance {
             identity: InstanceRef {
                 instance: identity,
@@ -735,7 +749,7 @@ impl PreparedBackend {
         }
     }
 }
-impl Drop for PreparedBackend {
+impl Drop for PreparedInstance {
     fn drop(&mut self) {
         if !self.retain_after_drop {
             if self.record.state == InstanceState::Preparing {

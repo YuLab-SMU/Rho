@@ -87,9 +87,11 @@ Sources:
 - `crates/plugins/**`
 - `plugins/**`
 - `scripts/check-plugin-boundaries.mjs`
+- `scripts/fixtures/plugin-ui.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
+- `scripts/test-plugin-ui.mjs`
 - `sdk/**`
 
 Checks:
@@ -102,6 +104,7 @@ Checks:
 - `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
+- `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`
 - `system.client`: `["node","scripts/client.mjs","check"]`
 

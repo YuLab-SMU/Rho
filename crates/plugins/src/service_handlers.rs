@@ -46,6 +46,8 @@ pub(crate) fn register(
         "resources.list",
         "resources.inspect",
         "resources.read",
+        "views.inspect",
+        "views.connection",
         "plugins.repository",
         "plugins.list",
         "plugins.inspect",
@@ -62,6 +64,9 @@ pub(crate) fn register(
         }))?;
     }
     for id in [
+        "views.open",
+        "views.update",
+        "views.close",
         "plugins.activate",
         "plugins.release",
         "plugins.remove",
@@ -80,6 +85,25 @@ pub(crate) fn register(
 }
 fn descriptor(id: &str) -> host::CapabilityDescriptor {
     let (input, output, example, summary, operation, scope) = match id {
+        "views.inspect" | "views.connection" => (
+            schema_for!(PluginViewArguments).to_value(),
+            if id == "views.connection" { schema_for!(PluginViewConnection).to_value() } else { schema_for!(PluginViewRecord).to_value() },
+            json!({"view":"view-example"}), "Inspect an existing scoped plugin view", false, PLUGINS_RUN_SCOPE,
+        ),
+        "views.open" => (
+            schema_for!(OpenPluginView).to_value(), schema_for!(PluginViewRecord).to_value(),
+            json!({"instance":instance(),"contribution":"inspector","window":"window-example","configuration":{},"state":{}}),
+            "Open a view of an exact active plugin instance", true, PLUGINS_RUN_SCOPE,
+        ),
+        "views.update" => (
+            schema_for!(UpdatePluginView).to_value(), schema_for!(PluginViewRecord).to_value(),
+            json!({"view":"view-example","expected_version":0,"state":{}}),
+            "Save view state with its owner's expected version", true, PLUGINS_RUN_SCOPE,
+        ),
+        "views.close" => (
+            schema_for!(PluginViewArguments).to_value(), schema_for!(PluginViewRecord).to_value(),
+            json!({"view":"view-example"}), "Close a view without releasing its backend", true, PLUGINS_RUN_SCOPE,
+        ),
         "resources.list" => (
             schema_for!(ResourceList).to_value(), schema_for!(ResourcePage).to_value(),
             json!({"owner":null,"after":null,"limit":20}),
@@ -251,6 +275,9 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "plugins.resolve" => normalize::<PluginResolveArguments>(value),
         "plugins.branch_head" => normalize::<PluginBranchArguments>(value),
         "plugins.compare" => normalize::<ComparePluginRevisions>(value),
+        "views.inspect" | "views.connection" | "views.close" => normalize::<PluginViewArguments>(value),
+        "views.open" => normalize::<OpenPluginView>(value),
+        "views.update" => normalize::<UpdatePluginView>(value),
         "plugins.activate" => normalize::<ActivatePlugin>(value),
         "plugins.branch" => normalize::<BranchPlugin>(value),
         "plugins.advance_branch" => normalize::<AdvancePluginBranch>(value),
@@ -281,6 +308,9 @@ impl QueryHandler for Read {
     ) -> Result<host::QuerySnapshot, OperationError> {
         let service = &self.service;
         let data = match self.id {
+            "views.inspect" => json!(service.view_record(context,&decode::<PluginViewArguments>(value)?.view)?),
+            "views.connection" => json!(service.view_connection(context,&decode::<PluginViewArguments>(value)?.view)?),
+
             "resources.list" | "resources.inspect" | "resources.read" => {
                 let resources = service.resources.clone();
                 let project = service.project.clone();
@@ -473,13 +503,27 @@ impl OperationHandler for Manage {
             identity: self.service.scope.clone(),
         };
         match self.id {
+            "views.open" => {
+                let args: OpenPluginView = decode(value)?;
+                self.service.prepare_view(context,&args)?;
+                revision = Some(args.instance.revision);
+                target = host::TargetRef { kind:"plugin_view".into(), identity:format!("view-{}",uuid::Uuid::new_v4().simple()) };
+            }
+            "views.update" | "views.close" => {
+                let view = if self.id=="views.update" { decode::<UpdatePluginView>(value)?.view } else { decode::<PluginViewArguments>(value)?.view };
+                let record=self.service.view_record(context,&view)?;
+                if !record.closed { revision=Some(record.instance.revision); }
+                target=host::TargetRef { kind:"plugin_view".into(), identity:view.to_string() };
+            }
+
             "plugins.activate" => {
                 let args: ActivatePlugin = decode(value)?;
-                if args.target != backend_target() {
-                    return Err(invalid("artifact target does not match this local Host"));
-                }
                 let repo = self.service.repository.lock().unwrap();
                 let stored = repo.revision(&args.revision).map_err(error)?;
+                let expected_target = if stored.manifest.backend.is_some() { backend_target() } else { "ui-web".into() };
+                if args.target != expected_target {
+                    return Err(invalid("artifact target does not match this local Host"));
+                }
                 let artifact = repo.artifact(&args.artifact).map_err(error)?;
                 if artifact.revision != args.revision || artifact.target != args.target {
                     return Err(invalid(
@@ -522,6 +566,7 @@ impl OperationHandler for Manage {
                     .observe_instance(context, &args.instance, false)?;
                 if !observation.observed_in_this_host
                     && observation.instance.state != InstanceState::Released
+                    && self.service.repository.lock().unwrap().revision(&args.instance.revision).map_err(error)?.manifest.backend.is_some()
                 {
                     return Err(error(
                         "instance belongs to an ended Host; cleanup is not established by its historical record",
@@ -645,6 +690,16 @@ impl Manage {
         let value = &operation.normalized_arguments;
         let service = &self.service;
         match self.id {
+            "views.open" | "views.update" | "views.close" => {
+                let _guard=service.gate.lock().await;
+                let record=match self.id {
+                    "views.open"=>service.open_view(&bound.context,ViewInstanceId::new(&bound.target.identity).map_err(error)?,decode(value)?)?,
+                    "views.update"=>service.update_view(&bound.context,decode(value)?)?,
+                    _=>service.close_view(&bound.context,&decode::<PluginViewArguments>(value)?.view)?,
+                };
+                Ok(json!(record))
+            }
+
             "plugins.activate" => {
                 let args: ActivatePlugin = decode(value)?;
                 let _guard = service.gate.lock().await;
@@ -658,7 +713,7 @@ impl Manage {
                 let result = service
                     .runtime
                     .activate_identified(
-                        BackendActivation {
+                        PluginActivation {
                             revision: args.revision,
                             artifact: args.artifact,
                             target: args.target,
@@ -695,6 +750,22 @@ impl Manage {
                     service.observe_instance(&bound.context, &args.instance, false)?;
                 if observation.instance.state == InstanceState::Released {
                     return Ok(json!(observation));
+                }
+                if !observation.observed_in_this_host {
+                    let mut repo=service.repository.lock().unwrap();
+                    let manifest=repo.revision(&args.instance.revision).map_err(error)?.manifest;
+                    if manifest.backend.is_none() {
+                        let references=repo.references(&args.instance.revision).map_err(error)?;
+                        let view_prefix=format!("view:{}:",args.instance.instance);
+                        let operation_prefix=format!("operation:{}:",args.instance.instance);
+                        if references.iter().any(|r|r.starts_with(&view_prefix)||r.starts_with(&operation_prefix)) { return Err(invalid("instance still has retained views or operations")); }
+                        let mut record=observation.instance;
+                        record.state=InstanceState::Released;
+                        record.diagnostic=None;
+                        repo.record_instance(&record).map_err(error)?;
+                        drop(repo);
+                        return Ok(json!(service.observe_instance(&bound.context,&args.instance,false)?));
+                    }
                 }
                 let result = service.runtime.release(&args.instance).await;
                 service.refresh_locked()?;

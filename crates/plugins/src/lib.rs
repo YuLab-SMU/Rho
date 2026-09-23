@@ -11,6 +11,8 @@ mod resources;
 pub use resources::*;
 #[cfg(unix)]
 mod resource_channel;
+mod views;
+pub use views::PluginViewAsset;
 mod service;
 mod service_handlers;
 pub use service::*;

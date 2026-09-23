@@ -10,6 +10,8 @@ mod resources;
 pub use resources::*;
 mod scenario;
 mod visual;
+mod view;
+pub use view::*;
 
 pub use identity::*;
 pub use manifest::*;

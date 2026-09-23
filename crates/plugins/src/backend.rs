@@ -112,7 +112,7 @@ impl<T> Drop for TaskGuard<T> {
 }
 
 pub(crate) async fn start(
-    mut prepared: PreparedBackend,
+    mut prepared: PreparedInstance,
     state: SharedBackendState,
     services: Arc<dyn PluginHostServices>,
     policy: BackendPolicy,
@@ -124,7 +124,7 @@ pub(crate) async fn start(
     let resource_channel = data_channel.as_ref().map(|c| c.endpoint.clone());
     #[cfg(not(unix))]
     let resource_channel = None;
-    let mut command = Command::new(&prepared.executable);
+    let mut command = Command::new(prepared.executable.as_ref().ok_or_else(|| PluginError::Invalid("package has no backend".into()))?);
     command
         .args(&prepared.manifest.backend.as_ref().unwrap().arguments)
         .current_dir(prepared.directory.path())
@@ -254,7 +254,7 @@ type IncomingFrames = mpsc::Receiver<Result<Option<RpcFrame>, String>>;
 
 #[allow(clippy::too_many_arguments)]
 async fn run(
-    mut prepared: PreparedBackend,
+    mut prepared: PreparedInstance,
     mut child: Child,
     mut writer: RpcWriter<ChildStdin>,
     mut frames: IncomingFrames,

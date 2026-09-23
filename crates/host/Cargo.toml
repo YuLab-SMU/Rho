@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+rho-plugin-protocol = { path = "../plugin-protocol" }
 rho-agents = { path = "../agents" }
 jsonschema.workspace = true
 rho-agent-client = { path = "../agent-client" }
@@ -38,7 +39,6 @@ uuid.workspace = true
 fs4 = { version = "1", default-features = false, features = ["sync"] }
 
 [dev-dependencies]
-rho-plugin-protocol = { path = "../plugin-protocol" }
 axum.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true

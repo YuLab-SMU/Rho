@@ -820,6 +820,7 @@ read together with lifecycle state, and does not itself establish process livene
 configuration through the normal Operation port. It validates configuration and
 all declared grants against existing caller authority before admission, waits
 for exact readiness, then publishes the backend's complete capability batch.
+A UI-only manifest uses target `ui-web` and creates no native process.
 Use `plugins.resolve` to select a provider and pass the returned `binding`,
 scientific `arguments` and native `preconditions` to that capability. Multiple
 matching instances require explicit selection. No package origin gains extra scope.
@@ -829,8 +830,21 @@ and `plugins.reconcile_references` also use normal Operations and stable
 `client_request_id` values. Release drains accepted work; an error does not prove
 cleanup. Reconciliation takes the original terminal `operation_id` and retires
 its protections without repeating native work. The CLI recovery interface still
-handles archive import/export and source snapshots; active Host import/build/UI
-flows are not implemented by this lifecycle slice.
+handles archive import/export and source snapshots; active Host build/import
+flows remain part of the ongoing Plugin Studio work.
+
+`views.open` takes an exact `instance`, declared `contribution`, `window`,
+`configuration` and schema-valid initial `state`. It returns a durable view ID.
+`views.inspect` reads it, and `views.connection` returns only an already-live
+connection. The generic standalone container opens through the private Workbench
+URL with `window=WINDOW_ID&plugin-view=VIEW_ID` query parameters; keep the launch
+credential only in the normal private URL fragment. This is also the conformance
+surface for the public UI SDK. The returned view must belong to that window.
+`views.update` uses `expected_version`; `views.close` revokes the connection but
+preserves state and leaves its backend alive. Close retained views before releasing
+an instance. After a Host restart, explicitly close historical view records before
+releasing a UI-only instance; reading a record never reconnects it. Management and
+Studio interfaces remain pending ordinary plugins.
 
 These ports are shared by connected CLI, HTTP and official MCP. An existing MCP
 connection receives tool-list change notifications when providers appear,

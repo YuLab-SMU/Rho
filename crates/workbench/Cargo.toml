@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 rho-contract = { path = "../contract" }
 rho-host = { path = "../host" }
+rho-plugin-protocol = { path = "../plugin-protocol" }
 rho-mcp = { path = "../mcp" }
 axum.workspace = true
 rmcp = { workspace = true, features = ["transport-streamable-http-server"] }

@@ -39,7 +39,7 @@ if (process.argv.includes("--self-test")) {
   checkPluginSource("backend/src/main.rs", "use rho_plugin_sdk::Backend;");
   console.log("Plugin private-import and delivery-bypass fixtures passed.");
 } else {
-  for (const file of walk(path.join(root, "plugins")))
+  for (const file of ["plugins", "sdk/plugin-ui"].flatMap(directory => walk(path.join(root, directory))))
     checkPluginSource(path.relative(root, file), fs.readFileSync(file, "utf8"));
   console.log("Plugin packages use public contracts without private core imports or delivery exceptions.");
 }

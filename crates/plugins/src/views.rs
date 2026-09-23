@@ -1,0 +1,433 @@
+use crate::{service::*, *};
+use rho_contract as host;
+use rho_operation::OperationError;
+use rho_plugin_protocol::*;
+use rusqlite::{OptionalExtension, params};
+use serde_json::Value;
+use std::collections::BTreeSet;
+
+const MAX_OPEN_VIEWS: usize = 256;
+const MAX_VIEW_STATE: usize = 256 * 1024;
+pub(crate) struct LiveView {
+    connection: PluginViewConnection,
+    context: host::CallContext,
+    sequence: u32,
+}
+pub struct PluginViewAsset {
+    pub bytes: Vec<u8>,
+    pub media_type: &'static str,
+}
+fn token() -> String {
+    format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    )
+}
+fn owner(record: &PluginViewRecord) -> String {
+    format!("{}:{}", record.instance.instance, record.view)
+}
+fn bounded_state(value: &Value) -> Result<(), OperationError> {
+    if serde_json::to_vec(value).map_err(invalid)?.len() > MAX_VIEW_STATE {
+        return Err(invalid("view state exceeds 256 KiB"));
+    }
+    Ok(())
+}
+impl PluginService {
+    pub(crate) fn close_live_views(&self) {
+        let records = self
+            .views
+            .lock()
+            .unwrap()
+            .values()
+            .map(|live| (live.context.clone(), live.connection.view.view.clone()))
+            .collect::<Vec<_>>();
+        for (context, id) in records {
+            if let Err(error) = self.close_view(&context, &id) {
+                eprintln!("plugin view shutdown: {error}");
+            }
+        }
+    }
+    pub(crate) fn prepare_view(
+        &self,
+        context: &host::CallContext,
+        args: &OpenPluginView,
+    ) -> Result<ViewContribution, OperationError> {
+        let observed = self.observe_instance(context, &args.instance, false)?;
+        if !observed.observed_in_this_host || observed.instance.state != InstanceState::Active {
+            return Err(invalid("view requires an active instance in this Host"));
+        }
+        let repo = self.repository.lock().unwrap();
+        let manifest = repo
+            .revision(&args.instance.revision)
+            .map_err(error)?
+            .manifest;
+        let contribution = manifest
+            .views
+            .into_iter()
+            .find(|v| v.id == args.contribution)
+            .ok_or_else(|| invalid("view is not contributed by this exact revision"))?;
+        bounded_state(&args.state)?;
+        if serde_json::to_vec(args).map_err(invalid)?.len() > MAX_CONTROL_BYTES / 2 {
+            return Err(invalid(
+                "view configuration and state exceed the bootstrap quota",
+            ));
+        }
+        crate::runtime::validate_value(&contribution.state_schema, &args.state, "view state")
+            .map_err(error)?;
+        crate::runtime::validate_value(
+            &contribution.configuration_schema,
+            &args.configuration,
+            "view configuration",
+        )
+        .map_err(error)?;
+        for grant in &manifest.requires {
+            if !grant.scopes.is_subset(&context.scopes) {
+                return Err(invalid("view grants exceed the caller's authority"));
+            }
+        }
+        Ok(contribution)
+    }
+    pub(crate) fn open_view(
+        &self,
+        context: &host::CallContext,
+        id: ViewInstanceId,
+        args: OpenPluginView,
+    ) -> Result<PluginViewRecord, OperationError> {
+        let contribution = self.prepare_view(context, &args)?;
+        let mut views = self.views.lock().unwrap();
+        if views.len() >= MAX_OPEN_VIEWS {
+            return Err(invalid("open view quota reached"));
+        }
+        let mut repo = self.repository.lock().unwrap();
+        let grants = repo
+            .revision(&args.instance.revision)
+            .map_err(error)?
+            .manifest
+            .requires;
+        let record = PluginViewRecord {
+            view: id,
+            instance: args.instance,
+            project: self.project.clone(),
+            principal: plugin_principal_id(context.principal()),
+            contribution: args.contribution,
+            window: args.window,
+            configuration: args.configuration,
+            state: args.state,
+            state_version: 0,
+            closed: false,
+        };
+        let transaction = repo.connection.transaction().map_err(invalid)?;
+        transaction
+            .execute(
+                "INSERT INTO plugin_views VALUES(?,?,?,?)",
+                params![
+                    record.view.as_str(),
+                    record.project.as_str(),
+                    record.principal.as_str(),
+                    serde_json::to_string(&record).map_err(invalid)?
+                ],
+            )
+            .map_err(invalid)?;
+        transaction
+            .execute(
+                "INSERT INTO revision_refs VALUES('view',?,?)",
+                params![owner(&record), record.instance.revision.as_str()],
+            )
+            .map_err(invalid)?;
+        transaction.commit().map_err(invalid)?;
+        let mut delegated = context.clone();
+        delegated.principal = Some(context.principal().clone());
+        delegated.caller = host::CallerIdentity {
+            kind: host::CallerKind::Plugin,
+            id: record.view.to_string(),
+        };
+        delegated.scopes = grants
+            .iter()
+            .flat_map(|g| g.scopes.iter().cloned())
+            .collect();
+        let connection = PluginViewConnection {
+            view: record.clone(),
+            connection: ConnectionId::new(format!("view-{}", uuid::Uuid::new_v4().simple()))
+                .map_err(error)?,
+            next_sequence: 1,
+            asset_token: token(),
+            call_token: token(),
+            entrypoint: contribution.entrypoint,
+            grants,
+        };
+        delegated.connection_id = connection.connection.to_string();
+        views.insert(
+            record.view.clone(),
+            LiveView {
+                connection,
+                context: delegated,
+                sequence: 0,
+            },
+        );
+        Ok(record)
+    }
+    pub fn view_record(
+        &self,
+        context: &host::CallContext,
+        id: &ViewInstanceId,
+    ) -> Result<PluginViewRecord, OperationError> {
+        let repo = self.repository.lock().unwrap();
+        let document = repo
+            .connection
+            .query_row(
+                "SELECT document FROM plugin_views WHERE id=? AND project=? AND principal=?",
+                params![
+                    id.as_str(),
+                    self.project.as_str(),
+                    plugin_principal_id(context.principal()).as_str()
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(invalid)?;
+        serde_json::from_str(&document.ok_or_else(|| OperationError::NotFound(id.to_string()))?)
+            .map_err(invalid)
+    }
+    pub(crate) fn update_view(
+        &self,
+        context: &host::CallContext,
+        args: UpdatePluginView,
+    ) -> Result<PluginViewRecord, OperationError> {
+        bounded_state(&args.state)?;
+        let mut record = self.view_record(context, &args.view)?;
+        if record.closed || record.state_version != args.expected_version {
+            return Err(OperationError::ContentChanged(
+                "view state changed or closed".into(),
+            ));
+        }
+        let mut views = self.views.lock().unwrap();
+        let mut repo = self.repository.lock().unwrap();
+        let manifest = repo
+            .revision(&record.instance.revision)
+            .map_err(error)?
+            .manifest;
+        let contribution = manifest
+            .views
+            .iter()
+            .find(|v| v.id == record.contribution)
+            .ok_or_else(|| invalid("missing view contribution"))?;
+        crate::runtime::validate_value(&contribution.state_schema, &args.state, "view state")
+            .map_err(error)?;
+        let before = serde_json::to_string(&record).map_err(invalid)?;
+        record.state = args.state;
+        record.state_version = record
+            .state_version
+            .checked_add(1)
+            .ok_or_else(|| invalid("view state version exhausted"))?;
+        let transaction = repo.connection.transaction().map_err(invalid)?;
+        if transaction
+            .execute(
+                "UPDATE plugin_views SET document=? WHERE id=? AND document=?",
+                params![
+                    serde_json::to_string(&record).map_err(invalid)?,
+                    record.view.as_str(),
+                    before
+                ],
+            )
+            .map_err(invalid)?
+            != 1
+        {
+            return Err(OperationError::ContentChanged("view state changed".into()));
+        }
+        transaction.commit().map_err(invalid)?;
+        if let Some(live) = views.get_mut(&record.view) {
+            live.connection.view = record.clone();
+        }
+        Ok(record)
+    }
+    pub(crate) fn close_view(
+        &self,
+        context: &host::CallContext,
+        id: &ViewInstanceId,
+    ) -> Result<PluginViewRecord, OperationError> {
+        let mut record = self.view_record(context, id)?;
+        let mut views = self.views.lock().unwrap();
+        let mut repo = self.repository.lock().unwrap();
+        let before = serde_json::to_string(&record).map_err(invalid)?;
+        record.closed = true;
+        let transaction = repo.connection.transaction().map_err(invalid)?;
+        if transaction
+            .execute(
+                "UPDATE plugin_views SET document=? WHERE id=? AND document=?",
+                params![
+                    serde_json::to_string(&record).map_err(invalid)?,
+                    id.as_str(),
+                    before
+                ],
+            )
+            .map_err(invalid)?
+            != 1
+        {
+            return Err(OperationError::ContentChanged("view state changed".into()));
+        }
+        transaction
+            .execute(
+                "DELETE FROM revision_refs WHERE owner_kind='view' AND owner=? AND revision=?",
+                params![owner(&record), record.instance.revision.as_str()],
+            )
+            .map_err(invalid)?;
+        transaction.commit().map_err(invalid)?;
+        views.remove(id);
+        self.view_sequences
+            .send_modify(|version| *version = version.wrapping_add(1));
+        Ok(record)
+    }
+    /// Read existing connection material; never mount, restart or recover a view.
+    pub fn view_connection(
+        &self,
+        context: &host::CallContext,
+        id: &ViewInstanceId,
+    ) -> Result<PluginViewConnection, OperationError> {
+        self.view_record(context, id)?;
+        self.views
+            .lock()
+            .unwrap()
+            .get(id)
+            .map(|v| {
+                let mut connection = v.connection.clone();
+                connection.next_sequence = v.sequence.saturating_add(1);
+                connection
+            })
+            .ok_or_else(|| {
+                OperationError::Unavailable("view connection is not present in this Host".into())
+            })
+    }
+    /// Token authority is narrowed again by the caller in the containing shell.
+    pub async fn view_context(
+        &self,
+        parent: &host::CallContext,
+        connection: &str,
+        token: &str,
+        window: &str,
+        view: &ViewInstanceId,
+        sequence: u32,
+        capability: Option<&host::CapabilityRef>,
+    ) -> Result<host::CallContext, OperationError> {
+        let mut changed = self.view_sequences.subscribe();
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                match self.try_view_context(
+                    parent, connection, token, window, view, sequence, capability,
+                ) {
+                    Ok(None) => {
+                        changed.changed().await.map_err(invalid)?;
+                    }
+                    result => {
+                        self.view_sequences
+                            .send_modify(|version| *version = version.wrapping_add(1));
+                        return result.map(|context| context.expect("ready view context"));
+                    }
+                }
+            }
+        })
+        .await
+        .map_err(|_| invalid("preceding view message did not arrive; reconnect this view"))?
+    }
+    fn try_view_context(
+        &self,
+        parent: &host::CallContext,
+        connection: &str,
+        token: &str,
+        window: &str,
+        view: &ViewInstanceId,
+        sequence: u32,
+        capability: Option<&host::CapabilityRef>,
+    ) -> Result<Option<host::CallContext>, OperationError> {
+        let mut views = self.views.lock().unwrap();
+        let live = views
+            .values_mut()
+            .find(|v| {
+                v.connection.connection.as_str() == connection
+                    && v.connection.call_token == token
+                    && v.connection.view.window.as_str() == window
+                    && &v.connection.view.view == view
+                    && v.context.principal() == parent.principal()
+            })
+            .ok_or_else(|| OperationError::NotFound("view connection".into()))?;
+        if sequence == 0 || sequence <= live.sequence {
+            return Err(invalid("stale view message"));
+        }
+        if sequence - live.sequence > 128 {
+            return Err(invalid("view message exceeds ordering quota"));
+        }
+        if sequence != live.sequence + 1 {
+            return Ok(None);
+        }
+        live.sequence = sequence;
+        let mut context = live.context.clone();
+        if let Some(cap) = capability {
+            let active = self.runtime.observe().iter().any(|observation| {
+                observation.instance.identity == live.connection.view.instance
+                    && observation.instance.state == InstanceState::Active
+            });
+            if !active {
+                return Err(invalid("view instance is no longer accepting calls"));
+            }
+            let grant = live
+                .connection
+                .grants
+                .iter()
+                .find(|g| {
+                    g.capability.id.as_str() == cap.id
+                        && g.capability.version == u32::from(cap.version)
+                })
+                .ok_or_else(|| invalid("capability is not granted to this view"))?;
+            context.scopes = grant.scopes.clone();
+        }
+        context.scopes = context
+            .scopes
+            .intersection(&parent.scopes)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        Ok(Some(context))
+    }
+    pub fn view_asset(
+        &self,
+        connection: &str,
+        token: &str,
+        path: &str,
+    ) -> Result<PluginViewAsset, OperationError> {
+        let path = PackagePath::new(path).map_err(error)?;
+        if !path.is_artifact() {
+            return Err(invalid("view assets must be immutable artifact files"));
+        }
+        let views = self.views.lock().unwrap();
+        let live = views
+            .values()
+            .find(|v| {
+                v.connection.connection.as_str() == connection && v.connection.asset_token == token
+            })
+            .ok_or_else(|| OperationError::NotFound("view assets".into()))?;
+        let repo = self.repository.lock().unwrap();
+        let artifact = repo
+            .artifact(&live.connection.view.instance.artifact)
+            .map_err(error)?;
+        let file = artifact
+            .files
+            .get(&path)
+            .ok_or_else(|| OperationError::NotFound(path.to_string()))?;
+        if file.bytes > 16 * 1024 * 1024 {
+            return Err(invalid("view asset exceeds 16 MiB; use a resource read"));
+        }
+        let bytes = repo.blob(&file.digest).map_err(error)?;
+        let media_type = match path.as_str().rsplit('.').next() {
+            Some("html") => "text/html; charset=utf-8",
+            Some("js" | "mjs") => "text/javascript; charset=utf-8",
+            Some("css") => "text/css; charset=utf-8",
+            Some("json") => "application/json",
+            Some("svg") => "image/svg+xml",
+            Some("png") => "image/png",
+            Some("jpg" | "jpeg") => "image/jpeg",
+            Some("woff2") => "font/woff2",
+            Some("wasm") => "application/wasm",
+            _ => "application/octet-stream",
+        };
+        Ok(PluginViewAsset { bytes, media_type })
+    }
+}

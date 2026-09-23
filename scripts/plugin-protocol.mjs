@@ -18,21 +18,25 @@ export function syncPluginProtocol(root, temp, mode) {
   const committed = path.join(root, "sdk/plugin-protocol");
   for (const section of ["types", "schema"]) {
     const names = files(path.join(generated, section));
-    if (mode === "check") assert.deepEqual(files(path.join(committed, section)), names, "plugin protocol inventory changed");
+    // A public type-only package ships declarations, not implementation files
+    // that force a consumer to widen its rootDir or emit empty JavaScript.
+    const declarationName = name => section === "types" ? name.replace(/\.ts$/, ".d.ts") : name;
+    const outputNames = names.map(declarationName).sort();
+    if (mode === "check") assert.deepEqual(files(path.join(committed, section)), outputNames, "plugin protocol inventory changed");
     for (const name of names) {
       let source = fs.readFileSync(path.join(generated, section, name), "utf8").replace(/[ \t]+$/gm, "");
       // Public ESM declarations must also work in NodeNext projects, not only
       // under the Studio bundler's extensionless module resolution.
       if (section === "types") source = source.replace(/(from\s+["'])(\.[^"']+)(["'])/g,
         (_match, start, specifier, end) => `${start}${specifier}.js${end}`);
-      const target = path.join(committed, section, name);
+      const target = path.join(committed, section, declarationName(name));
       if (mode === "generate") {
         fs.mkdirSync(path.dirname(target), { recursive: true });
         fs.writeFileSync(target, source);
       } else assert.equal(fs.readFileSync(target, "utf8"), source, `stale plugin protocol: ${section}/${name}`);
     }
     if (mode === "generate") for (const name of files(path.join(committed, section))) {
-      if (!names.includes(name)) fs.unlinkSync(path.join(committed, section, name));
+      if (!outputNames.includes(name)) fs.unlinkSync(path.join(committed, section, name));
     }
   }
   const index = files(path.join(generated, "types")).map(name =>
