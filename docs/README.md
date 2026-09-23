@@ -13,7 +13,10 @@ Start with the current product and the work being improved. Each page has one jo
 | Prepare a requested build or distribution | [Build and release](RELEASE.md) |
 
 [Scenario plugins](SCENARIO-PLUGINS.md) is exploratory research, separate from
-current product commitments. The [page index](INDEX.md) and
+the subsequently authorized unified-plugin implementation. Its current boundary
+is in [Architecture](ARCHITECTURE.md#authorized-unified-plugin-boundary), approved
+PS01–PS07 interactions in [Design](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved),
+and actual progress in Status. The [page index](INDEX.md) and
 [source/check index](SOURCE-INDEX.md) are generated navigation aids.
 
 The [built-in component Agent plan](BUILTIN-AGENT-PLAN.md) defines the authorized

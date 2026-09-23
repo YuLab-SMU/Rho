@@ -73,6 +73,34 @@ Checks:
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `docs.tool`: `["node","scripts/test-governance.mjs"]`
 
+## `plugins`
+
+Documentation:
+
+- None.
+
+Sources:
+
+- `crates/cli/src/plugins.rs`
+- `crates/plugin-protocol/**`
+- `crates/plugins/**`
+- `plugins/**`
+- `scripts/check-plugin-boundaries.mjs`
+- `scripts/plugin-protocol.mjs`
+- `scripts/test-plugin-protocol.mjs`
+- `sdk/**`
+
+Checks:
+
+- `docs.index`: `["node","scripts/governance.mjs","check"]`
+- `plugins.boundaries`: `["node","scripts/check-plugin-boundaries.mjs"]`
+- `plugins.boundary-tests`: `["node","scripts/check-plugin-boundaries.mjs","--self-test"]`
+- `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
+- `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
+- `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
+- `system.architecture`: `["node","scripts/check-architecture.mjs"]`
+- `system.client`: `["node","scripts/client.mjs","check"]`
+
 ## `studio`
 
 Documentation:

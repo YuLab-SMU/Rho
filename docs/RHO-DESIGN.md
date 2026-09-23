@@ -1,6 +1,6 @@
 # Rho product design philosophy
 
-Version: 0.3 — Calm Precision interaction specification, 2026-09-08.
+Version: 0.4 — Calm Precision and unified plugin interaction specification, 2026-09-23.
 
 This document defines the product principles and accepted Studio interaction
 contract. Section 10 specifies this implementation round. Runtime evidence and
@@ -1887,3 +1887,49 @@ All five Paper boards were inspected for spacing, readable text, contrast,
 alignment and clipping. The selected-text actions avoid covering the quotation;
 the compact capture has an explicit full-size entry. The drawings and example
 notes are design fixtures, not persisted product annotations or runtime evidence.
+
+## 21. Unified plugins and Plugin Studio — approved
+
+The user approved PS01–PS07 on 2026-09-23 in
+[Plugins · 统一插件与 Studio 评审](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/p-D-0),
+in the existing **Rho · 工作台交互草稿** file. These designs authorize the new
+plugin-management, scenario, development and recovery interfaces. Reuse the
+existing approved scientific interactions inside their plugin views.
+
+- **PS01 Plugins:** the list prioritizes purpose, revision and usage. Inspection
+  shows exact artifact identity, contributions, dependencies and protecting
+  references. Branch, export and removal use the same controls for delivered and
+  imported packages. Delivery origin carries no permission privilege.
+- **PS02 Scenarios:** named project scenarios pin exact revisions under aliases.
+  The switch preview identifies changed providers, retained drafts and still-running
+  instances. Prepare and validate the whole target before switching this window.
+  Other windows retain their scenario; accepted scientific work retains its target.
+- **PS03 Plugin Studio:** node tree, canvas/declaration/source editor and selected
+  properties share the work area. The header explicitly distinguishes Editing,
+  Scenario and Running revisions. Checkpoint, Check & build, History and Ask Agent
+  are separate actions. Canvas gestures and property reads cannot invoke science.
+- **PS04 History:** immutable checkpoints, a parent comparison and branch origin
+  remain visible. Preview precedes application to a named scenario/alias. Applying
+  a new revision creates/selects the corresponding instance; it does not replace
+  old running instances. Scenario restore creates another checkpoint and never
+  rewinds scientific effects, credentials or R memory.
+- **PS05 Preview & diagnostics:** fixture preview is the default. A real backend
+  test explicitly creates a disposable test project. Missing toolchains and failed
+  builds preserve the currently applied revision. Invalid declaration text stays
+  editable while the canvas retains the last valid structure and shared Undo.
+  Disconnection, unconfirmed cancellation, missing exact revision and core CLI
+  recovery have distinct explanations and actions.
+- **PS06 Instances:** service and view lifetime are separate. Closed views can be
+  reopened while sessions continue. Old and new revisions appear concurrently.
+  Drain revokes new calls; release cannot succeed while work or resources remain.
+  Cleanup failure stays visible with inspection and retry controls.
+- **PS07 constrained panel:** at 390 px, details replace the list with an explicit
+  Back action preserving selection/scroll. Long identifiers wrap in inspection.
+  Source and history use their own full-width views.
+
+Use the existing Paper tokens and Inter/Menlo typography; read JSX and computed
+styles for implementation values. The seven boards were screenshot-inspected at
+1440×900 and 390×900; the initial PS01 detail overflow was corrected. This is design
+review evidence, not acceptance of the implemented iframe experience. Normal,
+wide and constrained live layouts, keyboard/IME/focus/drag/clipboard and recovery
+still require implementation verification.

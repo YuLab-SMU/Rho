@@ -181,6 +181,43 @@
         "node",
         "scripts/test-architecture.mjs"
       ]
+    },
+    "plugins.protocol": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-plugin-protocol",
+        "--locked"
+      ]
+    },
+    "plugins.repository": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-plugins",
+        "--locked"
+      ]
+    },
+    "plugins.boundaries": {
+      "command": [
+        "node",
+        "scripts/check-plugin-boundaries.mjs"
+      ]
+    },
+    "plugins.boundary-tests": {
+      "command": [
+        "node",
+        "scripts/check-plugin-boundaries.mjs",
+        "--self-test"
+      ]
+    },
+    "plugins.public-types": {
+      "command": [
+        "node",
+        "scripts/test-plugin-protocol.mjs"
+      ]
     }
   },
   "areas": {
@@ -303,6 +340,28 @@
         "system.workbench-real-r",
         "system.mcp",
         "system.mcp-real-r"
+      ]
+    },
+    "plugins": {
+      "sources": [
+        "crates/plugin-protocol/**",
+        "crates/plugins/**",
+        "crates/cli/src/plugins.rs",
+        "sdk/**",
+        "plugins/**",
+        "scripts/plugin-protocol.mjs",
+        "scripts/check-plugin-boundaries.mjs",
+        "scripts/test-plugin-protocol.mjs"
+      ],
+      "checks": [
+        "docs.index",
+        "system.architecture",
+        "system.client",
+        "plugins.protocol",
+        "plugins.repository",
+        "plugins.boundaries",
+        "plugins.boundary-tests",
+        "plugins.public-types"
       ]
     }
   }

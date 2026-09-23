@@ -5991,6 +5991,8 @@ dependencies = [
  "rho-contract",
  "rho-host",
  "rho-mcp",
+ "rho-plugin-protocol",
+ "rho-plugins",
  "rho-workbench",
  "serde_json",
  "tempfile",
@@ -6119,6 +6121,33 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "rho-plugin-protocol"
+version = "0.1.0"
+dependencies = [
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "ts-rs",
+]
+
+[[package]]
+name = "rho-plugins"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "jsonschema",
+ "rho-plugin-protocol",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.20",
  "uuid",
 ]
 

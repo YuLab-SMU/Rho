@@ -750,3 +750,37 @@ only an explicit retry uses that same request. Stale or incompatible source
 references must be refreshed in their original source, removed, or used with a
 compatible target. Handoff never rewrites window/session identities to bypass a
 reader check.
+
+## Plugin package recovery CLI
+
+The new plugin repository is separate from scientific project storage. Core
+package recovery does not require a project, an R installation, or the plugin
+management interface. No command below starts a scientific Host or loads plugin
+code. The default store is `$XDG_DATA_HOME/rho/plugins-v1` when set, otherwise
+`$HOME/Library/Application Support/rho/plugins-v1` on the current macOS target.
+Use an explicit disposable store for development:
+
+```sh
+rho plugins --store /tmp/rho-plugin-test list
+rho plugins --store /tmp/rho-plugin-test snapshot /path/to/plugin --target ui-web
+rho plugins --store /tmp/rho-plugin-test inspect sha256:EXACT_REVISION_DIGEST
+rho plugins --store /tmp/rho-plugin-test export sha256:EXACT_REVISION_DIGEST /tmp/example.rho-plugin
+rho plugins --store /tmp/rho-plugin-test validate /tmp/example.rho-plugin
+rho plugins --store /tmp/rho-plugin-test import /tmp/example.rho-plugin
+rho plugins --store /tmp/rho-plugin-test branch sha256:EXACT_REVISION_DIGEST my-controls
+```
+
+Replace the digest placeholder with the full identity returned by Snapshot or
+List. Snapshot captures declared source plus existing `dist/` output; it does not
+run the declared build command. An unbuilt checkpoint can be stored but cannot
+be activated. Export refuses to overwrite an existing destination. Import is
+idempotent for identical immutable content and does not grant additional scopes.
+List leaves an absent repository absent. The repository never reads an old Rho
+project database or automatically reinstalls removed delivered packages.
+
+`remove REVISION` lists protecting instance, operation, document, scenario,
+checkpoint, dependency and branch references instead of deleting a used revision.
+`branch-head BRANCH` reads a branch; `advance-branch BRANCH EXPECTED NEXT` uses
+compare-and-swap and requires NEXT's parent to be EXPECTED. This changes a branch
+pointer, not a running instance or selected scenario. Application, builds,
+activation and full Plugin Studio integration are tracked separately in Status.

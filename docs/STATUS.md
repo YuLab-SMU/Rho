@@ -1,6 +1,43 @@
 # Rho: current state and focus
 
-Updated: 2026-09-22. This is the single current status summary. Git retains history.
+Updated: 2026-09-23. This is the single current status summary. Git retains history.
+
+## Unified plugin refactor — active implementation
+
+The user authorized the complete unified-plugin plan, including scientific
+backend migration, all existing views, multiple project scenarios, coexisting
+versions, public SDKs and a self-hosted Plugin Studio. This is the current focus;
+a Viewer-only pilot is not the final scope. PS01–PS07 were created in Paper,
+screenshot-inspected, and explicitly approved by the user on 2026-09-23. See
+[Design section 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved).
+
+The first foundation is implemented in `rho-plugin-protocol` and `rho-plugins`:
+public package/revision/instance/provider/scenario/visual/RPC contracts, immutable
+source and artifact identities, local JSON/base64 archives, source/lock/build
+requirements, schema/digest/path validation, transactional package import/export,
+revision references, branch compare-and-swap, source comparison and bounded
+catalog pages. The independently packageable protocol crate generates the public
+`sdk/plugin-protocol` TypeScript and JSON Schema package. The new core
+`rho plugins --store ...` recovery CLI supports these repository actions without
+opening a scientific Host. `plugins/example-inspector` is an ordinary, unprivileged
+conformance fixture; it is not installed automatically.
+
+This foundation does **not yet** activate plugins, manage backend processes,
+route scientific work, mount isolated views, switch live scenarios, or implement
+Plugin Studio. The existing Host and scientific UI still use their prior owners.
+Next is the shared runtime/container and SDK integration, followed by the complete
+R/Viewer vertical path, all-feature migration and the approved Studio workflows.
+Remove the replaced fixed composition before final acceptance; a permanent dual
+architecture is not an accepted outcome. New repository paths do not read or
+migrate abandoned storage. Existing user Hosts and R memory have not been restarted.
+
+Foundation verification passed: protocol unit/contract tests (7), repository
+tests (9), and local CLI recovery tests (2); public TypeScript consumption in an
+external strict NodeNext project; type generation, client build/check,
+architecture and plugin-boundary checks, and governance checks/fixtures.
+Commands are recorded in Development's focused plugin checks. No real-R or
+browser acceptance is claimed for the new architecture yet. Earlier scientific
+acceptance below is baseline evidence, not verification of the plugin migration.
 
 ## Bundled real Rho demo project
 
@@ -765,6 +802,7 @@ service-manager jobs and rollback of arbitrary external effects are not implied.
 
 The approved Packages interaction remains in
 [Paper](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/3-0).
-Cross-version import, plugin execution, package-management UI,
-abandoned-data migration, product installation and publication remain deferred.
+The unified-plugin work described above now authorizes exact plugin revision
+import and plugin execution. R package-management UI, abandoned-data migration,
+product installation and publication remain outside that implementation scope.
 The external acceptance runner is test tooling, not a product Agent behavior loop.

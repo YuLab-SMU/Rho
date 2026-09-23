@@ -271,6 +271,15 @@ third-party product or require its current models to pass an independent evaluat
 
 ## Contract and source changes
 
+The public plugin contracts live in `crates/plugin-protocol` and generate the
+standalone `sdk/plugin-protocol` TypeScript/schema package through the same
+`npm run generate --prefix ui` command. Public packages must not depend on private
+Host/Studio modules. Plugin source is snapshotted before use; import, inspection
+and validation must never invoke a build recipe. Focused foundation checks are
+`cargo test -p rho-plugin-protocol --locked` and
+`cargo test -p rho-plugins --locked`. These do not replace later real-science and
+iframe/browser acceptance for the full migration.
+
 Add capabilities to their owner and register them through Host. Keep input,
 concrete payload/recovery schemas, documentation, examples and related read paths
 in the same descriptor. Query schemas describe `QuerySnapshot.data`; operation

@@ -21,6 +21,8 @@ assert.ok(cli, "production CLI is missing");
 assert.deepEqual(metadata.workspace_default_members, [cli.id]);
 assert.deepEqual(cli.targets.filter(target => target.kind.includes("bin")).map(target => target.name), ["rho"]);
 const allowed = {
+  "rho-plugin-protocol": [],
+  "rho-plugins": ["rho-plugin-protocol"],
   "rho-contract": [],
   "rho-operation": ["rho-contract"],
   "rho-application": ["rho-contract"],
@@ -41,7 +43,7 @@ const allowed = {
   "rho-mcp": ["rho-contract", "rho-host"],
   "rho-agent-client": ["rho-contract"],
   "rho-workbench": ["rho-contract", "rho-host", "rho-mcp"],
-  "rho-cli": ["rho-contract", "rho-host", "rho-mcp", "rho-workbench"],
+  "rho-cli": ["rho-contract", "rho-host", "rho-mcp", "rho-workbench", "rho-plugin-protocol", "rho-plugins"],
 };
 for (const pkg of metadata.packages) {
   assertAgentEngineBoundary(pkg);

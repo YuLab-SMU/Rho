@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 mod connection;
+mod plugins;
 mod session;
 
 use clap::{Parser, Subcommand};
@@ -108,6 +109,13 @@ impl Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Recover and develop plugin packages without starting a scientific Host.
+    Plugins {
+        #[arg(long, default_value_os_t = plugins::default_store())]
+        store: PathBuf,
+        #[command(subcommand)]
+        command: plugins::PluginCommand,
+    },
     /// Keep one Host/R session alive; read and write the typed session protocol over stdio.
     Session,
     /// Serve MCP over stdio using the same Host and capability registry.
@@ -219,6 +227,14 @@ impl From<rho_host::OperationError> for CliFailure {
 
 async fn run() -> Result<(), CliFailure> {
     let cli = Cli::parse();
+    if let Command::Plugins { store, command } = &cli.command {
+        if cli.connect_url_file.is_some() {
+            return Err("Plugin recovery commands address a local --store; they do not use --connect-url-file".into());
+        }
+        let result = plugins::run(store, command).map_err(|e| e.to_string())?;
+        return print_json(&json!({"ok":true,"mode":"plugin_repository","result":result}))
+            .map_err(Into::into);
+    }
     let context = NextHost::local_context();
     if let Some(path) = &cli.connect_url_file {
         if cli.demo
@@ -347,6 +363,7 @@ async fn run() -> Result<(), CliFailure> {
     };
     let result = match cli.command {
         Command::Session
+        | Command::Plugins { .. }
         | Command::Mcp
         | Command::Workbench { .. }
         | Command::Query { .. }

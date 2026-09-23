@@ -1,0 +1,342 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginManifest",
+  "type": "object",
+  "properties": {
+    "backend": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BackendEntrypoint"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CapabilityContribution"
+      }
+    },
+    "configuration_schema": true,
+    "contexts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ContextContribution"
+      }
+    },
+    "default_configuration": true,
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PluginDependency"
+      }
+    },
+    "description": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "license": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "protocol_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CapabilityRequirement"
+      }
+    },
+    "source": {
+      "$ref": "#/$defs/SourceDeclaration"
+    },
+    "version": {
+      "description": "Human-readable only. All bindings use revision and artifact digests.",
+      "type": "string"
+    },
+    "views": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ViewContribution"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "id",
+    "name",
+    "version",
+    "description",
+    "license",
+    "source",
+    "dependencies",
+    "requires",
+    "views",
+    "capabilities",
+    "contexts",
+    "configuration_schema",
+    "default_configuration"
+  ],
+  "$defs": {
+    "BackendEntrypoint": {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "executable": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "executable",
+        "arguments"
+      ]
+    },
+    "BuildRecipe": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "Executable and literal arguments, without a shell interpolation layer.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ]
+    },
+    "CancellationSupport": {
+      "type": "string",
+      "enum": [
+        "unsupported",
+        "request"
+      ]
+    },
+    "CapabilityContribution": {
+      "type": "object",
+      "properties": {
+        "cancellation": {
+          "$ref": "#/$defs/CancellationSupport"
+        },
+        "capability": {
+          "$ref": "#/$defs/CapabilityKey"
+        },
+        "description": {
+          "type": "string"
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "input_schema": true,
+        "kind": {
+          "$ref": "#/$defs/CapabilityKind"
+        },
+        "output_schema": true,
+        "recovery_schema": true,
+        "required_scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "kind",
+        "title",
+        "description",
+        "input_schema",
+        "output_schema",
+        "recovery_schema",
+        "required_scopes",
+        "effects",
+        "cancellation"
+      ]
+    },
+    "CapabilityKey": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "CapabilityKind": {
+      "type": "string",
+      "enum": [
+        "query",
+        "operation",
+        "runtime"
+      ]
+    },
+    "CapabilityRequirement": {
+      "type": "object",
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/CapabilityKey"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "scopes"
+      ]
+    },
+    "ContextContribution": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "preview": {
+          "$ref": "#/$defs/CapabilityKey"
+        },
+        "search": {
+          "$ref": "#/$defs/CapabilityKey"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "search",
+        "preview"
+      ]
+    },
+    "PluginDependency": {
+      "type": "object",
+      "properties": {
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "plugin",
+        "revision"
+      ]
+    },
+    "SourceDeclaration": {
+      "type": "object",
+      "properties": {
+        "build": {
+          "description": "Executed only by an explicit development build, never by import or query.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuildRecipe"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "build_instructions": {
+          "type": "string"
+        },
+        "files": {
+          "description": "Every first-party source file must be included in the package snapshot.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "lockfiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "lockfiles",
+        "build_instructions"
+      ]
+    },
+    "ViewContribution": {
+      "type": "object",
+      "properties": {
+        "configuration_schema": true,
+        "entrypoint": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "resource_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "state_schema": true,
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "entrypoint",
+        "state_schema",
+        "configuration_schema",
+        "resource_kinds"
+      ]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+[package]
+name = "rho-plugin-protocol"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "AGPL-3.0-only"
+repository = "https://github.com/YuLab-SMU/Rho"
+description = "Language-neutral Rho plugin package and instance protocol"
+
+[[bin]]
+name = "export-plugin-protocol"
+path = "src/bin/export-plugin-protocol.rs"
+test = false
+bench = false
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+schemars = "1.0"
+thiserror = "2.0"
+ts-rs = { version = "=12.0.1", features = ["serde-json-impl", "no-serde-warnings"] }

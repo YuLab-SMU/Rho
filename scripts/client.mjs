@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { syncPluginProtocol } from "./plugin-protocol.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const mode = process.argv[2] ?? "check";
@@ -25,6 +26,7 @@ function files(dir, prefix = "") {
 }
 try {
   if (mode !== "build") {
+    syncPluginProtocol(root, temp, mode);
     const generated = path.join(temp, "types");
     execFileSync(
       "cargo",
@@ -134,9 +136,9 @@ try {
         );
     }
   }
-  console.log(
-    `Next client ${mode}: generated Rust contract and embedded client agree.`,
-  );
+  console.log(mode === "generate"
+    ? "Client generation: public plugin protocol and Rust client contracts generated."
+    : `Client ${mode}: types and embedded assets verified.`);
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }

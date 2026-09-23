@@ -7,6 +7,52 @@ in [Status](STATUS.md); protocol descriptions here are not acceptance results.
 
 ## Authority and ownership
 
+### Authorized unified plugin boundary
+
+The 2026-09-23 implementation scope replaces the fixed scientific workbench with
+a general core and composable packages. This boundary is approved; the migration
+is in progress, not complete. Status distinguishes the implemented substrate from
+the still-existing direct scientific composition described below.
+
+The core owns packages, immutable revisions/artifacts, dependency resolution,
+instances, process/message lifetime, unique provider routing, identity/scope checks,
+Operation admission/commit, generic evidence storage, windows/layout/drafts and
+HTTP/CLI/MCP. Scientific semantics (including R/Ark, project/Git, execution,
+environment, remote jobs, Agent, Help, outputs and annotations) belong to ordinary
+plugins. Management and Plugin Studio are ordinary plugins too; core CLI remains
+the recovery entry when they are absent. Default delivery imports the same package
+format and never introduces source-based validation exceptions or silent reinstall.
+
+`rho-plugin-protocol` is an independently packageable public contract with no core
+or scientific dependencies. Its generated language-neutral JSON Schemas and
+TypeScript definitions are in `sdk/plugin-protocol`. `rho-plugins` owns package
+storage in the new `catalog-v1.sqlite3` repository. Its transaction stores source,
+artifact and reference metadata, not scientific results. No old project database
+is read, migrated or deleted by this repository. Source and artifact digests are
+independent; execution must use immutable artifact bytes, never a development
+directory. Import verifies containment, source/lock/build declarations, schemas,
+inventories and digests without running a build or loading code.
+
+Every accepted operation must freeze capability, plugin revision, artifact,
+instance, project, principal and native target before dispatch. Provider choice
+cannot change with later scenario selection. Plugins return validated commit
+plans to the one core Operation owner; no adapter or plugin commits scientific
+truth through an independent result database. Active work, documents, scenarios,
+branches and checkpoints protect their referenced revisions from removal.
+
+UI isolation uses a sandboxed iframe per view and an instance-bound channel;
+backend isolation uses a process per activated service instance with bounded,
+versioned bidirectional RPC and separate logs. Neither native code nor build
+scripts have an OS filesystem/network sandbox. Registration becomes visible only
+after successful initialization. Draining first revokes new calls, then releases
+owned subscriptions/handles/processes; failures remain observable. Disconnection
+does not confirm cancellation or authorize replay.
+
+See [approved interactions](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)
+and the [public protocol](../sdk/plugin-protocol/README.md). The old composition is
+being removed in stages; retaining it as a second final architecture is outside
+the authorized design.
+
 | Owner | Responsibility |
 | --- | --- |
 | External Agent platform | Conversation/session lifecycle, intent, planning, tool choice, model/provider settings, permission decisions and continuation |
