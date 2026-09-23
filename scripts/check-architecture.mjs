@@ -22,7 +22,8 @@ assert.deepEqual(metadata.workspace_default_members, [cli.id]);
 assert.deepEqual(cli.targets.filter(target => target.kind.includes("bin")).map(target => target.name), ["rho"]);
 const allowed = {
   "rho-plugin-protocol": [],
-  "rho-plugins": ["rho-plugin-protocol"],
+  "rho-plugin-sdk": ["rho-plugin-protocol"],
+  "rho-plugins": ["rho-plugin-protocol", "rho-plugin-sdk"],
   "rho-contract": [],
   "rho-operation": ["rho-contract"],
   "rho-application": ["rho-contract"],

@@ -13,7 +13,7 @@ use std::{
 /// New storage only. Never reads or migrates a previous Rho project database.
 pub struct PluginRepository {
     root: PathBuf,
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 pub type InstalledRevision = InstalledPluginRevision;
@@ -38,7 +38,8 @@ impl PluginRepository {
             CREATE TABLE IF NOT EXISTS artifact_files(artifact TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE, path TEXT NOT NULL, digest TEXT NOT NULL REFERENCES blobs(digest), PRIMARY KEY(artifact,path));
             CREATE TABLE IF NOT EXISTS revision_refs(owner_kind TEXT NOT NULL, owner TEXT NOT NULL, revision TEXT NOT NULL, PRIMARY KEY(owner_kind,owner,revision));
             CREATE INDEX IF NOT EXISTS revision_refs_target ON revision_refs(revision);
-            CREATE TABLE IF NOT EXISTS branches(id TEXT PRIMARY KEY, plugin TEXT NOT NULL, head TEXT NOT NULL REFERENCES revisions(id), name TEXT NOT NULL);")?;
+            CREATE TABLE IF NOT EXISTS branches(id TEXT PRIMARY KEY, plugin TEXT NOT NULL, head TEXT NOT NULL REFERENCES revisions(id), name TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS plugin_instances(id TEXT PRIMARY KEY, document TEXT NOT NULL);")?;
         Ok(Self { root, connection })
     }
 

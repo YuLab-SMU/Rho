@@ -200,6 +200,12 @@
         "--locked"
       ]
     },
+    "plugins.backend-sdk": {
+      "command": ["cargo", "test", "-p", "rho-plugin-sdk", "--locked"]
+    },
+    "plugins.external-backend": {
+      "command": ["node", "scripts/test-plugin-backend.mjs"]
+    },
     "plugins.boundaries": {
       "command": [
         "node",
@@ -345,13 +351,15 @@
     "plugins": {
       "sources": [
         "crates/plugin-protocol/**",
+        "crates/plugin-sdk/**",
         "crates/plugins/**",
         "crates/cli/src/plugins.rs",
         "sdk/**",
         "plugins/**",
         "scripts/plugin-protocol.mjs",
         "scripts/check-plugin-boundaries.mjs",
-        "scripts/test-plugin-protocol.mjs"
+        "scripts/test-plugin-protocol.mjs",
+        "scripts/test-plugin-backend.mjs"
       ],
       "checks": [
         "docs.index",
@@ -359,6 +367,8 @@
         "system.client",
         "plugins.protocol",
         "plugins.repository",
+        "plugins.backend-sdk",
+        "plugins.external-backend",
         "plugins.boundaries",
         "plugins.boundary-tests",
         "plugins.public-types"

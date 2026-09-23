@@ -276,8 +276,15 @@ standalone `sdk/plugin-protocol` TypeScript/schema package through the same
 `npm run generate --prefix ui` command. Public packages must not depend on private
 Host/Studio modules. Plugin source is snapshotted before use; import, inspection
 and validation must never invoke a build recipe. Focused foundation checks are
-`cargo test -p rho-plugin-protocol --locked` and
-`cargo test -p rho-plugins --locked`. These do not replace later real-science and
+`cargo test -p rho-plugin-protocol --locked`,
+`cargo test -p rho-plugin-sdk --locked` and `cargo test -p rho-plugins --locked`.
+For runtime iteration use `cargo test -p rho-plugins --test backend_runtime --locked`.
+Its external Python fixture exercises actual independent processes and requires
+Python 3 on PATH. `node scripts/test-plugin-backend.mjs` copies the public Rust
+crates outside the repository and compiles the example with no private source;
+it invokes Cargo, so run it serially with every other Cargo command. Public
+TypeScript consumption is checked by `node scripts/test-plugin-protocol.mjs`.
+These do not replace later real-science and
 iframe/browser acceptance for the full migration.
 
 Add capabilities to their owner and register them through Host. Keep input,

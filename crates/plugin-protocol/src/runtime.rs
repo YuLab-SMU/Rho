@@ -38,6 +38,14 @@ pub struct PluginInstance {
     pub diagnostic: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginInstancePage {
+    pub instances: Vec<PluginInstance>,
+    pub next: Option<PluginInstanceId>,
+    pub total: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderBinding {
@@ -139,6 +147,8 @@ pub enum RpcBody {
     CommitPlan(PluginCommitPlan),
     /// Reverse calls use a delegated, instance-bound grant, never a Host credential.
     HostCall {
+        /// Active incoming call whose authority this reverse call inherits.
+        parent_request: RequestId,
         capability: CapabilityKey,
         arguments: Value,
     },

@@ -8,6 +8,9 @@ repository.workspace = true
 
 [dependencies]
 rho-plugin-protocol = { path = "../plugin-protocol" }
+rho-plugin-sdk = { path = "../plugin-sdk" }
+tokio.workspace = true
+async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

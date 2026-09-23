@@ -6,8 +6,13 @@ import type { ObservationCompleteness } from "./ObservationCompleteness.js";
 import type { PluginCall } from "./PluginCall.js";
 import type { PluginCommitPlan } from "./PluginCommitPlan.js";
 import type { PluginInstance } from "./PluginInstance.js";
+import type { RequestId } from "./RequestId.js";
 import type { ResourceReference } from "./ResourceReference.js";
 import type { RevisionId } from "./RevisionId.js";
 import type { JsonValue } from "./serde_json/JsonValue.js";
 
-export type RpcBody = { "type": "initialize", "data": { instance: PluginInstance, grants: Array<CapabilityRequirement>, } } | { "type": "ready", "data": { revision: RevisionId, artifact: ArtifactId, } } | { "type": "query", "data": PluginCall } | { "type": "invoke", "data": PluginCall } | { "type": "query_result", "data": { data: JsonValue, completeness: ObservationCompleteness, source: ResourceReference | null, } } | { "type": "commit_plan", "data": PluginCommitPlan } | { "type": "host_call", "data": { capability: CapabilityKey, arguments: JsonValue, } } | { "type": "host_result", "data": { result: JsonValue, } } | { "type": "cancel", "data": { operation_id: string, } } | { "type": "cancel_acknowledged", "data": { operation_id: string, confirmed: boolean, } } | { "type": "release" } | { "type": "released" } | { "type": "error", "data": { code: string, message: string, recovery: JsonValue | null, } };
+export type RpcBody = { "type": "initialize", "data": { instance: PluginInstance, grants: Array<CapabilityRequirement>, } } | { "type": "ready", "data": { revision: RevisionId, artifact: ArtifactId, } } | { "type": "query", "data": PluginCall } | { "type": "invoke", "data": PluginCall } | { "type": "query_result", "data": { data: JsonValue, completeness: ObservationCompleteness, source: ResourceReference | null, } } | { "type": "commit_plan", "data": PluginCommitPlan } | { "type": "host_call", "data": {
+/**
+ * Active incoming call whose authority this reverse call inherits.
+ */
+parent_request: RequestId, capability: CapabilityKey, arguments: JsonValue, } } | { "type": "host_result", "data": { result: JsonValue, } } | { "type": "cancel", "data": { operation_id: string, } } | { "type": "cancel_acknowledged", "data": { operation_id: string, confirmed: boolean, } } | { "type": "release" } | { "type": "released" } | { "type": "error", "data": { code: string, message: string, recovery: JsonValue | null, } };

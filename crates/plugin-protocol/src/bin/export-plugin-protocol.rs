@@ -15,6 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PluginRevisionPage::export_all(&types)?;
     RevisionDifference::export_all(&types)?;
     PluginInstance::export_all(&types)?;
+    PluginInstancePage::export_all(&types)?;
     RpcFrame::export_all(&types)?;
     ScenarioRevision::export_all(&types)?;
     WindowScenario::export_all(&types)?;

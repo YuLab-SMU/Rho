@@ -83,18 +83,22 @@ Sources:
 
 - `crates/cli/src/plugins.rs`
 - `crates/plugin-protocol/**`
+- `crates/plugin-sdk/**`
 - `crates/plugins/**`
 - `plugins/**`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/plugin-protocol.mjs`
+- `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
 - `sdk/**`
 
 Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
+- `plugins.backend-sdk`: `["cargo","test","-p","rho-plugin-sdk","--locked"]`
 - `plugins.boundaries`: `["node","scripts/check-plugin-boundaries.mjs"]`
 - `plugins.boundary-tests`: `["node","scripts/check-plugin-boundaries.mjs","--self-test"]`
+- `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`

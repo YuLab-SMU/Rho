@@ -28,6 +28,7 @@ export type * from "./types/PluginDependency.js";
 export type * from "./types/PluginId.js";
 export type * from "./types/PluginInstance.js";
 export type * from "./types/PluginInstanceId.js";
+export type * from "./types/PluginInstancePage.js";
 export type * from "./types/PluginManifest.js";
 export type * from "./types/PluginOutcome.js";
 export type * from "./types/PluginRevision.js";

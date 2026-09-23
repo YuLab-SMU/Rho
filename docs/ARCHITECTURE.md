@@ -33,6 +33,21 @@ independent; execution must use immutable artifact bytes, never a development
 directory. Import verifies containment, source/lock/build declarations, schemas,
 inventories and digests without running a build or loading code.
 
+The public Rust transport SDK is `rho-plugin-sdk`. Backend RPC uses a four-byte
+big-endian length followed by at most 1 MiB of JSON, with one ordered writer and
+one dedicated reader per direction. A cancelled partial write fences the channel.
+Reverse calls name an active parent request and inherit its project/principal,
+the declared grant's scopes, and whether only queries are allowed. They receive
+no generic Host credential. The Host service still enforces capability kind and
+native preconditions before delegating work.
+
+`rho-plugins` publishes all contributions of a backend instance only after the
+exact revision/artifact acknowledges readiness. Instance admission leases survive
+draining until their Operation owner releases them after commit. Generic lifecycle
+records and protecting references are durable; historical records alone do not
+prove that a native process is alive. Cleanup requires both an owner acknowledgement
+and successful process exit before its instance reference can be released.
+
 Every accepted operation must freeze capability, plugin revision, artifact,
 instance, project, principal and native target before dispatch. Provider choice
 cannot change with later scenario selection. Plugins return validated commit

@@ -1,0 +1,436 @@
+use crate::{PluginError, runtime::*};
+use rho_plugin_protocol::*;
+use rho_plugin_sdk::{RpcReader, RpcWriter};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    process::Stdio,
+    sync::Arc,
+};
+use tokio::{
+    io::AsyncReadExt,
+    process::{Child, ChildStdin, Command},
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+    time::timeout,
+};
+use uuid::Uuid;
+
+type Response = oneshot::Sender<Result<RpcBody, String>>;
+enum CommandMessage {
+    Call {
+        call: PluginCall,
+        query: bool,
+        response: Response,
+    },
+    Cancel {
+        operation: String,
+        capability: CapabilityKey,
+        response: Response,
+    },
+    Release {
+        response: Response,
+    },
+}
+
+#[derive(Clone)]
+pub(crate) struct ProcessClient {
+    sender: mpsc::Sender<CommandMessage>,
+}
+impl ProcessClient {
+    pub async fn call(&self, call: PluginCall, query: bool) -> Result<RpcBody, PluginError> {
+        let (response, receiver) = oneshot::channel();
+        self.sender
+            .send(CommandMessage::Call {
+                call,
+                query,
+                response,
+            })
+            .await
+            .map_err(|_| {
+                PluginError::Unavailable(
+                    "backend is disconnected; inspect the original operation before retrying"
+                        .into(),
+                )
+            })?;
+        receive(receiver).await
+    }
+    pub async fn cancel(
+        &self,
+        operation: &str,
+        capability: &CapabilityKey,
+    ) -> Result<bool, PluginError> {
+        let (response, receiver) = oneshot::channel();
+        self.sender
+            .send(CommandMessage::Cancel {
+                operation: operation.into(),
+                capability: capability.clone(),
+                response,
+            })
+            .await
+            .map_err(|_| {
+                PluginError::Unavailable(
+                    "backend is disconnected; cancellation is unconfirmed".into(),
+                )
+            })?;
+        match receive(receiver).await? {
+            RpcBody::CancelAcknowledged { confirmed, .. } => Ok(confirmed),
+            _ => Err(PluginError::Invalid("invalid cancellation response".into())),
+        }
+    }
+    pub async fn release(&self) -> Result<(), PluginError> {
+        let (response, receiver) = oneshot::channel();
+        self.sender
+            .send(CommandMessage::Release { response })
+            .await
+            .map_err(|_| {
+                PluginError::Unavailable("backend is disconnected; cleanup is unconfirmed".into())
+            })?;
+        match receive(receiver).await? {
+            RpcBody::Released => Ok(()),
+            _ => Err(PluginError::Invalid("invalid release response".into())),
+        }
+    }
+}
+async fn receive(
+    receiver: oneshot::Receiver<Result<RpcBody, String>>,
+) -> Result<RpcBody, PluginError> {
+    receiver
+        .await
+        .map_err(|_| {
+            PluginError::Unavailable(
+                "backend response was lost; execution may have occurred".into(),
+            )
+        })?
+        .map_err(PluginError::Unavailable)
+}
+
+struct TaskGuard<T>(JoinHandle<T>);
+impl<T> Drop for TaskGuard<T> {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+pub(crate) async fn start(
+    mut prepared: PreparedBackend,
+    state: SharedBackendState,
+    services: Arc<dyn PluginHostServices>,
+    policy: BackendPolicy,
+) -> Result<ProcessClient, PluginError> {
+    let identity = prepared.record.identity.clone();
+    let mut command = Command::new(&prepared.executable);
+    command
+        .args(&prepared.manifest.backend.as_ref().unwrap().arguments)
+        .current_dir(prepared.directory.path())
+        .env_clear()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    // Do not inherit launch tokens, API keys or other generic Host credentials.
+    // Trusted native code can still access local files; this is not an OS sandbox.
+    for name in ["PATH", "LANG", "LC_ALL", "LC_CTYPE"] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
+    let mut child = command.spawn()?;
+    prepared.retain_after_drop = true;
+    state.lock().unwrap().pid = child.id();
+    let connection = ConnectionId::new(format!("connection-{}", Uuid::new_v4().simple()))?;
+    let mut writer = RpcWriter::new(
+        child.stdin.take().unwrap(),
+        identity.instance.clone(),
+        connection.clone(),
+    );
+    let mut reader = RpcReader::new(
+        child.stdout.take().unwrap(),
+        identity.instance.clone(),
+        connection,
+    );
+    let (frames_tx, mut frames_rx) = mpsc::channel(32);
+    let reader_task = TaskGuard(tokio::spawn(async move {
+        loop {
+            let frame = reader.receive().await.map_err(|e| e.to_string());
+            let terminal = !matches!(&frame, Ok(Some(_)));
+            if frames_tx.send(frame).await.is_err() || terminal {
+                break;
+            }
+        }
+    }));
+    let mut stderr = child.stderr.take().unwrap();
+    let log_state = state.clone();
+    let log_task = TaskGuard(tokio::spawn(async move {
+        let mut chunk = [0; 4096];
+        while let Ok(size) = stderr.read(&mut chunk).await {
+            if size == 0 {
+                break;
+            }
+            let mut state = log_state.lock().unwrap();
+            state.log.extend_from_slice(&chunk[..size]);
+            let excess = state.log.len().saturating_sub(MAX_BACKEND_LOG_BYTES);
+            state.log.drain(..excess);
+        }
+    }));
+    let initialize = RequestId::new("host-initialize")?;
+    let handshake = timeout(policy.initialize_timeout, async {
+        writer
+            .send(
+                initialize.clone(),
+                RpcBody::Initialize {
+                    instance: prepared.record.clone(),
+                    grants: prepared.grants.clone(),
+                },
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        match frames_rx.recv().await {
+            Some(Ok(Some(RpcFrame {
+                request,
+                body: RpcBody::Ready { revision, artifact },
+                ..
+            }))) if request == initialize
+                && revision == identity.revision
+                && artifact == identity.artifact =>
+            {
+                Ok(())
+            }
+            Some(Err(error)) => Err(error),
+            _ => Err("backend did not confirm the exact revision and artifact".into()),
+        }
+    })
+    .await
+    .unwrap_or_else(|_| Err("backend initialization timed out".into()));
+    if let Err(error) = handshake {
+        let killed = child.kill().await;
+        let mut record = state.lock().unwrap();
+        record.record.state = if killed.is_ok() {
+            InstanceState::Failed
+        } else {
+            InstanceState::CleanupFailed
+        };
+        record.record.diagnostic = Some(format!("{error}; initialization was not published"));
+        if killed.is_ok() {
+            record.pid = None;
+        }
+        drop(record);
+        prepared.persist_state(&state);
+        return Err(PluginError::Unavailable(error));
+    }
+    let (sender, receiver) = mpsc::channel(MAX_PENDING_PLUGIN_CALLS);
+    tokio::spawn(run(
+        prepared,
+        child,
+        writer,
+        frames_rx,
+        receiver,
+        state,
+        services,
+        policy,
+        reader_task,
+        log_task,
+    ));
+    Ok(ProcessClient { sender })
+}
+
+enum PendingKind {
+    Call { call: PluginCall, query: bool },
+    Cancel { operation: String },
+}
+struct Pending {
+    kind: PendingKind,
+    response: Response,
+}
+type IncomingFrames = mpsc::Receiver<Result<Option<RpcFrame>, String>>;
+
+#[allow(clippy::too_many_arguments)]
+async fn run(
+    mut prepared: PreparedBackend,
+    mut child: Child,
+    mut writer: RpcWriter<ChildStdin>,
+    mut frames: IncomingFrames,
+    mut commands: mpsc::Receiver<CommandMessage>,
+    state: SharedBackendState,
+    services: Arc<dyn PluginHostServices>,
+    policy: BackendPolicy,
+    _reader_task: TaskGuard<()>,
+    _log_task: TaskGuard<()>,
+) {
+    let mut pending: BTreeMap<RequestId, Pending> = BTreeMap::new();
+    let mut reverse = BTreeSet::new();
+    let mut counter = 0_u64;
+    let (host_results_tx, mut host_results_rx) = mpsc::channel::<(RequestId, RpcBody)>(32);
+    let failure = loop {
+        tokio::select! {
+            command = commands.recv() => {
+                let Some(command) = command else { break "Host released its process handle without confirming cleanup".into(); };
+                counter += 1;
+                let request = RequestId::new(format!("host-{counter}")).unwrap();
+                let (body, request_pending) = match command {
+                    CommandMessage::Call { mut call, query, response } => {
+                        if pending.len() >= MAX_PENDING_PLUGIN_CALLS {
+                            let _ = response.send(Err("backend pending-call quota reached before dispatch".into())); continue;
+                        }
+                        call.request = request.clone();
+                        let body = if query { RpcBody::Query(call.clone()) } else { RpcBody::Invoke(call.clone()) };
+                        (body, Pending { kind: PendingKind::Call { call, query }, response })
+                    }
+                    CommandMessage::Cancel { operation, capability, response } => {
+                        if !pending.values().any(|p| matches!(&p.kind, PendingKind::Call {call, query: false}
+                            if call.operation_id.as_deref() == Some(operation.as_str()) && call.binding.capability == capability)) {
+                            let _ = response.send(Err("no matching active operation; cancellation is unconfirmed".into())); continue;
+                        }
+                        if pending.len() >= MAX_PENDING_PLUGIN_CALLS {
+                            let _ = response.send(Err("cancellation queue is full; cancellation is unconfirmed".into())); continue;
+                        }
+                        (RpcBody::Cancel { operation_id: operation.clone() }, Pending { kind: PendingKind::Cancel { operation }, response })
+                    }
+                    CommandMessage::Release { response } => {
+                        if !pending.is_empty() || !reverse.is_empty() {
+                            let _ = response.send(Err("backend still has active calls".into())); continue;
+                        }
+                        let released = release(&mut child, &mut writer, &mut frames, request, &policy).await;
+                        let released = released.and_then(|()| prepared.release_reference().map_err(|e| e.to_string()));
+                        {
+                            let mut state = state.lock().unwrap();
+                            state.record.state = if released.is_ok() { InstanceState::Released } else { InstanceState::CleanupFailed };
+                            state.record.diagnostic = released.as_ref().err().cloned();
+                            state.pid = None;
+                        }
+                        prepared.persist_state(&state);
+                        let _ = response.send(released.map(|()| RpcBody::Released));
+                        return;
+                    }
+                };
+                pending.insert(request.clone(), request_pending);
+                state.lock().unwrap().pending = pending.len();
+                if let Err(error) = transmit(&mut writer, request, body, &policy).await { break error; }
+            }
+            incoming = frames.recv() => {
+                let frame = match incoming {
+                    Some(Ok(Some(frame))) => frame,
+                    Some(Err(error)) => break error,
+                    _ => break "backend disconnected; outstanding execution and cancellation are unconfirmed".into(),
+                };
+                if let RpcBody::HostCall { parent_request, capability, arguments } = frame.body {
+                    if reverse.len() >= 32 || reverse.contains(&frame.request) || pending.contains_key(&frame.request) {
+                        break "invalid or excessive delegated Host request".into();
+                    }
+                    let grant = prepared.grants.iter().find(|g| g.capability == capability);
+                    let parent = pending.get(&parent_request).and_then(|p| match &p.kind {
+                        PendingKind::Call {call, query} => Some((call, *query)), _ => None });
+                    let delegated = match (grant, parent) {
+                        (Some(grant), Some((parent, query))) if grant.scopes.is_subset(&parent.scopes) => {
+                            let mut parent = parent.clone();
+                            // The reverse call receives only the grant's scopes,
+                            // never all capabilities of the original caller.
+                            parent.scopes = grant.scopes.clone();
+                            Some(DelegatedPluginCall { provider: prepared.record.identity.clone(), parent,
+                                grant: grant.clone(), query_only: query, arguments })
+                        }
+                        _ => None,
+                    };
+                    if let Some(delegated) = delegated {
+                        reverse.insert(frame.request.clone());
+                        let services = services.clone(); let results = host_results_tx.clone();
+                        // Once the Host service accepts work it owns completion.
+                        // A plugin disconnect must not abort or replay that work.
+                        tokio::spawn(async move {
+                            let result = services.call(delegated).await;
+                            let body = match result { Ok(result) => RpcBody::HostResult { result },
+                                Err(message) => RpcBody::Error { code: "host_call_failed".into(), message, recovery: None } };
+                            let _ = results.send((frame.request, body)).await;
+                        });
+                    } else if let Err(error) = transmit(&mut writer, frame.request, RpcBody::Error {
+                        code: "access_denied".into(), message: "reverse call has no active parent or declared grant in scope".into(), recovery: None }, &policy).await { break error; }
+                    continue;
+                }
+                let Some(expected) = pending.remove(&frame.request) else { break "unsolicited or repeated backend response".into(); };
+                state.lock().unwrap().pending = pending.len();
+                let valid = match (&expected.kind, &frame.body) {
+                    (PendingKind::Call {query: true, ..}, RpcBody::QueryResult {..} | RpcBody::Error {..}) => true,
+                    (PendingKind::Call {query: false, ..}, RpcBody::CommitPlan(_) | RpcBody::Error {..}) => true,
+                    (PendingKind::Cancel {operation}, RpcBody::CancelAcknowledged {operation_id, ..}) => operation == operation_id,
+                    _ => false,
+                };
+                if !valid {
+                    let _ = expected.response.send(Err("backend response did not match its pending request".into()));
+                    break "backend response kind or operation identity mismatch".into();
+                }
+                let _ = expected.response.send(Ok(frame.body));
+            }
+            completed = host_results_rx.recv(), if !reverse.is_empty() => {
+                if let Some((request, body)) = completed {
+                    reverse.remove(&request);
+                    if let Err(error) = transmit(&mut writer, request, body, &policy).await { break error; }
+                }
+            }
+            exited = child.wait() => {
+                break format!("backend process exited ({exited:?}); outstanding execution and cancellation are unconfirmed");
+            }
+        }
+    };
+    {
+        let mut state = state.lock().unwrap();
+        state.record.state = InstanceState::Disconnected;
+        state.record.diagnostic = Some(failure.clone());
+        state.pending = 0;
+        // This PID is historical unless try_wait proves it is still running.
+        if child.try_wait().ok().flatten().is_some() {
+            state.pid = None;
+        }
+    }
+    prepared.persist_state(&state);
+    for (_, expected) in pending {
+        let _ = expected.response.send(Err(failure.clone()));
+    }
+    // Losing framing fences the instance. Reap this managed direct child, but do
+    // not label its scientific work cancelled or remove the retained revision.
+    let _ = child.kill().await;
+    state.lock().unwrap().pid = None;
+}
+
+async fn transmit(
+    writer: &mut RpcWriter<ChildStdin>,
+    request: RequestId,
+    body: RpcBody,
+    policy: &BackendPolicy,
+) -> Result<(), String> {
+    timeout(policy.write_timeout, writer.send(request, body))
+        .await
+        .map_err(|_| "backend write timed out; dispatch may be partial".to_string())?
+        .map_err(|e| e.to_string())
+}
+
+async fn release(
+    child: &mut Child,
+    writer: &mut RpcWriter<ChildStdin>,
+    frames: &mut IncomingFrames,
+    request: RequestId,
+    policy: &BackendPolicy,
+) -> Result<(), String> {
+    let result = timeout(policy.release_timeout, async {
+        transmit(writer, request.clone(), RpcBody::Release, policy).await?;
+        match frames.recv().await {
+            Some(Ok(Some(RpcFrame {
+                request: reply,
+                body: RpcBody::Released,
+                ..
+            }))) if reply == request => (),
+            _ => return Err("backend did not acknowledge resource release".into()),
+        }
+        let exit = child.wait().await.map_err(|e| e.to_string())?;
+        if !exit.success() {
+            return Err(format!(
+                "backend acknowledged release but exited with {exit}"
+            ));
+        }
+        Ok(())
+    })
+    .await
+    .unwrap_or_else(|_| Err("backend cleanup timed out".into()));
+    if result.is_err() {
+        let _ = child.kill().await;
+    }
+    result
+}

@@ -26,6 +26,13 @@ pub enum PluginCommand {
     Inspect {
         revision: String,
     },
+    /// Read recorded instance identities; does not reconnect or verify live processes.
+    Instances {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        #[arg(long)]
+        after: Option<String>,
+    },
     /// Validate an immutable local .rho-plugin archive before importing it.
     Import {
         archive: PathBuf,
@@ -92,6 +99,17 @@ pub fn run(root: &Path, command: &PluginCommand) -> Result<Value, PluginError> {
         }
         PluginCommand::Inspect { revision } => {
             Ok(json!(observe(root)?.inspect(&RevisionId::new(revision)?)?))
+        }
+        PluginCommand::Instances { limit, after } => {
+            if !(1..=100).contains(limit) {
+                return Err(PluginError::Invalid("instance page size must be 1–100".into()));
+            }
+            let after = after.as_ref().map(rho_plugin_protocol::PluginInstanceId::new).transpose()?;
+            let recorded = match PluginRepository::observe(root)? {
+                Some(repo) => repo.recorded_instances(after.as_ref(), *limit)?,
+                None => rho_plugin_protocol::PluginInstancePage { instances: vec![], next: None, total: 0 },
+            };
+            Ok(json!({"recorded":recorded,"live_verified":false}))
         }
         PluginCommand::Import { archive } => {
             let archive = read_archive(archive)?;

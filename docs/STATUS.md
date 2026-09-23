@@ -22,11 +22,22 @@ catalog pages. The independently packageable protocol crate generates the public
 opening a scientific Host. `plugins/example-inspector` is an ordinary, unprivileged
 conformance fixture; it is not installed automatically.
 
-This foundation does **not yet** activate plugins, manage backend processes,
-route scientific work, mount isolated views, switch live scenarios, or implement
-Plugin Studio. The existing Host and scientific UI still use their prior owners.
-Next is the shared runtime/container and SDK integration, followed by the complete
-R/Viewer vertical path, all-feature migration and the approved Studio workflows.
+The standalone backend runtime now activates immutable artifacts in separate
+processes and atomically publishes their contributions after exact readiness.
+Multiple providers require explicit resolution; admission leases retain their
+instances through draining. Framed RPC checks identity/order/size, separates
+bounded stderr logs, validates responses and binds reverse calls to active parent
+authority. Cleanup requires acknowledgement plus successful process exit.
+Failed/disconnected instances retain revision references and durable diagnostics;
+the recovery CLI reads historical instance records without reconnecting.
+`rho-plugin-sdk` supplies independently usable Rust transport/initialization
+helpers and an example backend. Python fixtures exercise the language-neutral wire.
+
+This runtime is **not yet composed into the scientific Host/Operation gateways**.
+The existing Host and scientific UI still use their prior owners. Isolated iframe
+views, the TypeScript UI SDK, live scenarios and Plugin Studio are still pending.
+Next is gateway/container integration, followed by the complete R/Viewer vertical
+path, all-feature migration and the approved Studio workflows.
 Remove the replaced fixed composition before final acceptance; a permanent dual
 architecture is not an accepted outcome. New repository paths do not read or
 migrate abandoned storage. Existing user Hosts and R memory have not been restarted.
@@ -38,6 +49,17 @@ architecture and plugin-boundary checks, and governance checks/fixtures.
 Commands are recorded in Development's focused plugin checks. No real-R or
 browser acceptance is claimed for the new architecture yet. Earlier scientific
 acceptance below is baseline evidence, not verification of the plugin migration.
+
+Backend runtime checks have passed 9 actual-process cases, including coexisting
+versions, explicit binding, held admission, unconfirmed/confirmed cancellation,
+crash without replay, forged/out-of-order/oversized messages, scoped reverse calls,
+invalid commit plans, interrupted initialization, conflicting contracts and failed
+cleanup. Oversized input is rejected before touching a healthy backend's pipe.
+Public SDK transport/initialization tests (6), external Rust SDK compilation,
+protocol tests (7), repository tests (9), recovery CLI tests (2), generated
+TypeScript/schema consumption, client build/check, architecture and governance
+checks all passed. These are substrate checks; scientific gateway integration,
+real-R migration and iframe/browser acceptance remain outstanding.
 
 ## Bundled real Rho demo project
 

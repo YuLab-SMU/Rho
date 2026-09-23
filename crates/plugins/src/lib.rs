@@ -3,8 +3,12 @@
 
 mod package;
 mod repository;
+mod backend;
+mod runtime;
+mod instance_records;
 pub use package::*;
 pub use repository::*;
+pub use runtime::*;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PluginError {
@@ -24,6 +28,10 @@ pub enum PluginError {
     Referenced(Vec<String>),
     #[error("plugin state changed; refresh before retrying")]
     Conflict,
+    #[error("plugin instance is unavailable: {0}")]
+    Unavailable(String),
+    #[error(transparent)]
+    Transport(#[from] rho_plugin_sdk::SdkError),
 }
 
 pub(crate) fn ensure(condition: bool, message: impl Into<String>) -> Result<(), PluginError> {

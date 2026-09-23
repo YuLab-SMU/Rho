@@ -481,10 +481,15 @@
                 "arguments": true,
                 "capability": {
                   "$ref": "#/$defs/CapabilityKey"
+                },
+                "parent_request": {
+                  "description": "Active incoming call whose authority this reverse call inherits.",
+                  "type": "string"
                 }
               },
               "additionalProperties": false,
               "required": [
+                "parent_request",
                 "capability",
                 "arguments"
               ]

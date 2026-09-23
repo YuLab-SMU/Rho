@@ -37,6 +37,10 @@ fn recovery_cli_observes_empty_store_without_starting_science_or_creating_storag
         serde_json::json!({"revisions":[],"next":null,"total":0})
     );
     assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+    assert_eq!(result(run(temp.path(), &["instances"])), serde_json::json!({
+        "recorded":{"instances":[],"next":null,"total":0},"live_verified":false
+    }));
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
 }
 
 #[test]

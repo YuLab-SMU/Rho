@@ -762,6 +762,7 @@ Use an explicit disposable store for development:
 
 ```sh
 rho plugins --store /tmp/rho-plugin-test list
+rho plugins --store /tmp/rho-plugin-test instances --limit 20
 rho plugins --store /tmp/rho-plugin-test snapshot /path/to/plugin --target ui-web
 rho plugins --store /tmp/rho-plugin-test inspect sha256:EXACT_REVISION_DIGEST
 rho plugins --store /tmp/rho-plugin-test export sha256:EXACT_REVISION_DIGEST /tmp/example.rho-plugin
@@ -769,6 +770,11 @@ rho plugins --store /tmp/rho-plugin-test validate /tmp/example.rho-plugin
 rho plugins --store /tmp/rho-plugin-test import /tmp/example.rho-plugin
 rho plugins --store /tmp/rho-plugin-test branch sha256:EXACT_REVISION_DIGEST my-controls
 ```
+
+`instances` reads retained lifecycle records, including failed initialization,
+disconnect and cleanup diagnostics. Its `live_verified: false` explicitly means
+that stored state is not a live process observation. It does not reconnect, reuse
+an old PID, restart a backend, release an uncertain reference or replay work.
 
 Replace the digest placeholder with the full identity returned by Snapshot or
 List. Snapshot captures declared source plus existing `dist/` output; it does not
