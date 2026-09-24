@@ -20,6 +20,38 @@ pub struct OpenPluginView {
 pub struct PluginViewArguments {
     pub view: ViewInstanceId,
 }
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum PluginViewCloseMode {
+    /// Ask the connected view to flush its draft before native closure.
+    #[default]
+    Flush,
+    /// Explicit recovery when cooperation is unavailable. Keeps exactly this
+    /// acknowledged version; does not claim that local edits have been saved.
+    RetainAcknowledged { expected_version: u32 },
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ClosePluginView {
+    pub view: ViewInstanceId,
+    #[serde(default)]
+    pub mode: PluginViewCloseMode,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(tag = "phase", rename_all = "snake_case", deny_unknown_fields)]
+pub enum PluginViewCloseState {
+    Open,
+    Requested { operation: OperationId },
+    Prepared { operation: OperationId, state_version: u32 },
+    Refused { operation: OperationId, reason: String },
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginViewLifecycle {
+    pub view: ViewInstanceId,
+    pub state_version: u32,
+    pub close: PluginViewCloseState,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct UpdatePluginView {
@@ -62,6 +94,19 @@ pub struct PluginViewConnection {
 #[derive(Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PluginViewRequest {
+    /// Register only after installing the local close-time flush handler.
+    RegisterCloseHandler { renderer: RequestId },
+    ObserveLifecycle { renderer: RequestId },
+    PrepareClose {
+        renderer: RequestId,
+        operation: OperationId,
+        state_version: u32,
+    },
+    RefuseClose {
+        renderer: RequestId,
+        operation: OperationId,
+        reason: String,
+    },
     /// Reserve a browser text-copy action while the user gesture is current.
     /// Host validation is not confirmation that the clipboard was written.
     BeginTextCopy,
@@ -100,6 +145,10 @@ pub enum PluginViewRequest {
 impl std::fmt::Debug for PluginViewRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let kind = match self {
+            Self::RegisterCloseHandler { .. } => "RegisterCloseHandler",
+            Self::ObserveLifecycle { .. } => "ObserveLifecycle",
+            Self::PrepareClose { .. } => "PrepareClose",
+            Self::RefuseClose { .. } => "RefuseClose",
             Self::BeginTextCopy => "BeginTextCopy",
             Self::FinishTextCopy { .. } => "FinishTextCopy",
             Self::CancelTextCopy { .. } => "CancelTextCopy",

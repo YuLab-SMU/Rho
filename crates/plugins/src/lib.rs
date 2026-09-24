@@ -12,6 +12,7 @@ pub use resources::*;
 #[cfg(unix)]
 mod resource_channel;
 mod views;
+mod view_close;
 mod window_layout;
 pub use views::PluginViewAsset;
 mod service;

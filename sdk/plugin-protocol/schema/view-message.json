@@ -58,6 +58,93 @@
       "description": "Every request crosses the containing shell's scoped Host port. No browser\ncredential, project root or user identity is accepted from the iframe.",
       "oneOf": [
         {
+          "description": "Register only after installing the local close-time flush handler.",
+          "type": "object",
+          "properties": {
+            "renderer": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "register_close_handler"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "renderer"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "renderer": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "observe_lifecycle"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "renderer"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string"
+            },
+            "renderer": {
+              "type": "string"
+            },
+            "state_version": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "prepare_close"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "renderer",
+            "operation",
+            "state_version"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "renderer": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "refuse_close"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "renderer",
+            "operation",
+            "reason"
+          ]
+        },
+        {
           "description": "Reserve a browser text-copy action while the user gesture is current.\nHost validation is not confirmation that the clipboard was written.",
           "type": "object",
           "properties": {

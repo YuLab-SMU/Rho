@@ -86,7 +86,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
     // Opaque origins require '*'; the transferred port is addressed to this
     // exact WindowProxy and bootstrap is tied to this document's random nonce.
     iframe.contentWindow?.postMessage({ type: "rho:view:connect", protocol_version: 1, nonce,
-      connection: connection.connection, view: connection.view, features: clipboardAvailable ? ["text_copy_v1"] : [] }, "*", [channel.port2]);
+      connection: connection.connection, view: connection.view, features: ["view_close_v1", ...(clipboardAvailable ? ["text_copy_v1"] : [])] }, "*", [channel.port2]);
   };
   window.addEventListener("message", ready);
   container.append(iframe);

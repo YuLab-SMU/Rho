@@ -63,10 +63,12 @@ test("opaque Console package preserves editing, IME guards, queue controls and t
         } else if (request.type === "control") {
           if (request.capability.id === "r.respond_input") fixture.queue.console.input.submitted = true;
           result = { accepted: true };
+        } else if (["register_close_handler", "observe_lifecycle"].includes(request.type)) {
+          result = { view: view.view, state_version: view.state_version, close: { phase: "open" } };
         } else throw new Error("Unexpected view request");
         channel.port1.postMessage({ protocol_version: 1, connection: "connection", view: view.view, sequence: ++sequence, request: message.request, ok: true, result });
       };
-      (event.source as Window).postMessage({ type: "rho:view:connect", nonce: "fixture", protocol_version: 1, connection: "connection", view }, "*", [channel.port2]);
+      (event.source as Window).postMessage({ type: "rho:view:connect", nonce: "fixture", protocol_version: 1, connection: "connection", view, features: ["view_close_v1"] }, "*", [channel.port2]);
     });
     const frame = document.createElement("iframe"); frame.sandbox.add("allow-scripts"); frame.style.cssText = "width:100vw;height:100vh;border:0;display:block";
     frame.src = "/dist/index.html#rho-view-nonce=fixture"; document.body.append(frame);

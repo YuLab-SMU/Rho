@@ -11,6 +11,7 @@ const history = find("history"), message = find("message"), surface = find("surf
 const refresh = find<HTMLButtonElement>("refresh"), earlier = find<HTMLButtonElement>("earlier"), follow = find<HTMLButtonElement>("follow");
 let outputs: SavedOutput[] = [], current: SavedOutput | null = null, cursor: number | null = null;
 let initialized = false, fetching = false, stopped = false, generation = 0, controller: AbortController | null = null;
+let closing = false;
 function notice(text: string, error = false) { message.textContent = text; message.className = error ? "notice error" : "notice"; message.hidden = !text; }
 function releaseSurface() {
   controller?.abort(); controller = null; surface.replaceChildren();
@@ -59,17 +60,17 @@ async function select(output: SavedOutput, save = false, force = false) {
   }
 }
 async function update(older = false) {
-  if (fetching || stopped || (older && cursor === null)) return;
+  if (fetching || stopped || closing || (older && cursor === null)) return;
   fetching = true; refresh.disabled = true; earlier.disabled = true;
   try {
     const page = await readHistory(client, source, older ? cursor : null);
-    if (stopped) return;
+    if (stopped || closing) return;
     const all = new Map(outputs.map(output => [key(output), output]));
     for (const output of page.items) all.set(key(output), output);
     if (!initialized && state.selected && !Array.from(all.values()).some(output => matches(output, state.selected!))) {
       for (const output of await readOperation(client, source, state.selected.operation_id)) all.set(key(output), output);
     }
-    if (stopped) return;
+    if (stopped || closing) return;
     outputs = mergeHistory([], Array.from(all.values()), state.selected, older);
     if (!initialized || older) cursor = page.next;
     initialized = true;
@@ -85,6 +86,11 @@ earlier.onclick = () => { void update(true); };
 follow.onclick = () => { state.follow = !state.follow; renderHistory(); if (state.follow && outputs[0]) void select(outputs[0], true); else void saveState(); };
 refresh.onclick = () => { if (current) void select(current, false, true); void update(); };
 renderHistory();
+const close = await client.installCloseHandler({
+  async flush() { closing = true; await client.setState(structuredClone(state)); },
+  resume() { closing = false; void update(); },
+});
+close.subscribe(() => { const error = close.getSnapshot().error; if (error) notice(error, true); });
 const timer = setInterval(() => { if (!document.hidden) void update(); }, 3000);
 window.addEventListener("pagehide", () => { stopped = true; generation++; clearInterval(timer); releaseSurface(); client.dispose(); }, { once: true });
 

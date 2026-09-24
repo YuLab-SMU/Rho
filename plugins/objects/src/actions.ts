@@ -169,5 +169,6 @@ export class ObjectsActions extends Model<Snapshot> {
       this.state.receipt = { ...receipt, status: record.status, error: record.error ?? "" }; await this.save();
     });
   }
+  async settled() { await this.task?.catch(() => undefined); }
   stop() { this.stopped = true; this.dispose(); }
 }

@@ -1,5 +1,7 @@
 #[path = "fixtures/plugins.rs"]
 mod fixture;
+#[path = "fixtures/view_close.rs"]
+mod view_close;
 use rho_contract::*;
 use rho_host::{NextHost, OperationError};
 use rho_plugin_protocol::{PluginArchive, PluginInstanceObservation};
@@ -33,8 +35,14 @@ async fn run(
     context: &CallContext,
     id: &str,
     cap: &str,
-    args: Value,
+    mut args: Value,
 ) -> OperationRecord {
+    // These lifecycle fixtures have no cooperating UI document. Recovery closes
+    // explicitly retain the observed version; handshake tests choose Flush.
+    if cap == "views.close" && args.get("mode").is_none() {
+        let record = query(host, context, "views.inspect", json!({"view":args["view"]})).await;
+        args["mode"] = json!({"kind":"retain_acknowledged","expected_version":record["state_version"]});
+    }
     host.invoke(context, invocation(id, cap, args))
         .await
         .unwrap()
@@ -874,10 +882,14 @@ async fn window_layouts_are_scoped_versioned_and_do_not_restart_retained_views()
     for (id, view) in [("close-a", a["view"].clone()), ("close-b", b["view"].clone())] {
         assert_eq!(run(&host, &context, id, "views.close", json!({"view":view})).await.status, OperationStatus::Succeeded);
     }
+    let mut closed_layout = saved;
+    closed_layout["version"] = json!(3);
+    closed_layout["layout"]["views"] = json!([]);
+    assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await, closed_layout);
     assert_eq!(run(&host, &context, "release", "plugins.release", json!({"instance":activated.instance.identity})).await.status, OperationStatus::Succeeded);
     repo.remove(&archive.revision.id).unwrap(); drop(host);
     let host = NextHost::open_project(&database, &project).await.unwrap();
-    assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await, saved);
+    assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await, closed_layout);
     assert_eq!(query(&host, &context, "views.inspect", json!({"view":a["view"]})).await["closed"], true);
     assert!(host.query_snapshot(&context, QueryRequest { capability: CapabilityRef::new("views.connection", 1).unwrap(), arguments: json!({"view":a["view"]}) }).await.is_err());
     assert!(repo.list().unwrap().is_empty());

@@ -42,6 +42,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     OpenPluginView::export_all(&types)?;
     UpdatePluginView::export_all(&types)?;
     PluginViewArguments::export_all(&types)?;
+    ClosePluginView::export_all(&types)?;
+    PluginViewLifecycle::export_all(&types)?;
     PluginViewConnection::export_all(&types)?;
     PluginViewMessage::export_all(&types)?;
     PluginWindowLayout::export_all(&types)?;
@@ -59,6 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("archive", schemars::schema_for!(PluginArchive)),
         ("rpc", schemars::schema_for!(RpcFrame)),
         ("view-message", schemars::schema_for!(PluginViewMessage)),
+        ("view-close", schemars::schema_for!(ClosePluginView)),
         ("window-layout", schemars::schema_for!(PluginWindowLayout)),
         ("window-open-view", schemars::schema_for!(OpenPluginWindowView)),
         ("resource-transfer-request", schemars::schema_for!(ResourceTransferRequest)),

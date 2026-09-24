@@ -87,6 +87,47 @@ and clipboard permissions. This is browser presentation cooperation, not an
 operating-system sandbox guarantee.
 
 `views.open`, `views.update` and `views.close` use the common Operation port.
+Install the document's close handler after constructing its presentation model:
+
+```ts
+const closing = await client.installCloseHandler({
+  async flush() {
+    pausePresentationUpdates();
+    await finishLocalCapture();
+    await client.setState(captureCurrentDraft());
+  },
+  resume() { resumePresentationUpdates(); },
+});
+closing.subscribe(() => showCloseStatus(closing.getSnapshot()));
+```
+
+The container advertises `view_close_v1`. The SDK registers a document identity
+and makes bounded lifecycle observations. `views.close` defaults to `flush`: the
+owner fences new actions, requests every registered document's final state, and
+waits up to 15 seconds for acknowledgements of one exact version. The SDK makes
+its own document inert during preparation, awaits the handler and queued state
+writes, and acknowledges the original close Operation. It refuses preparation
+while composing text without making that editor inert. A refusal or deadline
+leaves the view open; the handler's `resume` restores presentation updates.
+Handlers must drain local capture/acceptance tasks and pause background changes,
+but must not wait for scientific execution or cancel accepted work. A failed
+save must reject. Keep transient/password answers out of retained view state.
+Objects flushes presentation choices, Console flushes its draft and refuses an
+unsent transient answer, and Viewer saves selection/history/follow choices. This
+does not serialize arbitrary nested HTML widgets.
+
+Successful closure removes the exact tab and releases its view reference in one
+transaction with closure of the acknowledged record. A lost reply is unconfirmed;
+the container must inspect the original Operation before removing the iframe.
+Disposal, navigation and browser reload do not prove that the destroyed document
+saved its local buffer. Its registration is retained rather than silently
+acknowledged. For an unavailable document, explicitly inspect `views.inspect` and
+invoke `views.close` with `mode: { kind: "retain_acknowledged", expected_version }`.
+This recovery mode retains that exact acknowledged state and does not claim to
+have saved disconnected edits. Never automatically fall back to it after failure.
+Host shutdown similarly retains acknowledged state and layout placeholders; it
+does not claim a close-time flush.
+
 For navigation into a window, declare `windows.layout` and `windows.open_view`
 with `plugins.run`, observe the containing window, then invoke `windows.open_view`
 with its expected layout version and an explicit target group. That operation

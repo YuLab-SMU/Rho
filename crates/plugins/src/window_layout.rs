@@ -209,6 +209,29 @@ pub(crate) fn layout_error(fault: PluginError) -> rho_operation::OperationError 
     }
 }
 
+/// Remove only the exact view while retaining destination groups and geometry.
+/// The caller commits this together with the final acknowledged view state.
+pub(crate) fn remove_view(mut current: PluginWindowLayout, view: &ViewInstanceId) -> Result<Option<UpdatePluginWindowLayout>, PluginError> {
+    current.layout.view_ids()?;
+    fn remove(node: &mut PluginWindowNode, view: &ViewInstanceId) -> bool {
+        match node {
+            PluginWindowNode::Tabs { views, selected, .. } => {
+                let Some(index) = views.iter().position(|id| id == view) else { return false };
+                views.remove(index);
+                if selected.as_ref() == Some(view) {
+                    *selected = views.get(index.min(views.len().saturating_sub(1))).cloned();
+                }
+                true
+            }
+            PluginWindowNode::Split { children, .. } => children.iter_mut().any(|node| remove(node, view)),
+            PluginWindowNode::Empty => false,
+        }
+    }
+    if !remove(&mut current.layout, view) { return Ok(None); }
+    current.layout.view_ids()?;
+    Ok(Some(UpdatePluginWindowLayout { window: current.window, expected_version: current.version, layout: current.layout }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,6 +245,29 @@ mod tests {
             version: 7,
             layout: node,
         }
+    }
+    #[test]
+    fn closure_preserves_groups_geometry_and_nearest_tab_selection() {
+        let view = |id| ViewInstanceId::new(id).unwrap();
+        for (selected, removed, expected) in [("b", "b", Some("c")), ("c", "c", Some("b")), ("a", "b", Some("a"))] {
+            let original = layout(PluginWindowNode::Split {
+                id: NodeId::new("split").unwrap(), direction: SplitDirection::Horizontal, weights: vec![2.0, 5.0],
+                children: vec![PluginWindowNode::Empty, PluginWindowNode::Tabs { id: NodeId::new("main").unwrap(),
+                    views: vec![view("a"), view("b"), view("c")], selected: Some(view(selected)) }],
+            });
+            assert!(remove_view(original.clone(), &view("unknown")).unwrap().is_none());
+            let next = remove_view(original.clone(), &view(removed)).unwrap().unwrap();
+            assert_eq!(next.expected_version, original.version);
+            if let PluginWindowNode::Split { weights, children, .. } = next.layout {
+                assert_eq!(weights, vec![2.0, 5.0]); assert_eq!(children[0], PluginWindowNode::Empty);
+                assert_eq!(children[1], PluginWindowNode::Tabs { id: NodeId::new("main").unwrap(),
+                    views: ["a", "b", "c"].into_iter().filter(|id| *id != removed).map(view).collect(), selected: expected.map(view) });
+            } else { panic!("split geometry must remain intact"); }
+        }
+        let group = NodeId::new("empty-target").unwrap();
+        let last = layout(PluginWindowNode::Tabs { id: group.clone(), selected: Some(view("last")), views: vec![view("last")] });
+        assert_eq!(remove_view(last, &view("last")).unwrap().unwrap().layout,
+            PluginWindowNode::Tabs { id: group, selected: None, views: vec![] });
     }
     #[test]
     fn navigation_requires_an_explicit_existing_group_after_the_first_open() {

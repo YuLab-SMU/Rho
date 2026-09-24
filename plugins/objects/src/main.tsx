@@ -22,17 +22,23 @@ try {
     throw new Error("The Objects contribution or object configuration is missing.");
   const connection = new ObjectsConnection(client, configuration.source);
   const actions = new ObjectsActions(client, connection, configuration.object_group);
+  const closing = await client.installCloseHandler({
+    async flush() { await connection.pause(); await actions.settled(); await connection.flush(); },
+    resume() { connection.resume(); },
+  });
   const ignore = (promise: Promise<unknown>) => { void promise.catch(() => undefined); };
   function App() {
     const state = useSyncExternalStore(connection.subscribe, connection.getSnapshot);
     const action = useSyncExternalStore(actions.subscribe, actions.getSnapshot);
+    const close = useSyncExternalStore(closing.subscribe, closing.getSnapshot);
     const receipt = action.receipt;
     return <ObjectsViewContext.Provider value={{ objects: connection.objects, session: state.session,
-      navigation: { blocked: action.working || !!action.pending, openObject: (name, path) => ignore(actions.openObject(name, path)) },
-      execution: { blocked: action.working || !!action.pending, run: (code, mode) => actions.run(code, mode).catch(() => undefined) }, clipboard: client }}>
+      navigation: { blocked: close.preparing || action.working || !!action.pending, openObject: (name, path) => ignore(actions.openObject(name, path)) },
+      execution: { blocked: close.preparing || action.working || !!action.pending, run: (code, mode) => actions.run(code, mode).catch(() => undefined) }, clipboard: client }}>
       <main className="objects-root">
         {client.view.contribution === "object" ? <ObjectViewer {...configuration.object!} viewId={client.view.view} /> : <ObjectsPanel viewId={client.view.view} />}
-        {(state.notice || state.saveError || action.error || action.pending || receipt) && <aside className="objects-status" aria-label="Objects status">
+        {(close.error || state.notice || state.saveError || action.error || action.pending || receipt) && <aside className="objects-status" aria-label="Objects status">
+          {close.error && <p role="alert">{close.error}</p>}
           {state.notice && <p role="status">{state.notice}</p>}
           {state.saveError && <p role="alert">{state.saveError}<button onClick={() => ignore(connection.flush())}>Retry Save</button></p>}
           {action.error && <p role="alert">{action.error}</p>}

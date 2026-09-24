@@ -92,10 +92,12 @@ Sources:
 - `scripts/build-r-plugin.mjs`
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
+- `scripts/fixtures/plugin-close.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`
 - `scripts/test-objects-plugin.mjs`
+- `scripts/test-packages-plugin.mjs`
 - `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
 - `scripts/test-plugin-ui.mjs`
@@ -123,6 +125,7 @@ Checks:
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.objects`: `["node","scripts/test-objects-plugin.mjs"]`
 - `plugins.objects-browser`: `["npm","run","test:browser","--prefix","ui","--","objects-plugin.spec.ts"]`
+- `plugins.packages`: `["node","scripts/test-packages-plugin.mjs"]`
 - `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
 - `plugins.r-console`: `["node","scripts/test-r-console.mjs"]`

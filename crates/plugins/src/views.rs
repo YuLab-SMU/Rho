@@ -9,9 +9,11 @@ use std::collections::BTreeSet;
 const MAX_OPEN_VIEWS: usize = 256;
 const MAX_VIEW_STATE: usize = 256 * 1024;
 pub(crate) struct LiveView {
-    connection: PluginViewConnection,
-    context: host::CallContext,
+    pub(crate) connection: PluginViewConnection,
+    pub(crate) context: host::CallContext,
     sequence: u32,
+    pub(crate) renderers: BTreeSet<RequestId>,
+    pub(crate) closing: Option<crate::view_close::CloseAttempt>,
 }
 pub struct PluginViewAsset {
     pub bytes: Vec<u8>,
@@ -43,7 +45,9 @@ impl PluginService {
             .map(|live| (live.context.clone(), live.connection.view.view.clone()))
             .collect::<Vec<_>>();
         for (context, id) in records {
-            if let Err(error) = self.close_view(&context, &id) {
+            let result = self.view_record(&context, &id).and_then(|record|
+                self.close_view_at_version(&context, &id, record.state_version, false));
+            if let Err(error) = result {
                 eprintln!("plugin view shutdown: {error}");
             }
         }
@@ -248,6 +252,8 @@ impl PluginService {
                 connection,
                 context: delegated,
                 sequence: 0,
+                renderers: BTreeSet::new(),
+                closing: None,
             },
         );
         Ok((record, layout))
@@ -287,6 +293,9 @@ impl PluginService {
             ));
         }
         let mut views = self.views.lock().unwrap();
+        if views.get(&args.view).is_some_and(|live| live.closing.as_ref().is_some_and(|close| close.sealed(live.renderers.len()))) {
+            return Err(OperationError::ContentChanged("view state is sealed for closure".into()));
+        }
         let mut repo = self.repository.lock().unwrap();
         let manifest = repo
             .revision(&record.instance.revision)
@@ -326,17 +335,23 @@ impl PluginService {
         }
         Ok(record)
     }
-    pub(crate) fn close_view(
+    pub(crate) fn close_view_at_version(
         &self,
         context: &host::CallContext,
         id: &ViewInstanceId,
+        expected_version: u32,
+        remove_from_window: bool,
     ) -> Result<PluginViewRecord, OperationError> {
         let mut record = self.view_record(context, id)?;
+        if record.closed { return Ok(record); }
+        if record.state_version != expected_version {
+            return Err(OperationError::ContentChanged("view state changed before closure".into()));
+        }
         let mut views = self.views.lock().unwrap();
         let mut repo = self.repository.lock().unwrap();
         let before = serde_json::to_string(&record).map_err(invalid)?;
         record.closed = true;
-        let transaction = repo.connection.transaction().map_err(invalid)?;
+        let transaction = repo.connection.transaction().map_err(error)?;
         if transaction
             .execute(
                 "UPDATE plugin_views SET document=? WHERE id=? AND document=?",
@@ -346,7 +361,7 @@ impl PluginService {
                     before
                 ],
             )
-            .map_err(invalid)?
+            .map_err(error)?
             != 1
         {
             return Err(OperationError::ContentChanged("view state changed".into()));
@@ -356,8 +371,17 @@ impl PluginService {
                 "DELETE FROM revision_refs WHERE owner_kind='view' AND owner=? AND revision=?",
                 params![owner(&record), record.instance.revision.as_str()],
             )
-            .map_err(invalid)?;
-        transaction.commit().map_err(invalid)?;
+            .map_err(error)?;
+        if remove_from_window {
+            let current = crate::window_layout::observed(&transaction, &record.project, &record.principal, &record.window)
+                .map_err(crate::window_layout::layout_error)?;
+            if let Some(args) = crate::window_layout::remove_view(current, &record.view)
+                .map_err(crate::window_layout::layout_error)? {
+                crate::window_layout::store_layout(&transaction, &record.project, &record.principal, args)
+                    .map_err(crate::window_layout::layout_error)?;
+            }
+        }
+        transaction.commit().map_err(error)?;
         views.remove(id);
         self.view_sequences
             .send_modify(|version| *version = version.wrapping_add(1));

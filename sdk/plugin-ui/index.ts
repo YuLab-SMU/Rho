@@ -1,5 +1,8 @@
 /** Public browser SDK. No React, Studio, Host credential or scientific owner. */
 import type { JsonValue, CapabilityKey, PluginViewMessage, PluginViewRecord, PluginViewRequest } from "../plugin-protocol/index.js";
+import { ViewCloseCooperation, type ViewCloseHandler } from "./view-close.js";
+export { ViewCloseCooperation } from "./view-close.js";
+export type { ViewCloseHandler, ViewCloseSnapshot } from "./view-close.js";
 export type { CapabilityKey, PluginViewRecord, PluginViewRequest } from "../plugin-protocol/index.js";
 export const UI_PROTOCOL_VERSION = 1;
 export const MAX_UI_MESSAGE_BYTES = 1024 * 1024;
@@ -45,6 +48,7 @@ export class PluginViewClient {
   private closed = false;
   private current: PluginViewRecord;
   private stateQueue: Promise<unknown> = Promise.resolve();
+  private closeCooperation: ViewCloseCooperation | null = null;
   constructor(private port: MessagePort, readonly initialization: ViewInitialization) {
     this.current = structuredClone(initialization.view);
     port.onmessage = event => this.receive(event.data);
@@ -52,8 +56,20 @@ export class PluginViewClient {
     port.start();
   }
   get view(): PluginViewRecord { return structuredClone(this.current); }
+  async installCloseHandler(handler: ViewCloseHandler): Promise<ViewCloseCooperation> {
+    if (!this.initialization.features?.includes("view_close_v1")) throw new Error("View close cooperation is unavailable in this container.");
+    if (this.closeCooperation) throw new Error("This document already has a close handler.");
+    const cooperation = new ViewCloseCooperation({ view: this.current.view,
+      version: () => this.current.state_version, stateSettled: () => this.stateQueue,
+      request: <T>(body: PluginViewRequest) => this.request<T>(body) }, handler);
+    this.closeCooperation = cooperation;
+    try { await cooperation.start(); return cooperation; }
+    catch (error) { cooperation.dispose(); this.closeCooperation = null; throw error; }
+  }
   request<T = unknown>(body: PluginViewRequest): Promise<T> {
     if (this.closed) return Promise.reject(new Error("View connection is closed"));
+    if (this.closeCooperation?.getSnapshot().preparing && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy"].includes(body.type))
+      return Promise.reject(new Error("View closure is preparing; wait before starting another action."));
     if (this.pending.size >= MAX_UI_PENDING) return Promise.reject(new Error("View request quota reached"));
     if (this.sequence >= 0xffffffff) { this.dispose("View sequence exhausted"); return Promise.reject(new Error("View sequence exhausted")); }
     const request = crypto.randomUUID();
@@ -118,6 +134,7 @@ export class PluginViewClient {
   dispose(reason = "View connection closed") {
     if (this.closed) return;
     this.closed = true;
+    this.closeCooperation?.dispose();
     this.port.close();
     for (const call of this.pending.values()) { clearTimeout(call.timer); call.reject(new Error(reason)); }
     this.pending.clear();

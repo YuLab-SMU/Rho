@@ -169,14 +169,22 @@ test("ordinary Console runs and cancels original R work while preserving drafts 
   await expect.poll(async () => (await query("views.inspect", { view: view.view })).state.input).toBe("saved draft 中文");
   await page.reload(); await expect(input).toContainText("saved draft 中文");
   await expect(outer.locator("#status")).toContainText("Ready");
-  await input.fill("Sys.sleep(3); cat('finished-after-close\\n')"); await input.press("Meta+Enter"); await expect(input).toHaveText("");
-  await input.fill("reopened draft 中文");
-  await expect.poll(async () => (await query("views.inspect", { view: view.view })).state.input).toBe("reopened draft 中文");
-  const saved = await query("views.inspect", { view: view.view });
-  await invoke("views.close", { view: view.view });
+  const reloaded = await query("views.inspect", { view: view.view });
+  // A document lost to reload cannot attest to its old buffer. Explicitly keep
+  // its acknowledged version, then use one fresh document for flush acceptance.
+  await invoke("views.close", { view: view.view, mode: { kind: "retain_acknowledged", expected_version: reloaded.state_version } });
+  view = await openView("console-flush", reloaded.state); await show(page, view);
+  await expect(outer.locator("#status")).toContainText("Ready");
   const read = await query("plugins.resolve", { instance: r, capability: { id: "r.session", version: 1 } });
+  await input.fill("Sys.sleep(5); cat('finished-after-close\\n')"); await input.press("Meta+Enter"); await expect(input).toHaveText("");
+  await expect.poll(async () => (await query("r.session", { binding: read, arguments: {} })).state).toBe("busy");
+  await input.fill("reopened draft 中文");
+  await invoke("views.close", { view: view.view });
+  const saved = await query("views.inspect", { view: view.view });
+  expect(saved.state.input).toBe("reopened draft 中文");
+  expect((await query("r.session", { binding: read, arguments: {} })).state).toBe("busy");
   await expect.poll(async () => (await query("r.session", { binding: read, arguments: {} })).state).toBe("idle");
-  await completedCode("Sys.sleep(3); cat('finished-after-close\\n')");
+  await completedCode("Sys.sleep(5); cat('finished-after-close\\n')");
   view = await openView("console-reopened", saved.state); await show(page, view);
   await expect(input).toContainText("reopened draft 中文"); await expect(transcript).toContainText("finished-after-close");
   await expect.poll(async () => (await query("plugins.instance", { instance: r })).retained_calls).toBe(0);
@@ -184,6 +192,8 @@ test("ordinary Console runs and cancels original R work while preserving drafts 
   await page.reload(); await expect(transcript).toContainText("[1] 22"); await expect(transcript).toContainText("finished-after-close");
   await expect(outer.locator("#observation-error")).toContainText("Live observation unavailable");
   await expect(outer.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
-  await invoke("views.close", { view: view.view }); await invoke("plugins.release", { instance: consoleInstance });
+  const offline = await query("views.inspect", { view: view.view });
+  await invoke("views.close", { view: view.view, mode: { kind: "retain_acknowledged", expected_version: offline.state_version } });
+  await invoke("plugins.release", { instance: consoleInstance });
   completed = true;
 });

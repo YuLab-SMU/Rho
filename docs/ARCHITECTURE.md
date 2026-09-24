@@ -212,6 +212,19 @@ its connection. Explicit release can retire a historical UI-only instance becaus
 its exact manifest establishes that no native backend was created; native failure
 still requires established cleanup. Closing a view never releases its backend.
 
+Ordinary view closure requests document cooperation. The view owner fences new
+actions while each registered document flushes its own draft and acknowledges
+the original close Operation and exact state version. All acknowledgements must
+match the same final version; sealing prevents a subsequent state write from
+racing closure. Preparation releases the service gate while waiting, and refusal,
+timeout or interruption clears the fence without cancelling accepted science.
+The final native transaction closes the retained record, removes its exact tab
+and releases its view revision reference together. Failed writes cannot partially
+close the view. Browser disposal is not an acknowledgement. Lost documents require
+explicit `retain_acknowledged` recovery with the observed state version; no
+automatic fallback may claim that a disconnected buffer was saved. Host shutdown
+keeps acknowledged state and layout placeholders without claiming a UI flush.
+
 `windows.layout` observes a retained arrangement of exact view identities, scoped
 to the authenticated principal, normalized project and explicit window. Absent
 layouts are empty observations and cause no write. `windows.update_layout` uses

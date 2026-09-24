@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClosePluginView",
+  "type": "object",
+  "properties": {
+    "mode": {
+      "$ref": "#/$defs/PluginViewCloseMode",
+      "default": {
+        "kind": "flush"
+      }
+    },
+    "view": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "view"
+  ],
+  "$defs": {
+    "PluginViewCloseMode": {
+      "oneOf": [
+        {
+          "description": "Ask the connected view to flush its draft before native closure.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "flush"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Explicit recovery when cooperation is unavailable. Keeps exactly this\nacknowledged version; does not claim that local edits have been saved.",
+          "type": "object",
+          "properties": {
+            "expected_version": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "retain_acknowledged"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "expected_version"
+          ]
+        }
+      ]
+    }
+  }
+}

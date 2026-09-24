@@ -92,11 +92,13 @@ test("ordinary Objects keeps read-only content, independent object navigation an
             const opened = { ...body.arguments.view, view: `object-${fixture.records.length}`, project: "project", principal: "principal", state_version: 0, closed: false };
             fixture.views[opened.view] = opened; fixture.layout.version++; fixture.layout.layout.views.push(opened.view); fixture.layout.layout.selected = opened.view; mount(opened);
           }
+        } else if (["register_close_handler", "observe_lifecycle"].includes(body.type)) {
+          result = { view: view.view, state_version: view.state_version, close: { phase: "open" } };
         } else error = `Unexpected request ${body.type}`;
         channel.port1.postMessage({ protocol_version: 1, connection: `connection-${view.view}`, view: view.view, sequence: ++sequence, request: message.request,
           ok: !error, result: structuredClone(result), error });
       };
-      (event.source as Window).postMessage({ type: "rho:view:connect", nonce: view.view, protocol_version: 1, connection: `connection-${view.view}`, view }, "*", [channel.port2]);
+      (event.source as Window).postMessage({ type: "rho:view:connect", nonce: view.view, protocol_version: 1, connection: `connection-${view.view}`, view, features: ["view_close_v1"] }, "*", [channel.port2]);
     });
     mount(initial);
   });
@@ -132,6 +134,9 @@ test("ordinary Objects keeps read-only content, independent object navigation an
     await expect(filter).toBeVisible();
     expect(await filter.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     await filter.click(); await expect(filter).toBeFocused();
+    const inspected = await page.evaluate(() => (window as any).fixture.calls.filter((call: any) => call.type === "query" && call.capability.id === "operation.get").length);
+    await directoryView.getByRole("button", { name: "Inspect Operation", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).fixture.calls.filter((call: any) => call.type === "query" && call.capability.id === "operation.get").length)).toBe(inspected + 1);
     await filter.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: info.outputPath(`objects-plugin-${width}.png`) });
   }

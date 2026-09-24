@@ -16,6 +16,13 @@ const get = <T extends HTMLElement>(id: string) => document.getElementById(id) a
 const state = model.state, message = get("message"), status = get("status"), transcriptMarks = new Compartment();
 let initialScroll: { top: number; follow: boolean } | null = { top: state.scrollTop, follow: state.follow };
 let stopped = false, saving: ReturnType<typeof setTimeout> | undefined, submitting = false, refreshing = false, lastHistory = 0;
+let closing = false;
+const localWork = new Set<Promise<unknown>>();
+function tracked<T>(work: Promise<T>): Promise<T> {
+  localWork.add(work);
+  void work.then(() => localWork.delete(work), () => localWork.delete(work));
+  return work;
+}
 let composition = false, composingKey = false, compositionEndedAt = -Infinity;
 let historyIndex = -1, historyDraft = "", inputRequest = "", answerClaimed = false;
 let answerComposition = false, answerEndedAt = -Infinity, answering = false;
@@ -24,17 +31,22 @@ function notice(text = "") { message.textContent = text; message.hidden = !text;
 function report(error: unknown) { if (!stopped) notice(error instanceof Error ? error.message : String(error)); }
 function save() {
   clearTimeout(saving);
+  if (closing || stopped) return;
   saving = setTimeout(() => {
     void model.save().then(() => { get("save-error").textContent = ""; })
       .catch(error => { get("save-error").textContent = `Draft not saved: ${String(error instanceof Error ? error.message : error)}`; });
   }, 500);
 }
-async function action(work: () => Promise<unknown>) { try { notice(); await work(); } catch (error) { report(error); } finally { render(); void refresh(); } }
+function action(work: () => Promise<unknown>) {
+  if (closing || stopped) return Promise.resolve();
+  return tracked((async () => { try { notice(); await work(); } catch (error) { report(error); } finally { render(); void refresh(); } })());
+}
 const transcript = new EditorView({ parent: get("transcript"), state: EditorState.create({ extensions: [
   EditorState.readOnly.of(true), EditorView.editable.of(false), EditorView.lineWrapping,
   EditorView.contentAttributes.of({ "aria-label": "Console Transcript", tabindex: "0" }),
   transcriptMarks.of([]), keymap.of(searchKeymap),
   EditorView.domEventHandlers({ scroll: () => {
+    if (closing || stopped) return;
     const dom = transcript.scrollDOM;
     state.scrollTop = dom.scrollTop;
     state.follow = dom.scrollHeight - dom.scrollTop - dom.clientHeight < 36;
@@ -59,7 +71,11 @@ function restoreDraft() {
   input.dispatch({ changes: { from: 0, to: input.state.doc.length, insert: historyDraft }, selection: { anchor: historyDraft.length } });
   return true;
 }
-async function submit(explicit = false, retry = false) {
+function submit(explicit = false, retry = false) {
+  if (closing || stopped) return Promise.resolve();
+  return tracked(performSubmit(explicit, retry));
+}
+async function performSubmit(explicit: boolean, retry: boolean) {
   if (submitting || composition || input.compositionStarted || composingKey) return;
   submitting = true; render();
   const text = input.state.doc.toString();
@@ -140,12 +156,13 @@ function renderTranscript() {
     // The initially empty editor cannot restore a scroll offset. Wait until
     // the retained transcript has been laid out before restoring its viewport.
     requestAnimationFrame(() => {
-      if (!stopped && !saved.follow) { state.follow = false; transcript.scrollDOM.scrollTop = saved.top; }
+      if (!stopped && !closing && !saved.follow) { state.follow = false; transcript.scrollDOM.scrollTop = saved.top; }
     });
   }
   if (!state.follow) get("new-output").hidden = false;
 }
 function render() {
+  if (closing || stopped) return;
   const queue = model.queue, session = model.session;
   get<HTMLButtonElement>("earlier").disabled = model.historyLoaded && (model.cursor === null || model.historyLimited);
   get("history-limit").hidden = !model.historyLimited;
@@ -178,8 +195,11 @@ function render() {
   }
   renderTranscript();
 }
-async function refresh() {
-  if (refreshing || stopped) return;
+function refresh() {
+  if (refreshing || stopped || closing) return Promise.resolve();
+  return tracked(performRefresh());
+}
+async function performRefresh() {
   refreshing = true;
   try {
     if (Date.now() - lastHistory > 3000) { await model.history(); lastHistory = Date.now(); }
@@ -253,6 +273,20 @@ get("send-answer").onclick = sendAnswer;
 get("identity").textContent = `${model.source.instance} · ${model.source.revision.slice(0, 19)}`;
 get("identity").title = JSON.stringify(model.source, null, 2);
 render();
+const close = await client.installCloseHandler({
+  async flush() {
+    closing = true; clearTimeout(saving);
+    // Wait only for local capture/acceptance and bounded reads. An accepted R
+    // execution keeps running after its Console view has closed.
+    await Promise.allSettled([...localWork]);
+    if (get<HTMLInputElement>("answer").value) throw new Error("Send or clear the pending R input answer before closing this view. Answers are not saved in view state.");
+    state.input = input.state.doc.toString();
+    state.anchor = input.state.selection.main.anchor; state.head = input.state.selection.main.head;
+    clearTimeout(saving); await model.save(); get("save-error").textContent = "";
+  },
+  resume() { closing = false; render(); void refresh(); },
+});
+close.subscribe(() => { const error = close.getSnapshot().error; if (error) notice(error); });
 const timer = setInterval(() => { if (!document.hidden) void refresh(); }, 1000);
 window.addEventListener("pagehide", () => { stopped = true; clearInterval(timer); clearTimeout(saving); model.dispose(); input.destroy(); transcript.destroy(); get<HTMLInputElement>("answer").value = ""; }, { once: true });
 await refresh();

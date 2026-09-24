@@ -6,9 +6,11 @@ import { pathToFileURL } from "node:url";
 import { MessageChannel } from "node:worker_threads";
 import { createHash } from "node:crypto";
 import { compilePublicUiSdk } from "./fixtures/plugin-ui.mjs";
+import { checkViewClose } from "./fixtures/plugin-close.mjs";
 const directory=fs.mkdtempSync(path.join(os.tmpdir(),"rho-public-ui-"));
 try {
   const sdk=await import(pathToFileURL(compilePublicUiSdk(directory)).href);
+  await checkViewClose(sdk);
   const scopedRequest = `sha256:${createHash('sha256').update('original-view:request-中文').digest('hex')}`;
   assert.equal(await sdk.operationRequestId('original-view','request-中文'), scopedRequest);
   assert.notEqual(await sdk.operationRequestId('reopened-view','request-中文'), scopedRequest);

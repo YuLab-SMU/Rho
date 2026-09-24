@@ -60,8 +60,18 @@ impl NextHost {
                 cap.as_ref(),
             )
             .await?;
+        service.check_view_close_fence(&message.view, &message.body)?;
         let cancel = matches!(&message.body, PluginViewRequest::Cancel { .. });
         let request = match message.body {
+            body @ (PluginViewRequest::RegisterCloseHandler { .. }
+            | PluginViewRequest::ObserveLifecycle { .. }
+            | PluginViewRequest::PrepareClose { .. }
+            | PluginViewRequest::RefuseClose { .. }) => {
+                if !parent.scopes.contains(rho_plugins::PLUGINS_RUN_SCOPE) {
+                    return Err(OperationError::InvalidInput("view lifecycle requires the parent's existing view authority".into()));
+                }
+                return Ok(json!(service.cooperate_with_view_close(&context, &message.view, &body)?));
+            }
             PluginViewRequest::BeginTextCopy
             | PluginViewRequest::FinishTextCopy { .. }
             | PluginViewRequest::CancelTextCopy { .. } => {

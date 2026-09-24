@@ -118,8 +118,8 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             "Save view state with its owner's expected version", true, PLUGINS_RUN_SCOPE,
         ),
         "views.close" => (
-            schema_for!(PluginViewArguments).to_value(), schema_for!(PluginViewRecord).to_value(),
-            json!({"view":"view-example"}), "Close a view without releasing its backend", true, PLUGINS_RUN_SCOPE,
+            schema_for!(ClosePluginView).to_value(), schema_for!(PluginViewRecord).to_value(),
+            json!({"view":"view-example"}), "Flush connected documents and close the view without releasing its backend; explicit retained-state recovery requires its acknowledged version", true, PLUGINS_RUN_SCOPE,
         ),
         "resources.list" => (
             schema_for!(ResourceList).to_value(), schema_for!(ResourcePage).to_value(),
@@ -312,7 +312,8 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "plugins.resolve" => normalize::<PluginResolveArguments>(value),
         "plugins.branch_head" => normalize::<PluginBranchArguments>(value),
         "plugins.compare" => normalize::<ComparePluginRevisions>(value),
-        "views.inspect" | "views.connection" | "views.close" => normalize::<PluginViewArguments>(value),
+        "views.inspect" | "views.connection" => normalize::<PluginViewArguments>(value),
+        "views.close" => normalize::<ClosePluginView>(value),
         "views.open" => normalize::<OpenPluginView>(value),
         "views.update" => normalize::<UpdatePluginView>(value),
         "windows.layout" => normalize::<PluginWindowArguments>(value),
@@ -575,8 +576,12 @@ impl OperationHandler for Manage {
                 target = host::TargetRef { kind:"plugin_view".into(), identity:format!("view-{}",uuid::Uuid::new_v4().simple()) };
             }
             "views.update" | "views.close" => {
-                let view = if self.id=="views.update" { decode::<UpdatePluginView>(value)?.view } else { decode::<PluginViewArguments>(value)?.view };
-                let record=self.service.view_record(context,&view)?;
+                let record = if self.id == "views.update" {
+                    self.service.view_record(context, &decode::<UpdatePluginView>(value)?.view)?
+                } else {
+                    self.service.prepare_view_close(context, &decode::<ClosePluginView>(value)?)?
+                };
+                let view = record.view.clone();
                 if !record.closed { revision=Some(record.instance.revision); }
                 target=host::TargetRef { kind:"plugin_view".into(), identity:view.to_string() };
             }
@@ -724,7 +729,7 @@ impl OperationHandler for Manage {
     }
     async fn execute(&self, operation: &host::Operation) -> Result<CommitPlan, HandlerError> {
         self.run(operation).await.map(CommitPlan::succeeded).map_err(|error| {
-            if matches!(self.id, "windows.update_layout" | "windows.open_view") && matches!(&error,
+            if matches!(self.id, "windows.update_layout" | "windows.open_view" | "views.close") && matches!(&error,
                 OperationError::ContentChanged(_) | OperationError::InvalidInput(_) | OperationError::NotFound(_)) {
                 return HandlerError::before_effect(error.to_string());
             }
@@ -775,12 +780,16 @@ impl Manage {
                     })?;
                 Ok(json!(record))
             }
-            "views.open" | "views.update" | "views.close" => {
+            "views.close" => {
+                Ok(json!(service.close_view_cooperatively(&bound.context,
+                    OperationId::new(operation.operation_id.as_str()).map_err(error)?, decode(value)?).await?))
+            }
+            "views.open" | "views.update" => {
                 let _guard=service.gate.lock().await;
                 let record=match self.id {
                     "views.open"=>service.open_view(&bound.context,ViewInstanceId::new(&bound.target.identity).map_err(error)?,decode(value)?)?,
                     "views.update"=>service.update_view(&bound.context,decode(value)?)?,
-                    _=>service.close_view(&bound.context,&decode::<PluginViewArguments>(value)?.view)?,
+                    _ => unreachable!(),
                 };
                 Ok(json!(record))
             }

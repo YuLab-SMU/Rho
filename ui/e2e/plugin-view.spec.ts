@@ -46,7 +46,7 @@ test.afterAll(async () => {
   if (directory && completed) await rm(directory, { recursive: true, force: true });
   else if (directory) console.error(`External UI fixture retained at ${directory}`);
 });
-test("external UI SDK runs in an opaque frame with persistent scoped state", async ({ page, request, context }) => {
+test("external UI SDK runs in an opaque frame with persistent scoped state", async ({ page, request, context }, info) => {
   const address = new URL(url); address.searchParams.set("window", windowId); address.searchParams.set("plugin-view", view.view);
   const faults: string[] = []; page.on("pageerror", error => faults.push(error.message));
   await page.goto(address.href);
@@ -121,18 +121,54 @@ test("external UI SDK runs in an opaque frame with persistent scoped state", asy
   await expect(frame.getByLabel("View note")).toHaveValue("中文输入 · αβ Ω ✓");
   await frame.getByRole("button", { name: "Read plugins", exact: true }).click();
   await expect(frame.locator("#result")).toHaveText("Plugins: 2");
-  await page.screenshot({ path: "../target/plugin-refactor/external-ui-wide.png" });
+  await page.screenshot({ path: info.outputPath("external-ui-wide.png") });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(frame.getByRole("button", { name: "Save note" })).toBeVisible();
-  await page.screenshot({ path: "../target/plugin-refactor/external-ui-narrow.png" });
+  await page.screenshot({ path: info.outputPath("external-ui-narrow.png") });
+  // Reload destroyed the original document. Explicit retained-version recovery
+  // closes that record without claiming its disconnected buffer was flushed.
+  const retained = await query("views.inspect", { view: view.view });
+  await invoke("views.close", { view: view.view, mode: { kind: "retain_acknowledged", expected_version: retained.state_version } });
+  view = await invoke("views.open", { instance: instance.identity, contribution: "view", window: windowId,
+    configuration: retained.configuration, state: retained.state });
+  address.searchParams.set("plugin-view", view.view); await page.goto(address.href);
+  await expect(frame.locator("#automatic-copy")).toContainText("explicit Copy action");
+  await frame.getByLabel("View note").fill("Close captures the latest 中文 draft");
+  const closeRequest = () => port("invoke", { capability: { id: "views.close", version: 1 },
+    arguments: { view: view.view }, preconditions: [], client_request_id: crypto.randomUUID() });
+  await frame.getByLabel("View note").dispatchEvent("compositionstart");
+  const composing = await closeRequest(); expect(composing.status).toBe("failed");
+  expect(composing.error).toContain("composing");
+  expect((await query("views.inspect", { view: view.view })).closed).toBe(false);
+  await frame.getByLabel("View note").dispatchEvent("compositionend");
+  // Reject the actual disposable repository write, preserving the channel's
+  // sequence and the original Operation instead of fabricating a reply.
+  const storage = (sql: string) => execFileSync("python3", ["-c",
+    "import sqlite3,sys\nwith sqlite3.connect(sys.argv[1]) as db: db.executescript(sys.argv[2])",
+    join(directory, "plugins-v1/catalog-v1.sqlite3"), sql]);
+  storage("CREATE TRIGGER reject_fixture_draft BEFORE UPDATE ON plugin_views BEGIN SELECT RAISE(ABORT, 'Fixture draft storage unavailable'); END;");
+  try {
+    const unsaved = await closeRequest(); expect(unsaved.status).toBe("failed");
+    expect(unsaved.error).toContain("View state was not saved");
+    const updates = await query("operation.list_recent", { limit: 100 });
+    expect(updates.operations.some((record: any) => record.capability.id === "views.update" &&
+      record.status === "uncertain" && record.error?.includes("Fixture draft storage unavailable"))).toBe(true);
+    await expect.poll(() => frame.locator("body").evaluate(body => body.inert)).toBe(false);
+    await expect(frame.getByLabel("View note")).toHaveValue("Close captures the latest 中文 draft");
+    await expect(frame.getByLabel("View note")).toBeFocused();
+    expect((await query("views.inspect", { view: view.view })).state.text).toBe(retained.state.text);
+    await page.screenshot({ path: info.outputPath("external-ui-close-refused.png") });
+  } finally { storage("DROP TRIGGER reject_fixture_draft;"); }
   await frame.getByRole("button", { name: "Copy after collection", exact: true }).click();
   await expect(frame.locator("#result")).toHaveText("Collecting");
   await invoke("views.close", { view: view.view });
-  await expect(frame.locator("#result")).toContainText("view connection", { timeout: 12000 });
+  expect((await query("views.inspect", { view: view.view })).state.text).toBe("Close captures the latest 中文 draft");
+  // Wait for the original delayed copy producer to finish. Lifecycle polling
+  // can report the closed connection earlier than that producer settles.
+  await expect(frame.locator("#result")).toContainText("View closure is preparing", { timeout: 12000 });
   expect(await copiedText()).toBe("中文输入 · αβ Ω ✓ · collected");
   const still = await query("plugins.instance", { instance: instance.identity }); expect(still.instance.state).toBe("active");
-  await frame.getByRole("button", { name: "Read plugins", exact: true }).click();
-  await expect(frame.locator("#result")).toContainText("view connection");
+  expect((await query("views.inspect", { view: view.view })).closed).toBe(true);
   await invoke("plugins.release", { instance: instance.identity });
   expect(faults).toEqual([]);
   completed = true;

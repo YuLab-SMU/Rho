@@ -85,3 +85,20 @@ it("a reverted edit is saved after the preceding in-flight write is acknowledged
   expect(f.setState.mock.calls.at(-1)?.[0].objects.objectViews.filter).toBe("original");
   expect(f.setState).toHaveBeenCalledTimes(3);
 });
+it("close preparation drains the active read, pauses new observations and captures the latest unsaved choice", async () => {
+  const f = fixture(); await f.owner.refresh(); await f.owner.flush();
+  const original = f.query.getMockImplementation()!;
+  let complete!: () => void;
+  f.query.mockImplementationOnce((...args) => new Promise(resolve => { complete = () => { void original(...args).then(resolve); }; }));
+  const refresh = f.owner.refresh();
+  let paused = false; const pause = f.owner.pause().then(() => { paused = true; });
+  await Promise.resolve(); expect(paused).toBe(false);
+  const reads = f.query.mock.calls.length;
+  await f.owner.refresh(); expect(f.query).toHaveBeenCalledTimes(reads);
+  f.owner.objects.setViewValue("filter", "last 中文 choice");
+  complete(); await refresh; await pause; await f.owner.flush();
+  expect(f.setState.mock.calls.at(-1)?.[0].objects.objectViews.filter).toBe("last 中文 choice");
+  const saves = f.setState.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(3000); expect(f.query).toHaveBeenCalledTimes(reads); expect(f.setState).toHaveBeenCalledTimes(saves);
+  f.owner.resume(); await f.owner.refresh(); expect(f.query.mock.calls.length).toBeGreaterThan(reads);
+});

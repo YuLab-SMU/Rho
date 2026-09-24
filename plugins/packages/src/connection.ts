@@ -1,7 +1,7 @@
 import type { InstanceRef, JsonValue, ProviderBinding } from "../public/plugin-protocol/index.js";
 import type { PluginViewClient } from "../public/plugin-ui/index.js";
 import type { RInspection, RInspectionState } from "../public/r-protocol/index.js";
-import { Objects } from "./objects.js";
+import { Packages } from "./packages.js";
 import type { ResourceIdentity } from "./resource-ports.js";
 import { Model } from "./shared/model.js";
 
@@ -12,14 +12,14 @@ interface ConnectionSnapshot {
   readonly connected: boolean;
 }
 type ViewClient = Pick<PluginViewClient, "view" | "query" | "setState">;
-const capabilities = ["r.list_objects", "r.observe_object", "r.read_object"];
+const capabilities = ["r.packages"];
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 /** One exact R provider/session and one view's acknowledged presentation state.
  * Polling observes native readiness, never Operation-list row IDs or timestamps.
  * Nothing here starts R, recovers work or invokes scientific code. */
-export class ObjectsConnection extends Model<ConnectionSnapshot> {
-  readonly objects: Objects;
+export class PackagesConnection extends Model<ConnectionSnapshot> {
+  readonly packages: Packages;
   readonly source: InstanceRef;
   private identity: ResourceIdentity;
   private cacheKey: string | null = null;
@@ -39,13 +39,13 @@ export class ObjectsConnection extends Model<ConnectionSnapshot> {
     this.source = Object.freeze(structuredClone(source));
     if (![source.instance, source.plugin, source.revision, source.artifact].every(value => typeof value === "string" && value.length > 0))
       throw new Error("Select an exact R plugin instance.");
-    const saved = client.view.state as { nativeSession?: unknown; objects?: unknown; actions?: JsonValue } | null;
+    const saved = client.view.state as { nativeSession?: unknown; packages?: unknown; actions?: JsonValue } | null;
     this.actions = structuredClone(saved?.actions ?? null);
     const session = typeof saved?.nativeSession === "string" && saved.nativeSession ? saved.nativeSession : null;
     this.identity = { epoch: 1, project: client.view.project, session, runtimeState: null, connected: false, capabilities };
-    this.objects = new Objects({ context: () => this.identity,
+    this.packages = new Packages({ context: () => this.identity,
       query: async (project, capability, args) => {
-        if (project !== this.identity.project) throw new Error("Object request belongs to a different project.");
+        if (project !== this.identity.project) throw new Error("Package request belongs to a different project.");
         const result = await this.query<RInspection<unknown>>(capability, args, this.identity.session);
         if (result.status !== "ready") this.deferred = true;
         if (result.status === "busy") {
@@ -55,7 +55,7 @@ export class ObjectsConnection extends Model<ConnectionSnapshot> {
         return result;
       }, schedule: () => this.schedule(), changed: () => this.changed(),
     });
-    this.objects.restore(saved?.objects);
+    this.packages.restore(saved?.packages);
     this.saved = JSON.stringify(this.state());
   }
   protected readSnapshot(): ConnectionSnapshot {
@@ -65,7 +65,7 @@ export class ObjectsConnection extends Model<ConnectionSnapshot> {
   get nativeSession() { return this.identity.session; }
   get actionState(): JsonValue { return structuredClone(this.actions); }
   async saveActions(value: JsonValue) { this.actions = structuredClone(value); await this.flush(); }
-  private state() { return { nativeSession: this.identity.session, objects: this.objects.serialize(), actions: this.actions }; }
+  private state() { return { nativeSession: this.identity.session, packages: this.packages.serialize(), actions: this.actions }; }
   private binding(id: string, target: string | null): ProviderBinding {
     return { capability: { id, version: 1 }, provider: this.source, project: this.identity.project!, target };
   }
@@ -96,7 +96,7 @@ export class ObjectsConnection extends Model<ConnectionSnapshot> {
     return task;
   }
   private async persist() {
-    if (this.stopped) throw new Error("The Objects view connection is closed.");
+    if (this.stopped) throw new Error("The Packages view connection is closed.");
     const state = this.state(), encoded = JSON.stringify(state);
     if (encoded === this.saved) return;
     try { await this.client.setState(state as JsonValue); this.saved = encoded; this.saveError = ""; }
@@ -119,15 +119,15 @@ export class ObjectsConnection extends Model<ConnectionSnapshot> {
         throw new Error("R inspection readiness changed its original session or returned an invalid observation.");
       this.identity = { ...previous, session: state.session_id, connected: true,
         runtimeState: state.status === "ready" ? "idle" : state.status === "busy" ? "busy" : "unavailable" };
-      if (previous.session !== state.session_id) { this.objects.sessionChanged(); this.changed(); }
-      else if (!previous.connected || this.cacheKey !== state.cache_key || state.status === "unavailable" && previous.runtimeState !== "unavailable") this.objects.invalidate();
+      if (previous.session !== state.session_id) { this.packages.sessionChanged(); this.changed(); }
+      else if (!previous.connected || this.cacheKey !== state.cache_key || state.status === "unavailable" && previous.runtimeState !== "unavailable") this.packages.invalidate();
       this.cacheKey = state.cache_key;
       this.notice = state.notices.join("\n"); this.publish();
       // A bounded batch allows separate frame actions and readiness reads to run.
       // Busy/unavailable native reads defer retries to the next caller's poll.
       for (let read = 0; read < 8 && !this.stopped && !this.paused; read++) {
-        await this.objects.observe();
-        if (this.deferred || !this.objects.needsObservation) break;
+        await this.packages.observe();
+        if (this.deferred || !this.packages.needsObservation) break;
       }
     })();
     this.refreshing = task.catch(error => {
@@ -135,19 +135,19 @@ export class ObjectsConnection extends Model<ConnectionSnapshot> {
         const connected = this.identity.connected;
         this.identity = { ...this.identity, connected: false, runtimeState: "unavailable" };
         this.deferred = true;
-        if (connected) this.objects.invalidate();
+        if (connected) this.packages.invalidate();
         this.notice = message(error); this.publish();
       }
       throw error;
     }).finally(() => {
       this.refreshing = null;
-      if (!this.stopped && !this.deferred && this.objects.needsObservation) this.schedule();
+      if (!this.stopped && !this.deferred && this.packages.needsObservation) this.schedule();
     });
     return this.refreshing;
   }
   stop() {
     this.stopped = true; clearTimeout(this.refreshTimer); clearTimeout(this.saveTimer);
-    this.objects.stop(); this.dispose();
+    this.packages.stop(); this.dispose();
   }
   async pause() {
     this.paused = true; clearTimeout(this.refreshTimer); this.refreshTimer = undefined;

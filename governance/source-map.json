@@ -315,6 +315,12 @@
         "scripts/test-objects-plugin.mjs"
       ]
     },
+    "plugins.packages": {
+      "command": [
+        "node",
+        "scripts/test-packages-plugin.mjs"
+      ]
+    },
     "plugins.objects-browser": {
       "command": [
         "npm",
@@ -469,6 +475,7 @@
         "scripts/test-plugin-backend.mjs",
         "scripts/test-plugin-ui.mjs",
         "scripts/fixtures/plugin-ui.mjs",
+        "scripts/fixtures/plugin-close.mjs",
         "scripts/test-r-plugin-engine.mjs",
         "scripts/build-r-plugin.mjs",
         "scripts/test-r-plugin.mjs",
@@ -483,6 +490,7 @@
         "scripts/test-r-console.mjs",
         "ui/e2e/r-plugin-console.spec.ts",
         "scripts/test-objects-plugin.mjs",
+        "scripts/test-packages-plugin.mjs",
         "scripts/build-objects-plugin.mjs",
         "ui/e2e/objects-plugin.spec.ts",
         "scripts/test-r-objects-plugin.mjs",
@@ -511,6 +519,7 @@
         "plugins.console-editor",
         "plugins.r-console",
         "plugins.objects",
+        "plugins.packages",
         "plugins.objects-browser",
         "plugins.r-objects"
       ]

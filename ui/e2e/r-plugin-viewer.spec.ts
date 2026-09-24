@@ -91,7 +91,8 @@ test.afterAll(async () => { await stopHost(); if (directory) await rm(directory,
 
 test("ordinary Viewer presents real retained HTML across revisions, closure and restart", async ({ page, context, request }) => {
   test.setTimeout(180000);
-  const left = await openView(rLeft, "viewer-left"), right = await openView(rRight, "viewer-right");
+  let left = await openView(rLeft, "viewer-left");
+  const right = await openView(rRight, "viewer-right");
   const secondPage = await context.newPage();
   const calls: string[] = [], faults: string[] = [];
   page.on("pageerror", error => faults.push(error.message));
@@ -149,6 +150,10 @@ test("ordinary Viewer presents real retained HTML across revisions, closure and 
   await expect(document(page).getByRole("heading")).toHaveText("Left · 中文 Ω");
   await expect.poll(async()=>(await query("views.inspect",{view:left.view})).state.follow).toBe(false);
   await page.reload(); await expect(document(page).getByRole("heading")).toHaveText("Left · 中文 Ω");
+  const reloaded = await query("views.inspect", { view: left.view });
+  await invoke("views.close", { view: left.view, mode: { kind: "retain_acknowledged", expected_version: reloaded.state_version } });
+  left = await openView(rLeft, "viewer-flush", reloaded.state); await show(page, left);
+  await expect(document(page).getByRole("heading")).toHaveText("Left · 中文 Ω");
   for(const width of [1440,1920,390]) {
     await page.setViewportSize({width,height:900});
     await secondPage.setViewportSize({width,height:900});
@@ -174,7 +179,7 @@ test("ordinary Viewer presents real retained HTML across revisions, closure and 
   await invoke("plugins.remove",{revision:rightRevision}); await invoke("plugins.remove",{revision:leftRevision});
   await outer.getByRole("button",{name:"Refresh",exact:true}).click();
   await expect(document(page).getByRole("heading")).toHaveText("Left · 中文 Ω");
-  expect(calls.every(call=>call.startsWith('query:')||call==='set_state:self')).toBe(true);
+  expect(calls.every(call=>call.startsWith('query:')||['set_state:self','register_close_handler:self','observe_lifecycle:self','prepare_close:self','refuse_close:self'].includes(call))).toBe(true);
   const viewerRevision=viewer.revision,viewerArtifact=viewer.artifact;
   await stopHost(); await secondPage.close(); await startHost();
   viewer=(await invoke("plugins.activate",{revision:viewerRevision,artifact:viewerArtifact,target:'ui-web',alias:'restored-viewer',configuration:{}})).instance.identity;

@@ -890,11 +890,22 @@ connection. The generic standalone container opens through the private Workbench
 URL with `window=WINDOW_ID&plugin-view=VIEW_ID` query parameters; keep the launch
 credential only in the normal private URL fragment. This is also the conformance
 surface for the public UI SDK. The returned view must belong to that window.
-`views.update` uses `expected_version`; `views.close` revokes the connection but
-preserves state and leaves its backend alive. Close retained views before releasing
-an instance. After a Host restart, explicitly close historical view records before
-releasing a UI-only instance; reading a record never reconnects it. Management and
-Studio interfaces remain pending ordinary plugins.
+`views.update` uses `expected_version`. `views.close` defaults to waiting for each
+registered document to flush and acknowledge the same final view-state version.
+It then atomically closes the record, removes its tab and releases only its view
+reference. A refused or unanswered preparation leaves the view open; accepted
+backend work continues. Do not remove its iframe until the original close
+Operation confirms success. A lost reply is not a confirmed close.
+
+For a document lost to reload/navigation or a view with no handler, inspect
+`views.inspect` and explicitly close with
+`{"view":"VIEW_ID","mode":{"kind":"retain_acknowledged","expected_version":N}}`.
+This checks and retains version N; it does not save a disconnected document's
+local edits. Do not automatically substitute this recovery mode for a failed
+flush. Close retained views before releasing an instance. After a Host restart,
+historical closed records and layout placeholders retain acknowledged state;
+reading them never reconnects them. Management and Studio interfaces remain
+pending ordinary plugins.
 
 These ports are shared by connected CLI, HTTP and official MCP. An existing MCP
 connection receives tool-list change notifications when providers appear,
