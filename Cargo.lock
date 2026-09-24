@@ -6003,7 +6003,9 @@ dependencies = [
 name = "rho-contract"
 version = "0.1.0"
 dependencies = [
+ "rho-files-api",
  "rho-plugin-protocol",
+ "rho-process-api",
  "rho-r-api",
  "schemars 1.2.1",
  "serde",
@@ -6039,18 +6041,36 @@ dependencies = [
 ]
 
 [[package]]
-name = "rho-git"
+name = "rho-files-api"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "ts-rs",
+]
+
+[[package]]
+name = "rho-files-engine"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "fs4",
- "rho-process",
- "rho-project",
+ "rho-files-api",
+ "rho-process-engine",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "rho-git"
+version = "0.1.0"
+dependencies = [
+ "rho-files-engine",
 ]
 
 [[package]]
@@ -6184,13 +6204,33 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "nix",
- "process-wrap",
  "rho-contract",
  "rho-execution",
  "rho-operation",
+ "rho-process-engine",
  "serde_json",
  "sysinfo",
  "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "rho-process-api"
+version = "0.1.0"
+dependencies = [
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "ts-rs",
+]
+
+[[package]]
+name = "rho-process-engine"
+version = "0.1.0"
+dependencies = [
+ "nix",
+ "process-wrap",
+ "rho-process-api",
  "tokio",
 ]
 
@@ -6200,6 +6240,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "rho-contract",
+ "rho-files-api",
  "rho-operation",
  "schemars 1.2.1",
  "serde",

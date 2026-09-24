@@ -1,5 +1,5 @@
 use super::*;
-use rho_project::*;
+use rho_files_api::*;
 
 const PAGE_BYTES: usize = 64 * 1024;
 const MATCH_SCAN_BYTES: usize = 1024 * 1024;
@@ -133,7 +133,7 @@ impl GitProject {
     /// Preserve native classifications while applying the same containment rules as checked_path.
     fn checked_text_path(&self, path: &str) -> Result<PathBuf, TextLoadError> {
         self.check_text_root()?;
-        rho_project::validate_path(path).map_err(ProjectTextError::InvalidInput)?;
+        rho_files_api::validate_path(path).map_err(ProjectTextError::InvalidInput)?;
         let result = self.root.join(path);
         if self
             .excluded

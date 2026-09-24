@@ -7,14 +7,4 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-async-trait.workspace = true
-rho-project = { path = "../../project" }
-rho-process = { path = "../process" }
-sha2.workspace = true
-serde_json.workspace = true
-serde.workspace = true
-tokio.workspace = true
-fs4 = { version = "1", default-features = false, features = ["sync"] }
-
-[dev-dependencies]
-tempfile.workspace = true
+rho-files-engine = { path = "../../../plugins/files/backend/engine" }

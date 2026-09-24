@@ -1,0 +1,18 @@
+[package]
+name = "rho-process-engine"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "AGPL-3.0-only"
+repository = "https://github.com/YuLab-SMU/Rho"
+
+[dependencies]
+rho-process-api = { path = "../../api" }
+process-wrap = { version = "10.0", features = ["tokio1"] }
+tokio = { version = "1.0", features = ["macros", "rt", "sync", "time", "process", "io-util"] }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", default-features = false }
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["net"] }

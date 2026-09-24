@@ -433,6 +433,38 @@
         "--",
         "plugin-download.spec.ts"
       ]
+    },
+    "plugins.files-engine": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-files-engine",
+        "-p",
+        "rho-process-engine",
+        "--lib",
+        "--tests",
+        "--locked"
+      ]
+    },
+    "plugins.files-independent": {
+      "command": [
+        "node",
+        "scripts/test-files-plugin-engine.mjs"
+      ]
+    },
+    "plugins.files-protocol": {
+      "command": [
+        "node",
+        "plugins/files/generate-sdk.mjs",
+        "--check"
+      ]
+    },
+    "plugins.files-public-types": {
+      "command": [
+        "node",
+        "scripts/test-files-protocol.mjs"
+      ]
     }
   },
   "areas": {
@@ -609,7 +641,9 @@
         "ui/e2e/plugin-workspace.spec.ts",
         "ui/e2e/plugin-download.spec.ts",
         "ui/e2e/plugin-resource-download.spec.ts",
-        "ui/e2e/fixtures/plugin-download.ts"
+        "ui/e2e/fixtures/plugin-download.ts",
+        "scripts/test-files-plugin-engine.mjs",
+        "scripts/test-files-protocol.mjs"
       ],
       "checks": [
         "docs.index",
@@ -647,7 +681,11 @@
         "plugins.r-plots",
         "plugins.window-browser",
         "plugins.download-browser",
-        "plugins.resource-download-browser"
+        "plugins.resource-download-browser",
+        "plugins.files-engine",
+        "plugins.files-independent",
+        "plugins.files-protocol",
+        "plugins.files-public-types"
       ]
     }
   }

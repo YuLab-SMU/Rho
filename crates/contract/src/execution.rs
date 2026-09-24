@@ -24,35 +24,7 @@ pub struct RunLocalArguments {
     #[schemars(range(min = 1, max = 131072))]
     pub output_limit_bytes: usize,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
-pub struct OutputCapture {
-    pub bytes: Vec<u8>,
-    pub total_bytes: u64,
-    pub truncated: bool,
-    pub eof: bool,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum ProcessTermination {
-    Exited,
-    Cancelled,
-    TimedOut,
-    Uncertain,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
-pub struct ProcessReport {
-    pub pid: Option<u32>,
-    pub exit_code: Option<i32>,
-    pub exit_signal: Option<i32>,
-    pub termination: ProcessTermination,
-    pub stdout: OutputCapture,
-    pub stderr: OutputCapture,
-    pub elapsed_ms: u64,
-    pub supervision: String,
-    pub stdin_error: Option<String>,
-    pub cleanup_requested: bool,
-    pub cleanup_error: Option<String>,
-}
+pub use rho_process_api::{OutputCapture, ProcessTermination, ProcessReport};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 pub struct NativeProcessIdentity {
     pub pid: u32,

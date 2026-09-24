@@ -27,20 +27,24 @@ const allowed = {
   "rho-r-backend": ["rho-plugin-sdk", "rho-r-api", "rho-r-engine"],
   "rho-r-api": ["rho-plugin-protocol"],
   "rho-r-engine": ["rho-r-api", "rho-plugin-protocol"],
-  "rho-contract": ["rho-plugin-protocol", "rho-r-api"],
+  "rho-files-api": [],
+  "rho-files-engine": ["rho-files-api", "rho-process-engine"],
+  "rho-process-api": [],
+  "rho-process-engine": ["rho-process-api"],
+  "rho-contract": ["rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api"],
   "rho-operation": ["rho-contract", "rho-plugin-protocol"],
   "rho-application": ["rho-contract"],
   "rho-agents": ["rho-application", "rho-contract"],
   "rho-skills": ["rho-contract", "rho-operation"],
   "rho-adapter-skills": ["rho-contract", "rho-operation", "rho-skills"],
   "rho-workspace": ["rho-contract", "rho-operation", "rho-r-api"],
-  "rho-project": ["rho-contract", "rho-operation"],
+  "rho-project": ["rho-contract", "rho-operation", "rho-files-api"],
   "rho-environment": ["rho-contract", "rho-operation"],
   "rho-execution": ["rho-contract", "rho-operation"],
-  "rho-process": ["rho-contract", "rho-operation", "rho-execution"],
+  "rho-process": ["rho-contract", "rho-operation", "rho-execution", "rho-process-engine"],
   "rho-ssh": ["rho-contract", "rho-operation", "rho-execution", "rho-process"],
   "rho-r-environment": ["rho-environment", "rho-operation", "rho-process"],
-  "rho-git": ["rho-project", "rho-process"],
+  "rho-git": ["rho-files-engine"],
   "rho-sqlite": ["rho-contract", "rho-operation", "rho-application"],
   "rho-r-runtime": ["rho-contract", "rho-workspace", "rho-r-api", "rho-r-engine", "rho-plugin-protocol"],
   "rho-host": ["rho-plugin-protocol", "rho-plugins", "rho-agents", "rho-agent-client", "rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
@@ -48,6 +52,11 @@ const allowed = {
   "rho-agent-client": ["rho-contract"],
   "rho-workbench": ["rho-plugin-protocol", "rho-contract", "rho-host", "rho-mcp"],
   "rho-cli": ["rho-contract", "rho-host", "rho-mcp", "rho-workbench", "rho-plugin-protocol", "rho-plugins"],
+};
+const pluginLibraries = {
+  "rho-r-api": "plugins/r/api", "rho-r-engine": "plugins/r/backend/engine",
+  "rho-files-api": "plugins/files/api", "rho-files-engine": "plugins/files/backend/engine",
+  "rho-process-api": "plugins/process/api", "rho-process-engine": "plugins/process/backend/engine",
 };
 for (const pkg of metadata.packages) {
   assertAgentEngineBoundary(pkg);
@@ -58,8 +67,8 @@ for (const pkg of metadata.packages) {
         assert.equal(path.resolve(dep.path), path.resolve(root, "vendor/jet-core"));
         continue;
       }
-      if (["rho-r-api", "rho-r-engine"].includes(dep.name)) {
-        assert.equal(path.resolve(dep.path), path.resolve(root, dep.name === "rho-r-api" ? "plugins/r/api" : "plugins/r/backend/engine"));
+      if (Object.hasOwn(pluginLibraries, dep.name)) {
+        assert.equal(path.resolve(dep.path), path.resolve(root, pluginLibraries[dep.name]));
       } else {
         const relative = path.relative(path.join(root, "crates"), dep.path);
         assert.ok(relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),

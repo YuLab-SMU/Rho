@@ -55,6 +55,18 @@ Use the smallest test tier that proves the current change. A small change must n
 rerun the entire workspace by default; expand the scope only when the dependency or
 owner boundary requires it.
 
+Files/Git native sources now live in `plugins/files/backend/engine`; their public
+data and provider contracts live in `plugins/files/api`. Shared bounded subprocess
+supervision lives in `plugins/process/backend/engine` with public process reports
+in `plugins/process/api`. The retiring adapters reuse these implementations.
+Iterate with `cargo test -p rho-files-engine -p rho-process-engine --lib --tests --locked`.
+For the source boundary, `node scripts/test-files-plugin-engine.mjs` materializes
+only those four libraries outside the checkout and runs their native tests with
+the installed toolchain. It is not a backend activation or packaging test.
+Generate public Files declarations with `node plugins/files/generate-sdk.mjs`,
+then run `node scripts/test-files-protocol.mjs`. Contract moves also require the
+normal client generation check, even when wire shapes remain unchanged.
+
 When one cross-boundary check needs several packages, prefer one Cargo invocation
 with multiple `-p` selections and the required target selectors when possible.
 Cargo [unifies their dependency features](https://doc.rust-lang.org/cargo/reference/resolver.html#feature-unification),

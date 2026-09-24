@@ -1,96 +1,14 @@
 use super::*;
+use rho_files_api::{validate_read, validate_search};
 
-/// Owner-level progressive-read failures. Adapters classify native facts where observed;
-/// message text is never parsed to infer a diagnostic code.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ProjectTextError {
-    InvalidInput(String),
-    ObservationExpired(String),
-    ContentChanged(String),
-    BudgetExceeded(String),
-    Unavailable(String),
-}
-impl std::fmt::Display for ProjectTextError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (kind, message) = match self {
-            Self::InvalidInput(message) => ("invalid text request", message),
-            Self::ObservationExpired(message) => ("text observation expired", message),
-            Self::ContentChanged(message) => ("text content changed", message),
-            Self::BudgetExceeded(message) => ("text budget exceeded", message),
-            Self::Unavailable(message) => ("text unavailable", message),
-        };
-        write!(f, "{kind}: {message}")
+fn text_error(error: ProjectTextError) -> OperationError {
+    match error {
+        ProjectTextError::InvalidInput(message) => OperationError::InvalidInput(message),
+        ProjectTextError::ObservationExpired(message) => OperationError::ObservationExpired(message),
+        ProjectTextError::ContentChanged(message) => OperationError::ContentChanged(message),
+        ProjectTextError::BudgetExceeded(message) => OperationError::BudgetExceeded(message),
+        ProjectTextError::Unavailable(message) => OperationError::Unavailable(message),
     }
-}
-impl std::error::Error for ProjectTextError {}
-impl From<ProjectTextError> for OperationError {
-    fn from(error: ProjectTextError) -> Self {
-        match error {
-            ProjectTextError::InvalidInput(message) => Self::InvalidInput(message),
-            ProjectTextError::ObservationExpired(message) => Self::ObservationExpired(message),
-            ProjectTextError::ContentChanged(message) => Self::ContentChanged(message),
-            ProjectTextError::BudgetExceeded(message) => Self::BudgetExceeded(message),
-            ProjectTextError::Unavailable(message) => Self::Unavailable(message),
-        }
-    }
-}
-
-fn validate_cursor(cursor: &TextCursor) -> Result<(), OperationError> {
-    validate_path(&cursor.file.path).map_err(invalid)?;
-    if cursor.line == 0 || cursor.byte_offset > cursor.file.byte_size {
-        return Err(invalid("invalid text continuation position"));
-    }
-    Ok(())
-}
-pub fn validate_read(args: &ReadTextArguments) -> Result<(), OperationError> {
-    validate_path(&args.path).map_err(invalid)?;
-    if args.start_line == 0 || !(1..=200).contains(&args.limit_lines) {
-        return Err(invalid("text lines start at 1; page limit is 1..=200"));
-    }
-    if let Some(cursor) = &args.continuation {
-        validate_cursor(cursor)?;
-    }
-    Ok(())
-}
-pub fn validate_search(args: &SearchTextArguments) -> Result<(), OperationError> {
-    if args.text.is_empty() || args.text.len() > 1024 || !(1..=100).contains(&args.limit_matches) {
-        return Err(invalid(
-            "literal text must be 1..=1024 UTF-8 bytes; match limit is 1..=100",
-        ));
-    }
-    if !args.directory.is_empty() {
-        validate_path(&args.directory).map_err(invalid)?;
-    }
-    if args
-        .filename_contains
-        .as_ref()
-        .is_some_and(|s| s.len() > 1024 || s.contains('/'))
-    {
-        return Err(invalid(
-            "filename filter must be a basename substring of at most 1024 bytes",
-        ));
-    }
-    if let Some(cursor) = &args.continuation {
-        if cursor.directories.len() > 64 {
-            return Err(invalid("directory continuation exceeds 64 levels"));
-        }
-        for frame in &cursor.directories {
-            if !frame.path.is_empty() {
-                validate_path(&frame.path).map_err(invalid)?;
-            }
-            if frame
-                .after_name
-                .as_ref()
-                .is_some_and(|s| s.len() > 1024 || s.contains('/'))
-            {
-                return Err(invalid("invalid directory continuation name"));
-            }
-        }
-        if let Some(active) = &cursor.active_file {
-            validate_cursor(active)?;
-        }
-    }
-    Ok(())
 }
 
 trait InvestigationCompleteness {
@@ -133,12 +51,12 @@ macro_rules! handler {
             }
             fn normalize_arguments(&self, value: &Value) -> Result<Value, OperationError> {
                 let args: $args = serde_json::from_value(value.clone()).map_err(invalid)?;
-                $validate(&args)?;
+                $validate(&args).map_err(text_error)?;
                 serde_json::to_value(args).map_err(invalid)
             }
             async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
                 let args: $args = serde_json::from_value(value.clone()).map_err(invalid)?;
-                $validate(&args)?;
+                $validate(&args).map_err(text_error)?;
                 let mut reply = QuerySnapshot {
                     next_reads: Vec::new(),
                     diagnostics: Vec::new(),
@@ -171,7 +89,7 @@ macro_rules! handler {
                             ));
                         }
                     }
-                    Err(error) => return Err(error.into()),
+                    Err(error) => return Err(text_error(error)),
                 }
                 Ok(reply)
             }

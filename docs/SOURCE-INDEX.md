@@ -100,6 +100,8 @@ Sources:
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`
+- `scripts/test-files-plugin-engine.mjs`
+- `scripts/test-files-protocol.mjs`
 - `scripts/test-help-plugin.mjs`
 - `scripts/test-objects-plugin.mjs`
 - `scripts/test-packages-plugin.mjs`
@@ -143,6 +145,10 @@ Checks:
 - `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
 - `plugins.download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-download.spec.ts"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
+- `plugins.files-engine`: `["cargo","test","-p","rho-files-engine","-p","rho-process-engine","--lib","--tests","--locked"]`
+- `plugins.files-independent`: `["node","scripts/test-files-plugin-engine.mjs"]`
+- `plugins.files-protocol`: `["node","plugins/files/generate-sdk.mjs","--check"]`
+- `plugins.files-public-types`: `["node","scripts/test-files-protocol.mjs"]`
 - `plugins.help`: `["node","scripts/test-help-plugin.mjs"]`
 - `plugins.help-browser`: `["npm","run","test:browser","--prefix","ui","--","help-plugin.spec.ts"]`
 - `plugins.objects`: `["node","scripts/test-objects-plugin.mjs"]`

@@ -3,6 +3,10 @@ resolver = "3"
 members = [
   "crates/plugin-protocol",
   "plugins/r/api",
+  "plugins/files/api",
+  "plugins/files/backend/engine",
+  "plugins/process/api",
+  "plugins/process/backend/engine",
   "plugins/r/backend/engine",
   "plugins/r/backend",
   "crates/plugin-sdk",

@@ -25,6 +25,17 @@ Original Plots export also passes before and after R release. Default scenario
 composition remains in progress. The remaining scientific composition, scenario integration and
 Plugin Studio stay in scope.
 
+The next owner extraction is Files/Git: public filesystem/text contracts and the
+native implementation now reside under `plugins/files`, and shared subprocess
+supervision and reports under `plugins/process`. The retiring adapters reuse the
+same implementation. Twenty-six affected owner checks and the independent public
+contract consumer pass. The standalone native source check also passes all 21
+file/process cases without private core source. Client generation/build/check pass;
+existing client declarations and embedded assets remain unchanged. All 22 affected
+Host project/ownership cases pass, including original preconditions, protected
+paths, project leases and uncertain partial effects. These libraries do not yet
+provide an installable Files backend or replace the fixed Files/Editor composition.
+
 ### Implemented behavior
 
 `rho-plugin-protocol` defines public package, revision, instance, provider, scenario,
@@ -345,6 +356,10 @@ executable startup is allowed to finish; silence is not treated as a test failur
 
 | Executed check | Result and scope |
 | --- | --- |
+| `cargo test -p rho-files-engine -p rho-process-engine -p rho-project -p rho-process --lib --tests --locked` | 26 passed: 13 file/text/containment, four native recovery, eight process-supervision and one typed owner-diagnostic checks. Native bodies were moved without semantic changes; the retiring adapters reuse the same implementations. |
+| `node plugins/files/generate-sdk.mjs`, `node plugins/files/generate-sdk.mjs --check`, `node scripts/test-files-protocol.mjs` | Public Files declarations/schemas generated and verified; an independent strict TypeScript consumer passed without private client imports. |
+| `node scripts/test-files-plugin-engine.mjs` | Standalone locked/offline build and all 21 native cases passed (13 Files, eight subprocess supervision) using only the four public Files/process libraries and their third-party dependencies. The copied sources contain no private core dependency; the existing Host was neither rebuilt nor restarted by this check. |
+| `cargo test -p rho-host --test project --test ownership --locked` | All 22 passed (15 project, seven ownership). Covers native Git/file preconditions, dirty/staged/untracked preservation, contained reads and writes, protected stores, root aliases, original project leases, unchanged query history and truthful uncertain partial effects. Compilation completed in 12m01s; test bodies completed in 0.95s/2.96s. |
 | `cargo test -p rho-host --test plugins original_download --locked` | Passed. Requires declared read scope and current parent authority, refuses changed resource/name/size and close preparation, reads retained bytes after provider release, redacts diagnostics and makes no download or extra-Operation claim. |
 | `npm run test --prefix ui -- host-client.test.ts plugin-window-close.test.ts plugin-window-client.test.ts plugin-window-views.test.ts plugin-workspace-window.test.tsx` | 50 passed across five files. Includes correlated admission diagnostics, uncertain/rejected distinction, explicit saved-version capture and original-request retries. |
 | `npm run test --prefix ui -- plugin-download.test.ts` | Six passed. Exact bounded chunks/digest, Unicode basename/control validation, final authority refusal and closure during collection/recheck. |
@@ -393,6 +408,15 @@ sequence to the Host, so the next message was correctly rejected. It now injects
 an actual disposable SQLite write failure. Subsequent assertions were corrected
 to check the SDK refusal and the retained uncertain update; the conformance case
 then passed. No message checks or native deadline changed.
+
+The initial Files extraction check refused a stale Cargo lock. The first offline
+metadata request then attempted to resolve uncached dependencies for unrelated
+targets; restricting metadata to the native target completed offline. An initial
+compile also found the retiring process recovery adapter still needed its Unix
+`nix` dependency; that dependency was restored and the complete 26-check rerun
+passed. A read-only sample of slow test startup showed `_dyld_start` before test
+code; the original run was allowed to finish and all executable checks passed.
+Logs and the sample are retained under `target/plugin-refactor`.
 
 The first generic-window boundary check rejected a direct docking-library import
 in the containing window. Moving title updates into the existing layout adapter

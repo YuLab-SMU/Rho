@@ -33,6 +33,15 @@ independent; execution must use immutable artifact bytes, never a development
 directory. Import verifies containment, source/lock/build declarations, schemas,
 inventories and digests without running a build or loading code.
 
+Files/Git contracts and native provider ports now live in `plugins/files/api`;
+the contained filesystem, text and Git implementation lives in
+`plugins/files/backend/engine`. Shared native subprocess supervision and its public
+reports live under `plugins/process`. These libraries have no private core imports.
+The retiring Git/process adapters reuse the same implementations while their
+ordinary backend and operation integration are completed. Moving the implementation
+does not relax canonical project roots, protected-path exclusions, symlink checks,
+bounded reads or native file identity requirements.
+
 The R domain contracts now live in `plugins/r/api`; the native Ark/R implementation
 and its R bridge live in `plugins/r/backend/engine`. They depend only on public
 plugin contracts and third-party libraries, not Host or Operation implementation.
@@ -1341,8 +1350,10 @@ package inspection.
 | `crates/operation` | Operation and Query gateways, handler/journal ports and commit discipline |
 | `crates/workspace`, `project`, `environment`, `execution` | Scientific owners and native port definitions |
 | `crates/application`, `skills` | Application context/control and method/source ports, separate from scientific execution |
-| `crates/adapters/` | SQLite, Git, package, process and SSH/Slurm implementations; transitional adapter to the R package |
+| `crates/adapters/` | SQLite, package, process recovery and SSH/Slurm implementations; transitional adapters to package-owned R, Files/Git and subprocess engines |
 | `plugins/r/api`, `plugins/r/backend` | Public R data/native ports, isolated RPC owner and the sole Ark/R engine |
+| `plugins/files/api`, `plugins/files/backend/engine` | Public filesystem/text/Git contracts and the contained native implementation |
+| `plugins/process/api`, `plugins/process/backend/engine` | Public bounded process reports and native subprocess supervision |
 | `crates/host` | Concrete composition and runtime configuration |
 | `crates/agent-client` | Bounded native Codex app-server / Kimi and DeepSeek ACP clients; no scientific handlers or Agent behavior loop |
 | `crates/agents` | Optional Rig integration; only Application/contract ports, no scientific owners or native adapter dependencies |
