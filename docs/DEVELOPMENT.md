@@ -41,12 +41,15 @@ it does not establish native R behavior or production window lifecycle integrati
 The native path uses explicit existing Ark/R and ggplot2 in a disposable project:
 `RHO_ARK=/absolute/existing/ark RHO_R_HOME=/absolute/existing/R/home node
 scripts/test-r-objects-plugin.mjs`. The wrapper builds both packages outside the
-checkout and verifies an unchanged Host binary. To reuse already built packages,
+checkout and verifies an unchanged Host binary; set `RHO_R_PLUGIN_PACKAGE` to
+reuse an existing native package while assembling current Objects sources.
+To reuse both already built packages,
 set `RHO_R_PLUGIN_PACKAGE` and `RHO_OBJECTS_PLUGIN_PACKAGE` alongside Ark/R, then
 run `npm run test:browser --prefix ui -- r-plugin-objects.spec.ts`. It covers native
-objects, exact destination/state, explicit plot Operations and retained read-only
-inspection. The standalone container opens the new view explicitly; this does not
-establish automatic production window navigation or close-time draft flushing.
+objects, automatic same-window inspection, preserved directory documents,
+responsive table presentation, actual pointer receipt inspection, explicit plot
+Operations and close-time state capture. The case uses the generic composition
+entrypoint; default scenario delivery remains a separate acceptance.
 
 Use the smallest test tier that proves the current change. A small change must not
 rerun the entire workspace by default; expand the scope only when the dependency or
@@ -421,7 +424,8 @@ versioned saves, lost acknowledgements and original Operation outcomes. The
 retained hidden documents, confirmed closure and retries of the original request.
 `plugin-workspace.spec.ts` exercises the generic `?plugin-window` composition with
 real Host ports and an independently built fixture package. It checks automatic
-placement, retained drafts, close refusal and lost-close acknowledgements. This
+placement, retained drafts, close refusal, lost-close acknowledgements and explicit
+saved-state recovery after both a flush refusal and a missing handler. This
 entrypoint is under integration; the final default scenario replaces the fixed
 shell after all feature packages are available.
 `node scripts/test-objects-plugin.mjs` compiles the in-progress Objects model and
@@ -446,6 +450,12 @@ override before the next user action so it cannot deny normal writes. The fixtur
 uses a disposable project, not a user's active scientific session, and retains
 its project on failure. `ui/tests/plugin-clipboard.test.ts` separately checks
 reservation expiry, bounds and native refusal.
+`plugin-resource-download.spec.ts` uses independently built ordinary UI/backend
+fixtures and real Host ports to check scoped original-byte downloads, Unicode
+filenames, unchanged Operation history, automatic-action refusal and closure
+during collection. `plugin-download.spec.ts` checks the browser download primitive
+and checksum refusal without establishing Host admission. The Plots native case
+separately checks original PNG export before and after releasing its R provider.
 `node scripts/test-viewer-plugin.mjs` independently builds the ordinary Viewer and
 checks original Operation/resource identities. `node scripts/test-r-viewer.mjs`
 requires explicit existing `RHO_ARK`, `RHO_R_HOME`, the R package `DT`, Chrome and a

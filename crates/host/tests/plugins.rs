@@ -2,6 +2,8 @@
 mod fixture;
 #[path = "fixtures/view_close.rs"]
 mod view_close;
+#[path = "fixtures/resource_download.rs"]
+mod resource_download;
 use rho_contract::*;
 use rho_host::{NextHost, OperationError};
 use rho_plugin_protocol::{PluginArchive, PluginInstanceObservation};

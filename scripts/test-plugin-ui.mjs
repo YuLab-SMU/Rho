@@ -82,6 +82,22 @@ try {
   const sha=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),n=>n.toString(16).padStart(2,"0")).join("");
   const owner={plugin:"example.resources",instance:"source",revision:"sha256:"+"a".repeat(64),artifact:"sha256:"+"b".repeat(64)};
   const reference={owner,resource:"resource",digest:"sha256:"+sha,bytes:bytes.length,media_type:"text/html"};
+  await assert.rejects(client.downloadResource(reference,'plot.png'),/unavailable/);
+  const downloadChannel=new MessageChannel(),downloadClient=new sdk.PluginViewClient(downloadChannel.port1,{...init,features:['resource_download_v1']});
+  let downloadSequence=0,confirmedDownload=true;const downloads=[];
+  downloadChannel.port2.on('message',message=>{
+    downloads.push(message.body);
+    downloadChannel.port2.postMessage({protocol_version:1,connection:'connection',view:'view',sequence:++downloadSequence,request:message.request,ok:true,result:confirmedDownload?{download_requested:true}:{authorized_view:'view'}});
+  });
+  await downloadClient.downloadResource(reference,'原图 α.html');
+  assert.deepEqual(downloads,[{type:'download_resource',reference,filename:'原图 α.html'}]);
+  for(const name of ['', '../original', 'x/y', 'x\\y', 'a:b', 'a\nb','a\u0085b', ' leading', '..', '字'.repeat(81)])
+    await assert.rejects(downloadClient.downloadResource(reference,name),/filename/);
+  for(const bytes of [-1,0.5,17*1024*1024,Number.NaN])
+    await assert.rejects(downloadClient.downloadResource({...reference,bytes},'plot.png'),/limit|size/);
+  assert.equal(downloads.length,1);
+  confirmedDownload=false;await assert.rejects(downloadClient.downloadResource(reference,'original.html'),/unconfirmed/);
+  downloadClient.dispose();downloadChannel.port2.close();
   let resourceReads=0;
   const reader={query:async(cap,args)=>{
     assert.equal(cap.id,"resources.read");resourceReads++;

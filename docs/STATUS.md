@@ -21,7 +21,8 @@ observation; its independent model checks and the new native readiness acceptanc
 pass. The Host binary remained unchanged for the independent R package check.
 The ordinary Objects, Packages, Help and Plots views are assembled. Packages-to-Help
 and pinned Plots comparisons now pass native acceptance in the generic window;
-Plots export and default scenario composition remain in progress. The remaining scientific composition, scenario integration and
+Original Plots export also passes before and after R release. Default scenario
+composition remains in progress. The remaining scientific composition, scenario integration and
 Plugin Studio stay in scope.
 
 ### Implemented behavior
@@ -90,14 +91,14 @@ an explicit tab group in one transaction. It checks the exact active instance,
 schemas, window scope and expected layout version before admission and again at
 execution. Failed writes roll back the view/reference/layout together; original
 request replay cannot create a second view. Direct view opening also refuses a
-view caller's attempt to open another window. All seventeen Host plugin/port-contract
+view caller's attempt to open another window. All eighteen Host plugin/port-contract
 cases pass, including forced storage failure and concurrent placement conflicts.
 A generic docking adapter, fixed iframe content layer and serialized
 presentation-save model now use the shared Host ports. Their unit checks and
 isolated Chrome fixture pass, including actual pointer dragging, hidden tabs,
 layout reconstruction, focus and retained Unicode drafts at 1440/1920/390 px.
 The fixture delegates closing without removing the frame. The generic application
-entrypoint is now wired and awaiting composed-window browser acceptance; default
+entrypoint now passes composed-window browser acceptance; default
 scenario application and removal of the fixed workbench layout remain pending.
 
 View closure now defaults to cooperative draft flushing. The public SDK registers
@@ -115,9 +116,9 @@ saved. Host shutdown retains acknowledged state and layout placeholders. Native
 Host and SDK checks pass. Chrome verifies the synthetic composition refusal, real
 view-state storage failure, draft/focus recovery, successful final capture and
 fenced delayed clipboard completion. Console and Viewer also pass their updated
-disposable native R paths. Objects verifies close-time capture and reopening using
-keyboard activation for the original receipt; its retained standalone frame has
-an unresolved pointer-routing failure after a second page is resized.
+disposable native R paths. Objects now verifies close-time capture, reopening and
+actual pointer receipt inspection in the generic window. Its older standalone
+path has an unresolved pointer-routing failure after a second page is resized.
 
 Public text-copy cooperation now validates the exact live view, window, principal
 and current parent authority before the containing browser reserves a native write.
@@ -233,10 +234,13 @@ The SDK exposes the Host-scoped request ID used for receipt matching and read-on
 recovery. All nine directory/table/action screenshots at 1440, 1920 and 390 px were
 inspected. The close handler pauses observation and captures the latest presentation choices;
 its connection and native browser checks pass, including immediate close before
-autosave. Native receipt inspection uses keyboard activation because the retained
-standalone frame currently misroutes the footer pointer after a second page resize.
-Production window wiring and remaining native
-interaction acceptance are still required before replacing the old UI.
+autosave. The current native case passes in the generic window (9.0 s body,
+27.1 s total), including automatic inspector placement, retained directory identity,
+actual pointer receipt inspection and close/reopen recovery. All six directory and
+table screenshots at 1440/1920/390 px were inspected. The prior standalone pointer
+failure remains separate; the current case does not claim to fix that path.
+Default scenario wiring and remaining native interaction acceptance are still
+required before replacing the old UI.
 
 The ordinary `org.rho.packages` package now assembles outside the checkout with
 its approved compact list, wide inspector, copy-specific source details and
@@ -290,11 +294,14 @@ window action, and lost replies cannot retarget it. Reopened comparisons prefer 
 selection over their initial configuration. Thirty-one independent checks
 and the isolated browser flow pass. Normal, wide, 390 px, 240 px and details
 screenshots were inspected. Native acceptance also passes in the generic window
-(12.2 s body, 29.3 s total): actual PNG reads, an independent pinned comparison,
+(12.2 s body, 28.5 s total): actual PNG reads, an independent pinned comparison,
 actual pointer receipt inspection, closure during R execution, final choice capture
-and retained image reads after R release. All five native screenshots were inspected.
-Original file export is still disabled pending generic container cooperation, and
-default scenario placement remains pending; this is not the finished replacement.
+and retained image reads after R release. Original export uses the generic container
+feature; actual downloads preserve exact PNG bytes and identity both before and
+after R release without another execution. Download status remains visible inside
+Details. All six current native screenshots were inspected, including settled
+narrow Fit, export, pinned and following views. Default scenario placement remains
+pending. This is not the finished replacement.
 
 The generic `?plugin-window` entrypoint now uses the shared layout and view ports
 to compose contributed frames. Window observations keep original scope and
@@ -302,19 +309,34 @@ instance identity, retain hidden documents and discard them only after confirmed
 closure. Local layout saves preserve original requests across lost acknowledgements.
 Closing a tab requests a cooperative flush; an uncertain acknowledgement retains
 the original request, while a confirmed failure permits another explicit attempt.
-Twenty-nine affected model checks, two containing-component checks, client build
-and client check pass. Actual composed-window browser acceptance also passes
-(3.7 s body), including automatic placement, retained drafts, close refusal and
-retrying a lost original acknowledgement. All three viewport screenshots were
-inspected. This remains an
-integration entrypoint; the fixed default shell has not yet been removed.
+Affected model/component checks, client build and client check pass. Actual
+composed-window browser acceptance passes (5.8 s body, 15.1 s total), including
+automatic placement, retained drafts, close refusal and retrying a lost original
+acknowledgement. All three viewport presentations were inspected. A confirmed
+flush failure now offers explicit recovery using the
+observed saved version, with a cancel choice that keeps the view open. The close
+request captures that version; an uncertain acknowledgement cannot be retargeted.
+The shared-port client retains structured diagnostics correlated to the original
+frame and request. This lets an invalid close preparation (including a missing
+document handler) offer recovery without misclassifying transport loss or an
+uncertain Operation. Fifty affected model/component/transport checks, client build
+and frontend boundary checks pass. Browser acceptance verifies cancel preserving
+the unsaved buffer, exact retained-version recovery and missing-handler admission
+rejection without an Operation. The final 390 px recovery dialog was inspected,
+including its stacked controls and single failure message. This remains an integration entrypoint; the
+fixed default shell has not yet been removed.
 
-Generic original-resource download verification has five passing unit checks for
-bounded allocation, exact identity, continuations, digest verification and closure.
-The public request, Host admission and containing-browser wiring are not yet
-implemented. The independent browser primitive passed its exact-byte SVG download
-with a Unicode filename and refused corrupted bytes (1.4 s total). This does not
-establish scoped SDK admission or Plots export, which remains disabled.
+Generic original-resource download now has a public request, Host admission and
+containing-browser wiring. Six unit checks cover bounded allocation, exact
+identity, continuations, digest verification, final authority rechecking and
+closure; public SDK and standalone protocol compilation also pass. The independent
+browser primitive previously passed exact-byte SVG download with a Unicode
+filename and refused corrupted bytes (1.4 s total). Affected Rust and client checks
+pass. Actual scoped SDK browser acceptance also passes (1.7 s body): a 2,100,003-byte
+original survives multiple chunks with its Unicode filename and exact digest;
+automatic/foreign requests are refused, and closing during collection prevents
+the later download. These interactions add no scientific Operation. Native Plots
+export and composed Objects acceptance pass separately as described above.
 
 ### Current verification
 
@@ -323,19 +345,20 @@ executable startup is allowed to finish; silence is not treated as a test failur
 
 | Executed check | Result and scope |
 | --- | --- |
-| `cargo test -p rho-plugin-protocol -p rho-plugins --lib --locked` | 14 passed (4 protocol, 10 plugins). Adds exact tab removal, nearest selection and preserved empty groups/geometry; retains placement, ownership, version-conflict and stored-state checks. |
-| `cargo test -p rho-host --test plugins --test port_contracts --locked` | 17 passed (12 plugin, 5 port-contract). The current external-link run also checks original window/parent authority, invalid URL rejection, redacted diagnostics and no navigation claim or extra Operation. Retains multi-document flush acknowledgement, original close identity, revoked authority, refusal/deadline fence cleanup, conflicting saved versions and atomic closure/layout/reference rollback. Retains opening, replay, visibility and accepted-native-work checks. |
+| `cargo test -p rho-host --test plugins original_download --locked` | Passed. Requires declared read scope and current parent authority, refuses changed resource/name/size and close preparation, reads retained bytes after provider release, redacts diagnostics and makes no download or extra-Operation claim. |
+| `npm run test --prefix ui -- host-client.test.ts plugin-window-close.test.ts plugin-window-client.test.ts plugin-window-views.test.ts plugin-workspace-window.test.tsx` | 50 passed across five files. Includes correlated admission diagnostics, uncertain/rejected distinction, explicit saved-version capture and original-request retries. |
+| `npm run test --prefix ui -- plugin-download.test.ts` | Six passed. Exact bounded chunks/digest, Unicode basename/control validation, final authority refusal and closure during collection/recheck. |
+| `cargo test -p rho-plugin-protocol -p rho-plugins -p rho-host --lib --test plugins --test port_contracts --locked` | 80 passed (4 protocol, 10 plugins, 48 Host library, 13 Host plugin, 5 port-contract); two Host library cases ignored and not counted as passes. Adds scoped original download admission and retained reads after provider release. Retains exact window placement, cooperative multi-document closure, atomic storage rollback, current authority, private connection containment, external-link/text-copy acknowledgement boundaries and unchanged original scientific Operations. |
 | `node scripts/test-objects-plugin.mjs` | Independent compilation and 64 checks passed across eight files. Adds draining the active read, pausing new observations and final unsaved-choice capture. Retains exact provider/session, bounded busy reads, serialized state, capture-before-submit and original-request recovery. |
 | `node scripts/test-r-packages.mjs --output=<packages-native-browser>` with existing R package and explicit Ark/R | Passed (30.4 s total) in the generic window. Four screenshots inspected; unchanged Host SHA-256 `e248cd09aaa9d5a1fb29ce7188d3eedf1deca75ca30ca9a8ff9a7ea3009af24c`. |
 | `node scripts/test-packages-plugin.mjs` | Independent source compilation and 31 model/connection/navigation checks passed. Adds selected-copy capture before Help navigation, exact target instance/window, failed-save admission prevention and original-request recovery. |
 | `npm run test:browser --prefix ui -- help-plugin.spec.ts packages-plugin.spec.ts --output=<help-packages-external-browser>` | Two passed (10.6 s total). Help explicit external-link request plus retained reading/scrolling/closure; Packages approved responsive inspection, busy/source details, failed capture before exact-copy Help navigation and original receipt inspection. The fixture does not establish native R or actual external-window behavior. |
-| `node scripts/test-r-plots.mjs --output=<plots-native-browser>` with existing R package and explicit Ark/R | Passed (29.3 s total) in the generic window. Five screenshots inspected; unchanged Host SHA-256 `e248cd09aaa9d5a1fb29ce7188d3eedf1deca75ca30ca9a8ff9a7ea3009af24c`. |
-| `node scripts/test-plots-plugin.mjs` | Independent source compilation and 31 checks across eight files passed. Original output identity, bounded history continuation, checksummed image cache, independent transforms, serialized final capture, saved pinned selection, captured comparison navigation and the not-yet-wired original export model. |
+| `node scripts/test-r-plots.mjs --output=<plots-export-native-browser-final>` with existing R package and explicit Ark/R | Passed (12.2 s body, 28.5 s total) in the generic window, including exact original PNG downloads before/after R release without another execution. Six screenshots inspected; unchanged Host SHA-256 `6c2925db212fcd970558d9572b0c41a5df059b5106860f6690d52663637b5dd5`. |
+| `node scripts/test-plots-plugin.mjs` | Independent source compilation and 31 checks across eight files passed. Original output identity, bounded history continuation, checksummed image cache, independent transforms, serialized final capture, saved pinned selection, captured comparison navigation and the captured original export model. |
 | `npm run test:browser --prefix ui -- plots-plugin.spec.ts --output=<plots-browser-2>` | Passed (one case, 7.5 s total). Opaque frames, original SVG reads, normal/wide/narrow layouts, pointer pan, keyboard Fit, original details, failed-save admission prevention and pinned comparison despite a newer output. Five screenshots inspected. Native PNG and original export remain separate acceptance. |
 | `node scripts/test-help-plugin.mjs` | Independent strict compilation and 41 checks in three files passed. Exact-copy identities, UTF-8/file continuations, expiry, busy backoff, late responses, serialized final capture, topic/alias selection and static HTML/link handling. |
 | `npm run test:browser --prefix ui -- help-plugin.spec.ts --output=<help-browser-3>` | Passed (one case, 3.5 s total). Actual opaque iframe, same-copy and cross-copy links, no external resource requests, Unicode, exact scroll restoration and cooperative final capture. The initial 1 px scroll-restoration failure is retained under `target/plugin-refactor/help-browser`; disabling scroll anchoring resolved it. |
 | `npm run test:browser --prefix ui -- r-plugin-help.spec.ts --output=<help-native-browser-2>` with independent R/Help packages and explicit Ark/R | Passed (one case, 25.0 s total). Native installed-copy/index/HTML reads, unchanged namespaces/search/library paths, no execution from viewing, closure during an original R run and restored choices. Four current screenshots inspected; unchanged Host SHA-256 `a580823ad8bc10fd0b3dd56386362f93d7c3c77a47e31d07707207f95f7dcf12`. |
-| `cargo test -p rho-plugin-protocol --lib --locked`, `cargo test -p rho-host --test plugins --locked` | 2 protocol and 9 Host plugin tests passed, including text-copy authority, no clipboard claim from Host acknowledgement and unchanged Operation history. |
 | `cargo test -p rho-r-api -p rho-r-backend --lib --bins --locked` | 11 passed (3 API, 8 backend); shared validation, caller-scope rejection and bounded inspection envelopes. Exporter target had no tests. |
 | `cargo test --manifest-path <external-package>/Cargo.toml -p rho-r-backend --bins --locked --offline` | 9 passed from the independently assembled package, including the new manifest-to-transport route check. |
 | `cargo test -p rho-workspace --lib --locked` | 14 passed after extracting query validation into the R package. |
@@ -352,12 +375,13 @@ executable startup is allowed to finish; silence is not treated as a test failur
 | `cargo test -p rho-mcp --lib --test plugins --locked` | 16 passed: 15 library tests and the existing-connection plugin lifecycle case. |
 | `cargo fmt --all --check` | Fails with formatting differences in 128 files, including 107 files unchanged by this work; no repository-wide reformat applied. |
 | `npm run generate --prefix ui`, `npm run build --prefix ui`, `npm run check --prefix ui` | Pass; public protocol/client bindings and embedded assets are current. |
-| `node scripts/test-plugin-protocol.mjs`, `node scripts/test-plugin-ui.mjs` | Independent strict consumers and close schema pass. SDK checks final acknowledged draft/version, joined observations, action fencing, read-only recovery, refusal/resume, disposal, synthetic composition guard and lost-acknowledgement uncertainty. No native IME claim. |
-| `CARGO_BUILD_JOBS=1 cargo build --locked` | Pass (37m27s). Current Host includes external-link admission and the generic window entrypoint, alongside cooperative closure and atomic view/layout/reference commit. SHA-256: `e248cd09aaa9d5a1fb29ce7188d3eedf1deca75ca30ca9a8ff9a7ea3009af24c`. |
+| `node scripts/test-plugin-protocol.mjs`, `node scripts/test-plugin-ui.mjs` | Independent strict consumers and schemas pass. SDK checks close capture/version, action fencing, joined observations, refusal/resume/disposal, synthetic composition guard and lost acknowledgements; download feature negotiation, exact wire identity, bounded Unicode filenames and requested-only acknowledgement. No native IME claim. |
+| `CARGO_BUILD_JOBS=1 cargo build --locked` | Passed (7m19s), then final presentation rebuild passed (1m12s). Includes scoped resource-download admission and saved-state recovery. Current SHA-256 `6c2925db212fcd970558d9572b0c41a5df059b5106860f6690d52663637b5dd5`. Existing user Hosts and R sessions were not restarted. |
 | `npm run test:browser --prefix ui -- objects-plugin.spec.ts` | Pass (1.6s body in the affected two-case command). Independent read-only browsing, captured navigation, save failure/retry and original receipts; pointer clicks on Inspect Operation send the query at 1440/1920/390 px. Three screenshots inspected. No native R or production-layout claim. |
-| `npm run test:browser --prefix ui -- r-plugin-objects.spec.ts` with independent R/Objects packages and explicit Ark/R | Current keyboard-assisted path passed (7.2s body, 22.6s total): exact source/session, real object/table reads, original PNG Operation, cooperative detail closure, immediate unsaved filter capture, unchanged R session and reopening/original receipt. Six screenshots inspected. Original receipt inspection uses Enter; the preceding native pointer path failed and remains unresolved. No automatic production-window navigation claim. |
+| `node scripts/test-r-objects-plugin.mjs --output=<objects-composed-native-browser>` with existing R package and explicit Ark/R | Passed (9.0 s body, 27.1 s total): generic-window automatic object placement, exact source/session, original PNG Operation, retained directory draft, cooperative detail closure, immediate unsaved filter capture, unchanged R session and actual pointer receipt inspection. Six screenshots inspected; unchanged Host SHA-256 `3f6672fe4f82cc56f60e70222d8e4e18f77f7d405ae9e8d1012c0290970b2f03`. Older standalone pointer failure remains separate. |
 | `npm run test:browser --prefix ui -- plugin-layout.spec.ts` | Corrected full run passed (1.2s body, 2.2s total). Three opaque iframe documents loaded exactly once across selection, native pointer dragging, saved-layout reconstruction and resizing. Unicode input, native focus and owner-delegated closure passed; all three viewport screenshots inspected. No Host persistence, close-time flushing, native IME or scenario application is established by this fixture. |
-| `npm run test:browser --prefix ui -- plugin-view.spec.ts plugin-workspace.spec.ts --output=<external-window-browser>` | Both pass (16.8 s and 3.7 s bodies, 33.4 s total); all six screenshots inspected. Adds actual external navigation without opener/referrer, refusal of automatic links, scoped dynamic window placement, retained documents and retry of one original close after a lost acknowledgement. Adds synthetic composition refusal, actual disposable SQLite write rejection, preserved draft/focus after refusal, explicit retained-version recovery, final draft capture and fenced delayed clipboard completion. The rejected update retains an uncertain Operation. Three conformance screenshots inspected; no native IME claim. |
+| `npm run test:browser --prefix ui -- plugin-resource-download.spec.ts plugin-workspace.spec.ts plugin-view.spec.ts --output=<resource-export-browser>` | Three passed (45.7 s total) on Host `3f6672fe…`; actual SDK multi-chunk download/Unicode/digest, foreign/automatic refusal and closure fencing, scoped window composition/recovery, external links without opener/referrer and unchanged scientific history. Six normal/wide/narrow window and conformance screenshots inspected. No native IME claim. |
+| `npm run test:browser --prefix ui -- plugin-workspace.spec.ts --output=<window-recovery-browser-final>` | Passed (5.8 s body, 15.1 s total) on current Host `6c2925db…`. Adds awaited recovery-modal inspection at 390 px, cancel preserving unsaved state, exact saved-version closure and correlated missing-handler refusal without an Operation. Twelve affected close/component checks passed after the final single-error presentation fix. |
 | `npm run test:browser --prefix ui -- console-editor.spec.ts` | Pass (2.7s body). Public MessagePort fixture: editing/composition guards, selection, transient password answers, controls, clear/new output, saved draft and scroll restoration. 1440/1920/390 px screenshots inspected. |
 | `npm run test:browser --prefix ui -- r-plugin-console.spec.ts` with independent R/Console packages and explicit Ark/R | Pass (16.1s body). Current close-time draft capture, R still busy after closure, eventual original completion, reopened draft/output and retained reads after release/removal. Retains readiness, failed/short-run invalidation, native input, queue, cancellation and Unicode coverage. Three screenshots inspected. |
 | `npm run test:browser --prefix ui -- r-plugin-viewer.spec.ts` with independent R/Viewer packages and explicit Ark/R | Pass (16.3s body). Two revisions, original resource identity, cooperative closure without ending accepted R work, explicit recovery after reload and retained HTML after release/removal/restart. All eight HTML/DT/source screenshots inspected. |
@@ -375,6 +399,17 @@ in the containing window. Moving title updates into the existing layout adapter
 resolved the violation; the corrected frontend boundary check and build passed.
 The first containing-component check used unavailable DOM matchers; direct DOM
 value/connection assertions corrected that fixture, and both cases then passed.
+The first `npm run typecheck --prefix ui` for saved-state recovery failed because
+the default close mode widened to a string. Explicitly typing and freezing the
+captured mode corrected it; subsequent client builds and the 50 affected checks
+passed. The failed typecheck log remains under `target/plugin-refactor`.
+
+The first recovery-modal screenshot was taken before the observed saved version
+finished loading; the final fixture waits for the dialog and checks horizontal
+containment. It also exposed duplicate error banners, now consolidated. The first
+narrow native plot snapshot captured the resize transition; the final fixture
+waits for the original image to fit its canvas. Both complete browser reruns pass,
+and final screenshots were inspected. Earlier images remain as diagnostic evidence.
 
 The first external-link client build failed because a runtime SDK import lay
 outside the client's TypeScript source root. The browser now validates URLs

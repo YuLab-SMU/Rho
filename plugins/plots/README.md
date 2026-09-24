@@ -22,7 +22,10 @@ untouched.
 
 Independent assembly and native PNG acceptance pass in the generic window,
 including pinned comparisons, final state capture and retained reads after R release.
-Generic original-file export and default scenario integration remain in progress. Export is currently disabled in this
-entrypoint until the public container cooperation is available; this is not the
-completed replacement for the retiring plot panel. See the repository's current
-Status for executed verification.
+Original-file export uses the public container download feature: it captures the
+selected original, verifies its retained bytes and requests a browser download
+without re-executing R. The control is unavailable in containers lacking that
+feature. Native acceptance verifies exact original PNG downloads before and after
+R release without another execution. Default scenario integration remains in
+progress; this is not the completed replacement for the retiring plot panel.
+See the repository's current Status for executed verification.

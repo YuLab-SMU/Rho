@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { PluginViewConnection } from '../../sdk/plugin-protocol/index.js';
+import type { PluginViewConnection, PluginViewRecord, PluginViewCloseMode } from '../../sdk/plugin-protocol/index.js';
 import { HostClient, message } from './host-client';
 import { createPluginWindowClosures, createPluginWindowState, createPluginWindowViews } from './plugin-window-client';
 import { pluginLayoutDocument, pluginLayoutModel, pluginLayoutViews, namePluginLayoutViews } from './plugin-layout';
 import { PluginLayoutHost } from './plugin-layout-host';
+import { Modal } from "./primitives";
 import { mountPluginFrame } from './plugin-frame';
 
 function ConnectedFrame({ client, project, connection, failed }: {
@@ -26,6 +27,7 @@ export function PluginWorkspace({ client, project }: { client: HostClient; proje
   const [dock, setDock] = useState(() => pluginLayoutModel(saved.layout));
   const applied = useRef(saved.layout);
   const [error, setError] = useState('');
+  const [recovery, setRecovery] = useState<{ record: PluginViewRecord; busy: boolean } | null>(null);
   useEffect(() => {
     let stopped = false, timer: ReturnType<typeof setTimeout> | undefined;
     const observe = async () => {
@@ -57,12 +59,24 @@ export function PluginWorkspace({ client, project }: { client: HostClient; proje
   useEffect(() => {
     namePluginLayoutViews(dock, new Map([...views].map(([id, entry]) => [id, entry.title])));
   }, [dock, views]);
-  const close = async (id: string) => {
+  const close = async (id: string, mode?: PluginViewCloseMode) => {
     try {
       await owners.layout.save();
-      const record = await owners.closes.close(id);
+      const record = await owners.closes.close(id, mode);
       owners.views.confirmedClosed(record);
-      await owners.layout.load(); setError('');
+      await owners.layout.load(); setError(''); return true;
+    } catch (error) {
+      // The per-view close entry and saved-layout owner already present their
+      // own diagnostics. A shared banner would repeat the same failure.
+      setError(owners.closes.getSnapshot().get(id)?.error || owners.layout.getSnapshot().error ? '' : message(error));
+      return false;
+    }
+  };
+  const inspectRecovery = async (id: string) => {
+    try {
+      const record = await owners.views.inspectForRecovery(id);
+      if (record.closed) { owners.views.confirmedClosed(record); await owners.layout.load(); return; }
+      setRecovery({ record, busy: false });
     } catch (error) { setError(message(error)); }
   };
   const retryLayout = async () => { try { await owners.layout.save(); setError(''); } catch (error) { setError(message(error)); } };
@@ -82,9 +96,20 @@ export function PluginWorkspace({ client, project }: { client: HostClient; proje
       {saved.saving && <span role="status">Saving layout…</span>}
       {saved.error && <><button onClick={() => void retryLayout()}>Retry original layout save</button><button disabled={saved.saving} onClick={() => void owners.layout.discardAndReload().catch(error => setError(message(error)))}>Use saved layout</button></>}
       {[...closes].map(([id, entry]) => <div key={id}>
-        {entry.busy ? <span role="status">Saving and closing {views.get(id)?.title ?? id}…</span> : <><span>{entry.error}</span> <button onClick={() => void close(id)}>{entry.confirmedFailure ? 'Try closing again' : 'Retry original close'}</button></>}
+        {entry.busy ? <span role="status">Saving and closing {views.get(id)?.title ?? id}…</span> : <><span>{entry.error}</span> <button onClick={() => void close(id)}>{entry.confirmedFailure ? 'Try closing again' : 'Retry original close'}</button>{entry.confirmedFailure && <button onClick={() => void inspectRecovery(id)}>Close with saved state…</button>}</>}
       </div>)}
     </div>}
+    {recovery && <Modal title="Close with saved state" description="Only saved view state will be kept. Unsaved changes may be lost. Running work is unaffected." onClose={() => { if (!recovery.busy) setRecovery(null); }}>
+      <p>View: {views.get(recovery.record.view)?.title ?? recovery.record.contribution}</p>
+      <p>Saved version: {recovery.record.state_version}</p>
+      <div className="dialog-actions">
+        <button disabled={recovery.busy} onClick={() => setRecovery(null)}>Keep view open</button>
+        <button disabled={recovery.busy} onClick={() => {
+          const record = recovery.record; setRecovery({ record, busy: true });
+          void close(record.view, { kind: 'retain_acknowledged', expected_version: record.state_version }).finally(() => setRecovery(null));
+        }}>Keep saved state and close</button>
+      </div>
+    </Modal>}
     <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
       <PluginLayoutHost model={dock} frames={frames} close={id => void close(id)} changed={() => {
         try { owners.layout.change(pluginLayoutDocument(dock)); applied.current = owners.layout.getSnapshot().layout; void owners.layout.save().catch(error => setError(message(error))); }

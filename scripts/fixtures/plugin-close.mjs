@@ -4,7 +4,7 @@ import { MessageChannel } from "node:worker_threads";
 export async function checkViewClose(sdk) {
   const channel = new MessageChannel();
   const client = new sdk.PluginViewClient(channel.port1, { protocol_version: 1, connection: "connection",
-    features: ["view_close_v1", "external_links_v1"], view: { view: "view", state: { text: "old" }, state_version: 0 } });
+    features: ["view_close_v1", "external_links_v1", "resource_download_v1"], view: { view: "view", state: { text: "old" }, state_version: 0 } });
   let phase = { phase: "open" }, version = 0, sequence = 0, state = { text: "old" };
   const requests = [];
   channel.port2.on("message", message => {
@@ -33,6 +33,7 @@ export async function checkViewClose(sdk) {
       const stop = cooperation.subscribe(() => { if (cooperation.getSnapshot().preparing) { stop(); resolve(); } });
     });
     assert.equal(requests.filter(r => r.type === "prepare_close").length, 0);
+    await assert.rejects(client.downloadResource({bytes:1}, "plot.png"), /closure is preparing/);
     await assert.rejects(client.openExternal("https://example.org/"), /closure is preparing/);
     await assert.rejects(client.invoke({ id: "fixture.run", version: 1 }, {}), /closure is preparing/);
     await assert.rejects(client.control({ id: "fixture.answer", version: 1 }, {}), /closure is preparing/);

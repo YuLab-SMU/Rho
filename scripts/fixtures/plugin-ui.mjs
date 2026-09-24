@@ -25,8 +25,8 @@ const client=await connectPluginView();
 document.querySelector('#connection').textContent='Connected';
 const input=document.querySelector('#text'),result=document.querySelector('#result');
 input.value=client.view.state.text;
-const closing=await client.installCloseHandler({flush:async()=>{await client.setState({text:input.value});}});
-closing.subscribe(()=>{if(closing.getSnapshot().error)result.textContent=closing.getSnapshot().error;});
+if(client.view.configuration.cooperative_close!==false){const closing=await client.installCloseHandler({flush:async()=>{await client.setState({text:input.value});}});
+closing.subscribe(()=>{if(closing.getSnapshot().error)result.textContent=closing.getSnapshot().error;});}
 document.querySelector('#save').onclick=async()=>{try{await client.setState({text:input.value});result.textContent='Saved';}catch(e){result.textContent=e.message;}};
 document.querySelector('#query').onclick=async()=>{try{const data=await client.query({id:'plugins.list',version:1},{after:null,limit:10});result.textContent='Plugins: '+data.data.total;}catch(e){result.textContent=e.message;}};
 document.querySelector('#denied').onclick=async()=>{try{await client.query({id:'plugins.instances',version:1},{after:null,limit:10});result.textContent='Unexpectedly allowed';}catch(e){result.textContent=e.message;}};
@@ -48,8 +48,8 @@ window.addEventListener('pagehide',()=>client.dispose());`);
   fs.writeFileSync(path.join(project,"BUILD.md"),"Run node build.mjs. All source, including the compiled public browser SDK, is present. No download or core checkout is needed.");
   fs.writeFileSync(path.join(project,"dependencies.lock"),"Rho public UI SDK 0.1.0, compiled from the accompanying public SDK sources; runtime closure is src/sdk/. No third-party runtime dependencies.\n");
   fs.writeFileSync(path.join(project,"plugin.json"),JSON.stringify({protocol_version:1,id:"example.external-ui",name:"Independent View",version:"1.0",description:"External public-SDK view conformance",license:"AGPL-3.0-only",
-    source:{files:["src/index.html","src/main.js","src/sdk/index.js","src/sdk/resources.js","src/sdk/view-close.js","src/sdk/external.js","build.mjs","LICENSE"],lockfiles:["dependencies.lock"],build_instructions:"BUILD.md",build:{command:["node","build.mjs"]}},dependencies:{},
-    requires:[{capability:{id:"plugins.list",version:1},scopes:["plugins.read"]},{capability:{id:"fixture.answer",version:2},scopes:["plugins.run"]}],views:[{id:"view",title:"Independent View",entrypoint:"dist/index.html",state_schema:{type:"object",properties:{text:{type:"string"}},required:["text"],additionalProperties:false},configuration_schema:{type:"object",properties:{binding:{type:"object"},external_url:{type:"string"}},additionalProperties:false},resource_kinds:[]}],capabilities:[],contexts:[],backend:null,configuration_schema:{type:"object",additionalProperties:false},default_configuration:{}},null,2));
+    source:{files:["src/index.html","src/main.js","src/sdk/index.js","src/sdk/resources.js","src/sdk/view-close.js","src/sdk/external.js","src/sdk/download.js","build.mjs","LICENSE"],lockfiles:["dependencies.lock"],build_instructions:"BUILD.md",build:{command:["node","build.mjs"]}},dependencies:{},
+    requires:[{capability:{id:"plugins.list",version:1},scopes:["plugins.read"]},{capability:{id:"fixture.answer",version:2},scopes:["plugins.run"]}],views:[{id:"view",title:"Independent View",entrypoint:"dist/index.html",state_schema:{type:"object",properties:{text:{type:"string"}},required:["text"],additionalProperties:false},configuration_schema:{type:"object",properties:{binding:{type:"object"},external_url:{type:"string"},cooperative_close:{type:"boolean"}},additionalProperties:false},resource_kinds:[]}],capabilities:[],contexts:[],backend:null,configuration_schema:{type:"object",additionalProperties:false},default_configuration:{}},null,2));
   execFileSync(process.execPath,[path.join(project,"build.mjs")],{cwd:project,stdio:"inherit"});
   return project;
 }

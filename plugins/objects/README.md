@@ -30,8 +30,10 @@ reply retains that request for explicit retry. A copied pending action cannot
 replay from another view. Acknowledged actions retain their original Operation ID
 and can be inspected. A reopened view can find a retained request through bounded
 Operation reads, verifying its original caller, input and provider without replay.
-An absent observation remains unconfirmed. Browsing and mounting never execute R. The package does not
-yet cooperate with a container close-time flush handshake.
+An absent observation remains unconfirmed. Browsing and mounting never execute R.
+The close-time handler pauses observations, drains local capture and saves final
+presentation choices without waiting for or cancelling accepted R work. Failed
+capture refuses closure and leaves its diagnostic visible.
 The existing workbench remains in place until the ordinary package replaces it.
 
 From the repository, `node scripts/test-objects-plugin.mjs` copies these sources,

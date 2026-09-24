@@ -8,6 +8,7 @@ import type {InstanceRef} from '../public/plugin-protocol/index.js';
 import type {PlotSelection} from './outputs.js';
 import {PlotsConnection} from './connection.js';
 import {MediaCache} from './media-cache.js';
+import {PlotsExport} from './export.js';
 import {PlotsActions} from './actions.js';
 import {PlotViewContext} from './view-services.js';
 import {PlotPanel} from './plot-panel.js';
@@ -20,14 +21,16 @@ try{
  const connection=new PlotsConnection(client,configuration.source,configuration.selection,configuration.pinned);
  const cache=new MediaCache(client,{create:(bytes,mime)=>URL.createObjectURL(new Blob([bytes],{type:mime})),revoke:url=>URL.revokeObjectURL(url)});
  const actions=new PlotsActions(client,connection,configuration.plot_group);
+ const exporting=new PlotsExport(client,reference=>connection.history.find(reference));
  const closing=await client.installCloseHandler({async flush(){connection.pause();await actions.settled();await connection.flush();},resume(){connection.resume();}});
  const ignore=(promise:Promise<unknown>)=>{void promise.catch(()=>undefined);};
  function App(){
-  const state=useSyncExternalStore(connection.subscribe,connection.getSnapshot),action=useSyncExternalStore(actions.subscribe,actions.getSnapshot),close=useSyncExternalStore(closing.subscribe,closing.getSnapshot);
-  return <PlotViewContext.Provider value={{connection,cache,navigation:{blocked:close.preparing||action.working||!!action.pending,
-   openComparison:reference=>ignore(actions.openComparison(reference)),exportAvailable:false,exportOriginal:()=>undefined}}}>
+  const download=useSyncExternalStore(exporting.subscribe,exporting.getSnapshot),state=useSyncExternalStore(connection.subscribe,connection.getSnapshot),action=useSyncExternalStore(actions.subscribe,actions.getSnapshot),close=useSyncExternalStore(closing.subscribe,closing.getSnapshot);
+  return <PlotViewContext.Provider value={{connection,cache,navigation:{blocked:close.preparing||action.working||!!action.pending||download.busy,
+   openComparison:reference=>ignore(actions.openComparison(reference)),exportAvailable:client.initialization.features?.includes('resource_download_v1')===true,exportStatus:download,exportOriginal:reference=>ignore(exporting.original(reference))}}}>
    <main className="plots-root"><PlotPanel/>
-    {(state.notice||state.saveError||close.error||action.error||action.pending||action.receipt)&&<aside className="plots-status" aria-label="Plots status">
+    {(download.busy||download.error||download.notice||state.notice||state.saveError||close.error||action.error||action.pending||action.receipt)&&<aside className="plots-status" aria-label="Plots status">
+     {download.busy&&<p role="status">Collecting original plot…</p>}{download.notice&&<p role="status">{download.notice}</p>}{download.error&&<p role="alert">{download.error}</p>}
      {state.notice&&<p role="status">{state.notice}</p>}{close.error&&<p role="alert">{close.error}</p>}
      {state.saveError&&<p role="alert">{state.saveError}<button onClick={()=>ignore(connection.flush())}>Retry Save</button></p>}
      {action.error&&<p role="alert">{action.error}</p>}
@@ -39,5 +42,5 @@ try{
  }
  root.render(<App/>);ignore(connection.initialize());
  const polling=setInterval(()=>ignore(connection.refresh()),3000);
- window.addEventListener('pagehide',()=>{clearInterval(polling);actions.stop();connection.stop();cache.stop();client.dispose();root.unmount();},{once:true});
+ window.addEventListener('pagehide',()=>{clearInterval(polling);exporting.stop();actions.stop();connection.stop();cache.stop();client.dispose();root.unmount();},{once:true});
 }catch(error){root.render(<div className="empty" role="alert">{error instanceof Error?error.message:String(error)}</div>);}

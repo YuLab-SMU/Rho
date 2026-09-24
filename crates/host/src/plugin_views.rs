@@ -47,6 +47,7 @@ impl NextHost {
                     OperationError::InvalidInput("capability version out of range".into())
                 })?,
             )?),
+            PluginViewRequest::DownloadResource { .. } => Some(CapabilityRef::new("resources.read", 1)?),
             _ => None,
         };
         let mut context = service
@@ -101,6 +102,30 @@ impl NextHost {
                 // evidence that the browser opened or loaded the destination.
                 // The browser independently parses the URL and checks a current
                 // focused-frame gesture before creating a new browsing context.
+                return Ok(json!({"authorized_view":message.view}));
+            }
+            PluginViewRequest::DownloadResource { reference, filename } => {
+                if !parent.scopes.contains(rho_plugins::PLUGINS_RUN_SCOPE) {
+                    return Err(OperationError::InvalidInput("resource download requires the parent's existing view authority".into()));
+                }
+                if filename.is_empty() || filename.trim() != filename || filename.len() > 240
+                    || matches!(filename.as_str(), "." | "..")
+                    || filename.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | ':'))
+                    || reference.bytes > 16 * 1024 * 1024
+                {
+                    return Err(OperationError::InvalidInput("resource download requires a bounded original and a filename without a directory path".into()));
+                }
+                // The same public read owner verifies project, principal, exact
+                // retained identity and bytes. view_context already required the
+                // view's declared resources.read grant, intersected with parent
+                // scopes. No provider starts and no scientific Operation is made.
+                let observation = self.query_snapshot(&context, QueryRequest {
+                    capability: cap.unwrap(),
+                    arguments: json!(ResourceRead { reference, offset: 0, limit: 1 }),
+                }).await?;
+                if observation.status != rho_contract::QueryStatus::Ready || observation.data.is_none() {
+                    return Err(OperationError::Unavailable("the original download resource is unavailable".into()));
+                }
                 return Ok(json!({"authorized_view":message.view}));
             }
             PluginViewRequest::Control { arguments, .. } => HostRequest::Control(rho_contract::ControlRequest {

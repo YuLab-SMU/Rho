@@ -352,6 +352,9 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
             <dd>{selected.sha256}</dd>
           </dl>
           <button disabled={!navigation.exportAvailable || navigation.blocked} onClick={() => navigation.exportOriginal(selected)}>Export Original</button>
+          {navigation.exportStatus?.busy && <p role="status">Collecting original plot…</p>}
+          {navigation.exportStatus?.notice && <p role="status">{navigation.exportStatus.notice}</p>}
+          {navigation.exportStatus?.error && <p role="alert">{navigation.exportStatus.error}</p>}
         </Modal>
       )}
     </section>

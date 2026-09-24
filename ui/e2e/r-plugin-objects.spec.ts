@@ -41,9 +41,14 @@ async function stopHost() {
   }
 }
 async function show(page: Page, view: any) {
-  const address = new URL(url); address.searchParams.set("window", view.window); address.searchParams.set("plugin-view", view.view); await page.goto(address.href);
+  const address = new URL(url); address.searchParams.set("window", view.window); address.searchParams.set("plugin-window", ""); await page.goto(address.href);
 }
-async function openView(window: string, state = {}) { return invoke("views.open", { instance: objectsInstance, contribution: "objects", window, configuration: { source: r, object_group: "main" }, state }); }
+async function openView(window: string, state = {}) {
+  const layout = await query("windows.layout", { window });
+  return (await invoke("windows.open_view", { expected_layout_version: layout.version,
+    group: layout.layout.kind === "tabs" ? layout.layout.id : null,
+    view: { instance: objectsInstance, contribution: "objects", window, configuration: { source: r, object_group: null }, state } })).view;
+}
 test.beforeAll(async () => {
   test.setTimeout(120000);
   expect(process.env.RHO_R_PLUGIN_PACKAGE).toBeTruthy(); expect(process.env.RHO_OBJECTS_PLUGIN_PACKAGE).toBeTruthy();
@@ -61,17 +66,11 @@ test.afterAll(async () => {
   else if (directory) console.error(`Incomplete disposable Objects acceptance retained: ${directory}`);
 });
 
-test("ordinary Objects reads exact native objects and captures navigation and explicit plotting", async ({ page, context }, info) => {
+test("ordinary Objects reads exact native objects and captures navigation and explicit plotting", async ({ page }, info) => {
   test.setTimeout(180000);
   const view = await openView("objects-native");
-  await invoke("windows.update_layout", { window: view.window, expected_version: 0, layout: {
-    kind: "split", id: "root", direction: "horizontal", weights: [1, 3], children: [
-      { kind: "tabs", id: "directory-group", selected: view.view, views: [view.view] },
-      { kind: "tabs", id: "main", selected: null, views: [] },
-    ],
-  } });
   await show(page, view);
-  const frame = page.frameLocator("iframe"), filter = frame.getByRole("textbox", { name: "Filter Objects" });
+  const frame = page.locator("[data-plugin-frame]").first().frameLocator("iframe"), filter = frame.getByRole("textbox", { name: "Filter Objects" });
   await expect(filter).toBeVisible();
   const binding = async (id: string, version = 1) => query("plugins.resolve", { instance: r, capability: { id, version } });
   const readiness = await binding("r.inspection_state");
@@ -92,44 +91,45 @@ test("ordinary Objects reads exact native objects and captures navigation and ex
   expect(await executions()).toHaveLength(1);
   for (const width of [1440, 1920, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await expect.poll(() => filter.evaluate(() => innerWidth)).toBe(width);
+    await expect.poll(() => filter.evaluate(() => innerWidth)).toBeGreaterThan(width - 20);
     await expect(filter).toBeVisible();
     await filter.click(); await expect(filter).toBeFocused();
     expect(await filter.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     await filter.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: info.outputPath(`objects-native-directory-${width}.png`) });
   }
+  const lifetime = await filter.evaluate(() => { (window as any).objectsLifetime = crypto.randomUUID(); return (window as any).objectsLifetime; });
   await frame.getByRole("button", { name: "Open data in New Tab", exact: true }).click();
   let detail: any;
   await expect.poll(async () => {
     const layout = await query("windows.layout", { window: view.window });
-    const group = layout.layout.children.find((node: any) => node.id === "main");
+    const group = layout.layout;
     if (!group?.selected) return false;
     detail = await query("views.inspect", { view: group.selected }); return detail.contribution === "object";
   }).toBe(true);
-  expect(detail.configuration).toEqual({ source: r, object_group: "main", object: { name: "data", path: [] } });
+  expect(detail.configuration).toEqual({ source: r, object_group: null, object: { name: "data", path: [] } });
   expect(detail.state.nativeSession).toBe(session); expect(detail.instance).toEqual(objectsInstance);
   expect(await executions()).toHaveLength(1);
-  // The current standalone container requires explicitly showing the opened
-  // record. Automatic production window navigation is separate remaining work.
-  const detailPage = await context.newPage(), detailFrame = detailPage.frameLocator("iframe");
-  await detailPage.setViewportSize({ width: 1440, height: 900 });
-  await show(detailPage, detail);
+  // The composed window selects the contributed inspector automatically while
+  // retaining the exact directory document and its state.
+  const detailFrame = page.locator(`[data-plugin-frame="${detail.view}"]`).frameLocator("iframe");
+  await expect(filter).toBeHidden();
+  await page.setViewportSize({ width: 1440, height: 900 });
   await expect(detailFrame.getByRole("grid")).toBeVisible();
   await expect(detailFrame.getByRole("columnheader", { name: /Sepal.Length/ })).toBeVisible();
   await expect(detailFrame.getByRole("grid")).toContainText("setosa");
   for (const width of [1440, 1920, 390]) {
-    await detailPage.setViewportSize({ width, height: 900 });
-    await expect.poll(() => detailFrame.locator(".object-viewer").evaluate(() => innerWidth)).toBe(width);
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => detailFrame.locator(".object-viewer").evaluate(() => innerWidth)).toBeGreaterThan(width - 20);
     await expect(detailFrame.getByRole("grid")).toBeVisible();
     expect(await detailFrame.locator(".object-viewer").evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
-    await detailPage.screenshot({ path: info.outputPath(`objects-native-table-${width}.png`) });
+    await page.screenshot({ path: info.outputPath(`objects-native-table-${width}.png`) });
   }
-  // Flush the detail document while it is still connected, then return to the
-  // directory. Browser-page disposal cannot attest to an already lost buffer.
-  await invoke("views.close", { view: detail.view });
-  await detailPage.close();
-  await page.bringToFront();
+  // A real close gesture flushes the inspector and restores the same directory.
+  await page.getByRole("tab", { name: "Object", exact: true }).locator('[data-layout-path$="/button/close"]').click();
+  await expect(page.locator(`[data-plugin-frame="${detail.view}"]`)).toHaveCount(0);
+  await expect(filter).toBeVisible();
+  expect(await filter.evaluate(() => (window as any).objectsLifetime)).toBe(lifetime);
   const plot = frame.locator(".object-entry").filter({ has: frame.locator('.object-name code', { hasText: /^plot$/ }) });
   await plot.locator(".object-name").click();
   await expect(plot.getByRole("button", { name: "Render plot", exact: true })).toBeVisible();
@@ -148,11 +148,9 @@ test("ordinary Objects reads exact native objects and captures navigation and ex
     run: { code: 'print(get("plot", envir = .GlobalEnv, inherits = FALSE))', source: { view_id: view.view, label: "Objects" } } });
   expect(operation.output.outputs.some((item: any) => item.reference.media_type === "image/png")).toBe(true);
   expect(await executions()).toHaveLength(2);
-  // Exercise keyboard activation here. Chrome's retained standalone frame has
-  // an unresolved pointer-routing failure after the secondary page is resized;
-  // isolated pointer coverage and those native traces remain separate evidence.
-  const inspect = frame.getByRole("button", { name: "Inspect Operation", exact: true });
-  await inspect.focus(); await inspect.press("Enter");
+  // Verify actual pointer routing in the composed window after responsive
+  // inspector use, with no keyboard substitute for this action.
+  await frame.getByRole("button", { name: "Inspect Operation", exact: true }).click();
   await expect(frame.getByText("Plot execution: succeeded", { exact: false })).toBeVisible();
   await filter.fill("palette");
   await invoke("views.close", { view: view.view });

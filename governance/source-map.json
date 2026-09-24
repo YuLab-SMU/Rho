@@ -412,6 +412,17 @@
         "plugin-workspace.spec.ts"
       ]
     },
+    "plugins.resource-download-browser": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui",
+        "--",
+        "plugin-resource-download.spec.ts"
+      ]
+    },
     "plugins.download-browser": {
       "command": [
         "npm",
@@ -561,6 +572,7 @@
         "scripts/test-plugin-ui.mjs",
         "scripts/fixtures/plugin-ui.mjs",
         "scripts/fixtures/plugin-close.mjs",
+        "scripts/fixtures/plugin-download.mjs",
         "scripts/test-r-plugin-engine.mjs",
         "scripts/build-r-plugin.mjs",
         "scripts/test-r-plugin.mjs",
@@ -596,6 +608,7 @@
         "ui/e2e/r-plugin-plots.spec.ts",
         "ui/e2e/plugin-workspace.spec.ts",
         "ui/e2e/plugin-download.spec.ts",
+        "ui/e2e/plugin-resource-download.spec.ts",
         "ui/e2e/fixtures/plugin-download.ts"
       ],
       "checks": [
@@ -633,7 +646,8 @@
         "plugins.plots-browser",
         "plugins.r-plots",
         "plugins.window-browser",
-        "plugins.download-browser"
+        "plugins.download-browser",
+        "plugins.resource-download-browser"
       ]
     }
   }

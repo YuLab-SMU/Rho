@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { HostClient } from "../src/host-client";
+import { HostClient, HostPortError } from "../src/host-client";
 import type { Invocation } from "../src/generated/Invocation";
 
 const invocation: Invocation = { client_request_id: "request-1", capability: { id: "workspace.run", version: 1 }, arguments: { code: "x <- 1" }, preconditions: [] };
@@ -24,6 +24,20 @@ it("keeps an explicit window reference in a credential-free resume URL", () => {
   }
 });
 function client() { const host = new HostClient("test-only-token"); clients.push(host); return host; }
+it('retains structured port rejection only when correlated to the original request', async () => {
+  const diagnostic = { code: 'invalid_input', message: 'Close handler is unavailable', continuation: 'correct_input', next_reads: [] };
+  const fetch = vi.fn(async (_url: unknown, options?: RequestInit) => {
+    const { frame } = JSON.parse(String(options?.body));
+    return response({ id: frame.id, ok: false, diagnostic });
+  });
+  vi.stubGlobal('fetch', fetch);
+  await expect(client().invoke('/project', invocation)).rejects.toMatchObject({
+    name: 'HostPortError', diagnostic, request: { method: 'invoke', params: invocation },
+  });
+  fetch.mockImplementation(async () => response({ id: 'another-frame', ok: false, diagnostic, error: 'Uncorrelated failure' }));
+  const rejected = await client().invoke('/project', invocation).catch(error => error);
+  expect(rejected).not.toBeInstanceOf(HostPortError); expect(rejected.message).toBe('Uncorrelated failure');
+});
 function pendingRead(signal?: AbortSignal | null): Promise<Response> {
   return new Promise((_resolve, reject) => {
     if (signal?.aborted) reject(signal.reason);

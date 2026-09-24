@@ -120,6 +120,9 @@ pub enum PluginViewRequest {
     /// Request a new browser tab after an explicit gesture. The Host verifies
     /// view authority; only the container can acknowledge native navigation.
     OpenExternalUrl { url: String },
+    /// Admit an explicit original-resource download. This is not evidence that
+    /// the containing browser requested or completed a file download.
+    DownloadResource { reference: ResourceReference, filename: String },
     Control {
         capability: CapabilityKey,
         arguments: Value,
@@ -156,6 +159,7 @@ impl std::fmt::Debug for PluginViewRequest {
             Self::FinishTextCopy { .. } => "FinishTextCopy",
             Self::CancelTextCopy { .. } => "CancelTextCopy",
             Self::OpenExternalUrl { .. } => "OpenExternalUrl",
+            Self::DownloadResource { .. } => "DownloadResource",
             Self::Control { .. } => "Control",
             Self::Query { .. } => "Query",
             Self::Invoke { .. } => "Invoke",

@@ -65,6 +65,12 @@ export class PluginWindowViews extends Model<ReadonlyMap<string,WindowView>> {
     if(record.closed){this.release(id);return;}
     this.connections.delete(id);this.entries.set(id,{...this.entries.get(id)!,connected:false,error:''});this.publish();await this.connect(id);
   }
+  async inspectForRecovery(id:string){
+    if(this.stopped||!this.entries.has(id))throw new Error('The view is not present in this window.');
+    const record=await this.ports.inspect(id);
+    if(this.stopped)throw new Error('The window is closed.');
+    this.scoped(record,id);return record;
+  }
   confirmedClosed(record:PluginViewRecord){
     if(this.stopped)return;this.scoped(record,record.view);
     if(!record.closed)throw new Error('The view has not been confirmed closed.');

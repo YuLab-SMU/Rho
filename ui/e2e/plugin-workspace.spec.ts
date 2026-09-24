@@ -100,5 +100,47 @@ test('the generic window composes live plugin views, captures closure and retrie
   expect(closes.filter((record: any) => record.client_request_id === originalRequest)).toHaveLength(1);
   expect((await query('views.inspect', { view: second.view })).state.text).toBe('Original close captures this draft 中文');
   expect((await query('plugins.instance', { instance: instance.identity })).instance.state).toBe('active');
+  // Saved-state recovery is an explicit choice after a confirmed flush refusal.
+  // Cancelling this dialog leaves the unsaved document untouched.
+  const empty = await query('windows.layout', { window: windowId });
+  const recover = (await invoke('windows.open_view', { expected_layout_version: empty.version,
+    group: empty.layout.kind === 'tabs' ? empty.layout.id : null,
+    view: { instance: instance.identity, contribution: 'view', window: windowId, configuration: view.configuration, state: { text: 'Acknowledged recovery choice' } } })).view;
+  const recoverInput = region(recover.view).frameLocator('iframe').getByLabel('View note');
+  await recoverInput.fill('Unsaved state to discard explicitly'); await recoverInput.dispatchEvent('compositionstart');
+  await tabs.nth(0).locator('[data-layout-path$="/button/close"]').click();
+  await page.getByRole('button', { name: 'Close with saved state…', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Saved version: 0');
+  await page.getByRole('button', { name: 'Keep view open', exact: true }).click();
+  await expect(recoverInput).toHaveValue('Unsaved state to discard explicitly');
+  expect((await query('views.inspect', { view: recover.view })).closed).toBe(false);
+  await page.getByRole('button', { name: 'Close with saved state…', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog')).toContainText('Saved version: 0');
+  expect(await page.getByRole('dialog').evaluate(element => element.scrollWidth > element.clientWidth)).toBe(false);
+  await page.screenshot({ path: info.outputPath('plugin-workspace-saved-recovery-390.png') });
+  await page.getByRole('button', { name: 'Keep saved state and close', exact: true }).click();
+  await expect(region(recover.view)).toHaveCount(0);
+  const recovered = await query('views.inspect', { view: recover.view });
+  expect(recovered.closed).toBe(true); expect(recovered.state.text).toBe('Acknowledged recovery choice');
+  // A document that never registered cooperation is explicitly rejected before
+  // admission. Its correlated diagnostic also permits saved-state recovery;
+  // a network failure above still requires retry of the original request.
+  const finalLayout = await query('windows.layout', { window: windowId });
+  const unavailable = (await invoke('windows.open_view', { expected_layout_version: finalLayout.version,
+    group: finalLayout.layout.kind === 'tabs' ? finalLayout.layout.id : null,
+    view: { instance: instance.identity, contribution: 'view', window: windowId,
+      configuration: { ...view.configuration, cooperative_close: false }, state: { text: 'Saved without a handler' } } })).view;
+  const unavailableInput = region(unavailable.view).frameLocator('iframe').getByLabel('View note');
+  await unavailableInput.fill('Never acknowledged');
+  const beforeRejection = await query('operation.list_recent', { limit: 100 });
+  await tabs.nth(0).locator('[data-layout-path$="/button/close"]').click();
+  await expect(page.getByRole('button', { name: 'Close with saved state…', exact: true })).toBeVisible();
+  expect(await query('operation.list_recent', { limit: 100 })).toEqual(beforeRejection);
+  expect((await query('views.inspect', { view: unavailable.view })).closed).toBe(false);
+  await page.getByRole('button', { name: 'Close with saved state…', exact: true }).click();
+  await page.getByRole('button', { name: 'Keep saved state and close', exact: true }).click();
+  await expect(region(unavailable.view)).toHaveCount(0);
+  expect((await query('views.inspect', { view: unavailable.view })).state.text).toBe('Saved without a handler');
   expect(faults).toEqual([]); await invoke('plugins.release', { instance: instance.identity }); completed = true;
 });

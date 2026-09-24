@@ -71,6 +71,14 @@ export class HostRequestError extends Error {
   }
 }
 
+/** A structured rejection correlated to the exact shared-port request. Network,
+ * HTTP and malformed replies remain unconfirmed transport errors. */
+export class HostPortError extends Error {
+  constructor(readonly diagnostic: Diagnostic, readonly request: HostRequest) {
+    super(diagnostic.message); this.name = "HostPortError";
+  }
+}
+
 export function json(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue;
 }
@@ -225,12 +233,16 @@ export class HostClient {
   async port<T>(project_root: string, request: HostRequest): Promise<T> {
     const frame: WorkbenchFrame = {
       project_root,
-      frame: { id: crypto.randomUUID(), request },
+      frame: { id: crypto.randomUUID(), request: structuredClone(request) },
     };
     const reply = await this.request<SessionReply>(request.method === "application_bridge" ? "/api/application/bridge" : "/api/host", frame);
     if (!reply || typeof reply.ok !== "boolean")
       throw new Error("Invalid Host reply");
-    if (!reply.ok) throw new Error(reply.error ?? "Host result is unconfirmed");
+    if (!reply.ok) {
+      if (reply.id === frame.frame.id && reply.diagnostic)
+        throw new HostPortError(reply.diagnostic, frame.frame.request);
+      throw new Error(reply.error ?? "Host result is unconfirmed");
+    }
     if (!("result" in reply)) throw new Error("Invalid Host reply");
     return reply.result as T;
   }

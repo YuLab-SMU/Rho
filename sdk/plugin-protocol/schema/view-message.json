@@ -54,6 +54,30 @@
         "version"
       ]
     },
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
     "PluginViewRequest": {
       "description": "Every request crosses the containing shell's scoped Host port. No browser\ncredential, project root or user identity is accepted from the iframe.",
       "oneOf": [
@@ -215,6 +239,28 @@
           ]
         },
         {
+          "description": "Admit an explicit original-resource download. This is not evidence that\nthe containing browser requested or completed a file download.",
+          "type": "object",
+          "properties": {
+            "filename": {
+              "type": "string"
+            },
+            "reference": {
+              "$ref": "#/$defs/ResourceReference"
+            },
+            "type": {
+              "type": "string",
+              "const": "download_resource"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "reference",
+            "filename"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "arguments": true,
@@ -335,6 +381,36 @@
             "state"
           ]
         }
+      ]
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "resource",
+        "digest",
+        "media_type",
+        "bytes"
       ]
     }
   }

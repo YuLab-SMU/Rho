@@ -224,6 +224,11 @@ close the view. Browser disposal is not an acknowledgement. Lost documents requi
 explicit `retain_acknowledged` recovery with the observed state version; no
 automatic fallback may claim that a disconnected buffer was saved. Host shutdown
 keeps acknowledged state and layout placeholders without claiming a UI flush.
+The containing window retains the original request and recovery version across
+lost acknowledgements. It offers saved-state recovery only after a terminal close
+failure or an exact correlated invalid-preparation rejection. Unstructured
+transport errors, idempotency conflicts and uncertain outcomes cannot establish
+that the original close failed.
 
 `windows.layout` observes a retained arrangement of exact view identities, scoped
 to the authenticated principal, normalized project and explicit window. Absent
@@ -295,6 +300,18 @@ requires the focused frame's current user gesture. It requests a fresh tab with
 no opener or referrer. A navigation acknowledgement is not evidence that the
 remote page loaded; blocked or uncertain requests remain errors. Close preparation
 fences new link actions. The opaque iframe itself gains no popup permission.
+
+Original-file download is generic presentation cooperation over retained resource
+references. The Host requires the view's declared `resources.read` grant,
+intersection with its original parent's authority and a live unfenced connection.
+It validates the exact retained resource through the existing Query port and
+acknowledges authority only. The browser captures the focused view's explicit
+gesture, permits one bounded collection per view, validates each chunk and the
+complete digest, and rechecks Host authority after collection before requesting
+a download. Filenames are bounded basenames; original bytes are not converted.
+No scientific Operation, runtime startup or file-save claim is introduced.
+Closure stops unsubmitted collection; an already-requested browser download is
+not described as rolled back.
 
 The public UI SDK reads retained resources through the declared `resources.read`
 query. It captures the exact reference, bounds allocation, validates every chunk's

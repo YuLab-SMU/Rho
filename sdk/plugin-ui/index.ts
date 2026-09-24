@@ -1,6 +1,8 @@
 /** Public browser SDK. No React, Studio, Host credential or scientific owner. */
-import type { JsonValue, CapabilityKey, PluginViewMessage, PluginViewRecord, PluginViewRequest } from "../plugin-protocol/index.js";
+import type { JsonValue, CapabilityKey, PluginViewMessage, PluginViewRecord, PluginViewRequest, ResourceReference } from "../plugin-protocol/index.js";
 import { ViewCloseCooperation, type ViewCloseHandler } from "./view-close.js";
+import { downloadFilename } from "./download.js";
+export { downloadFilename } from "./download.js";
 import { externalUrl } from "./external.js";
 export { externalUrl } from "./external.js";
 export { ViewCloseCooperation } from "./view-close.js";
@@ -70,7 +72,7 @@ export class PluginViewClient {
   }
   request<T = unknown>(body: PluginViewRequest): Promise<T> {
     if (this.closed) return Promise.reject(new Error("View connection is closed"));
-    if (this.closeCooperation?.getSnapshot().preparing && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy", "open_external_url"].includes(body.type))
+    if (this.closeCooperation?.getSnapshot().preparing && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy", "open_external_url", "download_resource"].includes(body.type))
       return Promise.reject(new Error("View closure is preparing; wait before starting another action."));
     if (this.pending.size >= MAX_UI_PENDING) return Promise.reject(new Error("View request quota reached"));
     if (this.sequence >= 0xffffffff) { this.dispose("View sequence exhausted"); return Promise.reject(new Error("View sequence exhausted")); }
@@ -106,6 +108,16 @@ export class PluginViewClient {
     if (!this.initialization.features?.includes("external_links_v1")) throw new Error("External links are unavailable in this view container.");
     const result = await this.request<{ navigation_requested: boolean }>({ type: "open_external_url", url: externalUrl(url) });
     if (result?.navigation_requested !== true) throw new Error("External navigation is unconfirmed.");
+  }
+  /** Call from an explicit Export action. The container verifies bounded
+   * original bytes using this view's declared resources.read grant. A resolved
+   * call means the browser was asked to download, not that a file was saved. */
+  async downloadResource(reference: ResourceReference, filename: string): Promise<void> {
+    if (!this.initialization.features?.includes("resource_download_v1")) throw new Error("Original downloads are unavailable in this view container.");
+    if (!reference || !Number.isSafeInteger(reference.bytes) || reference.bytes < 0 || reference.bytes > 16 * 1024 * 1024)
+      throw new Error("The original resource exceeds the download limit or has an invalid size.");
+    const result = await this.request<{ download_requested: boolean }>({ type: "download_resource", reference: structuredClone(reference), filename: downloadFilename(filename) });
+    if (result?.download_requested !== true) throw new Error("Original download request is unconfirmed.");
   }
   /** Invoke from an explicit Copy action. The producer runs only after the
    * containing browser reserves that gesture, allowing bounded asynchronous

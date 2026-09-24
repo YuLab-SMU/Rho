@@ -1,7 +1,8 @@
 /** Disposable native R acceptance for the independently built Plots package. */
 import { test, expect, type Page } from "@playwright/test";
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, realpath, readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 let directory: string, project: string, database: string, url: URL, host: ReturnType<typeof spawn>;
@@ -74,10 +75,24 @@ test("ordinary Plots reads native PNG outputs, captures view choices and retains
  await expect(frame.locator('.plot-original img')).toBeVisible();await expect.poll(()=>frame.locator('.plot-original img').evaluate((image:HTMLImageElement)=>image.naturalWidth)).toBeGreaterThan(0);
  for(const width of [1440,1920,390]){
   await page.setViewportSize({width,height:900});await expect.poll(()=>canvas.evaluate(()=>innerWidth)).toBeGreaterThan(width-20);
+  // Wait for the frame's resize observation and Fit transform, not only the
+  // browser viewport assignment, before retaining visual evidence.
+  await expect.poll(()=>frame.locator('.plot-original img').evaluate(image=>{
+   const box=image.getBoundingClientRect(),viewport=image.closest('[aria-label="Plot Canvas"]')!.getBoundingClientRect();
+   return box.left>=viewport.left&&box.right<=viewport.right&&box.top>=viewport.top&&box.bottom<=viewport.bottom;
+  })).toBe(true);
   expect(await canvas.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);await canvas.evaluate(()=>document.fonts.ready);
   await page.screenshot({path:info.outputPath(`plots-native-${width}.png`)});
  }
- await frame.getByRole('button',{name:'Details',exact:true}).click();await expect(frame.getByRole('dialog')).toContainText(original.reference.digest);await expect(frame.getByRole('dialog')).toContainText('Native plot acceptance');await page.keyboard.press('Escape');
+ await frame.getByRole('button',{name:'Details',exact:true}).click();await expect(frame.getByRole('dialog')).toContainText(original.reference.digest);await expect(frame.getByRole('dialog')).toContainText('Native plot acceptance');
+ const downloadOriginal=async(output:any,name:string)=>{
+  const reference=output.reference;
+  const pending=page.waitForEvent('download');await frame.getByRole('button',{name:'Export Original',exact:true}).click();const download=await pending;
+  expect(download.suggestedFilename()).toBe(`plot-${output.native.sequence}.png`);await download.saveAs(info.outputPath(name));expect(await download.failure()).toBeNull();
+  const bytes=await readFile(info.outputPath(name));expect(bytes.length).toBe(reference.bytes);expect('sha256:'+createHash('sha256').update(bytes).digest('hex')).toBe(reference.digest);
+  await expect(frame.getByRole('status').filter({hasText:'Original download requested.'})).toBeVisible();
+ };
+ await downloadOriginal(original,'downloaded-original.png');await page.screenshot({path:info.outputPath('plots-native-export-390.png')});await page.keyboard.press('Escape');
  const executions=async()=>(await query('operation.list_recent',{limit:100})).operations.filter((item:any)=>item.capability.id==='r.execute');expect(await executions()).toHaveLength(1);
  await frame.getByRole('button',{name:'Plot Actions',exact:true}).click();await frame.getByRole('menuitem',{name:'Open Plot in New View',exact:true}).click();
  let saved:any,navigation:any;
@@ -104,5 +119,8 @@ test("ordinary Plots reads native PNG outputs, captures view choices and retains
  expect((await query('r.inspection_state',{binding:await binding('r.inspection_state'),arguments:{expected_session:session}})).status).toBe('busy');expect((await working).status).toBe('succeeded');
  await invoke('plugins.release',{instance:r});
  view=await openView('plots-retained',saved.state);await show(page,view);await expect(frame.locator('.plot-original img')).toBeVisible();await expect(frame.getByLabel('Plot History')).toHaveCount(0);
+ await frame.getByRole('button',{name:'Details',exact:true}).click();
+ await downloadOriginal(second.output.outputs.find((item:any)=>item.reference.media_type==='image/png'),'downloaded-after-r-release.png');
+ await page.keyboard.press('Escape');
  expect(await executions()).toHaveLength(3);await invoke('views.close',{view:view.view});await invoke('plugins.release',{instance:plotsInstance});completed=true;
 });

@@ -1,6 +1,6 @@
 import type { PluginWindowLayout, PluginViewConnection, PluginViewRecord, PluginInspection } from "../../sdk/plugin-protocol/index.js";
 import type { HostClient } from "./host-client";
-import { json } from "./host-client";
+import { json, HostPortError } from "./host-client";
 import { PluginWindowState } from "./plugin-window-state";
 import { PluginWindowViews } from "./plugin-window-views";
 import { PluginWindowClosures, ConfirmedCloseFailure } from "./plugin-window-close";
@@ -48,9 +48,20 @@ export function createPluginWindowViews(client: Pick<HostClient, "windowId" | "q
 }
 
 export function createPluginWindowClosures(client: Pick<HostClient, "windowId" | "invoke">, project: string) {
-  return new PluginWindowClosures(async (view, request) => {
+  return new PluginWindowClosures(async (view, request, mode) => {
     const record = await client.invoke(project, { client_request_id: request,
-      capability: { id: "views.close", version: 1 }, arguments: { view, mode: { kind: "flush" } }, preconditions: [] });
+      capability: { id: "views.close", version: 1 }, arguments: { view, mode }, preconditions: [] }).catch(error => {
+        // The close owner rejects invalid preparation before journal admission
+        // (including a missing document handler). Accepted close failures return
+        // an Operation record instead. Never infer this from message text or a
+        // general HTTP/network failure, which could conceal accepted work.
+        if (error instanceof HostPortError && error.diagnostic.code === "invalid_input" &&
+            error.diagnostic.continuation === "correct_input" && error.request.method === "invoke" &&
+            error.request.params.capability.id === "views.close" && error.request.params.capability.version === 1 &&
+            error.request.params.client_request_id === request)
+          throw new ConfirmedCloseFailure(error.message);
+        throw error;
+      });
     if (record.operation.client_request_id !== request || record.operation.capability.id !== "views.close" || record.operation.capability.version !== 1)
       throw new Error("The close reply belongs to a different Operation.");
     if (record.status !== "succeeded" || record.outcome !== "succeeded" || !record.output) {

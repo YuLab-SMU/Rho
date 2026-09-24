@@ -103,6 +103,24 @@ handle and a [no-referrer link](https://developer.mozilla.org/en-US/docs/Web/HTT
 so a blocked tab can be distinguished from a requested navigation. It never
 targets an existing named browsing context.
 
+For an explicit original-file export, call
+`await client.downloadResource(reference, filename)` from the user's action
+handler. Declare `resources.read@1` with the `resources.read` scope. The
+`resource_download_v1` feature captures that exact retained reference and a plain
+filename (up to 240 UTF-8 bytes, without paths or control characters). Resources
+are limited to 16 MiB. The containing browser checks the focused-frame gesture,
+reads bounded chunks through the same view grant, verifies every identity/range
+and the complete SHA-256, then rechecks live Host authority before requesting
+the download. One download may be collected per view at a time.
+
+The acknowledgement means the browser download was requested; it does not claim
+that a file was saved. Browser settings, cancellation and disk failures remain
+outside this acknowledgement. Missing features, invalid references, failed reads,
+revoked authority and closure before submission are errors. The Host only
+authorizes the original read: it writes no file, starts no runtime and creates no
+Operation. Disposal stops unsubmitted collection, but cannot roll back a browser
+download already requested. The opaque iframe itself gains no download permission.
+
 `views.open`, `views.update` and `views.close` use the common Operation port.
 Install the document's close handler after constructing its presentation model:
 

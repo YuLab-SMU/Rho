@@ -96,6 +96,7 @@ Sources:
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/fixtures/plugin-close.mjs`
+- `scripts/fixtures/plugin-download.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`
@@ -124,6 +125,7 @@ Sources:
 - `ui/e2e/packages-plugin.spec.ts`
 - `ui/e2e/plots-plugin.spec.ts`
 - `ui/e2e/plugin-download.spec.ts`
+- `ui/e2e/plugin-resource-download.spec.ts`
 - `ui/e2e/plugin-workspace.spec.ts`
 - `ui/e2e/r-plugin-console.spec.ts`
 - `ui/e2e/r-plugin-help.spec.ts`
@@ -163,6 +165,7 @@ Checks:
 - `plugins.r-public-types`: `["node","scripts/test-r-protocol.mjs"]`
 - `plugins.r-viewer`: `["node","scripts/test-r-viewer.mjs"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
+- `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
 - `plugins.viewer`: `["node","scripts/test-viewer-plugin.mjs"]`
 - `plugins.window-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"]`

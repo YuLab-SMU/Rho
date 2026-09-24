@@ -15,10 +15,10 @@ console.log(`Existing Host SHA-256: ${originalHostHash}`);
 const directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-r-objects-')));
 let completed=false;
 try {
-  const native=path.join(directory,'r'),objectsPackage=path.join(directory,'objects');
-  execFileSync(process.execPath,[path.join(root,'scripts/build-r-plugin.mjs'),native],{cwd:root,stdio:'inherit'});
+  const native=process.env.RHO_R_PLUGIN_PACKAGE || path.join(directory,'r'),objectsPackage=path.join(directory,'objects');
+  if(!process.env.RHO_R_PLUGIN_PACKAGE) execFileSync(process.execPath,[path.join(root,'scripts/build-r-plugin.mjs'),native],{cwd:root,stdio:'inherit'});
   buildObjectsPlugin(objectsPackage);
-  execFileSync('npm',['run','test:browser','--prefix','ui','--','r-plugin-objects.spec.ts'],{cwd:root,stdio:'inherit',env:{...process.env,RHO_R_PLUGIN_PACKAGE:native,RHO_OBJECTS_PLUGIN_PACKAGE:objectsPackage}});
+  execFileSync('npm',['run','test:browser','--prefix','ui','--','r-plugin-objects.spec.ts', ...process.argv.slice(2)],{cwd:root,stdio:'inherit',env:{...process.env,RHO_R_PLUGIN_PACKAGE:native,RHO_OBJECTS_PLUGIN_PACKAGE:objectsPackage}});
   assert.equal(hashHost(),originalHostHash,'Independent packages must load without rebuilding the core');
   console.log(`Unchanged Host SHA-256: ${originalHostHash}`);completed=true;
 } finally {

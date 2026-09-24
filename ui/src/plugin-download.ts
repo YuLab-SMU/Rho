@@ -3,7 +3,7 @@ import type { ResourceReference } from '../../sdk/plugin-protocol/index.js';
 export const MAX_DOWNLOAD_BYTES = 16 * 1024 * 1024;
 export function downloadFilename(value: string): string {
   if (typeof value !== 'string' || !value.trim() || value !== value.trim() || value === '.' || value === '..' ||
-      /[\u0000-\u001f\u007f/\\:]/u.test(value) || new TextEncoder().encode(value).length > 240)
+      /[\p{Cc}/\\:]/u.test(value) || new TextEncoder().encode(value).length > 240)
     throw new Error('Choose a filename without a directory path or control characters.');
   return value;
 }
@@ -50,12 +50,20 @@ export function requestBrowserDownload(bytes:Uint8Array<ArrayBuffer>,filename:st
 export class PluginDownloads {
   private active:AbortController|null=null;
   private stopped=false;
-  constructor(private read:DownloadRead,private request=requestBrowserDownload){}
+  constructor(private read:DownloadRead,private request=requestBrowserDownload,private authorize?:(reference:ResourceReference,filename:string)=>Promise<void>){}
   async start(reference:ResourceReference,filename:string){
     if(this.stopped)throw new Error('The view download connection is closed.');
     if(this.active)throw new Error('Wait for the current original download.');
-    const name=downloadFilename(filename),abort=new AbortController();this.active=abort;
-    try{const bytes=await collectDownload(this.read,reference,abort.signal);if(this.stopped||abort.signal.aborted)throw new Error('The view closed before download was requested.');return this.request(bytes,name);}
+    const captured=structuredClone(reference),name=downloadFilename(filename),abort=new AbortController();this.active=abort;
+    try{
+      const bytes=await collectDownload(this.read,captured,abort.signal);
+      if(this.stopped||abort.signal.aborted)throw new Error('The view closed before download was requested.');
+      // Collection can outlive a close preparation or a revoked read grant.
+      // Recheck the same original at the Host before the browser side effect.
+      await this.authorize?.(captured,name);
+      if(this.stopped||abort.signal.aborted)throw new Error('The view closed before download was requested.');
+      return this.request(bytes,name);
+    }
     finally{if(this.active===abort)this.active=null;}
   }
   dispose(){this.stopped=true;this.active?.abort();}

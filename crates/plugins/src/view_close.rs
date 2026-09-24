@@ -202,6 +202,7 @@ impl PluginService {
                 | PluginViewRequest::Cancel { .. }
                 | PluginViewRequest::BeginTextCopy
                 | PluginViewRequest::OpenExternalUrl { .. }
+                | PluginViewRequest::DownloadResource { .. }
                 | PluginViewRequest::FinishTextCopy { .. } => {
                     return Err(OperationError::ContentChanged(
                         "view closure is preparing; new actions are fenced".into(),

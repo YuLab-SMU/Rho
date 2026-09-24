@@ -5,7 +5,7 @@ const owner={instance:'one',plugin:'plugin',revision:'sha256:'+'a'.repeat(64),ar
 async function reference(bytes:Uint8Array<ArrayBuffer>):Promise<ResourceReference>{return{owner,resource:'original',bytes:bytes.length,media_type:'image/png',digest:'sha256:'+Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('')};}
 const response=(ref:ResourceReference,bytes:Uint8Array)=>({status:'ready',data:{reference:ref,offset:0,base64:btoa(String.fromCharCode(...bytes)),next:null}});
 it('allows a bounded Unicode filename and refuses paths, controls and empty names',()=>{
- expect(downloadFilename('原图 α.png')).toBe('原图 α.png');for(const name of ['',' ','../plot','/plot','x\\y','a:b','a\nb',' plot.png','x'.repeat(241),'..'])expect(()=>downloadFilename(name)).toThrow();
+ expect(downloadFilename('原图 α.png')).toBe('原图 α.png');for(const name of ['',' ','../plot','/plot','x\\y','a:b','a\nb','a\u0085b',' plot.png','x'.repeat(241),'..'])expect(()=>downloadFilename(name)).toThrow();
 });
 it('requests a download only after the complete original passes its digest',async()=>{
  const bytes=new Uint8Array([1,2,3]),ref=await reference(bytes),read=vi.fn(async()=>response(ref,bytes)),request=vi.fn(()=>({download_requested:true})),downloads=new PluginDownloads(read,request);
@@ -29,4 +29,12 @@ it('rejects overlapping requests and stops an unsubmitted download when its view
  const request=vi.fn(),downloads=new PluginDownloads(()=>new Promise(resolve=>finish=resolve),request),first=downloads.start(ref,'one.png');
  await expect(downloads.start(ref,'two.png')).rejects.toThrow('current');downloads.dispose();finish(response(ref,bytes));await expect(first).rejects.toThrow('stopped');expect(request).not.toHaveBeenCalled();
  await expect(downloads.start(ref,'three.png')).rejects.toThrow('closed');
+});
+it('rechecks original authority after collection and never treats denied or late authorization as a browser request',async()=>{
+ const bytes=new Uint8Array([8]),ref=await reference(bytes),request=vi.fn(()=>({download_requested:true}));
+ const denied=vi.fn(async()=>{throw new Error('View closure is preparing');}),one=new PluginDownloads(async()=>response(ref,bytes),request,denied);
+ await expect(one.start(ref,'original.png')).rejects.toThrow('closure is preparing');expect(denied).toHaveBeenCalledWith(ref,'original.png');expect(request).not.toHaveBeenCalled();one.dispose();
+ let finish!:()=>void;const authorize=vi.fn(()=>new Promise<void>(resolve=>finish=resolve)),two=new PluginDownloads(async()=>response(ref,bytes),request,authorize);
+ const pending=two.start(ref,'original.png');await vi.waitFor(()=>expect(authorize).toHaveBeenCalledOnce());two.dispose();finish();
+ await expect(pending).rejects.toThrow('closed before download');expect(request).not.toHaveBeenCalled();
 });
