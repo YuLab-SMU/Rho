@@ -48,7 +48,7 @@ pub struct SnapshotArguments {
     #[serde(default)]
     pub expected_session: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct InspectArguments {
     #[schemars(length(min = 1, max = 1024))]
@@ -72,6 +72,17 @@ pub enum WorkspaceQuery {
     ReadHelp(ScopedWorkspaceArguments<crate::ReadPackageHelpArguments>),
 }
 impl WorkspaceQuery {
+    pub fn bind_scope(&mut self, scope: WorkspaceQueryScope) {
+        match self {
+            Self::ListObjects(arguments) => arguments.scope = scope,
+            Self::ObserveObject(arguments) => arguments.scope = scope,
+            Self::ReadObject(arguments) => arguments.scope = scope,
+            Self::PackageIndex(arguments) => arguments.scope = scope,
+            Self::ReadHelp(arguments) => arguments.scope = scope,
+            _ => {}
+        }
+    }
+
     pub fn expected_session(&self) -> Option<&str> {
         match self {
             Self::Snapshot(arguments) => arguments.expected_session.as_deref(),

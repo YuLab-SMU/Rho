@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReadObjectArguments",
+  "type": "object",
+  "properties": {
+    "column_limit": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 50,
+      "maximum": 50,
+      "minimum": 1
+    },
+    "column_start": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 1,
+      "minimum": 1
+    },
+    "expected_session": {
+      "type": "string"
+    },
+    "filter_column": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "default": null,
+      "minimum": 0
+    },
+    "filter_text": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "kind": {
+      "$ref": "#/$defs/ObjectReadKind"
+    },
+    "limit": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 100,
+      "maximum": 200,
+      "minimum": 1
+    },
+    "object_ref": {
+      "type": "string"
+    },
+    "path": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ObjectPathElement"
+      }
+    },
+    "slice": {
+      "description": "One-based coordinates for dimensions 3 and above; omitted coordinates select the first slice.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "sort_column": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "default": null,
+      "minimum": 0
+    },
+    "sort_descending": {
+      "type": "boolean",
+      "default": false
+    },
+    "start": {
+      "type": "integer",
+      "format": "uint64",
+      "default": 1,
+      "minimum": 1
+    },
+    "text_attribute": {
+      "description": "For kind=text, select \"names\" or \"levels\" instead of character values.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "text_limit_bytes": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 16384,
+      "maximum": 65536,
+      "minimum": 1
+    },
+    "text_start": {
+      "type": "integer",
+      "format": "uint64",
+      "default": 1,
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "expected_session",
+    "object_ref",
+    "kind"
+  ],
+  "$defs": {
+    "ObjectPathElement": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 1
+            },
+            "kind": {
+              "type": "string",
+              "const": "index"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "index"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "name"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "name"
+          ]
+        }
+      ]
+    },
+    "ObjectReadKind": {
+      "type": "string",
+      "enum": [
+        "structure",
+        "values",
+        "children",
+        "table",
+        "text",
+        "levels",
+        "names"
+      ]
+    }
+  }
+}

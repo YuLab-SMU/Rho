@@ -102,6 +102,20 @@ test("ordinary Console runs and cancels original R work while preserving drafts 
   await expect(transcript).toContainText("queue-verified");
   await completedCode("stopifnot(!exists('should_not_exist')); cat('queue-verified\\n')");
   await expect(outer.locator("#status")).toContainText("Ready");
+  // These contributed queries were added to the independent R package after
+  // this Host binary was built. The generic Host must discover and serve them.
+  const sessionRead = await query("plugins.resolve", { instance: r, capability: { id: "r.session", version: 1 } });
+  const session = (await query("r.session", { binding: sessionRead, arguments: {} })).session_id;
+  const observe = await query("plugins.resolve", { instance: r, capability: { id: "r.observe_object", version: 1 } });
+  let object: any;
+  await expect.poll(async () => {
+    object = await query("r.observe_object", { binding: observe, arguments: { expected_session: session, name: "answer" } });
+    return object.status;
+  }).toBe("ready");
+  const readObject = await query("plugins.resolve", { instance: r, capability: { id: "r.read_object", version: 1 } });
+  const value = await query("r.read_object", { binding: readObject, arguments: { expected_session: session, object_ref: object.data.object_ref, kind: "values" } });
+  expect(value.status).toBe("ready");
+  expect(value.data.values[0].text).toBe("αβ");
   for (const width of [1440, 1920, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect.poll(() => page.frames()[1].evaluate(() => innerWidth)).toBe(width);

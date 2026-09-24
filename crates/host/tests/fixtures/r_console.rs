@@ -161,6 +161,7 @@ pub async fn exercise(
     assert_eq!(waiting["console"]["current"]["source"], source);
     let input = waiting["console"]["input"].clone();
     assert_eq!(input["operation_id"], json!(id));
+    inspection::busy(host, owner, session).await;
     assert!(host.dispatch(&reopened, cancel_request(&id)).await.is_err(),
         "cancel pending must refuse the now-running native input call");
     assert!(!host.get_operation(&NextHost::local_context(), &id).await.unwrap().unwrap().cancellation_requested);

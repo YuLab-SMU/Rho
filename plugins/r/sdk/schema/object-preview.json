@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RInspection",
+  "description": "A successful RPC can report a busy or unavailable native observation. No\ncached value is presented as current, and continuation errors keep their code.",
+  "type": "object",
+  "properties": {
+    "completeness": {
+      "$ref": "#/$defs/NativeCompleteness"
+    },
+    "data": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BindingSummary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "diagnostic": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RInspectionDiagnostic"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "observed_at_ms": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/RInspectionStatus"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "status",
+    "source",
+    "observed_at_ms",
+    "completeness",
+    "notices"
+  ],
+  "$defs": {
+    "BindingSummary": {
+      "type": "object",
+      "properties": {
+        "classes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "kind": {
+          "type": "string"
+        },
+        "length": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "notice": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "object_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preview": true,
+        "preview_kind": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "classes",
+        "dimensions",
+        "truncated"
+      ]
+    },
+    "NativeCompleteness": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "partial",
+        "unknown"
+      ]
+    },
+    "RInspectionDiagnostic": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "RInspectionStatus": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "busy",
+        "unavailable"
+      ]
+    }
+  }
+}

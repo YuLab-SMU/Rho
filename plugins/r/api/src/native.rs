@@ -17,7 +17,7 @@ pub struct NativeReport {
     pub outcome: rho_plugin_protocol::PluginOutcome,
     pub error: Option<String>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, schemars::JsonSchema, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 pub enum NativeCompleteness {
     Complete,

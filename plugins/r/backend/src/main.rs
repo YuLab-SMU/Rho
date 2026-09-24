@@ -95,6 +95,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                         let is_query = call.operation_id.is_none();
                         let valid_kind = match call.binding.capability.id.as_str() {
                             "r.session" | "r.console" | "r.snapshot" | "r.prepare" | "r.check_code" | "r.output_events" => is_query,
+                            id if rho_r_api::r_inspection_kind(id).is_some() => is_query,
                             "r.create_session" | "r.execute" => !is_query,
                             _ => false,
                         };

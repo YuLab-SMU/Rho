@@ -11,6 +11,13 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+The ordinary R package now exposes object, Packages and Help inspection, verified
+through disposable native R and an unchanged Host binary. Shared input validation
+lives in `plugins/r/api`; the retiring adapter delegates to it. Exact sessions,
+busy/unavailable results and native diagnostic codes cross the public protocol.
+The next migration is the corresponding ordinary UI packages, while the remaining
+scientific composition, scenario integration and Plugin Studio stay in scope.
+
 ### Implemented behavior
 
 `rho-plugin-protocol` defines public package, revision, instance, provider, scenario,
@@ -84,6 +91,17 @@ event logs, PNG and HTML use retained resources. Lost sessions are observed with
 replacement. Native stdin uses exact session/operation/request/reply identities,
 UTF-8 limits and transient controls; input and reads remain available while draining.
 
+Seven contributed R inspection queries cover object directories, binding previews,
+progressive object reads, installed package copies, static indexes and Help. Trusted
+Host identity supplies observation scope; payloads cannot supply project or
+principal. Queries require the exact existing native session and return explicit
+busy/unavailable envelopes without starting R. Continuations preserve original
+references, filters and file identities. Results exceeding 256 KiB become an
+explicit budget failure. Inspection does not force active/lazy bindings, load or
+attach packages, change search/library paths, test loadability, or create execution
+records. Grouped package counts and copy details share one observation. Missing
+Help-rendering providers remain unavailable instead of being loaded by a query.
+
 The R package owns a FIFO of 33 original operations, including returned work
 awaiting settlement. Pause/resume use exact queue/pause identities and optional
 operation-scope fences. Failure, cancellation, uncertainty or uncommitted results
@@ -133,6 +151,10 @@ executable startup is allowed to finish; silence is not treated as a test failur
 
 | Executed check | Result and scope |
 | --- | --- |
+| `cargo test -p rho-r-api -p rho-r-backend --lib --bins --locked` | 11 passed (3 API, 8 backend); shared validation, caller-scope rejection and bounded inspection envelopes. Exporter target had no tests. |
+| `cargo test -p rho-workspace --lib --locked` | 14 passed after extracting query validation into the R package. |
+| `node plugins/r/generate-sdk.mjs`, `node scripts/test-r-protocol.mjs` | New R declarations, schemas and manifest generated; strict independent consumer passed. |
+| `node scripts/build-r-plugin.mjs <external-package>/r` | Independent current R package built with locked dependencies and no private core source. Existing Host SHA-256 unchanged. |
 | `cargo test -p rho-plugin-protocol -p rho-plugin-sdk -p rho-operation -p rho-workspace -p rho-r-backend --locked` | 61 passed; protocol/SDK and original cancellation owner checks. Subsequent Workspace changes are covered below. |
 | `cargo test -p rho-plugins -p rho-workspace --lib --tests --locked` | 51 passed, including shutdown with a prepared fence, original authority, failed journal writes, lost/late replies and unchanged original invocation identity. |
 | `cargo test -p rho-host --test plugins pending_cancellation_survives --locked` | Focused corrected case passed. |
@@ -146,8 +168,8 @@ executable startup is allowed to finish; silence is not treated as a test failur
 | `node scripts/test-plugin-protocol.mjs`, `node scripts/test-plugin-ui.mjs` | Current generated declarations compile in independent strict consumers. |
 | `cargo build --locked` | Pass; current Host binary built. |
 | `npm run test:browser --prefix ui -- console-editor.spec.ts` | Pass with the public MessagePort fixture: editing/composition guards, selection, transient password answers, controls, clear/new output, saved draft and scroll restoration. 1440px/1920px/390px screenshots inspected; the corrected capture waits for iframe resizing. |
-| `npm run test:browser --prefix ui -- r-plugin-console.spec.ts` with independently built R/Console packages and explicit Ark/R | Pass; full native flow, saved drafts, close/reopen and retained history after backend removal. Host SHA-256 remains `f5c8755aac91605d0be8bc4fa9917ed73a61da9e3a50da950073d6dda6f51ff0` after independent package builds. |
-| `cargo test -p rho-host --test r_plugin_real_r --locked -- --ignored --nocapture` with independently built R package and explicit Ark/R | Pass (one native integration case, 22.75s). Includes generic conditional cancellation, original authority, exact instances, FIFO, stdin, result settlement and retained resources. |
+| `npm run test:browser --prefix ui -- r-plugin-console.spec.ts` with independently built R/Console packages and explicit Ark/R | Current run passed (12.4s body, 27.9s total), including discovery of newly contributed object queries and reading a real Console-created Unicode value. Native flow, drafts, close/reopen and retained history also passed. All three current viewport screenshots inspected. Host SHA-256 remains `f5c8755aac91605d0be8bc4fa9917ed73a61da9e3a50da950073d6dda6f51ff0`. |
+| `cargo test -p rho-host --test r_plugin_real_r --locked -- --ignored --nocapture` with independently built R package and explicit Ark/R | Current run passed (one case, 24.95s). Adds unstarted/busy inspections, directory/table continuation, non-forcing bindings, foreign/expired references, package counts/copy identity, Help continuation/changed files, unchanged namespaces/search/library paths and unchanged Operation history. Existing instance, queue, stdin, cancellation, settlement and retained-resource regression also passed. |
 
 The first combined owner command failed to compile a new test because an identifier
 was moved while borrowed; its corrected rerun passes. The first combined Host
@@ -176,7 +198,7 @@ failure, original commit failure/recovery, FIFO/full queue, Console source label
 parser completeness, streaming during stdin, identity/UTF-8/duplicate-answer
 rejection, controls during draining and retained results after removal/restart.
 The unchanged engine also passed its independent copied-tree tests and actual-R
-check. These are prior evidence, not a pass for the new cancellation extension.
+check. These are preceding baselines; current contributed inspections are covered above.
 
 The preceding Viewer Chrome baseline passed the version 2 R/Viewer path without
 changing the core binary. All eight 1440px/1920px/390px HTML, DT and source-detail
@@ -194,7 +216,7 @@ continuation and optional real-model/alternate-R cases remain unexecuted.
 
 Finish generic close-time draft flushing; the current debounce can lose
 unacknowledged edits on abrupt closure. Add captured
-document execution, checkpoint ownership, R inspection and plot/context navigation.
+document execution, checkpoint ownership and plot/context navigation.
 Complete recovery of an unconfirmed submission from a newly opened view; the
 current origin check safely refuses replay but does not yet provide that workflow.
 Migrate all remaining Files/Git, Editor, Objects, Packages (read-only), Help, Plots,

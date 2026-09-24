@@ -1086,6 +1086,3113 @@
       "effects": [],
       "cancellation": "unsupported",
       "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.list_objects",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "List R objects",
+      "description": "Read a bounded stable binding directory in the exact expected_session. Reading never starts R or evaluates active/lazy bindings.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ListObjectsArguments",
+        "type": "object",
+        "properties": {
+          "directory_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "expected_session": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 100,
+            "maximum": 200,
+            "minimum": 1
+          },
+          "name_contains": {
+            "type": "string",
+            "default": ""
+          },
+          "object_type": {
+            "description": "Filter by native R typeof (for example double, character, list or closure); classes remain metadata.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "offset": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session"
+        ]
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "limit": 100
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RInspection",
+        "description": "A successful RPC can report a busy or unavailable native observation. No\ncached value is presented as current, and continuation errors keep their code.",
+        "type": "object",
+        "properties": {
+          "completeness": {
+            "$ref": "#/$defs/NativeCompleteness"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ObjectDirectoryPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RInspectionDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "observed_at_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/RInspectionStatus"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "status",
+          "source",
+          "observed_at_ms",
+          "completeness",
+          "notices"
+        ],
+        "$defs": {
+          "NativeCompleteness": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ]
+          },
+          "ObjectAttribute": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "values"
+            ]
+          },
+          "ObjectDirectoryEntry": {
+            "type": "object",
+            "properties": {
+              "metadata": {
+                "$ref": "#/$defs/ObjectMetadata"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "metadata"
+            ]
+          },
+          "ObjectDirectoryPage": {
+            "type": "object",
+            "properties": {
+              "complete": {
+                "type": "boolean"
+              },
+              "directory_ref": {
+                "type": "string"
+              },
+              "entries": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectDirectoryEntry"
+                }
+              },
+              "next_offset": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "observed_at_ms": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "offset": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "total": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "directory_ref",
+              "entries",
+              "total",
+              "offset",
+              "observed_at_ms",
+              "complete",
+              "notices"
+            ]
+          },
+          "ObjectMetadata": {
+            "type": "object",
+            "properties": {
+              "attributes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectAttribute"
+                }
+              },
+              "classes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "dimensions": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                }
+              },
+              "kind": {
+                "type": "string"
+              },
+              "length": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "level_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "default": null,
+                "minimum": 0
+              },
+              "notice": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "object_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "preview": {
+                "description": "A small native sample for immediate recognition, never a full profile.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "default": null,
+                "items": {
+                  "$ref": "#/$defs/ObjectScalar"
+                }
+              },
+              "supported_reads": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectReadKind"
+                }
+              },
+              "table_features": {
+                "description": "Native reader features, separate from attributes stored on the R object.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "default": null,
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "classes",
+              "dimensions",
+              "supported_reads",
+              "attributes"
+            ]
+          },
+          "ObjectReadKind": {
+            "type": "string",
+            "enum": [
+              "structure",
+              "values",
+              "children",
+              "table",
+              "text",
+              "levels",
+              "names"
+            ]
+          },
+          "ObjectScalar": {
+            "type": "object",
+            "properties": {
+              "color": {
+                "description": "Canonical R color when this complete character value is a valid color.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "imaginary": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "logical": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "next_text_start": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "number": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "object_type": {
+                "type": "string"
+              },
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text_characters": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "object_type"
+            ]
+          },
+          "RInspectionDiagnostic": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "RInspectionStatus": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "busy",
+              "unavailable"
+            ]
+          }
+        }
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.observe_object",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Observe an R object",
+      "description": "Create a scoped read-only observation for progressive inspection in the exact expected_session.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ObserveObjectArguments",
+        "type": "object",
+        "properties": {
+          "expected_session": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/ObjectPathElement"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session",
+          "name"
+        ],
+        "$defs": {
+          "ObjectPathElement": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "index"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "index"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "name"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "name"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "name": "iris"
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RInspection",
+        "description": "A successful RPC can report a busy or unavailable native observation. No\ncached value is presented as current, and continuation errors keep their code.",
+        "type": "object",
+        "properties": {
+          "completeness": {
+            "$ref": "#/$defs/NativeCompleteness"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ObjectObservation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RInspectionDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "observed_at_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/RInspectionStatus"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "status",
+          "source",
+          "observed_at_ms",
+          "completeness",
+          "notices"
+        ],
+        "$defs": {
+          "NativeCompleteness": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ]
+          },
+          "ObjectAttribute": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "values"
+            ]
+          },
+          "ObjectMetadata": {
+            "type": "object",
+            "properties": {
+              "attributes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectAttribute"
+                }
+              },
+              "classes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "dimensions": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                }
+              },
+              "kind": {
+                "type": "string"
+              },
+              "length": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "level_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "default": null,
+                "minimum": 0
+              },
+              "notice": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "object_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "preview": {
+                "description": "A small native sample for immediate recognition, never a full profile.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "default": null,
+                "items": {
+                  "$ref": "#/$defs/ObjectScalar"
+                }
+              },
+              "supported_reads": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectReadKind"
+                }
+              },
+              "table_features": {
+                "description": "Native reader features, separate from attributes stored on the R object.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "default": null,
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "classes",
+              "dimensions",
+              "supported_reads",
+              "attributes"
+            ]
+          },
+          "ObjectObservation": {
+            "type": "object",
+            "properties": {
+              "expires_at_ms": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "metadata": {
+                "$ref": "#/$defs/ObjectMetadata"
+              },
+              "name": {
+                "type": "string"
+              },
+              "object_ref": {
+                "type": "string"
+              },
+              "observed_at_ms": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "path": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectPathElement"
+                }
+              }
+            },
+            "required": [
+              "object_ref",
+              "name",
+              "path",
+              "metadata",
+              "observed_at_ms",
+              "expires_at_ms"
+            ]
+          },
+          "ObjectPathElement": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "index"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "index"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "name"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "name"
+                ]
+              }
+            ]
+          },
+          "ObjectReadKind": {
+            "type": "string",
+            "enum": [
+              "structure",
+              "values",
+              "children",
+              "table",
+              "text",
+              "levels",
+              "names"
+            ]
+          },
+          "ObjectScalar": {
+            "type": "object",
+            "properties": {
+              "color": {
+                "description": "Canonical R color when this complete character value is a valid color.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "imaginary": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "logical": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "next_text_start": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "number": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "object_type": {
+                "type": "string"
+              },
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text_characters": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "object_type"
+            ]
+          },
+          "RInspectionDiagnostic": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "RInspectionStatus": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "busy",
+              "unavailable"
+            ]
+          }
+        }
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.read_object",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Read an R object observation",
+      "description": "Read bounded structure, values, children, table slices or text using the original object reference and exact expected_session.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ReadObjectArguments",
+        "type": "object",
+        "properties": {
+          "column_limit": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 50,
+            "maximum": 50,
+            "minimum": 1
+          },
+          "column_start": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 1,
+            "minimum": 1
+          },
+          "expected_session": {
+            "type": "string"
+          },
+          "filter_column": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "default": null,
+            "minimum": 0
+          },
+          "filter_text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "kind": {
+            "$ref": "#/$defs/ObjectReadKind"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 100,
+            "maximum": 200,
+            "minimum": 1
+          },
+          "object_ref": {
+            "type": "string"
+          },
+          "path": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/ObjectPathElement"
+            }
+          },
+          "slice": {
+            "description": "One-based coordinates for dimensions 3 and above; omitted coordinates select the first slice.",
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "sort_column": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint32",
+            "default": null,
+            "minimum": 0
+          },
+          "sort_descending": {
+            "type": "boolean",
+            "default": false
+          },
+          "start": {
+            "type": "integer",
+            "format": "uint64",
+            "default": 1,
+            "minimum": 1
+          },
+          "text_attribute": {
+            "description": "For kind=text, select \"names\" or \"levels\" instead of character values.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "text_limit_bytes": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 16384,
+            "maximum": 65536,
+            "minimum": 1
+          },
+          "text_start": {
+            "type": "integer",
+            "format": "uint64",
+            "default": 1,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session",
+          "object_ref",
+          "kind"
+        ],
+        "$defs": {
+          "ObjectPathElement": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "index"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "index"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "name"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "name"
+                ]
+              }
+            ]
+          },
+          "ObjectReadKind": {
+            "type": "string",
+            "enum": [
+              "structure",
+              "values",
+              "children",
+              "table",
+              "text",
+              "levels",
+              "names"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "object_ref": "copy_object_ref_from_r_observe_object",
+          "kind": "structure"
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RInspection",
+        "description": "A successful RPC can report a busy or unavailable native observation. No\ncached value is presented as current, and continuation errors keep their code.",
+        "type": "object",
+        "properties": {
+          "completeness": {
+            "$ref": "#/$defs/NativeCompleteness"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ObjectReadPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RInspectionDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "observed_at_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/RInspectionStatus"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "status",
+          "source",
+          "observed_at_ms",
+          "completeness",
+          "notices"
+        ],
+        "$defs": {
+          "NativeCompleteness": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ]
+          },
+          "ObjectAttribute": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "values"
+            ]
+          },
+          "ObjectChild": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "metadata": {
+                "$ref": "#/$defs/ObjectMetadata"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "index",
+              "metadata"
+            ]
+          },
+          "ObjectColumn": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "metadata": {
+                "$ref": "#/$defs/ObjectMetadata"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectScalar"
+                }
+              }
+            },
+            "required": [
+              "index",
+              "metadata",
+              "values"
+            ]
+          },
+          "ObjectMetadata": {
+            "type": "object",
+            "properties": {
+              "attributes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectAttribute"
+                }
+              },
+              "classes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "dimensions": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                }
+              },
+              "kind": {
+                "type": "string"
+              },
+              "length": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "level_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "default": null,
+                "minimum": 0
+              },
+              "notice": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "object_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "preview": {
+                "description": "A small native sample for immediate recognition, never a full profile.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "default": null,
+                "items": {
+                  "$ref": "#/$defs/ObjectScalar"
+                }
+              },
+              "supported_reads": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectReadKind"
+                }
+              },
+              "table_features": {
+                "description": "Native reader features, separate from attributes stored on the R object.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "default": null,
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "classes",
+              "dimensions",
+              "supported_reads",
+              "attributes"
+            ]
+          },
+          "ObjectPathElement": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "index"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "index"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "name"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "name"
+                ]
+              }
+            ]
+          },
+          "ObjectReadKind": {
+            "type": "string",
+            "enum": [
+              "structure",
+              "values",
+              "children",
+              "table",
+              "text",
+              "levels",
+              "names"
+            ]
+          },
+          "ObjectReadPage": {
+            "type": "object",
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectChild"
+                }
+              },
+              "column_start": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectColumn"
+                }
+              },
+              "complete": {
+                "type": "boolean"
+              },
+              "kind": {
+                "$ref": "#/$defs/ObjectReadKind"
+              },
+              "metadata": {
+                "$ref": "#/$defs/ObjectMetadata"
+              },
+              "next_column_start": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "next_start": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "next_text_start": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "object_ref": {
+                "type": "string"
+              },
+              "observed_at_ms": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "observed_path": {
+                "description": "Path fixed when the observation opened, separate from this read's relative path.",
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectPathElement"
+                }
+              },
+              "path": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectPathElement"
+                }
+              },
+              "root_name": {
+                "type": "string"
+              },
+              "row_indices": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "default": null,
+                "items": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                }
+              },
+              "row_names": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "default": null,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "slice": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "default": null,
+                "items": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                }
+              },
+              "start": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "text_start": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "total_rows": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "default": null,
+                "minimum": 0
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ObjectScalar"
+                }
+              }
+            },
+            "required": [
+              "object_ref",
+              "root_name",
+              "observed_path",
+              "path",
+              "kind",
+              "metadata",
+              "values",
+              "children",
+              "columns",
+              "start",
+              "column_start",
+              "text_start",
+              "observed_at_ms",
+              "complete",
+              "notices"
+            ]
+          },
+          "ObjectScalar": {
+            "type": "object",
+            "properties": {
+              "color": {
+                "description": "Canonical R color when this complete character value is a valid color.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "imaginary": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "logical": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "next_text_start": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "number": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "object_type": {
+                "type": "string"
+              },
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text_characters": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "object_type"
+            ]
+          },
+          "RInspectionDiagnostic": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "RInspectionStatus": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "busy",
+              "unavailable"
+            ]
+          }
+        }
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.inspect_object",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Preview an R binding",
+      "description": "Read a bounded binding preview in the exact expected_session without forcing active/lazy bindings.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "InspectArguments",
+        "type": "object",
+        "properties": {
+          "expected_session": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "max_items": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 20,
+            "maximum": 100,
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "name": "iris",
+          "max_items": 20
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RInspection",
+        "description": "A successful RPC can report a busy or unavailable native observation. No\ncached value is presented as current, and continuation errors keep their code.",
+        "type": "object",
+        "properties": {
+          "completeness": {
+            "$ref": "#/$defs/NativeCompleteness"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BindingSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RInspectionDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "observed_at_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/RInspectionStatus"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "status",
+          "source",
+          "observed_at_ms",
+          "completeness",
+          "notices"
+        ],
+        "$defs": {
+          "BindingSummary": {
+            "type": "object",
+            "properties": {
+              "classes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "dimensions": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                }
+              },
+              "kind": {
+                "type": "string"
+              },
+              "length": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "name": {
+                "type": "string"
+              },
+              "notice": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "object_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "preview": true,
+              "preview_kind": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "truncated": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "kind",
+              "classes",
+              "dimensions",
+              "truncated"
+            ]
+          },
+          "NativeCompleteness": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ]
+          },
+          "RInspectionDiagnostic": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "RInspectionStatus": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "busy",
+              "unavailable"
+            ]
+          }
+        }
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.packages",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Observe installed R packages",
+      "description": "Read package metadata in the exact expected_session. Grouped counts and copy details continue one observation; no package is installed, loaded, attached or tested.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PackageQueryArguments",
+        "description": "Bounded observation of the libraries and namespaces of the existing R session.",
+        "type": "object",
+        "properties": {
+          "expected_session": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "filter": {
+            "type": "string",
+            "default": "",
+            "maxLength": 128
+          },
+          "grouped": {
+            "type": "boolean",
+            "default": false
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 100,
+            "maximum": 200,
+            "minimum": 1
+          },
+          "mode": {
+            "$ref": "#/$defs/PackageQueryMode",
+            "default": "installed"
+          },
+          "observation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null,
+            "maxLength": 64
+          },
+          "offset": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 0,
+            "maximum": 10000,
+            "minimum": 0
+          },
+          "package_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null,
+            "maxLength": 128,
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "$defs": {
+          "PackageQueryMode": {
+            "type": "string",
+            "enum": [
+              "installed",
+              "loaded",
+              "attached"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "grouped": true,
+          "limit": 100
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RInspection",
+        "description": "A successful RPC can report a busy or unavailable native observation. No\ncached value is presented as current, and continuation errors keep their code.",
+        "type": "object",
+        "properties": {
+          "completeness": {
+            "$ref": "#/$defs/NativeCompleteness"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/PackageSnapshotData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RInspectionDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "observed_at_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/RInspectionStatus"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "status",
+          "source",
+          "observed_at_ms",
+          "completeness",
+          "notices"
+        ],
+        "$defs": {
+          "NativeCompleteness": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ]
+          },
+          "PackageCounts": {
+            "type": "object",
+            "properties": {
+              "all": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "attached": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "installations": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "installed": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "loaded": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "multiple": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "all",
+              "installed",
+              "installations",
+              "loaded",
+              "attached",
+              "multiple"
+            ]
+          },
+          "PackageEntry": {
+            "type": "object",
+            "properties": {
+              "attached": {
+                "type": "boolean"
+              },
+              "built": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "first_in_library_path": {
+                "type": "boolean"
+              },
+              "library_index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "library_path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "loaded_from_library": {
+                "type": "boolean"
+              },
+              "loaded_path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "loaded_version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PackageSource"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "version",
+              "first_in_library_path",
+              "loaded_from_library",
+              "attached"
+            ]
+          },
+          "PackageGroup": {
+            "type": "object",
+            "properties": {
+              "attached": {
+                "type": "boolean"
+              },
+              "copy_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "first_version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "loaded_copy_observed": {
+                "type": "boolean"
+              },
+              "loaded_path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "loaded_version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "primary_library_path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "source_kind": {
+                "type": "string"
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "version",
+              "copy_count",
+              "loaded_copy_observed",
+              "attached",
+              "source_kind",
+              "source_count"
+            ]
+          },
+          "PackageLibrary": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "notice": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "index",
+              "path",
+              "status"
+            ]
+          },
+          "PackageProjectLink": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "label",
+              "url"
+            ]
+          },
+          "PackageQueryMode": {
+            "type": "string",
+            "enum": [
+              "installed",
+              "loaded",
+              "attached"
+            ]
+          },
+          "PackageSnapshotData": {
+            "type": "object",
+            "properties": {
+              "counts": {
+                "$ref": "#/$defs/PackageCounts",
+                "default": {
+                  "all": 0,
+                  "attached": 0,
+                  "installations": 0,
+                  "installed": 0,
+                  "loaded": 0,
+                  "multiple": 0
+                }
+              },
+              "filter": {
+                "type": "string"
+              },
+              "groups": {
+                "type": "array",
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/PackageGroup"
+                }
+              },
+              "libraries": {
+                "type": "array",
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/PackageLibrary"
+                }
+              },
+              "library_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "mode": {
+                "$ref": "#/$defs/PackageQueryMode"
+              },
+              "next_offset": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "observation_id": {
+                "type": "string",
+                "default": ""
+              },
+              "observed_at_ms": {
+                "type": "integer",
+                "format": "int64",
+                "default": 0
+              },
+              "offset": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "package_name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "packages": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/PackageEntry"
+                }
+              },
+              "platform": {
+                "type": "string"
+              },
+              "r_home": {
+                "type": "string"
+              },
+              "r_version": {
+                "type": "string"
+              },
+              "scan_complete": {
+                "type": "boolean"
+              },
+              "scanned": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "total_matches": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "r_version",
+              "r_home",
+              "platform",
+              "library_paths",
+              "mode",
+              "filter",
+              "offset",
+              "packages",
+              "total_matches",
+              "scanned",
+              "scan_complete",
+              "notices"
+            ]
+          },
+          "PackageSource": {
+            "type": "object",
+            "properties": {
+              "delivery_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/PackageSourceField"
+                }
+              },
+              "kind": {
+                "type": "string"
+              },
+              "links": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/PackageProjectLink"
+                }
+              },
+              "notice": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "remote_host": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "remote_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "remote_sha": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "repository": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "repository_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "snapshot": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "evidence",
+              "links"
+            ]
+          },
+          "PackageSourceField": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "field",
+              "value"
+            ]
+          },
+          "RInspectionDiagnostic": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "RInspectionStatus": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "busy",
+              "unavailable"
+            ]
+          }
+        }
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.package_index",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Inspect an observed package copy",
+      "description": "Read the static index of the original observed package copy in the exact expected_session.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PackageIndexArguments",
+        "type": "object",
+        "properties": {
+          "expected_session": {
+            "type": "string"
+          },
+          "filter": {
+            "type": "string",
+            "default": ""
+          },
+          "index_ref": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "library_path": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 100,
+            "minimum": 0
+          },
+          "observation_id": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 0,
+            "minimum": 0
+          },
+          "package": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session",
+          "observation_id",
+          "package",
+          "library_path"
+        ]
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "observation_id": "copy_observation_id_from_r_packages",
+          "package": "base",
+          "library_path": "copy-library-path-from-r.packages",
+          "limit": 100
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RInspection",
+        "description": "A successful RPC can report a busy or unavailable native observation. No\ncached value is presented as current, and continuation errors keep their code.",
+        "type": "object",
+        "properties": {
+          "completeness": {
+            "$ref": "#/$defs/NativeCompleteness"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/PackageIndexPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RInspectionDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "observed_at_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/RInspectionStatus"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "status",
+          "source",
+          "observed_at_ms",
+          "completeness",
+          "notices"
+        ],
+        "$defs": {
+          "NativeCompleteness": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ]
+          },
+          "PackageDescriptionField": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "value"
+            ]
+          },
+          "PackageFileIdentity": {
+            "type": "object",
+            "properties": {
+              "digest": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "digest"
+            ]
+          },
+          "PackageIndexEntry": {
+            "type": "object",
+            "properties": {
+              "declaration": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kind": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "resolved": {
+                "type": "boolean"
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "topic": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "resolved"
+            ]
+          },
+          "PackageIndexPage": {
+            "type": "object",
+            "properties": {
+              "complete": {
+                "type": "boolean"
+              },
+              "description": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/PackageDescriptionField"
+                }
+              },
+              "entries": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/PackageIndexEntry"
+                }
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/PackageFileIdentity"
+                }
+              },
+              "index_ref": {
+                "type": "string"
+              },
+              "library_path": {
+                "type": "string"
+              },
+              "next_offset": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "observation_id": {
+                "type": "string"
+              },
+              "observed_at_ms": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "offset": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "package": {
+                "type": "string"
+              },
+              "total": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "index_ref",
+              "observation_id",
+              "package",
+              "library_path",
+              "version",
+              "files",
+              "description",
+              "entries",
+              "total",
+              "offset",
+              "observed_at_ms",
+              "complete",
+              "notices"
+            ]
+          },
+          "RInspectionDiagnostic": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "RInspectionStatus": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "busy",
+              "unavailable"
+            ]
+          }
+        }
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.read_help",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Read observed R help",
+      "description": "Read bounded help text or HTML from the exact installed copy and file identities returned by r.package_index, in the exact expected_session.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ReadPackageHelpArguments",
+        "type": "object",
+        "properties": {
+          "expected_help_files": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null,
+            "items": {
+              "$ref": "#/$defs/PackageFileIdentity"
+            }
+          },
+          "expected_index_files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/PackageFileIdentity"
+            }
+          },
+          "expected_session": {
+            "type": "string"
+          },
+          "format": {
+            "$ref": "#/$defs/HelpFormat",
+            "default": "text"
+          },
+          "library_path": {
+            "type": "string"
+          },
+          "limit_bytes": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 16384,
+            "minimum": 0
+          },
+          "observation_id": {
+            "type": "string"
+          },
+          "offset_utf8": {
+            "type": "integer",
+            "format": "uint64",
+            "default": 0,
+            "minimum": 0
+          },
+          "package": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session",
+          "observation_id",
+          "package",
+          "library_path",
+          "topic",
+          "expected_index_files"
+        ],
+        "$defs": {
+          "HelpFormat": {
+            "description": "Rendering format. HTML is produced by the static `tools::Rd2HTML` stage and is\nsuitable for a sanitized document view; text remains the bounded default.",
+            "type": "string",
+            "enum": [
+              "text",
+              "html"
+            ]
+          },
+          "PackageFileIdentity": {
+            "type": "object",
+            "properties": {
+              "digest": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "digest"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "observation_id": "copy_observation_id_from_r_packages",
+          "package": "base",
+          "library_path": "copy-library-path-from-r.packages",
+          "topic": "sum",
+          "expected_index_files": [
+            {
+              "path": "copy_index_file_path_1",
+              "digest": "copy-original-index-file-digest"
+            },
+            {
+              "path": "copy_index_file_path_2",
+              "digest": "copy-original-index-file-digest"
+            },
+            {
+              "path": "copy_index_file_path_3",
+              "digest": "copy-original-index-file-digest"
+            },
+            {
+              "path": "copy_index_file_path_4",
+              "digest": "copy-original-index-file-digest"
+            }
+          ],
+          "limit_bytes": 16384
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RInspection",
+        "description": "A successful RPC can report a busy or unavailable native observation. No\ncached value is presented as current, and continuation errors keep their code.",
+        "type": "object",
+        "properties": {
+          "completeness": {
+            "$ref": "#/$defs/NativeCompleteness"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/PackageHelpPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RInspectionDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "observed_at_ms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/RInspectionStatus"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "status",
+          "source",
+          "observed_at_ms",
+          "completeness",
+          "notices"
+        ],
+        "$defs": {
+          "HelpFormat": {
+            "description": "Rendering format. HTML is produced by the static `tools::Rd2HTML` stage and is\nsuitable for a sanitized document view; text remains the bounded default.",
+            "type": "string",
+            "enum": [
+              "text",
+              "html"
+            ]
+          },
+          "NativeCompleteness": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ]
+          },
+          "PackageFileIdentity": {
+            "type": "object",
+            "properties": {
+              "digest": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "digest"
+            ]
+          },
+          "PackageHelpPage": {
+            "type": "object",
+            "properties": {
+              "complete": {
+                "type": "boolean"
+              },
+              "format": {
+                "$ref": "#/$defs/HelpFormat",
+                "default": "text"
+              },
+              "found": {
+                "type": "boolean"
+              },
+              "help_files": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/PackageFileIdentity"
+                }
+              },
+              "library_path": {
+                "type": "string"
+              },
+              "next_offset_utf8": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "observation_id": {
+                "type": "string"
+              },
+              "offset_utf8": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "package": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "topic": {
+                "type": "string"
+              },
+              "total_bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "version": {
+                "description": "Present for HTML: the package version recorded in the observed copy.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "observation_id",
+              "package",
+              "library_path",
+              "topic",
+              "found",
+              "text",
+              "offset_utf8",
+              "total_bytes",
+              "complete",
+              "help_files"
+            ]
+          },
+          "RInspectionDiagnostic": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "RInspectionStatus": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "busy",
+              "unavailable"
+            ]
+          }
+        }
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
     }
   ]
 }

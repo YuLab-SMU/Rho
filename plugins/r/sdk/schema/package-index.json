@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PackageIndexArguments",
+  "type": "object",
+  "properties": {
+    "expected_session": {
+      "type": "string"
+    },
+    "filter": {
+      "type": "string",
+      "default": ""
+    },
+    "index_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "kind": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "library_path": {
+      "type": "string"
+    },
+    "limit": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 100,
+      "minimum": 0
+    },
+    "observation_id": {
+      "type": "string"
+    },
+    "offset": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 0,
+      "minimum": 0
+    },
+    "package": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "expected_session",
+    "observation_id",
+    "package",
+    "library_path"
+  ]
+}

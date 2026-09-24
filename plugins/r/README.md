@@ -1,8 +1,10 @@
 # R plugin source
 
 The R owner is being moved here as part of the unified-plugin implementation.
-The public-protocol executable and package manifest now provide explicit session
-creation, bounded snapshots and execution through original Operations.
+The public-protocol executable and package manifest provide explicit session
+creation, Console controls, bounded inspection and execution through original
+Operations. Object directories, progressive object reads, installed package copies,
+static indexes and Help use the exact existing session; see [public interfaces](sdk/README.md).
 `node scripts/build-r-plugin.mjs DEST` assembles and builds a self-contained package
 outside the checkout; see [build instructions](BUILD.md). Current acceptance and
 the remaining migration are recorded in `docs/STATUS.md` at the repository root.
@@ -40,6 +42,9 @@ The test never connects to an existing user session.
 Run `node scripts/test-r-plugin.mjs` with explicit `RHO_ARK` and `RHO_R_HOME`
 to build the complete backend outside the checkout and exercise it through the
 shared Host Operation/Query ports in disposable projects. The test covers two
-coexisting revisions, session fencing, Unicode, HTML/PNG retention, cancellation
-and original records after package removal and Host restart. It does not establish
-Viewer UI, Console controls or complete scientific-owner migration acceptance.
+coexisting revisions, session fencing, Unicode, HTML/PNG retention, Console input
+and queue controls, cancellation and original records after package removal and
+Host restart. Its inspection fixture checks reference continuation, non-forcing
+binding reads, exact package/help identities and unchanged R search paths and
+loaded namespaces. Native checks do not establish UI or complete scientific-owner
+migration acceptance.

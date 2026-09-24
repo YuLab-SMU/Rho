@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PackageQueryArguments",
+  "description": "Bounded observation of the libraries and namespaces of the existing R session.",
+  "type": "object",
+  "properties": {
+    "expected_session": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "filter": {
+      "type": "string",
+      "default": "",
+      "maxLength": 128
+    },
+    "grouped": {
+      "type": "boolean",
+      "default": false
+    },
+    "limit": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 100,
+      "maximum": 200,
+      "minimum": 1
+    },
+    "mode": {
+      "$ref": "#/$defs/PackageQueryMode",
+      "default": "installed"
+    },
+    "observation_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "maxLength": 64
+    },
+    "offset": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 0,
+      "maximum": 10000,
+      "minimum": 0
+    },
+    "package_name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null,
+      "maxLength": 128,
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "PackageQueryMode": {
+      "type": "string",
+      "enum": [
+        "installed",
+        "loaded",
+        "attached"
+      ]
+    }
+  }
+}

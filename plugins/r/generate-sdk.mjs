@@ -37,6 +37,7 @@ try{
   const manifest=JSON.parse(fs.readFileSync(path.join(root,'plugin.json'),'utf8'));
   const schema=name=>JSON.parse(fs.readFileSync(path.join(temporary,'schema',name+'.json'),'utf8'));
   const source={view_id:'console-view',label:'Console',kind:'console'};
+  const session='copy-session-from-r.session';
   const additions=[
     {...structuredClone(manifest.capabilities.find(item=>item.capability.id==='r.execute'&&item.capability.version===1)),
       capability:{id:'r.execute',version:2},title:'Execute R input with source',description:'Execute the supplied code, output mode and source labels in the exact admitted session. Labels do not attest to a Host document capture.',
@@ -44,6 +45,13 @@ try{
     ...[
       ['r.check_code','Check R code','Check completeness in the existing idle session without evaluating code.','check-code','code-completeness',{expected_session:'copy-session-from-r.session',code:'1 + 1'}],
       ['r.output_events','Observe original R output','Read bounded events while a run is active. Observations never establish terminal execution status.','read-events','events-observation',{expected_session:'copy-session-from-r.session',operation_id:'original-operation',after_sequence:0,limit:100}],
+      ['r.list_objects','List R objects','Read a bounded stable binding directory in the exact expected_session. Reading never starts R or evaluates active/lazy bindings.','list-objects','object-directory',{expected_session:session,limit:100}],
+      ['r.observe_object','Observe an R object','Create a scoped read-only observation for progressive inspection in the exact expected_session.','observe-object','object-observation',{expected_session:session,name:'iris'}],
+      ['r.read_object','Read an R object observation','Read bounded structure, values, children, table slices or text using the original object reference and exact expected_session.','read-object','object-read',{expected_session:session,object_ref:'copy_object_ref_from_r_observe_object',kind:'structure'}],
+      ['r.inspect_object','Preview an R binding','Read a bounded binding preview in the exact expected_session without forcing active/lazy bindings.','inspect-object','object-preview',{expected_session:session,name:'iris',max_items:20}],
+      ['r.packages','Observe installed R packages','Read package metadata in the exact expected_session. Grouped counts and copy details continue one observation; no package is installed, loaded, attached or tested.','packages','package-observation',{expected_session:session,grouped:true,limit:100}],
+      ['r.package_index','Inspect an observed package copy','Read the static index of the original observed package copy in the exact expected_session.','package-index','package-index-observation',{expected_session:session,observation_id:'copy_observation_id_from_r_packages',package:'base',library_path:'copy-library-path-from-r.packages',limit:100}],
+      ['r.read_help','Read observed R help','Read bounded help text or HTML from the exact installed copy and file identities returned by r.package_index, in the exact expected_session.','read-help','help-observation',{expected_session:session,observation_id:'copy_observation_id_from_r_packages',package:'base',library_path:'copy-library-path-from-r.packages',topic:'sum',expected_index_files:[1,2,3,4].map(index=>({path:`copy_index_file_path_${index}`,digest:'copy-original-index-file-digest'})),limit_bytes:16384}],
     ].map(([id,title,description,input,output,example])=>({capability:{id,version:1},kind:'query',title,description,input_schema:schema(input),examples:[example],output_schema:schema(output),recovery_schema:true,required_scopes:['workspace.read'],effects:[],cancellation:'unsupported',preflight:null})),
   ];
   for(const addition of additions){const index=manifest.capabilities.findIndex(item=>item.capability.id===addition.capability.id&&item.capability.version===addition.capability.version);if(index<0)manifest.capabilities.push(addition);else manifest.capabilities[index]=addition;}

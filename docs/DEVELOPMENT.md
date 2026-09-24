@@ -342,6 +342,13 @@ The generator invokes Cargo and runs serially. R Console protocol changes requir
 source retention, visible Console output, live event pagination during stdin,
 pending cancellation and exact instance boundaries. Full Application document
 capture and Console UI acceptance remain separate migration work.
+R inspection changes use the same native acceptance: its inspection fixture reads
+object directories and table continuations, refuses foreign/expired references,
+reads Packages and Help from one observed copy, and verifies that queries neither
+force active/lazy bindings nor change loaded namespaces, search paths or library
+paths. The fixture explicitly loads its test prerequisite before taking the
+read-only baseline. It also checks busy/unstarted behavior and unchanged Operation
+history. Public declarations alone do not establish those native results.
 `node scripts/test-plugin-ui.mjs` compiles the public UI SDK outside the checkout
 and exercises its channel using real MessagePorts. After client generation/build
 and `cargo build --locked`, use `npm run test:browser --prefix ui --

@@ -205,6 +205,9 @@ impl Owner {
         }
     }
     pub async fn query(&self, call: &PluginCall) -> Result<Value, String> {
+        if let Some(kind) = r_inspection_kind(call.binding.capability.id.as_str()) {
+            return self.inspect(call, kind).await;
+        }
         match call.binding.capability.id.as_str() {
             "r.session" => Ok(match self.runtime.lock().unwrap().as_ref() {
                 Some(runtime) => {
@@ -375,6 +378,65 @@ impl Owner {
             _ => Err("unknown R query".into()),
         }
     }
+    async fn inspect(&self, call: &PluginCall, kind: WorkspaceQueryKind) -> Result<Value, String> {
+        let mut query = kind.parse(&call.arguments).map_err(|error| error.to_string())?;
+        let runtime = self.runtime()?;
+        let session = runtime.session_id();
+        if query.expected_session() != Some(session)
+            || call.binding.target.as_deref().is_some_and(|target| target != session)
+        {
+            return Err("R inspection requires this exact native session".into());
+        }
+        // These values come from the initialized Host identity, never from
+        // query arguments. Native observation references retain this scope.
+        query.bind_scope(WorkspaceQueryScope {
+            project: self.environment.project_root.clone(),
+            principal: call.principal.to_string(),
+            session: session.into(),
+        });
+        let mut observation = RInspection::<Value> {
+            session_id: session.into(),
+            status: RInspectionStatus::Busy,
+            source: "org.rho.r".into(),
+            observed_at_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).map_err(|error| error.to_string())?
+                .as_millis().try_into().map_err(|_| "Observation time exceeds its contract")?,
+            completeness: NativeCompleteness::Unknown,
+            data: None,
+            notices: vec!["R has active, queued or unsettled work; no inspection was submitted.".into()],
+            diagnostic: None,
+        };
+        if !self.queue.is_empty() {
+            return inspection_value(observation);
+        }
+        let Ok(_lane) = self.lane.try_lock() else {
+            return inspection_value(observation);
+        };
+        match runtime.query(&query).await {
+            Ok(native) if native.session_id == session => {
+                observation.status = RInspectionStatus::Ready;
+                observation.source = native.source;
+                observation.observed_at_ms = native.observed_at_ms;
+                observation.completeness = native.completeness;
+                observation.data = Some(native.data);
+                observation.notices = native.notices;
+            }
+            result => {
+                observation.status = RInspectionStatus::Unavailable;
+                observation.notices.clear();
+                let (code, message) = match result {
+                    Err(error) => (error.query_code.map(|code| code.to_string()).unwrap_or_else(|| "unavailable".into()), error.message),
+                    Ok(_) => ("session_changed".into(), "The native observation belongs to a different R session".into()),
+                };
+                observation.diagnostic = Some(RInspectionDiagnostic {
+                    code,
+                    message: preview(&message).to_owned(),
+                });
+            }
+        }
+        inspection_value(observation)
+    }
+
     pub async fn invoke(
         &self,
         call: &PluginCall,
@@ -633,6 +695,24 @@ impl Owner {
     }
 }
 
+/// Bound the entire observation, including JSON escaping. An oversized native
+/// page becomes an explicit unavailable result, never a silently shortened page.
+fn inspection_value(mut observation: RInspection<Value>) -> Result<Value, String> {
+    let encoded = serde_json::to_value(&observation).map_err(|error| error.to_string())?;
+    if serde_json::to_vec(&encoded).map_err(|error| error.to_string())?.len() <= 256 * 1024 {
+        return Ok(encoded);
+    }
+    observation.status = RInspectionStatus::Unavailable;
+    observation.completeness = NativeCompleteness::Unknown;
+    observation.data = None;
+    observation.notices.clear();
+    observation.diagnostic = Some(RInspectionDiagnostic {
+        code: "budget_exhausted".into(),
+        message: "R observation exceeds 256 KiB including its envelope; narrow the filter, path or page size.".into(),
+    });
+    serde_json::to_value(observation).map_err(|error| error.to_string())
+}
+
 /// Count JSON bytes, including escaping, rather than assuming event count bounds
 /// the framed response. The next page resumes at the last event actually sent.
 fn bound_events(mut output: OutputEvents, after: u64) -> Result<OutputEvents, String> {
@@ -662,6 +742,23 @@ fn bound_events(mut output: OutputEvents, after: u64) -> Result<OutputEvents, St
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn oversized_inspection_preserves_identity_and_reports_missing_data() {
+        let observation = RInspection {
+            session_id: "original-session".into(), status: RInspectionStatus::Ready,
+            source: "native".into(), observed_at_ms: 42, completeness: NativeCompleteness::Complete,
+            data: Some(json!({"text":"\0".repeat(65536)})), notices: vec![], diagnostic: None,
+        };
+        let value = inspection_value(observation).unwrap();
+        assert_eq!(value["session_id"], "original-session");
+        assert_eq!(value["observed_at_ms"], 42);
+        assert_eq!(value["status"], "unavailable");
+        assert_eq!(value["completeness"], "unknown");
+        assert!(value["data"].is_null());
+        assert_eq!(value["diagnostic"]["code"], "budget_exhausted");
+        assert!(serde_json::to_vec(&value).unwrap().len() < 1024);
+    }
+
     #[test]
     fn output_pages_bound_escaped_bytes_without_skipping_events_or_erasing_gaps() {
         let id = OperationId::new("original").unwrap();

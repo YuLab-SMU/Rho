@@ -19,6 +19,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ConsoleState::export_all(&types)?;
     RespondInput::export_all(&types)?;
     QueueControlArguments::export_all(&types)?;
+    InspectArguments::export_all(&types)?;
+    ListObjectsArguments::export_all(&types)?;
+    ObserveObjectArguments::export_all(&types)?;
+    ReadObjectArguments::export_all(&types)?;
+    PackageQueryArguments::export_all(&types)?;
+    PackageIndexArguments::export_all(&types)?;
+    ReadPackageHelpArguments::export_all(&types)?;
+    RInspection::<ObjectDirectoryPage>::export_all(&types)?;
+    ObjectDirectoryPage::export_all(&types)?;
+    ObjectObservation::export_all(&types)?;
+    ObjectReadPage::export_all(&types)?;
+    BindingSummary::export_all(&types)?;
+    PackageSnapshotData::export_all(&types)?;
+    PackageIndexPage::export_all(&types)?;
+    PackageHelpPage::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
         ("execute", schemars::schema_for!(ExecuteR)),
@@ -30,6 +45,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "events-observation",
             schemars::schema_for!(REventsObservation),
         ),
+        ("list-objects", schemars::schema_for!(ListObjectsArguments)),
+        ("object-directory", schemars::schema_for!(RInspection<ObjectDirectoryPage>)),
+        ("observe-object", schemars::schema_for!(ObserveObjectArguments)),
+        ("object-observation", schemars::schema_for!(RInspection<ObjectObservation>)),
+        ("read-object", schemars::schema_for!(ReadObjectArguments)),
+        ("object-read", schemars::schema_for!(RInspection<ObjectReadPage>)),
+        ("inspect-object", schemars::schema_for!(InspectArguments)),
+        ("object-preview", schemars::schema_for!(RInspection<BindingSummary>)),
+        ("packages", schemars::schema_for!(PackageQueryArguments)),
+        ("package-observation", schemars::schema_for!(RInspection<PackageSnapshotData>)),
+        ("package-index", schemars::schema_for!(PackageIndexArguments)),
+        ("package-index-observation", schemars::schema_for!(RInspection<PackageIndexPage>)),
+        ("read-help", schemars::schema_for!(ReadPackageHelpArguments)),
+        ("help-observation", schemars::schema_for!(RInspection<PackageHelpPage>)),
     ] {
         fs::write(
             root.join("schema").join(format!("{name}.json")),

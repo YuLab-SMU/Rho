@@ -29,3 +29,26 @@ resources through the generic read ports instead of recreating R.
 
 All calls use the public plugin UI/backend SDK and an exact `ProviderBinding`.
 Changing a view, scenario or current selection must not retarget accepted work.
+
+Read-only inspection contributions are `r.list_objects`, `r.observe_object`,
+`r.read_object`, `r.inspect_object`, `r.packages`, `r.package_index` and
+`r.read_help` (version 1). Every request must name the exact `expected_session`,
+including the shared preview/package argument types where that field is optional
+for the retiring local adapter. No query starts R, forces lazy/active bindings,
+installs or loads a package, attaches it, changes library paths or tests loadability.
+
+The result is `RInspection<T>`. Read `status` before `data`: busy and unavailable
+observations contain no current data. The native session, source, observation time,
+completeness and notices remain explicit. `diagnostic.code` preserves failures such
+as `observation_expired`, `observation_invalid`, `content_changed` and
+`budget_exhausted`. A view may retain its previous display with an explicit stale
+label; it must not present that value as a new observation. A response larger than
+256 KiB is unavailable with a budget diagnostic, never silently truncated.
+
+Directory/object references bind to the original project, principal and native
+session; request arguments cannot supply that scope. Continue with the original
+reference, filters and returned offsets. Packages grouped counts, copies and static
+index use the same `observation_id`; Help additionally fixes the index and help
+file identities. Preserve expired/changed evidence rather than silently selecting
+another object, package copy or observation. Available help-rendering providers are
+read as-is; missing providers remain unavailable instead of being loaded by a query.
