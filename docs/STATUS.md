@@ -246,6 +246,23 @@ R, and pauses reads while capturing final presentation state. Twenty-four model
 and connection checks pass outside the checkout. The package entrypoint, approved
 view components and Help navigation are not yet assembled or tested with native R.
 
+The ordinary `org.rho.help` package now builds outside the checkout with only
+public R/plugin contracts. It pins the selected installed copy's original provider,
+native session, package observation, library and version. Topic/alias indexes and
+UTF-8 content continuations retain file identities; expired observations and changed
+files require explicit reselection. Late responses cannot replace a newer topic.
+Static HTML is rebuilt without executable content or fetched resources; incomplete
+markup stays raw. Same-copy links and anchors work, while cross-package links
+require another installed-copy selection. External URLs can currently be copied;
+public external-window cooperation and image resource delivery remain to be added.
+Topic, search, index choices, raw display and scrolling are captured on cooperative
+closure. Forty-one independent model/connection/content checks, the isolated browser
+flow and disposable native R flow pass. Native `stats::lm` reading preserves loaded
+namespaces, search/library paths and execution count; closing during execution
+retains choices without ending R. The 1440/1920/390 px reading views and narrow topic
+list were inspected. Packages-to-Help navigation and production scenario placement
+remain separate integration work; the retiring Help implementation is still present.
+
 ### Current verification
 
 Cargo checks remain serial with `CARGO_BUILD_JOBS=1`. Slow local compiler and test
@@ -257,6 +274,9 @@ executable startup is allowed to finish; silence is not treated as a test failur
 | `cargo test -p rho-host --test plugins --test port_contracts --locked` | 17 passed (12 plugin, 5 port-contract). Adds multi-document flush acknowledgement, original close identity, revoked authority, refusal/deadline fence cleanup, conflicting saved versions and atomic closure/layout/reference rollback. Retains opening, replay, visibility and accepted-native-work checks. |
 | `node scripts/test-objects-plugin.mjs` | Independent compilation and 64 checks passed across eight files. Adds draining the active read, pausing new observations and final unsaved-choice capture. Retains exact provider/session, bounded busy reads, serialized state, capture-before-submit and original-request recovery. |
 | `node scripts/test-packages-plugin.mjs` | Independent strict NodeNext compilation and 24 model/connection checks passed. Public native envelopes, exact provider/session, grouped/copy observation identity, busy-state retention, expired-code pinning, source metadata, link validation and serialized final capture. No installed Packages UI or native-browser acceptance claim. |
+| `node scripts/test-help-plugin.mjs` | Independent strict compilation and 41 checks in three files passed. Exact-copy identities, UTF-8/file continuations, expiry, busy backoff, late responses, serialized final capture, topic/alias selection and static HTML/link handling. |
+| `npm run test:browser --prefix ui -- help-plugin.spec.ts --output=<help-browser-3>` | Passed (one case, 3.5 s total). Actual opaque iframe, same-copy and cross-copy links, no external resource requests, Unicode, exact scroll restoration and cooperative final capture. The initial 1 px scroll-restoration failure is retained under `target/plugin-refactor/help-browser`; disabling scroll anchoring resolved it. |
+| `npm run test:browser --prefix ui -- r-plugin-help.spec.ts --output=<help-native-browser-2>` with independent R/Help packages and explicit Ark/R | Passed (one case, 25.0 s total). Native installed-copy/index/HTML reads, unchanged namespaces/search/library paths, no execution from viewing, closure during an original R run and restored choices. Four current screenshots inspected; unchanged Host SHA-256 `a580823ad8bc10fd0b3dd56386362f93d7c3c77a47e31d07707207f95f7dcf12`. |
 | `cargo test -p rho-plugin-protocol --lib --locked`, `cargo test -p rho-host --test plugins --locked` | 2 protocol and 9 Host plugin tests passed, including text-copy authority, no clipboard claim from Host acknowledgement and unchanged Operation history. |
 | `cargo test -p rho-r-api -p rho-r-backend --lib --bins --locked` | 11 passed (3 API, 8 backend); shared validation, caller-scope rejection and bounded inspection envelopes. Exporter target had no tests. |
 | `cargo test --manifest-path <external-package>/Cargo.toml -p rho-r-backend --bins --locked --offline` | 9 passed from the independently assembled package, including the new manifest-to-transport route check. |

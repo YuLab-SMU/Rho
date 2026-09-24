@@ -337,6 +337,29 @@
         "node",
         "scripts/test-r-objects-plugin.mjs"
       ]
+    },
+    "plugins.help": {
+      "command": [
+        "node",
+        "scripts/test-help-plugin.mjs"
+      ]
+    },
+    "plugins.help-browser": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui",
+        "--",
+        "help-plugin.spec.ts"
+      ]
+    },
+    "plugins.r-help": {
+      "command": [
+        "node",
+        "scripts/test-r-help.mjs"
+      ]
     }
   },
   "areas": {
@@ -494,7 +517,12 @@
         "scripts/build-objects-plugin.mjs",
         "ui/e2e/objects-plugin.spec.ts",
         "scripts/test-r-objects-plugin.mjs",
-        "ui/e2e/r-plugin-objects.spec.ts"
+        "ui/e2e/r-plugin-objects.spec.ts",
+        "scripts/build-help-plugin.mjs",
+        "scripts/test-help-plugin.mjs",
+        "scripts/test-r-help.mjs",
+        "ui/e2e/help-plugin.spec.ts",
+        "ui/e2e/r-plugin-help.spec.ts"
       ],
       "checks": [
         "docs.index",
@@ -521,7 +549,10 @@
         "plugins.objects",
         "plugins.packages",
         "plugins.objects-browser",
-        "plugins.r-objects"
+        "plugins.r-objects",
+        "plugins.help",
+        "plugins.help-browser",
+        "plugins.r-help"
       ]
     }
   }

@@ -1,0 +1,220 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.help",
+  "name": "Help",
+  "version": "0.1.0",
+  "description": "Read-only static documentation from one exact observed installed R package copy.",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "README.md",
+      "build.mjs",
+      "index.html",
+      "package.json",
+      "src/connection.ts",
+      "src/content.ts",
+      "src/help.ts",
+      "src/main.tsx",
+      "src/shared/model.ts",
+      "src/style.css",
+      "src/styles.d.ts",
+      "src/view.tsx",
+      "tests/connection.test.ts",
+      "tests/content.test.ts",
+      "tests/fixtures.ts",
+      "tests/help.test.ts",
+      "tsconfig.json"
+    ],
+    "lockfiles": [
+      "dependencies.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [
+    {
+      "capability": {
+        "id": "r.inspection_state",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.package_index",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.read_help",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "help",
+      "title": "Help",
+      "entrypoint": "dist/index.html",
+      "state_schema": {
+        "type": "object",
+        "properties": {
+          "choices": {
+            "type": "object",
+            "properties": {
+              "topic": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "filter": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "format": {
+                "enum": [
+                  "html",
+                  "text"
+                ]
+              },
+              "raw": {
+                "type": "boolean"
+              },
+              "scrollTop": {
+                "type": "number",
+                "minimum": 0
+              },
+              "indexVisible": {
+                "type": "boolean"
+              },
+              "indexKind": {
+                "enum": [
+                  "topic",
+                  "alias"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "configuration_schema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "instance": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "plugin": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "artifact": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "additionalProperties": false
+          },
+          "copy": {
+            "type": "object",
+            "properties": {
+              "nativeSession": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "observation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "package": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "libraryPath": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16384
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            "required": [
+              "nativeSession",
+              "observation",
+              "package",
+              "libraryPath",
+              "version"
+            ],
+            "additionalProperties": false
+          },
+          "topic": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "source",
+          "copy",
+          "topic"
+        ],
+        "additionalProperties": false
+      },
+      "resource_kinds": []
+    }
+  ],
+  "capabilities": [],
+  "contexts": [],
+  "backend": null,
+  "configuration_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "default_configuration": {}
+}

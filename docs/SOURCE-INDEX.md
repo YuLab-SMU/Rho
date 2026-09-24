@@ -88,6 +88,7 @@ Sources:
 - `crates/plugins/**`
 - `plugins/**`
 - `scripts/build-console-plugin.mjs`
+- `scripts/build-help-plugin.mjs`
 - `scripts/build-objects-plugin.mjs`
 - `scripts/build-r-plugin.mjs`
 - `scripts/build-viewer-plugin.mjs`
@@ -96,12 +97,14 @@ Sources:
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`
+- `scripts/test-help-plugin.mjs`
 - `scripts/test-objects-plugin.mjs`
 - `scripts/test-packages-plugin.mjs`
 - `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
 - `scripts/test-plugin-ui.mjs`
 - `scripts/test-r-console.mjs`
+- `scripts/test-r-help.mjs`
 - `scripts/test-r-objects-plugin.mjs`
 - `scripts/test-r-plugin-engine.mjs`
 - `scripts/test-r-plugin.mjs`
@@ -110,8 +113,10 @@ Sources:
 - `scripts/test-viewer-plugin.mjs`
 - `sdk/**`
 - `ui/e2e/console-editor.spec.ts`
+- `ui/e2e/help-plugin.spec.ts`
 - `ui/e2e/objects-plugin.spec.ts`
 - `ui/e2e/r-plugin-console.spec.ts`
+- `ui/e2e/r-plugin-help.spec.ts`
 - `ui/e2e/r-plugin-objects.spec.ts`
 
 Checks:
@@ -123,6 +128,8 @@ Checks:
 - `plugins.console`: `["node","scripts/test-console-plugin.mjs"]`
 - `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
+- `plugins.help`: `["node","scripts/test-help-plugin.mjs"]`
+- `plugins.help-browser`: `["npm","run","test:browser","--prefix","ui","--","help-plugin.spec.ts"]`
 - `plugins.objects`: `["node","scripts/test-objects-plugin.mjs"]`
 - `plugins.objects-browser`: `["npm","run","test:browser","--prefix","ui","--","objects-plugin.spec.ts"]`
 - `plugins.packages`: `["node","scripts/test-packages-plugin.mjs"]`
@@ -130,6 +137,7 @@ Checks:
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
 - `plugins.r-console`: `["node","scripts/test-r-console.mjs"]`
 - `plugins.r-engine`: `["cargo","test","-p","rho-r-engine","--locked"]`
+- `plugins.r-help`: `["node","scripts/test-r-help.mjs"]`
 - `plugins.r-independent`: `["node","scripts/test-r-plugin-engine.mjs"]`
 - `plugins.r-native`: `["node","scripts/test-r-plugin.mjs"]`
 - `plugins.r-objects`: `["node","scripts/test-r-objects-plugin.mjs"]`

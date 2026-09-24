@@ -129,6 +129,15 @@ Skipped or unavailable real-R, browser, external-provider, and environment check
 are not passes. Run them only with their documented prerequisites; preserve the
 failure log when the prerequisite is missing.
 
+The ordinary Help package uses `node scripts/test-help-plugin.mjs` for independent
+model/connection/static-content checks and the isolated `help-plugin.spec.ts` browser
+case. `node scripts/test-r-help.mjs` builds the packages and runs its disposable
+native browser case with explicit `RHO_ARK` and `RHO_R_HOME`. An explicitly selected
+existing `RHO_R_PLUGIN_PACKAGE` reuses that native artifact when R sources have not
+changed; this establishes no new native build. Pass a distinct `--output` directory
+to retain each browser run. Help viewing must preserve namespace/search/library
+state and must not create scientific execution records.
+
 ### Optional workspace audit
 
 The complete workspace audit is intentionally not part of every development
