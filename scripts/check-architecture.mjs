@@ -28,6 +28,7 @@ const allowed = {
   "rho-r-api": ["rho-plugin-protocol"],
   "rho-r-engine": ["rho-r-api", "rho-plugin-protocol"],
   "rho-files-api": [],
+  "rho-files-owner": ["rho-files-api"],
   "rho-files-engine": ["rho-files-api", "rho-process-engine"],
   "rho-process-api": [],
   "rho-process-engine": ["rho-process-api"],
@@ -38,7 +39,7 @@ const allowed = {
   "rho-skills": ["rho-contract", "rho-operation"],
   "rho-adapter-skills": ["rho-contract", "rho-operation", "rho-skills"],
   "rho-workspace": ["rho-contract", "rho-operation", "rho-r-api"],
-  "rho-project": ["rho-contract", "rho-operation", "rho-files-api"],
+  "rho-project": ["rho-contract", "rho-operation", "rho-files-api", "rho-files-owner"],
   "rho-environment": ["rho-contract", "rho-operation"],
   "rho-execution": ["rho-contract", "rho-operation"],
   "rho-process": ["rho-contract", "rho-operation", "rho-execution", "rho-process-engine"],
@@ -55,6 +56,7 @@ const allowed = {
 };
 const pluginLibraries = {
   "rho-r-api": "plugins/r/api", "rho-r-engine": "plugins/r/backend/engine",
+  "rho-files-owner": "plugins/files/backend/owner",
   "rho-files-api": "plugins/files/api", "rho-files-engine": "plugins/files/backend/engine",
   "rho-process-api": "plugins/process/api", "rho-process-engine": "plugins/process/backend/engine",
 };

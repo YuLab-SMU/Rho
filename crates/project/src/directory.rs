@@ -20,17 +20,7 @@ impl ProjectDirectoryHandler {
     fn parse(&self, value: &Value) -> Result<ListDirectoryArguments, OperationError> {
         let args: ListDirectoryArguments =
             serde_json::from_value(value.clone()).map_err(invalid)?;
-        if !args.path.is_empty() {
-            validate_path(&args.path).map_err(invalid)?;
-        }
-        if !(1..=200).contains(&args.limit)
-            || args
-                .after_name
-                .as_ref()
-                .is_some_and(|n| n.len() > 1024 || n.contains('/'))
-        {
-            return Err(invalid("invalid directory page bounds"));
-        }
+        rho_files_api::validate_directory(&args).map_err(invalid)?;
         Ok(args)
     }
 }
@@ -107,147 +97,13 @@ impl QueryHandler for ProjectSearchHandler {
     fn normalize_arguments(&self, value: &Value) -> Result<Value, OperationError> {
         let args: rho_contract::SearchFilesArguments =
             serde_json::from_value(value.clone()).map_err(invalid)?;
-        if args.text.trim().is_empty() || args.text.len() > 1024 {
-            return Err(invalid("Search text must be 1..=1024 bytes"));
-        }
+        rho_files_api::validate_search_files(&args).map_err(invalid)?;
         serde_json::to_value(args).map_err(invalid)
     }
     async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
         let args: rho_contract::SearchFilesArguments =
             serde_json::from_value(value.clone()).map_err(invalid)?;
-        let mut cursor = args
-            .continuation
-            .clone()
-            .unwrap_or_else(|| SearchFilesCursor {
-                project: self.owner.runtime.root().into(),
-                text: args.text.clone(),
-                show_hidden: args.show_hidden,
-                directories: vec![DirectoryScanFrame {
-                    path: String::new(),
-                    after_name: None,
-                }],
-            });
-        if cursor.project != self.owner.runtime.root()
-            || cursor.text != args.text
-            || cursor.show_hidden != args.show_hidden
-            || cursor.directories.len() > 64
-        {
-            return Err(invalid("path search continuation project/query mismatch"));
-        }
-        let mut result = rho_contract::FileSearchResult {
-            entries: vec![],
-            scanned_entries: 0,
-            scanned_directories: 0,
-            truncated: false,
-            notices: vec![],
-            continuation: None,
-        };
-        let needle = args.text.to_lowercase();
-        let mut cache: Option<(
-            String,
-            std::collections::VecDeque<rho_contract::DirectoryEntry>,
-        )> = None;
-        while !cursor.directories.is_empty() {
-            result.continuation = Some(cursor.clone());
-            if result.scanned_entries >= 10000
-                || result.scanned_directories >= 200
-                || result.entries.len() >= 200
-                || serde_json::to_vec(&result).map_err(invalid)?.len() > 56 * 1024
-            {
-                result.truncated = true;
-                result.notices.push("Page budget reached; continue with the unchanged query and returned continuation.".into());
-                break;
-            }
-            let frame = cursor.directories.last_mut().unwrap();
-            if !frame.path.is_empty() {
-                validate_path(&frame.path).map_err(invalid)?;
-            }
-            if frame
-                .after_name
-                .as_ref()
-                .is_some_and(|name| name.len() > 1024 || name.contains('/'))
-            {
-                return Err(invalid("invalid path continuation name"));
-            }
-            if frame.after_name.is_none() {
-                result.scanned_directories += 1;
-            }
-            let page = if cache
-                .as_ref()
-                .is_some_and(|(path, entries)| path == &frame.path && !entries.is_empty())
-            {
-                let (_, entries) = cache.as_mut().unwrap();
-                Ok(DirectoryPage {
-                    path: frame.path.clone(),
-                    entries: vec![entries.pop_front().unwrap()],
-                    next_name: None,
-                    truncated: false,
-                    notices: vec![],
-                })
-            } else {
-                match self
-                    .owner
-                    .runtime
-                    .list_directory(&ListDirectoryArguments {
-                        path: frame.path.clone(),
-                        after_name: frame.after_name.clone(),
-                        limit: 200,
-                    })
-                    .await
-                {
-                    Ok(mut page) => {
-                        let mut entries: std::collections::VecDeque<_> =
-                            page.entries.drain(..).collect();
-                        page.entries = entries.pop_front().into_iter().collect();
-                        cache = Some((frame.path.clone(), entries));
-                        Ok(page)
-                    }
-                    Err(error) => Err(error),
-                }
-            };
-            match page {
-                Ok(page) => {
-                    if page.truncated {
-                        result.notices.extend(page.notices);
-                        result.truncated = true;
-                    }
-                    let Some(entry) = page.entries.into_iter().next() else {
-                        cursor.directories.pop();
-                        continue;
-                    };
-                    frame.after_name = Some(entry.name.clone());
-                    result.scanned_entries += 1;
-                    if !args.show_hidden && entry.name.starts_with('.') {
-                        continue;
-                    }
-                    if entry.kind == "directory" {
-                        if cursor.directories.len() == 64 {
-                            result.truncated = true;
-                            result.notices.push(format!("Directory depth exceeds 64 at {}; enumerate that directory explicitly.",entry.path));
-                        } else {
-                            cursor.directories.push(DirectoryScanFrame {
-                                path: entry.path.clone(),
-                                after_name: None,
-                            });
-                        }
-                    }
-                    if entry.path.to_lowercase().contains(&needle) {
-                        result.entries.push(entry);
-                    }
-                }
-                Err(error) => {
-                    result.truncated = true;
-                    result.notices.push(error);
-                    cursor.directories.pop();
-                }
-            }
-        }
-        result.continuation = (!cursor.directories.is_empty()).then_some(cursor);
-        if serde_json::to_vec(&result).map_err(invalid)?.len() > 64 * 1024 {
-            return Err(invalid(
-                "path search continuation exceeds 64 KiB; browse a narrower directory",
-            ));
-        }
+        let result = rho_files_owner::search_files(self.owner.runtime.as_ref(), &args).await.map_err(invalid)?;
         let mut next_reads = Vec::new();
         if let Some(cursor) = &result.continuation {
             let mut next = serde_json::to_value(&args).map_err(invalid)?;

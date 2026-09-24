@@ -64,6 +64,16 @@ MCP connection updates its tool catalog after provider publication or failure;
 page cursors cannot cross changed catalogs. The UI SDK remains separate from
 these public type definitions.
 
+`workspace.paths@1` takes `{}` and returns `WorkspacePaths` under `project.read`.
+The Host supplies its normalized project root and protected storage boundaries;
+neither arguments nor plugin configuration can supply those paths. A native
+backend declares this requirement and uses a reverse `HostCall` with an active
+parent that holds the scope. The reply is the ordinary Host query envelope, with
+the paths in `data`. Preserve lexical paths and resolved aliases, including
+nonexistent sidecars. Limits are 256 paths, 4096 UTF-8 bytes per path and 128 KiB
+for the encoded path list. This query neither scans files nor starts a runtime,
+and does not extend the initialization message or provide an OS sandbox.
+
 `windows.layout@1` accepts `PluginWindowArguments` and observes a
 `PluginWindowLayout`. `windows.update_layout@1` accepts `UpdatePluginWindowLayout`
 through the ordinary Operation port with `plugins.run`. It saves the arrangement

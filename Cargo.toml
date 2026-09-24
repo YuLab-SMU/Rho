@@ -5,6 +5,7 @@ members = [
   "plugins/r/api",
   "plugins/files/api",
   "plugins/files/backend/engine",
+  "plugins/files/backend/owner",
   "plugins/process/api",
   "plugins/process/backend/engine",
   "plugins/r/backend/engine",

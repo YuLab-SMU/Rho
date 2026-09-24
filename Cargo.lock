@@ -6067,6 +6067,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-files-owner"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "rho-files-api",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "rho-git"
 version = "0.1.0"
 dependencies = [
@@ -6241,6 +6251,7 @@ dependencies = [
  "async-trait",
  "rho-contract",
  "rho-files-api",
+ "rho-files-owner",
  "rho-operation",
  "schemars 1.2.1",
  "serde",

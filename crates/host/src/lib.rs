@@ -889,7 +889,7 @@ impl NextHost {
                 app.clone(),
                 discovery.clone(),
                 host_skills.as_deref(),
-                skill_exclusions,
+                skill_exclusions.clone(),
             )?)
         } else {
             None
@@ -1087,7 +1087,7 @@ impl NextHost {
             }
         }
         let plugins = plugin_store.zip(output_project.clone())
-            .map(|(store, project)| rho_plugins::PluginService::open(&store, project, journal.clone()))
+            .map(|(store, project)| rho_plugins::PluginService::open(&store, project, skill_exclusions, journal.clone()))
             .transpose()?;
         if let Some(plugins) = &plugins { plugins.register(&mut registry)?; }
         let event_port = observer::register_record_queries(

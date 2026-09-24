@@ -68,6 +68,18 @@ pub struct BackendEnvironment {
     pub data_root: String,
 }
 
+/// Host-owned path boundaries, obtained through the scoped `workspace.paths`
+/// query. They are metadata, not a filesystem sandbox or a caller configuration.
+/// Both existing and future paths are included; consumers must preserve lexical
+/// and resolved exclusions when exposing filesystem capabilities.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspacePaths {
+    pub project_root: String,
+    #[schemars(length(max = 256))]
+    pub protected_paths: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderBinding {

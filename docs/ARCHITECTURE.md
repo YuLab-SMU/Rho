@@ -37,10 +37,23 @@ Files/Git contracts and native provider ports now live in `plugins/files/api`;
 the contained filesystem, text and Git implementation lives in
 `plugins/files/backend/engine`. Shared native subprocess supervision and its public
 reports live under `plugins/process`. These libraries have no private core imports.
+`plugins/files/backend/owner` interprets bounded path searches, native patch
+preconditions and before/after effects. The retiring project handlers delegate to
+this owner; they retain only their Operation/Query adaptation and original commit
+records. A post-write observation failure remains an explicit possible effect
+with its original snapshot and affected paths, never an inferred pre-write failure.
 The retiring Git/process adapters reuse the same implementations while their
 ordinary backend and operation integration are completed. Moving the implementation
 does not relax canonical project roots, protected-path exclusions, symlink checks,
 bounded reads or native file identity requirements.
+
+The public `workspace.paths@1` query exposes the normalized Host project root and
+bounded protected storage paths under `project.read`. These boundaries come from
+Host composition, including future sidecars and the project lease; plugin
+configuration and query arguments cannot alter them. A backend declares the query
+as a requirement and reads it through an active parent's delegated authority.
+Initialization wire fields remain unchanged. These paths are containment metadata
+for trusted native code, not OS sandbox permissions.
 
 The R domain contracts now live in `plugins/r/api`; the native Ark/R implementation
 and its R bridge live in `plugins/r/backend/engine`. They depend only on public
@@ -975,6 +988,9 @@ Host startup acquires an OS lease on the canonical project's `.rho/next-host.loc
 and an exclusive journal writer lock. A second database cannot create a second Host
 for the same project. Lock-file existence does not prove liveness. Accepted work
 retains the Host and project lease after an edge disconnects.
+The last lease owner explicitly unlocks its file before closing it. A duplicated
+descriptor, including a transient descriptor in a starting subprocess, cannot
+extend a completed Host's ownership; live accepted work still retains the lease.
 
 Host-managed Project, Environment and process operations share the Host execution
 lane. Each managed R instance owns a separate lane, so a running instance blocks

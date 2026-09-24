@@ -25,16 +25,23 @@ Original Plots export also passes before and after R release. Default scenario
 composition remains in progress. The remaining scientific composition, scenario integration and
 Plugin Studio stay in scope.
 
-The next owner extraction is Files/Git: public filesystem/text contracts and the
-native implementation now reside under `plugins/files`, and shared subprocess
-supervision and reports under `plugins/process`. The retiring adapters reuse the
-same implementation. Twenty-six affected owner checks and the independent public
-contract consumer pass. The standalone native source check also passes all 21
-file/process cases without private core source. Client generation/build/check pass;
-existing client declarations and embedded assets remain unchanged. All 22 affected
-Host project/ownership cases pass, including original preconditions, protected
-paths, project leases and uncertain partial effects. These libraries do not yet
-provide an installable Files backend or replace the fixed Files/Editor composition.
+Files/Git contracts, native implementation and search/patch interpretation now
+reside under `plugins/files`; shared subprocess supervision and reports live under
+`plugins/process`. Retiring adapters and project handlers reuse these owners.
+The public `workspace.paths@1` query supplies Host-owned protected paths under
+`project.read`, without changing backend initialization fields or accepting caller
+configuration as authority. Four owner cases, all 25 standalone native cases and
+23 Host project/ownership/path cases pass. The external backend fixture covers the
+explicit reverse query, unchanged initialization shape and release. These libraries
+do not yet provide an installable Files backend or replace fixed Files/Editor
+composition. A newly built Host is required for the added query; existing user
+sessions have not been restarted.
+
+The Host regression exposed a lease-release case reproducible with the pre-change
+ownership source: a duplicated descriptor kept the project locked after its last
+owner ended. The last owner now explicitly unlocks. Its focused check and all
+seven ownership cases pass, including retention by accepted work and reacquisition
+without removing the lock file.
 
 ### Implemented behavior
 
@@ -356,10 +363,11 @@ executable startup is allowed to finish; silence is not treated as a test failur
 
 | Executed check | Result and scope |
 | --- | --- |
-| `cargo test -p rho-files-engine -p rho-process-engine -p rho-project -p rho-process --lib --tests --locked` | 26 passed: 13 file/text/containment, four native recovery, eight process-supervision and one typed owner-diagnostic checks. Native bodies were moved without semantic changes; the retiring adapters reuse the same implementations. |
+| `cargo test -p rho-files-owner --lib --locked` | Four passed: native hash/absence preconditions, success/failure/uncertain effect classification, recovery after post-write observation failure, and query-bound search continuation. The retiring project handlers delegate to these same functions. |
 | `node plugins/files/generate-sdk.mjs`, `node plugins/files/generate-sdk.mjs --check`, `node scripts/test-files-protocol.mjs` | Public Files declarations/schemas generated and verified; an independent strict TypeScript consumer passed without private client imports. |
-| `node scripts/test-files-plugin-engine.mjs` | Standalone locked/offline build and all 21 native cases passed (13 Files, eight subprocess supervision) using only the four public Files/process libraries and their third-party dependencies. The copied sources contain no private core dependency; the existing Host was neither rebuilt nor restarted by this check. |
-| `cargo test -p rho-host --test project --test ownership --locked` | All 22 passed (15 project, seven ownership). Covers native Git/file preconditions, dirty/staged/untracked preservation, contained reads and writes, protected stores, root aliases, original project leases, unchanged query history and truthful uncertain partial effects. Compilation completed in 12m01s; test bodies completed in 0.95s/2.96s. |
+| `node scripts/test-files-plugin-engine.mjs` | Standalone locked/offline build and all 25 cases passed (13 Files, four owner interpretation, eight subprocess supervision), using only five public Files/process libraries and their third-party dependencies. The copied sources contain no private core dependency; this check does not build or restart the Host. |
+| `cargo test -p rho-host --test project --test ownership --test plugin_workspace_paths --locked` | All 23 passed (15 project, seven ownership, one public-path integration). Covers original native preconditions, dirty/staged/untracked files, protected stores, aliases, original Operations, uncertain effects and a declared external reverse query. The first run exposed the old duplicated-descriptor lock behavior; the original failure and deterministic pre-change reproduction are retained under `target/plugin-refactor`. Full affected checks passed after the explicit unlock fix. |
+| `cargo test -p rho-host --lib ownership::tests::last_owner_releases_the_lock_despite_a_duplicated_descriptor --locked` | One passed; 50 unrelated cases filtered out. Accepted work retains the lease, final-owner release permits reacquisition despite an extra descriptor, and closing that old descriptor does not unlock the replacement owner. |
 | `cargo test -p rho-host --test plugins original_download --locked` | Passed. Requires declared read scope and current parent authority, refuses changed resource/name/size and close preparation, reads retained bytes after provider release, redacts diagnostics and makes no download or extra-Operation claim. |
 | `npm run test --prefix ui -- host-client.test.ts plugin-window-close.test.ts plugin-window-client.test.ts plugin-window-views.test.ts plugin-workspace-window.test.tsx` | 50 passed across five files. Includes correlated admission diagnostics, uncertain/rejected distinction, explicit saved-version capture and original-request retries. |
 | `npm run test --prefix ui -- plugin-download.test.ts` | Six passed. Exact bounded chunks/digest, Unicode basename/control validation, final authority refusal and closure during collection/recheck. |
@@ -389,9 +397,9 @@ executable startup is allowed to finish; silence is not treated as a test failur
 | Architecture, plugin and frontend boundary checks; governance validation | Pass. |
 | `cargo test -p rho-mcp --lib --test plugins --locked` | 16 passed: 15 library tests and the existing-connection plugin lifecycle case. |
 | `cargo fmt --all --check` | Fails with formatting differences in 128 files, including 107 files unchanged by this work; no repository-wide reformat applied. |
-| `npm run generate --prefix ui`, `npm run build --prefix ui`, `npm run check --prefix ui` | Pass; public protocol/client bindings and embedded assets are current. |
+| `npm run generate --prefix ui`, `npm run build --prefix ui`, `npm run check --prefix ui` | Pass after the Files owner and scoped-path changes. Public declarations include `FilePrecondition` and `WorkspacePaths`; existing client declarations and embedded assets remain byte-identical. |
 | `node scripts/test-plugin-protocol.mjs`, `node scripts/test-plugin-ui.mjs` | Independent strict consumers and schemas pass. SDK checks close capture/version, action fencing, joined observations, refusal/resume/disposal, synthetic composition guard and lost acknowledgements; download feature negotiation, exact wire identity, bounded Unicode filenames and requested-only acknowledgement. No native IME claim. |
-| `CARGO_BUILD_JOBS=1 cargo build --locked` | Passed (7m19s), then final presentation rebuild passed (1m12s). Includes scoped resource-download admission and saved-state recovery. Current SHA-256 `6c2925db212fcd970558d9572b0c41a5df059b5106860f6690d52663637b5dd5`. Existing user Hosts and R sessions were not restarted. |
+| `CARGO_BUILD_JOBS=1 cargo build --locked` | Passed (7m19s), then final presentation rebuild passed (1m12s). Includes scoped resource-download admission and saved-state recovery. Last production binary SHA-256 `6c2925db212fcd970558d9572b0c41a5df059b5106860f6690d52663637b5dd5`; it predates the current Files/path source changes. Current Host test targets compile that source. Existing user Hosts and R sessions were not restarted. |
 | `npm run test:browser --prefix ui -- objects-plugin.spec.ts` | Pass (1.6s body in the affected two-case command). Independent read-only browsing, captured navigation, save failure/retry and original receipts; pointer clicks on Inspect Operation send the query at 1440/1920/390 px. Three screenshots inspected. No native R or production-layout claim. |
 | `node scripts/test-r-objects-plugin.mjs --output=<objects-composed-native-browser>` with existing R package and explicit Ark/R | Passed (9.0 s body, 27.1 s total): generic-window automatic object placement, exact source/session, original PNG Operation, retained directory draft, cooperative detail closure, immediate unsaved filter capture, unchanged R session and actual pointer receipt inspection. Six screenshots inspected; unchanged Host SHA-256 `3f6672fe4f82cc56f60e70222d8e4e18f77f7d405ae9e8d1012c0290970b2f03`. Older standalone pointer failure remains separate. |
 | `npm run test:browser --prefix ui -- plugin-layout.spec.ts` | Corrected full run passed (1.2s body, 2.2s total). Three opaque iframe documents loaded exactly once across selection, native pointer dragging, saved-layout reconstruction and resizing. Unicode input, native focus and owner-delegated closure passed; all three viewport screenshots inspected. No Host persistence, close-time flushing, native IME or scenario application is established by this fixture. |

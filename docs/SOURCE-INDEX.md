@@ -145,7 +145,7 @@ Checks:
 - `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
 - `plugins.download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-download.spec.ts"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
-- `plugins.files-engine`: `["cargo","test","-p","rho-files-engine","-p","rho-process-engine","--lib","--tests","--locked"]`
+- `plugins.files-engine`: `["cargo","test","-p","rho-files-engine","-p","rho-files-owner","-p","rho-process-engine","--lib","--tests","--locked"]`
 - `plugins.files-independent`: `["node","scripts/test-files-plugin-engine.mjs"]`
 - `plugins.files-protocol`: `["node","plugins/files/generate-sdk.mjs","--check"]`
 - `plugins.files-public-types`: `["node","scripts/test-files-protocol.mjs"]`

@@ -1,5 +1,41 @@
 use crate::*;
 
+pub fn validate_patch(args: &ApplyPatchArguments) -> Result<(), String> {
+    if args.patch.trim().is_empty() || args.patch.len() > MAX_PATCH_BYTES || args.patch.contains('\0') {
+        return Err("patch must contain 1..=204800 non-NUL bytes".into());
+    }
+    Ok(())
+}
+pub fn validate_search_files(args: &SearchFilesArguments) -> Result<(), String> {
+    if args.text.trim().is_empty() || args.text.len() > 1024 {
+        return Err("Search text must be 1..=1024 bytes".into());
+    }
+    Ok(())
+}
+pub fn validate_directory(args: &ListDirectoryArguments) -> Result<(), String> {
+    if !args.path.is_empty() { validate_path(&args.path)?; }
+    if !(1..=200).contains(&args.limit) || args.after_name.as_ref().is_some_and(|n| n.len() > 1024 || n.contains('/')) {
+        return Err("invalid directory page bounds".into());
+    }
+    Ok(())
+}
+pub fn validate_snapshot(args: &mut ProjectSnapshotArguments) -> Result<(), String> {
+    if args.paths.len() > MAX_PROJECT_PATHS || !(1..=200).contains(&args.limit) {
+        return Err("project snapshot accepts at most 64 paths and a limit of 1..=200".into());
+    }
+    for path in &args.paths { validate_path(path)?; }
+    args.paths.sort();
+    args.paths.dedup();
+    Ok(())
+}
+pub fn validate_read_file(args: &ReadFileArguments) -> Result<(), String> {
+    validate_path(&args.path)?;
+    if !(1..=65536).contains(&args.limit_bytes) {
+        return Err("file page limit must be 1..=65536 bytes".into());
+    }
+    Ok(())
+}
+
 /// Owner-level progressive-read failures. Adapters classify native facts where observed;
 /// message text is never parsed to infer a diagnostic code.
 #[derive(Debug, Clone, PartialEq, Eq)]

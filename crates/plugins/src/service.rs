@@ -44,6 +44,7 @@ pub struct PluginService {
     pub(crate) view_sequences: tokio::sync::watch::Sender<u64>,
     pub(crate) bridge: PluginCapabilityBridge,
     pub(crate) scope: String,
+    pub(crate) workspace_paths: WorkspacePaths,
     pub(crate) project: ProjectId,
     pub(crate) registry: OnceLock<Weak<CapabilityRegistry>>,
     pub(crate) journal: Arc<dyn OperationJournal>,
@@ -56,8 +57,20 @@ impl PluginService {
     pub fn open(
         store: &Path,
         project: String,
+        protected_paths: Vec<PathBuf>,
         journal: Arc<dyn OperationJournal>,
     ) -> Result<Arc<Self>, OperationError> {
+        let mut protected_paths = protected_paths.into_iter().map(|path| {
+            std::path::absolute(path).map_err(error)?.into_os_string().into_string()
+                .map_err(|_| invalid("protected paths must be UTF-8"))
+        }).collect::<Result<Vec<_>, _>>()?;
+        protected_paths.sort();
+        protected_paths.dedup();
+        if protected_paths.len() > 256 || protected_paths.iter().any(|path| path.len() > 4096)
+            || serde_json::to_vec(&protected_paths).map_err(error)?.len() > 128 * 1024 {
+            return Err(invalid("Host protected paths exceed the metadata budget"));
+        }
+        let workspace_paths = WorkspacePaths { project_root: project.clone(), protected_paths };
         let repository = Arc::new(Mutex::new(PluginRepository::open(store).map_err(error)?));
         let resources = Arc::new(PluginResources::open(store).map_err(error)?);
         let services = Arc::new(Services {
@@ -89,6 +102,7 @@ impl PluginService {
             bridge,
             scope: project.clone(),
             project: plugin_project_id(&project),
+            workspace_paths,
             registry: OnceLock::new(),
             journal,
             gate: tokio::sync::Mutex::new(()),

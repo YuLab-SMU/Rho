@@ -61,6 +61,15 @@ pub struct ApplyPatchArguments {
     pub patch: String,
 }
 
+/// Native file/Git expectations; interpreted by the Files owner before writing.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+pub struct FilePrecondition {
+    pub kind: String,
+    pub subject: String,
+    pub expected: serde_json::Value,
+}
+
 pub struct GitApplyReport {
     pub exit_code: Option<i32>,
     pub diagnostic: String,

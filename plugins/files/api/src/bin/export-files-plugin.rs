@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     export!(ListDirectoryArguments, DirectoryPage, SearchFilesArguments, FileSearchResult,
         ProjectStorage, ProjectSnapshotArguments, ProjectSnapshot, ReadFileArguments,
         FilePage, ReadTextArguments, TextPage, SearchTextArguments, SearchTextPage,
-        ApplyPatchArguments, ProjectPatchResult, ProjectPatchRecovery);
+        ApplyPatchArguments, ProjectPatchResult, ProjectPatchRecovery, FilePrecondition);
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
         ("list-directory", schemars::schema_for!(ListDirectoryArguments)),
@@ -28,6 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("search-text", schemars::schema_for!(SearchTextArguments)),
         ("text-search-page", schemars::schema_for!(SearchTextPage)),
         ("apply-patch", schemars::schema_for!(ApplyPatchArguments)),
+        ("precondition", schemars::schema_for!(FilePrecondition)),
         ("patch-result", schemars::schema_for!(ProjectPatchResult)),
         ("patch-recovery", schemars::schema_for!(ProjectPatchRecovery)),
     ] {

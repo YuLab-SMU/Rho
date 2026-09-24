@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+rho-files-owner = { path = "../../plugins/files/backend/owner" }
 rho-files-api = { path = "../../plugins/files/api" }
 async-trait.workspace = true
 rho-contract = { path = "../contract" }

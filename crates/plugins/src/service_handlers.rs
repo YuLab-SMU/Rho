@@ -43,6 +43,7 @@ pub(crate) fn register(
     registry: &mut CapabilityRegistry,
 ) -> Result<(), OperationError> {
     for id in [
+        "workspace.paths",
         "resources.list",
         "resources.inspect",
         "resources.read",
@@ -88,6 +89,10 @@ pub(crate) fn register(
 }
 fn descriptor(id: &str) -> host::CapabilityDescriptor {
     let (input, output, example, summary, operation, scope) = match id {
+        "workspace.paths" => (
+            schema_for!(Empty).to_value(), schema_for!(WorkspacePaths).to_value(),
+            json!({}), "Read Host-owned project and protected path boundaries", false, "project.read",
+        ),
         "windows.layout" => (
             schema_for!(PluginWindowArguments).to_value(), schema_for!(PluginWindowLayout).to_value(),
             json!({"window":"window-example"}), "Read one window's retained plugin layout without opening views", false, PLUGINS_RUN_SCOPE,
@@ -263,6 +268,14 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             related_capabilities:vec![key("plugins.list"),key("plugins.instances")],related_skills:vec![],position_units:vec!["Offsets and byte bounds are bytes, not tokens. Page item limits are 1–100.".into()],
         },
     };
+    if id == "workspace.paths" {
+        descriptor.domain = "workspace".into();
+        descriptor.documentation.owner = "workspace".into();
+        descriptor.documentation.when_to_use = vec!["Obtain the Host's normalized project root and protected storage boundaries through an explicitly granted read.".into()];
+        descriptor.documentation.limitations = vec!["Paths come only from Host composition. Callers cannot choose a project, alter exclusions or grant filesystem access. Native plugins remain trusted local code, not OS-sandboxed processes.".into()];
+        descriptor.documentation.effects = "Read configuration metadata only. No runtime, filesystem scan, recovery or Operation is started.".into();
+        descriptor.documentation.related_capabilities = vec![];
+    }
     if id.starts_with("resources.") {
         descriptor.domain = "resources".into();
         descriptor.documentation.owner = "resources".into();
@@ -304,7 +317,7 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "resources.list" => normalize::<ResourceList>(value),
         "resources.inspect" => normalize::<ResourceInspect>(value),
         "resources.read" => normalize::<ResourceRead>(value),
-        "plugins.repository" => normalize::<Empty>(value),
+        "plugins.repository" | "workspace.paths" => normalize::<Empty>(value),
         "plugins.list" => normalize::<PluginCatalogArguments>(value),
         "plugins.inspect" | "plugins.remove" => normalize::<PluginRevisionArguments>(value),
         "plugins.instances" => normalize::<PluginInstancesArguments>(value),
@@ -349,6 +362,7 @@ impl QueryHandler for Read {
     ) -> Result<host::QuerySnapshot, OperationError> {
         let service = &self.service;
         let data = match self.id {
+            "workspace.paths" => json!(service.workspace_paths),
             "windows.layout" => {
                 let args: PluginWindowArguments = decode(value)?;
                 service.check_window_context(context, &args.window)?;
@@ -481,10 +495,10 @@ impl QueryHandler for Read {
         };
         Ok(host::QuerySnapshot {
             target: host::TargetRef {
-                kind: if self.id.starts_with("resources.") { "plugin_resources" } else { "plugin_repository" }.into(),
+                kind: if self.id == "workspace.paths" { "workspace" } else if self.id.starts_with("resources.") { "plugin_resources" } else { "plugin_repository" }.into(),
                 identity: service.scope.clone(),
             },
-            source: if self.id.starts_with("resources.") { "resources/retained-bytes" } else { "plugins/repository-and-native-lifecycle" }.into(),
+            source: if self.id == "workspace.paths" { "host/path-boundaries" } else if self.id.starts_with("resources.") { "resources/retained-bytes" } else { "plugins/repository-and-native-lifecycle" }.into(),
             observed_at_ms: SystemClock.now_ms()?,
             status: host::QueryStatus::Ready,
             completeness: host::ObservationCompleteness::Complete,

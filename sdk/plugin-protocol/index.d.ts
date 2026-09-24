@@ -115,4 +115,5 @@ export type * from "./types/VisualNode.js";
 export type * from "./types/VisualNodeKind.js";
 export type * from "./types/WindowId.js";
 export type * from "./types/WindowScenario.js";
+export type * from "./types/WorkspacePaths.js";
 export type * from "./types/serde_json/JsonValue.js";

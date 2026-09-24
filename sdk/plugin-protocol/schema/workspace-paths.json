@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkspacePaths",
+  "description": "Host-owned path boundaries, obtained through the scoped `workspace.paths`\nquery. They are metadata, not a filesystem sandbox or a caller configuration.\nBoth existing and future paths are included; consumers must preserve lexical\nand resolved exclusions when exposing filesystem capabilities.",
+  "type": "object",
+  "properties": {
+    "project_root": {
+      "type": "string"
+    },
+    "protected_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 256
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "project_root",
+    "protected_paths"
+  ]
+}

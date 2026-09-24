@@ -104,16 +104,7 @@ impl ProjectSnapshotHandler {
     fn parse(&self, value: &Value) -> Result<ProjectSnapshotArguments, OperationError> {
         let mut args: ProjectSnapshotArguments =
             serde_json::from_value(value.clone()).map_err(invalid)?;
-        if args.paths.len() > MAX_PROJECT_PATHS || !(1..=200).contains(&args.limit) {
-            return Err(invalid(
-                "project snapshot accepts at most 64 paths and a limit of 1..=200",
-            ));
-        }
-        for path in &args.paths {
-            validate_path(path).map_err(invalid)?;
-        }
-        args.paths.sort();
-        args.paths.dedup();
+        rho_files_api::validate_snapshot(&mut args).map_err(invalid)?;
         Ok(args)
     }
 }
@@ -180,10 +171,7 @@ impl ProjectReadHandler {
     }
     fn parse(&self, value: &Value) -> Result<ReadFileArguments, OperationError> {
         let args: ReadFileArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
-        validate_path(&args.path).map_err(invalid)?;
-        if !(1..=65536).contains(&args.limit_bytes) {
-            return Err(invalid("file page limit must be 1..=65536 bytes"));
-        }
+        rho_files_api::validate_read_file(&args).map_err(invalid)?;
         Ok(args)
     }
 }
@@ -256,12 +244,7 @@ impl OperationHandler for ProjectPatchHandler {
     }
     fn normalize_arguments(&self, value: &Value) -> Result<Value, OperationError> {
         let args: ApplyPatchArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
-        if args.patch.trim().is_empty()
-            || args.patch.len() > MAX_PATCH_BYTES
-            || args.patch.contains('\0')
-        {
-            return Err(invalid("patch must contain 1..=204800 non-NUL bytes"));
-        }
+        rho_files_api::validate_patch(&args).map_err(invalid)?;
         serde_json::to_value(args).map_err(invalid)
     }
     fn resolve_target(&self, _: &Value) -> Result<TargetRef, OperationError> {
@@ -285,136 +268,27 @@ impl OperationHandler for ProjectPatchHandler {
         let args: ApplyPatchArguments =
             serde_json::from_value(operation.normalized_arguments.clone())
                 .map_err(|e| HandlerError::before_effect(e.to_string()))?;
-        let paths = self
-            .owner
-            .runtime
-            .patch_paths(&args.patch)
-            .await
-            .map_err(HandlerError::before_effect)?;
-        if paths.is_empty() || paths.len() > MAX_PROJECT_PATHS {
-            return Err(HandlerError::before_effect(
-                "patch must affect between 1 and 64 paths",
-            ));
-        }
-        let mut observed_paths = paths.clone();
-        for condition in &operation.preconditions {
-            match condition.kind.as_str() {
-                "git.head" if condition.subject == "project" => {}
-                "file.sha256" => {
-                    validate_path(&condition.subject).map_err(HandlerError::before_effect)?;
-                    observed_paths.push(condition.subject.clone());
-                }
-                _ => {
-                    return Err(HandlerError::before_effect(
-                        "unsupported project precondition",
-                    ));
-                }
-            }
-        }
-        observed_paths.sort();
-        observed_paths.dedup();
-        if observed_paths.len() > MAX_PROJECT_PATHS {
-            return Err(HandlerError::before_effect(
-                "preconditions exceed the file observation limit",
-            ));
-        }
-        self.owner
-            .runtime
-            .check_patch(&args.patch)
-            .await
-            .map_err(HandlerError::before_effect)?;
-        let before = self
-            .owner
-            .runtime
-            .snapshot(&observed_paths, 200)
-            .await
-            .map_err(HandlerError::before_effect)?;
-        for condition in &operation.preconditions {
-            if condition.kind == "file.sha256"
-                && condition.expected.is_null()
-                && before
-                    .files
-                    .iter()
-                    .find(|file| file.path == condition.subject)
-                    .is_some_and(|file| file.kind != "absent")
-            {
-                return Err(HandlerError::before_effect(format!(
-                    "precondition failed: {} must be absent",
-                    condition.subject
-                )));
-            }
-            let observed = match condition.kind.as_str() {
-                "git.head" => json!(before.git.as_ref().and_then(|git| git.head.as_ref())),
-                _ => json!(
-                    before
-                        .files
-                        .iter()
-                        .find(|file| file.path == condition.subject)
-                        .and_then(|file| file.sha256.as_ref())
-                ),
-            };
-            if observed != condition.expected {
-                return Err(HandlerError::before_effect(format!(
-                    "precondition failed for {}: {}",
-                    condition.kind, condition.subject
-                )));
-            }
-        }
-        let report = self.owner.runtime.apply_patch(&args.patch).await;
-        let after = self.owner.runtime.snapshot(&observed_paths, 200).await.map_err(|error|
-            HandlerError::after_possible_effect(error, Some(json!({"project_root":self.owner.runtime.root(), "before":before, "affected_paths":paths}))))?;
-        let changed_paths = paths
-            .iter()
-            .filter(|path| {
-                before.files.iter().find(|file| &file.path == *path)
-                    != after.files.iter().find(|file| &file.path == *path)
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        let git_identity_changed = before
-            .git
-            .as_ref()
-            .map(|git| (&git.repository_root, &git.head))
-            != after
-                .git
-                .as_ref()
-                .map(|git| (&git.repository_root, &git.head));
-        let outcome = if git_identity_changed {
-            OperationOutcome::Uncertain
-        } else if report.exit_code == Some(0) {
-            OperationOutcome::Succeeded
-        } else if report.exit_code.is_some() && changed_paths.is_empty() {
-            OperationOutcome::Failed
-        } else {
-            OperationOutcome::Uncertain
+        let preconditions = operation.preconditions.iter().map(|condition| rho_files_api::FilePrecondition {
+            kind: condition.kind.clone(), subject: condition.subject.clone(), expected: condition.expected.clone(),
+        }).collect::<Vec<_>>();
+        let assessed = rho_files_owner::apply_patch(self.owner.runtime.as_ref(), &args, &preconditions).await
+            .map_err(|failure| match failure {
+                rho_files_owner::PatchFailure::AfterPossibleEffect { message, recovery } => HandlerError::after_possible_effect(message, Some(recovery)),
+                rho_files_owner::PatchFailure::BeforeEffect { message } => HandlerError::before_effect(message),
+            })?;
+        let outcome = match assessed.outcome {
+            rho_files_owner::PatchOutcome::Succeeded => OperationOutcome::Succeeded,
+            rho_files_owner::PatchOutcome::Failed => OperationOutcome::Failed,
+            rho_files_owner::PatchOutcome::Uncertain => OperationOutcome::Uncertain,
         };
-        let error = (outcome != OperationOutcome::Succeeded).then(|| {
-            if git_identity_changed {
-                "Git identity changed while the patch was applied".into()
-            } else {
-                report.diagnostic.clone()
-            }
-        });
-        let result = ProjectPatchResult {
-            before,
-            after,
-            affected_paths: paths,
-            changed_paths,
-            git_exit_code: report.exit_code,
-            diagnostic: report.diagnostic,
-            committed_to_git: false,
-        };
+        let result = assessed.result;
         let mut plan = CommitPlan::succeeded(
             serde_json::to_value(&result)
                 .map_err(|e| HandlerError::after_possible_effect(e.to_string(), None))?,
         );
         plan.outcome = outcome;
-        plan.error = error;
-        if outcome == OperationOutcome::Uncertain {
-            plan.recovery = Some(
-                json!({"action":"query_project_snapshot_before_retry", "root":self.owner.runtime.root(), "affected_paths":result.affected_paths}),
-            );
-        }
+        plan.error = assessed.error;
+        plan.recovery = assessed.recovery;
         plan.facts.push(DomainFactMutation { domain:"project".into(), schema:"rho.project.patch.v1".into(),
             key:operation.operation_id.as_str().into(), value:json!({"operation_id":operation.operation_id,"root":self.owner.runtime.root(),"changed_paths":result.changed_paths}) });
         plan.effect_observations.push(EffectObservation { kind:"project_files".into(), source:"git/filesystem".into(),

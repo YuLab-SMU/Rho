@@ -16,6 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PluginRevisionPage::export_all(&types)?;
     RevisionDifference::export_all(&types)?;
     PluginInstance::export_all(&types)?;
+    WorkspacePaths::export_all(&types)?;
     PluginInstancePage::export_all(&types)?;
     PluginRequest::export_all(&types)?;
     PluginPreflightRequest::export_all(&types)?;
@@ -60,6 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("manifest", schemars::schema_for!(PluginManifest)),
         ("archive", schemars::schema_for!(PluginArchive)),
         ("rpc", schemars::schema_for!(RpcFrame)),
+        ("workspace-paths", schemars::schema_for!(WorkspacePaths)),
         ("view-message", schemars::schema_for!(PluginViewMessage)),
         ("view-close", schemars::schema_for!(ClosePluginView)),
         ("window-layout", schemars::schema_for!(PluginWindowLayout)),

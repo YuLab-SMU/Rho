@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FilePrecondition",
+  "description": "Native file/Git expectations; interpreted by the Files owner before writing.",
+  "type": "object",
+  "properties": {
+    "expected": true,
+    "kind": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "subject",
+    "expected"
+  ]
+}

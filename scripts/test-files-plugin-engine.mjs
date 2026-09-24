@@ -15,22 +15,22 @@ const temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-ind
 let complete = false;
 try {
   for (const name of ['files', 'process']) {
-    for (const part of ['api', 'backend/engine']) {
+    for (const part of (name === 'files' ? ['api', 'backend/engine', 'backend/owner'] : ['api', 'backend/engine'])) {
       fs.cpSync(path.join(root, 'plugins', name, part), path.join(temporary, name, part), {
         recursive: true, filter: file => !/[\\/](?:target|node_modules|dist)(?:[\\/]|$)/.test(file),
       });
     }
   }
-  fs.writeFileSync(path.join(temporary, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["files/api", "files/backend/engine", "process/api", "process/backend/engine"]\n');
+  fs.writeFileSync(path.join(temporary, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["files/api", "files/backend/engine", "files/backend/owner", "process/api", "process/backend/engine"]\n');
   fs.copyFileSync(path.join(root, 'Cargo.lock'), path.join(temporary, 'Cargo.lock'));
   // Resolve only this standalone closure offline. Subsequent compilation is locked.
   const metadata = JSON.parse(execFileSync(cargo, ['metadata', '--offline', '--filter-platform', target, '--format-version', '1'], { cwd: temporary, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }));
   const members = metadata.packages.filter(pkg => metadata.workspace_members.includes(pkg.id));
-  assert.deepEqual(members.map(pkg => pkg.name).sort(), ['rho-files-api', 'rho-files-engine', 'rho-process-api', 'rho-process-engine']);
+  assert.deepEqual(members.map(pkg => pkg.name).sort(), ['rho-files-api', 'rho-files-engine', 'rho-files-owner', 'rho-process-api', 'rho-process-engine']);
   for (const pkg of members) for (const dep of pkg.dependencies) if (dep.path) {
     assert.ok(dep.path.startsWith(temporary + path.sep), `${pkg.name}: dependency leaves standalone source`);
   }
-  execFileSync(cargo, ['test', '-p', 'rho-files-engine', '-p', 'rho-process-engine', '--lib', '--tests', '--locked', '--offline'], { cwd: temporary, env, stdio: 'inherit' });
+  execFileSync(cargo, ['test', '-p', 'rho-files-engine', '-p', 'rho-files-owner', '-p', 'rho-process-engine', '--lib', '--tests', '--locked', '--offline'], { cwd: temporary, env, stdio: 'inherit' });
   complete = true;
   console.log('Independent Files/Git and process supervision passed without private core source.');
 } finally {

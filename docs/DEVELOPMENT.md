@@ -58,14 +58,20 @@ owner boundary requires it.
 Files/Git native sources now live in `plugins/files/backend/engine`; their public
 data and provider contracts live in `plugins/files/api`. Shared bounded subprocess
 supervision lives in `plugins/process/backend/engine` with public process reports
-in `plugins/process/api`. The retiring adapters reuse these implementations.
-Iterate with `cargo test -p rho-files-engine -p rho-process-engine --lib --tests --locked`.
+in `plugins/process/api`. Search and patch interpretation live in
+`plugins/files/backend/owner`; the retiring adapters and project handlers reuse
+these implementations. Iterate with
+`cargo test -p rho-files-engine -p rho-files-owner -p rho-process-engine --lib --tests --locked`.
 For the source boundary, `node scripts/test-files-plugin-engine.mjs` materializes
-only those four libraries outside the checkout and runs their native tests with
+only those five libraries outside the checkout and runs their native tests with
 the installed toolchain. It is not a backend activation or packaging test.
 Generate public Files declarations with `node plugins/files/generate-sdk.mjs`,
 then run `node scripts/test-files-protocol.mjs`. Contract moves also require the
 normal client generation check, even when wire shapes remain unchanged.
+The Host boundary check is
+`cargo test -p rho-host --test project --test ownership --test plugin_workspace_paths --locked`.
+It covers the original file operations and public protected-path metadata,
+including an external backend's explicitly granted reverse query.
 
 When one cross-boundary check needs several packages, prefer one Cargo invocation
 with multiple `-p` selections and the required target selectors when possible.

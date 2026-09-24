@@ -14,7 +14,8 @@ try {
   const consumer = path.join(temp, "consumer");
   fs.mkdirSync(consumer);
   fs.writeFileSync(path.join(consumer, "consumer.mts"), `
-import type { PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout, OpenPluginWindowView, ClosePluginView, PluginViewLifecycle } from "../protocol/index.js";
+import type { WorkspacePaths, PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout, OpenPluginWindowView, ClosePluginView, PluginViewLifecycle } from "../protocol/index.js";
+const paths: WorkspacePaths = { project_root: "/project", protected_paths: ["/project/records.sqlite-wal"] };
 const close: ClosePluginView = { view: "view", mode: { kind: "retain_acknowledged", expected_version: 4 } };
 const lifecycle: PluginViewLifecycle = { view: "view", state_version: 4, close: { phase: "requested", operation: "original-close" } };
 const open: OpenPluginWindowView = { view: { instance: { plugin: "example.view", instance: "instance", revision: "revision", artifact: "artifact" }, contribution: "view", window: "window", configuration: {}, state: {} }, expected_layout_version: 0, group: null };
@@ -29,7 +30,7 @@ const prepare: RpcFrame = { ...frame, body: { type: "prepare_pending_cancellatio
 const ready: RpcFrame = { ...frame, body: { type: "ready", data: { revision: original.binding.provider.revision, artifact: original.binding.provider.artifact } } };
 const extended: RpcFrame = { ...frame, body: { type: "ready", data: { revision: original.binding.provider.revision, artifact: original.binding.provider.artifact, features: ["pending_cancellation_v1"] } } };
 export function inspect(manifest: PluginManifest, visual: VisualDocument, page: PluginRevisionPage) {
-  return [frame, prepare, ready, extended, layout, open, close, lifecycle, manifest.views[0]?.entrypoint, visual.nodes[visual.root], page.next];
+  return [paths, frame, prepare, ready, extended, layout, open, close, lifecycle, manifest.views[0]?.entrypoint, visual.nodes[visual.root], page.next];
 }
 `);
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
@@ -39,6 +40,10 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
     assert.ok(schema.$schema && schema.$defs, `missing standalone schema: ${name}`);
   }
+  const paths = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/workspace-paths.json"), "utf8"));
+  assert.equal(paths.additionalProperties, false);
+  assert.deepEqual(paths.required, ["project_root", "protected_paths"]);
+  assert.equal(paths.properties.protected_paths.maxItems, 256);
   console.log("Public plugin protocol compiles in an external strict NodeNext project; standalone schemas are present.");
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
