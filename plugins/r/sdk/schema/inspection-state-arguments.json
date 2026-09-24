@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RInspectionStateArguments",
+  "type": "object",
+  "properties": {
+    "expected_session": {
+      "description": "Null observes an unstarted instance; a supplied session must match exactly.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

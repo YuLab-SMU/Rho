@@ -26,6 +26,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PackageQueryArguments::export_all(&types)?;
     PackageIndexArguments::export_all(&types)?;
     ReadPackageHelpArguments::export_all(&types)?;
+    RInspectionStateArguments::export_all(&types)?;
+    RInspectionState::export_all(&types)?;
     RInspection::<ObjectDirectoryPage>::export_all(&types)?;
     ObjectDirectoryPage::export_all(&types)?;
     ObjectObservation::export_all(&types)?;
@@ -46,6 +48,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             schemars::schema_for!(REventsObservation),
         ),
         ("list-objects", schemars::schema_for!(ListObjectsArguments)),
+        ("inspection-state-arguments", schemars::schema_for!(RInspectionStateArguments)),
+        ("inspection-state", schemars::schema_for!(RInspectionState)),
         ("object-directory", schemars::schema_for!(RInspection<ObjectDirectoryPage>)),
         ("observe-object", schemars::schema_for!(ObserveObjectArguments)),
         ("object-observation", schemars::schema_for!(RInspection<ObjectObservation>)),

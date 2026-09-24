@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RInspectionState",
+  "description": "A cheap observation of this R owner's inspection readiness. The cache key is\nscoped to the exact instance and session. It invalidates presentation caches,\nnever serves as a scientific precondition or establishes an Operation outcome.",
+  "type": "object",
+  "properties": {
+    "cache_key": {
+      "description": "Changes before and after native execution, even if polling misses the run.\nRead-only inspections do not change it. None means no session exists.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "observed_at_ms": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "session_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/RInspectionStatus"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "observed_at_ms",
+    "notices"
+  ],
+  "$defs": {
+    "RInspectionStatus": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "busy",
+        "unavailable"
+      ]
+    }
+  }
+}

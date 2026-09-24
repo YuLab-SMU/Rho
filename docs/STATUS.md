@@ -15,6 +15,10 @@ The ordinary R package now exposes object, Packages and Help inspection, verifie
 through disposable native R and an unchanged Host binary. Shared input validation
 lives in `plugins/r/api`; the retiring adapter delegates to it. Exact sessions,
 busy/unavailable results and native diagnostic codes cross the public protocol.
+The R owner now also exposes session-scoped inspection readiness and a cache key
+that changes around execution. Objects has a public-SDK connection for this
+observation; its independent model checks and the new native readiness acceptance
+pass. The Host binary remained unchanged for the independent R package check.
 The next migration is the corresponding ordinary UI packages, while the remaining
 scientific composition, scenario integration and Plugin Studio stay in scope.
 
@@ -110,6 +114,11 @@ attach packages, change search/library paths, test loadability, or create execut
 records. Grouped package counts and copy details share one observation. Missing
 Help-rendering providers remain unavailable instead of being loaded by a query.
 
+`r.inspection_state` observes the existing owner without entering R. Its cache key
+lets views invalidate data after a short run completed between polls, including
+failed or uncertain native returns. Read-only inspections do not change the key.
+It establishes neither a scientific precondition nor an Operation outcome.
+
 The R package owns a FIFO of 33 original operations, including returned work
 awaiting settlement. Pause/resume use exact queue/pause identities and optional
 operation-scope fences. Failure, cancellation, uncertainty or uncommitted results
@@ -158,8 +167,12 @@ inspection envelopes and preserve native diagnostic codes. Connection-local
 services replace the private Studio context. Copy actions reserve the container's
 native gesture before collecting complete values and retain their original
 observation fence. Model, expanded-view and copy-flow tests pass outside the
-checkout. The channel connection, container navigation and installable entrypoint
-are not assembled yet; the old UI remains until this migration is complete.
+checkout. Its channel connection pins the exact provider and first native session,
+including after restoring saved state. Busy reads defer retries, and owner changes
+invalidate retained observations. State writes are serialized so reverting an edit
+during an in-flight save cannot lose the final state; failed saves remain visible
+and retryable. Container navigation and an installable entrypoint are not assembled
+yet; the old UI remains until this migration is complete.
 This does not establish an ordinary Objects UI or visual acceptance.
 
 ### Current verification
@@ -169,9 +182,10 @@ executable startup is allowed to finish; silence is not treated as a test failur
 
 | Executed check | Result and scope |
 | --- | --- |
-| `node scripts/test-objects-plugin.mjs` | Independent source compilation and 43 model/component tests passed across six files, including expanded table demand and copy collection/confirmation. No native R or browser acceptance in this check. |
+| `node scripts/test-objects-plugin.mjs` | Independent source compilation and 50 model/component/connection tests passed across seven files. Includes exact provider/session binding, short-run invalidation, deferred busy reads, restored-session refusal, save failure and edit reversal during an in-flight write. No native R or browser acceptance in this check. |
 | `cargo test -p rho-plugin-protocol --lib --locked`, `cargo test -p rho-host --test plugins --locked` | 2 protocol and 9 Host plugin tests passed, including text-copy authority, no clipboard claim from Host acknowledgement and unchanged Operation history. |
 | `cargo test -p rho-r-api -p rho-r-backend --lib --bins --locked` | 11 passed (3 API, 8 backend); shared validation, caller-scope rejection and bounded inspection envelopes. Exporter target had no tests. |
+| `cargo test --manifest-path <external-package>/Cargo.toml -p rho-r-backend --bins --locked --offline` | 9 passed from the independently assembled package, including the new manifest-to-transport route check. |
 | `cargo test -p rho-workspace --lib --locked` | 14 passed after extracting query validation into the R package. |
 | `node plugins/r/generate-sdk.mjs`, `node scripts/test-r-protocol.mjs` | New R declarations, schemas and manifest generated; strict independent consumer passed. |
 | `node scripts/build-r-plugin.mjs <external-package>/r` | Independent current R package built with locked dependencies and no private core source. Existing Host SHA-256 unchanged. |
@@ -189,8 +203,15 @@ executable startup is allowed to finish; silence is not treated as a test failur
 | `cargo build --locked` | Pass; current Host binary built. SHA-256: `a95c85e9aa0ba9d2c288ac2a1a33f9710a76e0679f982e82651e3704a83d2617`. |
 | `npm run test:browser --prefix ui -- plugin-view.spec.ts` | Corrected full run passed (15.4s body, 26.4s total). Actual Chrome clipboard writes, 6.5-second collection, automatic/direct iframe refusal, failed collection, closed-view refusal and unchanged Operation history passed. Current 1440px/390px conformance-fixture screenshots inspected. |
 | `npm run test:browser --prefix ui -- console-editor.spec.ts` | Pass with the public MessagePort fixture: editing/composition guards, selection, transient password answers, controls, clear/new output, saved draft and scroll restoration. 1440px/1920px/390px screenshots inspected; the corrected capture waits for iframe resizing. |
-| `npm run test:browser --prefix ui -- r-plugin-console.spec.ts` with independently built R/Console packages and explicit Ark/R | Current run passed (12.4s body, 27.9s total), including discovery of newly contributed object queries and reading a real Console-created Unicode value. Native flow, drafts, close/reopen and retained history also passed. All three current viewport screenshots inspected. That inspection/Console run used Host SHA-256 `f5c8755aac91605d0be8bc4fa9917ed73a61da9e3a50da950073d6dda6f51ff0`. |
+| `npm run test:browser --prefix ui -- r-plugin-console.spec.ts` with independently built R/Console packages and explicit Ark/R | Corrected current run passed (12.4s body, 28.1s total). Adds unstarted/busy/ready inspection state, foreign-session refusal, short-run invalidation and invalidation after a failed script that already changed R memory. Read-only queries leave the key unchanged. Native flow, Unicode values, drafts, close/reopen and retained history also passed. All three current viewport screenshots inspected. Host SHA-256 stayed `a95c85e9aa0ba9d2c288ac2a1a33f9710a76e0679f982e82651e3704a83d2617`. |
 | `cargo test -p rho-host --test r_plugin_real_r --locked -- --ignored --nocapture` with independently built R package and explicit Ark/R | Current run passed (one case, 24.95s). Adds unstarted/busy inspections, directory/table continuation, non-forcing bindings, foreign/expired references, package counts/copy identity, Help continuation/changed files, unchanged namespaces/search/library paths and unchanged Operation history. Existing instance, queue, stdin, cancellation, settlement and retained-resource regression also passed. |
+
+The first readiness browser run failed because the R transport dispatch omitted
+the newly declared query. Its route is now registered and checked against the
+manifest; the corrected full native browser run passes. The first corrected
+standalone artifact rebuild selected Rust 1.88 from the external directory and
+failed its compiler requirement. Rebuilding with the already-installed Rust 1.97
+used by the original assembly passed. Both failed logs remain retained.
 
 The first copy-container client build failed because a local reply was used before
 its declaration; the corrected build and generated-asset check pass. The first

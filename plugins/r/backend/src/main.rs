@@ -93,15 +93,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                             break Err("R call identity differs from the initialized instance".into());
                         }
                         let is_query = call.operation_id.is_none();
-                        let valid_kind = match call.binding.capability.id.as_str() {
-                            "r.session" | "r.console" | "r.snapshot" | "r.prepare" | "r.check_code" | "r.output_events" => is_query,
-                            id if rho_r_api::r_inspection_kind(id).is_some() => is_query,
-                            "r.create_session" | "r.execute" => !is_query,
-                            _ => false,
-                        };
-                        let valid_version = call.binding.capability.version == 1
-                            || (call.binding.capability.id.as_str() == "r.execute" && call.binding.capability.version == 2);
-                        if !valid_kind || !valid_version {
+                        if !supported_call(&call.binding.capability, is_query) {
                             Some(error("unsupported", "unsupported R capability or message kind"))
                         } else if is_query && query_jobs >= 16 {
                             Some(error("busy", "R observation limit reached"))
@@ -195,6 +187,32 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     result?;
     stopped?;
     Ok(())
+}
+fn supported_call(capability: &CapabilityKey, is_query: bool) -> bool {
+    let valid_kind = match capability.id.as_str() {
+        "r.session" | "r.console" | "r.snapshot" | "r.prepare" | "r.check_code" | "r.output_events" | "r.inspection_state" => is_query,
+        id if rho_r_api::r_inspection_kind(id).is_some() => is_query,
+        "r.create_session" | "r.execute" => !is_query,
+        _ => false,
+    };
+    valid_kind && (capability.version == 1 || (capability.id.as_str() == "r.execute" && capability.version == 2))
+}
+#[cfg(test)]
+mod routing_tests {
+    use super::*;
+    #[test]
+    fn contributed_queries_and_operations_have_matching_transport_routes() {
+        let manifest: PluginManifest = serde_json::from_str(include_str!("../../plugin.json")).unwrap();
+        for contribution in manifest.capabilities {
+            if contribution.kind == CapabilityKind::Control { continue; }
+            let query = contribution.kind == CapabilityKind::Query;
+            assert!(supported_call(&contribution.capability, query), "missing route for {:?}", contribution.capability);
+            assert!(!supported_call(&contribution.capability, !query));
+            let mut unsupported = contribution.capability;
+            unsupported.version = 99;
+            assert!(!supported_call(&unsupported, query));
+        }
+    }
 }
 fn error(code: &str, message: &str) -> RpcBody {
     RpcBody::Error {

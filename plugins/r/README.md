@@ -5,6 +5,8 @@ The public-protocol executable and package manifest provide explicit session
 creation, Console controls, bounded inspection and execution through original
 Operations. Object directories, progressive object reads, installed package copies,
 static indexes and Help use the exact existing session; see [public interfaces](sdk/README.md).
+Read-only inspection readiness includes a session-scoped cache key that changes
+around native execution so views can notice short runs between refreshes.
 `node scripts/build-r-plugin.mjs DEST` assembles and builds a self-contained package
 outside the checkout; see [build instructions](BUILD.md). Current acceptance and
 the remaining migration are recorded in `docs/STATUS.md` at the repository root.

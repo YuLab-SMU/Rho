@@ -30,6 +30,20 @@ resources through the generic read ports instead of recreating R.
 All calls use the public plugin UI/backend SDK and an exact `ProviderBinding`.
 Changing a view, scenario or current selection must not retarget accepted work.
 
+`r.inspection_state@1` returns `RInspectionState` without entering R or starting a
+session. Pass `expected_session: null` to observe an unstarted instance; after a
+session is known, retain it in subsequent requests and the binding target. A
+different session is refused. Ready means the observed native session is idle and
+has no queued/unsettled work or occupied inspection lane. Busy/unavailable results
+retain their native identity and notices.
+
+Its `cache_key` is scoped to that exact instance and session and changes before
+and after native execution, including failed or uncertain returns. This lets views
+invalidate stale data even when a short run completes between polls. Read-only
+inspections do not change it. It is a presentation invalidation hint, not a global
+scientific revision, execution result, cancellation acknowledgement or native
+precondition. Original Operation records still establish execution outcomes.
+
 Read-only inspection contributions are `r.list_objects`, `r.observe_object`,
 `r.read_object`, `r.inspect_object`, `r.packages`, `r.package_index` and
 `r.read_help` (version 1). Every request must name the exact `expected_session`,

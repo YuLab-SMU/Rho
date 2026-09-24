@@ -11,8 +11,12 @@ explicit execution; no private Studio context is imported. Vector/table copies
 reserve the browser gesture before collecting pages and retain their observation
 fence until all text is available.
 
-The public channel connection, container navigation and plugin entrypoint are not
-yet assembled. This source directory does not yet provide an installable view artifact.
+The connection source pins its R provider and first native session through the
+public UI SDK. It observes `r.inspection_state`, invalidates caches on owner changes
+and keeps busy retries bounded. Presentation state is acknowledged through the
+view owner, with explicit save errors and a flush method for container cooperation.
+The container navigation and plugin entrypoint are not yet assembled. This source
+directory does not yet provide an installable view artifact.
 The existing workbench remains in place until the ordinary package replaces it.
 
 From the repository, `node scripts/test-objects-plugin.mjs` copies these sources,

@@ -54,6 +54,8 @@ export type * from "./types/RExecutionOutput.js";
 export type * from "./types/RExecutionResult.js";
 export type * from "./types/RInspection.js";
 export type * from "./types/RInspectionDiagnostic.js";
+export type * from "./types/RInspectionState.js";
+export type * from "./types/RInspectionStateArguments.js";
 export type * from "./types/RInspectionStatus.js";
 export type * from "./types/ReadObjectArguments.js";
 export type * from "./types/ReadPackageHelpArguments.js";

@@ -43,6 +43,7 @@ pub struct Owner {
     instance: InstanceRef,
     runtime: Mutex<Option<Arc<ArkRuntime>>>,
     launch_attempt: Mutex<Option<OperationId>>,
+    inspection_cache_key: Mutex<String>,
     lane: Arc<Lane<()>>,
     queue: Queue,
     resources: ResourceClient,
@@ -86,6 +87,7 @@ impl Owner {
             instance,
             runtime: Mutex::new(None),
             launch_attempt: Mutex::new(None),
+            inspection_cache_key: Mutex::new("initial".into()),
             lane: Arc::new(Lane::new(())),
             queue: Queue::default(),
             resources,
@@ -209,6 +211,7 @@ impl Owner {
             return self.inspect(call, kind).await;
         }
         match call.binding.capability.id.as_str() {
+            "r.inspection_state" => self.inspection_state(call),
             "r.session" => Ok(match self.runtime.lock().unwrap().as_ref() {
                 Some(runtime) => {
                     json!({"state":runtime.execution_state(), "session_id":runtime.session_id(), "queue_target":runtime.session_id(),
@@ -485,6 +488,44 @@ impl Owner {
             .expect("native queue result invariant");
         result
     }
+    fn inspection_state(&self, call: &PluginCall) -> Result<Value, String> {
+        let args: RInspectionStateArguments =
+            serde_json::from_value(call.arguments.clone()).map_err(|error| error.to_string())?;
+        let runtime = self.runtime.lock().unwrap().clone();
+        let session = runtime.as_ref().map(|runtime| runtime.session_id().to_owned());
+        if args.expected_session.as_ref().is_some_and(|expected| Some(expected) != session.as_ref())
+            || call.binding.target.as_ref().is_some_and(|target| Some(target) != session.as_ref())
+        {
+            return Err("R inspection readiness requires the exact native session".into());
+        }
+        let (status, cache_key, notices) = match runtime {
+            None => (RInspectionStatus::Unavailable, None, vec![
+                if self.launch_attempt.lock().unwrap().is_some() {
+                    "R session creation is not confirmed; inspect the original launch Operation."
+                } else {
+                    "Create an R session to inspect objects, packages and Help."
+                }.into(),
+            ]),
+            Some(runtime) => {
+                let key = Some(self.inspection_cache_key.lock().unwrap().clone());
+                match runtime.execution_state().as_str() {
+                    "idle" if self.queue.is_empty() && self.lane.try_lock().is_ok() =>
+                        (RInspectionStatus::Ready, key, vec![]),
+                    "idle" | "busy" | "starting" => (RInspectionStatus::Busy, key,
+                        vec!["R has active, queued or unsettled work; previous inspections are retained.".into()]),
+                    _ => (RInspectionStatus::Unavailable, key,
+                        vec!["The original R session is unavailable; no replacement was started.".into()]),
+                }
+            }
+        };
+        serde_json::to_value(RInspectionState {
+            session_id: session, status, cache_key,
+            observed_at_ms: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                .map_err(|error| error.to_string())?.as_millis().try_into()
+                .map_err(|_| "Observation time exceeds its contract")?,
+            notices,
+        }).map_err(|error| error.to_string())
+    }
     async fn execute(
         &self,
         call: &PluginCall,
@@ -537,9 +578,14 @@ impl Owner {
                     .validate_execute(&call.arguments, call.binding.capability.version)
                     .map_err(NativeError::before_effect)?;
                 let runtime = self.runtime().map_err(NativeError::before_effect)?;
+                *self.inspection_cache_key.lock().unwrap() = format!("{operation}:running");
                 let report = runtime
                     .execute_controlled(&operation, &args, cancellation)
-                    .await?;
+                    .await;
+                // Native return includes failure/uncertainty. This invalidates
+                // presentation only; the original journal decides the outcome.
+                *self.inspection_cache_key.lock().unwrap() = format!("{operation}:returned");
+                let report = report?;
                 let retained = self.retain_report(call, &report).await;
                 match retained {
                     Ok((report_reference, events_reference, outputs)) => {

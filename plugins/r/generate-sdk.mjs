@@ -43,6 +43,7 @@ try{
       capability:{id:'r.execute',version:2},title:'Execute R input with source',description:'Execute the supplied code, output mode and source labels in the exact admitted session. Labels do not attest to a Host document capture.',
       input_schema:schema('execute'),output_schema:schema('execute-result'),examples:[{expected_session:'copy-session-from-r.session',run:{code:'1 + 1',output_mode:'console',source}}]},
     ...[
+      ['r.inspection_state','Observe R inspection readiness','Observe this exact owner without starting R. Session-scoped cache keys change around native execution, including runs missed between polls, and never establish scientific results or preconditions.','inspection-state-arguments','inspection-state',{expected_session:null}],
       ['r.check_code','Check R code','Check completeness in the existing idle session without evaluating code.','check-code','code-completeness',{expected_session:'copy-session-from-r.session',code:'1 + 1'}],
       ['r.output_events','Observe original R output','Read bounded events while a run is active. Observations never establish terminal execution status.','read-events','events-observation',{expected_session:'copy-session-from-r.session',operation_id:'original-operation',after_sequence:0,limit:100}],
       ['r.list_objects','List R objects','Read a bounded stable binding directory in the exact expected_session. Reading never starts R or evaluates active/lazy bindings.','list-objects','object-directory',{expected_session:session,limit:100}],

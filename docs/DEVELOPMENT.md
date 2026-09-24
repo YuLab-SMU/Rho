@@ -349,11 +349,17 @@ force active/lazy bindings nor change loaded namespaces, search paths or library
 paths. The fixture explicitly loads its test prerequisite before taking the
 read-only baseline. It also checks busy/unstarted behavior and unchanged Operation
 history. Public declarations alone do not establish those native results.
+The native Console browser case also checks `r.inspection_state`: short runs and
+failed scripts with prior object mutations invalidate cached inspection data,
+while read-only queries preserve the key. The backend's manifest-to-route test
+checks that every declared query/operation reaches the proper transport handler.
 `node scripts/test-objects-plugin.mjs` compiles the in-progress Objects model and
 React components in a fresh external directory using public R/plugin declarations,
 the UI SDK and existing locked tools. It covers directory/reference bounds,
 stale/busy behavior, independent expanded-view demands, exact vector copying,
 reservation before collection, native confirmation and scalar/color/field semantics.
+Connection checks cover exact restored session/provider binding, busy deferral,
+owner cache invalidation, failed state saves and reverting edits during a save.
 It does not start R or establish a working plugin view; native and browser acceptance remain
 separate checks when that package is assembled.
 `node scripts/test-plugin-ui.mjs` compiles the public UI SDK outside the checkout

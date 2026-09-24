@@ -55,6 +55,13 @@ not verified document captures. Live output-event queries read only the original
 native log; bounded pages preserve gaps and never establish terminal truth.
 Code completeness uses the idle native parser and cannot bypass queued work.
 
+The R owner exposes cheap inspection readiness separately from native content
+queries. Its cache key changes around native execution and is scoped to the exact
+instance/session, so a view can invalidate observations after a run missed between
+polls. Read-only inspections do not advance it. It is neither a global scientific
+revision nor an execution result or mutation precondition; the original Operation
+and native observation references retain those responsibilities.
+
 The public Rust transport SDK is `rho-plugin-sdk`. Backend RPC uses a four-byte
 big-endian length followed by at most 1 MiB of JSON, with one ordered writer and
 one dedicated reader per direction. A cancelled partial write fences the channel.

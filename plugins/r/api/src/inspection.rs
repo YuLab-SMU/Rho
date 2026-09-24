@@ -34,6 +34,28 @@ pub struct RInspection<T> {
     pub diagnostic: Option<RInspectionDiagnostic>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RInspectionStateArguments {
+    /// Null observes an unstarted instance; a supplied session must match exactly.
+    pub expected_session: Option<String>,
+}
+
+/// A cheap observation of this R owner's inspection readiness. The cache key is
+/// scoped to the exact instance and session. It invalidates presentation caches,
+/// never serves as a scientific precondition or establishes an Operation outcome.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RInspectionState {
+    pub session_id: Option<String>,
+    pub status: RInspectionStatus,
+    /// Changes before and after native execution, even if polling misses the run.
+    /// Read-only inspections do not change it. None means no session exists.
+    pub cache_key: Option<String>,
+    pub observed_at_ms: i64,
+    pub notices: Vec<String>,
+}
+
 pub fn r_inspection_kind(capability: &str) -> Option<WorkspaceQueryKind> {
     Some(match capability {
         "r.list_objects" => WorkspaceQueryKind::ListObjects,

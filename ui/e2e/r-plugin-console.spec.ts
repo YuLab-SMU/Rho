@@ -73,12 +73,24 @@ test("ordinary Console runs and cancels original R work while preserving drafts 
   let view = await openView("console-native"); await show(page, view);
   const outer = page.frameLocator("iframe"), input = outer.getByRole("textbox", { name: "Console Input", exact: true }), transcript = outer.getByRole("textbox", { name: "Console Transcript", exact: true });
   await expect(outer.locator("#status")).toContainText("R has not started");
+  const inspectionBinding = await query("plugins.resolve", { instance: r, capability: { id: "r.inspection_state", version: 1 } });
+  const inspectionState = (expected_session: string | null = null) => query("r.inspection_state", { binding: inspectionBinding, arguments: { expected_session } });
+  expect(await inspectionState()).toMatchObject({ session_id: null, status: "unavailable", cache_key: null });
   await outer.getByRole("button", { name: "Start R", exact: true }).click();
   await expect(outer.locator("#status")).toContainText("Ready", { timeout: 30000 });
+  await expect.poll(async () => (await inspectionState()).status).toBe("ready");
+  const initialInspection = await inspectionState();
+  expect(initialInspection.cache_key).toEqual(expect.any(String));
+  await expect(inspectionState("foreign-session")).rejects.toThrow();
+  await expect(query("r.inspection_state", { binding: { ...inspectionBinding, target: "foreign-session" },
+    arguments: { expected_session: initialInspection.session_id } })).rejects.toThrow();
   await input.fill("cat('console-live 中文\\n'); answer <- readline('Your answer: '); 11; 22");
   await input.press("Meta+Enter"); await expect(input).toHaveText("");
   await expect(transcript).toContainText("console-live 中文");
   await expect(outer.getByRole("button", { name: "Answer Here" })).toBeVisible();
+  const busyInspection = await inspectionState(initialInspection.session_id);
+  expect(busyInspection.status).toBe("busy");
+  expect(busyInspection.cache_key).not.toBe(initialInspection.cache_key);
   await input.fill("next draft 中文 αβ");
   await outer.getByRole("button", { name: "Answer Here" }).click();
   await outer.getByRole("textbox", { name: "R Input Answer" }).fill("αβ");
@@ -116,6 +128,32 @@ test("ordinary Console runs and cancels original R work while preserving drafts 
   const value = await query("r.read_object", { binding: readObject, arguments: { expected_session: session, object_ref: object.data.object_ref, kind: "values" } });
   expect(value.status).toBe("ready");
   expect(value.data.values[0].text).toBe("αβ");
+  const readyInspection = await inspectionState(session);
+  expect(readyInspection.status).toBe("ready");
+  expect(readyInspection.cache_key).not.toBe(busyInspection.cache_key);
+  const fastBinding = await query("plugins.resolve", { instance: r, capability: { id: "r.execute", version: 1 } });
+  // The entire native run occurs between readiness reads. A UI must still learn
+  // that its retained object pages no longer describe the current workspace.
+  await invoke("r.execute", { binding: fastBinding, arguments: { expected_session: session, code: "inspection_fast <- 42L" } });
+  await expect.poll(async () => (await inspectionState(session)).status).toBe("ready");
+  const afterFast = await inspectionState(session);
+  expect(afterFast.cache_key).not.toBe(readyInspection.cache_key);
+  await query("r.observe_object", { binding: observe, arguments: { expected_session: session, name: "inspection_fast" } });
+  expect((await inspectionState(session)).cache_key).toBe(afterFast.cache_key);
+  const failed = await port("invoke", { capability: { id: "r.execute", version: 1 }, client_request_id: crypto.randomUUID(),
+    arguments: { binding: fastBinding, arguments: { expected_session: session, code: "inspection_failed <- 43L; stop('inspection failure fixture')" } }, preconditions: [] });
+  expect(failed.status).toBe("failed");
+  await expect.poll(async () => (await inspectionState(session)).status).toBe("ready");
+  expect((await inspectionState(session)).cache_key).not.toBe(afterFast.cache_key);
+  // A failed script can have changed R memory before its error. The original
+  // Operation stays failed while the read-only observation exposes that change.
+  const changedBeforeFailure = await query("r.observe_object", { binding: observe, arguments: { expected_session: session, name: "inspection_failed" } });
+  expect(changedBeforeFailure.status).toBe("ready");
+  const failedValue = await query("r.read_object", { binding: readObject, arguments: { expected_session: session, object_ref: changedBeforeFailure.data.object_ref, kind: "values" } });
+  expect(failedValue.data.values[0].number).toBe(43);
+  await expect(outer.getByRole("button", { name: "Resume Queue" })).toBeVisible();
+  await outer.getByRole("button", { name: "Resume Queue" }).click();
+  await expect(outer.getByRole("button", { name: "Pause Queue" })).toBeVisible();
   for (const width of [1440, 1920, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect.poll(() => page.frames()[1].evaluate(() => innerWidth)).toBe(width);
