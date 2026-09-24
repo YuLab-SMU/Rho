@@ -536,7 +536,7 @@ impl OperationHandler for Manage {
                     "configuration",
                 )
                 .map_err(error)?;
-                let registry = self.service.registry()?;
+                let registry = self.service.registry()?.snapshot();
                 for grant in &stored.manifest.requires {
                     let capability = host::CapabilityRef::new(
                         grant.capability.id.as_str(),
@@ -545,11 +545,12 @@ impl OperationHandler for Manage {
                     let descriptor = registry.descriptor(&capability).ok_or_else(|| {
                         OperationError::UnknownCapability(capability.display_key())
                     })?;
-                    if descriptor.kind == host::CapabilityKind::Control
+                    if (descriptor.kind == host::CapabilityKind::Control
+                        && registry.control_handler(&capability).is_err())
                         || !descriptor.required_scopes.is_subset(&grant.scopes)
                         || !grant.scopes.is_subset(&context.scopes)
                     {
-                        return Err(OperationError::AccessDenied {capability:capability.display_key(),missing:vec!["declared grant must fit the existing caller authority and selected non-control contract".into()]});
+                        return Err(OperationError::AccessDenied {capability:capability.display_key(),missing:vec!["declared grant must fit the existing caller authority and an available handler contract".into()]});
                     }
                 }
                 revision = Some(args.revision);

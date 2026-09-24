@@ -123,11 +123,28 @@ Reports, output-event logs, HTML and PNG bytes use the shared resource store.
 Failed launches and post-effect retention failures preserve uncertainty and
 recovery material; reading a lost session never replaces it.
 
+The R input path now uses a contributed `r.respond_input` Control through shared
+Host, CLI, MCP and view ports. Controls retain exact provider authority and live
+request identity without creating another Operation or recording an answer in
+receipts, events or result candidates. The backend receives input without waiting
+for its occupied execution lane. Explicit queries and controls remain available
+while an instance drains; new executions and automatic selection are refused.
+Focused checks cover shared authority, response redaction, journal isolation and
+caller disconnect. The real-R check now also passes stale native identity,
+duplicate answers, UTF-8 byte limits and input while release waits. The isolated
+Chrome case passes declared and undeclared controls, state retention and opaque
+frame boundaries; the 1440px and 390px screenshots were inspected without clipping
+or overlap. This conformance fixture does not establish native IME or complete
+Console/Studio visual acceptance.
+
 `node scripts/test-r-plugin.mjs` passes with explicit existing Ark/R. It builds the
 complete backend independently, activates two exact revisions through the real
 Host ports, verifies different sessions and isolated objects, original Operation
 identity and idempotency, Unicode/HTML/PNG evidence, actual native cancellation,
-partial effects after an R error, and uncertainty after native exit. Both native
+partial effects after an R error, and uncertainty after native exit. A waiting
+native input request rejects wrong operation/session identities, oversized UTF-8
+and duplicate answers. Its draining instance accepts the valid Chinese answer,
+rejects new execution, and completes the original Operation. Both native
 owners confirm shutdown; removing child then parent revisions leaves retained
 HTML readable after Host restart, and the original request returns its committed
 record without any provider. Two additional runtime tests pass for Host-bound,
@@ -140,20 +157,24 @@ parent before its child; the repository correctly rejected it and the fixture's
 removal order was corrected. These failed attempts are retained in the local
 verification logs and are not counted as passes.
 
-The settled RPC change also passes `cargo test -p rho-plugin-protocol -p
-rho-plugin-sdk --locked` (14), `cargo test -p rho-plugins --locked` (33),
-`cargo test -p rho-host --lib --test plugins --test observer --locked` (58 passed,
-2 ignored), and `cargo test -p rho-mcp --lib --test plugins --locked` (15).
-`npm run generate --prefix ui`, `npm run build --prefix ui` and `npm run check
---prefix ui` pass with the regenerated public initialization types. Independent
-Rust backend examples, strict TypeScript protocol/UI consumers, architecture,
-plugin source boundaries and governance checks pass. The two ignored Host tests
-remain separate from the explicitly executed native plugin check. No full
-workspace audit or new browser visual acceptance was run for this backend change;
-client rendering is unchanged and the container-stage evidence below retains its
-original scope.
+The settled control change passes `cargo test -p rho-operation --lib --locked`
+(25), `cargo test -p rho-plugin-protocol -p rho-plugin-sdk --locked` (15),
+`cargo test -p rho-plugins --locked` (33), `cargo test -p rho-host --lib --test
+plugins --test observer --locked` (59 passed, 2 ignored), `cargo test -p rho-mcp
+--lib --test plugins --locked` (16), and `cargo test -p rho-cli --locked` (16).
+The explicit native plugin check passes separately (1). `npm run generate --prefix
+ui`, `npm run build --prefix ui`, `npm run check --prefix ui` and `cargo build
+--locked` pass. `npm run test:browser --prefix ui -- e2e/plugin-view.spec.ts` passes
+against that binary. Independent backend examples, strict TypeScript protocol/UI
+consumers, architecture, plugin boundaries and governance checks also pass.
+The two ignored Host tests are not counted as passes; no full workspace audit ran.
+Initial control verification exposed the old blanket control-grant rejection and
+two tests requiring all queries to disappear during drain. The revised tests now
+prove that explicit reads remain available while new execution stays forbidden;
+the affected suites pass after the grant and expectation fixes. Failed attempts
+remain in the local verification logs.
 
-Full Console input/queue controls, checkpoint ownership, the other R inspection
+Console queue controls, checkpoint ownership, the other R inspection
 contributions and retained-resource Viewer UI still need migration. The native
 slice does not establish complete R/Viewer or Studio acceptance.
 

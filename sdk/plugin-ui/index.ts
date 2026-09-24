@@ -64,6 +64,9 @@ export class PluginViewClient {
   query<T = unknown>(capability: CapabilityKey, arguments_: JsonValue) {
     return this.request<T>({ type: "query", capability, arguments: arguments_ });
   }
+  control<T = unknown>(capability: CapabilityKey, arguments_: JsonValue) {
+    return this.request<T>({ type: "control", capability, arguments: arguments_ });
+  }
   invoke<T = unknown>(capability: CapabilityKey, arguments_: JsonValue, options: { requestId?: string; preconditions?: JsonValue[] } = {}) {
     return this.request<T>({ type: "invoke", capability, arguments: arguments_,
       request_id: options.requestId ?? crypto.randomUUID(), preconditions: (options.preconditions ?? []) });

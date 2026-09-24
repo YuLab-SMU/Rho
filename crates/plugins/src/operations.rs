@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use rho_contract as host;
 use rho_operation::{
     CapabilityRegistry, Clock, CommitPlan, ContributionBatch, DomainFactMutation, ExecutionLease,
-    HandlerError, OperationError, OperationHandler, QueryHandler, RegistrationRevision,
+    ControlHandler, HandlerError, OperationError, OperationHandler, QueryHandler, RegistrationRevision,
     SystemClock,
 };
 use rho_plugin_protocol::*;
@@ -98,7 +98,7 @@ impl PluginCapabilityBridge {
     }
     fn refresh_including(&self, registry: &CapabilityRegistry, pending: Option<&InstanceRef>) -> Result<RegistrationRevision, OperationError> {
         let mut registration = self.registration.lock().unwrap();
-        let mut batch = ContributionBatch {
+        let mut batch = ContributionBatch { controls: vec![],
             operations: vec![],
             queries: vec![],
         };
@@ -111,6 +111,8 @@ impl PluginCapabilityBridge {
             });
             if handler.cap.kind == CapabilityKind::Query {
                 batch.queries.push(handler);
+            } else if handler.cap.kind == CapabilityKind::Control {
+                batch.controls.push(handler);
             } else {
                 batch.operations.push(handler);
             }
@@ -524,6 +526,25 @@ impl BoundHandler {
 }
 
 #[async_trait]
+impl ControlHandler for RoutingHandler {
+    fn descriptor(&self) -> &host::CapabilityDescriptor { &self.descriptor }
+    async fn control(&self, context: &host::CallContext, value: Value) -> Result<Value, OperationError> {
+        let request = self.request(&value).map_err(|_| OperationError::InvalidInput("Control binding or arguments are invalid (redacted)".into()))?;
+        let lease = self.resolve(context, &request)?;
+        let reply = lease.call(PluginCall {
+            request: request_id(), binding: request.binding,
+            principal: plugin_principal_id(context.principal()), scopes: context.scopes.clone(),
+            arguments: request.arguments, preconditions: request.preconditions,
+            owner_context: Value::Null, operation_id: None,
+        }).await.map_err(|_| OperationError::Unavailable("Control completion is unconfirmed; inspect the original native request (arguments redacted)".into()))?;
+        match reply {
+            RpcBody::ControlResult { data } => Ok(data),
+            _ => Err(OperationError::Unavailable("The bound owner did not confirm control; inspect its current request (arguments redacted)".into())),
+        }
+    }
+}
+
+#[async_trait]
 impl QueryHandler for RoutingHandler {
     fn descriptor(&self) -> &host::CapabilityDescriptor {
         &self.descriptor
@@ -618,6 +639,7 @@ fn descriptor(
             "kind":{"const":"plugin_owner_recovery"},"data":{"$ref":"#/$defs/NativeRecovery"}}},
         {"type":"object","required":["kind","binding","operation_id","message","candidate"],"properties":{"kind":{"const":"plugin_boundary_failure"}}}]});
     let query = cap.kind == CapabilityKind::Query;
+    let control = cap.kind == CapabilityKind::Control;
     let placeholder = json!({"capability":cap.capability,"project":project,"target":null,"provider":{
         "instance":"select-instance","plugin":"select.plugin","revision":format!("sha256:{}","0".repeat(64)),
         "artifact":format!("sha256:{}","0".repeat(64))}});
@@ -625,7 +647,7 @@ fn descriptor(
         OperationError::Contract("Capability version exceeds Host protocol range".into())
     })?;
     Ok(host::CapabilityDescriptor {capability:host::CapabilityRef::new(cap.capability.id.as_str(),version)?,
-        kind:if query {host::CapabilityKind::Query}else{host::CapabilityKind::Operation}, domain:"plugin".into(), input_schema:input,
+        kind:if query {host::CapabilityKind::Query}else if control {host::CapabilityKind::Control}else{host::CapabilityKind::Operation}, domain:"plugin".into(), input_schema:input,
         output_schema:cap.output_schema.clone(), recovery_schema:recovery, required_scopes:cap.required_scopes.clone(),
         potential_effects:if cap.effects.is_empty() {Default::default()} else {[host::EffectHint::PluginDefined].into()},
         idempotency:if query {host::IdempotencyClass::Pure}else{host::IdempotencyClass::CallerScoped},
@@ -634,7 +656,7 @@ fn descriptor(
         documentation:host::CapabilityDocumentation {summary:cap.title.clone(), purpose:cap.description.clone(), owner:"Bound plugin instance".into(),
             effects:format!("Declared plugin effects: {:?}",cap.effects), when_to_use:vec![cap.description.clone()],
             limitations:vec!["Select an exact provider from the current project and authenticated principal. Examples contain placeholder identities.".into()],
-            retry_rule:"Inspect the original operation before retrying. Reuse its client request ID to read the original result.".into(),
+            retry_rule:if control {"Controls are ephemeral and are not journaled. Inspect the existing native request after lost acknowledgement; reuse its owner-defined reply identity only when the owner permits it.".into()} else {"Inspect the original operation before retrying. Reuse its client request ID to read the original result.".into()},
             cancellation_rule:"Cancellation is a request; the native owner's terminal result confirms its outcome.".into(),
             preconditions:vec![], examples:cap.examples.iter().map(|arguments| host::CapabilityExample {arguments:json!({"binding":placeholder,"arguments":arguments,"preconditions":null}),
                 result_explanation:"Replace the provider placeholder with an observed binding; the result follows the declared output schema.".into()}).collect(),

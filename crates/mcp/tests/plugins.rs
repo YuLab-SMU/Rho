@@ -55,6 +55,7 @@ async fn existing_mcp_connection_tracks_plugin_publications_and_invalidates_old_
         .unwrap();
     let tools = client.list_all_tools().await.unwrap();
     assert!(tools.iter().any(|t| t.name == "rho.fixture.read.v1"));
+    assert!(tools.iter().any(|t| t.name == "rho.fixture.answer.v2"));
     if let Some(cursor) = page.next_cursor {
         assert!(
             client
@@ -92,6 +93,21 @@ async fn existing_mcp_connection_tracks_plugin_publications_and_invalidates_old_
         result.structured_content.unwrap()["result"]["data"]["arguments"]["message"],
         "public MCP"
     );
+    let result = client.call_tool(CallToolRequestParams::new("rho.plugins.resolve.v1").with_arguments(
+        json!({"capability":{"id":"fixture.answer","version":2},"instance":identity}).as_object().unwrap().clone()
+    )).await.unwrap();
+    let control_binding = result.structured_content.unwrap()["result"]["data"].clone();
+    let result = client.call_tool(CallToolRequestParams::new("rho.fixture.answer.v2").with_arguments(
+        json!({"binding":control_binding,"arguments":{"value":"transient MCP input"}}).as_object().unwrap().clone()
+    )).await.unwrap();
+    assert_ne!(result.is_error, Some(true), "{result:?}");
+    assert_eq!(result.structured_content.unwrap()["result"], json!({"submitted":true}));
+    let secret = "do-not-echo-MCP-control-error";
+    let result = client.call_tool(CallToolRequestParams::new("rho.fixture.answer.v2").with_arguments(
+        json!({"binding":control_binding,"arguments":{"action":"reject","value":secret}}).as_object().unwrap().clone()
+    )).await.unwrap();
+    assert_eq!(result.is_error, Some(true));
+    assert!(!serde_json::to_string(&result).unwrap().contains(secret));
     // The MCP connection sees publication changes made through another official
     // edge as well; it cannot keep a private, stale second capability registry.
     let result = host

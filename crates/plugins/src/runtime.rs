@@ -294,9 +294,13 @@ impl PluginRuntime {
         let mut capabilities = BTreeMap::new();
         for entry in self.entries.lock().unwrap().values() {
             let state = entry.state.lock().unwrap();
-            if &state.record.project == project && state.record.state == InstanceState::Active
+            if &state.record.project == project && matches!(state.record.state, InstanceState::Active | InstanceState::Draining)
                 && (entry.published.load(Ordering::Acquire) || pending == Some(&state.record.identity)) {
                 for contribution in &entry.manifest.capabilities {
+                    // A draining owner must remain observable and able to answer
+                    // existing native requests. New scientific work is withdrawn.
+                    if state.record.state == InstanceState::Draining
+                        && !matches!(contribution.kind, CapabilityKind::Query | CapabilityKind::Control) { continue; }
                     capabilities.entry(contribution.capability.clone()).or_insert_with(|| contribution.clone());
                 }
             }
@@ -333,7 +337,10 @@ impl PluginRuntime {
         let entries = self.entries.lock().unwrap();
         let mut candidates = entries.values().filter(|entry| {
             let state = entry.state.lock().unwrap();
-            state.record.state == InstanceState::Active
+            (state.record.state == InstanceState::Active
+                || (state.record.state == InstanceState::Draining && selected.is_some()
+                    && entry.manifest.capabilities.iter().any(|cap| &cap.capability == capability
+                        && matches!(cap.kind, CapabilityKind::Query | CapabilityKind::Control))))
                 && entry.published.load(Ordering::Acquire)
                 && &state.record.project == project
                 && &state.record.principal == principal
@@ -361,7 +368,9 @@ impl PluginRuntime {
             .clone();
         let mut state = entry.state.lock().unwrap();
         ensure(
-            state.record.state == InstanceState::Active,
+            state.record.state == InstanceState::Active
+                || (state.record.state == InstanceState::Draining && selected.is_some()
+                    && matches!(contribution.kind, CapabilityKind::Query | CapabilityKind::Control)),
             "provider stopped receiving new work",
         )?;
         state.pins += 1;
@@ -470,20 +479,21 @@ impl ProviderLease {
             "call lacks required scopes",
         )?;
         validate_value(&self.contribution.input_schema, &call.arguments, "input")?;
-        let query = self.contribution.kind == CapabilityKind::Query;
+        let kind = self.contribution.kind;
+        let operation = matches!(kind, CapabilityKind::Operation | CapabilityKind::Runtime);
         ensure(
-            query == call.operation_id.is_none(),
+            operation == call.operation_id.is_some(),
             "queries and admitted operations must remain distinct",
         )?;
         preflight_control(
             &self.identity.instance,
-            if query {
-                RpcBody::Query(call.clone())
-            } else {
-                RpcBody::Invoke(call.clone())
+            match kind {
+                CapabilityKind::Query => RpcBody::Query(call.clone()),
+                CapabilityKind::Control => RpcBody::Control(call.clone()),
+                _ => RpcBody::Invoke(call.clone()),
             },
         )?;
-        let reply = self.entry.process.get().unwrap().call(call, query).await?;
+        let reply = self.entry.process.get().unwrap().call(call, kind).await?;
         if let Err(error) = validate_reply(&self.contribution, &self.identity, &reply) {
             return Err(PluginError::InvalidResponse {message:error.to_string(),response:Box::new(reply)});
         }
@@ -554,7 +564,10 @@ fn validate_reply(
                 )?;
             }
         }
-        RpcBody::CommitPlan(plan) if cap.kind != CapabilityKind::Query => {
+        RpcBody::ControlResult { data } if cap.kind == CapabilityKind::Control => {
+            validate_value(&cap.output_schema, data, "control result")?;
+        }
+        RpcBody::CommitPlan(plan) if matches!(cap.kind, CapabilityKind::Operation | CapabilityKind::Runtime) => {
             if let Some(output) = &plan.output {
                 validate_value(&cap.output_schema, output, "operation output")?;
             }

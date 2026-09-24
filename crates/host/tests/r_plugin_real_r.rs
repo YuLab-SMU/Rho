@@ -74,6 +74,156 @@ fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
+async fn answer_native_input(host: &Arc<NextHost>, instance: &InstanceRef, session: &Value) {
+    let execute = binding(host, instance, "r.execute").await;
+    let request = invocation(
+        "native-input",
+        "r.execute",
+        json!({"binding":execute,
+        "arguments":{"expected_session":session,"code":"answer <- readline('Native answer: '); paste0('received:', answer)"}}),
+    );
+    let running_host = host.clone();
+    let running_request = request.clone();
+    let running = tokio::spawn(async move {
+        running_host
+            .invoke(&NextHost::local_context(), running_request)
+            .await
+    });
+    // Wait for the native request itself; elapsed time never authorizes an answer.
+    let pending = tokio::time::timeout(Duration::from_secs(20), async {
+        let mut interval = tokio::time::interval(Duration::from_millis(30));
+        loop {
+            interval.tick().await;
+            let observed = native_query(host, instance, "r.session", json!({})).await;
+            if !observed["input"].is_null() {
+                break observed["input"].clone();
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let active = host
+        .invoke(&NextHost::local_context(), request)
+        .await
+        .unwrap();
+    assert_eq!(active.status, OperationStatus::Running);
+    assert_eq!(
+        pending["operation_id"],
+        json!(active.operation.operation_id)
+    );
+    assert_eq!(pending["session_id"], *session);
+    let mut control_binding = binding(host, instance, "r.respond_input").await;
+    control_binding["target"] = session.clone();
+    let arguments = json!({"session_id":session,"operation_id":pending["operation_id"],
+        "request_id":pending["request_id"],"reply_id":"native-answer","value":"中文 αβ"});
+    let control = |binding: Value, args: Value| {
+        HostRequest::Control(ControlRequest {
+            capability: CapabilityRef::new("r.respond_input", 1).unwrap(),
+            arguments: json!({"binding":binding,"arguments":args}),
+        })
+    };
+    let mut wrong_operation = arguments.clone();
+    wrong_operation["operation_id"] = json!("not-the-pending-operation");
+    assert!(
+        host.dispatch(
+            &NextHost::local_context(),
+            control(control_binding.clone(), wrong_operation)
+        )
+        .await
+        .is_err()
+    );
+    let mut wrong_target = control_binding.clone();
+    wrong_target["target"] = json!("another-session");
+    assert!(
+        host.dispatch(
+            &NextHost::local_context(),
+            control(wrong_target, arguments.clone())
+        )
+        .await
+        .is_err()
+    );
+    let mut oversized = arguments.clone();
+    oversized["value"] = json!("中".repeat(30000)); // Under character quota, over native byte quota.
+    assert!(
+        host.dispatch(
+            &NextHost::local_context(),
+            control(control_binding.clone(), oversized)
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(
+        native_query(host, instance, "r.session", json!({})).await["input"]["submitted"],
+        false
+    );
+    let draining = host
+        .invoke(
+            &NextHost::local_context(),
+            invocation(
+                "drain-pending-input",
+                "plugins.release",
+                json!({"instance":instance}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_ne!(draining.status, OperationStatus::Succeeded);
+    assert_eq!(
+        query(host, "plugins.instance", json!({"instance":instance})).await["instance"]["state"],
+        "draining"
+    );
+    assert!(
+        host.invoke(
+            &NextHost::local_context(),
+            invocation(
+                "no-new-execution",
+                "r.execute",
+                json!({"binding":execute,
+        "arguments":{"expected_session":session,"code":"stop('must not run')"}})
+            )
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(
+        native_query(host, instance, "r.session", json!({})).await["input"]["request_id"],
+        pending["request_id"]
+    );
+    assert_eq!(
+        host.dispatch(
+            &NextHost::local_context(),
+            control(control_binding.clone(), arguments.clone())
+        )
+        .await
+        .unwrap(),
+        json!({"submitted":true})
+    );
+    assert!(
+        host.dispatch(
+            &NextHost::local_context(),
+            control(control_binding, arguments)
+        )
+        .await
+        .is_err(),
+        "an accepted answer cannot be repeated"
+    );
+    let completed = tokio::time::timeout(Duration::from_secs(20), running)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        completed.operation.operation_id,
+        active.operation.operation_id
+    );
+    assert_eq!(
+        completed.status,
+        OperationStatus::Succeeded,
+        "{completed:?}"
+    );
+    assert_eq!(completed.output.unwrap()["value"], "received:中文 αβ");
+}
+
 #[tokio::test]
 #[ignore = "requires RHO_R_PLUGIN_PACKAGE built outside the checkout, RHO_ARK and RHO_R_HOME"]
 async fn independent_r_plugin_uses_original_operations_and_retains_revision_scoped_resources() {
@@ -173,6 +323,7 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
         assert_eq!(host.invoke(&NextHost::local_context(),disconnect).await.unwrap().operation.operation_id,uncertain.operation.operation_id);
         assert_eq!(native_query(&host,&left,"r.session",json!({})).await["session_id"],session, "read cannot replace a lost native session");
         assert_eq!(native_query(&host,&right,"r.session",json!({})).await["session_id"],other_session);
+        answer_native_input(&host, &right, &other_session).await;
         (html,request,record)
     }).await;
     // Attempt cleanup for both owners before reporting any assertion failure.

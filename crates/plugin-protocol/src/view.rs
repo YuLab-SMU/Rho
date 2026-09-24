@@ -59,9 +59,13 @@ pub struct PluginViewConnection {
 
 /// Every request crosses the containing shell's scoped Host port. No browser
 /// credential, project root or user identity is accepted from the iframe.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PluginViewRequest {
+    Control {
+        capability: CapabilityKey,
+        arguments: Value,
+    },
     Query {
         capability: CapabilityKey,
         arguments: Value,
@@ -82,6 +86,20 @@ pub enum PluginViewRequest {
         expected_version: u32,
         state: Value,
     },
+}
+impl std::fmt::Debug for PluginViewRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let kind = match self {
+            Self::Control { .. } => "Control",
+            Self::Query { .. } => "Query",
+            Self::Invoke { .. } => "Invoke",
+            Self::GetOperation { .. } => "GetOperation",
+            Self::Cancel { .. } => "Cancel",
+            Self::SetState { .. } => "SetState",
+        };
+        f.write_str(kind)?;
+        f.write_str(" ([payload redacted])")
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]

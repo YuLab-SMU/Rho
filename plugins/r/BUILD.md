@@ -16,7 +16,13 @@ Activate it with explicit canonical `ark` and `r_home` paths. Observe `r.session
 invoke `r.create_session`, then copy its exact session to `r.execute` or
 `r.snapshot`. Every invocation uses the normal provider binding and original
 Operation. Activation and queries do not launch R. Different revision instances
-own different native sessions. Release requests confirmed native shutdown and
-keeps original resource bytes. This package currently provides the first native
-vertical slice; full Console controls, checkpoints, packages/help and Viewer UI
-migration are still being implemented.
+own different native sessions. When `r.session.input` is present, use the transient
+`r.respond_input` control with its exact session, original Operation and request
+IDs, a fresh reply ID and the answer. Set the provider binding's target to that
+same session. Answers are limited to 65,536 UTF-8 bytes without NUL. Read the pending
+request after a lost acknowledgement; a submitted answer cannot be repeated.
+Control transport does not record the answer; ordinary non-password native input
+can still be echoed by R into its output. Queries and input remain available for
+explicit bindings while release waits on accepted work; new executions are refused.
+Release confirms native shutdown and keeps original resource bytes. Queue controls,
+checkpoints, packages/help and Viewer UI migration are still being implemented.

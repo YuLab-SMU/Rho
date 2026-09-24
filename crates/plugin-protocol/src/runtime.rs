@@ -160,7 +160,7 @@ pub struct RpcFrame {
     pub body: RpcBody,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(
     tag = "type",
     content = "data",
@@ -181,11 +181,16 @@ pub enum RpcBody {
         artifact: ArtifactId,
     },
     Query(PluginCall),
+    /// Ephemeral native control; it never carries a new Operation identity.
+    Control(PluginCall),
     Invoke(PluginCall),
     QueryResult {
         data: Value,
         completeness: ObservationCompleteness,
         source: Option<ResourceReference>,
+    },
+    ControlResult {
+        data: Value,
     },
     CommitPlan(PluginCommitPlan),
     /// Reverse calls use a delegated, instance-bound grant, never a Host credential.
@@ -212,6 +217,33 @@ pub enum RpcBody {
         message: String,
         recovery: Option<Value>,
     },
+}
+
+impl std::fmt::Debug for RpcBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Protocol dumps are diagnostics, not an alternate channel for answers,
+        // owner replies or initialization credentials. Serialize explicitly only
+        // for the transport; Debug reports the message kind without its payload.
+        let kind = match self {
+            Self::Initialize { .. } => "Initialize",
+            Self::Ready { .. } => "Ready",
+            Self::Query(_) => "Query",
+            Self::Control(_) => "Control",
+            Self::Invoke(_) => "Invoke",
+            Self::QueryResult { .. } => "QueryResult",
+            Self::ControlResult { .. } => "ControlResult",
+            Self::CommitPlan(_) => "CommitPlan",
+            Self::HostCall { .. } => "HostCall",
+            Self::HostResult { .. } => "HostResult",
+            Self::Cancel { .. } => "Cancel",
+            Self::CancelAcknowledged { .. } => "CancelAcknowledged",
+            Self::Release => "Release",
+            Self::Released => "Released",
+            Self::Error { .. } => "Error",
+        };
+        f.write_str(kind)?;
+        f.write_str(" ([payload redacted])")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

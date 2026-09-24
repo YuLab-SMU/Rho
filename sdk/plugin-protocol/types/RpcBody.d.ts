@@ -13,7 +13,7 @@ import type { ResourceReference } from "./ResourceReference.js";
 import type { RevisionId } from "./RevisionId.js";
 import type { JsonValue } from "./serde_json/JsonValue.js";
 
-export type RpcBody = { "type": "initialize", "data": { instance: PluginInstance, grants: Array<CapabilityRequirement>, environment?: BackendEnvironment | null, resource_channel?: ResourceChannel | null, } } | { "type": "ready", "data": { revision: RevisionId, artifact: ArtifactId, } } | { "type": "query", "data": PluginCall } | { "type": "invoke", "data": PluginCall } | { "type": "query_result", "data": { data: JsonValue, completeness: ObservationCompleteness, source: ResourceReference | null, } } | { "type": "commit_plan", "data": PluginCommitPlan } | { "type": "host_call", "data": {
+export type RpcBody = { "type": "initialize", "data": { instance: PluginInstance, grants: Array<CapabilityRequirement>, environment?: BackendEnvironment | null, resource_channel?: ResourceChannel | null, } } | { "type": "ready", "data": { revision: RevisionId, artifact: ArtifactId, } } | { "type": "query", "data": PluginCall } | { "type": "control", "data": PluginCall } | { "type": "invoke", "data": PluginCall } | { "type": "query_result", "data": { data: JsonValue, completeness: ObservationCompleteness, source: ResourceReference | null, } } | { "type": "control_result", "data": { data: JsonValue, } } | { "type": "commit_plan", "data": PluginCommitPlan } | { "type": "host_call", "data": {
 /**
  * Active incoming call whose authority this reverse call inherits.
  */

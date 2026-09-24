@@ -3,6 +3,7 @@ import type { ApplicationBridgeRequest } from "./ApplicationBridgeRequest";
 import type { ApplicationCommandRequest } from "./ApplicationCommandRequest";
 import type { ApplicationExecuteRequest } from "./ApplicationExecuteRequest";
 import type { BindMethodRequest } from "./BindMethodRequest";
+import type { ControlRequest } from "./ControlRequest";
 import type { InvokeRequest } from "./InvokeRequest";
 import type { OperationId } from "./OperationId";
 import type { QueryRequest } from "./QueryRequest";
@@ -12,4 +13,4 @@ import type { RespondInput } from "./RespondInput";
 /**
  * The local session edge forwards these five ports to the Host.
  */
-export type HostRequest = { "method": "invoke", "params": InvokeRequest } | { "method": "get_operation", "params": { operation_id: OperationId, } } | { "method": "request_cancellation", "params": { operation_id: OperationId, only_if_pending?: boolean, } } | { "method": "reconcile_commit", "params": ReconcileOperationCommit } | { "method": "respond_input", "params": RespondInput } | { "method": "query_snapshot", "params": QueryRequest } | { "method": "application_control", "params": ApplicationCommandRequest } | { "method": "application_bridge", "params": ApplicationBridgeRequest } | { "method": "application_execute", "params": ApplicationExecuteRequest } | { "method": "bind_method", "params": BindMethodRequest } | { "method": "subscribe", "params": { after_sequence: number, limit: number, } };
+export type HostRequest = { "method": "control", "params": ControlRequest } | { "method": "invoke", "params": InvokeRequest } | { "method": "get_operation", "params": { operation_id: OperationId, } } | { "method": "request_cancellation", "params": { operation_id: OperationId, only_if_pending?: boolean, } } | { "method": "reconcile_commit", "params": ReconcileOperationCommit } | { "method": "respond_input", "params": RespondInput } | { "method": "query_snapshot", "params": QueryRequest } | { "method": "application_control", "params": ApplicationCommandRequest } | { "method": "application_bridge", "params": ApplicationBridgeRequest } | { "method": "application_execute", "params": ApplicationExecuteRequest } | { "method": "bind_method", "params": BindMethodRequest } | { "method": "subscribe", "params": { after_sequence: number, limit: number, } };

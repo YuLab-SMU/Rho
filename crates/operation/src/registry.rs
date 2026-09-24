@@ -1,4 +1,4 @@
-use crate::{OperationError, OperationHandler, QueryHandler, RegistrySnapshot};
+use crate::{ControlHandler, OperationError, OperationHandler, QueryHandler, RegistrySnapshot};
 use rho_contract::{
     CallContext, CapabilityDescriptor, CapabilityRef, NextRead, OperationRecord, QuerySnapshot,
 };
@@ -11,6 +11,7 @@ use std::{
 /// One owner publishes/replaces all its contributions in a single transaction.
 /// No group can replace startup controls or another owner's capability.
 pub struct ContributionBatch {
+    pub controls: Vec<Arc<dyn ControlHandler>>,
     pub operations: Vec<Arc<dyn OperationHandler>>,
     pub queries: Vec<Arc<dyn QueryHandler>>,
 }
@@ -104,7 +105,7 @@ impl CapabilityRegistry {
                 "invalid contribution owner".into(),
             ));
         }
-        if batch.operations.len() + batch.queries.len() > 512 {
+        if batch.operations.len() + batch.queries.len() + batch.controls.len() > 512 {
             return Err(OperationError::BudgetExceeded(
                 "too many contributions in a registration".into(),
             ));
@@ -112,6 +113,9 @@ impl CapabilityRegistry {
         // Schema compilation and examples can be expensive; prepare privately
         // before taking the publication lock. Nothing is visible on failure.
         let mut prepared = RegistrySnapshot::default();
+        for handler in batch.controls {
+            prepared.register_control_handler(handler)?;
+        }
         for handler in batch.operations {
             prepared.register(handler)?;
         }
@@ -142,6 +146,7 @@ impl CapabilityRegistry {
             for capability in capabilities {
                 next.handlers.remove(capability);
                 next.queries.remove(capability);
+                next.controls.remove(capability);
                 next.schemas.remove(capability);
                 next.descriptors.remove(capability);
             }
@@ -169,6 +174,7 @@ impl CapabilityRegistry {
         })?;
         next.handlers.extend(prepared.handlers);
         next.queries.extend(prepared.queries);
+        next.controls.extend(prepared.controls);
         next.schemas.extend(prepared.schemas);
         next.descriptors.extend(prepared.descriptors.clone());
         next.validate_links()?;
@@ -201,7 +207,7 @@ impl CapabilityRegistry {
         self.replace_batch(
             &expected.owner,
             Some(expected),
-            ContributionBatch {
+            ContributionBatch { controls: vec![],
                 operations: vec![],
                 queries: vec![],
             },

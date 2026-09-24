@@ -28,6 +28,13 @@ operations started by this view, under the original principal and granted scopes
 Self-state saving is an intrinsic view operation with a version comparison. It
 cannot name another view, change configuration or acquire another capability.
 
+Use `control(capability, arguments)` for transient answers to an existing native
+request, with the exact provider and request identities required by its owner.
+This uses the same declared grants as queries and Operations, but creates no
+Operation or saved answer. Do not put passwords or other transient answers in view
+state. A missing acknowledgement requires inspection of the pending native request;
+it does not authorize automatic retry. Control errors redact native payloads.
+
 `ViewRequestError.diagnostic` retains the original structured Host diagnostic,
 including recovery material; an error string does not replace that evidence.
 

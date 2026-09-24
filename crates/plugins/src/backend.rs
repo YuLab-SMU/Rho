@@ -19,7 +19,7 @@ type Response = oneshot::Sender<Result<RpcBody, String>>;
 enum CommandMessage {
     Call {
         call: PluginCall,
-        query: bool,
+        kind: CapabilityKind,
         response: Response,
     },
     Cancel {
@@ -37,12 +37,12 @@ pub(crate) struct ProcessClient {
     sender: mpsc::Sender<CommandMessage>,
 }
 impl ProcessClient {
-    pub async fn call(&self, call: PluginCall, query: bool) -> Result<RpcBody, PluginError> {
+    pub async fn call(&self, call: PluginCall, kind: CapabilityKind) -> Result<RpcBody, PluginError> {
         let (response, receiver) = oneshot::channel();
         self.sender
             .send(CommandMessage::Call {
                 call,
-                query,
+                kind,
                 response,
             })
             .await
@@ -244,7 +244,7 @@ pub(crate) async fn start(
 }
 
 enum PendingKind {
-    Call { call: PluginCall, query: bool },
+    Call { call: PluginCall, kind: CapabilityKind },
     Cancel { operation: String },
 }
 struct Pending {
@@ -278,18 +278,18 @@ async fn run(
                 counter += 1;
                 let request = RequestId::new(format!("host-{counter}")).unwrap();
                 let (body, request_pending) = match command {
-                    CommandMessage::Call { mut call, query, response } => {
+                    CommandMessage::Call { mut call, kind, response } => {
                         if pending.len() >= MAX_PENDING_PLUGIN_CALLS {
                             let _ = response.send(Err("backend pending-call quota reached before dispatch".into())); continue;
                         }
                         call.request = request.clone();
                         #[cfg(unix)]
-                        if let Some(channel) = &data_channel { channel.session.insert(&call); }
-                        let body = if query { RpcBody::Query(call.clone()) } else { RpcBody::Invoke(call.clone()) };
-                        (body, Pending { kind: PendingKind::Call { call, query }, response })
+                        if kind != CapabilityKind::Control { if let Some(channel) = &data_channel { channel.session.insert(&call); } }
+                        let body = match kind { CapabilityKind::Query => RpcBody::Query(call.clone()), CapabilityKind::Control => RpcBody::Control(call.clone()), _ => RpcBody::Invoke(call.clone()) };
+                        (body, Pending { kind: PendingKind::Call { call, kind }, response })
                     }
                     CommandMessage::Cancel { operation, capability, response } => {
-                        if !pending.values().any(|p| matches!(&p.kind, PendingKind::Call {call, query: false}
+                        if !pending.values().any(|p| matches!(&p.kind, PendingKind::Call {call, ..}
                             if call.operation_id.as_deref() == Some(operation.as_str()) && call.binding.capability == capability)) {
                             let _ = response.send(Err("no matching active operation; cancellation is unconfirmed".into())); continue;
                         }
@@ -335,7 +335,7 @@ async fn run(
                     }
                     let grant = prepared.grants.iter().find(|g| g.capability == capability);
                     let parent = pending.get(&parent_request).and_then(|p| match &p.kind {
-                        PendingKind::Call {call, query} => Some((call, *query)), _ => None });
+                        PendingKind::Call {call, kind} => Some((call, !matches!(kind, CapabilityKind::Operation | CapabilityKind::Runtime))), _ => None });
                     let delegated = match (grant, parent) {
                         (Some(grant), Some((parent, query))) if grant.scopes.is_subset(&parent.scopes) => {
                             let mut parent = parent.clone();
@@ -367,8 +367,9 @@ async fn run(
                 let Some(expected) = pending.remove(&frame.request) else { break "unsolicited or repeated backend response".into(); };
                 state.lock().unwrap().pending = pending.len();
                 let valid = match (&expected.kind, &frame.body) {
-                    (PendingKind::Call {query: true, ..}, RpcBody::QueryResult {..} | RpcBody::Error {..}) => true,
-                    (PendingKind::Call {query: false, ..}, RpcBody::CommitPlan(_) | RpcBody::Error {..}) => true,
+                    (PendingKind::Call {kind: CapabilityKind::Query, ..}, RpcBody::QueryResult {..} | RpcBody::Error {..}) => true,
+                    (PendingKind::Call {kind: CapabilityKind::Control, ..}, RpcBody::ControlResult {..} | RpcBody::Error {..}) => true,
+                    (PendingKind::Call {kind: CapabilityKind::Operation | CapabilityKind::Runtime, ..}, RpcBody::CommitPlan(_) | RpcBody::Error {..}) => true,
                     (PendingKind::Cancel {operation}, RpcBody::CancelAcknowledged {operation_id, ..}) => operation == operation_id,
                     _ => false,
                 };

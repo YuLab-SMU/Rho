@@ -265,18 +265,18 @@ fn dynamic_handler(value: i64) -> TestHandler {
 #[test]
 fn dynamic_registration_is_atomic_owned_and_compare_and_swap() {
     let registry = CapabilityRegistry::new();
-    let first = registry.replace_batch("plugin.test", None, ContributionBatch {
+    let first = registry.replace_batch("plugin.test", None, ContributionBatch { controls: vec![],
         operations: vec![Arc::new(dynamic_handler(1))], queries: vec![],
     }).unwrap();
     let before = registry.snapshot();
     let mut bad = TestQuery::new("test.partial");
     bad.descriptor.input_schema = json!({"$ref":"https://invalid.test/schema"});
-    assert!(registry.replace_batch("plugin.test", Some(&first), ContributionBatch {
+    assert!(registry.replace_batch("plugin.test", Some(&first), ContributionBatch { controls: vec![],
         operations:vec![Arc::new(dynamic_handler(2))], queries:vec![Arc::new(bad)],
     }).is_err());
     assert!(Arc::ptr_eq(&before, &registry.snapshot()));
     assert!(registry.query_handler(&CapabilityRef::new("test.partial",1).unwrap()).is_err());
-    assert!(registry.replace_batch("another.owner", None, ContributionBatch {
+    assert!(registry.replace_batch("another.owner", None, ContributionBatch { controls: vec![],
         operations:vec![Arc::new(dynamic_handler(2))],queries:vec![],
     }).is_err());
     let removed = registry.remove_batch(&first).unwrap();
@@ -284,11 +284,11 @@ fn dynamic_registration_is_atomic_owned_and_compare_and_swap() {
     assert!(registry.remove_batch(&first).is_err());
     let mut changed = dynamic_handler(3);
     changed.descriptor.output_schema = json!({"type":"string"});
-    assert!(registry.replace_batch("plugin.test", Some(&removed), ContributionBatch {
+    assert!(registry.replace_batch("plugin.test", Some(&removed), ContributionBatch { controls: vec![],
         operations:vec![Arc::new(changed)],queries:vec![],
     }).is_err());
     assert!(registry.descriptors().is_empty());
-    let restored = registry.replace_batch("plugin.test", Some(&removed), ContributionBatch {
+    let restored = registry.replace_batch("plugin.test", Some(&removed), ContributionBatch { controls: vec![],
         operations:vec![Arc::new(dynamic_handler(4))],queries:vec![],
     }).unwrap();
     assert_eq!(restored.generation, removed.generation + 1);
@@ -306,7 +306,7 @@ async fn accepted_operation_retains_handler_contract_and_cancellation_after_unre
     let mut registry = CapabilityRegistry::new();
     register_get(&mut registry, journal.clone(), Some("/project".into()));
     let registry = Arc::new(registry);
-    let registration = registry.replace_batch("plugin.test", None, ContributionBatch {
+    let registration = registry.replace_batch("plugin.test", None, ContributionBatch { controls: vec![],
         operations:vec![Arc::new(handler)],queries:vec![],
     }).unwrap();
     let gateway = Arc::new(gateway(registry.clone(), journal.clone()));
@@ -342,7 +342,7 @@ async fn query_in_flight_uses_one_registry_snapshot_through_result_validation() 
     let started = Arc::new(tokio::sync::Notify::new()); let finish = Arc::new(tokio::sync::Notify::new());
     let mut base = TestQuery::new("test.delayed"); base.descriptor.documentation.related_capabilities.clear();
     let registry = Arc::new(CapabilityRegistry::new());
-    let registration = registry.replace_batch("plugin.query", None, ContributionBatch { operations:vec![],queries:vec![Arc::new(DelayedQuery {
+    let registration = registry.replace_batch("plugin.query", None, ContributionBatch { controls: vec![], operations:vec![],queries:vec![Arc::new(DelayedQuery {
         base, started:started.clone(), finish:finish.clone(),
     })]}).unwrap();
     let reader = QueryGateway::new(registry.clone());
@@ -358,7 +358,7 @@ async fn query_in_flight_uses_one_registry_snapshot_through_result_validation() 
 async fn captured_request_returns_original_after_provider_removal_without_preparation_or_replay() {
     let registry = Arc::new(CapabilityRegistry::new());
     let handler = Arc::new(dynamic_handler(23));
-    let registration = registry.replace_batch("plugin.original", None, ContributionBatch {operations:vec![handler.clone()],queries:vec![]}).unwrap();
+    let registration = registry.replace_batch("plugin.original", None, ContributionBatch { controls: vec![],operations:vec![handler.clone()],queries:vec![]}).unwrap();
     let journal = Arc::new(TestJournal::default()); let gateway = gateway(registry.clone(), journal.clone());
     let original = gateway.invoke(&context(), invocation(json!({"value":1}))).await.unwrap();
     assert_eq!(original.operation.admission.as_ref().unwrap().descriptor.capability, original.operation.capability);
@@ -390,7 +390,7 @@ async fn preparation_freezes_the_owner_before_admission_and_cannot_expand_its_au
         if expand { bound.descriptor.required_scopes.clear(); }
         let bound = Arc::new(bound);
         let registry = Arc::new(CapabilityRegistry::new());
-        registry.replace_batch("plugin.bound", None, ContributionBatch {operations:vec![Arc::new(BindingHandler {
+        registry.replace_batch("plugin.bound", None, ContributionBatch { controls: vec![],operations:vec![Arc::new(BindingHandler {
             base:dynamic_handler(0),bound:bound.clone(),reject,
         })],queries:vec![]}).unwrap();
         let journal = Arc::new(TestJournal::default());
@@ -1253,4 +1253,75 @@ fn control_contract_validation_uses_the_registry_without_admitting_an_operation(
         registry.handler(&capability),
         Err(OperationError::UnknownCapability(_))
     ));
+}
+
+struct DelayedControl {
+    descriptor: CapabilityDescriptor,
+    started: Arc<tokio::sync::Notify>,
+    finish: Arc<tokio::sync::Notify>,
+}
+#[async_trait]
+impl ControlHandler for DelayedControl {
+    fn descriptor(&self) -> &CapabilityDescriptor {
+        &self.descriptor
+    }
+    async fn control(&self, _: &CallContext, arguments: Value) -> Result<Value, OperationError> {
+        self.started.notify_one();
+        self.finish.notified().await;
+        Ok(arguments)
+    }
+}
+#[tokio::test]
+async fn control_keeps_its_handler_and_schema_through_atomic_unregistration() {
+    let registry = Arc::new(CapabilityRegistry::new());
+    let started = Arc::new(tokio::sync::Notify::new());
+    let finish = Arc::new(tokio::sync::Notify::new());
+    let mut contract = descriptor("test.answer", CapabilityKind::Control);
+    contract.documentation.related_capabilities.clear();
+    let registration = registry
+        .replace_batch(
+            "plugin.control",
+            None,
+            ContributionBatch {
+                operations: vec![],
+                queries: vec![],
+                controls: vec![Arc::new(DelayedControl {
+                    descriptor: contract,
+                    started: started.clone(),
+                    finish: finish.clone(),
+                })],
+            },
+        )
+        .unwrap();
+    let request = |arguments| ControlRequest {
+        capability: CapabilityRef::new("test.answer", 1).unwrap(),
+        arguments,
+    };
+    let invalid = registry
+        .control(&context(), request(json!({"value":"secret control input"})))
+        .await
+        .unwrap_err();
+    assert!(!format!("{invalid:?}").contains("secret control input"));
+    let running_registry = registry.clone();
+    let running = tokio::spawn(async move {
+        running_registry
+            .control(
+                &context(),
+                ControlRequest {
+                    capability: CapabilityRef::new("test.answer", 1).unwrap(),
+                    arguments: json!({"value":7}),
+                },
+            )
+            .await
+    });
+    started.notified().await;
+    registry.remove_batch(&registration).unwrap();
+    assert!(
+        registry
+            .control(&context(), request(json!({"value":9})))
+            .await
+            .is_err()
+    );
+    finish.notify_one();
+    assert_eq!(running.await.unwrap().unwrap(), json!({"value":7}));
 }

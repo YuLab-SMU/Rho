@@ -463,6 +463,24 @@
           ]
         },
         {
+          "description": "Ephemeral native control; it never carries a new Operation identity.",
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/PluginCall"
+            },
+            "type": {
+              "type": "string",
+              "const": "control"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "data": {
@@ -509,6 +527,30 @@
             "type": {
               "type": "string",
               "const": "query_result"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "data": true
+              },
+              "additionalProperties": false,
+              "required": [
+                "data"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "control_result"
             }
           },
           "additionalProperties": false,

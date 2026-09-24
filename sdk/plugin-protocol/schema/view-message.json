@@ -66,6 +66,25 @@
             },
             "type": {
               "type": "string",
+              "const": "control"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "capability",
+            "arguments"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "arguments": true,
+            "capability": {
+              "$ref": "#/$defs/CapabilityKey"
+            },
+            "type": {
+              "type": "string",
               "const": "query"
             }
           },

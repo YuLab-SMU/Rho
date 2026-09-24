@@ -3,7 +3,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildUiFixture } from "../../scripts/fixtures/plugin-ui.mjs";
+import { buildUiFixture, buildControlFixture } from "../../scripts/fixtures/plugin-ui.mjs";
 
 let directory: string, project: string, url: URL, process_: ReturnType<typeof spawn>, view: any, instance: any;
 const windowId = "external.view-window";
@@ -24,6 +24,7 @@ test.beforeAll(async () => {
   project = join(directory, "project"); await mkdir(project); project = await realpath(project);
   const plugin = buildUiFixture(directory), database = join(directory, "state.sqlite");
   const installed = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", plugin], { encoding: "utf8" })).result;
+  const native = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", buildControlFixture(directory), "--target", "aarch64-apple-darwin"], { encoding: "utf8" })).result;
   process_ = spawn(resolve("../target/debug/rho"), ["--database", database, "--project", project, "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = "", errors = "";
@@ -32,8 +33,10 @@ test.beforeAll(async () => {
     process_.stdout!.on("data", b => { output += b; const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/); if (found) { clearTimeout(timer); done(found[0]); } });
     process_.once("exit", code => { clearTimeout(timer); reject(new Error(`Fixture Host exited ${code}: ${errors}`)); });
   }));
+  const nativeInstance = (await invoke("plugins.activate", { revision: native.revision, artifact: native.artifacts[0], target: "aarch64-apple-darwin", alias: "native", configuration: {} })).instance;
   instance = (await invoke("plugins.activate", { revision: installed.revision, artifact: installed.artifacts[0], target: "ui-web", alias: "external", configuration: {} })).instance;
-  view = await invoke("views.open", { instance: instance.identity, contribution: "view", window: windowId, configuration: {}, state: { text: "Initial Ω" } });
+  const binding = await query("plugins.resolve", { capability: { id: "fixture.answer", version: 2 }, instance: nativeInstance.identity });
+  view = await invoke("views.open", { instance: instance.identity, contribution: "view", window: windowId, configuration: { binding }, state: { text: "Initial Ω" } });
 });
 test.afterAll(async () => {
   if (process_?.exitCode === null) {
@@ -68,9 +71,13 @@ test("external UI SDK runs in an opaque frame with persistent scoped state", asy
   try {
     await expect.poll(async () => (await query("views.inspect", { view: view.view })).state_version).toBe(2);
   } finally { releaseRead(); }
-  await expect(frame.locator("#result")).toHaveText("Plugins: 1");
+  await expect(frame.locator("#result")).toHaveText("Plugins: 2");
   await page.unroute("**/api/plugin-view");
   await frame.getByRole("button", { name: "Try undeclared read" }).click();
+  await expect(frame.locator("#result")).toContainText("not granted");
+  await frame.getByRole("button", { name: "Answer native input", exact: true }).click();
+  await expect(frame.locator("#result")).toHaveText("Answer accepted");
+  await frame.getByRole("button", { name: "Try undeclared control" }).click();
   await expect(frame.locator("#result")).toContainText("not granted");
   const isolation = await page.frames()[1].evaluate(async () => {
     let parentBlocked = false, storageBlocked = false, apiBlocked = false;
@@ -89,7 +96,7 @@ test("external UI SDK runs in an opaque frame with persistent scoped state", asy
   await expect(frame.locator("#connection")).toHaveText("Connected");
   await expect(frame.getByLabel("View note")).toHaveValue("中文输入 · αβ Ω ✓");
   await frame.getByRole("button", { name: "Read plugins", exact: true }).click();
-  await expect(frame.locator("#result")).toHaveText("Plugins: 1");
+  await expect(frame.locator("#result")).toHaveText("Plugins: 2");
   await page.screenshot({ path: "../target/plugin-refactor/external-ui-wide.png" });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(frame.getByRole("button", { name: "Save note" })).toBeVisible();

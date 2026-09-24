@@ -28,13 +28,35 @@ input.value=client.view.state.text;
 document.querySelector('#save').onclick=async()=>{try{await client.setState({text:input.value});result.textContent='Saved';}catch(e){result.textContent=e.message;}};
 document.querySelector('#query').onclick=async()=>{try{const data=await client.query({id:'plugins.list',version:1},{after:null,limit:10});result.textContent='Plugins: '+data.data.total;}catch(e){result.textContent=e.message;}};
 document.querySelector('#denied').onclick=async()=>{try{await client.query({id:'plugins.instances',version:1},{after:null,limit:10});result.textContent='Unexpectedly allowed';}catch(e){result.textContent=e.message;}};
+for(const [id,label] of [['answer','Answer native input'],['denied-answer','Try undeclared control']]){const button=document.createElement('button');button.id=id;button.textContent=label;result.before(button);}
+document.querySelector('#answer').onclick=async()=>{try{const reply=await client.control({id:'fixture.answer',version:2},{binding:client.view.configuration.binding,arguments:{value:input.value}});result.textContent=reply.submitted?'Answer accepted':'Answer unconfirmed';}catch(e){result.textContent=e.message;}};
+document.querySelector('#denied-answer').onclick=async()=>{try{await client.control({id:'undeclared.answer',version:2},{value:input.value});result.textContent='Unexpectedly allowed';}catch(e){result.textContent=e.message;}};
 window.addEventListener('pagehide',()=>client.dispose());`);
   fs.writeFileSync(path.join(project,"build.mjs"),"import{cpSync}from'node:fs';cpSync(new URL('./src/',import.meta.url),new URL('./dist/',import.meta.url),{recursive:true});");
   fs.writeFileSync(path.join(project,"BUILD.md"),"Run node build.mjs. All source, including the compiled public browser SDK, is present. No download or core checkout is needed.");
   fs.writeFileSync(path.join(project,"dependencies.lock"),"Rho public UI SDK 0.1.0, compiled from the accompanying public SDK sources; runtime closure is src/sdk.js. No third-party runtime dependencies.\n");
   fs.writeFileSync(path.join(project,"plugin.json"),JSON.stringify({protocol_version:1,id:"example.external-ui",name:"Independent View",version:"1.0",description:"External public-SDK view conformance",license:"AGPL-3.0-only",
     source:{files:["src/index.html","src/main.js","src/sdk.js","build.mjs","LICENSE"],lockfiles:["dependencies.lock"],build_instructions:"BUILD.md",build:{command:["node","build.mjs"]}},dependencies:{},
-    requires:[{capability:{id:"plugins.list",version:1},scopes:["plugins.read"]}],views:[{id:"view",title:"Independent View",entrypoint:"dist/index.html",state_schema:{type:"object",properties:{text:{type:"string"}},required:["text"],additionalProperties:false},configuration_schema:{type:"object",additionalProperties:false},resource_kinds:[]}],capabilities:[],contexts:[],backend:null,configuration_schema:{type:"object",additionalProperties:false},default_configuration:{}},null,2));
+    requires:[{capability:{id:"plugins.list",version:1},scopes:["plugins.read"]},{capability:{id:"fixture.answer",version:2},scopes:["plugins.run"]}],views:[{id:"view",title:"Independent View",entrypoint:"dist/index.html",state_schema:{type:"object",properties:{text:{type:"string"}},required:["text"],additionalProperties:false},configuration_schema:{type:"object",properties:{binding:{type:"object"}},additionalProperties:false},resource_kinds:[]}],capabilities:[],contexts:[],backend:null,configuration_schema:{type:"object",additionalProperties:false},default_configuration:{}},null,2));
   execFileSync(process.execPath,[path.join(project,"build.mjs")],{cwd:project,stdio:"inherit"});
+  return project;
+}
+
+/** An ordinary language-independent backend for browser control acceptance. */
+export function buildControlFixture(directory) {
+  const project=path.join(directory,"external-control");
+  fs.mkdirSync(path.join(project,"dist"),{recursive:true});
+  const source=fs.readFileSync(path.join(root,"crates/plugins/tests/fixtures/backend.py"));
+  fs.writeFileSync(path.join(project,"backend.py"),source);
+  fs.writeFileSync(path.join(project,"dist/backend"),source,{mode:0o755});
+  fs.writeFileSync(path.join(project,"BUILD.md"),"Copy backend.py to dist/backend and set executable permission. Requires the existing Python 3 standard library.");
+  fs.writeFileSync(path.join(project,"dependencies.lock"),"Python 3 standard library; no downloaded dependencies.");
+  fs.writeFileSync(path.join(project,"plugin.json"),JSON.stringify({protocol_version:1,id:"example.external-control",name:"Independent input owner",version:"1.0",description:"Public control protocol fixture",license:"AGPL-3.0-only",
+    source:{files:["backend.py"],lockfiles:["dependencies.lock"],build_instructions:"BUILD.md",build:null},dependencies:{},requires:[],views:[],contexts:[],
+    backend:{executable:"dist/backend",arguments:[]},configuration_schema:{type:"object",additionalProperties:false},default_configuration:{},
+    capabilities:[{capability:{id:"fixture.answer",version:2},kind:"control",title:"Answer input",description:"Respond to a native request without a new Operation.",
+      input_schema:{type:"object",properties:{value:{type:"string"}},required:["value"],additionalProperties:false},examples:[{value:"example"}],
+      output_schema:{type:"object",properties:{submitted:{type:"boolean"}},required:["submitted"],additionalProperties:false},recovery_schema:true,
+      required_scopes:["plugins.run"],effects:["fixture.input"],cancellation:"unsupported",preflight:null}]},null,2));
   return project;
 }

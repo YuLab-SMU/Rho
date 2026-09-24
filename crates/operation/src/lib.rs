@@ -11,6 +11,8 @@ mod evidence;
 pub use evidence::{OperationEvidenceHandler, evidence_sha256};
 mod navigation;
 mod query;
+mod control;
+pub use control::ControlHandler;
 mod record;
 mod schema;
 mod registry;

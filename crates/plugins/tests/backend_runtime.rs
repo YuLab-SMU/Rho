@@ -209,7 +209,6 @@ async fn draining_retains_accepted_work_and_unconfirmed_cancel_does_not_end_it()
         .await
         .unwrap();
     let operation = Arc::new(resolve(&runtime, &instance, true));
-    let query = resolve(&runtime, &instance, false);
     let runner = operation.clone();
     let running = tokio::spawn(async move {
         runner
@@ -222,13 +221,16 @@ async fn draining_retains_accepted_work_and_unconfirmed_cancel_does_not_end_it()
     assert!(
         runtime
             .resolve(
-                &key("fixture.read"),
+                &key("fixture.run"),
                 &instance.project,
                 &instance.principal,
                 Some(&instance.identity)
             )
             .is_err()
     );
+    assert!(runtime.resolve(&key("fixture.read"), &instance.project, &instance.principal, None).is_err(),
+        "automatic provider selection cannot enter a draining instance");
+    let query = resolve(&runtime, &instance, false);
     assert!(!operation.cancel("operation-original").await.unwrap());
     assert!(!running.is_finished());
     query

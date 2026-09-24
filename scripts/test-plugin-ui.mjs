@@ -14,6 +14,8 @@ try {
   channel.port2.on("message",message=>channel.port2.postMessage({protocol_version:1,connection:"connection",view:"view",sequence:++response,request:message.request,ok:true,result:message.body}));
   const result=await client.query({id:"fixture.read",version:1},{text:"中文 Ω"});
   assert.equal(result.arguments.text,"中文 Ω");
+  const control=await client.control({id:"fixture.answer",version:2},{value:"临时答复"});
+  assert.deepEqual(control,{type:"control",capability:{id:"fixture.answer",version:2},arguments:{value:"临时答复"}});
   await assert.rejects(client.query({id:"fixture.read",version:1},{text:"x".repeat(sdk.MAX_UI_MESSAGE_BYTES)}),/quota/);
   client.dispose();channel.port2.close();
   await assert.rejects(client.operation("op"),/closed/);

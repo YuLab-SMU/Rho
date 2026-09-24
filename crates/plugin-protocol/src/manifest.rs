@@ -80,6 +80,7 @@ pub struct ViewContribution {
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityKind {
     Query,
+    Control,
     Operation,
     Runtime,
 }
@@ -310,9 +311,13 @@ impl PluginManifest {
         }
         let mut requirements = BTreeSet::new();
         for cap in &self.capabilities {
+            if cap.kind == CapabilityKind::Control {
+                require(cap.cancellation == CancellationSupport::Unsupported,
+                    "ephemeral controls cannot create a cancellable Operation")?;
+            }
             if let Some(preflight) = &cap.preflight {
                 require(
-                    cap.kind != CapabilityKind::Query
+                    matches!(cap.kind, CapabilityKind::Operation | CapabilityKind::Runtime)
                         && capabilities.get(preflight) == Some(&CapabilityKind::Query),
                     "operation preflight must name a declared query in the same plugin",
                 )?;

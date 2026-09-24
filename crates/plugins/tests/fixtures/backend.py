@@ -12,6 +12,7 @@ identity = None
 connection = None
 configuration = {}
 pending = {}
+pending_controls = set()
 reverse = {}
 
 
@@ -110,7 +111,9 @@ while True:
                 "owner_context":{"native_session":"fixed-session"}})
             continue
         action = args.get("action", "echo")
-        if action == "environment":
+        if action == "control_pending":
+            query_result(request, {"pending": len(pending_controls)})
+        elif action == "environment":
             query_result(request, {"environment": environment, "cwd": os.getcwd()})
         elif action == "resource_put":
             reference = retain_resource(request, args)
@@ -142,6 +145,29 @@ while True:
             query_result(request, {"label": configuration.get("label"), "pid": os.getpid(),
                          "instance": identity["instance"], "arguments": args,
                          "host_credential": os.environ.get("RHO_PRIVATE_TEST_CREDENTIAL")})
+    elif kind == "control":
+        assert data["operation_id"] is None
+        args = data["arguments"]
+        action = args.get("action", "answer")
+        if action == "hold":
+            pending_controls.add(request)
+        elif action == "finish":
+            for original in pending_controls:
+                send(original, "control_result", {"data":{"submitted":True}})
+            pending_controls.clear()
+            send(request, "control_result", {"data":{"submitted":True}})
+        elif action == "reject":
+            send(request, "error", {"code":"rejected", "message":args["value"], "recovery":{"secret":args["value"]}})
+        elif action == "bad_output":
+            send(request, "control_result", {"data":{"submitted":args["value"]}})
+        elif action == "resource_put":
+            try:
+                retain_resource(request, {"bytes":8})
+                send(request, "control_result", {"data":{"submitted":False}})
+            except RuntimeError:
+                send(request, "control_result", {"data":{"submitted":True}})
+        else:
+            send(request, "control_result", {"data":{"submitted":True}})
     elif kind == "invoke":
         action = data["arguments"].get("action", "hold")
         if action == "crash":

@@ -1,6 +1,21 @@
 use crate::{InvokeRequest, OperationId, QueryRequest, RespondInput};
 use serde::{Deserialize, Serialize};
 
+/// Ephemeral owner control. Arguments may contain secrets and never become an
+/// Operation, receipt, event or diagnostic payload.
+#[derive(Deserialize, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+pub struct ControlRequest {
+    pub capability: crate::CapabilityRef,
+    pub arguments: serde_json::Value,
+}
+impl std::fmt::Debug for ControlRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ControlRequest").field("capability", &self.capability)
+            .field("arguments", &"[redacted]").finish()
+    }
+}
+
 /// The local session edge forwards these five ports to the Host.
 #[derive(Debug, Deserialize)]
 #[serde(
@@ -11,6 +26,7 @@ use serde::{Deserialize, Serialize};
 )]
 #[derive(ts_rs::TS)]
 pub enum HostRequest {
+    Control(ControlRequest),
     Invoke(InvokeRequest),
     GetOperation {
         operation_id: OperationId,

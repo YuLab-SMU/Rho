@@ -239,6 +239,83 @@
       "effects": [],
       "cancellation": "unsupported",
       "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.respond_input",
+        "version": 1
+      },
+      "kind": "control",
+      "title": "Answer R input",
+      "description": "Answer an existing native input request. Answers are transient; inspect r.session after a lost acknowledgement.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9._:/-]+$"
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "reply_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 65536
+          }
+        },
+        "required": [
+          "session_id",
+          "operation_id",
+          "request_id",
+          "reply_id",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "session_id": "copy-session-from-r.session",
+          "operation_id": "copy-pending-operation",
+          "request_id": "copy-pending-request",
+          "reply_id": "unique-answer",
+          "value": "example answer"
+        }
+      ],
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "submitted": {
+            "const": true
+          }
+        },
+        "required": [
+          "submitted"
+        ],
+        "additionalProperties": false
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r"
+      ],
+      "effects": [
+        "r.input"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
     }
   ]
 }

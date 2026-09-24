@@ -40,6 +40,7 @@ impl NextHost {
             })?;
         let cap = match &message.body {
             PluginViewRequest::Query { capability, .. }
+            | PluginViewRequest::Control { capability, .. }
             | PluginViewRequest::Invoke { capability, .. } => Some(CapabilityRef::new(
                 capability.id.as_str(),
                 capability.version.try_into().map_err(|_| {
@@ -61,6 +62,9 @@ impl NextHost {
             .await?;
         let cancel = matches!(&message.body, PluginViewRequest::Cancel { .. });
         let request = match message.body {
+            PluginViewRequest::Control { arguments, .. } => HostRequest::Control(rho_contract::ControlRequest {
+                capability: cap.unwrap(), arguments,
+            }),
             PluginViewRequest::Query { arguments, .. } => {
                 HostRequest::QuerySnapshot(QueryRequest {
                     capability: cap.unwrap(),

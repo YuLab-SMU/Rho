@@ -82,7 +82,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> BackendConnection<R, W> {
     /// schemas/scopes before dispatch; owners still check native preconditions.
     pub fn validate_call(&self, frame: &RpcFrame) -> Result<(), SdkError> {
         let (call, operation) = match &frame.body {
-            RpcBody::Query(call) => (call, false),
+            RpcBody::Query(call) | RpcBody::Control(call) => (call, false),
             RpcBody::Invoke(call) => (call, true),
             _ => return Err(SdkError::Invalid("expected a query or invocation".into())),
         };

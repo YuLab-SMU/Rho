@@ -73,7 +73,11 @@ Real R acceptance uses disposable projects and explicit bindings. The independen
 packaged R backend path is checked with explicit existing
 `RHO_ARK` and `RHO_R_HOME` using `node scripts/test-r-plugin.mjs`. It assembles
 public SDKs plus R sources outside the checkout and tests original Operations,
-coexisting revisions, cancellation and retained resources through the Host.
+coexisting revisions, cancellation, native stdin and retained resources through
+the Host. The input case waits for an actual native prompt, rejects stale identity,
+oversized UTF-8 and duplicate answers, then completes the original execution while
+its instance drains. The generic Host plugin test separately proves that transient
+controls create no journal/result/event entries or direct resource uploads.
 
 The complete native matrix is:
 

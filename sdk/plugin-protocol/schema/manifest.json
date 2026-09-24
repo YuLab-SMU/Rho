@@ -220,6 +220,7 @@
       "type": "string",
       "enum": [
         "query",
+        "control",
         "operation",
         "runtime"
       ]

@@ -108,6 +108,30 @@ impl Owner {
         }
         Ok(args)
     }
+    /// Input answers belong to a pending native request, never to a new
+    /// scientific Operation. Do not take the execution lane held by that request.
+    pub fn control(&self, call: &PluginCall) -> Result<Value, String> {
+        if call.binding.capability.id.as_str() != "r.respond_input"
+            || call.binding.capability.version != 1
+            || call.operation_id.is_some()
+            || (!call.preconditions.is_null() && call.preconditions != json!({}))
+        {
+            return Err("Unsupported R control".into());
+        }
+        let reply: RespondInput = serde_json::from_value(call.arguments.clone())
+            .map_err(|_| "Invalid input response (redacted)")?;
+        let runtime = self.runtime()?;
+        if call.binding.target.as_deref() != Some(runtime.session_id())
+            || reply.session_id != runtime.session_id()
+        {
+            return Err("Input response requires this exact native session".into());
+        }
+        // The native owner checks original Operation, request, submission state
+        // and byte bounds. Neither the payload nor transport diagnostics escape.
+        runtime.respond_input(reply)
+            .map_err(|_| "Input was not confirmed; inspect the pending native request (redacted)")?;
+        Ok(json!({"submitted":true}))
+    }
     pub async fn query(&self, call: &PluginCall) -> Result<Value, String> {
         match call.binding.capability.id.as_str() {
             "r.session" => Ok(match self.runtime.lock().unwrap().as_ref() {

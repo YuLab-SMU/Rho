@@ -135,6 +135,16 @@ is owned by the Host task tracker and retains the Host lifetime across disconnec
 Core result reconciliation can retire original plugin protections; failure to
 retire one does not replace the already committed scientific result.
 
+An owner can contribute an ephemeral Control handler through the same atomic
+registry. Host, CLI, MCP and scoped view requests validate the exact contract,
+provider, principal and existing authority. Controls do not create an Operation,
+receipt, event, result candidate or data-channel parent; each argument/result is
+bounded to 256 KiB. Input and native error diagnostics are redacted. The owner
+validates the original native request and duplicate-submission state. A lost
+acknowledgement requires observing that request, never automatic replay. Host
+task ownership keeps dispatched controls alive across caller disconnect. Native
+reverse calls from Control parents are limited to reads.
+
 Registry publication notifications are catalog metadata, never scientific
 preconditions. MCP caches only projections of current scoped descriptors, sends
 tool-list changes on publication, and binds pagination to the descriptor content.
@@ -172,7 +182,9 @@ have an OS network sandbox.
 Backend isolation uses a process per activated service instance with bounded,
 versioned bidirectional RPC and separate logs. Neither native code nor build
 scripts have an OS filesystem/network sandbox. Registration becomes visible only
-after successful initialization. Draining first revokes new calls, then releases
+after successful initialization. Draining first revokes new scientific calls.
+Explicitly bound queries and controls can still inspect and finish existing native
+requests; automatic provider selection excludes the draining instance. Release cleans
 owned subscriptions/handles/processes; failures remain observable. Disconnection
 does not confirm cancellation or authorize replay.
 

@@ -315,7 +315,7 @@ impl McpEdge {
                 return Err(invalid_operation("native view uses the presentation route"));
             }
             Route::Capability(capability, CapabilityKind::Control) => {
-                control_request(&capability.id, args)?
+                control_request(capability, args)?
             }
             Route::Get => {
                 let input: OperationGetArguments =
@@ -324,8 +324,8 @@ impl McpEdge {
                     operation_id: input.operation_id,
                 }
             }
-            Route::Cancel => control_request("operation.request_cancellation", args)?,
-            Route::Input => control_request("workspace.respond_input", args)?,
+            Route::Cancel => control_request(&rho_contract::CapabilityRef::new("operation.request_cancellation",1)?, args)?,
+            Route::Input => control_request(&rho_contract::CapabilityRef::new("workspace.respond_input",1)?, args)?,
             Route::Events => {
                 let input: PollOperationEventsArguments =
                     serde_json::from_value(args).map_err(invalid_operation)?;
@@ -652,18 +652,18 @@ fn capability_description(capability: &rho_contract::CapabilityDescriptor) -> St
         capability.capability.display_key()
     )
 }
-fn control_request(id: &str, args: Value) -> Result<HostRequest, OperationError> {
-    Ok(match id {
-        "application.control" => HostRequest::ApplicationControl(
+fn control_request(capability: &rho_contract::CapabilityRef, args: Value) -> Result<HostRequest, OperationError> {
+    Ok(match (capability.id.as_str(), capability.version) {
+        ("application.control", 1) => HostRequest::ApplicationControl(
             serde_json::from_value(args).map_err(invalid_operation)?,
         ),
-        "application.bind_method" => {
+        ("application.bind_method", 1) => {
             HostRequest::BindMethod(serde_json::from_value(args).map_err(invalid_operation)?)
         }
-        "operation.reconcile_commit" => HostRequest::ReconcileCommit(
+        ("operation.reconcile_commit", 1) => HostRequest::ReconcileCommit(
             serde_json::from_value(args).map_err(invalid_operation)?,
         ),
-        "operation.request_cancellation" => {
+        ("operation.request_cancellation", 1) => {
             let input: rho_contract::CancelOperation =
                 serde_json::from_value(args).map_err(invalid_operation)?;
             HostRequest::RequestCancellation {
@@ -671,10 +671,10 @@ fn control_request(id: &str, args: Value) -> Result<HostRequest, OperationError>
                 only_if_pending: input.only_if_pending,
             }
         }
-        "workspace.respond_input" => {
+        ("workspace.respond_input", 1) => {
             HostRequest::RespondInput(serde_json::from_value(args).map_err(invalid_operation)?)
         }
-        _ => return Err(OperationError::UnknownCapability(format!("{id}@1"))),
+        _ => HostRequest::Control(rho_contract::ControlRequest { capability: capability.clone(), arguments: args }),
     })
 }
 
@@ -684,6 +684,17 @@ fn invalid_operation(error: impl std::fmt::Display) -> OperationError {
 
 #[cfg(test)]
 mod port_contract_tests {
+    #[test]
+    fn dynamic_controls_preserve_versions_even_when_names_match_fixed_controls() {
+        for id in ["application.control", "application.bind_method", "operation.reconcile_commit",
+            "operation.request_cancellation", "workspace.respond_input"] {
+            let capability = rho_contract::CapabilityRef::new(id, 2).unwrap();
+            let request = super::control_request(&capability, serde_json::json!({"owner_payload":true})).unwrap();
+            let rho_contract::HostRequest::Control(control) = request else { panic!("a new version was routed to a fixed v1 control"); };
+            assert_eq!(control.capability, capability);
+            assert_eq!(control.arguments, serde_json::json!({"owner_payload":true}));
+        }
+    }
     use super::*;
 
     #[test]

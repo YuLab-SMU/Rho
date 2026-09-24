@@ -13,5 +13,5 @@ try {
   execFileSync(process.execPath,[path.join(root,"scripts/build-r-plugin.mjs"),source],{cwd:root,stdio:"inherit"});
   execFileSync("cargo",["test","-p","rho-host","--test","r_plugin_real_r","--locked","--","--ignored","--nocapture"],{
     cwd:root,stdio:"inherit",env:{...process.env,CARGO_BUILD_JOBS:"1",RHO_R_PLUGIN_PACKAGE:source}});
-  console.log("Independent native R plugin passed original-Operation, revision coexistence, cancellation and retained-output acceptance.");
+  console.log("Independent native R plugin passed original-Operation, revision coexistence, cancellation, input during drain and retained-output acceptance.");
 } finally { fs.rmSync(directory,{recursive:true,force:true}); }

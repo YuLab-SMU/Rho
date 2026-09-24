@@ -1,4 +1,4 @@
-use crate::{OperationError, OperationHandler, QueryHandler, schema};
+use crate::{ControlHandler, OperationError, OperationHandler, QueryHandler, schema};
 use rho_contract::{CallContext, CapabilityDescriptor, CapabilityKind, CapabilityRef};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc};
@@ -7,11 +7,21 @@ use std::{collections::BTreeMap, sync::Arc};
 pub struct RegistrySnapshot {
     pub(crate) handlers: BTreeMap<CapabilityRef, Arc<dyn OperationHandler>>,
     pub(crate) queries: BTreeMap<CapabilityRef, Arc<dyn QueryHandler>>,
+    pub(crate) controls: BTreeMap<CapabilityRef, Arc<dyn ControlHandler>>,
     pub(crate) schemas: BTreeMap<CapabilityRef, Arc<schema::CapabilitySchemas>>,
     pub(crate) descriptors: BTreeMap<CapabilityRef, CapabilityDescriptor>,
 }
 
 impl RegistrySnapshot {
+    pub fn register_control_handler(&mut self, handler: Arc<dyn ControlHandler>) -> Result<(), OperationError> {
+        self.register_control(handler.descriptor().clone())?;
+        self.controls.insert(handler.descriptor().capability.clone(), handler);
+        Ok(())
+    }
+    pub fn control_handler(&self, capability: &CapabilityRef) -> Result<Arc<dyn ControlHandler>, OperationError> {
+        self.controls.get(capability).cloned()
+            .ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))
+    }
     pub fn new() -> Self {
         Self::default()
     }

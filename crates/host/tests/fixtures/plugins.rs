@@ -56,6 +56,11 @@ pub fn package(path: &Path, version: &str, collision: bool) -> PluginArchive {
             "required_scopes":[scope],"effects":effects,"cancellation":cancellation
         })
     };
+    let mut control = capability("fixture.answer", "control", "plugins.run", json!(["fixture.input"]), "unsupported");
+    control["capability"]["version"] = json!(2);
+    control["input_schema"] = json!({"type":"object","properties":{"value":{"type":"string","maxLength":65536},"action":{"type":"string"}},"required":["value"],"additionalProperties":false});
+    control["examples"] = json!([{"value":"example"}]);
+    control["output_schema"] = json!({"type":"object","properties":{"submitted":{"type":"boolean"}},"required":["submitted"],"additionalProperties":false});
     fs::write(path.join("plugin.json"), serde_json::to_vec(&json!({
         "protocol_version":1,"id":"example.host","name":"External Host fixture","version":version,
         "description":"Public plugin protocol fixture","license":"MIT",
@@ -65,7 +70,7 @@ pub fn package(path: &Path, version: &str, collision: bool) -> PluginArchive {
             {"capability":{"id":"plugins.branch","version":1},"scopes":["plugins.write"]}],
         "views":[],"contexts":[],"backend":{"executable":"dist/backend","arguments":[]},
         "capabilities":[capability(if collision {"plugins.list"}else{"fixture.read"},"query","plugins.read",json!([]),"unsupported"),
-            capability("fixture.run","operation","plugins.run",json!(["fixture.write"]),"request")],
+            capability("fixture.run","operation","plugins.run",json!(["fixture.write"]),"request"), control],
         "configuration_schema":{"type":"object"},"default_configuration":{}
     })).unwrap()).unwrap();
     snapshot_directory(path, None, &backend_target()).unwrap()

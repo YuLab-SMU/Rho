@@ -12,6 +12,18 @@ incoming call identity with `validate_call`; enforce native identity and
 preconditions in the owner. Return a query observation or a proposed CommitPlan.
 The Host's Operation mechanism commits results. Never write its database.
 
+Declare `kind: "control"` for transient answers to an existing owner request.
+Handle `Control(PluginCall)` without taking the lane held by the waiting execution,
+then return `ControlResult`. Its `operation_id` must be null; original native
+operation/request identities belong in the owner's validated arguments. Controls
+have no new Operation, idempotency receipt, event, recovery candidate or resource
+transfer authority. Host arguments and results are each bounded to 256 KiB.
+Do not log answers or include them in errors; Host control diagnostics redact
+native errors and schema failures. The owner must fence stale and duplicate input.
+After lost acknowledgement, observe the original native request before retrying.
+Explicitly bound queries and controls remain available while an instance drains;
+new Operations and automatic provider selection cannot enter that instance.
+
 Initialization may include a Host-issued `environment` with the normalized
 `project_root` and a private, persistent `data_root` for this exact instance.
 Use these paths for owner storage; do not infer a project from the artifact working

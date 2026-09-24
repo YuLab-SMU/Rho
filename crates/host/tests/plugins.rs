@@ -1014,3 +1014,258 @@ async fn closing_a_view_does_not_cancel_or_retarget_its_accepted_native_operatio
         OperationStatus::Succeeded
     );
 }
+
+#[tokio::test]
+async fn ephemeral_controls_share_host_and_view_authority_without_recording_answers() {
+    use rho_plugin_protocol::{PluginViewConnection, PluginViewMessage};
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir(&project).unwrap();
+    let db = temp.path().join("state.sqlite");
+    let native = fixture::package(&temp.path().join("native"), "1", false);
+    let ui_path = temp.path().join("ui");
+    ui_package(&ui_path);
+    let mut manifest: Value =
+        serde_json::from_slice(&fs::read(ui_path.join("plugin.json")).unwrap()).unwrap();
+    manifest["requires"] =
+        json!([{"capability":{"id":"fixture.answer","version":2},"scopes":["plugins.run"]}]);
+    fs::write(
+        ui_path.join("plugin.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    let ui = rho_plugins::snapshot_directory(&ui_path, None, "ui-web").unwrap();
+    let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
+    repo.import(&native).unwrap();
+    repo.import(&ui).unwrap();
+    let host = Arc::new(NextHost::open_project(&db, &project).await.unwrap());
+    let context = NextHost::local_context();
+    let native_instance = observation(
+        &run(
+            &host,
+            &context,
+            "control-native",
+            "plugins.activate",
+            activation(&native, "native"),
+        )
+        .await,
+    );
+    let ui_instance = observation(&run(&host,&context,"control-ui","plugins.activate",json!({"revision":ui.revision.id,"artifact":ui.artifacts[0].id,"target":"ui-web","alias":"ui","configuration":{}})).await);
+    let view = run(&host,&context,"control-view","views.open",json!({"instance":ui_instance.instance.identity,"contribution":"view","window":"window-a","configuration":{},"state":{"text":""}})).await.output.unwrap();
+    let connection: PluginViewConnection = serde_json::from_value(
+        query(
+            &host,
+            &context,
+            "views.connection",
+            json!({"view":view["view"]}),
+        )
+        .await,
+    )
+    .unwrap();
+    let binding = query(&host,&context,"plugins.resolve",json!({"capability":{"id":"fixture.answer","version":2},"instance":native_instance.instance.identity})).await;
+    let secret = "transient-only-Ω-42197";
+    let request = |version, args: Value| {
+        HostRequest::Control(ControlRequest {
+            capability: CapabilityRef::new("fixture.answer", version).unwrap(),
+            arguments: json!({"binding":binding,"arguments":args}),
+        })
+    };
+    assert!(!format!("{:?}", request(2, json!({"value":secret}))).contains(secret));
+    let counts = || {
+        let connection = rusqlite::Connection::open(&db).unwrap();
+        [
+            "operations",
+            "operation_events",
+            "domain_facts",
+            "outbox",
+            "operation_commit_candidates",
+            "operation_uncommitted_evidence",
+        ]
+        .map(|table| {
+            connection
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap()
+        })
+    };
+    let before = counts();
+    let outbox = host.outbox(&context, 0, 100).await.unwrap();
+    let read_binding = query(&host,&context,"plugins.resolve",json!({"capability":{"id":"fixture.read","version":1},"instance":native_instance.instance.identity})).await;
+    let held_host = host.clone();
+    let held_request = request(2,json!({"value":secret,"action":"hold"}));
+    let held = tokio::spawn(async move { held_host.dispatch(&NextHost::local_context(), held_request).await });
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(20));
+        loop {
+            interval.tick().await;
+            if query(&host,&context,"fixture.read",json!({"binding":read_binding,"arguments":{"action":"control_pending"}})).await["pending"] == 1 { break; }
+        }
+    }).await.unwrap();
+    held.abort();
+    assert!(held.await.unwrap_err().is_cancelled());
+    assert_eq!(query(&host,&context,"plugins.instance",json!({"instance":native_instance.instance.identity})).await["retained_calls"],1,
+        "Caller disconnect must not drop the dispatched control's provider lease");
+    assert_eq!(host.dispatch(&context,request(2,json!({"value":secret,"action":"finish"}))).await.unwrap(),json!({"submitted":true}));
+    for action in ["answer", "resource_put"] {
+        assert_eq!(
+            host.dispatch(
+                &context,
+                request(2, json!({"value":secret,"action":action}))
+            )
+            .await
+            .unwrap(),
+            json!({"submitted":true})
+        );
+    }
+    for action in ["reject", "bad_output"] {
+        let error = host
+            .dispatch(
+                &context,
+                request(2, json!({"value":secret,"action":action})),
+            )
+            .await
+            .unwrap_err();
+        assert!(!format!("{error:?}").contains(secret));
+    }
+    let invalid = host
+        .dispatch(&context, request(2, json!({"value":{"invalid":secret}})))
+        .await
+        .unwrap_err();
+    assert!(!format!("{invalid:?}").contains(secret));
+    assert!(
+        host.dispatch(&context, request(1, json!({"value":secret})))
+            .await
+            .is_err()
+    );
+    let mut stranger = context.clone();
+    stranger.caller.id = "another-principal".into();
+    let mut denied = context.clone();
+    denied.scopes.remove("plugins.run");
+    for caller in [&stranger, &denied] {
+        assert!(
+            host.dispatch(caller, request(2, json!({"value":secret})))
+                .await
+                .is_err()
+        );
+    }
+    // Neither a Query nor a new Operation is an alternate way to send a control.
+    assert!(
+        host.query_snapshot(
+            &context,
+            QueryRequest {
+                capability: CapabilityRef::new("fixture.answer", 2).unwrap(),
+                arguments: json!({"binding":binding,"arguments":{"value":secret}})
+            }
+        )
+        .await
+        .is_err()
+    );
+    let mut invoke = invocation(
+        "must-not-record-control",
+        "fixture.answer",
+        json!({"binding":binding,"arguments":{"value":secret}}),
+    );
+    invoke.capability.version = 2;
+    assert!(host.invoke(&context, invoke).await.is_err());
+    let message = |sequence, capability: &str| {
+        serde_json::from_value::<PluginViewMessage>(json!({
+        "protocol_version":1,"connection":connection.connection,"view":view["view"],"sequence":sequence,"request":format!("answer-{sequence}"),
+        "body":{"type":"control","capability":{"id":capability,"version":2},"arguments":{"binding":binding,"arguments":{"value":secret}}}
+    })).unwrap()
+    };
+    assert_eq!(
+        host.dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.call_token,
+            message(1, "fixture.answer")
+        )
+        .await
+        .unwrap(),
+        json!({"submitted":true})
+    );
+    assert!(
+        host.dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.call_token,
+            message(2, "undeclared.answer")
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        host.dispatch_plugin_view(
+            &context,
+            "wrong-window",
+            &connection.call_token,
+            message(3, "fixture.answer")
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(
+        counts(),
+        before,
+        "Controls cannot create receipts, results, recovery candidates or events"
+    );
+    assert_eq!(
+        json!(host.outbox(&context, 0, 100).await.unwrap()),
+        json!(outbox)
+    );
+    assert_eq!(
+        query(
+            &host,
+            &context,
+            "resources.list",
+            json!({"owner":native_instance.instance.identity,"limit":10})
+        )
+        .await["total"],
+        0
+    );
+    run(
+        &host,
+        &context,
+        "close-control-view",
+        "views.close",
+        json!({"view":view["view"]}),
+    )
+    .await;
+    for (id, instance) in [
+        ("control-release-ui", ui_instance),
+        ("control-release-native", native_instance),
+    ] {
+        let released = run(
+            &host,
+            &context,
+            id,
+            "plugins.release",
+            json!({"instance":instance.instance.identity}),
+        )
+        .await;
+        assert_eq!(released.status, OperationStatus::Succeeded);
+    }
+    assert!(
+        host.dispatch(&context, request(2, json!({"value":secret})))
+            .await
+            .is_err()
+    );
+    host.drain().await;
+    drop(host);
+    // SQLite and retained repository diagnostics must not contain the answer.
+    for path in [&db, &db.with_extension("sqlite-wal")] {
+        if let Ok(bytes) = fs::read(path) {
+            assert!(
+                !bytes
+                    .windows(secret.len())
+                    .any(|part| part == secret.as_bytes())
+            );
+        }
+    }
+    assert!(
+        !serde_json::to_string(&repo.recorded_instances(None, 100).unwrap())
+            .unwrap()
+            .contains(secret)
+    );
+}

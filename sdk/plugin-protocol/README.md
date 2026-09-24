@@ -84,6 +84,15 @@ as `PluginCall.owner_context` along with the original Operation ID. Queries carr
 no Operation ID. Duplicate original requests read their saved record without
 running preflight again.
 
+`kind: "control"` contributes a transient handler for an existing owner request.
+Use `Control` / `ControlResult` frames with no new `operation_id`; Host callers
+use the same `PluginRequest` binding envelope through the Control port. Native
+request/answer identities and preconditions remain owner-defined. The Host limits
+arguments/results to 256 KiB, redacts validation/native errors, and creates no
+Operation, receipt, event, recovery candidate or resource-transfer parent. Only
+explicitly selected queries and controls can reach a draining instance. Read the
+pending native request after an unacknowledged answer; never replay automatically.
+
 The core bridge wraps native recovery as `plugin_owner_recovery`; transport and
 contract failures retain their original candidate under a distinct boundary
 recovery. Proposed resource evidence is accepted only after the resource owner

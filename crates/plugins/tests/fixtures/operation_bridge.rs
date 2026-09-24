@@ -247,7 +247,9 @@ async fn operation_bridge_retains_running_provider_and_cancellation_does_not_imp
     wait_pending(&h.runtime).await;
     assert!(h.runtime.release(&h.instance.identity).await.is_err());
     h.bridge.refresh(&h.registry).unwrap();
-    assert!(h.registry.descriptors().is_empty());
+    assert!(h.registry.handler(&host::CapabilityRef::new("fixture.run",1).unwrap()).is_err());
+    assert!(h.registry.query_handler(&host::CapabilityRef::new("fixture.read",1).unwrap()).is_ok());
+    assert!(h.registry.descriptors().iter().all(|d| d.kind == host::CapabilityKind::Query));
     let cancel = h
         .gateway
         .request_cancellation(&h.context, &record.operation.operation_id)

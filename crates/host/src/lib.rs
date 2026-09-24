@@ -304,6 +304,15 @@ impl NextHost {
     ) -> Result<serde_json::Value, OperationError> {
         use rho_contract::HostRequest;
         let result = match request {
+            HostRequest::Control(request) => {
+                let runtime = self.runtime.clone();
+                let context = context.clone();
+                return self.tasks.spawn(async move {
+                    runtime.registry.control(&context, request).await
+                }).await.map_err(|_| OperationError::Unavailable(
+                    "Control completion was lost; inspect the native request before retrying".into()
+                ))?;
+            }
             HostRequest::Invoke(invocation) => {
                 serde_json::to_value(if invocation.return_after_acceptance == Some(true) {
                     self.invoke_accepted(context, invocation.invocation).await?

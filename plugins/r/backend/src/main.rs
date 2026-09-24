@@ -70,6 +70,17 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                 };
                 let operation_message = matches!(&frame.body, RpcBody::Invoke(_));
                 let reply = match frame.body {
+                    RpcBody::Control(call) => {
+                        if call.request != frame.request || call.binding.provider != instance.identity
+                            || call.binding.project != instance.project || call.principal != instance.principal
+                            || call.operation_id.is_some() {
+                            break Err("R control identity differs from the initialized instance".into());
+                        }
+                        Some(match owner.control(&call) {
+                            Ok(data) => RpcBody::ControlResult { data },
+                            Err(message) => error("r_control", &message),
+                        })
+                    }
                     RpcBody::Query(call) | RpcBody::Invoke(call) => {
                         // Host admission is authoritative; also fence mismatched calls
                         // before native owner code sees any arguments.

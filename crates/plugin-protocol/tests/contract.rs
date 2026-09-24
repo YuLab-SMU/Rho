@@ -232,3 +232,31 @@ fn aggregate_layout_and_visual_source_limits_are_enforced() {
     };
     assert!(scene.validate().is_err());
 }
+
+#[test]
+fn control_diagnostics_redact_payloads_but_wire_retains_exact_answers() {
+    let secret = "ephemeral-secret-Ω";
+    let request: PluginViewRequest = serde_json::from_value(json!({"type":"control",
+        "capability":{"id":"example.answer","version":2},"arguments":{"value":secret}}))
+    .unwrap();
+    assert!(!format!("{request:?}").contains(secret));
+    assert_eq!(
+        serde_json::to_value(&request).unwrap()["arguments"]["value"],
+        secret
+    );
+    for body in [
+        RpcBody::ControlResult {
+            data: json!({"value":secret}),
+        },
+        RpcBody::Error {
+            code: "bad".into(),
+            message: secret.into(),
+            recovery: Some(json!({"answer":secret})),
+        },
+    ] {
+        let mut wire = frame(1);
+        wire.body = body;
+        assert!(!format!("{wire:?}").contains(secret));
+        assert_eq!(RpcFrame::decode(&wire.encode().unwrap()).unwrap(), wire);
+    }
+}
