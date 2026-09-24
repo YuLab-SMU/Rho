@@ -303,6 +303,10 @@ impl NextHost {
         request: rho_contract::HostRequest,
     ) -> Result<serde_json::Value, OperationError> {
         use rho_contract::HostRequest;
+        let request = match request {
+            HostRequest::Control(control) => port_contracts::control_request(&self.runtime.registry, context, control)?,
+            request => request,
+        };
         let result = match request {
             HostRequest::Control(request) => {
                 let runtime = self.runtime.clone();
@@ -1422,23 +1426,18 @@ impl NextHost {
         operation_id: &OperationId,
         only_if_pending: bool,
     ) -> Result<CancellationRequestOutcome, OperationError> {
-        let capability = rho_contract::CapabilityRef::new(port_contracts::CANCEL, 1)?;
-        self.runtime.registry.validate_control_input(
-            context,
-            &capability,
-            &json!({"operation_id":operation_id,"only_if_pending":only_if_pending}),
-        )?;
-        OperationId::new(operation_id.as_str())?;
-        let result = self
-            .runtime
-            .gateway
-            .request_cancellation_conditional(context, operation_id, only_if_pending)
-            .await?;
-        self.runtime.registry.validate_control_output(
-            &capability,
-            &serde_json::to_value(&result).map_err(|e| OperationError::Contract(e.to_string()))?,
-        )?;
-        Ok(result)
+        let runtime = self.runtime.clone();
+        let context = context.clone();
+        let operation_id = operation_id.clone();
+        // Native pending-cancellation preparation can outlive a view/edge. Keep
+        // its original journal decision and signal owned by this Host task.
+        self.tasks.spawn(async move {
+            let result = runtime.registry.control(&context, rho_contract::ControlRequest {
+                capability: rho_contract::CapabilityRef::new(port_contracts::CANCEL, 1)?,
+                arguments: json!({"operation_id":operation_id,"only_if_pending":only_if_pending}),
+            }).await?;
+            serde_json::from_value(result).map_err(|e| OperationError::Contract(e.to_string()))
+        }).await.map_err(|_| OperationError::Unavailable("Original cancellation acknowledgement was lost; inspect the same operation before retrying".into()))?
     }
 
     pub async fn events(

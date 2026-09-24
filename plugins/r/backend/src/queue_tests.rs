@@ -38,6 +38,54 @@ async fn pending<F: Future>(future: Pin<&mut F>) {
     tokio::select! { biased; _ = future => panic!("queued work must remain pending"), _ = std::future::ready(()) => () }
 }
 
+#[tokio::test]
+async fn pending_cancellation_fences_start_until_the_original_journal_signal() {
+    let queue = Queue::default();
+    let lane = Arc::new(Lane::new(()));
+    let a = call("waiting-for-read-lane");
+    queue.admit(&a).unwrap();
+    let read = lane.clone().lock_owned().await;
+    let (cancel, cancellation) = watch::channel(false);
+    let a_id = id(&a);
+    let acquiring = queue.acquire(&a_id, lane.clone(), cancellation);
+    tokio::pin!(acquiring);
+    pending(acquiring.as_mut()).await;
+    let preparation = PendingCancellation { binding: a.binding.clone(), operation_id: a_id.clone() };
+    let mut wrong = preparation.clone();
+    wrong.binding.target = Some("another-session".into());
+    assert!(queue.prepare_pending_cancellation(&wrong).is_err());
+    assert!(queue.prepare_pending_cancellation(&preparation).unwrap());
+    drop(read);
+    // A lost preparation reply or failed journal write cannot start OR finish R.
+    pending(acquiring.as_mut()).await;
+    let observed = queue.observe("native-session", None);
+    assert_eq!(observed.pending_cancellations, vec![a_id.clone()]);
+    assert!(observed.awaiting_commit.is_empty());
+    assert!(observed.console.current.is_none());
+    assert_eq!(observed.console.pending[0].operation_id, a_id);
+    control(&queue, true, None).unwrap();
+    assert!(control(&queue, false, None).unwrap_err().contains("journal confirmation"));
+    assert!(queue.prepare_pending_cancellation(&preparation).unwrap(), "same original preparation is retryable");
+    pending(acquiring.as_mut()).await;
+    cancel.send_replace(true);
+    assert!(acquiring.await.unwrap().is_none());
+    assert!(!queue.prepare_pending_cancellation(&preparation).unwrap());
+    assert_eq!(queue.observe("native-session", None).awaiting_commit, vec![a_id.clone()]);
+    queue.settle(&settled(&a, PluginOutcome::Cancelled)).unwrap();
+    assert!(queue.observe("native-session", None).pending_cancellations.is_empty());
+    control(&queue, false, None).unwrap();
+    let b = call("already-running");
+    queue.admit(&b).unwrap();
+    let (_cancel, cancellation) = watch::channel(false);
+    let running = queue.acquire(&id(&b), lane, cancellation).await.unwrap().unwrap();
+    assert!(!queue.prepare_pending_cancellation(&PendingCancellation {
+        binding: b.binding.clone(), operation_id: id(&b),
+    }).unwrap(), "conditional cancellation never interrupts a running native call");
+    queue.finished(&id(&b), PluginOutcome::Succeeded).unwrap();
+    drop(running);
+    queue.settle(&settled(&b, PluginOutcome::Succeeded)).unwrap();
+}
+
 #[test]
 fn versioned_run_keeps_its_source_and_summary_after_the_caller_changes_input() {
     let queue = Queue::default();

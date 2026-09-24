@@ -15,6 +15,7 @@ struct QueueData {
     reserved: Option<rho_contract::OperationId>,
     pause: Option<QueuePause>,
     cancelled: BTreeSet<String>,
+    cancellation_prepared: BTreeSet<String>,
     serial: u64,
     controls_pending: usize,
     closing: bool,
@@ -94,7 +95,7 @@ impl ConsoleQueue {
     pub fn begin_shutdown(&self) {
         let mut d = self.data.lock().unwrap_or_else(|e| e.into_inner());
         d.closing = true;
-        if d.pause.is_some() {
+        if d.pause.is_some() || !d.cancellation_prepared.is_empty() {
             Self::cancel_on_shutdown(&mut d);
         }
         drop(d);
@@ -146,6 +147,9 @@ impl ConsoleQueue {
     }
     pub(super) fn cancel_pending(&self, operation: &Operation) -> bool {
         let mut d = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        if d.closing {
+            return false;
+        }
         if !d
             .pending
             .iter()
@@ -153,7 +157,7 @@ impl ConsoleQueue {
         {
             return false;
         }
-        d.cancelled
+        d.cancellation_prepared
             .insert(operation.operation_id.as_str().to_string());
         drop(d);
         self.signal();
@@ -166,6 +170,7 @@ impl ConsoleQueue {
         }
         d.pending.retain(|r| &r.operation_id != id);
         d.cancelled.remove(id.as_str());
+        d.cancellation_prepared.remove(id.as_str());
         if !success {
             Self::pause_locked(&mut d, Some(id.clone()), reason);
         }
@@ -193,6 +198,7 @@ impl ConsoleQueue {
                 let cancelled =
                     *cancellation.borrow() || d.cancelled.contains(operation.operation_id.as_str());
                 let available = !cancelled
+                    && !d.cancellation_prepared.contains(operation.operation_id.as_str())
                     && d.controls_pending == 0
                     && d.pause.is_none()
                     && d.current.is_none()
@@ -230,6 +236,7 @@ impl ConsoleQueue {
                 let d = self.data.lock().unwrap_or_else(|e| e.into_inner());
                 if *cancellation.borrow()
                     || d.cancelled.contains(operation.operation_id.as_str())
+                    || d.cancellation_prepared.contains(operation.operation_id.as_str())
                     || d.pause.is_some()
                     || d.controls_pending > 0
                 {
@@ -242,6 +249,7 @@ impl ConsoleQueue {
                 let start = guard.is_some()
                     && !*cancellation.borrow()
                     && !d.cancelled.contains(operation.operation_id.as_str())
+                    && !d.cancellation_prepared.contains(operation.operation_id.as_str())
                     && d.pause.is_none()
                     && d.controls_pending == 0;
                 if start {
@@ -317,6 +325,11 @@ impl ConsoleQueue {
             if d.pause.as_ref().map(|p| p.id.as_str()) != pause_id || pause_id.is_none() {
                 return Err(HandlerError::before_effect(
                     "Queue pause changed. Refresh before resuming.",
+                ));
+            }
+            if !d.cancellation_prepared.is_empty() {
+                return Err(HandlerError::before_effect(
+                    "An original cancellation awaits journal confirmation; retry that cancellation before resuming.",
                 ));
             }
             d.pause = None;

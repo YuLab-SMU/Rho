@@ -5,6 +5,18 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 use ts_rs::TS;
 
+pub const PENDING_CANCELLATION_FEATURE: &str = "pending_cancellation_v1";
+
+/// A Host-only fence on an original invocation, never a second operation.
+/// Preparation prevents native start until the original journal's cancellation
+/// signal arrives. Repeating preparation for the same invocation is idempotent.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PendingCancellation {
+    pub binding: ProviderBinding,
+    pub operation_id: OperationId,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct InstanceRef {
@@ -190,6 +202,11 @@ pub enum RpcBody {
     Ready {
         revision: RevisionId,
         artifact: ArtifactId,
+        /// Optional protocol extensions. Unknown bounded names are ignored by
+        /// Hosts; an extension is used only after exact readiness advertises it.
+        #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+        #[schemars(length(max = 16))]
+        features: BTreeSet<String>,
     },
     Query(PluginCall),
     /// Ephemeral native control; it never carries a new Operation identity.
@@ -220,6 +237,11 @@ pub enum RpcBody {
     CancelAcknowledged {
         operation_id: String,
         confirmed: bool,
+    },
+    PreparePendingCancellation(PendingCancellation),
+    PendingCancellationPrepared {
+        cancellation: PendingCancellation,
+        prepared: bool,
     },
     OperationSettled(OperationSettlement),
     /// Echo the exact settlement after applying it idempotently. A delayed or
@@ -252,6 +274,8 @@ impl std::fmt::Debug for RpcBody {
             Self::HostResult { .. } => "HostResult",
             Self::Cancel { .. } => "Cancel",
             Self::CancelAcknowledged { .. } => "CancelAcknowledged",
+            Self::PreparePendingCancellation(_) => "PreparePendingCancellation",
+            Self::PendingCancellationPrepared { .. } => "PendingCancellationPrepared",
             Self::OperationSettled(_) => "OperationSettled",
             Self::SettlementAcknowledged(_) => "SettlementAcknowledged",
             Self::Release => "Release",
@@ -284,6 +308,12 @@ impl RpcFrame {
             frame.protocol_version == PLUGIN_PROTOCOL_VERSION && frame.sequence > 0,
             "unsupported protocol or sequence",
         )?;
+        if let RpcBody::Ready { features, .. } = &frame.body {
+            require(features.len() <= 16 && features.iter().all(|feature|
+                !feature.is_empty() && feature.len() <= 64 && feature.bytes().all(|b|
+                    b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))),
+                "invalid backend protocol features")?;
+        }
         Ok(frame)
     }
     pub fn encode(&self) -> Result<Vec<u8>, ProtocolError> {

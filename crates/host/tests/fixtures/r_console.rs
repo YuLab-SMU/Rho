@@ -127,12 +127,21 @@ pub async fn exercise(
     .await;
     let cancel_id: OperationId =
         serde_json::from_value(pending["console"]["pending"][1]["operation_id"].clone()).unwrap();
-    assert!(
-        host.request_cancellation(&NextHost::local_context(), &cancel_id)
-            .await
-            .unwrap()
-            .accepted
-    );
+    let cancel_request = |operation_id: &OperationId| HostRequest::Control(ControlRequest {
+        capability: CapabilityRef::new("operation.request_cancellation", 1).unwrap(),
+        arguments: json!({"operation_id":operation_id,"only_if_pending":true}),
+    });
+    let mut reopened = NextHost::local_context();
+    reopened.principal = Some(reopened.principal().clone());
+    reopened.caller.id = "reopened-console".into();
+    let mut readonly = reopened.clone();
+    readonly.scopes.remove("workspace.run_r");
+    assert!(host.dispatch(&readonly, cancel_request(&cancel_id)).await.is_err());
+    let mut foreign = reopened.clone();
+    foreign.principal.as_mut().unwrap().id = "foreign-console-owner".into();
+    assert!(host.dispatch(&foreign, cancel_request(&cancel_id)).await.is_err());
+    let accepted = host.dispatch(&reopened, cancel_request(&cancel_id)).await.unwrap();
+    assert_eq!(accepted["accepted"], true);
     let cancelled = queue::completed(cancelling).await;
     assert_eq!(
         cancelled.status,
@@ -152,6 +161,9 @@ pub async fn exercise(
     assert_eq!(waiting["console"]["current"]["source"], source);
     let input = waiting["console"]["input"].clone();
     assert_eq!(input["operation_id"], json!(id));
+    assert!(host.dispatch(&reopened, cancel_request(&id)).await.is_err(),
+        "cancel pending must refuse the now-running native input call");
+    assert!(!host.get_operation(&NextHost::local_context(), &id).await.unwrap().unwrap().cancellation_requested);
     assert!(
         read(
             host,

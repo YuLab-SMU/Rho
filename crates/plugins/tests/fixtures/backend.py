@@ -18,6 +18,10 @@ reverse = {}
 settlements = {}
 settlement_requests = {}
 invocations = 0
+preparations = {}
+preparation_requests = {}
+cancel_signals = []
+deferred_preparations = {}
 
 
 def read():
@@ -94,7 +98,8 @@ if configuration.get("mode") == "init_fail":
     send(frame["request"], "error", {"code": "fixture_failed", "message": "Owner initialization failed", "recovery": None})
     sys.exit(0)
 send(frame["request"], "ready", {"revision": identity["revision"], "artifact":
-    "sha256:" + "0" * 64 if configuration.get("mode") == "bad_ready" else identity["artifact"]})
+    "sha256:" + "0" * 64 if configuration.get("mode") == "bad_ready" else identity["artifact"],
+    "features": ["pending_cancellation_v1"] if configuration.get("pending_cancellation") else []})
 
 while True:
     frame = read()
@@ -107,6 +112,27 @@ while True:
         if configuration.get("mode") != "cleanup_fail":
             send(request, "released")
             break
+    elif kind == "prepare_pending_cancellation":
+        assert configuration.get("pending_cancellation"), "Host must not probe unsupported RPC extensions"
+        operation = data["operation_id"]
+        original = next((call for call in pending.values() if call["operation_id"] == operation), None)
+        assert original and original["binding"] == data["binding"]
+        requests = preparation_requests.setdefault(operation, [])
+        requests.append(request)
+        prepared = original["arguments"].get("action") != "running"
+        if prepared:
+            preparations[operation] = data
+        if configuration.get("pending_cancellation") == "lose_first" and len(requests) == 1:
+            continue
+        if configuration.get("pending_cancellation") == "wrong_identity":
+            data = {**data, "operation_id": "wrong-operation"}
+        answer = {"cancellation": data, "prepared": prepared}
+        if configuration.get("pending_cancellation") == "gate":
+            deferred_preparations[request] = answer
+            continue
+        send(request, "pending_cancellation_prepared", answer)
+        if configuration.get("pending_cancellation") == "lose_first":
+            send(requests[0], "pending_cancellation_prepared", answer)
     elif kind == "operation_settled":
         operation = data["operation_id"]
         assert data["binding"]["provider"] == identity
@@ -132,7 +158,15 @@ while True:
                 "owner_context":{"native_session":"fixed-session"}})
             continue
         action = args.get("action", "echo")
-        if action == "settlement_state":
+        if action == "confirm_preparation":
+            for original_request, answer in deferred_preparations.items():
+                send(original_request, "pending_cancellation_prepared", answer)
+            deferred_preparations.clear()
+            query_result(request, {})
+        elif action == "cancellation_state":
+            query_result(request, {"preparations": preparations, "requests": preparation_requests,
+                "signals": cancel_signals, "invocations": invocations})
+        elif action == "settlement_state":
             query_result(request, {"settlements": settlements, "requests": settlement_requests, "invocations": invocations})
         elif action == "pending_count":
             query_result(request, {"operations": len(pending), "queries": len(pending_queries), "controls": len(pending_controls)})
@@ -224,6 +258,7 @@ while True:
         else:
             pending[request] = data
     elif kind == "cancel":
+        cancel_signals.append(data["operation_id"])
         confirmed = configuration.get("cancel_confirmed", False)
         send(request, "cancel_acknowledged", {"operation_id": data["operation_id"], "confirmed": confirmed})
         if confirmed:

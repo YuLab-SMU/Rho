@@ -357,6 +357,13 @@ impl ExecutionLease for PluginExecutionLease {
 }
 #[async_trait]
 impl OperationHandler for BoundHandler {
+    async fn prepare_pending_cancellation(&self, operation: &host::Operation) -> Result<bool, OperationError> {
+        self.lease.prepare_pending_cancellation(PendingCancellation {
+            binding: self.request.binding.clone(),
+            operation_id: rho_plugin_protocol::OperationId::new(operation.operation_id.as_str())
+                .map_err(|error| OperationError::InvalidInput(error.to_string()))?,
+        }).await.map_err(|error| OperationError::Unavailable(error.to_string()))
+    }
     fn descriptor(&self) -> &host::CapabilityDescriptor {
         &self.descriptor
     }

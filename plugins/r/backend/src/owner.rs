@@ -611,6 +611,14 @@ impl Owner {
             .await
             .map_err(|e| e.to_string())
     }
+    pub fn prepare_pending_cancellation(&self, cancellation: &PendingCancellation) -> Result<bool, String> {
+        let binding = &cancellation.binding;
+        if binding.provider != self.instance || binding.target.as_deref() != Some(self.target().as_str())
+            || binding.capability.id.as_str() != "r.execute" || !matches!(binding.capability.version, 1 | 2) {
+            return Err("Pending cancellation requires the exact admitted R execution".into());
+        }
+        self.queue.prepare_pending_cancellation(cancellation)
+    }
     pub fn begin_shutdown(&self) {
         self.queue.begin_shutdown();
         if let Ok(runtime) = self.runtime() {

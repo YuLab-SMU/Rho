@@ -329,6 +329,13 @@ pub trait OperationHandler: Send + Sync {
     fn cancel_pending(&self, _operation: &Operation) -> bool {
         false
     }
+    /// Remote owners atomically fence a waiting invocation. A successful fence
+    /// must not itself finish the operation: wait for the original journal's
+    /// cancellation signal. Lost acknowledgement/storage failure preserves the
+    /// fence so the same authorized cancellation can be retried without starting.
+    async fn prepare_pending_cancellation(&self, operation: &Operation) -> Result<bool, OperationError> {
+        Ok(self.cancel_pending(operation))
+    }
     async fn acquire_execution(
         &self,
         _operation: &Operation,
@@ -1009,12 +1016,18 @@ impl OperationGateway {
                 operation.operation.capability.display_key(),
             ));
         }
-        if only_if_pending
-            && !retained
-                .as_ref()
-                .is_some_and(|handler| handler.cancel_pending(&operation.operation))
-        {
-            return Err(OperationError::InvalidInput("The run has started or ended. Refresh its state; use Interrupt explicitly for a running operation.".into()));
+        // Original identity and handler were captured under admission. A native
+        // round trip must not block unrelated admission or closing a view. The
+        // owner arbitrates start, and the journal arbitrates terminal completion.
+        drop(_admission);
+        if only_if_pending {
+            let prepared = match retained.as_ref() {
+                Some(handler) => handler.prepare_pending_cancellation(&operation.operation).await?,
+                None => false,
+            };
+            if !prepared {
+                return Err(OperationError::InvalidInput("The owner did not reserve a pending run. It may have started, ended or not support conditional cancellation. Refresh its state; use Interrupt explicitly for a running operation.".into()));
+            }
         }
         let mut outcome = self
             .journal

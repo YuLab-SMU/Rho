@@ -14,11 +14,18 @@ try {
   const consumer = path.join(temp, "consumer");
   fs.mkdirSync(consumer);
   fs.writeFileSync(path.join(consumer, "consumer.mts"), `
-import type { PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage } from "../protocol/index.js";
+import type { PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation } from "../protocol/index.js";
 const frame: RpcFrame = { protocol_version: 1, connection: "channel", instance: "instance",
   sequence: 1, request: "request", body: { type: "release" } };
+const original: PendingCancellation = { operation_id: "original", binding: {
+  capability: { id: "example.run", version: 1 }, project: "project", target: "native",
+  provider: { instance: "instance", plugin: "example.plugin", revision: "sha256:" + "a".repeat(64), artifact: "sha256:" + "b".repeat(64) }
+} };
+const prepare: RpcFrame = { ...frame, body: { type: "prepare_pending_cancellation", data: original } };
+const ready: RpcFrame = { ...frame, body: { type: "ready", data: { revision: original.binding.provider.revision, artifact: original.binding.provider.artifact } } };
+const extended: RpcFrame = { ...frame, body: { type: "ready", data: { revision: original.binding.provider.revision, artifact: original.binding.provider.artifact, features: ["pending_cancellation_v1"] } } };
 export function inspect(manifest: PluginManifest, visual: VisualDocument, page: PluginRevisionPage) {
-  return [frame, manifest.views[0]?.entrypoint, visual.nodes[visual.root], page.next];
+  return [frame, prepare, ready, extended, manifest.views[0]?.entrypoint, visual.nodes[visual.root], page.next];
 }
 `);
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),

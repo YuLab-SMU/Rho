@@ -129,6 +129,99 @@ impl Harness {
 }
 
 #[tokio::test]
+async fn pending_cancellation_requires_original_authority_and_retries_the_same_native_fence() {
+    for mode in ["journal_failure", "lose_first", "unsupported", "running", "wrong_identity"] {
+        let h = Harness::new(json!({"pending_cancellation": if mode == "unsupported" {Value::Null} else {json!(mode)}, "cancel_confirmed":true}), false).await;
+        let gateway = h.gateway.clone();
+        let context = h.context.clone();
+        let invocation = h.invocation("conditional", json!({"action":if mode == "running" {"running"} else {"hold"}}));
+        let (accepted, ack) = tokio::sync::oneshot::channel();
+        let work = tokio::spawn(async move { gateway.invoke_notifying(&context, invocation, Some(accepted)).await });
+        let original = ack.await.unwrap();
+        let id = &original.operation.operation_id;
+        wait_pending(&h.runtime).await;
+        let mut foreign = h.context.clone();
+        foreign.principal.as_mut().unwrap().id = "foreign-principal".into();
+        assert!(h.gateway.request_cancellation_conditional(&foreign, id, true).await.is_err());
+        let mut readonly = h.context.clone();
+        readonly.scopes.remove("fixture:read");
+        assert!(h.gateway.request_cancellation_conditional(&readonly, id, true).await.is_err());
+        assert_eq!(h.read(json!({"action":"cancellation_state"})).await.unwrap().data.unwrap()["requests"], json!({}));
+        let connection = rusqlite::Connection::open(h._temp.path().join("operations.sqlite")).unwrap();
+        if mode == "journal_failure" {
+            connection.execute_batch("CREATE TRIGGER fail_cancellation BEFORE UPDATE OF cancellation_requested ON operations BEGIN SELECT RAISE(ABORT,'injected cancellation journal failure'); END;").unwrap();
+        }
+        assert!(h.gateway.request_cancellation_conditional(&h.context, id, true).await.is_err());
+        let observed = h.journal.get(id).await.unwrap().unwrap();
+        assert!(!observed.cancellation_requested);
+        if mode == "wrong_identity" {
+            let result = work.await.unwrap().unwrap();
+            assert_eq!(result.status, host::OperationStatus::Uncertain);
+            assert!(!result.cancellation_requested);
+            assert!(h.runtime.release(&h.instance.identity).await.is_err());
+            continue;
+        }
+        assert!(!work.is_finished(), "preparation cannot finish the original operation");
+        let native = h.read(json!({"action":"cancellation_state"})).await.unwrap().data.unwrap();
+        assert_eq!(native["signals"], json!([]));
+        assert_eq!(native["invocations"], 1);
+        if mode == "unsupported" || mode == "running" {
+            assert_eq!(native["preparations"], json!({}));
+            if mode == "unsupported" { assert_eq!(native["requests"], json!({})); }
+            h.read(json!({"action":"finish"})).await.unwrap();
+            assert_eq!(work.await.unwrap().unwrap().status, host::OperationStatus::Succeeded);
+        } else {
+            assert_eq!(native["preparations"][id.as_str()]["operation_id"], id.as_str());
+            if mode == "journal_failure" { connection.execute_batch("DROP TRIGGER fail_cancellation").unwrap(); }
+            // A reopened view has a different caller but retains the same principal and original scopes.
+            let mut reopened = h.context.clone();
+            reopened.caller.id = "reopened-console".into();
+            assert!(h.gateway.request_cancellation_conditional(&reopened, id, true).await.unwrap().accepted);
+            let result = work.await.unwrap().unwrap();
+            assert_eq!(result.operation.operation_id, *id);
+            assert_eq!(result.status, host::OperationStatus::Cancelled);
+            assert!(result.cancellation_requested);
+            let native = h.read(json!({"action":"cancellation_state"})).await.unwrap().data.unwrap();
+            assert_eq!(native["signals"], json!([id]));
+            assert_eq!(native["invocations"], 1);
+            if mode == "lose_first" {
+                let requests = native["requests"][id.as_str()].as_array().unwrap();
+                assert_eq!(requests.len(), 2);
+                assert_eq!(requests[0], requests[1]);
+            }
+        }
+        h.runtime.release(&h.instance.identity).await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn original_return_retires_unanswered_preparation_and_accepts_only_its_late_identity() {
+    let h = Harness::new(json!({"pending_cancellation":"gate","cancel_confirmed":true}), false).await;
+    let gateway = h.gateway.clone(); let context = h.context.clone();
+    let invocation = h.invocation("original", json!({"action":"hold"}));
+    let (accepted, ack) = tokio::sync::oneshot::channel();
+    let work = tokio::spawn(async move { gateway.invoke_notifying(&context, invocation, Some(accepted)).await });
+    let id = ack.await.unwrap().operation.operation_id;
+    wait_pending(&h.runtime).await;
+    let gateway = h.gateway.clone(); let context = h.context.clone(); let original = id.clone();
+    let preparing = tokio::spawn(async move { gateway.request_cancellation_conditional(&context,&original,true).await });
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if h.read(json!({"action":"cancellation_state"})).await.unwrap().data.unwrap()["preparations"][id.as_str()].is_object() { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
+    // A second, explicitly authorized cancellation can finish the original while
+    // the first preparation acknowledgement is still missing.
+    assert!(h.gateway.request_cancellation(&h.context,&id).await.unwrap().accepted);
+    assert_eq!(work.await.unwrap().unwrap().status,host::OperationStatus::Cancelled);
+    assert!(tokio::time::timeout(Duration::from_secs(3),preparing).await.unwrap().unwrap().is_err());
+    h.read(json!({"action":"confirm_preparation"})).await.unwrap();
+    assert_eq!(h.read(json!({"action":"cancellation_state"})).await.unwrap().data.unwrap()["invocations"],1);
+    h.runtime.release(&h.instance.identity).await.unwrap();
+}
+
+#[tokio::test]
 async fn operation_bridge_freezes_binding_commits_once_and_returns_original_after_unload() {
     let h = Harness::new(json!({"label":"bound"}), true).await;
     let query = h.read(json!({"message":"中文"})).await.unwrap();

@@ -38,7 +38,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                 .ok_or("Host resources are unavailable")?,
         )?,
     )?);
-    connection.ready().await?;
+    connection.ready_with_features([PENDING_CANCELLATION_FEATURE.into()].into()).await?;
     let instance = connection.instance.clone();
     let (frames_tx, mut frames) = mpsc::channel(32);
     let mut reader = connection.reader;
@@ -137,6 +137,15 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                             });
                             None
                         }
+                    }
+                    RpcBody::PreparePendingCancellation(cancellation) => {
+                        if cancellation.binding.provider != instance.identity || cancellation.binding.project != instance.project {
+                            break Err("Pending cancellation identity differs from the initialized instance".into());
+                        }
+                        Some(match owner.prepare_pending_cancellation(&cancellation) {
+                            Ok(prepared) => RpcBody::PendingCancellationPrepared { cancellation, prepared },
+                            Err(message) => error("r_pending_cancellation", &message),
+                        })
                     }
                     RpcBody::Cancel { operation_id } => {
                         if let Some(cancel) = cancellations.get(&operation_id) { cancel.send_replace(true); }

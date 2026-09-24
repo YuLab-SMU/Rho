@@ -27,6 +27,10 @@ enum CommandMessage {
         capability: CapabilityKey,
         response: Response,
     },
+    PrepareCancellation {
+        cancellation: PendingCancellation,
+        response: Response,
+    },
     Settle {
         settlement: OperationSettlement,
         response: Response,
@@ -39,8 +43,19 @@ enum CommandMessage {
 #[derive(Clone)]
 pub(crate) struct ProcessClient {
     sender: mpsc::Sender<CommandMessage>,
+    features: BTreeSet<String>,
 }
 impl ProcessClient {
+    pub async fn prepare_pending_cancellation(&self, cancellation: PendingCancellation) -> Result<bool, PluginError> {
+        if !self.features.contains(PENDING_CANCELLATION_FEATURE) { return Ok(false); }
+        let (response, receiver) = oneshot::channel();
+        self.sender.send(CommandMessage::PrepareCancellation { cancellation: cancellation.clone(), response })
+            .await.map_err(|_| PluginError::Unavailable("pending cancellation is unconfirmed; inspect the original operation".into()))?;
+        match receive(receiver).await? {
+            RpcBody::PendingCancellationPrepared { cancellation: acknowledged, prepared } if acknowledged == cancellation => Ok(prepared),
+            _ => Err(PluginError::Unavailable("pending cancellation preparation is unconfirmed; retry the same original cancellation".into())),
+        }
+    }
     pub async fn settle(&self, settlement: OperationSettlement) -> Result<(), PluginError> {
         let (response, receiver) = oneshot::channel();
         self.sender.send(CommandMessage::Settle { settlement: settlement.clone(), response })
@@ -208,13 +223,13 @@ pub(crate) async fn start(
         match frames_rx.recv().await {
             Some(Ok(Some(RpcFrame {
                 request,
-                body: RpcBody::Ready { revision, artifact },
+                body: RpcBody::Ready { revision, artifact, features },
                 ..
             }))) if request == initialize
                 && revision == identity.revision
                 && artifact == identity.artifact =>
             {
-                Ok(())
+                Ok(features)
             }
             Some(Err(error)) => Err(error),
             _ => Err("backend did not confirm the exact revision and artifact".into()),
@@ -222,7 +237,9 @@ pub(crate) async fn start(
     })
     .await
     .unwrap_or_else(|_| Err("backend initialization timed out".into()));
-    if let Err(error) = handshake {
+    let features = match handshake {
+      Ok(features) => features,
+      Err(error) => {
         let killed = child.kill().await;
         let mut record = state.lock().unwrap();
         record.record.state = if killed.is_ok() {
@@ -237,7 +254,8 @@ pub(crate) async fn start(
         drop(record);
         prepared.persist_state(&state);
         return Err(PluginError::Unavailable(error));
-    }
+      }
+    };
     let (sender, receiver) = mpsc::channel(MAX_PENDING_PLUGIN_CALLS);
     tokio::spawn(run(
         prepared,
@@ -253,12 +271,13 @@ pub(crate) async fn start(
         #[cfg(unix)]
         data_channel,
     ));
-    Ok(ProcessClient { sender })
+    Ok(ProcessClient { sender, features })
 }
 
 enum PendingKind {
     Call { call: PluginCall, kind: CapabilityKind },
     Cancel { operation: String },
+    PrepareCancellation(PendingCancellation),
     Settlement(OperationSettlement),
 }
 struct Pending {
@@ -290,6 +309,9 @@ async fn run(
     // Reconciliation resends the same pending identity. Exact late duplicate
     // acknowledgements are harmless within this bounded transport history.
     let mut settled: VecDeque<(RequestId, OperationSettlement)> = VecDeque::new();
+    // None means the original invocation returned before preparation replied.
+    // Its late acknowledgement is transport cleanup, never a cancellation result.
+    let mut cancellation_prepared: VecDeque<(RequestId, PendingCancellation, Option<bool>)> = VecDeque::new();
     let mut reverse = BTreeSet::new();
     let mut counter = 0_u64;
     let (host_results_tx, mut host_results_rx) = mpsc::channel::<(RequestId, RpcBody)>(32);
@@ -319,6 +341,28 @@ async fn run(
                             let _ = response.send(Err("cancellation queue is full; cancellation is unconfirmed".into())); continue;
                         }
                         (RpcBody::Cancel { operation_id: operation.clone() }, Pending { kind: PendingKind::Cancel { operation }, responses: vec![response] })
+                    }
+                    CommandMessage::PrepareCancellation { cancellation, response } => {
+                        if !pending.values().any(|p| matches!(&p.kind, PendingKind::Call {call, ..}
+                            if call.operation_id.as_deref() == Some(cancellation.operation_id.as_str()) && call.binding == cancellation.binding)) {
+                            let _ = response.send(Err("no matching active invocation for pending cancellation; inspect its original state".into())); continue;
+                        }
+                        if let Some((original, retained)) = pending.iter_mut().find(|(_, p)| matches!(&p.kind,
+                            PendingKind::PrepareCancellation(old) if old == &cancellation)) {
+                            retained.responses.retain(|response| !response.is_closed());
+                            if retained.responses.len() >= 32 {
+                                let _ = response.send(Err("pending cancellation retry limit reached".into())); continue;
+                            }
+                            retained.responses.push(response);
+                            if let Err(error) = transmit(&mut writer, original.clone(), RpcBody::PreparePendingCancellation(cancellation), &policy).await { break error; }
+                            continue;
+                        }
+                        if pending.len() >= MAX_PENDING_PLUGIN_CALLS {
+                            let _ = response.send(Err("pending cancellation queue is full; original work is unchanged".into())); continue;
+                        }
+                        (RpcBody::PreparePendingCancellation(cancellation.clone()), Pending {
+                            kind: PendingKind::PrepareCancellation(cancellation), responses: vec![response]
+                        })
                     }
                     CommandMessage::Settle { settlement, response } => {
                         if let Some((original, retained)) = pending.iter_mut().find(|(_, p)| matches!(&p.kind,
@@ -407,6 +451,11 @@ async fn run(
                 if let Some(channel) = &data_channel { channel.session.remove(&frame.request); }
                 let Some(expected) = pending.remove(&frame.request) else {
                     if settled.iter().any(|(request, settlement)| request == &frame.request && frame.body == RpcBody::SettlementAcknowledged(settlement.clone())) { continue; }
+                    if cancellation_prepared.iter().any(|(request, expected, decision)| request == &frame.request && match &frame.body {
+                        RpcBody::PendingCancellationPrepared { cancellation, prepared } => cancellation == expected && decision.is_none_or(|value| value == *prepared),
+                        RpcBody::Error { .. } => decision.is_none(),
+                        _ => false,
+                    }) { continue; }
                     break "unsolicited or repeated backend response".into();
                 };
                 state.lock().unwrap().pending = pending.len();
@@ -415,6 +464,8 @@ async fn run(
                     (PendingKind::Call {kind: CapabilityKind::Control, ..}, RpcBody::ControlResult {..} | RpcBody::Error {..}) => true,
                     (PendingKind::Call {kind: CapabilityKind::Operation | CapabilityKind::Runtime, ..}, RpcBody::CommitPlan(_) | RpcBody::Error {..}) => true,
                     (PendingKind::Cancel {operation}, RpcBody::CancelAcknowledged {operation_id, ..}) => operation == operation_id,
+                    (PendingKind::PrepareCancellation(cancellation), RpcBody::PendingCancellationPrepared { cancellation: acknowledged, .. }) => cancellation == acknowledged,
+                    (PendingKind::PrepareCancellation(_), RpcBody::Error {..}) => true,
                     (PendingKind::Settlement(settlement), RpcBody::SettlementAcknowledged(acknowledged)) => settlement == acknowledged,
                     (PendingKind::Settlement(_), RpcBody::Error {..}) => true,
                     _ => false,
@@ -422,6 +473,24 @@ async fn run(
                 if !valid {
                     expected.respond(Err("backend response did not match its pending request".into()));
                     break "backend response kind or operation identity mismatch".into();
+                }
+                if let (PendingKind::PrepareCancellation(cancellation), RpcBody::PendingCancellationPrepared { prepared, .. }) = (&expected.kind, &frame.body) {
+                    cancellation_prepared.push_back((frame.request.clone(), cancellation.clone(), Some(*prepared)));
+                    if cancellation_prepared.len() > MAX_PENDING_PLUGIN_CALLS { cancellation_prepared.pop_front(); }
+                }
+                if let PendingKind::Call { call, kind: CapabilityKind::Operation | CapabilityKind::Runtime } = &expected.kind {
+                    let returned = pending.iter().filter_map(|(request, entry)| match &entry.kind {
+                        PendingKind::PrepareCancellation(cancellation) if call.operation_id.as_deref() == Some(cancellation.operation_id.as_str()) && call.binding == cancellation.binding => Some((request.clone(), cancellation.clone())),
+                        _ => None,
+                    }).collect::<Vec<_>>();
+                    for (request, cancellation) in returned {
+                        if let Some(preparation) = pending.remove(&request) {
+                            preparation.respond(Err("original native invocation returned during cancellation preparation; inspect the original operation".into()));
+                            cancellation_prepared.push_back((request, cancellation, None));
+                            if cancellation_prepared.len() > MAX_PENDING_PLUGIN_CALLS { cancellation_prepared.pop_front(); }
+                        }
+                    }
+                    state.lock().unwrap().pending = pending.len();
                 }
                 if let (PendingKind::Settlement(settlement), RpcBody::SettlementAcknowledged(_)) = (&expected.kind, &frame.body) {
                     // The native acknowledgement is scheduling cleanup, not

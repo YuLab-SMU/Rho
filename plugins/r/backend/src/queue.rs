@@ -1,6 +1,6 @@
 //! Native scheduling only. Terminal scientific truth comes from Host settlement.
 use rho_plugin_sdk::protocol::{
-    OperationId, OperationSettlement, PluginCall, PluginOutcome, ProviderBinding,
+    OperationId, OperationSettlement, PendingCancellation, PluginCall, PluginOutcome, ProviderBinding,
 };
 use rho_r_api::{ConsoleState, InputRequest, QueueControlArguments, QueuePause, QueuedRun};
 use serde::Serialize;
@@ -23,6 +23,7 @@ struct Entry {
     run: QueuedRun,
     phase: Phase,
     native_outcome: Option<PluginOutcome>,
+    pending_cancellation: bool,
 }
 #[derive(Default)]
 struct State {
@@ -37,6 +38,9 @@ struct State {
 pub struct Observation {
     pub console: ConsoleState,
     pub awaiting_commit: Vec<OperationId>,
+    /// Native start is fenced; retry the original cancellation if its Host
+    /// journal acknowledgement failed. This is not terminal cancellation.
+    pub pending_cancellations: Vec<OperationId>,
     /// Native queue capacity only; Host lifecycle and grants still govern admission.
     pub accepting: bool,
     pub capacity: usize,
@@ -104,6 +108,7 @@ impl Queue {
                 },
                 phase: Phase::Waiting,
                 native_outcome: None,
+                pending_cancellation: false,
             },
         );
         state.pending.push_back(id);
@@ -136,6 +141,9 @@ impl Queue {
                 .filter(|(_, e)| e.phase == Phase::AwaitingSettlement)
                 .map(|(id, _)| id.clone())
                 .collect(),
+            pending_cancellations: state.entries.iter()
+                .filter(|(_, entry)| entry.pending_cancellation)
+                .map(|(id, _)| id.clone()).collect(),
             accepting: !state.closing && state.entries.len() < MAX_ACCEPTED,
             capacity: MAX_ACCEPTED,
         }
@@ -143,11 +151,22 @@ impl Queue {
     pub fn is_empty(&self) -> bool {
         self.state.lock().unwrap().entries.is_empty()
     }
+    pub fn prepare_pending_cancellation(&self, cancellation: &PendingCancellation) -> Result<bool, String> {
+        let mut state = self.state.lock().unwrap();
+        let Some(entry) = state.entries.get_mut(&cancellation.operation_id) else { return Ok(false); };
+        if entry.binding != cancellation.binding { return Err("Pending cancellation differs from the original binding".into()); }
+        if entry.phase != Phase::Waiting { return Ok(false); }
+        entry.pending_cancellation = true;
+        drop(state);
+        self.signal();
+        Ok(true)
+    }
     fn available(state: &State, id: &OperationId) -> bool {
         !state.closing
             && state.pause.is_none()
             && state.current.is_none()
             && state.pending.front() == Some(id)
+            && state.entries.get(id).is_some_and(|entry| !entry.pending_cancellation)
             && !state
                 .entries
                 .values()
@@ -313,6 +332,9 @@ impl Queue {
         } else {
             if state.pause.is_none() {
                 return Err("Observe an existing pause before resuming".into());
+            }
+            if state.entries.values().any(|entry| entry.pending_cancellation) {
+                return Err("An original cancellation awaits journal confirmation; retry that cancellation before resuming".into());
             }
             if state
                 .entries

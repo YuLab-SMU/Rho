@@ -158,6 +158,23 @@
         "outcome"
       ]
     },
+    "PendingCancellation": {
+      "description": "A Host-only fence on an original invocation, never a second operation.\nPreparation prevents native start until the original journal's cancellation\nsignal arrives. Repeating preparation for the same invocation is idempotent.",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ProviderBinding"
+        },
+        "operation_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "binding",
+        "operation_id"
+      ]
+    },
     "PluginCall": {
       "type": "object",
       "properties": {
@@ -445,6 +462,15 @@
                 "artifact": {
                   "type": "string"
                 },
+                "features": {
+                  "description": "Optional protocol extensions. Unknown bounded names are ignored by\nHosts; an extension is used only after exact readiness advertises it.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 16,
+                  "uniqueItems": true
+                },
                 "revision": {
                   "type": "string"
                 }
@@ -703,6 +729,53 @@
             "type": {
               "type": "string",
               "const": "cancel_acknowledged"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/PendingCancellation"
+            },
+            "type": {
+              "type": "string",
+              "const": "prepare_pending_cancellation"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "cancellation": {
+                  "$ref": "#/$defs/PendingCancellation"
+                },
+                "prepared": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "cancellation",
+                "prepared"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "pending_cancellation_prepared"
             }
           },
           "additionalProperties": false,

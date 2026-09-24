@@ -285,6 +285,29 @@
         "node",
         "scripts/test-r-protocol.mjs"
       ]
+    },
+    "plugins.console": {
+      "command": [
+        "node",
+        "scripts/test-console-plugin.mjs"
+      ]
+    },
+    "plugins.console-editor": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui",
+        "--",
+        "console-editor.spec.ts"
+      ]
+    },
+    "plugins.r-console": {
+      "command": [
+        "node",
+        "scripts/test-r-console.mjs"
+      ]
     }
   },
   "areas": {
@@ -430,7 +453,12 @@
         "scripts/build-viewer-plugin.mjs",
         "scripts/test-viewer-plugin.mjs",
         "scripts/test-r-viewer.mjs",
-        "scripts/test-r-protocol.mjs"
+        "scripts/test-r-protocol.mjs",
+        "scripts/build-console-plugin.mjs",
+        "scripts/test-console-plugin.mjs",
+        "ui/e2e/console-editor.spec.ts",
+        "scripts/test-r-console.mjs",
+        "ui/e2e/r-plugin-console.spec.ts"
       ],
       "checks": [
         "docs.index",
@@ -450,7 +478,10 @@
         "plugins.viewer",
         "plugins.r-viewer",
         "plugins.r-protocol",
-        "plugins.r-public-types"
+        "plugins.r-public-types",
+        "plugins.console",
+        "plugins.console-editor",
+        "plugins.r-console"
       ]
     }
   }

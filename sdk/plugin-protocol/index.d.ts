@@ -30,6 +30,7 @@ export type * from "./types/OperationId.js";
 export type * from "./types/OperationSettlement.js";
 export type * from "./types/PackageFile.js";
 export type * from "./types/PackagePath.js";
+export type * from "./types/PendingCancellation.js";
 export type * from "./types/PluginArchive.js";
 export type * from "./types/PluginArtifactSummary.js";
 export type * from "./types/PluginBranchArguments.js";

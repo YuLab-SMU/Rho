@@ -2,7 +2,7 @@
 //! All scientific authority remains in OperationGateway and Workspace owner.
 use rho_contract::*;
 use rho_operation::{
-    CapabilityRegistry, Clock, OperationError, OperationGateway, QueryHandler, SystemClock,
+    CapabilityRegistry, Clock, ControlHandler, OperationError, OperationGateway, QueryHandler, SystemClock,
 };
 use schemars::schema_for;
 use serde_json::{Value, json};
@@ -15,6 +15,28 @@ pub(crate) const RECONCILE: &str = "operation.reconcile_commit";
 pub(crate) const CANCEL: &str = "operation.request_cancellation";
 pub(crate) const INPUT: &str = "workspace.respond_input";
 pub(crate) const EVENTS: &str = "operation.events";
+
+/// All edges may use the declared control capability. Route core-owned controls
+/// to their original Host ports; native contributed controls use the registry.
+pub(crate) fn control_request(registry: &CapabilityRegistry, context: &CallContext, request: ControlRequest) -> Result<HostRequest, OperationError> {
+    if request.capability.version != 1 || !matches!(request.capability.id.as_str(),
+        RECONCILE | INPUT | "application.control" | "application.bind_method") {
+        return Ok(HostRequest::Control(request));
+    }
+    registry.validate_control_input(context, &request.capability, &request.arguments)
+        .map_err(|error| match error {
+            OperationError::InvalidInput(_) => OperationError::InvalidInput("Control arguments violate their contract (redacted)".into()),
+            other => other,
+        })?;
+    let invalid = |_| OperationError::InvalidInput("Control arguments violate their contract (redacted)".into());
+    Ok(match request.capability.id.as_str() {
+        RECONCILE => HostRequest::ReconcileCommit(serde_json::from_value(request.arguments).map_err(invalid)?),
+        INPUT => HostRequest::RespondInput(serde_json::from_value(request.arguments).map_err(invalid)?),
+        "application.control" => HostRequest::ApplicationControl(serde_json::from_value(request.arguments).map_err(invalid)?),
+        "application.bind_method" => HostRequest::BindMethod(serde_json::from_value(request.arguments).map_err(invalid)?),
+        _ => unreachable!(),
+    })
+}
 
 /// The cancellation port requires the selected operation's original authority,
 /// which is a disjunction at discovery time and an exact check at admission.
@@ -50,12 +72,14 @@ pub(crate) fn register(
         })?;
     let cancel_output =
         cancellation_result_schema(&get.output_schema).map_err(OperationError::Contract)?;
-    if writable || registry.descriptors().iter().any(|descriptor| {
+    let cancellation = if writable || registry.descriptors().iter().any(|descriptor| {
         descriptor.kind == CapabilityKind::Operation
             && descriptor.cancellation != CancellationClass::Unsupported
     }) {
-        registry.register_control(cancel_descriptor(cancel_output))?;
-    }
+        let control = Arc::new(CancellationControl { descriptor: cancel_descriptor(cancel_output), gateway: OnceLock::new() });
+        registry.register_control_handler(control.clone())?;
+        Some(control)
+    } else { None };
     if has_workspace {
         registry.register_control(input_descriptor())?;
     }
@@ -66,12 +90,33 @@ pub(crate) fn register(
     registry.register_query(commit_status.clone())?;
     let events = Arc::new(EventsHandler {
         commit_status,
+        cancellation,
         project,
         gateway: OnceLock::new(),
         descriptor: events_descriptor(),
     });
     registry.register_query(events.clone())?;
     Ok(events)
+}
+
+/// This adapter delegates to the original gateway; it owns no journal, native
+/// queue or alternative cancellation decision. Every edge uses the same handler.
+struct CancellationControl {
+    descriptor: CapabilityDescriptor,
+    gateway: OnceLock<Weak<OperationGateway>>,
+}
+#[async_trait::async_trait]
+impl ControlHandler for CancellationControl {
+    fn descriptor(&self) -> &CapabilityDescriptor { &self.descriptor }
+    async fn control(&self, context: &CallContext, arguments: Value) -> Result<Value, OperationError> {
+        let args: CancelOperation = serde_json::from_value(arguments)
+            .map_err(|_| OperationError::InvalidInput("Cancellation arguments violate their contract (redacted)".into()))?;
+        OperationId::new(args.operation_id.as_str())?;
+        let gateway = self.gateway.get().and_then(Weak::upgrade)
+            .ok_or_else(|| OperationError::Unavailable("Original operation gateway is unavailable".into()))?;
+        let result = gateway.request_cancellation_conditional(context, &args.operation_id, args.only_if_pending.unwrap_or(false)).await?;
+        serde_json::to_value(result).map_err(|e| OperationError::Contract(e.to_string()))
+    }
 }
 
 fn reference(id: &str) -> CapabilityRef {
@@ -197,12 +242,16 @@ fn events_descriptor() -> CapabilityDescriptor {
 /// no independent journal, execution state, permission policy or recovery loop.
 pub(crate) struct EventsHandler {
     commit_status: Arc<rho_operation::OperationCommitStatusHandler>,
+    cancellation: Option<Arc<CancellationControl>>,
     project: Option<String>,
     gateway: OnceLock<Weak<OperationGateway>>,
     descriptor: CapabilityDescriptor,
 }
 impl EventsHandler {
     pub(crate) fn bind(&self, gateway: &Arc<OperationGateway>) {
+        if let Some(control) = &self.cancellation {
+            control.gateway.set(Arc::downgrade(gateway)).expect("cancellation port binds once");
+        }
         self.commit_status.bind(&gateway.commit_recovery());
         self.gateway
             .set(Arc::downgrade(gateway))

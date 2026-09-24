@@ -5,6 +5,7 @@ import type { CapabilityKey } from "./CapabilityKey.js";
 import type { CapabilityRequirement } from "./CapabilityRequirement.js";
 import type { ObservationCompleteness } from "./ObservationCompleteness.js";
 import type { OperationSettlement } from "./OperationSettlement.js";
+import type { PendingCancellation } from "./PendingCancellation.js";
 import type { PluginCall } from "./PluginCall.js";
 import type { PluginCommitPlan } from "./PluginCommitPlan.js";
 import type { PluginInstance } from "./PluginInstance.js";
@@ -14,8 +15,13 @@ import type { ResourceReference } from "./ResourceReference.js";
 import type { RevisionId } from "./RevisionId.js";
 import type { JsonValue } from "./serde_json/JsonValue.js";
 
-export type RpcBody = { "type": "initialize", "data": { instance: PluginInstance, grants: Array<CapabilityRequirement>, environment?: BackendEnvironment | null, resource_channel?: ResourceChannel | null, } } | { "type": "ready", "data": { revision: RevisionId, artifact: ArtifactId, } } | { "type": "query", "data": PluginCall } | { "type": "control", "data": PluginCall } | { "type": "invoke", "data": PluginCall } | { "type": "query_result", "data": { data: JsonValue, completeness: ObservationCompleteness, source: ResourceReference | null, } } | { "type": "control_result", "data": { data: JsonValue, } } | { "type": "commit_plan", "data": PluginCommitPlan } | { "type": "host_call", "data": {
+export type RpcBody = { "type": "initialize", "data": { instance: PluginInstance, grants: Array<CapabilityRequirement>, environment?: BackendEnvironment | null, resource_channel?: ResourceChannel | null, } } | { "type": "ready", "data": { revision: RevisionId, artifact: ArtifactId,
+/**
+ * Optional protocol extensions. Unknown bounded names are ignored by
+ * Hosts; an extension is used only after exact readiness advertises it.
+ */
+features?: Array<string>, } } | { "type": "query", "data": PluginCall } | { "type": "control", "data": PluginCall } | { "type": "invoke", "data": PluginCall } | { "type": "query_result", "data": { data: JsonValue, completeness: ObservationCompleteness, source: ResourceReference | null, } } | { "type": "control_result", "data": { data: JsonValue, } } | { "type": "commit_plan", "data": PluginCommitPlan } | { "type": "host_call", "data": {
 /**
  * Active incoming call whose authority this reverse call inherits.
  */
-parent_request: RequestId, capability: CapabilityKey, arguments: JsonValue, } } | { "type": "host_result", "data": { result: JsonValue, } } | { "type": "cancel", "data": { operation_id: string, } } | { "type": "cancel_acknowledged", "data": { operation_id: string, confirmed: boolean, } } | { "type": "operation_settled", "data": OperationSettlement } | { "type": "settlement_acknowledged", "data": OperationSettlement } | { "type": "release" } | { "type": "released" } | { "type": "error", "data": { code: string, message: string, recovery: JsonValue | null, } };
+parent_request: RequestId, capability: CapabilityKey, arguments: JsonValue, } } | { "type": "host_result", "data": { result: JsonValue, } } | { "type": "cancel", "data": { operation_id: string, } } | { "type": "cancel_acknowledged", "data": { operation_id: string, confirmed: boolean, } } | { "type": "prepare_pending_cancellation", "data": PendingCancellation } | { "type": "pending_cancellation_prepared", "data": { cancellation: PendingCancellation, prepared: boolean, } } | { "type": "operation_settled", "data": OperationSettlement } | { "type": "settlement_acknowledged", "data": OperationSettlement } | { "type": "release" } | { "type": "released" } | { "type": "error", "data": { code: string, message: string, recovery: JsonValue | null, } };

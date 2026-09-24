@@ -67,12 +67,17 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> BackendConnection<R, W> {
     }
 
     pub async fn ready(&mut self) -> Result<(), SdkError> {
+        self.ready_with_features(Default::default()).await
+    }
+
+    pub async fn ready_with_features(&mut self, features: std::collections::BTreeSet<String>) -> Result<(), SdkError> {
         self.writer
             .send(
                 self.initialization_request.clone(),
                 RpcBody::Ready {
                     revision: self.instance.identity.revision.clone(),
                     artifact: self.instance.identity.artifact.clone(),
+                    features,
                 },
             )
             .await

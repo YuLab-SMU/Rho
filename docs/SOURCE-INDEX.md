@@ -87,20 +87,25 @@ Sources:
 - `crates/plugin-sdk/**`
 - `crates/plugins/**`
 - `plugins/**`
+- `scripts/build-console-plugin.mjs`
 - `scripts/build-r-plugin.mjs`
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/plugin-protocol.mjs`
+- `scripts/test-console-plugin.mjs`
 - `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
 - `scripts/test-plugin-ui.mjs`
+- `scripts/test-r-console.mjs`
 - `scripts/test-r-plugin-engine.mjs`
 - `scripts/test-r-plugin.mjs`
 - `scripts/test-r-protocol.mjs`
 - `scripts/test-r-viewer.mjs`
 - `scripts/test-viewer-plugin.mjs`
 - `sdk/**`
+- `ui/e2e/console-editor.spec.ts`
+- `ui/e2e/r-plugin-console.spec.ts`
 
 Checks:
 
@@ -108,9 +113,12 @@ Checks:
 - `plugins.backend-sdk`: `["cargo","test","-p","rho-plugin-sdk","--locked"]`
 - `plugins.boundaries`: `["node","scripts/check-plugin-boundaries.mjs"]`
 - `plugins.boundary-tests`: `["node","scripts/check-plugin-boundaries.mjs","--self-test"]`
+- `plugins.console`: `["node","scripts/test-console-plugin.mjs"]`
+- `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
+- `plugins.r-console`: `["node","scripts/test-r-console.mjs"]`
 - `plugins.r-engine`: `["cargo","test","-p","rho-r-engine","--locked"]`
 - `plugins.r-independent`: `["node","scripts/test-r-plugin-engine.mjs"]`
 - `plugins.r-native`: `["node","scripts/test-r-plugin.mjs"]`

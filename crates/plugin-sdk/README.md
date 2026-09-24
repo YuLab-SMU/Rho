@@ -12,6 +12,27 @@ incoming call identity with `validate_call`; enforce native identity and
 preconditions in the owner. Return a query observation or a proposed CommitPlan.
 The Host's Operation mechanism commits results. Never write its database.
 
+Owners that can atomically fence a waiting invocation may advertise
+`pending_cancellation_v1` with `ready_with_features`. `ready` advertises no optional
+extensions, so existing exact revisions keep their original capability contracts.
+Handle `PreparePendingCancellation` on the reader/control lane. Match its complete
+provider binding, project, native target and original Operation ID. Atomically
+reserve cancellation only while that invocation is waiting; a running or completed
+invocation returns `prepared: false`. Echo the exact request in
+`PendingCancellationPrepared`. Preparation fences native start but cannot finish
+the Operation, interrupt running work or manufacture a result. Wait for the ordinary
+`Cancel` after the Host records the original cancellation request.
+
+Preparation is idempotent. A lost reply or failed Host journal write leaves the
+fence observable; the user can retry the same original cancellation. The Host waits
+up to five seconds per preparation attempt and coalesces retries under the same
+unanswered transport identity. Exact late duplicate replies are bounded to the
+128-entry transport history. Never release a fence by a timeout or queue resume.
+After the actual cancellation, use the normal CommitPlan and settlement handshake.
+If the original invocation returns while preparation is unanswered, the Host retires
+that preparation without claiming success and accepts only a bounded late reply
+for its exact identity. The unanswered preparation cannot indefinitely block release.
+
 Declare `kind: "control"` for transient answers to an existing owner request.
 Handle `Control(PluginCall)` without taking the lane held by the waiting execution,
 then return `ControlResult`. Its `operation_id` must be null; original native

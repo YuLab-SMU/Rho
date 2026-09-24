@@ -849,6 +849,22 @@ without execution. A result awaiting journal commit must use original commit
 recovery first; resume cannot confirm it. These controls also work before R exists
 and during draining. No query/control creates or reconnects a session.
 
+Use the shared `operation.request_cancellation@1` Control with the original
+`operation_id` and `only_if_pending: true` to cancel a queued native run. A backend
+that supports this first reserves the still-waiting invocation, then the Host records
+the request and signals cancellation. An already-running run is refused; use an
+explicit Interrupt (`only_if_pending: false`) if intended. A lost preparation reply
+or journal write failure leaves `r.console.pending_cancellations` visible. Retry
+that same original cancellation; queue resume cannot clear its fence. A cancellation
+receipt still does not prove native completion or rollback.
+
+The ordinary Console package is assembled with
+`node scripts/build-console-plugin.mjs DEST`, using existing locked dependencies.
+Its `console` contribution takes `{"source": InstanceRef}`. The view reads that exact
+R instance and retains its own command draft/history; it never creates R while
+reading. Start R is an explicit action. Stdin answers remain transient and separate
+from the next command. Full integration and acceptance status are recorded in Status.
+
 Use `r.execute@2` for code with an optional source label and Console output mode:
 its arguments are `{"expected_session": SESSION, "run": {"code": CODE,
 "output_mode": "console", "source": {"view_id": VIEW, "label": LABEL,

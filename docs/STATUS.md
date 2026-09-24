@@ -4,359 +4,215 @@ Updated: 2026-09-24. This is the single current status summary. Git retains hist
 
 ## Unified plugin refactor — active implementation
 
-The user authorized the complete unified-plugin plan, including scientific
-backend migration, all existing views, multiple project scenarios, coexisting
-versions, public SDKs and a self-hosted Plugin Studio. This is the current focus;
-a Viewer-only pilot is not the final scope. PS01–PS07 were created in Paper,
-screenshot-inspected, and explicitly approved by the user on 2026-09-23. See
-[Design section 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved).
+The user authorized the entire unified-plugin plan: all scientific owners and
+views, coexisting versions, project scenarios, public SDKs and Plugin Studio as an
+ordinary plugin. A Viewer-only pilot is not the final scope. PS01–PS07 were created
+in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
+21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
+remains active. The fixed scientific composition has not yet been removed.
 
-The first foundation is implemented in `rho-plugin-protocol` and `rho-plugins`:
-public package/revision/instance/provider/scenario/visual/RPC contracts, immutable
-source and artifact identities, local JSON/base64 archives, source/lock/build
-requirements, schema/digest/path validation, transactional package import/export,
-revision references, branch compare-and-swap, source comparison and bounded
-catalog pages. The independently packageable protocol crate generates the public
-`sdk/plugin-protocol` TypeScript and JSON Schema package. The new core
-`rho plugins --store ...` recovery CLI supports these repository actions without
-opening a scientific Host. `plugins/example-inspector` is an ordinary, unprivileged
-conformance fixture; it is not installed automatically.
+### Implemented behavior
 
-The standalone backend runtime now activates immutable artifacts in separate
-processes and atomically publishes their contributions after exact readiness.
-Multiple providers require explicit resolution; admission leases retain their
-instances through draining. Framed RPC checks identity/order/size, separates
-bounded stderr logs, validates responses and binds reverse calls to active parent
-authority. Cleanup requires acknowledgement plus successful process exit.
-Failed/disconnected instances retain revision references and durable diagnostics;
-the recovery CLI reads historical instance records without reconnecting.
-`rho-plugin-sdk` supplies independently usable Rust transport/initialization
-helpers and an example backend. Python fixtures exercise the language-neutral wire.
+`rho-plugin-protocol` defines public package, revision, instance, provider, scenario,
+visual-document and RPC contracts. `rho-plugins` owns immutable source/artifact
+identities, validated local archives, transactional import/export, revision
+references, branch compare-and-swap, source comparison and bounded repository
+pages. Sources, dependency locks and build instructions are required. The recovery
+CLI, `rho plugins --store ...`, works without a scientific Host. Packages are not
+activated or reinstalled implicitly, and native builds are explicit trusted local
+code. Scenario and visual-document contracts do not establish their product UI.
 
-The generic `PluginCapabilityBridge` now uses the real Operation/Query gateways
-and their existing SQLite journal. The registry publishes owner batches atomically;
-accepted operations retain their original handler and contract after removal.
-Optional native preflight freezes qualified arguments/target/context before
-admission, and the captured original request returns its existing record after
-unload without another preflight or execution. Facts are instance-qualified;
-invalid responses retain their candidate, and resource claims require an
-authoritative verifier. Terminal journal completion now sends a Host-only native
-settlement with the original binding and outcome. For a live owner, its operation
-reference is released only after the exact acknowledgement; a five-second timeout
-preserves the committed result and retained reference. Explicit reconciliation
-rereads the original scoped journal, resends the same pending confirmation and
-never repeats execution. Disconnected or historical owners are not restarted for
-reference cleanup. Focused bridge tests pass commit-failure gating, lost and late
-acknowledgements, exact identity and original-result preservation. The shared Host
-recovery test rejects foreign principals, missing original scopes and attempts to
-substitute a caller control. Native execution occurs once; completed cleanup does
-not notify the owner again. The affected checks and independent native R pass.
+Backend instances run immutable artifacts in separate processes. Exact readiness
+precedes atomic contribution publication. Binding resolution is explicit; accepted
+work retains its original provider through draining. Bounded framed RPC checks
+identity/order, keeps logs off control messages and enforces parent authority for
+reverse calls. Cleanup requires acknowledgement and process exit. Failed or
+historical instances retain diagnostics and references without being restarted by
+a query. Public Rust and TypeScript SDKs build independently of private core code;
+the protocol generates TypeScript declarations and language-neutral JSON schemas.
 
-Core commit recovery now retains the checked native result and execution lease,
-stages its exact candidate in the existing journal, and commits scientific facts
-only in the original terminal transaction. Host/CLI/MCP expose read-only
-`operation.commit_status` and exact-reference `operation.reconcile_commit`.
-Storage failures distinguish volatile from durable results; restart preserves a
-durable candidate for explicit completion without a provider or reexecution.
-Repeated completion uses a digest receipt, and live pending results prevent a
-clean quit from discarding their execution leases. Recovery attempts remain owned
-by the Host across edge disconnection. Query-only observers can inspect durable
-candidates without recovering them or exposing a reconciliation control.
+The plugin bridge uses the existing Operation/Query gateways and SQLite journal.
+Native preflight freezes the qualified request before admission. Repeating an
+accepted request returns the original record after unload without another preflight
+or execution. Invalid candidates and uncertain outcomes retain recovery material.
+Validated native results are staged and committed through the original journal;
+`operation.commit_status` and `operation.reconcile_commit` expose explicit original
+commit recovery. A committed result releases its live provider protection only
+after exact native settlement acknowledgement. Timeout or lost acknowledgement
+retains the result and lease; reconciliation resends confirmation without repeating
+science. Recovery attempts remain Host-owned across edge disconnection.
 
-Active Hosts now compose the package/lifecycle owner and dynamic bridge through
-their shared ports. `plugins.*` queries expose bounded repository and scoped
-instance observations; activation, release, branch changes, removal and reference
-reconciliation use normal Operations. The CLI defaults to the same repository
-beside its configured database. Installed packages are never activated implicitly.
-Native reverse calls retain the original principal and parent, enforce declared
-scopes/query-only authority, and remain tracked through Host shutdown. MCP
-projects current scoped contracts, not a startup-only tool list, and receives
-registry/lifecycle change notifications with content-bound page cursors.
+Host, CLI and MCP use the shared ports for repository/lifecycle operations,
+contributed capabilities and scoped observations. MCP follows current registrations,
+with content-bound cursors and change notifications. CLI execution, query and
+control capacity are separately bounded; a full execution queue does not block its
+reader or controls. Ephemeral native controls preserve original authority and do
+not create an Operation or persist stdin answers.
 
-The generic resource owner now retains immutable, instance/project/principal-bound
-bytes in a separate protected store. Native uploads use an ephemeral per-instance
-Unix socket and an active parent request; raw bytes stay off control/stdout.
-Complete length/digest verification precedes atomic retention. Transfer leases
-retain Host concurrency slots through storage, including after a lost connection;
-the store enforces instance and total byte/count limits. Incomplete uploads never become evidence, and identical uploads
-resolve to the same resource. The bridge verifies retained bytes before publishing
-query sources or committing scientific evidence. `resources.list`, `inspect` and
-`read` use the shared Query port, filter original project/principal, and require
-`resources.read`. Complete bytes remain readable after provider release, package
-removal and Host restart; the list supports discovery after lost acknowledgement.
-The public Rust SDK includes streaming resource methods and an independent example;
-the public package includes data-channel types and language-neutral schemas.
+The generic resource owner stores immutable project/principal/instance-bound bytes.
+Native uploads use an ephemeral per-instance socket with an active parent request;
+large bytes stay off the control pipe. Length/digest checks, leases and byte/count
+quotas precede retention. Incomplete transfers never become evidence. Scoped
+`resources.list`, `inspect` and `read` remain available after provider release,
+package removal and Host restart. Resource claims are checked before scientific
+commit; no adapter owns a second result database.
 
-The generic view container and public TypeScript UI SDK are implemented. UI-only
-packages activate under `ui-web` without a process. The same Operation gateway
-owns opening, closing and versioned state updates; state survives closure and
-Host restart, while connection reads never recreate a view. Each iframe has an
-opaque origin, a private MessagePort, independent asset/call credentials, explicit
-window/principal/grant checks and ordered bounded messages. The call credential
-stays in the containing shell. Closing revokes only the view and leaves accepted
-native work on its original Operation. Historical UI-only instances can be
-explicitly released after closing their retained views. The independent fixture
-builds from the public SDK outside the checkout and uses the ordinary package and
-lifecycle paths. Public types now ship as `.d.ts` declarations so consumers keep
-their own source-root boundary.
+The generic view container serves UI-only packages in opaque iframes with private
+MessagePorts. Asset/call credentials are separate, and generic Host credentials
+stay in the containing shell. Window, principal, grant, sequence and quota checks
+apply to each connection. Normal Operations own opening, closing and versioned
+state updates; acknowledged state survives closure and restart. Closing revokes
+future view calls and leaves accepted native work running. The standalone frame
+still needs integration into scenario layouts, along with public focus, theme,
+menu, shortcut and context cooperation.
 
-The R data/native contracts now live in `plugins/r/api`, and its sole native
-implementation and R bridge live in `plugins/r/backend/engine`. Neither imports
-private core modules. The existing Host uses a thin adapter to that implementation
-while the full RPC composition is built. All seven relocated R bridge files retain
-their original bytes. The engine passes 14 unit tests both in-tree and in a copied
-tree outside the checkout containing only public contracts and pinned Jet. That
-independent tree also passes a real-R test for session state, Unicode output,
-retained HTML and confirmed native shutdown. It reuses the installed compiler and
-offline lock; it does not install tools or connect to existing sessions.
+R-owned contracts live in `plugins/r/api`; the sole R implementation and seven
+unchanged bridge files live in `plugins/r/backend/engine`. The legacy Host adapter
+still reuses that implementation while the remaining composition migrates. The
+ordinary `org.rho.r` package builds outside the checkout from its sources, public
+SDK/protocol and pinned Jet. Initialization receives the normalized Host project
+root and a unique retained data directory. Activation and queries do not start R.
+Explicit session creation starts one native session per exact instance; existing
+sessions are never attached to a different revision.
 
-The extraction also passes the public protocol (8), contract (4), Operation (24)
-and Workspace (12) tests, client generation and build/check. The affected Host
-library (48), observer (4) and plugin (6) tests pass, as do the MCP library (14)
-and actual plugin-connection test. Architecture, plugin boundaries, pinned-Jet
-integrity and governance checks pass. The exact command
-`cargo test -p rho-host --lib --test observer --test plugins --locked` reports
-58 passed and 2 ignored; ignored tests are not counted as passes. The explicit
-real-R suite separately passes the recovery-copy case; automatic continuation
-remains unexecuted.
+`r.execute@2` accepts native run options and preserves caller-supplied source labels
+in the queue, original Operation and result. Labels do not attest to synchronized
+document capture. Console mode prints native visible expressions. `r.check_code`
+uses an existing idle parser without evaluation; `r.output_events` reads bounded
+ordered pages with exact owner/session, cursors and gap/truncation notices. Reports,
+event logs, PNG and HTML use retained resources. Lost sessions are observed without
+replacement. Native stdin uses exact session/operation/request/reply identities,
+UTF-8 limits and transient controls; input and reads remain available while draining.
 
-The ordinary `org.rho.r` backend now builds outside the checkout from public
-SDK/protocol, R-owned sources and pinned Jet only. Its standard manifest and
-immutable artifact activate through the existing plugin lifecycle. Generic
-initialization supplies a normalized Host project root and a fresh, protected,
-persistent data directory independently of user configuration. Activation and
-queries do not start R; `r.create_session` starts one explicit session per instance,
-`r.prepare` freezes its native identity, and `r.execute` uses the original
-Operation with a serialized native lane and concurrent cancellation reception.
-Reports, output-event logs, HTML and PNG bytes use the shared resource store.
-Failed launches and post-effect retention failures preserve uncertainty and
-recovery material; reading a lost session never replaces it.
+The R package owns a FIFO of 33 original operations, including returned work
+awaiting settlement. Pause/resume use exact queue/pause identities and optional
+operation-scope fences. Failure, cancellation, uncertainty or uncommitted results
+pause followers; Host restart never replays them. Pending-only cancellation now
+negotiates `pending_cancellation_v1`. The owner atomically fences a waiting run and
+waits for the original journal cancellation signal before completing it. Running
+or unsupported work is refused without an interrupt. Lost replies and journal
+write failures retain the same identity for retry. Returned invocations retire
+unanswered preparations and accept only matching late replies. Cancellation is a
+callable Host Control handler delegating to the original gateway, shared by typed
+and generic requests and retained across view disconnection.
 
-The R input path now uses a contributed `r.respond_input` Control through shared
-Host, CLI, MCP and view ports. Controls retain exact provider authority and live
-request identity without creating another Operation or recording an answer in
-receipts, events or result candidates. The backend receives input without waiting
-for its occupied execution lane. Explicit queries and controls remain available
-while an instance drains; new executions and automatic selection are refused.
-Focused checks cover shared authority, response redaction, journal isolation and
-caller disconnect. The real-R check now also passes stale native identity,
-duplicate answers, UTF-8 byte limits and input while release waits. The isolated
-Chrome case passes declared and undeclared controls, state retention and opaque
-frame boundaries; the 1440px and 390px screenshots were inspected without clipping
-or overlap. This conformance fixture does not establish native IME or complete
-Console/Studio visual acceptance.
+The ordinary `org.rho.viewer` package independently reads original terminal R
+Operations and digest-verified retained HTML. It pins the producing instance,
+revision and artifact, checks source labels and supports execution versions 1/2.
+History, source inspection and rendering do not invoke R. Saved selection survives
+reopening; HTML runs in a second opaque iframe and remains readable after release,
+removal and restart.
 
-`node scripts/test-r-plugin.mjs` passes with explicit existing Ark/R. It builds the
-complete backend independently, activates two exact revisions through the real
-Host ports, verifies different sessions and isolated objects, original Operation
-identity and idempotency, Unicode/HTML/PNG evidence, actual native cancellation,
-partial effects after an R error, and uncertainty after native exit. A waiting
-native input request rejects wrong operation/session identities, oversized UTF-8
-and duplicate answers. Its draining instance accepts the valid Chinese answer,
-rejects new execution, and completes the original Operation. Both native
-owners confirm shutdown; removing child then parent revisions leaves retained
-HTML readable after Host restart, and the original request returns its committed
-record without any provider. Two additional runtime tests pass for Host-bound,
-unique retained directories and rejection of symlinked data parents.
-The initial native acceptance failed on release timeout caused by Tokio's idle
-blocking stdin read. The backend now awaits all scientific cleanup before ending
-its owned runtime without waiting for that read; the full native acceptance
-passes after this fix. An intermediate fixture also tried to delete a protected
-parent before its child; the repository correctly rejected it and the fixture's
-removal order was corrected. These failed attempts are retained in the local
-verification logs and are not counted as passes.
+The ordinary `org.rho.console` package passes its isolated editing and disposable
+real-R browser paths. It pins one R instance and provides a selectable
+CodeMirror transcript, original source/run details, independent command drafts,
+native completeness, live/retained events, immutable queued code, pending-only
+cancellation and explicit Interrupt. Draft capture must succeed before submission
+or retry; acceptance preserves newer edits. Captured request identity cannot be
+replayed from a different view. Stdin is a separate transient field; buttons and
+Enter use the same explicit Control, with composition and duplicate-send guards.
+Password values never enter saved state or history.
 
-The settlement change passes `cargo test -p rho-operation -p rho-workspace
--p rho-sqlite --lib --locked` (25/12/33), `cargo test -p rho-plugin-protocol
--p rho-plugin-sdk --locked` (15), `cargo test -p rho-plugins --locked` (35),
-`cargo test -p rho-host --test plugins --locked` (8), and `cargo test -p rho-mcp
---test plugins --locked` (1). `node scripts/test-r-plugin.mjs` passes its independently
-built native backend and real-R acceptance (1), including original settlement and
-confirmed release. `npm run generate --prefix ui`, `npm run build --prefix ui` and
-`npm run check --prefix ui` pass. Independent Rust backend examples, the external
-strict TypeScript protocol consumer, architecture, plugin boundaries and governance
-checks pass. No full workspace audit ran.
+Console history scans bounded pages past unrelated view-state writes and retains
+100 completed runs plus active work. The limit is visible; exhausted pagination
+never restarts at the first page or drops recent work to display an older page.
+Clear View records observed event positions, so later output from the same active
+run appears and Show History restores the retained transcript. Transcript updates
+preserve unchanged text, and saved scrolling is restored after content is laid out.
+The isolated browser check verifies selection across transcript updates and saved
+scroll restoration. The real-R path verifies native input and visible expressions,
+immutable queued code and pending cancellation, acknowledged draft restoration,
+execution continuing after view closure, and retained transcript reads after the
+R instance is released and its revision removed. Generic close-time draft flushing,
+plot navigation and full native interaction acceptance remain unfinished.
 
-The initial `cargo test -p rho-host --lib --test plugins --test observer --locked`
-failed one view-closure test: it required release immediately after observing a
-terminal journal record, before native acknowledgement had completed. That test
-now separately observes the retained calls and pending messages before release.
-The Host plugin file passes all 8 tests after this correction and the new shared
-recovery case. Its unchanged library (48 passed, 2 ignored) and observer (4 passed)
-results from the initial command are reused. The failed combined command remains
-recorded as failed; the two ignored checks are not counted as passes.
-The control-stage CLI suite (16), public UI consumer, Chrome
-conformance case and inspected 1440px/390px screenshots remain the prior baseline.
+### Current verification
 
-The ordinary R backend now owns a FIFO of up to 33 accepted original operations,
-including returned results awaiting Host settlement. `r.console` observes it without
-starting R; pause/resume are transient controls with exact queue/pause identities
-and optional operation-scope fences. Native failure, cancellation or uncertainty
-pauses subsequent work. A control cannot clear a pending original commit, and
-cancelling a waiting execution returns `started:false`. The unstarted queue target
-supports pause/resume before session creation; creation retains its existing
-unsupported-cancellation contract. Explicit controls remain usable while draining.
-The CLI session now reserves separate bounded execution/query/control capacity,
-removes its scientific query-name exceptions and never blocks its reader on an
-owner call. EOF drains accepted work.
+Cargo checks remain serial with `CARGO_BUILD_JOBS=1`. Slow local compiler and test
+executable startup is allowed to finish; silence is not treated as a test failure.
 
-`cargo test -p rho-r-backend queue::tests --locked` passes four scheduling tests.
-`cargo test -p rho-cli --test session --locked` passes three tests, including an
-external plugin with 32 held operations, 16 held queries and responsive controls.
-`node scripts/test-r-plugin.mjs` passes the independently built backend and real-R
-acceptance (1): injected original commit failure/reconciliation, FIFO continuation,
-failed and cancelled pauses, all 33 queued executions cancelled without native
-start, full-queue observations/controls, and input plus queued continuation during
-draining. Both native owners confirm shutdown and retained HTML survives removal
-and restart. The first queue acceptance attempt failed because its fixture tried
-to cancel session creation despite the frozen unsupported-cancellation contract;
-the fixture now verifies that refusal and resumes creation explicitly. The failed
-attempt remains recorded and is not counted as a pass. No UI or native IME
-acceptance was added by this queue change. The affected `cargo test -p rho-plugins
---locked` (35) and `cargo test -p rho-host --test plugins --locked` (8) pass,
-as do architecture, plugin-boundary and governance checks. No full workspace audit
-ran; unchanged client and public-protocol evidence above is reused.
+| Executed check | Result and scope |
+| --- | --- |
+| `cargo test -p rho-plugin-protocol -p rho-plugin-sdk -p rho-operation -p rho-workspace -p rho-r-backend --locked` | 61 passed; protocol/SDK and original cancellation owner checks. Subsequent Workspace changes are covered below. |
+| `cargo test -p rho-plugins -p rho-workspace --lib --tests --locked` | 51 passed, including shutdown with a prepared fence, original authority, failed journal writes, lost/late replies and unchanged original invocation identity. |
+| `cargo test -p rho-host --test plugins pending_cancellation_survives --locked` | Focused corrected case passed. |
+| `cargo test -p rho-host --lib --test plugins --test port_contracts --locked` | Corrected full run: 62 passed (48/9/5), two library tests ignored. Includes callable cancellation grants, view disconnect and unrelated admission, original scopes, commit recovery and visibility. |
+| `node scripts/test-console-plugin.mjs` | Independent package build and model checks pass: original source/resource identity, ordered/deduplicated events, UTF-8/history bounds, captured drafts/retries, clear positions and transient stdin. |
+| `npm run test --prefix ui` | 456 passed across 42 files. |
+| Architecture, plugin and frontend boundary checks; governance validation | Pass. |
+| `cargo test -p rho-mcp --lib --test plugins --locked` | 16 passed: 15 library tests and the existing-connection plugin lifecycle case. |
+| `cargo fmt --all --check` | Fails with formatting differences in 128 files, including 107 files unchanged by this work; no repository-wide reformat applied. |
+| `npm run generate --prefix ui`, `npm run build --prefix ui`, `npm run check --prefix ui` | Pass; public protocol/client bindings and embedded assets are current. |
+| `node scripts/test-plugin-protocol.mjs`, `node scripts/test-plugin-ui.mjs` | Current generated declarations compile in independent strict consumers. |
+| `cargo build --locked` | Pass; current Host binary built. |
+| `npm run test:browser --prefix ui -- console-editor.spec.ts` | Pass with the public MessagePort fixture: editing/composition guards, selection, transient password answers, controls, clear/new output, saved draft and scroll restoration. 1440px/1920px/390px screenshots inspected; the corrected capture waits for iframe resizing. |
+| `npm run test:browser --prefix ui -- r-plugin-console.spec.ts` with independently built R/Console packages and explicit Ark/R | Pass; full native flow, saved drafts, close/reopen and retained history after backend removal. Host SHA-256 remains `f5c8755aac91605d0be8bc4fa9917ed73a61da9e3a50da950073d6dda6f51ff0` after independent package builds. |
+| `cargo test -p rho-host --test r_plugin_real_r --locked -- --ignored --nocapture` with independently built R package and explicit Ark/R | Pass (one native integration case, 22.75s). Includes generic conditional cancellation, original authority, exact instances, FIFO, stdin, result settlement and retained resources. |
 
-The ordinary `org.rho.viewer` UI-only package now builds outside the checkout from
-its own source and public SDKs. Each view fixes its producing R instance, revision
-and artifact. It reads original terminal Operations and retained HTML through
-declared queries, verifies native/resource identities and complete chunked bytes,
-and displays content in a second opaque `srcdoc` iframe. History, latest output,
-refresh and source inspection never invoke R. Saved selection survives reopening;
-bounded earlier-history pages retain the latest and explicitly selected output.
-The public UI SDK now provides the same bounded, digest-verified resource reader
-to any ordinary plugin. Rendering uses the existing container policy unchanged.
+The first combined owner command failed to compile a new test because an identifier
+was moved while borrowed; its corrected rerun passes. The first combined Host
+command passed 48 library tests (two ignored) and eight plugin tests but failed the
+new cancellation-view case during activation. Cancellation had metadata without a
+callable handler, which the grant validator correctly refused. The adapter fix
+passes the focused and full reruns above. That first failed command did not reach
+`port_contracts`. The initial Console browser attempt failed because its fixture
+omitted the opaque-frame asset CORS header. The corrected fixture passes;
+production isolation policy did not change. The first native Console browser run
+failed on a test-only `views.get` typo after the input/queue checks; it now uses
+`views.inspect`. A second attempt timed out during backend initialization before
+the test body. A subsequent full run passes with unchanged native/core artifacts;
+the timeout cause is unconfirmed and no deadline was relaxed. The later combined
+browser command passed the isolated case but submitted immediately after reload,
+before the first R observation, so the existing guard correctly refused execution.
+The native fixture now waits for Ready after reload; its corrected full rerun
+passes (11.2s test body, 25.5s total). Failed logs and
+browser traces remain in local test artifacts; none is counted as a pass. No full
+workspace test suite ran for this change.
 
-`node scripts/test-r-viewer.mjs` passes its independent R/Viewer builds and actual
-Chrome acceptance (1). Two R revisions have separate native sessions and HTML;
-actual DT search and Unicode text input work. Closing a view leaves an in-flight
-original execution intact. After backend release, revision removal and Host
-restart, saved HTML remains readable without a live R owner. Nested parent/top
-DOM, storage and Host API access are blocked. The core binary's SHA-256 is
-identical before and after loading the external packages. The 1440px, 1920px and
-390px HTML/DT screenshots and narrow source details were inspected without
-clipping or overlap. This is standalone Viewer acceptance; native IME, clipboard,
-drag, cross-window commands and full scenario/Studio integration remain pending.
+The preceding committed native baseline passed `node scripts/test-r-plugin.mjs`
+with independently built R sources and explicit existing Ark/R. It verified two
+revisions/sessions with isolated objects, Unicode/PNG/HTML, native cancellation and
+failure, original commit failure/recovery, FIFO/full queue, Console source labels,
+parser completeness, streaming during stdin, identity/UTF-8/duplicate-answer
+rejection, controls during draining and retained results after removal/restart.
+The unchanged engine also passed its independent copied-tree tests and actual-R
+check. These are prior evidence, not a pass for the new cancellation extension.
 
-`node scripts/test-viewer-plugin.mjs` and `node scripts/test-plugin-ui.mjs` pass
-external compilation, original identities, bounded history, multibyte resource
-assembly, digest/range failures, cancellation and empty-resource authority.
-`npm run test:browser --prefix ui -- plugin-view.spec.ts
---output=../target/plugin-refactor/viewer-sdk-browser` passes the existing public
-UI fixture (1). Client build/check and 456 tests across 42 files pass; architecture,
-plugin boundaries and governance pass. No full workspace audit ran. The first
-real Viewer attempt failed because the UI added a second algorithm prefix to the
-native digest; the corrected comparison and regression check now pass the full
-acceptance. Its original failure log and trace remain retained. An exploratory
-`cargo build --locked` was interrupted after an unnecessary core CSP edit was
-fully reverted; that build is incomplete, not a pass. The successful browser runs
-use the already-built, unchanged core and verify its original security policy.
+The preceding Viewer Chrome baseline passed the version 2 R/Viewer path without
+changing the core binary. All eight 1440px/1920px/390px HTML, DT and source-detail
+screenshots were inspected, including Unicode input. The public UI conformance
+browser passed opaque boundaries, state, controls, sequence recovery and view
+closure; normal/narrow screenshots were inspected. The prior client generation,
+build/check and 456 tests across 42 files remain the baseline. Native OS IME,
+clipboard, drag, cross-window shortcuts and full scenario continuity are not
+established by these checks. The earlier exploratory `cargo build --locked` that
+was interrupted after a reverted CSP edit remains incomplete, not a pass. Existing
+scientific real-R regression evidence is retained below and in Git; automatic
+continuation and optional real-model/alternate-R cases remain unexecuted.
 
-The R package now owns a generated public TypeScript/schema package. Its
-`r.execute@2` accepts the native run options, preserves caller-supplied source
-labels in the queue and original result, and supports Console mode through the
-existing R execution lane. These labels do not attest to a synchronized document
-capture. `r.check_code` uses only an existing idle native parser; `r.output_events`
-reads the original log during execution or stdin waiting, with exact owner/session,
-bounded pages and explicit gap/truncation. Events remain partial observations,
-never proof of a terminal result. Viewer understands both execution versions,
-checks source labels against the original input, and skips confirmed pre-start
-cancellations without breaking history.
+### Remaining work and restart boundary
 
-`cargo test -p rho-r-api -p rho-r-backend --locked` passes the public input test
-and six backend tests, including queued source retention and escaped-byte event
-pagination. `node plugins/r/generate-sdk.mjs --check`, the independent R protocol
-and Viewer consumers, client generation/build/check, architecture, plugin-boundary
-and governance checks pass. The version 2 Viewer case passes
-`npm run test:browser --prefix ui -- r-plugin-viewer.spec.ts
---output=../target/plugin-refactor/console-viewer-browser` (1), reusing a copy of
-this independently built R artifact and a newly assembled Viewer package. The
-existing core binary remains byte-identical. All eight 1440px/1920px/390px HTML,
-DT and source-detail screenshots were inspected, including the new Unicode input
-label; no clipping or broken layout was found. `node scripts/test-r-plugin.mjs`
-passes its independent native build and real-R fixture (1). The new Console cases
-verify that observations do not start R, completeness checks do not evaluate code,
-queued/original/result source labels agree, and Console mode prints each visible
-expression. Output remains readable during native stdin waiting, with exact event
-cursors and refusal across instances/sessions. Version 2 pre-start cancellation
-returns the original `started:false` result; the valid Unicode answer completes
-the same original execution. The existing commit-recovery, full-queue, draining,
-native cancellation/failure and retained-output cases also pass. Both disposable
-native owners confirm release. This run completed after a 37m49s Host-test build
-and slow local executable startup; neither stage was timed out or restarted.
-The initial `cargo test -p rho-r-api plugin::tests --locked` failed while the API
-and generator edits were incomplete; the subsequent combined suite passes. The
-first `node plugins/r/generate-sdk.mjs` failed on the nested `serde_json` declaration
-directory. Recursive generation fixed that failure, and regeneration plus freshness
-checking pass. Both failed logs remain retained. The unchanged 456 client tests
-remain the preceding baseline; no full workspace audit ran.
+Finish generic close-time draft flushing; the current debounce can lose
+unacknowledged edits on abrupt closure. Add captured
+document execution, checkpoint ownership, R inspection and plot/context navigation.
+Complete recovery of an unconfirmed submission from a newly opened view; the
+current origin check safely refuses replay but does not yet provide that workflow.
+Migrate all remaining Files/Git, Editor, Objects, Packages (read-only), Help, Plots,
+Agent, Environment/process/SSH/Slurm and annotation/context owners and views into
+ordinary packages. Complete per-window scenarios, coexisting live compositions,
+history/branches, VisualDocument canvas/source/shared undo, invalid-source retention,
+build/fixture/disposable preview/apply/import/export and Agent development workflows.
+Management and Plugin Studio themselves must be ordinary replaceable plugins.
 
-Console UI, captured document execution, checkpoint ownership and the other R
-inspection contributions still need migration. The native and Viewer slices do
-not establish complete R/Viewer or Studio acceptance.
-
-The remaining scientific owners and fixed Studio panels have not yet migrated into
-packages. The standalone generic frame is the container conformance surface;
-its integration into plugin/scenario layouts remains part of the active work.
-Next is the complete R/Viewer vertical path, all-feature migration, live scenarios
-and the approved Plugin Studio workflows. Management and Studio still need to
-become ordinary plugins.
-Remove the replaced fixed composition before final acceptance; a permanent dual
-architecture is not an accepted outcome. New repository paths do not read or
-migrate abandoned storage. Existing user Hosts and R memory have not been restarted.
-The lifecycle ports require the rebuilt Host; refreshing only the client cannot
-add them to an older process. Inspect live work and preserve its R session before
-any separately authorized replacement.
-
-The completed container stage passed: public protocol tests (7), Rust SDK
-transport tests (6), resource store/channel tests (8), repository tests (9),
-backend/bridge process tests (14), Host library tests (48) and plugin integration
-tests (6), Workbench library tests (26), plus MCP library tests (14) and its actual plugin-connection test.
-External TypeScript and Rust echo/resource consumers compile using only the public
-packages. The public UI SDK additionally verifies MessagePort identity/order,
-quotas, Unicode, disposal and retention of structured error/recovery diagnostics.
-Generation, client build/check, 456 frontend tests across 42 files, architecture,
-plugin boundaries and governance checks passed. The ordinary Host library run
-still has two ignored real-R recovery fixtures; these are not counted as passes. Host observer/port/recovery tests (11) and CLI
-package recovery tests (3) were the preceding foundation baseline.
-
-The new Host tests exercise external immutable revisions, exact provider binding,
-principal-filtered observations, original records after unload, collision cleanup,
-and delegated queries/operations with no scope expansion. The actual MCP test
-connects before activation, observes new tools and changed cursors, invokes the
-backend, and receives withdrawal notifications after release and native failure.
-Resource tests cover multi-megabyte transfers off the control pipe, exact owner
-and principal visibility, incomplete uploads, wrong digests, corruption, quotas,
-revoked channels, acknowledgement loss and unsupported-store rejection without
-modification. The external Host fixture verifies original committed evidence,
-refuses forged evidence without publishing facts, and reads retained resources
-after provider release, package removal and Host restart.
-
-The container-stage isolated Chrome `plugin-view.spec.ts` case passed against that
-stage’s rebuilt binary with a package created outside the checkout after that build. It verifies
-top-level module initialization, an opaque iframe, parent/storage/API isolation,
-Unicode input, durable state, a save completing while a query response is held,
-refresh with a resumed sequence, undeclared-capability rejection and credential
-revocation. Its 1440 px and 390 px screenshots were inspected without clipping or
-missing glyphs. Host tests also cover out-of-order HTTP arrivals, original native
-completion after view closure, cancellation without an extra read requirement and
-explicit UI-only release after Host restart. The container stage also passed the isolated
-Chrome case `real Console, settings and docking shell` successfully.
-
-The current R extraction passed `node scripts/test-real-r.mjs`, including native
-queries, Console/stdin/cancellation, authorized Agent execution, Host/MCP fact
-parity, independent session recovery, recovery-copy library protection and CLI
-execution/read-only result retrieval. The ordinary Host library run still ignores
-two real-R fixtures; the explicit real-R suite executes the recovery-copy case,
-while its automatic-continuation fixture remains unexecuted. The unchanged
-`node scripts/test-mcp.mjs` and `node scripts/test-process-recovery.mjs` remain the
-preceding baseline. Optional real-model and alternate R-installation
-cases remain outside this run. These results verify the new plugin Host/MCP path
-and the existing scientific flows. Real-R plugin migration, scenario layout
-integration and complete iframe interaction acceptance (OS IME, shared shortcuts,
-docking/drag and clipboard) remain outstanding. The current generic-container
-checks do not certify those remaining workflows.
-Focused commands are documented in Development.
+Default delivery must use the same repository and lifecycle, with all feature
+plugins removable and no silent reinstall. Remove replaced fixed registrations,
+panels and scientific/Agent branches; permanent dual composition is not accepted.
+New storage does not read or migrate abandoned formats. The full independent
+provider, all-features-removed and native interaction acceptance still remains.
+Existing user Hosts and R memory have not been restarted. New Host capabilities
+require the rebuilt binary; a client refresh alone cannot add them. Inspect live
+work and preserve its session before any separately authorized replacement. All
+new native acceptance uses disposable projects and explicit existing Ark/R.
 
 ## Bundled real Rho demo project
 

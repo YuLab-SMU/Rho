@@ -81,6 +81,14 @@ impl CapabilityRegistry {
             .insert(key.clone(), next.descriptors[&key].clone());
         Ok(())
     }
+    pub fn register_control_handler(&mut self, handler: Arc<dyn ControlHandler>) -> Result<(), OperationError> {
+        let state = self.state.get_mut().unwrap();
+        let key = handler.descriptor().capability.clone();
+        let next = Arc::make_mut(&mut state.current);
+        next.register_control_handler(handler)?;
+        state.contracts.insert(key.clone(), next.descriptors[&key].clone());
+        Ok(())
+    }
     pub fn validate_links(&mut self) -> Result<(), OperationError> {
         let state = self.state.get_mut().unwrap();
         let mut next = (*state.current).clone();

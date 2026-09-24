@@ -542,6 +542,15 @@ impl ProviderLease {
             .cancel(operation_id, &self.contribution.capability)
             .await
     }
+    pub async fn prepare_pending_cancellation(&self, cancellation: PendingCancellation) -> Result<bool, PluginError> {
+        ensure(self.contribution.cancellation == CancellationSupport::Request,
+            "provider does not support cancellation")?;
+        ensure(cancellation.binding == self.binding(cancellation.binding.target.clone()),
+            "pending cancellation differs from the admitted provider")?;
+        tokio::time::timeout(Duration::from_secs(5), self.entry.process.get().unwrap()
+            .prepare_pending_cancellation(cancellation)).await
+            .map_err(|_| PluginError::Unavailable("pending cancellation acknowledgement is unconfirmed; inspect the owner queue and retry the same original cancellation".into()))?
+    }
 }
 impl Drop for ProviderLease {
     fn drop(&mut self) {

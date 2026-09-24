@@ -98,6 +98,18 @@ No public capability, reverse call or resource-transfer grant can manufacture a
 settlement. Synchronous scientific owners retain their existing completion behavior
 inside the same async lease hook.
 
+Conditional cancellation uses an owner-owned atomic start fence, not a query
+followed by an interrupt. A backend may negotiate `pending_cancellation_v1` in
+its exact readiness reply without changing the frozen capability contract.
+Host-only preparation carries the accepted binding and original Operation ID;
+the owner refuses an already-running call. After preparation, the single journal
+records the cancellation request and its existing signal performs cancellation.
+A lost acknowledgement or journal failure preserves the waiting fence and exposes
+an explicit same-operation retry. Preparation alone cannot return a cancelled
+result; queue resume cannot clear it. Cancellation work stays owned by the Host
+across edge/view disconnect. All edges route contributed and core-owned Control
+requests through the same Host ports and original principal/project/scope checks.
+
 The R package owns its bounded FIFO and transient pause state. Accepted entries
 retain original bindings through native return and Host settlement; a pause or
 resume control cannot supply a terminal outcome. Failure, cancellation and

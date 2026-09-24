@@ -442,6 +442,44 @@ mod tests {
 
     use super::*;
 
+    #[tokio::test]
+    async fn prepared_pending_cancellation_waits_for_original_journal_confirmation() {
+        let queue = Arc::new(ConsoleQueue::default());
+        let operation = operation(vec![]);
+        queue.admit(&operation).unwrap();
+        let lane = Arc::new(tokio::sync::Mutex::new(()));
+        let reader = lane.clone().lock_owned().await;
+        let (cancel, cancellation) = tokio::sync::watch::channel(false);
+        let acquiring = queue.acquire(&operation, lane, cancellation);
+        tokio::pin!(acquiring);
+        tokio::select! { biased; _ = &mut acquiring => panic!("read lane is occupied"), _ = std::future::ready(()) => () }
+        assert!(queue.cancel_pending(&operation));
+        drop(reader);
+        tokio::select! { biased; _ = &mut acquiring => panic!("preparation alone cannot start or finish work"), _ = std::future::ready(()) => () }
+        assert_eq!(queue.snapshot("session-test", None).pending.len(), 1);
+        assert!(queue.cancel_pending(&operation));
+        cancel.send_replace(true);
+        let Err(error) = acquiring.await else { panic!("cancelled work cannot start") };
+        assert!(error.cancellation_confirmed);
+        assert!(queue.snapshot("session-test", None).pending.is_empty());
+    }
+
+    #[tokio::test]
+    async fn shutdown_settles_a_prepared_pending_cancellation_without_running_it() {
+        let queue = Arc::new(ConsoleQueue::default());
+        let operation = operation(vec![]);
+        queue.admit(&operation).unwrap();
+        assert!(queue.cancel_pending(&operation));
+        queue.begin_shutdown();
+        assert!(!queue.cancel_pending(&operation));
+        let (_cancel, cancellation) = tokio::sync::watch::channel(false);
+        let result = tokio::time::timeout(std::time::Duration::from_secs(1),
+            queue.acquire(&operation, Arc::new(tokio::sync::Mutex::new(())), cancellation)).await.unwrap();
+        let Err(error) = result else { panic!("shutdown cannot start a prepared run") };
+        assert!(error.cancellation_confirmed);
+        assert!(queue.snapshot("session-test", None).pending.is_empty());
+    }
+
     struct CountingRuntime {
         calls: AtomicUsize,
     }

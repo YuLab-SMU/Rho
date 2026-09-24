@@ -20,6 +20,17 @@ commands to complete instead of polling them with sleep loops.
 
 ## Testing SOP
 
+The ordinary Console package has an independent build/model check,
+`node scripts/test-console-plugin.mjs`. Its isolated editing case is
+`npm run test:browser --prefix ui -- console-editor.spec.ts`; this case supplies
+only a public MessagePort fixture and establishes no native R behavior. Build the
+current client and Host before the browser checks. The real R package path is
+`RHO_ARK=/absolute/existing/ark RHO_R_HOME=/absolute/existing/R/home node
+scripts/test-r-console.mjs`. It builds the native and Console packages outside the
+checkout, exercises the current Host, and checks that those package builds did not
+change the Host binary. Synthetic composition events cover submission guards;
+they do not establish native input-method acceptance.
+
 Use the smallest test tier that proves the current change. A small change must not
 rerun the entire workspace by default; expand the scope only when the dependency or
 owner boundary requires it.

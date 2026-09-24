@@ -151,7 +151,8 @@ async fn sdk_initialization_and_call_validation_keep_the_host_binding() {
         ready.body,
         RpcBody::Ready {
             revision: instance.identity.revision.clone(),
-            artifact: instance.identity.artifact.clone()
+            artifact: instance.identity.artifact.clone(),
+            features: Default::default(),
         }
     );
     let request = RequestId::new("read").unwrap();

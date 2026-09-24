@@ -13,6 +13,31 @@ fn frame(sequence: u32) -> RpcFrame {
 }
 
 #[test]
+fn readiness_extensions_are_optional_bounded_and_do_not_change_manifest_contracts() {
+    let mut ready = frame(1);
+    ready.body = RpcBody::Ready {
+        revision: RevisionId::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
+        artifact: ArtifactId::new(format!("sha256:{}", "b".repeat(64))).unwrap(),
+        features: Default::default(),
+    };
+    let old = ready.encode().unwrap();
+    assert!(!String::from_utf8_lossy(&old).contains("features"));
+    assert_eq!(RpcFrame::decode(&old).unwrap(), ready);
+    if let RpcBody::Ready { features, .. } = &mut ready.body {
+        features.insert(PENDING_CANCELLATION_FEATURE.into());
+        features.insert("another-owner.feature_v1".into());
+    }
+    assert_eq!(RpcFrame::decode(&ready.encode().unwrap()).unwrap(), ready);
+    for invalid in [vec!["".to_owned()], vec!["x".repeat(65)], vec!["invalid value".into()],
+        (0..17).map(|i| format!("feature-{i}")).collect()] {
+        if let RpcBody::Ready { features, .. } = &mut ready.body {
+            *features = invalid.into_iter().collect();
+        }
+        assert!(ready.encode().is_err());
+    }
+}
+
+#[test]
 fn instance_connection_and_sequence_are_checked_before_acceptance() {
     let mut guard = RpcSessionGuard::new(
         PluginInstanceId::new("instance-1").unwrap(),

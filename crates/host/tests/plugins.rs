@@ -55,6 +55,69 @@ fn observation(record: &OperationRecord) -> PluginInstanceObservation {
 }
 
 #[tokio::test]
+async fn pending_cancellation_survives_view_disconnect_without_blocking_other_admission() {
+    use rho_plugin_protocol::{PluginViewConnection, PluginViewMessage};
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("project"); fs::create_dir(&project).unwrap();
+    let db = temp.path().join("state.sqlite");
+    let native = fixture::package(&temp.path().join("native"), "1", false);
+    let ui_path = temp.path().join("ui"); ui_package(&ui_path);
+    let mut manifest: Value = serde_json::from_slice(&fs::read(ui_path.join("plugin.json")).unwrap()).unwrap();
+    manifest["requires"] = json!([{"capability":{"id":"operation.request_cancellation","version":1},"scopes":["plugins.run"]}]);
+    fs::write(ui_path.join("plugin.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let ui = rho_plugins::snapshot_directory(&ui_path, None, "ui-web").unwrap();
+    let mut repo = PluginRepository::open(&repository_path(&db)).unwrap(); repo.import(&native).unwrap(); repo.import(&ui).unwrap();
+    let host = Arc::new(NextHost::open_project(&db, &project).await.unwrap());
+    let context = NextHost::local_context();
+    let mut args = activation(&native, "native");
+    args["configuration"]["pending_cancellation"] = json!("gate"); args["configuration"]["cancel_confirmed"] = json!(true);
+    let native_instance = observation(&run(&host,&context,"start-native","plugins.activate",args).await);
+    let ui_instance = observation(&run(&host,&context,"start-ui","plugins.activate",json!({"revision":ui.revision.id,"artifact":ui.artifacts[0].id,"target":"ui-web","alias":"ui","configuration":{}})).await);
+    let view = run(&host,&context,"open-view","views.open",json!({"instance":ui_instance.instance.identity,"contribution":"view","window":"window-a","configuration":{},"state":{"text":""}})).await.output.unwrap();
+    let connection: PluginViewConnection = serde_json::from_value(query(&host,&context,"views.connection",json!({"view":view["view"]})).await).unwrap();
+    let binding = query(&host,&context,"plugins.resolve",json!({"instance":native_instance.instance.identity,"capability":{"id":"fixture.run","version":1}})).await;
+    let reader = query(&host,&context,"plugins.resolve",json!({"instance":native_instance.instance.identity,"capability":{"id":"fixture.read","version":1}})).await;
+    let work = invocation("original","fixture.run",json!({"binding":binding,"arguments":{"action":"hold"}}));
+    let accepted: OperationRecord = serde_json::from_value(host.dispatch(&context,HostRequest::Invoke(InvokeRequest {invocation:work,return_after_acceptance:Some(true)})).await.unwrap()).unwrap();
+    let id = accepted.operation.operation_id;
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if query(&host,&context,"fixture.read",json!({"binding":reader,"arguments":{"action":"pending_count"}})).await["operations"] == 1 { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
+    let message = |sequence| serde_json::from_value::<PluginViewMessage>(json!({"protocol_version":1,"connection":connection.connection,"view":view["view"],"sequence":sequence,"request":format!("cancel-{sequence}"),
+        "body":{"type":"control","capability":{"id":"operation.request_cancellation","version":1},"arguments":{"operation_id":id,"only_if_pending":true}}})).unwrap();
+    let mut readonly = context.clone(); readonly.scopes.remove("plugins.run");
+    assert!(host.dispatch_plugin_view(&readonly,"window-a",&connection.call_token,message(1)).await.is_err());
+    let task_host = host.clone(); let task_context = context.clone(); let token = connection.call_token.clone(); let request = message(2);
+    let disconnected = tokio::spawn(async move { task_host.dispatch_plugin_view(&task_context,"window-a",&token,request).await });
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if query(&host,&context,"fixture.read",json!({"binding":reader,"arguments":{"action":"cancellation_state"}})).await["preparations"][id.as_str()].is_object() { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
+    disconnected.abort(); assert!(disconnected.await.unwrap_err().is_cancelled());
+    // Closing the view is an unrelated Operation, not a cancellation decision.
+    let closed = tokio::time::timeout(std::time::Duration::from_secs(2),run(&host,&context,"close-pending-view","views.close",json!({"view":view["view"]}))).await.unwrap();
+    assert_eq!(closed.status,OperationStatus::Succeeded);
+    assert!(!host.get_operation(&context,&id).await.unwrap().unwrap().cancellation_requested);
+    query(&host,&context,"fixture.read",json!({"binding":reader,"arguments":{"action":"confirm_preparation"}})).await;
+    let completed = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let record = host.get_operation(&context,&id).await.unwrap().unwrap();
+            if record.status.is_terminal() { break record; }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
+    assert_eq!(completed.status,OperationStatus::Cancelled); assert!(completed.cancellation_requested);
+    let native_state = query(&host,&context,"fixture.read",json!({"binding":reader,"arguments":{"action":"cancellation_state"}})).await;
+    assert_eq!(native_state["invocations"],1); assert_eq!(native_state["signals"],json!([id]));
+    host.drain().await;
+}
+
+#[tokio::test]
 async fn native_settlement_recovery_uses_original_host_authority_and_never_replays_science() {
     let temp = tempfile::tempdir().unwrap();
     let project = temp.path().join("project");

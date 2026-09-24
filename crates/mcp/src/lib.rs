@@ -653,29 +653,7 @@ fn capability_description(capability: &rho_contract::CapabilityDescriptor) -> St
     )
 }
 fn control_request(capability: &rho_contract::CapabilityRef, args: Value) -> Result<HostRequest, OperationError> {
-    Ok(match (capability.id.as_str(), capability.version) {
-        ("application.control", 1) => HostRequest::ApplicationControl(
-            serde_json::from_value(args).map_err(invalid_operation)?,
-        ),
-        ("application.bind_method", 1) => {
-            HostRequest::BindMethod(serde_json::from_value(args).map_err(invalid_operation)?)
-        }
-        ("operation.reconcile_commit", 1) => HostRequest::ReconcileCommit(
-            serde_json::from_value(args).map_err(invalid_operation)?,
-        ),
-        ("operation.request_cancellation", 1) => {
-            let input: rho_contract::CancelOperation =
-                serde_json::from_value(args).map_err(invalid_operation)?;
-            HostRequest::RequestCancellation {
-                operation_id: input.operation_id,
-                only_if_pending: input.only_if_pending,
-            }
-        }
-        ("workspace.respond_input", 1) => {
-            HostRequest::RespondInput(serde_json::from_value(args).map_err(invalid_operation)?)
-        }
-        _ => HostRequest::Control(rho_contract::ControlRequest { capability: capability.clone(), arguments: args }),
-    })
+    Ok(HostRequest::Control(rho_contract::ControlRequest { capability: capability.clone(), arguments: args }))
 }
 
 fn invalid_operation(error: impl std::fmt::Display) -> OperationError {
@@ -688,11 +666,13 @@ mod port_contract_tests {
     fn dynamic_controls_preserve_versions_even_when_names_match_fixed_controls() {
         for id in ["application.control", "application.bind_method", "operation.reconcile_commit",
             "operation.request_cancellation", "workspace.respond_input"] {
-            let capability = rho_contract::CapabilityRef::new(id, 2).unwrap();
+          for version in [1, 2] {
+            let capability = rho_contract::CapabilityRef::new(id, version).unwrap();
             let request = super::control_request(&capability, serde_json::json!({"owner_payload":true})).unwrap();
-            let rho_contract::HostRequest::Control(control) = request else { panic!("a new version was routed to a fixed v1 control"); };
+            let rho_contract::HostRequest::Control(control) = request else { panic!("the MCP edge interpreted a Host control"); };
             assert_eq!(control.capability, capability);
             assert_eq!(control.arguments, serde_json::json!({"owner_payload":true}));
+          }
         }
     }
     use super::*;

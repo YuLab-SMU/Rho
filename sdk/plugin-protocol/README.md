@@ -12,6 +12,17 @@ Semantic checks (identity formats, references, scope, schema compilation, digest
 limits and lifecycle) also run in the receiving owner. JSON Schema alone does not
 grant authority or establish runtime availability.
 
+`Ready.features` is an optional set of up to 16 bounded protocol-extension names.
+Hosts ignore unknown names and send an optional message only when its feature was
+advertised by this exact instance. `pending_cancellation_v1` supports Host-only
+`PreparePendingCancellation` / `PendingCancellationPrepared`: the owner atomically
+fences a still-waiting original invocation, the Host records cancellation in the
+same Operation journal, then its normal Cancel signal reaches the owner. A fence
+alone is neither cancellation success nor a terminal result. Lost replies and
+journal failures preserve the original fence and identity for explicit retry.
+The existing manifest cancellation contract does not change. See the
+[backend SDK](../../crates/plugin-sdk/README.md) for owner obligations.
+
 ## Package identity
 
 `plugin.json` declares purpose, display version, exact dependencies, required
@@ -135,9 +146,12 @@ Limits are 256 MiB per upload, 256 KiB per read, four concurrent transfers per H
 partial upload is not evidence; lost acknowledgement does not delete complete
 retained bytes. Identical uploads resolve to the same immutable resource identity.
 
-UI views use isolated iframes and an instance-bound message channel. They receive
-public theme, menu, focus, shortcut, view and resource services, never the Host's
-general credential or parent DOM access. Native backends and build scripts are
+UI views use isolated iframes and an instance-bound message channel. Current
+messages cover queries, controls, invocations, original-operation reads and view
+state; resources use the declared Query port. Theme, menu, focus and shortcut
+integration must also use public services as those contributions are implemented.
+Views never receive the Host's general credential or parent DOM access.
+Native backends and build scripts are
 trusted local code: this is UI, failure and lifetime isolation, not an OS sandbox.
 
 ## Scenarios and visual source
