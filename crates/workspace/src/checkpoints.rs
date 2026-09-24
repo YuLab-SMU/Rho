@@ -428,8 +428,9 @@ struct MaintenanceLease {
     delete: Option<OperationId>,
     reservation: Option<Mutex<Box<dyn CheckpointReservation>>>,
 }
+#[async_trait::async_trait]
 impl ExecutionLease for MaintenanceLease {
-    fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
+    async fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
         if result.is_err()
             || result
                 .as_ref()

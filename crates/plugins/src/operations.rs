@@ -123,7 +123,8 @@ impl PluginCapabilityBridge {
     }
 
     /// Recover a lost completion notification using the original journal only.
-    /// This releases a package reference, never reexecutes or recommits a result.
+    /// Notify the original live owner before releasing its package reference.
+    /// This never reexecutes or recommits a result.
     pub async fn reconcile_reference(
         &self,
         journal: &dyn rho_operation::OperationJournal,
@@ -162,7 +163,7 @@ impl PluginCapabilityBridge {
                 "Operation has no authoritative terminal result".into(),
             ));
         }
-        let request: PluginRequest = serde_json::from_value(record.operation.normalized_arguments)
+        let request: PluginRequest = serde_json::from_value(record.operation.normalized_arguments.clone())
             .map_err(|e| OperationError::Contract(e.to_string()))?;
         if request.binding.project != self.shared.project
             || admission.owner_context["binding"] != json!(request.binding)
@@ -173,7 +174,8 @@ impl PluginCapabilityBridge {
         }
         self.shared
             .runtime
-            .release_operation(&request.binding.provider, operation_id.as_str())
+            .settle_operation(settlement(&record, request.binding)?)
+            .await
             .map_err(unavailable)
     }
 }
@@ -335,21 +337,21 @@ struct BoundHandler {
 }
 struct PluginExecutionLease {
     shared: Arc<BridgeContext>,
-    provider: Arc<ProviderLease>,
+    _provider: Arc<ProviderLease>,
     operation: String,
+    binding: ProviderBinding,
 }
+#[async_trait]
 impl ExecutionLease for PluginExecutionLease {
-    fn completed(&mut self, result: &Result<host::OperationRecord, OperationError>) {
-        if result
-            .as_ref()
-            .is_ok_and(|record| record.status.is_terminal())
+    async fn completed(&mut self, result: &Result<host::OperationRecord, OperationError>) {
+        if let Ok(record) = result
+            && record.operation.operation_id.as_str() == self.operation
+            && let Ok(settlement) = settlement(record, self.binding.clone())
         {
-            // If storage cannot release this reference, it stays pinned for
-            // explicit reconciliation. Never claim cleanup on a failed write.
-            let _ = self
-                .shared
-                .runtime
-                .release_operation(&self.provider.binding(None).provider, &self.operation);
+            // Keep the provider lease through bounded confirmation. A lost reply
+            // preserves the original reference for explicit reconciliation; it
+            // cannot change an already committed scientific result.
+            let _ = self.shared.runtime.settle_operation(settlement).await;
         }
     }
 }
@@ -386,8 +388,9 @@ impl OperationHandler for BoundHandler {
     ) -> Result<Box<dyn ExecutionLease>, HandlerError> {
         Ok(Box::new(PluginExecutionLease {
             shared: self.shared.clone(),
-            provider: self.lease.clone(),
+            _provider: self.lease.clone(),
             operation: operation.operation_id.as_str().to_owned(),
+            binding: self.request.binding.clone(),
         }))
     }
     async fn execute(&self, operation: &host::Operation) -> Result<CommitPlan, HandlerError> {
@@ -683,4 +686,15 @@ fn unavailable(error: PluginError) -> OperationError {
 }
 fn owner_recovery(data: Value) -> Value {
     json!({"kind":"plugin_owner_recovery","data":data})
+}
+
+fn settlement(record: &host::OperationRecord, binding: ProviderBinding) -> Result<OperationSettlement, OperationError> {
+    let outcome = match record.status {
+        host::OperationStatus::Succeeded => PluginOutcome::Succeeded,
+        host::OperationStatus::Failed => PluginOutcome::Failed,
+        host::OperationStatus::Uncertain => PluginOutcome::Uncertain,
+        host::OperationStatus::Cancelled => PluginOutcome::Cancelled,
+        _ => return Err(OperationError::LifecycleConflict("Operation has no authoritative terminal result".into())),
+    };
+    Ok(OperationSettlement { operation_id: record.operation.operation_id.clone(), binding, outcome })
 }

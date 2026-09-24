@@ -278,6 +278,9 @@ async fn operation_bridge_preserves_invalid_candidate_and_crash_is_never_replaye
             .unwrap();
         assert_eq!(record.status, host::OperationStatus::Uncertain);
         assert!(record.recovery.as_ref().unwrap()["candidate"].is_object());
+        let native = h.read(json!({"action":"settlement_state"})).await.unwrap().data.unwrap();
+        assert_eq!(native["settlements"][record.operation.operation_id.as_str()]["outcome"], "uncertain",
+            "settlement uses the validated original result, not the backend's proposed success");
         assert!(
             h.journal
                 .facts_for_operation(&record.operation.operation_id)
@@ -346,16 +349,71 @@ async fn operation_bridge_retains_provider_until_original_durable_result_is_comm
     assert!(cancellation.accepted);
     assert_eq!(cancellation.operation.status, host::OperationStatus::Running);
     assert!(h.journal.facts_for_operation(&operation_id).await.unwrap().is_empty());
+    let native = h.read(json!({"action":"settlement_state"})).await.unwrap().data.unwrap();
+    assert_eq!(native["settlements"], json!({}), "native completion must not advance an uncommitted operation");
+    assert!(h.bridge.reconcile_reference(h.journal.as_ref(), &h.context, &operation_id).await.is_err());
     assert!(h.runtime.release(&h.instance.identity).await.is_err());
     connection.execute_batch("DROP TRIGGER fail_commit").unwrap();
     let result = h.gateway.reconcile_commit(&h.context, &host::ReconcileOperationCommit {reference:receipt.reference}).await.unwrap();
     assert_eq!(result.status,host::OperationStatus::Succeeded);
     assert!(result.cancellation_requested, "a later cancellation request cannot overwrite a known native result");
     assert_eq!(h.journal.facts_for_operation(&operation_id).await.unwrap().len(),1);
+    let native = h.read(json!({"action":"settlement_state"})).await.unwrap().data.unwrap();
+    assert_eq!(native["settlements"][operation_id.as_str()]["outcome"], "succeeded");
+    assert_eq!(native["settlements"][operation_id.as_str()]["binding"], invocation.arguments["binding"]);
+    assert_eq!(native["invocations"], 1);
     h.runtime.release(&h.instance.identity).await.unwrap();
     h.bridge.refresh(&h.registry).unwrap();
     assert!(h.registry.descriptors().is_empty());
     let original = h.gateway.invoke(&h.context, invocation).await.unwrap();
     assert_eq!(original.operation.operation_id, operation_id);
     assert_eq!(original.output, result.output);
+}
+
+#[tokio::test]
+async fn operation_bridge_reconciles_lost_native_settlement_without_reexecution() {
+    let h = Harness::new(json!({"settlement":"lose_first"}), false).await;
+    let invocation = h.invocation("lost-settlement", json!({"action":"commit"}));
+    let record = h.gateway.invoke(&h.context, invocation.clone()).await.unwrap();
+    assert_eq!(record.status, host::OperationStatus::Succeeded, "lost cleanup acknowledgement cannot replace committed science");
+    let id = &record.operation.operation_id;
+    assert!(h.repo.lock().unwrap().references(&h.instance.identity.revision).unwrap().contains(&format!("operation:{}:{id}", h.instance.identity.instance)));
+    assert!(h.runtime.release(&h.instance.identity).await.is_err());
+    let native = h.read(json!({"action":"settlement_state"})).await.unwrap().data.unwrap();
+    assert_eq!(native["settlements"][id.as_str()]["outcome"], "succeeded");
+    let mut foreign = h.context.clone();
+    foreign.principal.as_mut().unwrap().id = "another-owner".into();
+    assert!(h.bridge.reconcile_reference(h.journal.as_ref(), &foreign, id).await.is_err());
+    h.bridge.reconcile_reference(h.journal.as_ref(), &h.context, id).await.unwrap();
+    let native = h.read(json!({"action":"settlement_state"})).await.unwrap().data.unwrap();
+    assert_eq!(native["invocations"], 1);
+    let requests = native["requests"][id.as_str()].as_array().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0], requests[1], "explicit resend keeps its pending transport identity");
+    h.bridge.reconcile_reference(h.journal.as_ref(), &h.context, id).await.unwrap();
+    let repeated = h.read(json!({"action":"settlement_state"})).await.unwrap().data.unwrap();
+    assert_eq!(repeated["requests"], native["requests"], "completed cleanup does not notify the owner again");
+    assert!(!h.repo.lock().unwrap().references(&h.instance.identity.revision).unwrap().iter().any(|r| r.starts_with("operation:")));
+    assert_eq!(h.runtime.observe().iter().find(|o| o.instance.identity == h.instance.identity).unwrap().instance.state, InstanceState::Draining,
+        "late exact acknowledgement must not disconnect the owner");
+    let replay = h.gateway.invoke(&h.context, invocation).await.unwrap();
+    assert_eq!(replay.operation.operation_id, *id);
+    assert_eq!(replay.output, record.output);
+    h.runtime.release(&h.instance.identity).await.unwrap();
+}
+
+#[tokio::test]
+async fn operation_bridge_wrong_settlement_acknowledgement_preserves_committed_result() {
+    let h = Harness::new(json!({"settlement":"wrong_identity"}), false).await;
+    let invocation = h.invocation("wrong-ack", json!({"action":"commit"}));
+    let record = h.gateway.invoke(&h.context, invocation.clone()).await.unwrap();
+    assert_eq!(record.status, host::OperationStatus::Succeeded);
+    assert!(h.repo.lock().unwrap().references(&h.instance.identity.revision).unwrap().iter().any(|r| r.starts_with("operation:")));
+    assert!(h.read(json!({})).await.is_err());
+    h.bridge.reconcile_reference(h.journal.as_ref(), &h.context, &record.operation.operation_id).await.unwrap();
+    assert!(!h.repo.lock().unwrap().references(&h.instance.identity.revision).unwrap().iter().any(|r| r.starts_with("operation:")));
+    assert!(h.runtime.release(&h.instance.identity).await.is_err(), "reference cleanup is not native shutdown confirmation");
+    let replay = h.gateway.invoke(&h.context, invocation).await.unwrap();
+    assert_eq!(replay.operation.operation_id, record.operation.operation_id);
+    assert_eq!(replay.output, record.output);
 }

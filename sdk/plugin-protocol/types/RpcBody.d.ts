@@ -4,6 +4,7 @@ import type { BackendEnvironment } from "./BackendEnvironment.js";
 import type { CapabilityKey } from "./CapabilityKey.js";
 import type { CapabilityRequirement } from "./CapabilityRequirement.js";
 import type { ObservationCompleteness } from "./ObservationCompleteness.js";
+import type { OperationSettlement } from "./OperationSettlement.js";
 import type { PluginCall } from "./PluginCall.js";
 import type { PluginCommitPlan } from "./PluginCommitPlan.js";
 import type { PluginInstance } from "./PluginInstance.js";
@@ -17,4 +18,4 @@ export type RpcBody = { "type": "initialize", "data": { instance: PluginInstance
 /**
  * Active incoming call whose authority this reverse call inherits.
  */
-parent_request: RequestId, capability: CapabilityKey, arguments: JsonValue, } } | { "type": "host_result", "data": { result: JsonValue, } } | { "type": "cancel", "data": { operation_id: string, } } | { "type": "cancel_acknowledged", "data": { operation_id: string, confirmed: boolean, } } | { "type": "release" } | { "type": "released" } | { "type": "error", "data": { code: string, message: string, recovery: JsonValue | null, } };
+parent_request: RequestId, capability: CapabilityKey, arguments: JsonValue, } } | { "type": "host_result", "data": { result: JsonValue, } } | { "type": "cancel", "data": { operation_id: string, } } | { "type": "cancel_acknowledged", "data": { operation_id: string, confirmed: boolean, } } | { "type": "operation_settled", "data": OperationSettlement } | { "type": "settlement_acknowledged", "data": OperationSettlement } | { "type": "release" } | { "type": "released" } | { "type": "error", "data": { code: string, message: string, recovery: JsonValue | null, } };

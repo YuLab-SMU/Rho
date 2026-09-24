@@ -2,7 +2,7 @@ use crate::{PluginError, runtime::*};
 use rho_plugin_protocol::*;
 use rho_plugin_sdk::{RpcReader, RpcWriter};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     process::Stdio,
     sync::Arc,
 };
@@ -27,6 +27,10 @@ enum CommandMessage {
         capability: CapabilityKey,
         response: Response,
     },
+    Settle {
+        settlement: OperationSettlement,
+        response: Response,
+    },
     Release {
         response: Response,
     },
@@ -37,6 +41,15 @@ pub(crate) struct ProcessClient {
     sender: mpsc::Sender<CommandMessage>,
 }
 impl ProcessClient {
+    pub async fn settle(&self, settlement: OperationSettlement) -> Result<(), PluginError> {
+        let (response, receiver) = oneshot::channel();
+        self.sender.send(CommandMessage::Settle { settlement: settlement.clone(), response })
+            .await.map_err(|_| PluginError::Unavailable("original backend settlement is unconfirmed".into()))?;
+        match receive(receiver).await? {
+            RpcBody::SettlementAcknowledged(acknowledged) if acknowledged == settlement => Ok(()),
+            _ => Err(PluginError::Invalid("native settlement was not acknowledged".into())),
+        }
+    }
     pub async fn call(&self, call: PluginCall, kind: CapabilityKind) -> Result<RpcBody, PluginError> {
         let (response, receiver) = oneshot::channel();
         self.sender
@@ -246,10 +259,16 @@ pub(crate) async fn start(
 enum PendingKind {
     Call { call: PluginCall, kind: CapabilityKind },
     Cancel { operation: String },
+    Settlement(OperationSettlement),
 }
 struct Pending {
     kind: PendingKind,
-    response: Response,
+    responses: Vec<Response>,
+}
+impl Pending {
+    fn respond(self, result: Result<RpcBody, String>) {
+        for response in self.responses { let _ = response.send(result.clone()); }
+    }
 }
 type IncomingFrames = mpsc::Receiver<Result<Option<RpcFrame>, String>>;
 
@@ -268,6 +287,9 @@ async fn run(
     #[cfg(unix)] data_channel: Option<crate::resource_channel::DataChannel>,
 ) {
     let mut pending: BTreeMap<RequestId, Pending> = BTreeMap::new();
+    // Reconciliation resends the same pending identity. Exact late duplicate
+    // acknowledgements are harmless within this bounded transport history.
+    let mut settled: VecDeque<(RequestId, OperationSettlement)> = VecDeque::new();
     let mut reverse = BTreeSet::new();
     let mut counter = 0_u64;
     let (host_results_tx, mut host_results_rx) = mpsc::channel::<(RequestId, RpcBody)>(32);
@@ -286,7 +308,7 @@ async fn run(
                         #[cfg(unix)]
                         if kind != CapabilityKind::Control { if let Some(channel) = &data_channel { channel.session.insert(&call); } }
                         let body = match kind { CapabilityKind::Query => RpcBody::Query(call.clone()), CapabilityKind::Control => RpcBody::Control(call.clone()), _ => RpcBody::Invoke(call.clone()) };
-                        (body, Pending { kind: PendingKind::Call { call, kind }, response })
+                        (body, Pending { kind: PendingKind::Call { call, kind }, responses: vec![response] })
                     }
                     CommandMessage::Cancel { operation, capability, response } => {
                         if !pending.values().any(|p| matches!(&p.kind, PendingKind::Call {call, ..}
@@ -296,7 +318,26 @@ async fn run(
                         if pending.len() >= MAX_PENDING_PLUGIN_CALLS {
                             let _ = response.send(Err("cancellation queue is full; cancellation is unconfirmed".into())); continue;
                         }
-                        (RpcBody::Cancel { operation_id: operation.clone() }, Pending { kind: PendingKind::Cancel { operation }, response })
+                        (RpcBody::Cancel { operation_id: operation.clone() }, Pending { kind: PendingKind::Cancel { operation }, responses: vec![response] })
+                    }
+                    CommandMessage::Settle { settlement, response } => {
+                        if let Some((original, retained)) = pending.iter_mut().find(|(_, p)| matches!(&p.kind,
+                            PendingKind::Settlement(old) if old.operation_id == settlement.operation_id)) {
+                            if !matches!(&retained.kind, PendingKind::Settlement(old) if old == &settlement) {
+                                let _ = response.send(Err("original settlement identity changed".into())); continue;
+                            }
+                            retained.responses.retain(|response| !response.is_closed());
+                            if retained.responses.len() >= 32 {
+                                let _ = response.send(Err("settlement reconciliation limit reached".into())); continue;
+                            }
+                            retained.responses.push(response);
+                            if let Err(error) = transmit(&mut writer, original.clone(), RpcBody::OperationSettled(settlement), &policy).await { break error; }
+                            continue;
+                        }
+                        if pending.len() >= MAX_PENDING_PLUGIN_CALLS {
+                            let _ = response.send(Err("settlement queue is full; original reference retained".into())); continue;
+                        }
+                        (RpcBody::OperationSettled(settlement.clone()), Pending { kind: PendingKind::Settlement(settlement), responses: vec![response] })
                     }
                     CommandMessage::Release { response } => {
                         if !pending.is_empty() || !reverse.is_empty() {
@@ -364,20 +405,36 @@ async fn run(
                 }
                 #[cfg(unix)]
                 if let Some(channel) = &data_channel { channel.session.remove(&frame.request); }
-                let Some(expected) = pending.remove(&frame.request) else { break "unsolicited or repeated backend response".into(); };
+                let Some(expected) = pending.remove(&frame.request) else {
+                    if settled.iter().any(|(request, settlement)| request == &frame.request && frame.body == RpcBody::SettlementAcknowledged(settlement.clone())) { continue; }
+                    break "unsolicited or repeated backend response".into();
+                };
                 state.lock().unwrap().pending = pending.len();
                 let valid = match (&expected.kind, &frame.body) {
                     (PendingKind::Call {kind: CapabilityKind::Query, ..}, RpcBody::QueryResult {..} | RpcBody::Error {..}) => true,
                     (PendingKind::Call {kind: CapabilityKind::Control, ..}, RpcBody::ControlResult {..} | RpcBody::Error {..}) => true,
                     (PendingKind::Call {kind: CapabilityKind::Operation | CapabilityKind::Runtime, ..}, RpcBody::CommitPlan(_) | RpcBody::Error {..}) => true,
                     (PendingKind::Cancel {operation}, RpcBody::CancelAcknowledged {operation_id, ..}) => operation == operation_id,
+                    (PendingKind::Settlement(settlement), RpcBody::SettlementAcknowledged(acknowledged)) => settlement == acknowledged,
+                    (PendingKind::Settlement(_), RpcBody::Error {..}) => true,
                     _ => false,
                 };
                 if !valid {
-                    let _ = expected.response.send(Err("backend response did not match its pending request".into()));
+                    expected.respond(Err("backend response did not match its pending request".into()));
                     break "backend response kind or operation identity mismatch".into();
                 }
-                let _ = expected.response.send(Ok(frame.body));
+                if let (PendingKind::Settlement(settlement), RpcBody::SettlementAcknowledged(_)) = (&expected.kind, &frame.body) {
+                    // The native acknowledgement is scheduling cleanup, not
+                    // scientific truth. Only the bridge can issue this message
+                    // after the original journal has a terminal record.
+                    let released = prepared.repository.lock().unwrap().release_reference("operation",
+                        &format!("{}:{}", settlement.binding.provider.instance, settlement.operation_id),
+                        &settlement.binding.provider.revision).map_err(|e| e.to_string());
+                    settled.push_back((frame.request, settlement.clone()));
+                    if settled.len() > MAX_PENDING_PLUGIN_CALLS { settled.pop_front(); }
+                    if let Err(error) = released { expected.respond(Err(error)); continue; }
+                }
+                expected.respond(Ok(frame.body));
             }
             completed = host_results_rx.recv(), if !reverse.is_empty() => {
                 if let Some((request, body)) = completed {
@@ -402,7 +459,7 @@ async fn run(
     }
     prepared.persist_state(&state);
     for (_, expected) in pending {
-        let _ = expected.response.send(Err(failure.clone()));
+        expected.respond(Err(failure.clone()));
     }
     // Losing framing fences the instance. Reap this managed direct child, but do
     // not label its scientific work cancelled or remove the retained revision.

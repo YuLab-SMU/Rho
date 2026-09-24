@@ -78,6 +78,20 @@ plans to the one core Operation owner; no adapter or plugin commits scientific
 truth through an independent result database. Active work, documents, scenarios,
 branches and checkpoints protect their referenced revisions from removal.
 
+The execution lease receives terminal completion asynchronously, after the single
+journal commit. A plugin lease sends the original ID, binding and terminal outcome
+as a Host-only `OperationSettled`, then awaits bounded native acknowledgement.
+This lets native queues fence their next item until authoritative commit. For a
+live owner, only an exact `SettlementAcknowledged` releases that operation's
+revision reference. For a disconnected or historical instance, original journal
+proof can retire the operation reference; instance and failure references remain.
+Lost acknowledgement leaves the result committed and the reference retained;
+explicit reconciliation rereads the original scoped journal and resends settlement,
+never execution. A disconnected/historical owner is not restarted for cleanup.
+No public capability, reverse call or resource-transfer grant can manufacture a
+settlement. Synchronous scientific owners retain their existing completion behavior
+inside the same async lease hook.
+
 The Operation registry publishes owner-scoped contribution batches by
 compare-and-swap. Queries and invocations keep one immutable handler/schema
 snapshot through response validation and commit. Unregistering a provider removes

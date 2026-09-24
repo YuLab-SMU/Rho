@@ -27,6 +27,7 @@ export type * from "./types/NodeId.js";
 export type * from "./types/ObservationCompleteness.js";
 export type * from "./types/OpenPluginView.js";
 export type * from "./types/OperationId.js";
+export type * from "./types/OperationSettlement.js";
 export type * from "./types/PackageFile.js";
 export type * from "./types/PackagePath.js";
 export type * from "./types/PluginArchive.js";

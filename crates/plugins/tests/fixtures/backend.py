@@ -14,6 +14,9 @@ configuration = {}
 pending = {}
 pending_controls = set()
 reverse = {}
+settlements = {}
+settlement_requests = {}
+invocations = 0
 
 
 def read():
@@ -103,6 +106,23 @@ while True:
         if configuration.get("mode") != "cleanup_fail":
             send(request, "released")
             break
+    elif kind == "operation_settled":
+        operation = data["operation_id"]
+        assert data["binding"]["provider"] == identity
+        previous = settlements.get(operation)
+        assert previous is None or previous == data
+        settlements[operation] = data
+        requests = settlement_requests.setdefault(operation, [])
+        requests.append(request)
+        if configuration.get("settlement") == "lose_first" and len(requests) == 1:
+            continue
+        if configuration.get("settlement") == "wrong_identity":
+            data = {**data, "operation_id": "another-original-operation"}
+        send(request, "settlement_acknowledged", data)
+        if configuration.get("settlement") == "lose_first":
+            # The delayed first reply has the same request; transport must accept
+            # this exact duplicate without affecting a later native operation.
+            send(requests[0], "settlement_acknowledged", data)
     elif kind == "query":
         args = data["arguments"]
         if data["binding"]["capability"]["id"] == "fixture.prepare":
@@ -111,7 +131,9 @@ while True:
                 "owner_context":{"native_session":"fixed-session"}})
             continue
         action = args.get("action", "echo")
-        if action == "control_pending":
+        if action == "settlement_state":
+            query_result(request, {"settlements": settlements, "requests": settlement_requests, "invocations": invocations})
+        elif action == "control_pending":
             query_result(request, {"pending": len(pending_controls)})
         elif action == "environment":
             query_result(request, {"environment": environment, "cwd": os.getcwd()})
@@ -169,6 +191,7 @@ while True:
         else:
             send(request, "control_result", {"data":{"submitted":True}})
     elif kind == "invoke":
+        invocations += 1
         action = data["arguments"].get("action", "hold")
         if action == "crash":
             with open(data["arguments"]["marker"], "a") as marker:

@@ -332,8 +332,9 @@ struct ConsoleLease {
     _guard: OwnedMutexGuard<()>,
     finished: bool,
 }
+#[async_trait::async_trait]
 impl ExecutionLease for ConsoleLease {
-    fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
+    async fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
         self.finished = true;
         let success = result
             .as_ref()
@@ -487,8 +488,9 @@ struct QueueControlLease {
     queue: Arc<ConsoleQueue>,
     completed: bool,
 }
+#[async_trait::async_trait]
 impl ExecutionLease for QueueControlLease {
-    fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
+    async fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
         self.completed = true;
         self.queue.finish_control(result.is_ok());
     }

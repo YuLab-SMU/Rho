@@ -1,7 +1,7 @@
 //! Ordinary public-protocol executable; no Host, journal or edge implementation.
 mod owner;
 use owner::Owner;
-use rho_plugin_sdk::{ResourceClient, accept_stdio, protocol::*};
+use rho_plugin_sdk::{ResourceClient, accept_stdio, protocol::*, validate_settlement};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::{
     sync::{mpsc, watch},
@@ -130,6 +130,17 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                         if let Some(cancel) = cancellations.get(&operation_id) { cancel.send_replace(true); }
                         // An interrupt request does not prove the evaluation stopped.
                         Some(RpcBody::CancelAcknowledged { operation_id, confirmed: false })
+                    }
+                    RpcBody::OperationSettled(settlement) => {
+                        if let Err(error) = validate_settlement(&instance, &settlement) { break Err(error.to_string()); }
+                        if cancellations.contains_key(settlement.operation_id.as_str()) {
+                            Some(error("r_settlement", "Native invocation has not returned its result"))
+                        } else {
+                            // No queue fence is installed yet. This standard
+                            // lifecycle acknowledgement also covers operations
+                            // cancelled by the Host before native dispatch.
+                            Some(RpcBody::SettlementAcknowledged(settlement))
+                        }
                     }
                     RpcBody::Release => {
                         if !jobs.is_empty() { Some(error("busy", "Accepted owner calls must finish before release")) }

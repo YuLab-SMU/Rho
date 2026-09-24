@@ -55,6 +55,62 @@ fn observation(record: &OperationRecord) -> PluginInstanceObservation {
 }
 
 #[tokio::test]
+async fn native_settlement_recovery_uses_original_host_authority_and_never_replays_science() {
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir(&project).unwrap();
+    let db = temp.path().join("state/state.sqlite");
+    let source = temp.path().join("external");
+    fixture::package(&source, "1", false);
+    let manifest_path = source.join("plugin.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["capabilities"][1]["required_scopes"] = json!(["plugins.run", "fixture:science"]);
+    fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let archive = rho_plugins::snapshot_directory(&source, None, &backend_target()).unwrap();
+    let mut repository = PluginRepository::open(&repository_path(&db)).unwrap();
+    repository.import(&archive).unwrap();
+    let mut context = NextHost::local_context();
+    context.scopes.insert("fixture:science".into());
+    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let mut args = activation(&archive, "settlement");
+    args["configuration"]["settlement"] = json!("lose_first");
+    let instance = observation(&run(&host, &context, "activate", "plugins.activate", args).await);
+    let binding = query(&host, &context, "plugins.resolve", json!({"capability":{"id":"fixture.run","version":1},"instance":instance.instance.identity})).await;
+    let work = invocation("science", "fixture.run", json!({"binding":binding,"arguments":{"action":"commit"}}));
+    let original = host.invoke(&context, work.clone()).await.unwrap();
+    assert_eq!(original.status, OperationStatus::Succeeded);
+    let reference = format!("operation:{}:{}", instance.instance.identity.instance, original.operation.operation_id);
+    assert!(repository.references(&archive.revision.id).unwrap().contains(&reference));
+    let args = json!({"operation_id":original.operation.operation_id});
+    assert!(host.dispatch(&context, HostRequest::Control(ControlRequest {
+        capability: CapabilityRef::new("plugins.reconcile_references", 1).unwrap(), arguments: args.clone(),
+    })).await.is_err(), "a caller control cannot manufacture original settlement");
+    for (name, denied) in [
+        ("foreign", { let mut c = context.clone(); c.caller.id = "foreign".into(); c }),
+        ("missing-original-scope", { let mut c = context.clone(); c.scopes.remove("fixture:science"); c }),
+    ] {
+        let result = run(&host, &denied, name, "plugins.reconcile_references", args.clone()).await;
+        assert_ne!(result.status, OperationStatus::Succeeded);
+        assert!(repository.references(&archive.revision.id).unwrap().contains(&reference));
+    }
+    let reader = query(&host, &context, "plugins.resolve", json!({"capability":{"id":"fixture.read","version":1},"instance":instance.instance.identity})).await;
+    let native_args = json!({"binding":reader,"arguments":{"action":"settlement_state"}});
+    let before = query(&host, &context, "fixture.read", native_args.clone()).await;
+    assert_eq!(before["requests"][original.operation.operation_id.as_str()].as_array().unwrap().len(), 1);
+    let recovered = run(&host, &context, "recover", "plugins.reconcile_references", args).await;
+    assert_eq!(recovered.status, OperationStatus::Succeeded, "{:?}", recovered.error);
+    assert!(!repository.references(&archive.revision.id).unwrap().contains(&reference));
+    let after = query(&host, &context, "fixture.read", native_args).await;
+    assert_eq!(after["invocations"], 1);
+    assert_eq!(after["requests"][original.operation.operation_id.as_str()].as_array().unwrap().len(), 2);
+    let replay = host.invoke(&context, work).await.unwrap();
+    assert_eq!(replay.operation.operation_id, original.operation.operation_id);
+    assert_eq!(replay.output, original.output);
+    assert_eq!(run(&host, &context, "release", "plugins.release", json!({"instance":instance.instance.identity})).await.status, OperationStatus::Succeeded);
+    drop(host);
+}
+
+#[tokio::test]
 async fn retained_plugin_resources_share_host_visibility_and_survive_provider_and_host_release() {
     use base64::{Engine, engine::general_purpose::STANDARD};
     let temp = tempfile::tempdir().unwrap();
@@ -991,7 +1047,12 @@ async fn closing_a_view_does_not_cancel_or_retarget_its_accepted_native_operatio
                 .unwrap()
                 .unwrap();
             if current.status.is_terminal() {
-                break current;
+                // Journal truth can be observed before the bounded native
+                // settlement acknowledgement releases its execution lease.
+                let owner = query(&host, &context, "plugins.instance", json!({"instance":native_instance.instance.identity})).await;
+                if owner["retained_calls"] == 0 && owner["pending_messages"] == 0 {
+                    break current;
+                }
             }
             tokio::task::yield_now().await;
         }

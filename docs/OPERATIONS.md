@@ -828,8 +828,13 @@ matching instances require explicit selection. No package origin gains extra sco
 `plugins.release`, `plugins.remove`, `plugins.branch`, `plugins.advance_branch`
 and `plugins.reconcile_references` also use normal Operations and stable
 `client_request_id` values. Release drains accepted work; an error does not prove
-cleanup. Reconciliation takes the original terminal `operation_id` and retires
-its protections without repeating native work. The CLI recovery interface still
+cleanup. Reconciliation takes the original terminal `operation_id`. For a live
+backend it resends only the original journal's terminal settlement and awaits an
+exact acknowledgement before retiring protections. A pending acknowledgement does
+not change an already committed scientific result. Retain the original operation
+ID; after observing a completed but unsuccessful reconciliation attempt, use a new
+client request ID for another explicit attempt. No scientific execution is repeated
+and no disconnected backend is restarted. The CLI recovery interface still
 handles archive import/export and source snapshots; active Host build/import
 flows remain part of the ongoing Plugin Studio work.
 

@@ -40,8 +40,17 @@ Optional native preflight freezes qualified arguments/target/context before
 admission, and the captured original request returns its existing record after
 unload without another preflight or execution. Facts are instance-qualified;
 invalid responses retain their candidate, and resource claims require an
-authoritative verifier. Lost lifecycle completion notifications can release a
-reference only after reading the original terminal journal record.
+authoritative verifier. Terminal journal completion now sends a Host-only native
+settlement with the original binding and outcome. For a live owner, its operation
+reference is released only after the exact acknowledgement; a five-second timeout
+preserves the committed result and retained reference. Explicit reconciliation
+rereads the original scoped journal, resends the same pending confirmation and
+never repeats execution. Disconnected or historical owners are not restarted for
+reference cleanup. Focused bridge tests pass commit-failure gating, lost and late
+acknowledgements, exact identity and original-result preservation. The shared Host
+recovery test rejects foreign principals, missing original scopes and attempts to
+substitute a caller control. Native execution occurs once; completed cleanup does
+not notify the owner again. The affected checks and independent native R pass.
 
 Core commit recovery now retains the checked native result and execution lease,
 stages its exact candidate in the existing journal, and commits scientific facts
@@ -157,22 +166,27 @@ parent before its child; the repository correctly rejected it and the fixture's
 removal order was corrected. These failed attempts are retained in the local
 verification logs and are not counted as passes.
 
-The settled control change passes `cargo test -p rho-operation --lib --locked`
-(25), `cargo test -p rho-plugin-protocol -p rho-plugin-sdk --locked` (15),
-`cargo test -p rho-plugins --locked` (33), `cargo test -p rho-host --lib --test
-plugins --test observer --locked` (59 passed, 2 ignored), `cargo test -p rho-mcp
---lib --test plugins --locked` (16), and `cargo test -p rho-cli --locked` (16).
-The explicit native plugin check passes separately (1). `npm run generate --prefix
-ui`, `npm run build --prefix ui`, `npm run check --prefix ui` and `cargo build
---locked` pass. `npm run test:browser --prefix ui -- e2e/plugin-view.spec.ts` passes
-against that binary. Independent backend examples, strict TypeScript protocol/UI
-consumers, architecture, plugin boundaries and governance checks also pass.
-The two ignored Host tests are not counted as passes; no full workspace audit ran.
-Initial control verification exposed the old blanket control-grant rejection and
-two tests requiring all queries to disappear during drain. The revised tests now
-prove that explicit reads remain available while new execution stays forbidden;
-the affected suites pass after the grant and expectation fixes. Failed attempts
-remain in the local verification logs.
+The settlement change passes `cargo test -p rho-operation -p rho-workspace
+-p rho-sqlite --lib --locked` (25/12/33), `cargo test -p rho-plugin-protocol
+-p rho-plugin-sdk --locked` (15), `cargo test -p rho-plugins --locked` (35),
+`cargo test -p rho-host --test plugins --locked` (8), and `cargo test -p rho-mcp
+--test plugins --locked` (1). `node scripts/test-r-plugin.mjs` passes its independently
+built native backend and real-R acceptance (1), including original settlement and
+confirmed release. `npm run generate --prefix ui`, `npm run build --prefix ui` and
+`npm run check --prefix ui` pass. Independent Rust backend examples, the external
+strict TypeScript protocol consumer, architecture, plugin boundaries and governance
+checks pass. No full workspace audit ran.
+
+The initial `cargo test -p rho-host --lib --test plugins --test observer --locked`
+failed one view-closure test: it required release immediately after observing a
+terminal journal record, before native acknowledgement had completed. That test
+now separately observes the retained calls and pending messages before release.
+The Host plugin file passes all 8 tests after this correction and the new shared
+recovery case. Its unchanged library (48 passed, 2 ignored) and observer (4 passed)
+results from the initial command are reused. The failed combined command remains
+recorded as failed; the two ignored checks are not counted as passes.
+The control-stage CLI suite (16), public UI consumer, Chrome
+conformance case and inspected 1440px/390px screenshots remain the prior baseline.
 
 Console queue controls, checkpoint ownership, the other R inspection
 contributions and retained-resource Viewer UI still need migration. The native

@@ -324,6 +324,36 @@ impl PluginRuntime {
         self.repository.lock().unwrap().release_reference("operation", &format!("{}:{operation}",identity.instance), &identity.revision)
     }
 
+    /// Only the Operation bridge may supply this original-journal proof. Neither
+    /// public capabilities nor reverse calls expose a caller-written settlement.
+    pub(crate) async fn settle_operation(&self, settlement: OperationSettlement) -> Result<(), PluginError> {
+        let identity = &settlement.binding.provider;
+        let reference = format!("operation:{}:{}", identity.instance, settlement.operation_id);
+        if !self.repository.lock().unwrap().references(&identity.revision)?.contains(&reference) {
+            return Ok(());
+        }
+        let entry = self.entries.lock().unwrap().get(&identity.instance).cloned();
+        let process = if let Some(entry) = entry {
+            let state = entry.state.lock().unwrap();
+            ensure(state.record.identity == *identity && state.record.project == settlement.binding.project,
+                "settlement differs from the original provider")?;
+            if matches!(state.record.state, InstanceState::Active | InstanceState::Draining) {
+                Some(entry.process.get().ok_or_else(|| PluginError::Unavailable("original backend has no connection".into()))?.clone())
+            } else { None }
+        } else { None };
+        if let Some(process) = process {
+            preflight_control(&identity.instance, RpcBody::OperationSettled(settlement.clone()))?;
+            tokio::time::timeout(Duration::from_secs(5), process.settle(settlement))
+                .await
+                .map_err(|_| PluginError::Unavailable("Original result is committed; native settlement acknowledgement is pending. Reconcile its reference explicitly.".into()))?
+        } else {
+            // A disconnected or historical instance has no live scheduler to
+            // advance. Only its operation reference is cleaned; the instance's
+            // failure/retained revision and native outcome remain unchanged.
+            self.release_operation(identity, settlement.operation_id.as_str())
+        }
+    }
+
     /// Pin before Operation admission; retain this lease through the journal's
     /// terminal commit (including a pending commit). Scene/view changes cannot
     /// redirect or release it. Only the existing Operation owner executes writes.

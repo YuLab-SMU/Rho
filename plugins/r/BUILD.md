@@ -24,5 +24,7 @@ request after a lost acknowledgement; a submitted answer cannot be repeated.
 Control transport does not record the answer; ordinary non-password native input
 can still be echoed by R into its output. Queries and input remain available for
 explicit bindings while release waits on accepted work; new executions are refused.
+The backend acknowledges Host-only original-Operation settlement through the public
+protocol. A returned native report alone is not proof of core journal commit.
 Release confirms native shutdown and keeps original resource bytes. Queue controls,
 checkpoints, packages/help and Viewer UI migration are still being implemented.

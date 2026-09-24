@@ -148,18 +148,18 @@ impl CommitRecovery {
             detail: error.to_string(),
         });
         if result.is_ok() {
-            self.complete(&reference.operation_id, &result);
+            self.complete(&reference.operation_id, &result).await;
         }
         result
     }
-    fn complete(&self, id: &OperationId, result: &Result<OperationRecord, OperationError>) {
+    async fn complete(&self, id: &OperationId, result: &Result<OperationRecord, OperationError>) {
         let entry = self
             .retained
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(id);
         if let Some(mut lease) = entry.and_then(|e| e.lease) {
-            lease.completed(result);
+            lease.completed(result).await;
         }
     }
     pub async fn status(
@@ -282,7 +282,7 @@ impl CommitRecovery {
                     ));
                 }
                 let result = Ok(record);
-                self.complete(&reference.operation_id, &result);
+                self.complete(&reference.operation_id, &result).await;
                 return result;
             }
         }
@@ -316,7 +316,7 @@ impl CommitRecovery {
                                 )
                             })?;
                         let result = Ok(record);
-                        self.complete(&reference.operation_id, &result);
+                        self.complete(&reference.operation_id, &result).await;
                         return result;
                     }
                     return Err(error);

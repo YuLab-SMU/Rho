@@ -93,6 +93,20 @@ Operation, receipt, event, recovery candidate or resource-transfer parent. Only
 explicitly selected queries and controls can reach a draining instance. Read the
 pending native request after an unacknowledged answer; never replay automatically.
 
+After the original journal reaches a terminal state, the Host sends
+`OperationSettled(OperationSettlement)` to that exact native instance. The payload
+contains only the original ID, binding and terminal outcome, not inputs or result
+bytes. The owner applies matching scheduling cleanup idempotently and echoes the
+exact payload as `SettlementAcknowledged`. Neither public Control nor reverse
+`HostCall` exposes this notification. It has no resource-transfer parent. Never
+advance the next queue item merely because a native CommitPlan was returned.
+The Host preserves the protecting operation reference until acknowledgement;
+lost acknowledgement cannot alter the committed scientific result. Explicit
+`plugins.reconcile_references` uses original journal proof to resend an unanswered
+settlement, with its original request identity and a fresh ordered frame sequence.
+An exact late duplicate acknowledgement is accepted within the bounded 128-request
+transport history. Unrelated identities and unsolicited replies fence the instance.
+
 The core bridge wraps native recovery as `plugin_owner_recovery`; transport and
 contract failures retain their original candidate under a distinct boundary
 recovery. Proposed resource evidence is accepted only after the resource owner

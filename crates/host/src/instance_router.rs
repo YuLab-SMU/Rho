@@ -217,12 +217,13 @@ struct RoutedLease {
     hold: RequestHold,
     potentially_mutating: bool,
 }
+#[async_trait::async_trait]
 impl ExecutionLease for RoutedLease {
-    fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
+    async fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
         self.hold.mark_activity = self.potentially_mutating;
         // Activity is visible before the real owner's lane/queue permits a subsequent capture.
         self.hold.release_result(result);
-        self.inner.completed(result);
+        self.inner.completed(result).await;
     }
 }
 impl Drop for RoutedLease {

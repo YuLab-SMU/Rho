@@ -357,8 +357,11 @@ pub trait OperationHandler: Send + Sync {
 }
 
 /// Domain-owned execution qualification outlives the final journal commit.
+#[async_trait]
 pub trait ExecutionLease: Send + Sync {
-    fn completed(&mut self, _result: &Result<OperationRecord, OperationError>) {}
+    /// Called after authoritative completion. Owners may confirm bounded native
+    /// scheduling cleanup; failure cannot replace the already committed result.
+    async fn completed(&mut self, _result: &Result<OperationRecord, OperationError>) {}
 }
 impl ExecutionLease for () {}
 

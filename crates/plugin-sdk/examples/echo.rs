@@ -14,6 +14,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     source: None,
                 }
             }
+            RpcBody::OperationSettled(settlement) => {
+                backend.validate_settlement(settlement)?;
+                RpcBody::SettlementAcknowledged(settlement.clone())
+            }
             RpcBody::Release => {
                 backend
                     .writer

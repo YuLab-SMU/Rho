@@ -24,6 +24,26 @@ After lost acknowledgement, observe the original native request before retrying.
 Explicitly bound queries and controls remain available while an instance drains;
 new Operations and automatic provider selection cannot enter that instance.
 
+Handle `OperationSettled` independently of the execution lane. This Host-only
+notification contains the original Operation ID, exact provider/native binding
+and terminal outcome read from the authoritative journal. Validate it with
+`validate_settlement`, then match any live owner scheduling fence. Release the
+matching fence on success, or retain an explicit pause on failure/cancellation/
+uncertainty according to the owner. Echo it as `SettlementAcknowledged` only after
+applying that scheduling change. It must be idempotent: a repeated or unknown old
+ID cannot advance another queue item. An operation cancelled before native dispatch
+may have no local item and still needs acknowledgement. This is not a new execution
+or result database; do not accept settlement through user controls or reverse calls.
+
+Each settlement attempt waits up to five seconds for acknowledgement. Timeout or
+invalid acknowledgement preserves the already committed result and the protecting
+operation reference. Explicit `plugins.reconcile_references` reads the original
+journal and resends only its settlement to the original live instance. A resend
+keeps an unanswered transport request ID; owners must accept it with a new ordered
+frame sequence. No scientific invocation is repeated. After disconnection/restart,
+reconciliation can release the operation reference without starting a replacement
+owner; the failed instance and native recovery material remain retained.
+
 Initialization may include a Host-issued `environment` with the normalized
 `project_root` and a private, persistent `data_root` for this exact instance.
 Use these paths for owner storage; do not infer a project from the artifact working

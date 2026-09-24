@@ -16,8 +16,9 @@ struct Counts {
     dropped: AtomicUsize,
 }
 struct Lease(Arc<Counts>);
+#[async_trait::async_trait]
 impl ExecutionLease for Lease {
-    fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
+    async fn completed(&mut self, result: &Result<OperationRecord, OperationError>) {
         assert!(result.as_ref().unwrap().status.is_terminal());
         self.0.completed.fetch_add(1, Ordering::SeqCst);
     }

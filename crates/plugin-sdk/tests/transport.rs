@@ -179,6 +179,21 @@ async fn sdk_initialization_and_call_validation_keep_the_host_binding() {
         .unwrap();
     let frame = backend.reader.receive().await.unwrap().unwrap();
     backend.validate_call(&frame).unwrap();
+    let settlement = OperationSettlement {
+        operation_id: OperationId::new("original-operation").unwrap(),
+        binding: call.binding.clone(),
+        outcome: PluginOutcome::Uncertain,
+    };
+    host_writer.send(RequestId::new("settled").unwrap(), RpcBody::OperationSettled(settlement.clone())).await.unwrap();
+    let frame = backend.reader.receive().await.unwrap().unwrap();
+    assert_eq!(frame.body, RpcBody::OperationSettled(settlement.clone()));
+    backend.validate_settlement(&settlement).unwrap();
+    let mut wrong = settlement.clone();
+    wrong.binding.project = ProjectId::new("other-project").unwrap();
+    assert!(backend.validate_settlement(&wrong).is_err());
+    wrong = settlement;
+    wrong.binding.provider.revision = RevisionId::new(format!("sha256:{}", "c".repeat(64))).unwrap();
+    assert!(backend.validate_settlement(&wrong).is_err());
     let mut spoof = call;
     spoof.principal = PrincipalId::new("different-principal").unwrap();
     host_writer

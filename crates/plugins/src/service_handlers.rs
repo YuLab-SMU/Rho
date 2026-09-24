@@ -227,7 +227,7 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             schema_for!(Reconcile).to_value(),
             json!({"type":"object","properties":{"operation_id":{"type":"string"},"reconciled":{"const":true}},"required":["operation_id","reconciled"],"additionalProperties":false}),
             json!({"operation_id":"operation-example"}),
-            "Release protections from an original terminal operation",
+            "Confirm original native settlement and release its operation protections",
             true,
             PLUGINS_RUN_SCOPE,
         ),
@@ -235,7 +235,7 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
     };
     let mut descriptor = host::CapabilityDescriptor {
         kind:if operation {host::CapabilityKind::Operation}else{host::CapabilityKind::Query},capability:key(id),domain:"plugins".into(),input_schema:input,output_schema:output,recovery_schema:json!({"type":["object","null"]}),
-        required_scopes:BTreeSet::from([scope.into()]),potential_effects:match id {"plugins.activate"=>BTreeSet::from([host::EffectHint::MaySpawnProcess,host::EffectHint::MayMutateRuntime]),"plugins.release"=>BTreeSet::from([host::EffectHint::MayMutateRuntime]),_=>BTreeSet::new()},
+        required_scopes:BTreeSet::from([scope.into()]),potential_effects:match id {"plugins.activate"=>BTreeSet::from([host::EffectHint::MaySpawnProcess,host::EffectHint::MayMutateRuntime]),"plugins.release"|"plugins.reconcile_references"=>BTreeSet::from([host::EffectHint::MayMutateRuntime]),_=>BTreeSet::new()},
         idempotency:if operation {host::IdempotencyClass::CallerScoped}else{host::IdempotencyClass::Pure},retry:if operation {host::RetryClass::ReconcileFirst}else{host::RetryClass::Safe},cancellation:host::CancellationClass::Unsupported,
         documentation:host::CapabilityDocumentation {
             summary:summary.into(),purpose:summary.into(),when_to_use:vec!["Manage or observe ordinary installed packages through the shared Host ports.".into()],
@@ -669,8 +669,9 @@ struct ManagementLease {
     operation: host::OperationId,
     revision: Option<RevisionId>,
 }
+#[async_trait::async_trait]
 impl ExecutionLease for ManagementLease {
-    fn completed(&mut self, result: &Result<host::OperationRecord, OperationError>) {
+    async fn completed(&mut self, result: &Result<host::OperationRecord, OperationError>) {
         if result.as_ref().is_ok_and(|r| r.status.is_terminal())
             && let Some(revision) = &self.revision
         {

@@ -27,6 +27,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     source: Some(reference),
                 }
             }
+            RpcBody::OperationSettled(settlement) => {
+                backend.validate_settlement(settlement)?;
+                RpcBody::SettlementAcknowledged(settlement.clone())
+            }
             RpcBody::Release => {
                 backend
                     .writer

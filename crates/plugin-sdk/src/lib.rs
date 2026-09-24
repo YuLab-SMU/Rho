@@ -98,6 +98,20 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> BackendConnection<R, W> {
         }
         Ok(())
     }
+
+    /// Validate Host-issued terminal notification before applying owner queue
+    /// cleanup. The owner must also match any retained native operation binding.
+    pub fn validate_settlement(&self, settlement: &OperationSettlement) -> Result<(), SdkError> {
+        validate_settlement(&self.instance, settlement)
+    }
+}
+
+/// Available after splitting the connection's reader and writer.
+pub fn validate_settlement(instance: &PluginInstance, settlement: &OperationSettlement) -> Result<(), SdkError> {
+    if settlement.binding.provider != instance.identity || settlement.binding.project != instance.project {
+        return Err(SdkError::Invalid("settlement differs from the initialized instance or project".into()));
+    }
+    Ok(())
 }
 
 pub async fn accept_stdio()

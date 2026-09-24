@@ -90,6 +90,17 @@ pub struct PluginCall {
     pub operation_id: Option<String>,
 }
 
+/// Host-to-owner notification derived only from the original terminal journal
+/// record. This releases native scheduling fences; it is not another operation,
+/// a commit plan, a cancellation request or a caller-supplied control.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct OperationSettlement {
+    pub operation_id: OperationId,
+    pub binding: ProviderBinding,
+    pub outcome: PluginOutcome,
+}
+
 /// Public Host payload: provider selection is separate from scientific arguments.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
@@ -210,6 +221,10 @@ pub enum RpcBody {
         operation_id: String,
         confirmed: bool,
     },
+    OperationSettled(OperationSettlement),
+    /// Echo the exact settlement after applying it idempotently. A delayed or
+    /// repeated settlement must never advance a different native queue item.
+    SettlementAcknowledged(OperationSettlement),
     Release,
     Released,
     Error {
@@ -237,6 +252,8 @@ impl std::fmt::Debug for RpcBody {
             Self::HostResult { .. } => "HostResult",
             Self::Cancel { .. } => "Cancel",
             Self::CancelAcknowledged { .. } => "CancelAcknowledged",
+            Self::OperationSettled(_) => "OperationSettled",
+            Self::SettlementAcknowledged(_) => "SettlementAcknowledged",
             Self::Release => "Release",
             Self::Released => "Released",
             Self::Error { .. } => "Error",

@@ -137,6 +137,27 @@
         "unavailable"
       ]
     },
+    "OperationSettlement": {
+      "description": "Host-to-owner notification derived only from the original terminal journal\nrecord. This releases native scheduling fences; it is not another operation,\na commit plan, a cancellation request or a caller-supplied control.",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ProviderBinding"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/PluginOutcome"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "binding",
+        "outcome"
+      ]
+    },
     "PluginCall": {
       "type": "object",
       "properties": {
@@ -682,6 +703,41 @@
             "type": {
               "type": "string",
               "const": "cancel_acknowledged"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/OperationSettlement"
+            },
+            "type": {
+              "type": "string",
+              "const": "operation_settled"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "description": "Echo the exact settlement after applying it idempotently. A delayed or\nrepeated settlement must never advance a different native queue item.",
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/OperationSettlement"
+            },
+            "type": {
+              "type": "string",
+              "const": "settlement_acknowledged"
             }
           },
           "additionalProperties": false,

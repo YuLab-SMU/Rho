@@ -215,8 +215,9 @@ impl PluginService {
             },
         })
     }
-    /// Completion repairs only version protections, from the original terminal
-    /// journal authority. It never repeats native effects or changes outcomes.
+    /// Completion confirms native scheduling cleanup and version protections
+    /// from original terminal journal authority. It never repeats scientific
+    /// execution or changes its outcome.
     pub async fn complete_record(
         &self,
         context: &host::CallContext,
