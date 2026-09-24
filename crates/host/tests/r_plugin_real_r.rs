@@ -6,6 +6,9 @@ use rho_plugins::{PluginRepository, backend_target, repository_path, snapshot_di
 use serde_json::{Value, json};
 use std::{fs, path::Path, sync::Arc, time::Duration};
 
+#[path = "fixtures/r_queue.rs"]
+mod queue;
+
 async fn query(host: &NextHost, id: &str, args: Value) -> Value {
     host.query_snapshot(
         &NextHost::local_context(),
@@ -156,6 +159,23 @@ async fn answer_native_input(host: &Arc<NextHost>, instance: &InstanceRef, sessi
         native_query(host, instance, "r.session", json!({})).await["input"]["submitted"],
         false
     );
+    let paused = queue::control(host, instance, session, true, Value::Null, Value::Null)
+        .await
+        .unwrap();
+    let followup = queue::start(
+        host,
+        invocation(
+            "queued-before-drain",
+            "r.execute",
+            json!({"binding":execute,
+        "arguments":{"expected_session":session,"code":"paste0('continued:', answer)"}}),
+        ),
+    );
+    let queued = queue::wait(host, instance, session, |s| {
+        s["console"]["pending"].as_array().unwrap().len() == 1
+    })
+    .await;
+    let followup_id = queued["console"]["pending"][0]["operation_id"].clone();
     let draining = host
         .invoke(
             &NextHost::local_context(),
@@ -222,6 +242,17 @@ async fn answer_native_input(host: &Arc<NextHost>, instance: &InstanceRef, sessi
         "{completed:?}"
     );
     assert_eq!(completed.output.unwrap()["value"], "received:中文 αβ");
+    // Draining withdraws new operations; explicit controls can still resume the
+    // exact already accepted queue after the native input has completed.
+    assert_eq!(
+        queue::console(host, instance, session).await["console"]["pause"]["id"],
+        paused["console"]["pause"]["id"]
+    );
+    queue::resume(host, instance, session, json!([followup_id])).await;
+    assert_eq!(
+        queue::completed(followup).await.output.unwrap()["value"],
+        "continued:中文 αβ"
+    );
 }
 
 #[tokio::test]
@@ -258,6 +289,7 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
     let live_left = left.clone();
     let live_right = right.clone();
     let project_root = project.canonicalize().unwrap();
+    let live_db = db.clone();
     let exercise = tokio::spawn(async move {
         let (host, left, right) = (live_host, live_left, live_right);
         assert_eq!(native_query(&host, &left, "r.session", json!({})).await["state"], "unstarted");
@@ -266,8 +298,8 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
         }).await;
         assert!(premature.is_err());
         assert_eq!(native_query(&host, &left, "r.session", json!({})).await["state"], "unstarted");
+        let right_create=queue::paused_creation(&host,&right).await;
         let left_create = run(&host, "left-session", "r.create_session", json!({"binding":binding(&host,&left,"r.create_session").await,"arguments":{}})).await;
-        let right_create = run(&host, "right-session", "r.create_session", json!({"binding":binding(&host,&right,"r.create_session").await,"arguments":{}})).await;
         let session = left_create.output.as_ref().unwrap()["session_id"].clone();
         let other_session = right_create.output.as_ref().unwrap()["session_id"].clone();
         assert_ne!(session, other_session);
@@ -310,9 +342,11 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
         let cancelled = tokio::time::timeout(Duration::from_secs(20),running).await.unwrap().unwrap().unwrap();
         assert_eq!(cancelled.status,OperationStatus::Cancelled,"{cancelled:?}");
         assert_eq!(native_query(&host,&left,"r.session",json!({})).await["session_id"],session);
+        queue::resume(&host,&left,&session,json!([cancelled.operation.operation_id])).await;
         let failed = host.invoke(&NextHost::local_context(), invocation("native-error", "r.execute", json!({"binding":bind,
             "arguments":{"expected_session":session,"code":"x <- 99; stop('expected native error')"}}))).await.unwrap();
         assert_eq!(failed.status, OperationStatus::Failed, "{failed:?}");
+        queue::resume(&host,&left,&session,json!([failed.operation.operation_id])).await;
         let after_error = run(&host,"after-native-error","r.execute",json!({"binding":bind,"arguments":{"expected_session":session,"code":"x"}})).await;
         assert_eq!(after_error.output.unwrap()["value"],99, "R errors do not roll back prior effects");
         let disconnect = invocation("native-disconnect", "r.execute", json!({"binding":bind,
@@ -323,6 +357,8 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
         assert_eq!(host.invoke(&NextHost::local_context(),disconnect).await.unwrap().operation.operation_id,uncertain.operation.operation_id);
         assert_eq!(native_query(&host,&left,"r.session",json!({})).await["session_id"],session, "read cannot replace a lost native session");
         assert_eq!(native_query(&host,&right,"r.session",json!({})).await["session_id"],other_session);
+        queue::exercise(&host,&right,&other_session,&live_db,&project_root).await;
+        queue::full_queue(&host,&right,&other_session,&project_root).await;
         answer_native_input(&host, &right, &other_session).await;
         (html,request,record)
     }).await;

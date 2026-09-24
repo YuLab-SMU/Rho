@@ -1,5 +1,6 @@
 //! Ordinary public-protocol executable; no Host, journal or edge implementation.
 mod owner;
+mod queue;
 use owner::Owner;
 use rho_plugin_sdk::{ResourceClient, accept_stdio, protocol::*, validate_settlement};
 use std::{collections::BTreeMap, sync::Arc};
@@ -52,6 +53,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     });
     let mut writer = connection.writer;
     let mut jobs = JoinSet::new();
+    let mut query_jobs = 0_usize;
     let mut cancellations: BTreeMap<String, watch::Sender<bool>> = BTreeMap::new();
     let result: Result<(), String> = loop {
         tokio::select! {
@@ -60,6 +62,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                     break Err("R owner task ended without a result; native outcome is unconfirmed".into());
                 };
                 if let Some(operation) = operation { cancellations.remove(&operation); }
+                else { query_jobs -= 1; }
                 if let Err(error) = writer.send(request, reply).await { break Err(error.to_string()); }
             }
             incoming = frames.recv() => {
@@ -91,21 +94,26 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         let is_query = call.operation_id.is_none();
                         let valid_kind = match call.binding.capability.id.as_str() {
-                            "r.session" | "r.snapshot" | "r.prepare" => is_query,
+                            "r.session" | "r.console" | "r.snapshot" | "r.prepare" => is_query,
                             "r.create_session" | "r.execute" => !is_query,
                             _ => false,
                         };
                         if !valid_kind || call.binding.capability.version != 1 {
                             Some(error("unsupported", "unsupported R capability or message kind"))
-                        } else if jobs.len() >= 32 {
-                            Some(error("busy", "R owner request limit reached"))
+                        } else if is_query && query_jobs >= 16 {
+                            Some(error("busy", "R observation limit reached"))
+                        } else if !is_query && let Err(message) = owner.admit(&call) {
+                            Some(RpcBody::CommitPlan(PluginCommitPlan {
+                                outcome: PluginOutcome::Failed, output: None, error: Some(message), recovery: None,
+                                facts: vec![], evidence: vec![], cancellation_confirmed: false,
+                            }))
                         } else {
                             let operation = call.operation_id.clone();
                             let (cancel, cancellation) = watch::channel(false);
                             if let Some(operation) = &operation {
                                 if cancellations.contains_key(operation) { break Err("duplicate active original Operation".into()); }
                                 cancellations.insert(operation.clone(), cancel);
-                            }
+                            } else { query_jobs += 1; }
                             let owner = owner.clone();
                             jobs.spawn(async move {
                                 let reply = if is_query {
@@ -136,14 +144,14 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                         if cancellations.contains_key(settlement.operation_id.as_str()) {
                             Some(error("r_settlement", "Native invocation has not returned its result"))
                         } else {
-                            // No queue fence is installed yet. This standard
-                            // lifecycle acknowledgement also covers operations
-                            // cancelled by the Host before native dispatch.
-                            Some(RpcBody::SettlementAcknowledged(settlement))
+                            Some(match owner.settle(&settlement) {
+                                Ok(()) => RpcBody::SettlementAcknowledged(settlement),
+                                Err(message) => error("r_settlement", &message),
+                            })
                         }
                     }
                     RpcBody::Release => {
-                        if !jobs.is_empty() { Some(error("busy", "Accepted owner calls must finish before release")) }
+                        if !jobs.is_empty() || !owner.ready_to_release() { Some(error("busy", "Accepted owner calls and their original settlements must finish before release")) }
                         else {
                             match owner.shutdown().await {
                                 Ok(()) => {

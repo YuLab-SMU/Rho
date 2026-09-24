@@ -26,5 +26,25 @@ can still be echoed by R into its output. Queries and input remain available for
 explicit bindings while release waits on accepted work; new executions are refused.
 The backend acknowledges Host-only original-Operation settlement through the public
 protocol. A returned native report alone is not proof of core journal commit.
-Release confirms native shutdown and keeps original resource bytes. Queue controls,
-checkpoints, packages/help and Viewer UI migration are still being implemented.
+`r.console` observes the existing queue using `expected_session` copied from
+`r.session.queue_target`. This identity exists even before session creation;
+queries and controls do not create R. The queue admits at most 33 original
+operations, in received order. `accepting` describes native queue capacity only;
+Host lifecycle and granted scopes still govern admission. A native result blocks later execution until the
+Host confirms the original journal commit. Failed, cancelled and uncertain runs
+leave a pause; their partial effects remain visible in the original result.
+
+Use `r.pause_queue` / `r.resume_queue` as transient controls. Set the binding target
+and `session_id` to the observed queue target, and copy the exact `pause_id` (null
+when currently unpaused). Optional `only_operation_ids` must cover all accepted
+work and the operation that caused the pause. Pause lets the current run finish;
+resume cannot bypass a result in `awaiting_commit`. Resolve such a result through
+original Operation commit recovery, then observe and resume the queue. Cancelling
+a waiting `r.execute` item confirms `started:false` and preserves its original
+cancellation result. Controls and queue observations remain available during draining.
+Session creation
+retains its existing unsupported-cancellation contract; it can be paused before
+starting and resumed through the unstarted queue target.
+
+Release confirms native shutdown and keeps original resource bytes. Checkpoints,
+packages/help and Viewer UI migration are still being implemented.

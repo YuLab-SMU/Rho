@@ -13,6 +13,7 @@ connection = None
 configuration = {}
 pending = {}
 pending_controls = set()
+pending_queries = set()
 reverse = {}
 settlements = {}
 settlement_requests = {}
@@ -133,6 +134,10 @@ while True:
         action = args.get("action", "echo")
         if action == "settlement_state":
             query_result(request, {"settlements": settlements, "requests": settlement_requests, "invocations": invocations})
+        elif action == "pending_count":
+            query_result(request, {"operations": len(pending), "queries": len(pending_queries), "controls": len(pending_controls)})
+        elif action == "hold_read":
+            pending_queries.add(request)
         elif action == "control_pending":
             query_result(request, {"pending": len(pending_controls)})
         elif action == "environment":
@@ -174,10 +179,17 @@ while True:
         if action == "hold":
             pending_controls.add(request)
         elif action == "finish":
+            for original in pending_queries:
+                query_result(original, {"finished": True})
+            pending_queries.clear()
             for original in pending_controls:
                 send(original, "control_result", {"data":{"submitted":True}})
             pending_controls.clear()
             send(request, "control_result", {"data":{"submitted":True}})
+        elif action == "controls_pending":
+            send(request, "control_result", {"data":{"submitted":len(pending_controls) == 1}})
+        elif action == "reads_full":
+            send(request, "control_result", {"data":{"submitted":len(pending_queries) == 16}})
         elif action == "reject":
             send(request, "error", {"code":"rejected", "message":args["value"], "recovery":{"secret":args["value"]}})
         elif action == "bad_output":

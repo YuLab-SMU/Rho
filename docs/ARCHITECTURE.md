@@ -92,6 +92,17 @@ No public capability, reverse call or resource-transfer grant can manufacture a
 settlement. Synchronous scientific owners retain their existing completion behavior
 inside the same async lease hook.
 
+The R package owns its bounded FIFO and transient pause state. Accepted entries
+retain original bindings through native return and Host settlement; a pause or
+resume control cannot supply a terminal outcome. Failure, cancellation and
+uncertainty pause following work without undoing native effects. Cancellation of
+an item that has not acquired the native lane cannot start R code. Queries and
+controls observe the owner even before R creation, using its explicit queue target,
+and remain reachable for existing work while draining. They do not start a runtime.
+The session edge reserves independent execution, query and control capacity and
+never waits for an owner call on its frame reader; it has no scientific command
+names or second scheduling policy.
+
 The Operation registry publishes owner-scoped contribution batches by
 compare-and-swap. Queries and invocations keep one immutable handler/schema
 snapshot through response validation and commit. Unregistering a provider removes

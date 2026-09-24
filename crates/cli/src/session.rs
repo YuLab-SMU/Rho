@@ -9,7 +9,21 @@ use tokio::{
 
 const MAX_FRAME_BYTES: usize = MAX_ARGUMENT_BYTES + 4096;
 const MAX_REPLY_BYTES: usize = 8 * 1024 * 1024;
-const MAX_IN_FLIGHT: usize = 32;
+// Queries and transient controls keep independent capacity when accepted work
+// is waiting. The reader never waits for an owner call to finish.
+const POOL_LIMITS: [usize; 3] = [32, 16, 16];
+fn pool(request: &HostRequest) -> usize {
+    match request {
+        HostRequest::Control(_)
+        | HostRequest::RequestCancellation { .. }
+        | HostRequest::RespondInput(_)
+        | HostRequest::ReconcileCommit(_) => 2,
+        HostRequest::QuerySnapshot(_)
+        | HostRequest::GetOperation { .. }
+        | HostRequest::Subscribe { .. } => 1,
+        _ => 0,
+    }
+}
 
 pub async fn serve(
     host: Arc<NextHost>,
@@ -25,14 +39,20 @@ pub async fn serve(
     let mut buffer = Vec::new();
     let mut tasks = JoinSet::new();
     let mut in_flight = BTreeSet::new();
+    let mut counts = [0usize; 3];
     let mut ended = false;
     let mut output_error = None;
     while !ended || !tasks.is_empty() {
         tokio::select! {
             next = tasks.join_next(), if !tasks.is_empty() => {
                 let reply: SessionReply = match next {
-                    Some(Ok(reply)) => reply,
-                    Some(Err(error)) => failure(None, format!("response task failed: {error}")),
+                    Some(Ok((pool, reply))) => { counts[pool] -= 1; reply },
+                    Some(Err(error)) => {
+                        // A panic lost its reply identity. Stop admission, drain
+                        // every other accepted request, and report the failure.
+                        ended = true;
+                        failure(None, format!("response task failed: {error}"))
+                    },
                     None => continue,
                 };
                 if let Some(id) = &reply.id { in_flight.remove(id); }
@@ -66,18 +86,16 @@ pub async fn serve(
                     emit(&mut output, failure(Some(frame.id), "duplicate in-flight session request id".into()), &mut output_error, &mut ended).await;
                     continue;
                 }
-                if tasks.len() >= MAX_IN_FLIGHT {
-                    // A full execution queue must not prevent requesting cancellation.
-                    if matches!(&frame.request, HostRequest::Control(_) | HostRequest::RequestCancellation { .. } | HostRequest::RespondInput(_) | HostRequest::ReconcileCommit(_)) || matches!(&frame.request,HostRequest::QuerySnapshot(query) if matches!(query.capability.id.as_str(), "workspace.console_state" | "operation.commit_status")) {
-                        let reply = dispatch(host.clone(), frame).await;
-                        emit(&mut output, reply, &mut output_error, &mut ended).await;
-                    } else {
-                        emit(&mut output, failure(Some(frame.id), "session is at its in-flight request limit".into()), &mut output_error, &mut ended).await;
-                    }
+                let pool = pool(&frame.request);
+                if counts[pool] >= POOL_LIMITS[pool] {
+                    let kind = ["execution", "query", "control"][pool];
+                    emit(&mut output, failure(Some(frame.id), format!("session {kind} pool is at its in-flight request limit")), &mut output_error, &mut ended).await;
                     continue;
                 }
                 in_flight.insert(frame.id.clone());
-                tasks.spawn(dispatch(host.clone(), frame));
+                counts[pool] += 1;
+                let host = host.clone();
+                tasks.spawn(async move { (pool, dispatch(host, frame).await) });
             }
         }
     }

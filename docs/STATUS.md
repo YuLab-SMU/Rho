@@ -188,9 +188,37 @@ recorded as failed; the two ignored checks are not counted as passes.
 The control-stage CLI suite (16), public UI consumer, Chrome
 conformance case and inspected 1440px/390px screenshots remain the prior baseline.
 
-Console queue controls, checkpoint ownership, the other R inspection
-contributions and retained-resource Viewer UI still need migration. The native
-slice does not establish complete R/Viewer or Studio acceptance.
+The ordinary R backend now owns a FIFO of up to 33 accepted original operations,
+including returned results awaiting Host settlement. `r.console` observes it without
+starting R; pause/resume are transient controls with exact queue/pause identities
+and optional operation-scope fences. Native failure, cancellation or uncertainty
+pauses subsequent work. A control cannot clear a pending original commit, and
+cancelling a waiting execution returns `started:false`. The unstarted queue target
+supports pause/resume before session creation; creation retains its existing
+unsupported-cancellation contract. Explicit controls remain usable while draining.
+The CLI session now reserves separate bounded execution/query/control capacity,
+removes its scientific query-name exceptions and never blocks its reader on an
+owner call. EOF drains accepted work.
+
+`cargo test -p rho-r-backend queue::tests --locked` passes four scheduling tests.
+`cargo test -p rho-cli --test session --locked` passes three tests, including an
+external plugin with 32 held operations, 16 held queries and responsive controls.
+`node scripts/test-r-plugin.mjs` passes the independently built backend and real-R
+acceptance (1): injected original commit failure/reconciliation, FIFO continuation,
+failed and cancelled pauses, all 33 queued executions cancelled without native
+start, full-queue observations/controls, and input plus queued continuation during
+draining. Both native owners confirm shutdown and retained HTML survives removal
+and restart. The first queue acceptance attempt failed because its fixture tried
+to cancel session creation despite the frozen unsupported-cancellation contract;
+the fixture now verifies that refusal and resumes creation explicitly. The failed
+attempt remains recorded and is not counted as a pass. No UI or native IME
+acceptance was added by this queue change. The affected `cargo test -p rho-plugins
+--locked` (35) and `cargo test -p rho-host --test plugins --locked` (8) pass,
+as do architecture, plugin-boundary and governance checks. No full workspace audit
+ran; unchanged client and public-protocol evidence above is reused.
+
+Console UI, checkpoint ownership, the other R inspection contributions and
+retained-resource Viewer UI still need migration. The native slice does not establish complete R/Viewer or Studio acceptance.
 
 The remaining scientific owners and fixed Studio panels have not yet migrated into
 packages. The standalone generic frame is the container conformance surface;

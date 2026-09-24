@@ -838,6 +838,22 @@ and no disconnected backend is restarted. The CLI recovery interface still
 handles archive import/export and source snapshots; active Host build/import
 flows remain part of the ongoing Plugin Studio work.
 
+The ordinary R package exposes `r.console` for current/pending original operations,
+pause identity and `awaiting_commit`. Copy `r.session.queue_target` into the query's
+`expected_session`. Queue controls `r.pause_queue` and `r.resume_queue` take that
+same identity as binding target and `session_id`, the observed `pause_id` (null
+when unpaused), and optionally every affected `only_operation_ids`. Pause does
+not interrupt a running evaluation. Failed or cancelled work leaves a fresh pause;
+inspect its original result before resuming. A pending native item can be cancelled
+without execution. A result awaiting journal commit must use original commit
+recovery first; resume cannot confirm it. These controls also work before R exists
+and during draining. No query/control creates or reconnects a session.
+
+The JSON session edge admits up to 32 execution, 16 query and 16 control requests
+concurrently. Saturating one pool does not consume another pool's capacity.
+Duplicate in-flight request IDs and pool overflow are rejected before dispatch.
+EOF stops admission and drains every accepted request.
+
 `views.open` takes an exact `instance`, declared `contribution`, `window`,
 `configuration` and schema-valid initial `state`. It returns a durable view ID.
 `views.inspect` reads it, and `views.connection` returns only an already-live

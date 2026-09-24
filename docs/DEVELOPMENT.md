@@ -71,7 +71,12 @@ node scripts/test-process-recovery.mjs
 
 Real R acceptance uses disposable projects and explicit bindings. The independently
 packaged R backend path is checked with explicit existing
-`RHO_ARK` and `RHO_R_HOME` using `node scripts/test-r-plugin.mjs`. It assembles
+`RHO_ARK` and `RHO_R_HOME` using `node scripts/test-r-plugin.mjs`. Native queue changes
+also use `cargo test -p rho-r-backend queue::tests --locked`. Session routing changes
+use `cargo test -p rho-cli --test session --locked`, including an external plugin
+that fills execution/query capacity while transient controls remain responsive.
+The real-R acceptance injects an original journal commit fault, verifies FIFO
+recovery, failed/pending-cancel pauses and resuming accepted work during draining. It assembles
 public SDKs plus R sources outside the checkout and tests original Operations,
 coexisting revisions, cancellation, native stdin and retained resources through
 the Host. The input case waits for an actual native prompt, rejects stale identity,

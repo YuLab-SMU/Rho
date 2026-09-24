@@ -1,3 +1,4 @@
+use crate::queue::Queue;
 use rho_plugin_sdk::{ResourceClient, protocol::*};
 use rho_r_api::*;
 use rho_r_engine::{ArkConfig, ArkRuntime, OutputStore};
@@ -28,6 +29,11 @@ struct Execute {
     expected_session: String,
     code: String,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SessionObservation {
+    expected_session: String,
+}
 
 /// One exact plugin instance owns one native session and its execution lane.
 /// No journal or second result authority is available to this process.
@@ -37,7 +43,8 @@ pub struct Owner {
     instance: InstanceRef,
     runtime: Mutex<Option<Arc<ArkRuntime>>>,
     launch_attempt: Mutex<Option<OperationId>>,
-    lane: Lane<()>,
+    lane: Arc<Lane<()>>,
+    queue: Queue,
     resources: ResourceClient,
 }
 impl Owner {
@@ -79,7 +86,8 @@ impl Owner {
             instance,
             runtime: Mutex::new(None),
             launch_attempt: Mutex::new(None),
-            lane: Lane::new(()),
+            lane: Arc::new(Lane::new(())),
+            queue: Queue::default(),
             resources,
         })
     }
@@ -108,42 +116,116 @@ impl Owner {
         }
         Ok(args)
     }
-    /// Input answers belong to a pending native request, never to a new
-    /// scientific Operation. Do not take the execution lane held by that request.
+    pub fn admit(&self, call: &PluginCall) -> Result<(), String> {
+        if call.binding.target.as_deref() != Some(&self.target())
+            || call.owner_context != json!({"session_target":self.target()})
+            || (!call.preconditions.is_null() && call.preconditions != json!({}))
+        {
+            return Err("R target or preconditions changed after admission".into());
+        }
+        match call.binding.capability.id.as_str() {
+            "r.execute" => {
+                self.validate_execute(&call.arguments)?;
+            }
+            "r.create_session" if call.arguments == json!({}) => (),
+            _ => return Err("Unsupported R invocation".into()),
+        }
+        self.queue.admit(call)
+    }
+    pub fn settle(&self, settlement: &OperationSettlement) -> Result<(), String> {
+        self.queue.settle(settlement)
+    }
+    pub fn ready_to_release(&self) -> bool {
+        self.queue.is_empty()
+    }
+    /// Input and queue controls affect existing work, without taking its lane or
+    /// manufacturing another scientific result. Native identity remains exact.
     pub fn control(&self, call: &PluginCall) -> Result<Value, String> {
-        if call.binding.capability.id.as_str() != "r.respond_input"
-            || call.binding.capability.version != 1
+        if call.binding.capability.version != 1
             || call.operation_id.is_some()
             || (!call.preconditions.is_null() && call.preconditions != json!({}))
         {
             return Err("Unsupported R control".into());
         }
-        let reply: RespondInput = serde_json::from_value(call.arguments.clone())
-            .map_err(|_| "Invalid input response (redacted)")?;
-        let runtime = self.runtime()?;
-        if call.binding.target.as_deref() != Some(runtime.session_id())
-            || reply.session_id != runtime.session_id()
-        {
-            return Err("Input response requires this exact native session".into());
+        let target = self.target();
+        if call.binding.target.as_deref() != Some(&target) {
+            return Err("Control requires this exact native queue target".into());
         }
-        // The native owner checks original Operation, request, submission state
-        // and byte bounds. Neither the payload nor transport diagnostics escape.
-        runtime.respond_input(reply)
-            .map_err(|_| "Input was not confirmed; inspect the pending native request (redacted)")?;
-        Ok(json!({"submitted":true}))
+        match call.binding.capability.id.as_str() {
+            "r.respond_input" => {
+                let runtime = self.runtime()?;
+                let reply: RespondInput = serde_json::from_value(call.arguments.clone())
+                    .map_err(|_| "Invalid input response (redacted)")?;
+                if reply.session_id != runtime.session_id() {
+                    return Err("Input response requires this exact native session".into());
+                }
+                runtime.respond_input(reply).map_err(
+                    |_| "Input was not confirmed; inspect the pending native request (redacted)",
+                )?;
+                Ok(json!({"submitted":true}))
+            }
+            "r.pause_queue" | "r.resume_queue" => {
+                let args: QueueControlArguments = serde_json::from_value(call.arguments.clone())
+                    .map_err(|_| "Invalid queue control")?;
+                if args.session_id != target {
+                    return Err("Queue control requires this exact native queue target".into());
+                }
+                self.queue.control(
+                    call.binding.capability.id.as_str() == "r.pause_queue",
+                    &args,
+                )?;
+                Ok(json!(
+                    self.queue.observe(
+                        &target,
+                        self.runtime
+                            .lock()
+                            .unwrap()
+                            .as_ref()
+                            .and_then(|r| r.input_request())
+                    )
+                ))
+            }
+            _ => Err("Unsupported R control".into()),
+        }
     }
     pub async fn query(&self, call: &PluginCall) -> Result<Value, String> {
         match call.binding.capability.id.as_str() {
             "r.session" => Ok(match self.runtime.lock().unwrap().as_ref() {
                 Some(runtime) => {
-                    json!({"state":runtime.execution_state(), "session_id":runtime.session_id(),
+                    json!({"state":runtime.execution_state(), "session_id":runtime.session_id(), "queue_target":runtime.session_id(),
                     "process":runtime.process_identity(), "installation":runtime.installation_identity(), "input":runtime.input_request()})
                 }
                 None => {
                     let attempt = self.launch_attempt.lock().unwrap();
-                    json!({"state":if attempt.is_some() { "launch_unconfirmed" } else { "unstarted" }, "session_id":null, "launch_operation":*attempt})
+                    json!({"state":if attempt.is_some() { "launch_unconfirmed" } else { "unstarted" }, "session_id":null, "queue_target":format!("unstarted:{}",self.instance.instance), "launch_operation":*attempt})
                 }
             }),
+            "r.console" => {
+                let args: SessionObservation =
+                    serde_json::from_value(call.arguments.clone()).map_err(|e| e.to_string())?;
+                let target = self.target();
+                if args.expected_session != target
+                    || call
+                        .binding
+                        .target
+                        .as_deref()
+                        .is_some_and(|value| value != target)
+                {
+                    return Err(
+                        "Console observation requires this exact native queue target".into(),
+                    );
+                }
+                Ok(json!(
+                    self.queue.observe(
+                        &target,
+                        self.runtime
+                            .lock()
+                            .unwrap()
+                            .as_ref()
+                            .and_then(|r| r.input_request())
+                    )
+                ))
+            }
             "r.prepare" => {
                 let args: PluginPreflightRequest =
                     serde_json::from_value(call.arguments.clone()).map_err(|e| e.to_string())?;
@@ -189,6 +271,9 @@ impl Owner {
                 }))
             }
             "r.snapshot" => {
+                if !self.queue.is_empty() {
+                    return Err("R has queued work or an unsettled result; this observation did not execute".into());
+                }
                 let _lane = self
                     .lane
                     .try_lock()
@@ -219,7 +304,19 @@ impl Owner {
         call: &PluginCall,
         cancellation: watch::Receiver<bool>,
     ) -> PluginCommitPlan {
-        match self.execute(call, cancellation).await {
+        let id = OperationId::new(
+            call.operation_id
+                .as_deref()
+                .expect("admitted original operation"),
+        )
+        .expect("validated operation identity");
+        let lane = self
+            .queue
+            .acquire(&id, self.lane.clone(), cancellation.clone())
+            .await
+            .expect("native queue acquisition invariant");
+        let result = if let Some(_lane) = lane {
+            match self.execute(call, cancellation).await {
             Ok(plan) => plan,
             Err(error) => PluginCommitPlan {
                 outcome: if error.effect_may_have_occurred {
@@ -238,16 +335,23 @@ impl Owner {
                 cancellation_confirmed: false,
             },
         }
+        } else {
+            plan(
+                PluginOutcome::Cancelled,
+                json!({"operation_id":id,"started":false}),
+                vec![],
+            )
+        };
+        self.queue
+            .finished(&id, result.outcome)
+            .expect("native queue result invariant");
+        result
     }
     async fn execute(
         &self,
         call: &PluginCall,
         cancellation: watch::Receiver<bool>,
     ) -> Result<PluginCommitPlan, NativeError> {
-        let _lane = self
-            .lane
-            .try_lock()
-            .map_err(|_| NativeError::before_effect("R execution lane is busy"))?;
         let operation =
             OperationId::new(call.operation_id.as_deref().ok_or_else(|| {
                 NativeError::before_effect("original Operation identity required")
@@ -413,6 +517,7 @@ impl Owner {
             .map_err(|e| e.to_string())
     }
     pub fn begin_shutdown(&self) {
+        self.queue.begin_shutdown();
         if let Ok(runtime) = self.runtime() {
             runtime.begin_shutdown();
         }

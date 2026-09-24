@@ -10,7 +10,9 @@
       "backend/src/main.rs",
       "backend/src/owner.rs",
       "BUILD.md",
-      "build.mjs"
+      "build.mjs",
+      "backend/src/queue.rs",
+      "backend/src/queue_tests.rs"
     ],
     "lockfiles": [
       "Cargo.lock"
@@ -313,6 +315,174 @@
       ],
       "effects": [
         "r.input"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.console",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "R queue",
+      "description": "Observe queued original operations, pause and pending Host settlement without starting R.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "expected_session": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        },
+        "required": [
+          "expected_session"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "expected_session": "copy-queue_target-from-r.session"
+        }
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.pause_queue",
+        "version": 1
+      },
+      "kind": "control",
+      "title": "Pause R queue",
+      "description": "Pause the existing queue; the current run continues. Match the observed pause identity or null.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "pause_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "only_operation_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 1,
+            "maxItems": 34,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^[A-Za-z0-9._:/-]+$"
+            }
+          }
+        },
+        "required": [
+          "session_id",
+          "pause_id"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "session_id": "copy-queue_target-from-r.session",
+          "pause_id": null
+        }
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r"
+      ],
+      "effects": [
+        "r.queue"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.resume_queue",
+        "version": 1
+      },
+      "kind": "control",
+      "title": "Resume R queue",
+      "description": "Resume an observed pause after original Host settlements. Never confirms a scientific result or replays an operation.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "pause_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "only_operation_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 1,
+            "maxItems": 34,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": "^[A-Za-z0-9._:/-]+$"
+            }
+          }
+        },
+        "required": [
+          "session_id",
+          "pause_id"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "session_id": "copy-queue_target-from-r.session",
+          "pause_id": "copy-pause-from-r.console"
+        }
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r"
+      ],
+      "effects": [
+        "r.queue"
       ],
       "cancellation": "unsupported",
       "preflight": null
