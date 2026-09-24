@@ -883,10 +883,24 @@ and verifies its complete content. Reads take `reference`, a byte `offset` and
 `limit` of 1–262144, returning base64 bytes and the next offset or null at EOF.
 These reads work after provider release and Host restart without activating code.
 
+The ordinary Viewer package can be assembled outside the checkout with
+`node scripts/build-viewer-plugin.mjs DEST`. It includes only its source and public
+SDKs and uses an existing TypeScript compiler. Snapshot the resulting directory
+under target `ui-web`, activate the exact revision/artifact, then open contribution
+`viewer` with configuration `{"source": INSTANCE_REF}` for the producing R owner.
+Different views can retain different source instances and revisions. History,
+refresh and source inspection read original terminal Operations and verified
+resources; they never start R. A nested sandboxed frame displays saved HTML,
+including retained local widget dependencies. Selection is stored in the view's
+normal versioned state. Presentation is limited to 16 MiB per document and 200
+outputs per view, with explicit paging for earlier runs. Live web services are
+not recreated. The standalone container is available; scenario/layout integration
+and the complete Studio workflows remain under implementation.
+
 Backend initialization includes an instance-only resource channel for uploading
 bytes independently of control messages. Files are limited to 256 MiB, with four
 simultaneous transfers per Host; retained limits are 512 MiB per instance and
 2 GiB / 16,384 resources per store. Quotas preserve existing bytes and report
-rejection. There is no automatic eviction of historical evidence. UI asset
-delivery and preview containers are separate remaining work; this resource
-transport does not itself implement the approved Viewer or Studio interactions.
+rejection. There is no automatic eviction of historical evidence. Immutable UI
+asset delivery uses the separate generic view container; disposable development
+previews and the complete approved Studio interactions remain under implementation.

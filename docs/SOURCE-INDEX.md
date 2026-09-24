@@ -88,6 +88,7 @@ Sources:
 - `crates/plugins/**`
 - `plugins/**`
 - `scripts/build-r-plugin.mjs`
+- `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/plugin-protocol.mjs`
@@ -96,6 +97,8 @@ Sources:
 - `scripts/test-plugin-ui.mjs`
 - `scripts/test-r-plugin-engine.mjs`
 - `scripts/test-r-plugin.mjs`
+- `scripts/test-r-viewer.mjs`
+- `scripts/test-viewer-plugin.mjs`
 - `sdk/**`
 
 Checks:
@@ -110,8 +113,10 @@ Checks:
 - `plugins.r-engine`: `["cargo","test","-p","rho-r-engine","--locked"]`
 - `plugins.r-independent`: `["node","scripts/test-r-plugin-engine.mjs"]`
 - `plugins.r-native`: `["node","scripts/test-r-plugin.mjs"]`
+- `plugins.r-viewer`: `["node","scripts/test-r-viewer.mjs"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
+- `plugins.viewer`: `["node","scripts/test-viewer-plugin.mjs"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`
 - `system.client`: `["node","scripts/client.mjs","check"]`
 

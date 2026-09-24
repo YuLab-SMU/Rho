@@ -204,6 +204,16 @@ keep their fixed provider and original commit owner. Browser subresources are
 restricted; neither iframe self-navigation nor trusted native code is claimed to
 have an OS network sandbox.
 
+The public UI SDK reads retained resources through the declared `resources.read`
+query. It captures the exact reference, bounds allocation, validates every chunk's
+owner/range/length and verifies the final SHA-256 before returning bytes. Stopping
+presentation reads never cancels the original scientific Operation. The ordinary
+`org.rho.viewer` package owns interpretation of R output records and fixes its
+source instance/revision/artifact in each view. Saved HTML runs in a second opaque
+`srcdoc` frame with scripts enabled and without same-origin access; it inherits
+the existing container policy and receives no private channel. The generic
+container does not parse R output semantics or add a Viewer-specific rendering route.
+
 Backend isolation uses a process per activated service instance with bounded,
 versioned bidirectional RPC and separate logs. Neither native code nor build
 scripts have an OS filesystem/network sandbox. Registration becomes visible only

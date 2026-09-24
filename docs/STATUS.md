@@ -217,8 +217,44 @@ acceptance was added by this queue change. The affected `cargo test -p rho-plugi
 as do architecture, plugin-boundary and governance checks. No full workspace audit
 ran; unchanged client and public-protocol evidence above is reused.
 
-Console UI, checkpoint ownership, the other R inspection contributions and
-retained-resource Viewer UI still need migration. The native slice does not establish complete R/Viewer or Studio acceptance.
+The ordinary `org.rho.viewer` UI-only package now builds outside the checkout from
+its own source and public SDKs. Each view fixes its producing R instance, revision
+and artifact. It reads original terminal Operations and retained HTML through
+declared queries, verifies native/resource identities and complete chunked bytes,
+and displays content in a second opaque `srcdoc` iframe. History, latest output,
+refresh and source inspection never invoke R. Saved selection survives reopening;
+bounded earlier-history pages retain the latest and explicitly selected output.
+The public UI SDK now provides the same bounded, digest-verified resource reader
+to any ordinary plugin. Rendering uses the existing container policy unchanged.
+
+`node scripts/test-r-viewer.mjs` passes its independent R/Viewer builds and actual
+Chrome acceptance (1). Two R revisions have separate native sessions and HTML;
+actual DT search and Unicode text input work. Closing a view leaves an in-flight
+original execution intact. After backend release, revision removal and Host
+restart, saved HTML remains readable without a live R owner. Nested parent/top
+DOM, storage and Host API access are blocked. The core binary's SHA-256 is
+identical before and after loading the external packages. The 1440px, 1920px and
+390px HTML/DT screenshots and narrow source details were inspected without
+clipping or overlap. This is standalone Viewer acceptance; native IME, clipboard,
+drag, cross-window commands and full scenario/Studio integration remain pending.
+
+`node scripts/test-viewer-plugin.mjs` and `node scripts/test-plugin-ui.mjs` pass
+external compilation, original identities, bounded history, multibyte resource
+assembly, digest/range failures, cancellation and empty-resource authority.
+`npm run test:browser --prefix ui -- plugin-view.spec.ts
+--output=../target/plugin-refactor/viewer-sdk-browser` passes the existing public
+UI fixture (1). Client build/check and 456 tests across 42 files pass; architecture,
+plugin boundaries and governance pass. No full workspace audit ran. The first
+real Viewer attempt failed because the UI added a second algorithm prefix to the
+native digest; the corrected comparison and regression check now pass the full
+acceptance. Its original failure log and trace remain retained. An exploratory
+`cargo build --locked` was interrupted after an unnecessary core CSP edit was
+fully reverted; that build is incomplete, not a pass. The successful browser runs
+use the already-built, unchanged core and verify its original security policy.
+
+Console UI, captured document execution, checkpoint ownership and the other R
+inspection contributions still need migration. The native and Viewer slices do
+not establish complete R/Viewer or Studio acceptance.
 
 The remaining scientific owners and fixed Studio panels have not yet migrated into
 packages. The standalone generic frame is the container conformance surface;

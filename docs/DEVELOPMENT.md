@@ -328,6 +328,16 @@ and `cargo build --locked`, use `npm run test:browser --prefix ui --
 e2e/plugin-view.spec.ts` for the independent UI-only package, opaque iframe,
 scoped reads, state persistence, Unicode input and revocation. The fixture uses a
 disposable project, not a user's active scientific session.
+`node scripts/test-viewer-plugin.mjs` independently builds the ordinary Viewer and
+checks original Operation/resource identities. `node scripts/test-r-viewer.mjs`
+requires explicit existing `RHO_ARK`, `RHO_R_HOME`, the R package `DT`, Chrome and a
+current `target/debug/rho`. It builds R and Viewer outside the checkout, then runs
+`r-plugin-viewer.spec.ts` with disposable native sessions and unchanged core binary
+hashes. It invokes Cargo for the external R backend, so run it serially with other
+Cargo commands. The browser case covers interactive retained HTML, separate R
+revisions, history/refresh, closure during execution, removal/restart recovery and
+normal/wide/narrow screenshots. Inspect those screenshots before claiming visual
+acceptance; programmatic Unicode input does not verify native IME composition.
 These do not replace later real-science and
 iframe/browser acceptance for the full migration.
 

@@ -17,10 +17,10 @@ export function buildUiFixture(directory) {
   const sdk=compilePublicUiSdk(path.join(directory,"public-sdk"));
   const project=path.join(directory,"external-plugin");
   fs.mkdirSync(path.join(project,"src"),{recursive:true});
-  fs.copyFileSync(sdk,path.join(project,"src/sdk.js"));
+  fs.cpSync(path.dirname(sdk),path.join(project,"src/sdk"),{recursive:true});
   fs.copyFileSync(path.join(root,"LICENSE"),path.join(project,"LICENSE"));
   fs.writeFileSync(path.join(project,"src/index.html"),`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Independent View</title><style>body{margin:0;padding:24px;font:14px/1.5 system-ui;color:#202936}h1{font-size:22px}label{display:block;margin:20px 0 6px}input{width:90%;max-width:480px;padding:8px}button{margin:12px 8px 12px 0;padding:6px 12px}output{display:block;white-space:pre-wrap}</style><h1>Independent View</h1><p>Loaded from an ordinary immutable plugin package.</p><output id="connection">Connecting…</output><label for="text">View note</label><input id="text"><button id="save">Save note</button><button id="query">Read plugins</button><button id="denied">Try undeclared read</button><output id="result"></output><script type="module" src="./main.js"></script></html>`);
-  fs.writeFileSync(path.join(project,"src/main.js"),`import {connectPluginView} from './sdk.js';
+  fs.writeFileSync(path.join(project,"src/main.js"),`import {connectPluginView} from './sdk/index.js';
 const client=await connectPluginView();
 document.querySelector('#connection').textContent='Connected';
 const input=document.querySelector('#text'),result=document.querySelector('#result');
@@ -34,9 +34,9 @@ document.querySelector('#denied-answer').onclick=async()=>{try{await client.cont
 window.addEventListener('pagehide',()=>client.dispose());`);
   fs.writeFileSync(path.join(project,"build.mjs"),"import{cpSync}from'node:fs';cpSync(new URL('./src/',import.meta.url),new URL('./dist/',import.meta.url),{recursive:true});");
   fs.writeFileSync(path.join(project,"BUILD.md"),"Run node build.mjs. All source, including the compiled public browser SDK, is present. No download or core checkout is needed.");
-  fs.writeFileSync(path.join(project,"dependencies.lock"),"Rho public UI SDK 0.1.0, compiled from the accompanying public SDK sources; runtime closure is src/sdk.js. No third-party runtime dependencies.\n");
+  fs.writeFileSync(path.join(project,"dependencies.lock"),"Rho public UI SDK 0.1.0, compiled from the accompanying public SDK sources; runtime closure is src/sdk/. No third-party runtime dependencies.\n");
   fs.writeFileSync(path.join(project,"plugin.json"),JSON.stringify({protocol_version:1,id:"example.external-ui",name:"Independent View",version:"1.0",description:"External public-SDK view conformance",license:"AGPL-3.0-only",
-    source:{files:["src/index.html","src/main.js","src/sdk.js","build.mjs","LICENSE"],lockfiles:["dependencies.lock"],build_instructions:"BUILD.md",build:{command:["node","build.mjs"]}},dependencies:{},
+    source:{files:["src/index.html","src/main.js","src/sdk/index.js","src/sdk/resources.js","build.mjs","LICENSE"],lockfiles:["dependencies.lock"],build_instructions:"BUILD.md",build:{command:["node","build.mjs"]}},dependencies:{},
     requires:[{capability:{id:"plugins.list",version:1},scopes:["plugins.read"]},{capability:{id:"fixture.answer",version:2},scopes:["plugins.run"]}],views:[{id:"view",title:"Independent View",entrypoint:"dist/index.html",state_schema:{type:"object",properties:{text:{type:"string"}},required:["text"],additionalProperties:false},configuration_schema:{type:"object",properties:{binding:{type:"object"}},additionalProperties:false},resource_kinds:[]}],capabilities:[],contexts:[],backend:null,configuration_schema:{type:"object",additionalProperties:false},default_configuration:{}},null,2));
   execFileSync(process.execPath,[path.join(project,"build.mjs")],{cwd:project,stdio:"inherit"});
   return project;

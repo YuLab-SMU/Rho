@@ -31,5 +31,29 @@ try {
   const pending=Array.from({length:sdk.MAX_UI_PENDING},()=>quota.operation("op").catch(e=>e));
   await assert.rejects(quota.operation("op"),/quota/);
   quota.dispose();quotaChannel.port2.close();await Promise.all(pending);
+  const bytes=new TextEncoder().encode("中文 Ω\n".repeat(50000));
+  const sha=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),n=>n.toString(16).padStart(2,"0")).join("");
+  const owner={plugin:"example.resources",instance:"source",revision:"sha256:"+"a".repeat(64),artifact:"sha256:"+"b".repeat(64)};
+  const reference={owner,resource:"resource",digest:"sha256:"+sha,bytes:bytes.length,media_type:"text/html"};
+  let resourceReads=0;
+  const reader={query:async(cap,args)=>{
+    assert.equal(cap.id,"resources.read");resourceReads++;
+    const end=Math.min(args.offset+args.limit,bytes.length);
+    return {data:{reference:structuredClone(reference),offset:args.offset,base64:Buffer.from(bytes.slice(args.offset,end)).toString("base64"),next:end===bytes.length?null:end}};
+  }};
+  assert.deepEqual(await sdk.readResource(reader,reference),bytes);assert.ok(resourceReads>1);
+  await assert.rejects(sdk.readResource(reader,reference,{maxBytes:10}),/limit/);
+  for(const corrupt of [
+    part=>({...part,next:1}),part=>({...part,offset:1}),part=>({...part,base64:""}),
+    part=>({...part,reference:{...part.reference,owner:{...owner,instance:"another"}}}),
+    part=>({...part,base64:Buffer.alloc(Buffer.from(part.base64,"base64").length).toString("base64")}),
+  ]) await assert.rejects(sdk.readResource({query:async(cap,args)=>({data:corrupt((await reader.query(cap,args)).data)})},reference),/identity|range|integrity|incomplete/);
+  const controller=new AbortController();let stoppedReads=0;
+  await assert.rejects(sdk.readResource({query:async(cap,args)=>{stoppedReads++;controller.abort();return reader.query(cap,args);}},reference,{signal:controller.signal}),/stopped/);
+  assert.equal(stoppedReads,1);
+  const empty={...reference,bytes:0,digest:"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"};let authorizedEmpty=false;
+  assert.equal((await sdk.readResource({query:async()=>{authorizedEmpty=true;return {data:{reference:empty,offset:0,base64:"",next:null}};}},empty)).length,0);
+  assert.equal(authorizedEmpty,true);
+  console.log("Public resource reads verify multibyte chunk assembly, immutable identity, exact ranges, final digest, cancellation and empty-resource authority.");
   console.log("External public UI SDK compiles; Unicode, quotas, stale connections and disposal verified.");
 } finally {fs.rmSync(directory,{recursive:true,force:true});}

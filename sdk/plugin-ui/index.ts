@@ -125,3 +125,6 @@ export function connectPluginView(timeoutMs = 15000): Promise<PluginViewClient> 
     window.parent.postMessage({ type: "rho:view:ready", protocol_version: UI_PROTOCOL_VERSION, nonce }, "*");
   });
 }
+
+export { readResource, isResourceReference, sameResource, DEFAULT_RESOURCE_VIEW_BYTES } from "./resources.js";
+export type { ResourceReference, ResourceReader } from "./resources.js";

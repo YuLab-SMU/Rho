@@ -2,9 +2,9 @@
 
 A framework-independent browser client for an ordinary plugin's isolated view.
 Compile `index.ts` with the public `@rho/plugin-protocol` declarations beside it
-(the sibling `plugin-protocol` package). Its emitted JavaScript has no runtime
-imports. Ship that JavaScript with the plugin's source and immutable `dist/`
-artifact. No private Studio, scientific module, framework or Host bearer is needed.
+(the sibling `plugin-protocol` package). Ship every emitted JavaScript module,
+including `resources.js`, with the plugin's source and immutable `dist/` artifact.
+There are no third-party runtime imports. No private Studio, scientific module, framework or Host bearer is needed.
 
 ```ts
 import { connectPluginView } from "@rho/plugin-ui";
@@ -73,3 +73,21 @@ Run `node scripts/test-plugin-ui.mjs` from a checkout to verify external strict
 NodeNext compilation and the public channel. The browser conformance fixture is
 built entirely outside the checkout from the public SDK, then snapshotted and
 activated through the ordinary package and Host lifecycle paths.
+
+`readResource(client, reference, {maxBytes, signal})` reads through the declared
+`resources.read@1` capability. It validates each returned reference, offset and
+length, then verifies the complete SHA-256 before returning bytes. Reads are
+256 KiB or smaller; presentation defaults to 16 MiB. Aborting stops further reads
+without cancelling the producing Operation. Empty resources still require an
+authorized query. A mismatch preserves the original reference and throws an error.
+
+A plugin may present saved HTML in another iframe using `srcdoc`,
+`sandbox="allow-scripts"` and `referrerpolicy="no-referrer"`. Inherited CSP and
+sandbox flags preserve opaque origins. The existing `frame-src 'none'` blocks
+URL-backed frames; it does not prevent a local inline source document. No core
+security-policy change is needed. Network connections, workers, forms, top
+navigation and parent DOM access remain unavailable. Do not insert resource HTML
+into the plugin's own DOM. Remove the nested document when replacing or closing
+it. This is saved content presentation, not a live-service or scientific execution
+capability. Rendering and JavaScript behavior still require real-browser
+verification; a load event does not establish content correctness.

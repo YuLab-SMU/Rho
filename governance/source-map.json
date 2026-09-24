@@ -260,6 +260,18 @@
         "node",
         "scripts/test-r-plugin.mjs"
       ]
+    },
+    "plugins.viewer": {
+      "command": [
+        "node",
+        "scripts/test-viewer-plugin.mjs"
+      ]
+    },
+    "plugins.r-viewer": {
+      "command": [
+        "node",
+        "scripts/test-r-viewer.mjs"
+      ]
     }
   },
   "areas": {
@@ -401,7 +413,10 @@
         "scripts/test-r-plugin-engine.mjs",
         "scripts/build-r-plugin.mjs",
         "scripts/test-r-plugin.mjs",
-        "crates/host/tests/r_plugin_real_r.rs"
+        "crates/host/tests/r_plugin_real_r.rs",
+        "scripts/build-viewer-plugin.mjs",
+        "scripts/test-viewer-plugin.mjs",
+        "scripts/test-r-viewer.mjs"
       ],
       "checks": [
         "docs.index",
@@ -417,7 +432,9 @@
         "plugins.ui-sdk",
         "plugins.r-engine",
         "plugins.r-independent",
-        "plugins.r-native"
+        "plugins.r-native",
+        "plugins.viewer",
+        "plugins.r-viewer"
       ]
     }
   }

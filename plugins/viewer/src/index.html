@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Viewer</title>
+<link rel="stylesheet" href="./style.css">
+<header><button id="toggle-history" type="button">History</button><span id="identity">Viewer</span><button id="follow" type="button" aria-pressed="true" title="Follow the latest saved output">Latest</button><button id="refresh" type="button">Refresh</button></header>
+<nav id="history" aria-label="Saved output history"></nav><button id="earlier" type="button" hidden>Load earlier runs</button>
+<div class="metadata"><span id="status">Saved HTML</span><details><summary>Source</summary><pre id="source-details">Select a saved output to inspect its source.</pre></details></div>
+<div id="state-error" class="notice error" role="alert" hidden></div><div id="message" class="notice" role="status">Reading saved outputs…</div><main id="surface" aria-label="HTML output"></main>
+<script type="module" src="./main.js"></script></html>

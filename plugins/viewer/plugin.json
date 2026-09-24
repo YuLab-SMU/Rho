@@ -1,0 +1,156 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.viewer",
+  "name": "Viewer",
+  "version": "0.1.0",
+  "description": "Saved R HTML with exact original-operation and resource identities.",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "src/main.ts",
+      "src/outputs.ts",
+      "src/index.html",
+      "src/style.css",
+      "tsconfig.json",
+      "package.json",
+      "build.mjs",
+      "README.md"
+    ],
+    "lockfiles": [
+      "dependencies.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "resources.read",
+        "version": 1
+      },
+      "scopes": [
+        "resources.read"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "viewer",
+      "title": "Viewer",
+      "entrypoint": "dist/src/index.html",
+      "state_schema": {
+        "type": "object",
+        "properties": {
+          "selected": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "operation_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "resource_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              }
+            },
+            "required": [
+              "operation_id",
+              "resource_id"
+            ],
+            "additionalProperties": false
+          },
+          "history": {
+            "type": "boolean"
+          },
+          "follow": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "configuration_schema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "instance": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "plugin": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "artifact": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "resource_kinds": [
+        "text/html"
+      ]
+    }
+  ],
+  "capabilities": [],
+  "contexts": [],
+  "backend": null,
+  "configuration_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "default_configuration": {}
+}
