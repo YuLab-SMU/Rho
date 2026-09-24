@@ -154,6 +154,10 @@ test("ordinary Console runs and cancels original R work while preserving drafts 
   await expect(outer.getByRole("button", { name: "Resume Queue" })).toBeVisible();
   await outer.getByRole("button", { name: "Resume Queue" }).click();
   await expect(outer.getByRole("button", { name: "Pause Queue" })).toBeVisible();
+  // These runs originated outside the Console view and finished between its
+  // live polls. Wait for history discovery before checking the resulting UI.
+  await expect(transcript).toContainText("inspection_failed <- 43L");
+  await expect(transcript).toContainText("inspection failure fixture");
   for (const width of [1440, 1920, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect.poll(() => page.frames()[1].evaluate(() => innerWidth)).toBe(width);

@@ -12,6 +12,8 @@ mod scenario;
 mod visual;
 mod view;
 pub use view::*;
+mod window;
+pub use window::*;
 
 pub use identity::*;
 pub use manifest::*;

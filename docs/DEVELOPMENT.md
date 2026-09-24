@@ -35,6 +35,13 @@ Use the smallest test tier that proves the current change. A small change must n
 rerun the entire workspace by default; expand the scope only when the dependency or
 owner boundary requires it.
 
+When one cross-boundary check needs several packages, prefer one Cargo invocation
+with multiple `-p` selections and the required target selectors when possible.
+Cargo [unifies their dependency features](https://doc.rust-lang.org/cargo/reference/resolver.html#feature-unification),
+which can avoid rebuilding the same shared dependency with different feature sets
+in consecutive commands. Keep the intended test set and the serial Cargo rule;
+this is not a reason to expand a focused check into a workspace audit.
+
 ### Test tiers
 
 - **L0 — focused iteration.** Run the nearest test or filter while editing:
@@ -353,6 +360,19 @@ The native Console browser case also checks `r.inspection_state`: short runs and
 failed scripts with prior object mutations invalidate cached inspection data,
 while read-only queries preserve the key. The backend's manifest-to-route test
 checks that every declared query/operation reaches the proper transport handler.
+Generic window layout changes use the `rho-plugin-protocol` and `rho-plugins`
+library checks, followed by `cargo test -p rho-host --test plugins --test
+port_contracts --locked`. These cover bounded layout structure, scoped view
+references, expected versions, original request replay and retained closed views
+after package removal/restart. They do not establish a visual window shell,
+scenario switching, or iframe drag/focus behavior; those need their own browser
+acceptance once assembled. The independent `plugin-layout.spec.ts` browser fixture
+checks retained opaque iframe documents/input while tabs move, hide, resize and
+restore from saved layout. Its close gesture must reach the owner callback without
+removing the frame. It does not exercise Host persistence or close-time flushing.
+The `plugin-layout`, `plugin-frame-layer`, `plugin-window-state` and
+`plugin-window-client` unit checks cover protocol conversion, fixed DOM order,
+versioned saves, lost acknowledgements and original Operation outcomes.
 `node scripts/test-objects-plugin.mjs` compiles the in-progress Objects model and
 React components in a fresh external directory using public R/plugin declarations,
 the UI SDK and existing locked tools. It covers directory/reference bounds,

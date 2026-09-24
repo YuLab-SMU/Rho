@@ -48,6 +48,7 @@ pub(crate) fn register(
         "resources.read",
         "views.inspect",
         "views.connection",
+        "windows.layout",
         "plugins.repository",
         "plugins.list",
         "plugins.inspect",
@@ -67,6 +68,7 @@ pub(crate) fn register(
         "views.open",
         "views.update",
         "views.close",
+        "windows.update_layout",
         "plugins.activate",
         "plugins.release",
         "plugins.remove",
@@ -85,6 +87,15 @@ pub(crate) fn register(
 }
 fn descriptor(id: &str) -> host::CapabilityDescriptor {
     let (input, output, example, summary, operation, scope) = match id {
+        "windows.layout" => (
+            schema_for!(PluginWindowArguments).to_value(), schema_for!(PluginWindowLayout).to_value(),
+            json!({"window":"window-example"}), "Read one window's retained plugin layout without opening views", false, PLUGINS_RUN_SCOPE,
+        ),
+        "windows.update_layout" => (
+            schema_for!(UpdatePluginWindowLayout).to_value(), schema_for!(PluginWindowLayout).to_value(),
+            json!({"window":"window-example","expected_version":0,"layout":{"kind":"empty"}}),
+            "Save a scoped window layout using its expected version", true, PLUGINS_RUN_SCOPE,
+        ),
         "views.inspect" | "views.connection" => (
             schema_for!(PluginViewArguments).to_value(),
             if id == "views.connection" { schema_for!(PluginViewConnection).to_value() } else { schema_for!(PluginViewRecord).to_value() },
@@ -254,6 +265,21 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         descriptor.documentation.related_capabilities = vec![key("resources.inspect"),key("resources.read")];
         descriptor.documentation.position_units = vec!["offset and limit are bytes. Read limit is 1–262144; next is the next byte offset, or null at EOF.".into()];
     }
+    if id.starts_with("windows.") {
+        descriptor.domain = "windows".into();
+        descriptor.documentation.owner = "windows".into();
+        descriptor.documentation.when_to_use = vec!["Read or save one window's arrangement of exact plugin view identities.".into()];
+        descriptor.documentation.limitations = vec!["Layouts belong to the authenticated principal and normalized project. A plugin view can address only its original window. Cross-window view references are refused.".into(),
+            "Saving layout does not activate plugins, reopen views, release instances, start a scientific runtime, or switch a scenario. Closed or unavailable views remain explicit placeholders.".into()];
+        descriptor.documentation.effects = if operation { "Save presentation only. No view state, scientific state or runtime lifetime changes." } else { "Bounded read. An absent window is empty and is not created by this observation." }.into();
+        descriptor.documentation.related_capabilities = vec![key("windows.layout"), key("windows.update_layout"), key("views.inspect")];
+        descriptor.documentation.position_units = vec!["Split weights are finite positive ratios. At most 256 views, 1024 structural nodes, depth 32 and 256 KiB per layout.".into()];
+    }
+    if id == "views.connection" {
+        descriptor.documentation.when_to_use = vec!["Connect the trusted containing shell to an already opened view.".into()];
+        descriptor.documentation.limitations = vec!["Returns private connection credentials to the containing Host shell. Plugin callers are refused, including with an explicit capability grant. Plugins use views.inspect for public metadata/state.".into(),
+            "Reading never creates or recovers a view connection.".into()];
+    }
     descriptor
 }
 fn digest() -> String {
@@ -278,6 +304,8 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "views.inspect" | "views.connection" | "views.close" => normalize::<PluginViewArguments>(value),
         "views.open" => normalize::<OpenPluginView>(value),
         "views.update" => normalize::<UpdatePluginView>(value),
+        "windows.layout" => normalize::<PluginWindowArguments>(value),
+        "windows.update_layout" => normalize::<UpdatePluginWindowLayout>(value),
         "plugins.activate" => normalize::<ActivatePlugin>(value),
         "plugins.branch" => normalize::<BranchPlugin>(value),
         "plugins.advance_branch" => normalize::<AdvancePluginBranch>(value),
@@ -308,6 +336,11 @@ impl QueryHandler for Read {
     ) -> Result<host::QuerySnapshot, OperationError> {
         let service = &self.service;
         let data = match self.id {
+            "windows.layout" => {
+                let args: PluginWindowArguments = decode(value)?;
+                service.check_window_context(context, &args.window)?;
+                json!(service.repository.lock().unwrap().window_layout(&service.project, &plugin_principal_id(context.principal()), &args.window).map_err(error)?)
+            }
             "views.inspect" => json!(service.view_record(context,&decode::<PluginViewArguments>(value)?.view)?),
             "views.connection" => json!(service.view_connection(context,&decode::<PluginViewArguments>(value)?.view)?),
 
@@ -503,6 +536,19 @@ impl OperationHandler for Manage {
             identity: self.service.scope.clone(),
         };
         match self.id {
+            "windows.update_layout" => {
+                let args: UpdatePluginWindowLayout = decode(value)?;
+                self.service.check_window_context(context, &args.window)?;
+                let ids = args.layout.view_ids().map_err(invalid)?;
+                if serde_json::to_vec(&args).map_err(invalid)?.len() > MAX_CONTROL_BYTES / 4 { return Err(invalid("window layout exceeds 256 KiB")); }
+                let principal = plugin_principal_id(context.principal());
+                let current = self.service.repository.lock().unwrap().window_layout(&self.service.project, &principal, &args.window).map_err(error)?;
+                if current.version != args.expected_version { return Err(OperationError::ContentChanged("window layout changed".into())); }
+                for id in ids {
+                    if self.service.view_record(context, &id)?.window != args.window { return Err(invalid("window view is unavailable in this scope")); }
+                }
+                target = host::TargetRef { kind: "plugin_window".into(), identity: format!("{}:{}:{}", self.service.project, principal, args.window) };
+            }
             "views.open" => {
                 let args: OpenPluginView = decode(value)?;
                 self.service.prepare_view(context,&args)?;
@@ -659,6 +705,10 @@ impl OperationHandler for Manage {
     }
     async fn execute(&self, operation: &host::Operation) -> Result<CommitPlan, HandlerError> {
         self.run(operation).await.map(CommitPlan::succeeded).map_err(|error| {
+            if self.id == "windows.update_layout" && matches!(&error,
+                OperationError::ContentChanged(_) | OperationError::InvalidInput(_) | OperationError::NotFound(_)) {
+                return HandlerError::before_effect(error.to_string());
+            }
             let recovery=json!({"kind":"plugin_lifecycle","target":operation.target,"detail":error.to_string(),"automatic_reexecution":false});
             HandlerError::after_possible_effect(error.to_string(),Some(recovery))
         })
@@ -692,6 +742,15 @@ impl Manage {
         let value = &operation.normalized_arguments;
         let service = &self.service;
         match self.id {
+            "windows.update_layout" => {
+                let _guard = service.gate.lock().await;
+                service.check_window_context(&bound.context, &decode::<UpdatePluginWindowLayout>(value)?.window)?;
+                let record = service.repository.lock().unwrap().update_window_layout(&service.project,
+                    &plugin_principal_id(bound.context.principal()), decode(value)?).map_err(|fault| match fault {
+                        PluginError::Conflict => OperationError::ContentChanged("window layout changed".into()), other => error(other),
+                    })?;
+                Ok(json!(record))
+            }
             "views.open" | "views.update" | "views.close" => {
                 let _guard=service.gate.lock().await;
                 let record=match self.id {

@@ -6,7 +6,7 @@ Rust source of these definitions is the independently packageable
 `rho-plugin-protocol` crate. Other languages can implement the same JSON protocol.
 
 `schema/manifest.json`, `schema/archive.json`, `schema/rpc.json`,
-`schema/scenario.json`, `schema/visual-document.json`, and the two
+`schema/window-layout.json`, `schema/scenario.json`, `schema/visual-document.json`, and the two
 `schema/resource-transfer-*.json` documents define the wire shapes.
 Semantic checks (identity formats, references, scope, schema compilation, digests,
 limits and lifecycle) also run in the receiving owner. JSON Schema alone does not
@@ -63,6 +63,22 @@ same authoritative Operation journal as contributed capabilities. The official
 MCP connection updates its tool catalog after provider publication or failure;
 page cursors cannot cross changed catalogs. The UI SDK remains separate from
 these public type definitions.
+
+`windows.layout@1` accepts `PluginWindowArguments` and observes a
+`PluginWindowLayout`. `windows.update_layout@1` accepts `UpdatePluginWindowLayout`
+through the ordinary Operation port with `plugins.run`. It saves the arrangement
+using the window's `expected_version`; it does not open, close or move ownership of
+views. Project and principal come from the Host. Every referenced view must belong
+to that exact window and scope, and a view caller cannot address another window.
+Closed views can remain explicit placeholders without live connections or an
+installed artifact. Reads never reconstruct them or mutate their saved state.
+
+Layout nodes are empty regions, weighted splits and selected tab groups. IDs are
+unique across groups and views. Limits are 256 view references, 1024 structural
+nodes, depth 32 and a 256 KiB update payload. Split weights must be positive and
+finite, including their sum. A layout version is a presentation precondition for
+one window, not a scientific revision. Scenario preparation/application and view
+creation remain separate operations; these two ports do not provide that workflow.
 
 ## Runtime protocol
 
@@ -151,6 +167,9 @@ messages cover queries, controls, invocations, original-operation reads and view
 state; resources use the declared Query port. Theme, menu, focus and shortcut
 integration must also use public services as those contributions are implemented.
 Views never receive the Host's general credential or parent DOM access.
+Private `views.connection` material remains with the containing Host shell;
+plugin callers cannot query it, even with a declared grant. `views.inspect`
+provides the public record, configuration and state without connection credentials.
 Native backends and build scripts are
 trusted local code: this is UI, failure and lifetime isolation, not an OS sandbox.
 

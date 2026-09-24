@@ -241,6 +241,22 @@
     ]
   },
   {
+    "name": "generic plugin layout adapter owns docking without a scientific dependency",
+    "files": {
+      "plugin-layout.ts": "import { Model } from 'flexlayout-react'; export const layout = Model;",
+      "plugin-layout-host.tsx": "import { Layout } from 'flexlayout-react'; export const host = Layout;"
+    },
+    "rules": []
+  },
+  {
+    "name": "scientific domain cannot hide a docking dependency through the generic adapter",
+    "files": {
+      "plugin-layout.ts": "import { Model } from 'flexlayout-react'; export const layout = Model;",
+      "objects.ts": "import { layout } from './plugin-layout'; export const bad = layout;"
+    },
+    "rules": ["domain-ui"]
+  },
+  {
     "name": "component assistants cannot depend on scientific or external Agent owners",
     "files": {
       "component-agents.ts": "import type { Documents } from './documents'; import type { AgentTasks } from './agent-tasks'; export interface ComponentAgents { documents: Documents; tasks: AgentTasks }",

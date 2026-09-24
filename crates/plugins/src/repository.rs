@@ -40,7 +40,8 @@ impl PluginRepository {
             CREATE INDEX IF NOT EXISTS revision_refs_target ON revision_refs(revision);
             CREATE TABLE IF NOT EXISTS branches(id TEXT PRIMARY KEY, plugin TEXT NOT NULL, head TEXT NOT NULL REFERENCES revisions(id), name TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS plugin_instances(id TEXT PRIMARY KEY, document TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS plugin_views(id TEXT PRIMARY KEY, project TEXT NOT NULL, principal TEXT NOT NULL, document TEXT NOT NULL);")?;
+            CREATE TABLE IF NOT EXISTS plugin_views(id TEXT PRIMARY KEY, project TEXT NOT NULL, principal TEXT NOT NULL, document TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS plugin_window_layouts(project TEXT NOT NULL, principal TEXT NOT NULL, window TEXT NOT NULL, document TEXT NOT NULL, PRIMARY KEY(project,principal,window));")?;
         Ok(Self { root, connection })
     }
 

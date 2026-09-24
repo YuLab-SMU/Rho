@@ -14,7 +14,8 @@ try {
   const consumer = path.join(temp, "consumer");
   fs.mkdirSync(consumer);
   fs.writeFileSync(path.join(consumer, "consumer.mts"), `
-import type { PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation } from "../protocol/index.js";
+import type { PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout } from "../protocol/index.js";
+const layout: UpdatePluginWindowLayout = { window: "window", expected_version: 0, layout: { kind: "tabs", id: "group", selected: "view", views: ["view"] } };
 const frame: RpcFrame = { protocol_version: 1, connection: "channel", instance: "instance",
   sequence: 1, request: "request", body: { type: "release" } };
 const original: PendingCancellation = { operation_id: "original", binding: {
@@ -25,13 +26,13 @@ const prepare: RpcFrame = { ...frame, body: { type: "prepare_pending_cancellatio
 const ready: RpcFrame = { ...frame, body: { type: "ready", data: { revision: original.binding.provider.revision, artifact: original.binding.provider.artifact } } };
 const extended: RpcFrame = { ...frame, body: { type: "ready", data: { revision: original.binding.provider.revision, artifact: original.binding.provider.artifact, features: ["pending_cancellation_v1"] } } };
 export function inspect(manifest: PluginManifest, visual: VisualDocument, page: PluginRevisionPage) {
-  return [frame, prepare, ready, extended, manifest.views[0]?.entrypoint, visual.nodes[visual.root], page.next];
+  return [frame, prepare, ready, extended, layout, manifest.views[0]?.entrypoint, visual.nodes[visual.root], page.next];
 }
 `);
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext",
     "--target", "ES2022", "--rootDir", consumer, path.join(consumer, "consumer.mts")], { stdio: "inherit" });
-  for (const name of ["manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "scenario", "visual-document"]) {
+  for (const name of ["manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "window-layout", "scenario", "visual-document"]) {
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
     assert.ok(schema.$schema && schema.$defs, `missing standalone schema: ${name}`);
   }

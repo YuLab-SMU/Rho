@@ -212,12 +212,35 @@ its connection. Explicit release can retire a historical UI-only instance becaus
 its exact manifest establishes that no native backend was created; native failure
 still requires established cleanup. Closing a view never releases its backend.
 
+`windows.layout` observes a retained arrangement of exact view identities, scoped
+to the authenticated principal, normalized project and explicit window. Absent
+layouts are empty observations and cause no write. `windows.update_layout` uses
+that window's expected version and validates every view's original scope in the
+same storage transaction. View callers can address only their containing window.
+Saving layout cannot activate a package, reopen a view, change its saved state or
+release a runtime. Closed or missing connections remain retained placeholders;
+scenario definitions use separate reusable identities and do not reuse live view
+IDs across windows. The layout ports alone do not apply a scenario or supply the
+visual window shell.
+
+The generic docking adapter references only public view identities. Live iframe
+elements stay in a fixed sibling layer: moving, selecting, hiding or restoring
+layout updates their geometry and visibility without reparenting them into the
+docking tree. A close gesture delegates to the view lifecycle owner before any
+frame can be removed. Local presentation saves serialize acknowledged versions;
+an unconfirmed response retains the original request and arguments for explicit
+retry before a later edit is sent. This changes neither scientific routing nor
+the lifetime of accepted work.
+
 The public `sdk/plugin-ui` client uses an opaque sandboxed iframe per view and a
 private MessagePort addressed to its exact document and bootstrap nonce. The
 containing shell retains the call credential; the iframe receives only view
 identity, configuration and state. Immutable asset access has a separate token,
 16 MiB per-file quota and response sandbox, including direct navigation. Only
 that scoped GET route admits null Origin; generic Host API access remains private.
+`views.connection` refuses plugin callers even with an explicit grant, so a
+generic query cannot transfer the containing shell's private credentials into an
+iframe or backend package. Plugins use `views.inspect` for public metadata/state.
 The core checks principal/window/connection/message ordering and declared grants,
 then delegates to the same Host ports. HTTP arrival reordering has a bounded wait;
 acceptance order does not serialize completion or block controls behind slow reads.

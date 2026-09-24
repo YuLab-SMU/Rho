@@ -688,6 +688,79 @@ fn ui_package(path: &std::path::Path) -> PluginArchive {
 }
 
 #[tokio::test]
+async fn window_layouts_are_scoped_versioned_and_do_not_restart_retained_views() {
+    use rho_plugin_protocol::{PluginViewConnection, PluginViewMessage};
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("project"); fs::create_dir(&project).unwrap();
+    let database = temp.path().join("state.sqlite");
+    let source = temp.path().join("ui"); ui_package(&source);
+    let mut manifest: Value = serde_json::from_slice(&fs::read(source.join("plugin.json")).unwrap()).unwrap();
+    manifest["requires"] = json!([
+        {"capability":{"id":"windows.layout","version":1},"scopes":["plugins.run"]},
+        {"capability":{"id":"windows.update_layout","version":1},"scopes":["plugins.run"]},
+        {"capability":{"id":"views.connection","version":1},"scopes":["plugins.run"]}
+    ]);
+    fs::write(source.join("plugin.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let archive = rho_plugins::snapshot_directory(&source, None, "ui-web").unwrap();
+    let mut repo = PluginRepository::open(&repository_path(&database)).unwrap(); repo.import(&archive).unwrap();
+    let host = NextHost::open_project(&database, &project).await.unwrap();
+    let context = NextHost::local_context();
+    let before = query(&host, &context, "operation.list_recent", json!({"limit":100})).await;
+    assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await["version"], 0);
+    assert_eq!(query(&host, &context, "operation.list_recent", json!({"limit":100})).await, before);
+    let activated = observation(&run(&host, &context, "activate", "plugins.activate",
+        json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":"ui-web","alias":"layout","configuration":{}})).await);
+    let a = run(&host, &context, "open-a", "views.open", json!({"instance":activated.instance.identity,
+        "contribution":"view","window":"window-a","configuration":{},"state":{"text":"retained 中文"}})).await.output.unwrap();
+    let b = run(&host, &context, "open-b", "views.open", json!({"instance":activated.instance.identity,
+        "contribution":"view","window":"window-b","configuration":{},"state":{"text":"other window"}})).await.output.unwrap();
+    let args = json!({"window":"window-a","expected_version":0,"layout":{"kind":"tabs","id":"main","selected":a["view"],"views":[a["view"]]}});
+    let first = run(&host, &context, "layout-first", "windows.update_layout", args.clone()).await;
+    assert_eq!(first.status, OperationStatus::Succeeded, "{:?}", first.error);
+    assert_eq!(first.output.as_ref().unwrap()["version"], 1);
+    assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-b"})).await["version"], 0);
+    let mut next = args.clone(); next["expected_version"] = json!(1); next["layout"]["selected"] = Value::Null;
+    let second = run(&host, &context, "layout-second", "windows.update_layout", next).await;
+    assert_eq!(second.status, OperationStatus::Succeeded);
+    let saved = second.output.unwrap(); assert_eq!(saved["version"], 2);
+    assert_eq!(run(&host, &context, "layout-first", "windows.update_layout", args.clone()).await.operation.operation_id, first.operation.operation_id);
+    assert!(host.invoke(&context, invocation("stale-layout", "windows.update_layout", args.clone())).await.is_err());
+    let mut foreign = args; foreign["window"] = json!("window-b");
+    assert!(host.invoke(&context, invocation("foreign-view", "windows.update_layout", foreign)).await.is_err());
+    let connection: PluginViewConnection = serde_json::from_value(query(&host, &context, "views.connection", json!({"view":a["view"]})).await).unwrap();
+    let message = |sequence, body: Value| serde_json::from_value::<PluginViewMessage>(json!({"protocol_version":1,
+        "connection":connection.connection,"view":a["view"],"sequence":sequence,"request":format!("layout-{sequence}"),"body":body})).unwrap();
+    let read = |window: &str| json!({"type":"query","capability":{"id":"windows.layout","version":1},"arguments":{"window":window}});
+    let own = host.dispatch_plugin_view(&context, "window-a", &connection.call_token, message(1, read("window-a"))).await.unwrap();
+    assert_eq!(own["data"]["version"], 2);
+    for (sequence, view) in [(2, a["view"].clone()), (3, b["view"].clone())] {
+        let private = json!({"type":"query","capability":{"id":"views.connection","version":1},"arguments":{"view":view}});
+        assert!(matches!(host.dispatch_plugin_view(&context, "window-a", &connection.call_token, message(sequence, private)).await,
+            Err(OperationError::AccessDenied { .. })));
+    }
+    assert!(host.dispatch_plugin_view(&context, "window-a", &connection.call_token, message(4, read("window-b"))).await.is_err());
+    let change_other = json!({"type":"invoke","request_id":"foreign-layout","capability":{"id":"windows.update_layout","version":1},
+        "arguments":{"window":"window-b","expected_version":0,"layout":{"kind":"empty"}},"preconditions":[]});
+    assert!(host.dispatch_plugin_view(&context, "window-a", &connection.call_token, message(5, change_other)).await.is_err());
+    assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await, saved);
+    assert_eq!(query(&host, &context, "views.inspect", json!({"view":a["view"]})).await["state"]["text"], "retained 中文");
+    let mut stranger = context.clone(); stranger.caller.id = "stranger".into();
+    assert_eq!(query(&host, &stranger, "windows.layout", json!({"window":"window-a"})).await["version"], 0);
+    let mut revoked = context.clone(); revoked.scopes.remove("plugins.run");
+    assert!(host.query_snapshot(&revoked, QueryRequest { capability: CapabilityRef::new("windows.layout", 1).unwrap(), arguments: json!({"window":"window-a"}) }).await.is_err());
+    for (id, view) in [("close-a", a["view"].clone()), ("close-b", b["view"].clone())] {
+        assert_eq!(run(&host, &context, id, "views.close", json!({"view":view})).await.status, OperationStatus::Succeeded);
+    }
+    assert_eq!(run(&host, &context, "release", "plugins.release", json!({"instance":activated.instance.identity})).await.status, OperationStatus::Succeeded);
+    repo.remove(&archive.revision.id).unwrap(); drop(host);
+    let host = NextHost::open_project(&database, &project).await.unwrap();
+    assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await, saved);
+    assert_eq!(query(&host, &context, "views.inspect", json!({"view":a["view"]})).await["closed"], true);
+    assert!(host.query_snapshot(&context, QueryRequest { capability: CapabilityRef::new("views.connection", 1).unwrap(), arguments: json!({"view":a["view"]}) }).await.is_err());
+    assert!(repo.list().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn ui_only_views_have_scoped_channels_durable_state_and_independent_instance_lifetimes() {
     use rho_plugin_protocol::{PluginViewConnection, PluginViewMessage, PluginViewRecord};
     let temp = tempfile::tempdir().unwrap();

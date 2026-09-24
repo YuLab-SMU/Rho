@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginWindowLayout",
+  "type": "object",
+  "properties": {
+    "layout": {
+      "$ref": "#/$defs/PluginWindowNode"
+    },
+    "principal": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "version": {
+      "description": "Changes only when this window's presentation is explicitly saved.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "window": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "window",
+    "project",
+    "principal",
+    "version",
+    "layout"
+  ],
+  "$defs": {
+    "PluginWindowNode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "empty"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PluginWindowNode"
+              }
+            },
+            "direction": {
+              "$ref": "#/$defs/SplitDirection"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "split"
+            },
+            "weights": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "direction",
+            "weights",
+            "children"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "tabs"
+            },
+            "selected": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "views": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "views"
+          ]
+        }
+      ]
+    },
+    "SplitDirection": {
+      "type": "string",
+      "enum": [
+        "horizontal",
+        "vertical"
+      ]
+    }
+  }
+}

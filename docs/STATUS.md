@@ -77,6 +77,21 @@ future view calls and leaves accepted native work running. The standalone frame
 still needs integration into scenario layouts, along with public focus, theme,
 menu, shortcut and context cooperation.
 
+The generic window layout source now stores bounded split/tab arrangements under
+project, principal and window identity. Public read/update ports validate view
+ownership and expected layout versions; view callers are restricted to their own
+window. Private view connection credentials are also refused to plugin callers,
+even with a declared query grant. Reads and saved placeholders do not reopen views
+or alter their state.
+Protocol/storage checks and all fifteen Host plugin/port-contract cases pass.
+A generic docking adapter, fixed iframe content layer and serialized
+presentation-save model now use the shared Host ports. Their unit checks and
+isolated Chrome fixture pass, including actual pointer dragging, hidden tabs,
+layout reconstruction, focus and retained Unicode drafts at 1440/1920/390 px.
+The fixture delegates closing without removing the frame. Application wiring,
+atomic navigation, close-time flushing and scenario application are still required
+before this can replace the fixed workbench layout.
+
 Public text-copy cooperation now validates the exact live view, window, principal
 and current parent authority before the containing browser reserves a native write.
 The focused frame must have a current user gesture. Asynchronous collection can
@@ -182,6 +197,8 @@ executable startup is allowed to finish; silence is not treated as a test failur
 
 | Executed check | Result and scope |
 | --- | --- |
+| `cargo test -p rho-plugin-protocol -p rho-plugins --lib --locked` | 10 passed (4 protocol, 6 plugins), including layout structure bounds, foreign references, atomic version conflicts and persisted closed views with unchanged state. |
+| `cargo test -p rho-host --test plugins --test port_contracts --locked` | 15 passed (10 plugin, 5 port-contract). Includes scoped/versioned window layouts, unchanged view state after closure/removal/restart, original request replay and refusal of private connection queries from plugins even with an explicit grant. |
 | `node scripts/test-objects-plugin.mjs` | Independent source compilation and 50 model/component/connection tests passed across seven files. Includes exact provider/session binding, short-run invalidation, deferred busy reads, restored-session refusal, save failure and edit reversal during an in-flight write. No native R or browser acceptance in this check. |
 | `cargo test -p rho-plugin-protocol --lib --locked`, `cargo test -p rho-host --test plugins --locked` | 2 protocol and 9 Host plugin tests passed, including text-copy authority, no clipboard claim from Host acknowledgement and unchanged Operation history. |
 | `cargo test -p rho-r-api -p rho-r-backend --lib --bins --locked` | 11 passed (3 API, 8 backend); shared validation, caller-scope rejection and bounded inspection envelopes. Exporter target had no tests. |
@@ -194,17 +211,27 @@ executable startup is allowed to finish; silence is not treated as a test failur
 | `cargo test -p rho-host --test plugins pending_cancellation_survives --locked` | Focused corrected case passed. |
 | `cargo test -p rho-host --lib --test plugins --test port_contracts --locked` | Corrected full run: 62 passed (48/9/5), two library tests ignored. Includes callable cancellation grants, view disconnect and unrelated admission, original scopes, commit recovery and visibility. |
 | `node scripts/test-console-plugin.mjs` | Independent package build and model checks pass: original source/resource identity, ordered/deduplicated events, UTF-8/history bounds, captured drafts/retries, clear positions and transient stdin. |
-| `npm run test --prefix ui` | 460 passed across 43 files, including native copy reservation bounds, expiry, closure and refusal. |
+| `npm run test --prefix ui` | 479 passed across 47 files. Adds generic layout conversion, fixed frame DOM order, serialized versioned saves, lost-acknowledgement retry, in-flight reversals and shared-port scope/outcome checks; retains clipboard reservation coverage. |
 | Architecture, plugin and frontend boundary checks; governance validation | Pass. |
 | `cargo test -p rho-mcp --lib --test plugins --locked` | 16 passed: 15 library tests and the existing-connection plugin lifecycle case. |
 | `cargo fmt --all --check` | Fails with formatting differences in 128 files, including 107 files unchanged by this work; no repository-wide reformat applied. |
 | `npm run generate --prefix ui`, `npm run build --prefix ui`, `npm run check --prefix ui` | Pass; public protocol/client bindings and embedded assets are current. |
 | `node scripts/test-plugin-protocol.mjs`, `node scripts/test-plugin-ui.mjs` | Current generated declarations compile in independent strict consumers. |
-| `cargo build --locked` | Pass; current Host binary built. SHA-256: `a95c85e9aa0ba9d2c288ac2a1a33f9710a76e0679f982e82651e3704a83d2617`. |
+| `cargo build --locked` | Pass; current Host binary includes scoped window ports and the private-connection guard. SHA-256: `22ac10ae42969a75b15271373a81116a501c4f39e7e06cdc403560660d537790`. Client assets remain byte-identical; the generic layout components are exercised through their independent fixture and are not yet the application entrypoint. |
+| `npm run test:browser --prefix ui -- plugin-layout.spec.ts` | Corrected full run passed (1.2s body, 2.2s total). Three opaque iframe documents loaded exactly once across selection, native pointer dragging, saved-layout reconstruction and resizing. Unicode input, native focus and owner-delegated closure passed; all three viewport screenshots inspected. No Host persistence, close-time flushing, native IME or scenario application is established by this fixture. |
 | `npm run test:browser --prefix ui -- plugin-view.spec.ts` | Corrected full run passed (15.4s body, 26.4s total). Actual Chrome clipboard writes, 6.5-second collection, automatic/direct iframe refusal, failed collection, closed-view refusal and unchanged Operation history passed. Current 1440px/390px conformance-fixture screenshots inspected. |
 | `npm run test:browser --prefix ui -- console-editor.spec.ts` | Pass with the public MessagePort fixture: editing/composition guards, selection, transient password answers, controls, clear/new output, saved draft and scroll restoration. 1440px/1920px/390px screenshots inspected; the corrected capture waits for iframe resizing. |
-| `npm run test:browser --prefix ui -- r-plugin-console.spec.ts` with independently built R/Console packages and explicit Ark/R | Corrected current run passed (12.4s body, 28.1s total). Adds unstarted/busy/ready inspection state, foreign-session refusal, short-run invalidation and invalidation after a failed script that already changed R memory. Read-only queries leave the key unchanged. Native flow, Unicode values, drafts, close/reopen and retained history also passed. All three current viewport screenshots inspected. Host SHA-256 stayed `a95c85e9aa0ba9d2c288ac2a1a33f9710a76e0679f982e82651e3704a83d2617`. |
+| `npm run test:browser --prefix ui -- r-plugin-console.spec.ts` with independently built R/Console packages and explicit Ark/R | Corrected current run passed (14.4s body, 29.7s total). Adds unstarted/busy/ready inspection state, foreign-session refusal, short-run invalidation and invalidation after a failed script that already changed R memory. Read-only queries leave the key unchanged. Short runs from another Host caller are discovered in Console history, including the failed source and error. Native flow, Unicode values, drafts, close/reopen and retained history also passed. All three current viewport screenshots inspected. Host SHA-256 stayed `a95c85e9aa0ba9d2c288ac2a1a33f9710a76e0679f982e82651e3704a83d2617`. |
 | `cargo test -p rho-host --test r_plugin_real_r --locked -- --ignored --nocapture` with independently built R package and explicit Ark/R | Current run passed (one case, 24.95s). Adds unstarted/busy inspections, directory/table continuation, non-forcing bindings, foreign/expired references, package counts/copy identity, Help continuation/changed files, unchanged namespaces/search/library paths and unchanged Operation history. Existing instance, queue, stdin, cancellation, settlement and retained-resource regression also passed. |
+
+The first window-container client build failed type checking because splitter
+size was supplied as a JSON global attribute. It now uses the library's supported
+model setter; the corrected build, generated-asset check and focused layout tests
+pass. The first browser fixture clicked during the asynchronous 1920-to-390 px
+resize and failed its focus assertion. It now waits for the frame and the actual
+docking content rectangle to agree before coordinate-based interaction; the
+corrected full run passes without a production focus or permission change. Both
+initial failure logs and the browser trace remain retained.
 
 The first readiness browser run failed because the R transport dispatch omitted
 the newly declared query. Its route is now registered and checked against the

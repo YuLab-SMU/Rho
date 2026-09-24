@@ -284,6 +284,14 @@ impl PluginService {
         context: &host::CallContext,
         id: &ViewInstanceId,
     ) -> Result<PluginViewConnection, OperationError> {
+        // Even a declared query grant cannot transfer the shell's private call
+        // credential into plugin code. Plugins inspect the public view record.
+        if context.caller.kind == host::CallerKind::Plugin {
+            return Err(OperationError::AccessDenied {
+                capability: "views.connection@1".into(),
+                missing: vec!["private view connections are retained by the containing Host shell".into()],
+            });
+        }
         self.view_record(context, id)?;
         self.views
             .lock()

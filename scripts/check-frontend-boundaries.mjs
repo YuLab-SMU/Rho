@@ -67,7 +67,7 @@ export function checkFrontendBoundaries(sourceRoot = path.join(repository, "ui/s
       const specifier = literal.text, target = resolve(file, specifier);
       edges.push({ target, specifier, node });
       if (specifier.startsWith("flexlayout-react")) {
-        const allowed = ["layout-model.ts", "layout-host.tsx", "builtin-panel-renderers.tsx"].includes(file)
+        const allowed = ["layout-model.ts", "layout-host.tsx", "plugin-layout.ts", "plugin-layout-host.tsx", "builtin-panel-renderers.tsx"].includes(file)
           || (file === "app.ts" && specifier.endsWith(".css"));
         if (!allowed) report(file, node, "flexlayout-owner", "FlexLayout belongs to the layout implementation and UI adapters.");
       }
