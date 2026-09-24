@@ -31,6 +31,23 @@ checkout, exercises the current Host, and checks that those package builds did n
 change the Host binary. Synthetic composition events cover submission guards;
 they do not establish native input-method acceptance.
 
+The ordinary Objects package is assembled outside the checkout with
+`node scripts/build-objects-plugin.mjs /absolute/new/directory`; model, action
+capture and component checks run with `node scripts/test-objects-plugin.mjs`.
+After building the current client and Host, use
+`npm run test:browser --prefix ui -- objects-plugin.spec.ts` for its opaque-frame
+presentation and explicit-action fixture. This fixture uses public SDK messages;
+it does not establish native R behavior or production window lifecycle integration.
+The native path uses explicit existing Ark/R and ggplot2 in a disposable project:
+`RHO_ARK=/absolute/existing/ark RHO_R_HOME=/absolute/existing/R/home node
+scripts/test-r-objects-plugin.mjs`. The wrapper builds both packages outside the
+checkout and verifies an unchanged Host binary. To reuse already built packages,
+set `RHO_R_PLUGIN_PACKAGE` and `RHO_OBJECTS_PLUGIN_PACKAGE` alongside Ark/R, then
+run `npm run test:browser --prefix ui -- r-plugin-objects.spec.ts`. It covers native
+objects, exact destination/state, explicit plot Operations and retained read-only
+inspection. The standalone container opens the new view explicitly; this does not
+establish automatic production window navigation or close-time draft flushing.
+
 Use the smallest test tier that proves the current change. A small change must not
 rerun the entire workspace by default; expand the scope only when the dependency or
 owner boundary requires it.

@@ -4,10 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { MessageChannel } from "node:worker_threads";
+import { createHash } from "node:crypto";
 import { compilePublicUiSdk } from "./fixtures/plugin-ui.mjs";
 const directory=fs.mkdtempSync(path.join(os.tmpdir(),"rho-public-ui-"));
 try {
   const sdk=await import(pathToFileURL(compilePublicUiSdk(directory)).href);
+  const scopedRequest = `sha256:${createHash('sha256').update('original-view:request-中文').digest('hex')}`;
+  assert.equal(await sdk.operationRequestId('original-view','request-中文'), scopedRequest);
+  assert.notEqual(await sdk.operationRequestId('reopened-view','request-中文'), scopedRequest);
   const init={protocol_version:1,connection:"connection",view:{view:"view",state:{text:""},state_version:0}};
   const channel=new MessageChannel(),client=new sdk.PluginViewClient(channel.port1,init);
   let response=0;

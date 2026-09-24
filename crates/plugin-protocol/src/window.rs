@@ -48,6 +48,23 @@ pub struct UpdatePluginWindowLayout {
     pub layout: PluginWindowNode,
 }
 
+/// Create an exact view and select it in one window's presentation atomically.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct OpenPluginWindowView {
+    pub view: OpenPluginView,
+    pub expected_layout_version: u32,
+    /// Existing tab group. None creates a group only in an entirely empty window.
+    pub group: Option<NodeId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct OpenedPluginWindowView {
+    pub view: PluginViewRecord,
+    pub layout: PluginWindowLayout,
+}
+
 impl PluginWindowNode {
     /// Return a bounded, duplicate-free set for scoped owner validation.
     pub fn view_ids(&self) -> Result<BTreeSet<ViewInstanceId>, ProtocolError> {

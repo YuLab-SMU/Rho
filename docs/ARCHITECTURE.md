@@ -223,6 +223,19 @@ scenario definitions use separate reusable identities and do not reuse live view
 IDs across windows. The layout ports alone do not apply a scenario or supply the
 visual window shell.
 
+`windows.open_view` freezes a new view identity at Operation admission and checks
+the exact active instance, view schemas, caller/window scope, layout version and
+explicit target tab group. One immediate repository transaction inserts the view
+and its protecting revision reference, appends/selects it in that group, and saves
+the layout. Private connection material is prepared before commit and published
+only afterward. A failed write cannot leave a live view outside the saved layout.
+An empty window can explicitly create its first group; existing windows never
+infer scientific panel names or fall back to another group. Direct `views.open`
+also confines a view caller to its original window. The opening capability grant
+must explicitly include every scope delegated to the target view, intersected
+with the containing parent's current authority; unrelated grants cannot supply
+missing delegation scopes.
+
 The generic docking adapter references only public view identities. Live iframe
 elements stay in a fixed sibling layer: moving, selecting, hiding or restoring
 layout updates their geometry and visibility without reparenting them into the

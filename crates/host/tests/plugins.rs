@@ -688,6 +688,129 @@ fn ui_package(path: &std::path::Path) -> PluginArchive {
 }
 
 #[tokio::test]
+async fn window_open_is_atomic_scoped_and_idempotent_across_layout_conflicts() {
+    use rho_plugin_protocol::{PluginViewConnection, PluginViewMessage};
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("project"); fs::create_dir(&project).unwrap();
+    let database = temp.path().join("state.sqlite");
+    let source = temp.path().join("ui"); ui_package(&source);
+    let mut manifest: Value = serde_json::from_slice(&fs::read(source.join("plugin.json")).unwrap()).unwrap();
+    manifest["requires"] = json!([
+        {"capability":{"id":"windows.open_view","version":1},"scopes":["plugins.run","operation.read"]},
+        {"capability":{"id":"views.open","version":1},"scopes":["plugins.run"]},
+        {"capability":{"id":"operation.get","version":1},"scopes":["operation.read"]}
+    ]);
+    fs::write(source.join("plugin.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let archive = rho_plugins::snapshot_directory(&source, None, "ui-web").unwrap();
+    let mut repo = PluginRepository::open(&repository_path(&database)).unwrap(); repo.import(&archive).unwrap();
+    let host = NextHost::open_project(&database, &project).await.unwrap();
+    let context = NextHost::local_context();
+    let activated = observation(&run(&host, &context, "activate", "plugins.activate",
+        json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":"ui-web","alias":"layout","configuration":{}})).await);
+    let args = json!({"view":{"instance":activated.instance.identity,"contribution":"view","window":"window-a",
+        "configuration":{},"state":{"text":"new 中文 α"}},"expected_layout_version":0,"group":null});
+    let first = run(&host, &context, "first", "windows.open_view", args.clone()).await;
+    assert_eq!(first.status, OperationStatus::Succeeded, "{:?}", first.error);
+    let first_output = first.output.clone().unwrap();
+    let first_view = first_output["view"]["view"].clone();
+    assert_eq!(first_output["view"]["state"]["text"], "new 中文 α");
+    assert_eq!(first_output["view"]["instance"], json!(activated.instance.identity));
+    assert_eq!(first_output["layout"]["version"], 1);
+    assert_eq!(first_output["layout"]["layout"]["selected"], first_view);
+    let group = first_output["layout"]["layout"]["id"].clone();
+    let connection: PluginViewConnection = serde_json::from_value(query(&host, &context, "views.connection", json!({"view":first_view})).await).unwrap();
+    let serialized = serde_json::to_string(&first).unwrap();
+    assert!(!serialized.contains(&connection.call_token) && !serialized.contains(&connection.asset_token));
+    let mut next = args.clone(); next["expected_layout_version"] = json!(1); next["group"] = group.clone();
+    let second = run(&host, &context, "second", "windows.open_view", next.clone()).await;
+    assert_eq!(second.status, OperationStatus::Succeeded, "{:?}", second.error);
+    let saved = second.output.unwrap()["layout"].clone();
+    assert_eq!(saved["version"], 2);
+    assert_eq!(saved["layout"]["views"].as_array().unwrap().len(), 2);
+    assert_eq!(run(&host, &context, "first", "windows.open_view", args.clone()).await.operation.operation_id, first.operation.operation_id);
+    let catalog = rusqlite::Connection::open(repository_path(&database).join("catalog-v1.sqlite3")).unwrap();
+    let counts = || ["SELECT count(*) FROM plugin_views", "SELECT count(*) FROM revision_refs WHERE owner_kind='view'"].map(|sql|
+        catalog.query_row(sql, [], |row| row.get::<_, i64>(0)).unwrap());
+    assert_eq!(counts(), [2, 2]);
+    for (id, bad) in [
+        ("stale", next.clone()),
+        ("missing-group", { let mut v=next.clone(); v["expected_layout_version"]=json!(2); v["group"]=json!("unknown"); v }),
+        ("implicit-group", { let mut v=next.clone(); v["expected_layout_version"]=json!(2); v["group"]=Value::Null; v }),
+        ("foreign-group", { let mut v=next.clone(); v["expected_layout_version"]=json!(0); v["view"]["window"]=json!("window-b"); v }),
+        ("bad-state", { let mut v=next.clone(); v["expected_layout_version"]=json!(2); v["view"]["state"]=json!({"text":42}); v }),
+        ("bad-instance", { let mut v=next.clone(); v["expected_layout_version"]=json!(2); v["view"]["instance"]["instance"]=json!("foreign"); v }),
+    ] {
+        assert!(host.invoke(&context, invocation(id, "windows.open_view", bad)).await.is_err(), "{id}");
+        assert_eq!(counts(), [2, 2]);
+    }
+    let mut stranger=context.clone(); stranger.caller.id="stranger".into();
+    assert!(host.invoke(&stranger, invocation("foreign-principal", "windows.open_view", args.clone())).await.is_err());
+    let mut revoked=context.clone(); revoked.scopes.remove("plugins.run");
+    assert!(host.invoke(&revoked, invocation("revoked", "windows.open_view", args.clone())).await.is_err());
+    for (sequence, capability) in [(1, "windows.open_view"), (2, "views.open")] {
+        let mut foreign=args.clone(); foreign["view"]["window"]=json!("window-b");
+        let arguments=if capability=="views.open" { foreign["view"].clone() } else { foreign };
+        let message: PluginViewMessage=serde_json::from_value(json!({"protocol_version":1,"connection":connection.connection,
+            "view":first_view,"sequence":sequence,"request":format!("cross-window-{sequence}"),"body":{"type":"invoke",
+            "request_id":format!("cross-window-{sequence}"),"capability":{"id":capability,"version":1},"arguments":arguments,"preconditions":[]}})).unwrap();
+        assert!(host.dispatch_plugin_view(&context, "window-a", &connection.call_token, message).await.is_err());
+    }
+    assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await, saved);
+    // Force a failure after the view and its revision reference have been inserted.
+    // The containing SQLite transaction must roll both back, with no live channel.
+    catalog.execute_batch("CREATE TRIGGER reject_window_save BEFORE INSERT ON plugin_window_layouts BEGIN SELECT RAISE(ABORT, 'fixture write failure'); END;").unwrap();
+    next["expected_layout_version"]=json!(2);
+    let failed=run(&host, &context, "write-fails", "windows.open_view", next.clone()).await;
+    assert_ne!(failed.status, OperationStatus::Succeeded);
+    assert_eq!(counts(), [2, 2]);
+    assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await, saved);
+    for capability in ["views.inspect", "views.connection"] {
+        assert!(host.query_snapshot(&context, QueryRequest { capability: CapabilityRef::new(capability,1).unwrap(),
+            arguments:json!({"view":failed.operation.target.identity}) }).await.is_err());
+    }
+    catalog.execute_batch("DROP TRIGGER reject_window_save;").unwrap();
+    assert_eq!(run(&host, &context, "write-fails", "windows.open_view", next.clone()).await.operation.operation_id, failed.operation.operation_id);
+    assert_eq!(counts(), [2, 2]);
+    let (left, right)=tokio::join!(host.invoke(&context, invocation("race-a", "windows.open_view", next.clone())),
+        host.invoke(&context, invocation("race-b", "windows.open_view", next.clone())));
+    assert_eq!([left, right].iter().filter(|result| result.as_ref().is_ok_and(|r| r.status==OperationStatus::Succeeded)).count(), 1);
+    assert_eq!(counts(), [3, 3]);
+    let saved=query(&host, &context, "windows.layout", json!({"window":"window-a"})).await;
+    assert_eq!(saved["version"], 3);
+    // An actual view caller can navigate in its own window through the public grant.
+    next["expected_layout_version"]=json!(3);
+    let message: PluginViewMessage=serde_json::from_value(json!({"protocol_version":1,"connection":connection.connection,
+        "view":first_view,"sequence":3,"request":"own-window","body":{"type":"invoke","request_id":"own-window",
+        "capability":{"id":"windows.open_view","version":1},"arguments":next,"preconditions":[]}})).unwrap();
+    let own=host.dispatch_plugin_view(&context, "window-a", &connection.call_token, message).await.unwrap();
+    let id=OperationId::new(own["operation"]["operation_id"].as_str().unwrap()).unwrap();
+    let completed=tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let record=host.get_operation(&context, &id).await.unwrap().unwrap();
+            if record.status.is_terminal() { break record; }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
+    assert_eq!(completed.status, OperationStatus::Succeeded, "{:?}", completed.error);
+    assert_eq!(completed.output.unwrap()["layout"]["version"], 4);
+    assert_eq!(counts(), [4, 4]);
+    // The selected opening grant, not the union of unrelated grants, limits
+    // authority delegated to the new view. A revoked parent scope narrows it too.
+    for (sequence, capability, parent) in [(4, "views.open", context.clone()),
+        (5, "windows.open_view", { let mut parent=context.clone(); parent.scopes.remove("operation.read"); parent })] {
+        let mut arguments=next.clone(); arguments["expected_layout_version"]=json!(4);
+        if capability=="views.open" { arguments=arguments["view"].clone(); }
+        let message: PluginViewMessage=serde_json::from_value(json!({"protocol_version":1,"connection":connection.connection,
+            "view":first_view,"sequence":sequence,"request":format!("delegation-{sequence}"),"body":{"type":"invoke",
+            "request_id":format!("delegation-{sequence}"),"capability":{"id":capability,"version":1},"arguments":arguments,"preconditions":[]}})).unwrap();
+        let error=host.dispatch_plugin_view(&parent, "window-a", &connection.call_token, message).await.unwrap_err();
+        assert!(error.to_string().contains("view grants exceed"), "{error}");
+        assert_eq!(counts(), [4, 4]);
+    }
+    host.drain().await;
+}
+
+#[tokio::test]
 async fn window_layouts_are_scoped_versioned_and_do_not_restart_retained_views() {
     use rho_plugin_protocol::{PluginViewConnection, PluginViewMessage};
     let temp = tempfile::tempdir().unwrap();

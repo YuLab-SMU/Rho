@@ -314,6 +314,23 @@
         "node",
         "scripts/test-objects-plugin.mjs"
       ]
+    },
+    "plugins.objects-browser": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui",
+        "--",
+        "objects-plugin.spec.ts"
+      ]
+    },
+    "plugins.r-objects": {
+      "command": [
+        "node",
+        "scripts/test-r-objects-plugin.mjs"
+      ]
     }
   },
   "areas": {
@@ -465,7 +482,11 @@
         "ui/e2e/console-editor.spec.ts",
         "scripts/test-r-console.mjs",
         "ui/e2e/r-plugin-console.spec.ts",
-        "scripts/test-objects-plugin.mjs"
+        "scripts/test-objects-plugin.mjs",
+        "scripts/build-objects-plugin.mjs",
+        "ui/e2e/objects-plugin.spec.ts",
+        "scripts/test-r-objects-plugin.mjs",
+        "ui/e2e/r-plugin-objects.spec.ts"
       ],
       "checks": [
         "docs.index",
@@ -489,7 +510,9 @@
         "plugins.console",
         "plugins.console-editor",
         "plugins.r-console",
-        "plugins.objects"
+        "plugins.objects",
+        "plugins.objects-browser",
+        "plugins.r-objects"
       ]
     }
   }

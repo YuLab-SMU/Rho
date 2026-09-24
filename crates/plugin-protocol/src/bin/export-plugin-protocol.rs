@@ -47,6 +47,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PluginWindowLayout::export_all(&types)?;
     PluginWindowArguments::export_all(&types)?;
     UpdatePluginWindowLayout::export_all(&types)?;
+    OpenPluginWindowView::export_all(&types)?;
+    OpenedPluginWindowView::export_all(&types)?;
     RpcFrame::export_all(&types)?;
     ScenarioRevision::export_all(&types)?;
     WindowScenario::export_all(&types)?;
@@ -58,6 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("rpc", schemars::schema_for!(RpcFrame)),
         ("view-message", schemars::schema_for!(PluginViewMessage)),
         ("window-layout", schemars::schema_for!(PluginWindowLayout)),
+        ("window-open-view", schemars::schema_for!(OpenPluginWindowView)),
         ("resource-transfer-request", schemars::schema_for!(ResourceTransferRequest)),
         ("resource-transfer-response", schemars::schema_for!(ResourceTransferResponse)),
         ("scenario", schemars::schema_for!(ScenarioRevision)),

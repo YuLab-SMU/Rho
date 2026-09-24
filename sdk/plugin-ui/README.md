@@ -87,6 +87,15 @@ and clipboard permissions. This is browser presentation cooperation, not an
 operating-system sandbox guarantee.
 
 `views.open`, `views.update` and `views.close` use the common Operation port.
+For navigation into a window, declare `windows.layout` and `windows.open_view`
+with `plugins.run`, observe the containing window, then invoke `windows.open_view`
+with its expected layout version and an explicit target group. That operation
+creates the view and selects it atomically. It returns public records only;
+connection credentials remain in the containing shell. Keep the original request
+ID and arguments after a lost acknowledgement. A view cannot open another window.
+The opening capability grant must also declare the scopes needed by the target
+view: new views cannot inherit authority excluded from the opening call. This
+is explicit delegation within the caller's existing scopes.
 `views.inspect` reads durable state; `views.connection` observes an already-open
 connection without recreating it. Open views protect their revision. Closing one
 revokes both credentials and releases only its view reference. It leaves the
@@ -116,3 +125,9 @@ into the plugin's own DOM. Remove the nested document when replacing or closing
 it. This is saved content presentation, not a live-service or scientific execution
 capability. Rendering and JavaScript behavior still require real-browser
 verification; a load event does not establish content correctness.
+
+Host journal request IDs are scoped to the originating view. Use
+`operationRequestId(originalView, originalRequest)` for a receipt comparison or
+`operation.list_recent` request filter. Pass the unchanged original request to
+`invoke`; a reopened view may inspect the old request but must not replay it under
+a new caller identity.

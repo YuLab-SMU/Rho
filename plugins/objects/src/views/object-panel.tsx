@@ -234,6 +234,7 @@ export function ObjectsPanel({ viewId = "objects" }: { viewId?: string }) {
                     className="object-open icon-button"
                     title="Open in New Tab"
                     aria-label={`Open ${x.name} in New Tab`}
+                    disabled={nav.blocked}
                     onClick={() => nav.openObject(x.name)}
                   >
                     ↗
@@ -513,6 +514,7 @@ export function ObjectInspector({
                 <button
                   title="Open in New Tab"
                   aria-label={`Open ${child.name ?? child.index} in New Tab`}
+                  disabled={nav.blocked}
                   onClick={() =>
                     nav.openObject(name, [
                       ...path,
@@ -590,7 +592,7 @@ export function ObjectInspector({
           {m.classes.some((c) => /ggplot/.test(c)) &&
             (path.length === 0 || o.metadata(name)?.object_type !== "S4") && (
               <button
-                disabled={runtime.runtime?.state !== "idle"}
+                disabled={runtime.runtime?.state !== "idle" || consoleOwner.blocked}
                 onClick={() => {
                   void consoleOwner
                     .run(`print(${objectExpression(name, path)})`, "console")
@@ -619,7 +621,7 @@ export function ObjectInspector({
           )}
           {start > 1 && <button onClick={() => setStart(1)}>First</button>}
           {inline && (
-            <button onClick={() => nav.openObject(name, path)}>
+            <button disabled={nav.blocked} onClick={() => nav.openObject(name, path)}>
               Open in New Tab
             </button>
           )}

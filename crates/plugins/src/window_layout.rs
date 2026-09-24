@@ -25,7 +25,7 @@ impl crate::PluginService {
     }
 }
 
-fn observed(
+pub(crate) fn observed(
     connection: &Connection,
     project: &ProjectId,
     principal: &PrincipalId,
@@ -74,57 +74,138 @@ impl PluginRepository {
         principal: &PrincipalId,
         args: UpdatePluginWindowLayout,
     ) -> Result<PluginWindowLayout, PluginError> {
-        let ids = args.layout.view_ids()?;
-        ensure(
-            serde_json::to_vec(&args)?.len() <= MAX_CONTROL_BYTES / 4,
-            "window layout exceeds 256 KiB",
-        )?;
         let transaction = self
             .connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        let current = observed(&transaction, project, principal, &args.window)?;
-        if current.version != args.expected_version {
-            return Err(PluginError::Conflict);
-        }
-        for id in ids {
-            let document: Option<String> = transaction
-                .query_row(
-                    "SELECT document FROM plugin_views WHERE id=? AND project=? AND principal=?",
-                    params![id.as_str(), project.as_str(), principal.as_str()],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            let view: PluginViewRecord = serde_json::from_str(&document.ok_or_else(|| {
-                PluginError::Invalid("window view is unavailable in this scope".into())
-            })?)?;
-            ensure(
-                view.view == id
-                    && &view.project == project
-                    && &view.principal == principal
-                    && view.window == args.window,
-                "window view is unavailable in this scope",
-            )?;
-        }
-        let next = PluginWindowLayout {
-            version: current
-                .version
-                .checked_add(1)
-                .ok_or_else(|| PluginError::Invalid("window layout version exhausted".into()))?,
-            layout: args.layout,
-            ..current
-        };
-        transaction.execute(
-            "INSERT INTO plugin_window_layouts(project,principal,window,document) VALUES(?,?,?,?)
-             ON CONFLICT(project,principal,window) DO UPDATE SET document=excluded.document",
-            params![
-                project.as_str(),
-                principal.as_str(),
-                next.window.as_str(),
-                serde_json::to_string(&next)?
-            ],
-        )?;
+        let next = store_layout(&transaction, project, principal, args)?;
         transaction.commit()?;
         Ok(next)
+    }
+}
+
+/// The caller owns the transaction, so view creation and placement can commit once.
+pub(crate) fn store_layout(
+    connection: &Connection,
+    project: &ProjectId,
+    principal: &PrincipalId,
+    args: UpdatePluginWindowLayout,
+) -> Result<PluginWindowLayout, PluginError> {
+    let ids = args.layout.view_ids()?;
+    ensure(
+        serde_json::to_vec(&args)?.len() <= MAX_CONTROL_BYTES / 4,
+        "window layout exceeds 256 KiB",
+    )?;
+    let current = observed(connection, project, principal, &args.window)?;
+    if current.version != args.expected_version {
+        return Err(PluginError::Conflict);
+    }
+    for id in ids {
+        let document: Option<String> = connection
+            .query_row(
+                "SELECT document FROM plugin_views WHERE id=? AND project=? AND principal=?",
+                params![id.as_str(), project.as_str(), principal.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let view: PluginViewRecord = serde_json::from_str(&document.ok_or_else(|| {
+            PluginError::Invalid("window view is unavailable in this scope".into())
+        })?)?;
+        ensure(
+            view.view == id
+                && &view.project == project
+                && &view.principal == principal
+                && view.window == args.window,
+            "window view is unavailable in this scope",
+        )?;
+    }
+    let next = PluginWindowLayout {
+        version: current
+            .version
+            .checked_add(1)
+            .ok_or_else(|| PluginError::Invalid("window layout version exhausted".into()))?,
+        layout: args.layout,
+        ..current
+    };
+    connection.execute(
+        "INSERT INTO plugin_window_layouts(project,principal,window,document) VALUES(?,?,?,?)
+             ON CONFLICT(project,principal,window) DO UPDATE SET document=excluded.document",
+        params![
+            project.as_str(),
+            principal.as_str(),
+            next.window.as_str(),
+            serde_json::to_string(&next)?
+        ],
+    )?;
+    Ok(next)
+}
+
+pub(crate) fn place_view(
+    mut current: PluginWindowLayout,
+    expected_version: u32,
+    group: Option<&NodeId>,
+    view: &ViewInstanceId,
+) -> Result<UpdatePluginWindowLayout, PluginError> {
+    if current.version != expected_version {
+        return Err(PluginError::Conflict);
+    }
+    current.layout.view_ids()?;
+    match (&mut current.layout, group) {
+        (node @ PluginWindowNode::Empty, None) => {
+            *node = PluginWindowNode::Tabs {
+                id: NodeId::new(format!("layout-{}", uuid::Uuid::new_v4().simple()))?,
+                selected: Some(view.clone()),
+                views: vec![view.clone()],
+            };
+        }
+        (layout, Some(group)) => {
+            fn append(node: &mut PluginWindowNode, group: &NodeId, view: &ViewInstanceId) -> bool {
+                match node {
+                    PluginWindowNode::Tabs {
+                        id,
+                        selected,
+                        views,
+                    } if id == group => {
+                        views.push(view.clone());
+                        *selected = Some(view.clone());
+                        true
+                    }
+                    PluginWindowNode::Split { children, .. } => {
+                        children.iter_mut().any(|node| append(node, group, view))
+                    }
+                    _ => false,
+                }
+            }
+            ensure(
+                append(layout, group, view),
+                "target window tab group is unavailable",
+            )?;
+        }
+        _ => {
+            return Err(PluginError::Invalid(
+                "an existing window requires an explicit tab group".into(),
+            ));
+        }
+    }
+    current.layout.view_ids()?;
+    let args = UpdatePluginWindowLayout {
+        window: current.window,
+        expected_version,
+        layout: current.layout,
+    };
+    ensure(
+        serde_json::to_vec(&args)?.len() <= MAX_CONTROL_BYTES / 4,
+        "window layout exceeds 256 KiB",
+    )?;
+    Ok(args)
+}
+
+pub(crate) fn layout_error(fault: PluginError) -> rho_operation::OperationError {
+    match fault {
+        PluginError::Conflict => {
+            rho_operation::OperationError::ContentChanged("window layout changed".into())
+        }
+        PluginError::Invalid(message) => crate::service::invalid(message),
+        other => crate::service::error(other),
     }
 }
 
@@ -132,6 +213,96 @@ impl PluginRepository {
 mod tests {
     use super::*;
     use serde_json::json;
+    fn layout(node: PluginWindowNode) -> PluginWindowLayout {
+        let (project, principal, window) = identity();
+        PluginWindowLayout {
+            window,
+            project,
+            principal,
+            version: 7,
+            layout: node,
+        }
+    }
+    #[test]
+    fn navigation_requires_an_explicit_existing_group_after_the_first_open() {
+        let view = ViewInstanceId::new("new-view").unwrap();
+        let empty = layout(PluginWindowNode::Empty);
+        let opened = place_view(empty.clone(), 7, None, &view).unwrap();
+        assert!(
+            matches!(opened.layout, PluginWindowNode::Tabs { selected: Some(ref id), .. } if id == &view)
+        );
+        let group = NodeId::new("missing").unwrap();
+        assert!(place_view(empty.clone(), 7, Some(&group), &view).is_err());
+        assert!(matches!(
+            place_view(empty, 6, None, &view),
+            Err(PluginError::Conflict)
+        ));
+        let existing = layout(PluginWindowNode::Tabs {
+            id: group,
+            selected: None,
+            views: vec![],
+        });
+        assert!(place_view(existing, 7, None, &view).is_err());
+    }
+    #[test]
+    fn navigation_selects_only_the_named_nested_group_and_preserves_other_geometry() {
+        let group = NodeId::new("target").unwrap();
+        let old = ViewInstanceId::new("old-view").unwrap();
+        let next = ViewInstanceId::new("new-view").unwrap();
+        let before = layout(PluginWindowNode::Split {
+            id: NodeId::new("split").unwrap(),
+            direction: SplitDirection::Vertical,
+            weights: vec![2.0, 7.0],
+            children: vec![
+                PluginWindowNode::Empty,
+                PluginWindowNode::Tabs {
+                    id: group.clone(),
+                    selected: None,
+                    views: vec![old.clone()],
+                },
+            ],
+        });
+        let placed = place_view(before.clone(), 7, Some(&group), &next).unwrap();
+        if let PluginWindowNode::Split {
+            weights, children, ..
+        } = placed.layout
+        {
+            assert_eq!(weights, vec![2.0, 7.0]);
+            assert_eq!(children[0], PluginWindowNode::Empty);
+            assert_eq!(
+                children[1],
+                PluginWindowNode::Tabs {
+                    id: group.clone(),
+                    selected: Some(next.clone()),
+                    views: vec![old.clone(), next]
+                }
+            );
+        } else {
+            panic!("split must remain intact");
+        }
+        assert!(place_view(before.clone(), 7, Some(&group), &old).is_err());
+        assert!(place_view(before, 7, Some(&NodeId::new("split").unwrap()), &old).is_err());
+    }
+    #[test]
+    fn navigation_cannot_exceed_the_window_view_quota() {
+        let group = NodeId::new("target").unwrap();
+        let full = layout(PluginWindowNode::Tabs {
+            id: group.clone(),
+            selected: None,
+            views: (0..256)
+                .map(|n| ViewInstanceId::new(format!("view-{n}")).unwrap())
+                .collect(),
+        });
+        assert!(
+            place_view(
+                full,
+                7,
+                Some(&group),
+                &ViewInstanceId::new("overflow").unwrap()
+            )
+            .is_err()
+        );
+    }
     fn identity() -> (ProjectId, PrincipalId, WindowId) {
         (
             ProjectId::new("project").unwrap(),

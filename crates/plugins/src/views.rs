@@ -53,6 +53,7 @@ impl PluginService {
         context: &host::CallContext,
         args: &OpenPluginView,
     ) -> Result<ViewContribution, OperationError> {
+        self.check_window_context(context, &args.window)?;
         let observed = self.observe_instance(context, &args.instance, false)?;
         if !observed.observed_in_this_host || observed.instance.state != InstanceState::Active {
             return Err(invalid("view requires an active instance in this Host"));
@@ -88,12 +89,68 @@ impl PluginService {
         }
         Ok(contribution)
     }
+    pub(crate) fn prepare_window_view(
+        &self,
+        context: &host::CallContext,
+        id: &ViewInstanceId,
+        args: &OpenPluginWindowView,
+    ) -> Result<(), OperationError> {
+        self.prepare_view(context, &args.view)?;
+        let current = self
+            .repository
+            .lock()
+            .unwrap()
+            .window_layout(
+                &self.project,
+                &plugin_principal_id(context.principal()),
+                &args.view.window,
+            )
+            .map_err(crate::window_layout::layout_error)?;
+        crate::window_layout::place_view(
+            current,
+            args.expected_layout_version,
+            args.group.as_ref(),
+            id,
+        )
+        .map_err(crate::window_layout::layout_error)?;
+        if self.views.lock().unwrap().len() >= MAX_OPEN_VIEWS {
+            return Err(invalid("open view quota reached"));
+        }
+        Ok(())
+    }
     pub(crate) fn open_view(
         &self,
         context: &host::CallContext,
         id: ViewInstanceId,
         args: OpenPluginView,
     ) -> Result<PluginViewRecord, OperationError> {
+        self.create_view(context, id, args, None)
+            .map(|(view, _)| view)
+    }
+    pub(crate) fn open_window_view(
+        &self,
+        context: &host::CallContext,
+        id: ViewInstanceId,
+        args: OpenPluginWindowView,
+    ) -> Result<OpenedPluginWindowView, OperationError> {
+        let (view, layout) = self.create_view(
+            context,
+            id,
+            args.view,
+            Some((args.expected_layout_version, args.group)),
+        )?;
+        Ok(OpenedPluginWindowView {
+            view,
+            layout: layout.expect("window placement requested"),
+        })
+    }
+    fn create_view(
+        &self,
+        context: &host::CallContext,
+        id: ViewInstanceId,
+        args: OpenPluginView,
+        placement: Option<(u32, Option<NodeId>)>,
+    ) -> Result<(PluginViewRecord, Option<PluginWindowLayout>), OperationError> {
         let contribution = self.prepare_view(context, &args)?;
         let mut views = self.views.lock().unwrap();
         if views.len() >= MAX_OPEN_VIEWS {
@@ -117,25 +174,8 @@ impl PluginService {
             state_version: 0,
             closed: false,
         };
-        let transaction = repo.connection.transaction().map_err(invalid)?;
-        transaction
-            .execute(
-                "INSERT INTO plugin_views VALUES(?,?,?,?)",
-                params![
-                    record.view.as_str(),
-                    record.project.as_str(),
-                    record.principal.as_str(),
-                    serde_json::to_string(&record).map_err(invalid)?
-                ],
-            )
-            .map_err(invalid)?;
-        transaction
-            .execute(
-                "INSERT INTO revision_refs VALUES('view',?,?)",
-                params![owner(&record), record.instance.revision.as_str()],
-            )
-            .map_err(invalid)?;
-        transaction.commit().map_err(invalid)?;
+        // Prepare all fallible connection material before committing. No public
+        // result or durable document includes these private credentials.
         let mut delegated = context.clone();
         delegated.principal = Some(context.principal().clone());
         delegated.caller = host::CallerIdentity {
@@ -157,6 +197,51 @@ impl PluginService {
             grants,
         };
         delegated.connection_id = connection.connection.to_string();
+        let transaction = repo
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(error)?;
+        let layout_args = placement
+            .map(|(version, group)| {
+                let current = crate::window_layout::observed(
+                    &transaction,
+                    &record.project,
+                    &record.principal,
+                    &record.window,
+                )?;
+                crate::window_layout::place_view(current, version, group.as_ref(), &record.view)
+            })
+            .transpose()
+            .map_err(crate::window_layout::layout_error)?;
+        transaction
+            .execute(
+                "INSERT INTO plugin_views VALUES(?,?,?,?)",
+                params![
+                    record.view.as_str(),
+                    record.project.as_str(),
+                    record.principal.as_str(),
+                    serde_json::to_string(&record).map_err(invalid)?
+                ],
+            )
+            .map_err(error)?;
+        transaction
+            .execute(
+                "INSERT INTO revision_refs VALUES('view',?,?)",
+                params![owner(&record), record.instance.revision.as_str()],
+            )
+            .map_err(error)?;
+        let layout = layout_args
+            .map(|args| {
+                crate::window_layout::store_layout(
+                    &transaction,
+                    &record.project,
+                    &record.principal,
+                    args,
+                )
+            })
+            .transpose()
+            .map_err(crate::window_layout::layout_error)?;
+        transaction.commit().map_err(error)?;
         views.insert(
             record.view.clone(),
             LiveView {
@@ -165,7 +250,7 @@ impl PluginService {
                 sequence: 0,
             },
         );
-        Ok(record)
+        Ok((record, layout))
     }
     pub fn view_record(
         &self,

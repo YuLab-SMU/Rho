@@ -26,6 +26,8 @@ export type * from "./types/InstanceState.js";
 export type * from "./types/NodeId.js";
 export type * from "./types/ObservationCompleteness.js";
 export type * from "./types/OpenPluginView.js";
+export type * from "./types/OpenPluginWindowView.js";
+export type * from "./types/OpenedPluginWindowView.js";
 export type * from "./types/OperationId.js";
 export type * from "./types/OperationSettlement.js";
 export type * from "./types/PackageFile.js";

@@ -7,8 +7,8 @@ import type { PluginViewClient } from "../public/plugin-ui/index.js";
 export interface ObjectsViewServices {
   objects: Objects;
   session: { project: string | null; runtime: { state: string } | null };
-  navigation: { openObject(name: string, path?: ObjectPathElement[]): void };
-  execution: { run(code: string, mode: "console"): Promise<unknown> };
+  navigation: { blocked?: boolean; openObject(name: string, path?: ObjectPathElement[]): void };
+  execution: { blocked?: boolean; run(code: string, mode: "console"): Promise<unknown> };
   clipboard: Pick<PluginViewClient, "copyText">;
 }
 export const ObjectsViewContext = createContext<ObjectsViewServices | null>(null);

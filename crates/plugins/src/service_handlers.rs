@@ -69,6 +69,7 @@ pub(crate) fn register(
         "views.update",
         "views.close",
         "windows.update_layout",
+        "windows.open_view",
         "plugins.activate",
         "plugins.release",
         "plugins.remove",
@@ -90,6 +91,11 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         "windows.layout" => (
             schema_for!(PluginWindowArguments).to_value(), schema_for!(PluginWindowLayout).to_value(),
             json!({"window":"window-example"}), "Read one window's retained plugin layout without opening views", false, PLUGINS_RUN_SCOPE,
+        ),
+        "windows.open_view" => (
+            schema_for!(OpenPluginWindowView).to_value(), schema_for!(OpenedPluginWindowView).to_value(),
+            json!({"view":{"instance":instance(),"contribution":"inspector","window":"window-example","configuration":{},"state":{}},"expected_layout_version":0,"group":null}),
+            "Create and select an exact plugin view in a window atomically", true, PLUGINS_RUN_SCOPE,
         ),
         "windows.update_layout" => (
             schema_for!(UpdatePluginWindowLayout).to_value(), schema_for!(PluginWindowLayout).to_value(),
@@ -275,6 +281,11 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         descriptor.documentation.related_capabilities = vec![key("windows.layout"), key("windows.update_layout"), key("views.inspect")];
         descriptor.documentation.position_units = vec!["Split weights are finite positive ratios. At most 256 views, 1024 structural nodes, depth 32 and 256 KiB per layout.".into()];
     }
+    if id == "windows.open_view" {
+        descriptor.documentation.when_to_use = vec!["Open a contributed view in an explicit existing tab group, or create the first group in an empty window.".into()];
+        descriptor.documentation.effects = "Atomically create one scoped view, retain its exact revision, and select it in the expected window layout. Does not start or stop a backend.".into();
+        descriptor.documentation.limitations.push("The view instance must already be active. A null group is valid only for an empty window; no panel names or fallback routing are inferred. Conflict or validation failure leaves the view and layout unchanged.".into());
+    }
     if id == "views.connection" {
         descriptor.documentation.when_to_use = vec!["Connect the trusted containing shell to an already opened view.".into()];
         descriptor.documentation.limitations = vec!["Returns private connection credentials to the containing Host shell. Plugin callers are refused, including with an explicit capability grant. Plugins use views.inspect for public metadata/state.".into(),
@@ -306,6 +317,7 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "views.update" => normalize::<UpdatePluginView>(value),
         "windows.layout" => normalize::<PluginWindowArguments>(value),
         "windows.update_layout" => normalize::<UpdatePluginWindowLayout>(value),
+        "windows.open_view" => normalize::<OpenPluginWindowView>(value),
         "plugins.activate" => normalize::<ActivatePlugin>(value),
         "plugins.branch" => normalize::<BranchPlugin>(value),
         "plugins.advance_branch" => normalize::<AdvancePluginBranch>(value),
@@ -536,6 +548,13 @@ impl OperationHandler for Manage {
             identity: self.service.scope.clone(),
         };
         match self.id {
+            "windows.open_view" => {
+                let args: OpenPluginWindowView = decode(value)?;
+                let id = ViewInstanceId::new(format!("view-{}", uuid::Uuid::new_v4().simple())).map_err(error)?;
+                self.service.prepare_window_view(context, &id, &args)?;
+                revision = Some(args.view.instance.revision);
+                target = host::TargetRef { kind: "plugin_view".into(), identity: id.to_string() };
+            }
             "windows.update_layout" => {
                 let args: UpdatePluginWindowLayout = decode(value)?;
                 self.service.check_window_context(context, &args.window)?;
@@ -705,7 +724,7 @@ impl OperationHandler for Manage {
     }
     async fn execute(&self, operation: &host::Operation) -> Result<CommitPlan, HandlerError> {
         self.run(operation).await.map(CommitPlan::succeeded).map_err(|error| {
-            if self.id == "windows.update_layout" && matches!(&error,
+            if matches!(self.id, "windows.update_layout" | "windows.open_view") && matches!(&error,
                 OperationError::ContentChanged(_) | OperationError::InvalidInput(_) | OperationError::NotFound(_)) {
                 return HandlerError::before_effect(error.to_string());
             }
@@ -742,6 +761,11 @@ impl Manage {
         let value = &operation.normalized_arguments;
         let service = &self.service;
         match self.id {
+            "windows.open_view" => {
+                let _guard = service.gate.lock().await;
+                Ok(json!(service.open_window_view(&bound.context,
+                    ViewInstanceId::new(&bound.target.identity).map_err(error)?, decode(value)?)?))
+            }
             "windows.update_layout" => {
                 let _guard = service.gate.lock().await;
                 service.check_window_context(&bound.context, &decode::<UpdatePluginWindowLayout>(value)?.window)?;

@@ -26,6 +26,7 @@ export class ObjectsConnection extends Model<ConnectionSnapshot> {
   private notice = "";
   private saveError = "";
   private saved = "";
+  private actions: JsonValue = null;
   private stopped = false;
   private refreshing: Promise<void> | null = null;
   private saveQueue: Promise<void> = Promise.resolve();
@@ -37,7 +38,8 @@ export class ObjectsConnection extends Model<ConnectionSnapshot> {
     this.source = Object.freeze(structuredClone(source));
     if (![source.instance, source.plugin, source.revision, source.artifact].every(value => typeof value === "string" && value.length > 0))
       throw new Error("Select an exact R plugin instance.");
-    const saved = client.view.state as { nativeSession?: unknown; objects?: unknown } | null;
+    const saved = client.view.state as { nativeSession?: unknown; objects?: unknown; actions?: JsonValue } | null;
+    this.actions = structuredClone(saved?.actions ?? null);
     const session = typeof saved?.nativeSession === "string" && saved.nativeSession ? saved.nativeSession : null;
     this.identity = { epoch: 1, project: client.view.project, session, runtimeState: null, connected: false, capabilities };
     this.objects = new Objects({ context: () => this.identity,
@@ -59,7 +61,10 @@ export class ObjectsConnection extends Model<ConnectionSnapshot> {
     return { session: { project: this.identity.project!, runtime: this.identity.session ? { state: this.identity.runtimeState ?? "unavailable" } : null },
       notice: this.notice, saveError: this.saveError, connected: this.identity.connected };
   }
-  private state() { return { nativeSession: this.identity.session, objects: this.objects.serialize() }; }
+  get nativeSession() { return this.identity.session; }
+  get actionState(): JsonValue { return structuredClone(this.actions); }
+  async saveActions(value: JsonValue) { this.actions = structuredClone(value); await this.flush(); }
+  private state() { return { nativeSession: this.identity.session, objects: this.objects.serialize(), actions: this.actions }; }
   private binding(id: string, target: string | null): ProviderBinding {
     return { capability: { id, version: 1 }, provider: this.source, project: this.identity.project!, target };
   }

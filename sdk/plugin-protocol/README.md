@@ -77,8 +77,17 @@ Layout nodes are empty regions, weighted splits and selected tab groups. IDs are
 unique across groups and views. Limits are 256 view references, 1024 structural
 nodes, depth 32 and a 256 KiB update payload. Split weights must be positive and
 finite, including their sum. A layout version is a presentation precondition for
-one window, not a scientific revision. Scenario preparation/application and view
-creation remain separate operations; these two ports do not provide that workflow.
+one window, not a scientific revision.
+
+`windows.open_view@1` accepts `OpenPluginWindowView` through the same Operation
+port and returns `OpenedPluginWindowView`: a public view record and the newly saved
+layout. `view` selects an exact active instance, contribution, configuration and
+state. `expected_layout_version` fences the placement; `group` names an existing
+tab group. A null group creates the first tab group only in an empty window.
+Creation, the revision reference and selection commit in one transaction; a stale
+version, missing group or invalid view leaves them unchanged. The new connection
+is published only after commit. Repeating the original request returns its original
+Operation, without a second view. Scenario preparation/application remains separate.
 
 ## Runtime protocol
 
