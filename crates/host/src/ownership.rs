@@ -78,6 +78,39 @@ impl ProjectLease {
     }
 }
 
+impl Drop for ProjectLease {
+    fn drop(&mut self) {
+        // The last scientific owner is gone. A duplicated descriptor (including
+        // one briefly inherited by a concurrently starting child) must not extend
+        // ownership until its close. Accepted tasks retain this lease through Arc.
+        if let Err(error) = self._file.unlock() {
+            eprintln!("project ownership unlock failed for {}: {error}", self.root.display());
+        }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[test]
+    fn last_owner_releases_the_lock_despite_a_duplicated_descriptor() {
+        let temporary = tempfile::tempdir().unwrap();
+        let lease = Arc::new(ProjectLease::acquire(temporary.path()).unwrap());
+        let accepted_work = lease.clone();
+        let inherited = lease._file.try_clone().unwrap();
+        drop(lease);
+        assert!(matches!(ProjectLease::acquire(temporary.path()), Err(OperationError::ProjectBusy(_))));
+        drop(accepted_work);
+        let replacement = ProjectLease::acquire(temporary.path()).unwrap();
+        drop(inherited);
+        assert!(matches!(ProjectLease::acquire(temporary.path()), Err(OperationError::ProjectBusy(_))));
+        drop(replacement);
+        assert!(ProjectLease::acquire(temporary.path()).is_ok());
+    }
+}
+
 fn check_lock_file(metadata: &fs::Metadata) -> Result<(), OperationError> {
     if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() != 0 {
         return Err(OperationError::TargetResolution(
