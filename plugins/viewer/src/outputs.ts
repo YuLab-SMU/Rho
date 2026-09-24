@@ -1,9 +1,11 @@
 /** R output semantics belong to this package, not the view container. */
 import type { InstanceRef, JsonValue } from "../public/plugin-protocol/index.js";
+import type { RunSource } from "../public/r-protocol/index.js";
 import { isResourceReference, type ResourceReader, type ResourceReference } from "../public/plugin-ui/index.js";
 export interface SavedOutput {
   operation: string; sequence: number; status: string; session: string;
   accepted: number; reference: ResourceReference;
+  inputSource: RunSource | null;
 }
 export type Selection = { operation_id: string; resource_id: string; };
 export function sameOwner(a: InstanceRef, b: InstanceRef): boolean {
@@ -12,12 +14,25 @@ export function sameOwner(a: InstanceRef, b: InstanceRef): boolean {
 function object(value: unknown): Record<string, any> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : null;
 }
+function isRExecution(capability: { id?: unknown; version?: unknown } | undefined): boolean {
+  return capability?.id === "r.execute" && (capability.version === 1 || capability.version === 2);
+}
 export function outputsFrom(value: unknown, source: InstanceRef): SavedOutput[] {
   const record = object(value), operation = object(record?.operation), output = object(record?.output);
   const provider = object(operation?.normalized_arguments)?.binding?.provider;
-  if (!operation || operation.capability?.id !== "r.execute" || operation.capability?.version !== 1 || !provider || !sameOwner(provider, source)) return [];
+  if (!operation || !isRExecution(operation.capability) || !provider || !sameOwner(provider, source)) return [];
   if (!["succeeded", "failed", "cancelled", "uncertain"].includes(record!.status) || !output) return [];
-  if (output.operation_id !== operation.operation_id || !Array.isArray(output.outputs)) throw new Error("Saved output differs from its original R operation");
+  if (output.operation_id !== operation.operation_id) throw new Error("Saved output differs from its original R operation");
+  if (record!.status === "cancelled" && output.started === false && Object.keys(output).length === 2) return [];
+  if (!Array.isArray(output.outputs)) throw new Error("Saved output differs from its original R operation");
+  let inputSource: RunSource | null = null;
+  if (operation.capability.version === 2) {
+    const expected = object(object(operation.normalized_arguments)?.arguments)?.run?.source ?? null;
+    const actual = output.source ?? null;
+    if (expected === null ? actual !== null : !actual || ["view_id", "label", "kind"].some(field => typeof actual[field] !== "string" || actual[field] !== expected[field]))
+      throw new Error("Saved output source differs from its original R input");
+    inputSource = actual === null ? null : { view_id: actual.view_id, label: actual.label, kind: actual.kind };
+  }
   const results: SavedOutput[] = [];
   for (const item of output.outputs) {
     if (item?.reference?.media_type !== "text/html") continue;
@@ -27,7 +42,7 @@ export function outputsFrom(value: unknown, source: InstanceRef): SavedOutput[] 
       !Number.isSafeInteger(native.sequence) || native.sequence < 0 || typeof output.session_id !== "string")
       throw new Error("Saved HTML has an inconsistent producing operation or resource identity");
     results.push({ operation: operation.operation_id, sequence: native.sequence, status: record!.status,
-      session: output.session_id, accepted: operation.accepted_at_ms, reference: structuredClone(ref) });
+      session: output.session_id, accepted: operation.accepted_at_ms, reference: structuredClone(ref), inputSource });
   }
   return results;
 }
@@ -56,7 +71,7 @@ export async function readHistory(reader: ResourceReader, source: InstanceRef, b
   if (!result.data || !Array.isArray(result.data.operations)) throw new Error("Operation history is unavailable");
   const items: SavedOutput[] = [];
   for (const operation of result.data.operations) {
-    if (operation.capability.id === "r.execute" && operation.capability.version === 1 && ["succeeded", "failed", "cancelled", "uncertain"].includes(operation.status))
+    if (isRExecution(operation.capability) && ["succeeded", "failed", "cancelled", "uncertain"].includes(operation.status))
       items.push(...await readOperation(reader, source, operation.operation_id));
   }
   return { items, next: result.data.next_cursor };

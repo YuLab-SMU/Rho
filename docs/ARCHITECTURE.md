@@ -47,7 +47,13 @@ keeps cancellation reception independent of execution. Original reports, bounded
 output logs and verified HTML/image bytes go through the shared resource owner.
 Retention failure after native execution remains uncertain with recovery material;
 a failed native launch cannot be silently retried in the same instance. Full
-Console, recovery and Viewer interaction migration remains in progress.
+Console, recovery and full Viewer interaction migration remains in progress.
+The R package owns its public TypeScript/schema data package under `plugins/r/sdk`.
+Its versioned execution input retains source labels and Console output mode through
+the same native lane and original Operation. Labels are caller-supplied metadata,
+not verified document captures. Live output-event queries read only the original
+native log; bounded pages preserve gaps and never establish terminal truth.
+Code completeness uses the idle native parser and cannot bypass queued work.
 
 The public Rust transport SDK is `rho-plugin-sdk`. Backend RPC uses a four-byte
 big-endian length followed by at most 1 MiB of JSON, with one ordered writer and

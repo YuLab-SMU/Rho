@@ -272,6 +272,19 @@
         "node",
         "scripts/test-r-viewer.mjs"
       ]
+    },
+    "plugins.r-protocol": {
+      "command": [
+        "node",
+        "plugins/r/generate-sdk.mjs",
+        "--check"
+      ]
+    },
+    "plugins.r-public-types": {
+      "command": [
+        "node",
+        "scripts/test-r-protocol.mjs"
+      ]
     }
   },
   "areas": {
@@ -416,7 +429,8 @@
         "crates/host/tests/r_plugin_real_r.rs",
         "scripts/build-viewer-plugin.mjs",
         "scripts/test-viewer-plugin.mjs",
-        "scripts/test-r-viewer.mjs"
+        "scripts/test-r-viewer.mjs",
+        "scripts/test-r-protocol.mjs"
       ],
       "checks": [
         "docs.index",
@@ -434,7 +448,9 @@
         "plugins.r-independent",
         "plugins.r-native",
         "plugins.viewer",
-        "plugins.r-viewer"
+        "plugins.r-viewer",
+        "plugins.r-protocol",
+        "plugins.r-public-types"
       ]
     }
   }

@@ -1,7 +1,8 @@
 # Build the Viewer package
 
 Assemble outside the checkout with `node scripts/build-viewer-plugin.mjs DEST`.
-The assembly contains only this package and the public protocol/UI SDK. It uses
+The assembly contains this package, the public protocol/UI SDK and public R data
+declarations. It uses
 the existing TypeScript compiler without downloading dependencies or tooling.
 Inside the assembled directory, run `node build.mjs` with an existing `tsc` on PATH
 or `RHO_PLUGIN_TSC` pointing to its JavaScript entrypoint. Failed builds preserve
@@ -18,6 +19,8 @@ The package declares only `operation.list_recent`, `operation.get` and
 `resources.read`. It reads original terminal R output contracts, verifies the
 resource identity/length/digest, and displays saved HTML in a nested opaque iframe.
 History, refresh and following the latest output never invoke R or recover work.
+Both `r.execute@1` and `r.execute@2` outputs are understood. Version 2 source
+labels are checked against the original normalized input before presentation.
 User selection is saved through the public self-state interface. Up to 200 outputs
 are shown per open view; earlier operations are paged explicitly. HTML documents
 are limited to 16 MiB. R-owned local dependency retention runs before this viewer;

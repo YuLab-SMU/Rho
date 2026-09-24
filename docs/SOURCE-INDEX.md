@@ -97,6 +97,7 @@ Sources:
 - `scripts/test-plugin-ui.mjs`
 - `scripts/test-r-plugin-engine.mjs`
 - `scripts/test-r-plugin.mjs`
+- `scripts/test-r-protocol.mjs`
 - `scripts/test-r-viewer.mjs`
 - `scripts/test-viewer-plugin.mjs`
 - `sdk/**`
@@ -113,6 +114,8 @@ Checks:
 - `plugins.r-engine`: `["cargo","test","-p","rho-r-engine","--locked"]`
 - `plugins.r-independent`: `["node","scripts/test-r-plugin-engine.mjs"]`
 - `plugins.r-native`: `["node","scripts/test-r-plugin.mjs"]`
+- `plugins.r-protocol`: `["node","plugins/r/generate-sdk.mjs","--check"]`
+- `plugins.r-public-types`: `["node","scripts/test-r-protocol.mjs"]`
 - `plugins.r-viewer`: `["node","scripts/test-r-viewer.mjs"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`

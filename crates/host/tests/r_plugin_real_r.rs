@@ -8,6 +8,8 @@ use std::{fs, path::Path, sync::Arc, time::Duration};
 
 #[path = "fixtures/r_queue.rs"]
 mod queue;
+#[path = "fixtures/r_console.rs"]
+mod console;
 
 async fn query(host: &NextHost, id: &str, args: Value) -> Value {
     host.query_snapshot(
@@ -293,6 +295,7 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
     let exercise = tokio::spawn(async move {
         let (host, left, right) = (live_host, live_left, live_right);
         assert_eq!(native_query(&host, &left, "r.session", json!({})).await["state"], "unstarted");
+        console::unstarted(&host,&left).await;
         let premature = host.query_snapshot(&NextHost::local_context(), QueryRequest {
             capability: CapabilityRef::new("r.snapshot",1).unwrap(), arguments:json!({"binding":binding(&host,&left,"r.snapshot").await,"arguments":{"expected_session":"absent","limit":10}}),
         }).await;
@@ -327,6 +330,7 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
         assert!(host.invoke(&NextHost::local_context(), invocation("wrong-session","r.execute",json!({"binding":bind,"arguments":{"expected_session":other_session,"code":"x <- 999"}}))).await.is_err());
         let repeat = host.invoke(&NextHost::local_context(), request.clone()).await.unwrap();
         assert_eq!(repeat.operation.operation_id, record.operation.operation_id);
+        console::exercise(&host,&left,&session,&right,&other_session).await;
         // Receive an actual native signal before cancelling; no timing guesses.
         let ready = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let code = format!("con <- socketConnection('127.0.0.1', port={}, open='w'); writeLines('started', con); close(con); Sys.sleep(20); 777",ready.local_addr().unwrap().port());

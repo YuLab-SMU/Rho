@@ -38,7 +38,8 @@ async function select(output: SavedOutput, save = false, force = false) {
   state.selected = { operation_id: output.operation, resource_id: output.reference.resource };
   find("identity").textContent = `Output ${output.sequence} · Run ${output.operation.slice(0, 8)}`;
   find("status").textContent = `Saved HTML · ${output.status === "succeeded" ? "Completed run" : `${output.status} run`}`;
-  sourceDetails.textContent = `Operation: ${output.operation}\nSession: ${output.session}\nPlugin: ${source.plugin}\nInstance: ${source.instance}\nRevision: ${source.revision}\nArtifact: ${source.artifact}\nResource: ${output.reference.resource}\nDigest: ${output.reference.digest}`;
+  const input = output.inputSource ? `Input: ${output.inputSource.label} (${output.inputSource.kind})\nView: ${output.inputSource.view_id}\n` : "";
+  sourceDetails.textContent = `${input}Operation: ${output.operation}\nSession: ${output.session}\nPlugin: ${source.plugin}\nInstance: ${source.instance}\nRevision: ${source.revision}\nArtifact: ${source.artifact}\nResource: ${output.reference.resource}\nDigest: ${output.reference.digest}`;
   notice("Opening saved HTML…"); renderHistory();
   const abort = new AbortController(); controller = abort;
   if (save) void saveState();

@@ -38,6 +38,22 @@ async fn pending<F: Future>(future: Pin<&mut F>) {
     tokio::select! { biased; _ = future => panic!("queued work must remain pending"), _ = std::future::ready(()) => () }
 }
 
+#[test]
+fn versioned_run_keeps_its_source_and_summary_after_the_caller_changes_input() {
+    let queue = Queue::default();
+    let mut current = call("source-run");
+    current.binding.capability.version = 2;
+    let source = json!({"view_id":"document:one","label":"分析.R","kind":"selection"});
+    current.arguments = json!({"expected_session":"native-session","run":{"code":"中文 <- 42","output_mode":"console","source":source}});
+    queue.admit(&current).unwrap();
+    current.arguments["run"]["code"] = json!("changed");
+    current.arguments["run"]["source"]["label"] = json!("another.R");
+    let pending = queue.observe("native-session", None).console.pending;
+    assert_eq!(pending[0].operation_id, id(&current));
+    assert_eq!(pending[0].summary, "中文 <- 42");
+    assert_eq!(serde_json::to_value(&pending[0].source).unwrap(), source);
+}
+
 #[tokio::test]
 async fn fifo_waits_for_original_settlement_and_old_ack_cannot_advance_the_next_run() {
     let queue = Queue::default();

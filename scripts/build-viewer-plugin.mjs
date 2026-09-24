@@ -9,7 +9,7 @@ export function buildViewerPlugin(destination) {
   const parent=fs.realpathSync(path.dirname(path.resolve(destination))),output=path.join(parent,path.basename(destination));
   assert.ok(output!==root&&!output.startsWith(root+path.sep),'Use an independent directory outside the core checkout');
   fs.mkdirSync(output);
-  for(const [from,to] of [['plugins/viewer','.'],['sdk/plugin-ui','public/plugin-ui'],['sdk/plugin-protocol','public/plugin-protocol']])
+  for(const [from,to] of [['plugins/viewer','.'],['sdk/plugin-ui','public/plugin-ui'],['sdk/plugin-protocol','public/plugin-protocol'],['plugins/r/sdk','public/r-protocol']])
     fs.cpSync(path.join(root,from),path.join(output,to),{recursive:true,filter:source=>!/[\\/](?:target|dist|node_modules)(?:[\\/]|$)/.test(source)});
   fs.copyFileSync(path.join(root,'LICENSE'),path.join(output,'LICENSE'));
   const walk=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{

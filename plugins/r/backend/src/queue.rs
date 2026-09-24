@@ -80,8 +80,13 @@ impl Queue {
                     .into(),
             );
         }
-        let summary = call
-            .arguments
+        let run = call.arguments.get("run").unwrap_or(&call.arguments);
+        let source = run
+            .get("source")
+            .filter(|value| !value.is_null())
+            .map(|value| serde_json::from_value(value.clone()).map_err(|error| error.to_string()))
+            .transpose()?;
+        let summary = run
             .get("code")
             .and_then(serde_json::Value::as_str)
             .unwrap_or("Create R session")
@@ -94,7 +99,7 @@ impl Queue {
                 binding: call.binding.clone(),
                 run: QueuedRun {
                     operation_id: id.clone(),
-                    source: None,
+                    source,
                     summary,
                 },
                 phase: Phase::Waiting,

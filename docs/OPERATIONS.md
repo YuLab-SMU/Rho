@@ -849,6 +849,19 @@ without execution. A result awaiting journal commit must use original commit
 recovery first; resume cannot confirm it. These controls also work before R exists
 and during draining. No query/control creates or reconnects a session.
 
+Use `r.execute@2` for code with an optional source label and Console output mode:
+its arguments are `{"expected_session": SESSION, "run": {"code": CODE,
+"output_mode": "console", "source": {"view_id": VIEW, "label": LABEL,
+"kind": "console"}}}`. Resolve version 2 explicitly. Console mode prints each
+visible expression through the native output stream; source labels are retained
+with the original request/result and do not prove a synchronized document capture.
+Version 1 keeps its code-only input. `r.check_code` takes the exact session and code
+and refuses to compete with queued or unsettled work. `r.output_events` takes the
+exact session, original `operation_id`, `after_sequence` and `limit` (1–100).
+Continue from the returned sequence; a page may stop earlier at its encoded-byte
+budget. While R runs, an empty current page is not completion. Read original
+Operations and retained resources after backend release, without recreating R.
+
 The JSON session edge admits up to 32 execution, 16 query and 16 control requests
 concurrently. Saturating one pool does not consume another pool's capacity.
 Duplicate in-flight request IDs and pool overflow are rejected before dispatch.

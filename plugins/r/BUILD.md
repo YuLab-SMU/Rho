@@ -5,6 +5,10 @@ Use a new destination outside the repository. The assembly includes the complete
 R API, engine, backend, public Rust SDK/protocol, pinned Jet source and licenses,
 a standalone Cargo workspace and dependency lock. No private core crate is used.
 The manifest source inventory is generated from these exact files.
+The package's `sdk/` directory contains public R TypeScript declarations and JSON
+Schemas. `node generate-sdk.mjs` regenerates these and the versioned manifest
+contracts from the R API; `node generate-sdk.mjs --check` verifies them. These
+commands invoke Cargo and must run serially with other builds or checks.
 
 Inside that self-contained directory run `node build.mjs`. It uses the existing
 Rust 1.97 toolchain and cached locked dependencies, and writes `dist/rho-r-backend`.
@@ -46,5 +50,16 @@ Session creation
 retains its existing unsupported-cancellation contract; it can be paused before
 starting and resumed through the unstarted queue target.
 
-Release confirms native shutdown and keeps original resource bytes. Checkpoints,
-packages/help and Viewer UI migration are still being implemented.
+`r.execute@2` adds the original `run` object with code, source labels and optional
+Console output mode; it keeps the code-only `r.execute@1` contract available for
+existing consumers. The source is retained in queue observations and the terminal
+result. These labels do not attest to a Host-synchronized document capture.
+`r.check_code` checks completeness only in an existing idle session.
+`r.output_events` reads the original append-only output log while execution or
+stdin waits continue. Pages keep exact sequence cursors, gaps and truncation, and
+are bounded by both event count and encoded bytes. They never imply completion;
+inspect the original Operation for that. See [public contracts](sdk/README.md).
+
+Release confirms native shutdown and keeps original resource bytes. The ordinary
+Viewer package can read retained HTML; Console UI, captured document execution,
+checkpoints and package/help contributions still need migration.

@@ -50,10 +50,11 @@ async function createSession(instance: any) {
   const binding = await query("plugins.resolve", { instance, capability: { id: "r.create_session", version: 1 } });
   return (await invoke("r.create_session", { binding, arguments: {} })).session_id;
 }
-async function execute(instance: any, session: string, code: string, accepted = false) {
-  const binding = await query("plugins.resolve", { instance, capability: { id: "r.execute", version: 1 } });
-  return port("invoke", { capability: { id: "r.execute", version: 1 }, client_request_id: crypto.randomUUID(),
-    arguments: { binding, arguments: { expected_session: session, code } }, preconditions: [], return_after_acceptance: accepted });
+async function execute(instance: any, session: string, code: string, accepted = false, version = 1) {
+  const binding = await query("plugins.resolve", { instance, capability: { id: "r.execute", version } });
+  const arguments_ = version === 1 ? { expected_session: session, code } : { expected_session: session, run: { code, source: { view_id: "viewer-script", label: "分析 · viewer.R", kind: "file" } } };
+  return port("invoke", { capability: { id: "r.execute", version }, client_request_id: crypto.randomUUID(),
+    arguments: { binding, arguments: arguments_ }, preconditions: [], return_after_acceptance: accepted });
 }
 async function openView(source: any, window: string, state = {}) {
   return invoke("views.open", { instance: viewer, contribution: "viewer", window, configuration: { source }, state });
@@ -133,9 +134,15 @@ test("ordinary Viewer presents real retained HTML across revisions, closure and 
   await page.frameLocator("iframe").getByRole("button",{name:"Refresh",exact:true}).click();
   await expect.poll(()=>before!.evaluate(frame=>frame.isConnected)).toBe(false);
   await expect(document(page).getByRole("button",{name:"0",exact:true})).toBeVisible();
-  const third = await execute(rLeft,leftSession,`f <- tempfile(fileext='.html'); writeLines('<h1>Left later output</h1>',f); getOption('viewer')(f); 84`);
+  const third = await execute(rLeft,leftSession,`f <- tempfile(fileext='.html'); writeLines('<h1>Left later output</h1>',f); getOption('viewer')(f); 84`,false,2);
   expect(third.status).toBe("succeeded");
   await expect(document(page).getByRole("heading")).toHaveText("Left later output");
+  expect(await source.textContent()).toContain("Input: 分析 · viewer.R (file)");
+  await page.setViewportSize({width:390,height:900});
+  await page.frameLocator("iframe").locator("summary").click();
+  await page.screenshot({path:'../target/plugin-refactor/viewer-v2-source-390.png'});
+  await page.frameLocator("iframe").locator("summary").click();
+  await page.setViewportSize({width:1440,height:900});
   const outer=page.frameLocator("iframe");
   await expect(outer.locator(".history-item")).toHaveCount(2);
   await outer.locator(".history-item").filter({hasText:first.operation.operation_id.slice(0,8)}).click();

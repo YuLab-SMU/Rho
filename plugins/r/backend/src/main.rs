@@ -94,11 +94,13 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         let is_query = call.operation_id.is_none();
                         let valid_kind = match call.binding.capability.id.as_str() {
-                            "r.session" | "r.console" | "r.snapshot" | "r.prepare" => is_query,
+                            "r.session" | "r.console" | "r.snapshot" | "r.prepare" | "r.check_code" | "r.output_events" => is_query,
                             "r.create_session" | "r.execute" => !is_query,
                             _ => false,
                         };
-                        if !valid_kind || call.binding.capability.version != 1 {
+                        let valid_version = call.binding.capability.version == 1
+                            || (call.binding.capability.id.as_str() == "r.execute" && call.binding.capability.version == 2);
+                        if !valid_kind || !valid_version {
                             Some(error("unsupported", "unsupported R capability or message kind"))
                         } else if is_query && query_jobs >= 16 {
                             Some(error("busy", "R observation limit reached"))
@@ -119,11 +121,13 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                                 let reply = if is_query {
                                     match owner.query(&call).await {
                                         Ok(data) => {
-                                            let completeness = match data.get("completeness").and_then(serde_json::Value::as_str) {
+                                            let completeness = if call.binding.capability.id.as_str() == "r.output_events" {
+                                                ObservationCompleteness::Partial
+                                            } else { match data.get("completeness").and_then(serde_json::Value::as_str) {
                                                 Some("partial") => ObservationCompleteness::Partial,
                                                 Some("unknown") => ObservationCompleteness::Unavailable,
                                                 _ => ObservationCompleteness::Complete,
-                                            };
+                                            }};
                                             RpcBody::QueryResult { data, completeness, source: None }
                                         },
                                         Err(message) => error("r_observation", &message),

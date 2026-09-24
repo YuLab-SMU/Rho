@@ -106,15 +106,31 @@ impl Owner {
             .map(|r| r.session_id().into())
             .unwrap_or_else(|| format!("unstarted:{}", self.instance.instance))
     }
-    fn validate_execute(&self, value: &Value) -> Result<Execute, String> {
-        let args: Execute = serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
-        if args.expected_session != self.runtime()?.session_id() {
+    fn validate_execute(&self, value: &Value, version: u32) -> Result<RunRArguments, String> {
+        let (session, run) = match version {
+            1 => {
+                let args: Execute =
+                    serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+                (
+                    args.expected_session,
+                    RunRArguments {
+                        code: args.code,
+                        ..Default::default()
+                    },
+                )
+            }
+            2 => {
+                let args: ExecuteR =
+                    serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+                (args.expected_session, args.run)
+            }
+            _ => return Err("Unsupported R execution version".into()),
+        };
+        if session != self.runtime()?.session_id() {
             return Err("R session precondition changed".into());
         }
-        if args.code.is_empty() || args.code.contains('\0') || args.code.len() > 256 * 1024 {
-            return Err("R code must contain 1–262144 bytes".into());
-        }
-        Ok(args)
+        validate_r_input(&run.code, run.source.as_ref())?;
+        Ok(run)
     }
     pub fn admit(&self, call: &PluginCall) -> Result<(), String> {
         if call.binding.target.as_deref() != Some(&self.target())
@@ -125,7 +141,7 @@ impl Owner {
         }
         match call.binding.capability.id.as_str() {
             "r.execute" => {
-                self.validate_execute(&call.arguments)?;
+                self.validate_execute(&call.arguments, call.binding.capability.version)?;
             }
             "r.create_session" if call.arguments == json!({}) => (),
             _ => return Err("Unsupported R invocation".into()),
@@ -229,7 +245,9 @@ impl Owner {
             "r.prepare" => {
                 let args: PluginPreflightRequest =
                     serde_json::from_value(call.arguments.clone()).map_err(|e| e.to_string())?;
-                if args.capability.version != 1 {
+                if args.capability.version != 1
+                    && !(args.capability.id.as_str() == "r.execute" && args.capability.version == 2)
+                {
                     return Err("unsupported R capability version".into());
                 }
                 match args.capability.id.as_str() {
@@ -253,7 +271,7 @@ impl Owner {
                         }
                     }
                     "r.execute" => {
-                        self.validate_execute(&args.arguments)?;
+                        self.validate_execute(&args.arguments, args.capability.version)?;
                     }
                     _ => return Err("unknown R operation".into()),
                 }
@@ -269,6 +287,64 @@ impl Owner {
                     target: Some(target.clone()),
                     owner_context: json!({"session_target":target})
                 }))
+            }
+            "r.output_events" => {
+                let args: ReadREvents =
+                    serde_json::from_value(call.arguments.clone()).map_err(|e| e.to_string())?;
+                let runtime = self.runtime()?;
+                if args.expected_session != runtime.session_id()
+                    || call
+                        .binding
+                        .target
+                        .as_deref()
+                        .is_some_and(|value| value != runtime.session_id())
+                    || !(1..=100).contains(&args.limit)
+                {
+                    return Err(
+                        "Output observation requires this exact session and a limit of 1–100"
+                            .into(),
+                    );
+                }
+                // Reading the append-only observation log never takes the R lane,
+                // starts R or turns an observed output event into terminal truth.
+                let store = self.output_store()?;
+                let output = bound_events(
+                    store.events(&OutputEventsArguments {
+                        operation_id: args.operation_id,
+                        after_sequence: args.after_sequence,
+                        limit: args.limit,
+                    })?,
+                    args.after_sequence,
+                )?;
+                Ok(json!(REventsObservation {
+                    session_id: runtime.session_id().into(),
+                    output
+                }))
+            }
+            "r.check_code" => {
+                let args: CheckRCode =
+                    serde_json::from_value(call.arguments.clone()).map_err(|e| e.to_string())?;
+                validate_r_input(&args.code, None)?;
+                let runtime = self.runtime()?;
+                if args.expected_session != runtime.session_id()
+                    || call
+                        .binding
+                        .target
+                        .as_deref()
+                        .is_some_and(|value| value != runtime.session_id())
+                {
+                    return Err("Code check requires this exact native session".into());
+                }
+                if !self.queue.is_empty() {
+                    return Err(
+                        "R has queued work or an unsettled result; code was not checked".into(),
+                    );
+                }
+                let _lane = self
+                    .lane
+                    .try_lock()
+                    .map_err(|_| "R is busy; code was not checked")?;
+                Ok(json!(runtime.check_code(&args.code).await?))
             }
             "r.snapshot" => {
                 if !self.queue.is_empty() {
@@ -396,18 +472,11 @@ impl Owner {
             }
             "r.execute" => {
                 let args = self
-                    .validate_execute(&call.arguments)
+                    .validate_execute(&call.arguments, call.binding.capability.version)
                     .map_err(NativeError::before_effect)?;
                 let runtime = self.runtime().map_err(NativeError::before_effect)?;
                 let report = runtime
-                    .execute_controlled(
-                        &operation,
-                        &RunRArguments {
-                            code: args.code,
-                            ..Default::default()
-                        },
-                        cancellation,
-                    )
+                    .execute_controlled(&operation, &args, cancellation)
                     .await?;
                 let retained = self.retain_report(call, &report).await;
                 match retained {
@@ -416,14 +485,37 @@ impl Owner {
                         evidence.extend(outputs.iter().map(|(_, reference)| reference.clone()));
                         let value = serde_json::to_vec(&report.value)
                             .map_err(|e| NativeError::after_possible_effect(e.to_string(), None))?;
-                        let mut result = plan(
-                            report.outcome,
+                        let output = if call.binding.capability.version == 2 {
+                            json!(RExecutionResult {
+                                operation_id: operation.clone(),
+                                session_id: report.session_id.clone(),
+                                value: if value.len() <= 32768 {
+                                    report.value.clone()
+                                } else {
+                                    Value::Null
+                                },
+                                value_in_report: value.len() > 32768,
+                                stdout: preview(&report.stdout).into(),
+                                stderr: preview(&report.stderr).into(),
+                                report: report_reference.clone(),
+                                events: events_reference.clone(),
+                                outputs: outputs
+                                    .iter()
+                                    .map(|(native, reference)| RetainedROutput {
+                                        native: native.clone(),
+                                        reference: reference.clone()
+                                    })
+                                    .collect(),
+                                source: args.source,
+                                output_mode: args.output_mode
+                            })
+                        } else {
                             json!({"operation_id":operation, "session_id":report.session_id,
                             "value":if value.len() <= 32768 { report.value.clone() } else { Value::Null },
                             "value_in_report":value.len() > 32768, "stdout":preview(&report.stdout), "stderr":preview(&report.stderr),
-                            "report":report_reference, "events":events_reference, "outputs":outputs.iter().map(|(native, reference)| json!({"native":native,"reference":reference})).collect::<Vec<_>>()}),
-                            evidence,
-                        );
+                            "report":report_reference, "events":events_reference, "outputs":outputs.iter().map(|(native, reference)| json!({"native":native,"reference":reference})).collect::<Vec<_>>()})
+                        };
+                        let mut result = plan(report.outcome, output, evidence);
                         result.error = report.error.map(|message| preview(&message).to_owned());
                         if report.outcome == PluginOutcome::Uncertain {
                             result.recovery =
@@ -465,11 +557,7 @@ impl Owner {
         ),
         String,
     > {
-        let store = OutputStore::open_read_only(
-            &PathBuf::from(&self.environment.data_root),
-            &self.environment.project_root,
-        )?
-        .ok_or("original native output store unavailable")?;
+        let store = self.output_store()?;
         let mut outputs = vec![];
         for native in &report.output_references {
             let bytes = store.verified_original(native)?;
@@ -495,6 +583,13 @@ impl Owner {
         let bytes = serde_json::to_vec(&events).map_err(|e| e.to_string())?;
         let events_reference = self.retain(call, "application/json", &bytes).await?;
         Ok((reference, events_reference, outputs))
+    }
+    fn output_store(&self) -> Result<OutputStore, String> {
+        OutputStore::open_read_only(
+            &PathBuf::from(&self.environment.data_root),
+            &self.environment.project_root,
+        )?
+        .ok_or_else(|| "Original native output store unavailable".into())
     }
     async fn retain(
         &self,
@@ -527,6 +622,71 @@ impl Owner {
             runtime.shutdown().await.map_err(|e| e.message)?;
         }
         Ok(())
+    }
+}
+
+/// Count JSON bytes, including escaping, rather than assuming event count bounds
+/// the framed response. The next page resumes at the last event actually sent.
+fn bound_events(mut output: OutputEvents, after: u64) -> Result<OutputEvents, String> {
+    let mut bytes = 0;
+    let mut count = 0;
+    for event in &output.events {
+        let size = serde_json::to_vec(event)
+            .map_err(|error| error.to_string())?
+            .len();
+        if bytes + size > 256 * 1024 {
+            break;
+        }
+        bytes += size;
+        count += 1;
+    }
+    if count == 0 && !output.events.is_empty() {
+        return Err("Original output event exceeds its presentation bound".into());
+    }
+    if count < output.events.len() {
+        output.events.truncate(count);
+        output.has_more = true;
+    }
+    output.next_sequence = output.events.last().map_or(after, |event| event.sequence);
+    Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn output_pages_bound_escaped_bytes_without_skipping_events_or_erasing_gaps() {
+        let id = OperationId::new("original").unwrap();
+        let events = (1..=100)
+            .map(|sequence| OutputEvent {
+                operation_id: id.clone(),
+                sequence,
+                kind: "stdout".into(),
+                text: Some("\0".repeat(4096)),
+                media: None,
+                observed_at_ms: 0,
+            })
+            .collect();
+        let page = OutputEvents {
+            operation_id: id,
+            events,
+            next_sequence: 100,
+            has_more: false,
+            truncated: true,
+            gap: true,
+            notices: vec!["Original gap".into()],
+        };
+        let first = bound_events(page.clone(), 0).unwrap();
+        assert!(first.has_more && first.truncated && first.gap);
+        assert!(first.events.len() < 100);
+        assert!(serde_json::to_vec(&first).unwrap().len() < 300 * 1024);
+        let mut remaining = page;
+        remaining
+            .events
+            .retain(|event| event.sequence > first.next_sequence);
+        let second = bound_events(remaining, first.next_sequence).unwrap();
+        assert_eq!(second.events[0].sequence, first.next_sequence + 1);
+        assert_eq!(second.notices, vec!["Original gap"]);
     }
 }
 fn plan(

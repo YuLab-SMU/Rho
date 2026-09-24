@@ -1,6 +1,6 @@
 # Rho: current state and focus
 
-Updated: 2026-09-23. This is the single current status summary. Git retains history.
+Updated: 2026-09-24. This is the single current status summary. Git retains history.
 
 ## Unified plugin refactor — active implementation
 
@@ -251,6 +251,45 @@ acceptance. Its original failure log and trace remain retained. An exploratory
 `cargo build --locked` was interrupted after an unnecessary core CSP edit was
 fully reverted; that build is incomplete, not a pass. The successful browser runs
 use the already-built, unchanged core and verify its original security policy.
+
+The R package now owns a generated public TypeScript/schema package. Its
+`r.execute@2` accepts the native run options, preserves caller-supplied source
+labels in the queue and original result, and supports Console mode through the
+existing R execution lane. These labels do not attest to a synchronized document
+capture. `r.check_code` uses only an existing idle native parser; `r.output_events`
+reads the original log during execution or stdin waiting, with exact owner/session,
+bounded pages and explicit gap/truncation. Events remain partial observations,
+never proof of a terminal result. Viewer understands both execution versions,
+checks source labels against the original input, and skips confirmed pre-start
+cancellations without breaking history.
+
+`cargo test -p rho-r-api -p rho-r-backend --locked` passes the public input test
+and six backend tests, including queued source retention and escaped-byte event
+pagination. `node plugins/r/generate-sdk.mjs --check`, the independent R protocol
+and Viewer consumers, client generation/build/check, architecture, plugin-boundary
+and governance checks pass. The version 2 Viewer case passes
+`npm run test:browser --prefix ui -- r-plugin-viewer.spec.ts
+--output=../target/plugin-refactor/console-viewer-browser` (1), reusing a copy of
+this independently built R artifact and a newly assembled Viewer package. The
+existing core binary remains byte-identical. All eight 1440px/1920px/390px HTML,
+DT and source-detail screenshots were inspected, including the new Unicode input
+label; no clipping or broken layout was found. `node scripts/test-r-plugin.mjs`
+passes its independent native build and real-R fixture (1). The new Console cases
+verify that observations do not start R, completeness checks do not evaluate code,
+queued/original/result source labels agree, and Console mode prints each visible
+expression. Output remains readable during native stdin waiting, with exact event
+cursors and refusal across instances/sessions. Version 2 pre-start cancellation
+returns the original `started:false` result; the valid Unicode answer completes
+the same original execution. The existing commit-recovery, full-queue, draining,
+native cancellation/failure and retained-output cases also pass. Both disposable
+native owners confirm release. This run completed after a 37m49s Host-test build
+and slow local executable startup; neither stage was timed out or restarted.
+The initial `cargo test -p rho-r-api plugin::tests --locked` failed while the API
+and generator edits were incomplete; the subsequent combined suite passes. The
+first `node plugins/r/generate-sdk.mjs` failed on the nested `serde_json` declaration
+directory. Recursive generation fixed that failure, and regeneration plus freshness
+checking pass. Both failed logs remain retained. The unchanged 456 client tests
+remain the preceding baseline; no full workspace audit ran.
 
 Console UI, captured document execution, checkpoint ownership and the other R
 inspection contributions still need migration. The native and Viewer slices do

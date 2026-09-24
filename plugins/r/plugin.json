@@ -486,6 +486,606 @@
       ],
       "cancellation": "unsupported",
       "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.execute",
+        "version": 2
+      },
+      "kind": "operation",
+      "title": "Execute R input with source",
+      "description": "Execute the supplied code, output mode and source labels in the exact admitted session. Labels do not attest to a Host document capture.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ExecuteR",
+        "type": "object",
+        "properties": {
+          "expected_session": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1
+          },
+          "run": {
+            "$ref": "#/$defs/RunRArguments"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session",
+          "run"
+        ],
+        "$defs": {
+          "RunRArguments": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1
+              },
+              "output_mode": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RunROutputMode"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RunSource"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "code"
+            ]
+          },
+          "RunROutputMode": {
+            "type": "string",
+            "enum": [
+              "console"
+            ]
+          },
+          "RunSource": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "view_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "view_id",
+              "label",
+              "kind"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "run": {
+            "code": "1 + 1",
+            "output_mode": "console",
+            "source": {
+              "view_id": "console-view",
+              "label": "Console",
+              "kind": "console"
+            }
+          }
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RExecutionOutput",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RExecutionResult"
+          },
+          {
+            "$ref": "#/$defs/RExecutionNotStarted"
+          }
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RExecutionNotStarted": {
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "started": {
+                "description": "Always false when the owner confirms cancellation before native execution.",
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "started"
+            ]
+          },
+          "RExecutionResult": {
+            "type": "object",
+            "properties": {
+              "events": {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "output_mode": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RunROutputMode"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "outputs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/RetainedROutput"
+                }
+              },
+              "report": {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              "session_id": {
+                "type": "string"
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RunSource"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "stderr": {
+                "type": "string"
+              },
+              "stdout": {
+                "type": "string"
+              },
+              "value": {
+                "description": "R's dynamic value; larger values remain in the full retained report."
+              },
+              "value_in_report": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "session_id",
+              "value",
+              "value_in_report",
+              "stdout",
+              "stderr",
+              "report",
+              "events",
+              "outputs"
+            ]
+          },
+          "ResourceReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ]
+          },
+          "RetainedROutput": {
+            "type": "object",
+            "properties": {
+              "native": {
+                "type": "object",
+                "properties": {
+                  "byte_size": {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0
+                  },
+                  "display_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "mime_type": {
+                    "type": "string"
+                  },
+                  "operation_id": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0
+                  },
+                  "sha256": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "operation_id",
+                  "sequence",
+                  "mime_type",
+                  "byte_size",
+                  "sha256"
+                ]
+              },
+              "reference": {
+                "$ref": "#/$defs/ResourceReference"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "native",
+              "reference"
+            ]
+          },
+          "RunROutputMode": {
+            "type": "string",
+            "enum": [
+              "console"
+            ]
+          },
+          "RunSource": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "view_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "view_id",
+              "label",
+              "kind"
+            ]
+          }
+        }
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r"
+      ],
+      "effects": [
+        "r.session"
+      ],
+      "cancellation": "request",
+      "preflight": {
+        "id": "r.prepare",
+        "version": 1
+      }
+    },
+    {
+      "capability": {
+        "id": "r.check_code",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Check R code",
+      "description": "Check completeness in the existing idle session without evaluating code.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "CheckRCode",
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 262144,
+            "minLength": 1
+          },
+          "expected_session": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session",
+          "code"
+        ]
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "code": "1 + 1"
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "CodeCompleteness",
+        "type": "object",
+        "properties": {
+          "indent": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "indent"
+        ]
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.output_events",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Observe original R output",
+      "description": "Read bounded events while a run is active. Observations never establish terminal execution status.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ReadREvents",
+        "type": "object",
+        "properties": {
+          "after_sequence": {
+            "type": "integer",
+            "format": "uint64",
+            "default": 0,
+            "minimum": 0
+          },
+          "expected_session": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 100,
+            "maximum": 100,
+            "minimum": 1
+          },
+          "operation_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session",
+          "operation_id"
+        ]
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "operation_id": "original-operation",
+          "after_sequence": 0,
+          "limit": 100
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "REventsObservation",
+        "type": "object",
+        "properties": {
+          "output": {
+            "$ref": "#/$defs/OutputEvents"
+          },
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "output"
+        ],
+        "$defs": {
+          "OutputEvent": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "media": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "byte_size": {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0
+                  },
+                  "display_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "mime_type": {
+                    "type": "string"
+                  },
+                  "operation_id": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0
+                  },
+                  "sha256": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "operation_id",
+                  "sequence",
+                  "mime_type",
+                  "byte_size",
+                  "sha256"
+                ]
+              },
+              "observed_at_ms": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "operation_id",
+              "sequence",
+              "kind",
+              "observed_at_ms"
+            ]
+          },
+          "OutputEvents": {
+            "type": "object",
+            "properties": {
+              "events": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/OutputEvent"
+                }
+              },
+              "gap": {
+                "type": "boolean"
+              },
+              "has_more": {
+                "type": "boolean"
+              },
+              "next_sequence": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "truncated": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "operation_id",
+              "events",
+              "next_sequence",
+              "has_more",
+              "truncated",
+              "gap",
+              "notices"
+            ]
+          }
+        }
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
     }
   ]
 }

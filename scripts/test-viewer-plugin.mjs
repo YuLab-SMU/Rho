@@ -12,8 +12,23 @@ try {
   const reference={owner,resource:'html-resource',digest:'sha256:'+'c'.repeat(64),bytes:20,media_type:'text/html'};
   const record={operation:{operation_id:'original-run',capability:{id:'r.execute',version:1},normalized_arguments:{binding:{provider:owner}},accepted_at_ms:42},status:'succeeded',output:{operation_id:'original-run',session_id:'session',outputs:[{reference,native:{operation_id:'original-run',sequence:3,mime_type:'text/html',byte_size:20,sha256:reference.digest}}]}};
   assert.equal(outputsFrom(record,owner)[0].reference.resource,'html-resource');
+  const versioned=structuredClone(record);versioned.operation.capability.version=2;
+  const inputSource={view_id:'script-view',label:'分析.R',kind:'file'};
+  versioned.operation.normalized_arguments.arguments={run:{code:'1',source:inputSource}};versioned.output.source=structuredClone(inputSource);
+  assert.equal(outputsFrom(versioned,owner)[0].reference.resource,'html-resource');
+  assert.deepEqual(outputsFrom(versioned,owner)[0].inputSource,inputSource);
+  const unlabeled=structuredClone(versioned);delete unlabeled.operation.normalized_arguments.arguments.run.source;delete unlabeled.output.source;
+  assert.equal(outputsFrom(unlabeled,owner)[0].inputSource,null);
+  versioned.output.source.label='changed.R';assert.throws(()=>outputsFrom(versioned,owner),/source differs/);
+  versioned.operation.capability.version=3;assert.deepEqual(outputsFrom(versioned,owner),[],'unknown contracts are not interpreted');
   assert.deepEqual(outputsFrom({...record,status:'running'},owner),[],'uncommitted native outputs cannot become saved output');
   assert.deepEqual(outputsFrom(record,{...owner,revision:'sha256:'+'d'.repeat(64)}),[],'coexisting revisions do not mix');
+  for(const version of [1,2]){
+    const notStarted=structuredClone(record);notStarted.operation.capability.version=version;notStarted.status='cancelled';
+    notStarted.output={operation_id:record.operation.operation_id,started:false};
+    assert.deepEqual(outputsFrom(notStarted,owner),[],'pre-start cancellation has no saved media');
+    notStarted.output.operation_id='another-run';assert.throws(()=>outputsFrom(notStarted,owner),/original R operation/);
+  }
   for(const field of ['operation_id','mime_type','byte_size','sha256']) {
     const forged=structuredClone(record);forged.output.outputs[0].native[field]='changed';
     assert.throws(()=>outputsFrom(forged,owner),/inconsistent/);

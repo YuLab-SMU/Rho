@@ -322,6 +322,15 @@ Python 3 on PATH. `node scripts/test-plugin-backend.mjs` copies the public Rust
 crates outside the repository and compiles the example with no private source;
 it invokes Cargo, so run it serially with every other Cargo command. Public
 TypeScript consumption is checked by `node scripts/test-plugin-protocol.mjs`.
+R-owned public declarations and capability schemas are generated with
+`node plugins/r/generate-sdk.mjs`; use `--check` for freshness and
+`node scripts/test-r-protocol.mjs` for a strict independent TypeScript consumer.
+The generator invokes Cargo and runs serially. R Console protocol changes require
+`cargo test -p rho-r-api -p rho-r-backend --locked` and the existing real-R
+`node scripts/test-r-plugin.mjs`, whose Console fixture checks parser nonexecution,
+source retention, visible Console output, live event pagination during stdin,
+pending cancellation and exact instance boundaries. Full Application document
+capture and Console UI acceptance remain separate migration work.
 `node scripts/test-plugin-ui.mjs` compiles the public UI SDK outside the checkout
 and exercises its channel using real MessagePorts. After client generation/build
 and `cargo build --locked`, use `npm run test:browser --prefix ui --
