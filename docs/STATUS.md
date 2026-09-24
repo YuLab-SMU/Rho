@@ -28,14 +28,29 @@ Plugin Studio stay in scope.
 Files/Git contracts, native implementation and search/patch interpretation now
 reside under `plugins/files`; shared subprocess supervision and reports live under
 `plugins/process`. Retiring adapters and project handlers reuse these owners.
+The ordinary `org.rho.files` backend now assembles outside the checkout from eight
+public/plugin packages, with no private core dependency or independent journal.
+Its nine capabilities expose bounded file/Git observations and explicit patches.
 The public `workspace.paths@1` query supplies Host-owned protected paths under
 `project.read`, without changing backend initialization fields or accepting caller
-configuration as authority. Four owner cases, all 25 standalone native cases and
-23 Host project/ownership/path cases pass. The external backend fixture covers the
-explicit reverse query, unchanged initialization shape and release. These libraries
-do not yet provide an installable Files backend or replace fixed Files/Editor
-composition. A newly built Host is required for the added query; existing user
-sessions have not been restarted.
+configuration as authority. The original native libraries' 25 standalone cases
+and 23 Host project/ownership/path cases remain the prior regression evidence.
+Three backend unit cases and independent executable protocol/native Host
+acceptance pass. They cover exact revisions, protected stores and aliases, native
+hash/head preconditions, unchanged staged/dirty/untracked files, journal failure
+after a real patch, original-result reconciliation and historical replay after
+release/removal/restart. The compiled Host acceptance target remains byte-identical
+across the external package build. Returned patches retain their lane until exact
+journal settlement; a transport acknowledgement cannot confirm cancellation.
+Query/preflight failures now retain provider codes across the generic Host bridge.
+The 26 Operation and 10 plugin unit cases pass; updated native Files acceptance
+verifies changed-content, wrong-target and busy diagnostics, plus writes from both
+exact revisions with separately owned facts. Generated Files capability schemas
+match their public types. All 19 Host lifecycle/shared-port/path regression cases
+pass (`cargo test -p rho-host --test plugins --test port_contracts --test
+plugin_workspace_paths --locked`). Transient Control diagnostics remain redacted.
+The fixed Files/Editor composition is not yet replaced. A newly built Host is
+required for the added query; existing user sessions have not been restarted.
 
 The Host regression exposed a lease-release case reproducible with the pre-change
 ownership source: a duplicated descriptor kept the project locked after its last

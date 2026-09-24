@@ -12,6 +12,14 @@ incoming call identity with `validate_call`; enforce native identity and
 preconditions in the owner. Return a query observation or a proposed CommitPlan.
 The Host's Operation mechanism commits results. Never write its database.
 
+For a failed query or preflight, return `Error` with an exact diagnostic `code`
+and useful `message`. The Host preserves the provider error; common codes such as
+`busy`, `invalid_input`, `observation_expired`, `content_changed` and
+`budget_exceeded` retain their typed observation hints at public edges. Unknown
+codes remain visible in the error and use the generic unavailable hint. Message
+text is never parsed to classify an error. These read diagnostics do not authorize
+work or establish an Operation outcome. Transient Control errors remain redacted.
+
 Owners that can atomically fence a waiting invocation may advertise
 `pending_cancellation_v1` with `ready_with_features`. `ready` advertises no optional
 extensions, so existing exact revisions keep their original capability contracts.

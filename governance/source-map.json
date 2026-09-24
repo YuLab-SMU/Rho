@@ -462,6 +462,15 @@
         "--check"
       ]
     },
+    "plugins.files-backend": {
+      "command": ["cargo", "test", "-p", "rho-files-backend", "--lib", "--locked"]
+    },
+    "plugins.files-manifest": {
+      "command": ["node", "plugins/files/generate-manifest.mjs", "--check"]
+    },
+    "plugins.files-native": {
+      "command": ["node", "scripts/test-files-plugin.mjs"]
+    },
     "plugins.files-public-types": {
       "command": [
         "node",
@@ -645,6 +654,9 @@
         "ui/e2e/plugin-resource-download.spec.ts",
         "ui/e2e/fixtures/plugin-download.ts",
         "scripts/test-files-plugin-engine.mjs",
+        "scripts/build-files-plugin.mjs",
+        "scripts/test-files-plugin.mjs",
+        "crates/host/tests/files_plugin.rs",
         "scripts/test-files-protocol.mjs"
       ],
       "checks": [
@@ -687,6 +699,9 @@
         "plugins.files-engine",
         "plugins.files-independent",
         "plugins.files-protocol",
+        "plugins.files-backend",
+        "plugins.files-manifest",
+        "plugins.files-native",
         "plugins.files-public-types"
       ]
     }

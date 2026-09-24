@@ -82,12 +82,14 @@ Documentation:
 Sources:
 
 - `crates/cli/src/plugins.rs`
+- `crates/host/tests/files_plugin.rs`
 - `crates/host/tests/r_plugin_real_r.rs`
 - `crates/plugin-protocol/**`
 - `crates/plugin-sdk/**`
 - `crates/plugins/**`
 - `plugins/**`
 - `scripts/build-console-plugin.mjs`
+- `scripts/build-files-plugin.mjs`
 - `scripts/build-help-plugin.mjs`
 - `scripts/build-objects-plugin.mjs`
 - `scripts/build-packages-plugin.mjs`
@@ -101,6 +103,7 @@ Sources:
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`
 - `scripts/test-files-plugin-engine.mjs`
+- `scripts/test-files-plugin.mjs`
 - `scripts/test-files-protocol.mjs`
 - `scripts/test-help-plugin.mjs`
 - `scripts/test-objects-plugin.mjs`
@@ -145,8 +148,11 @@ Checks:
 - `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
 - `plugins.download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-download.spec.ts"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
+- `plugins.files-backend`: `["cargo","test","-p","rho-files-backend","--lib","--locked"]`
 - `plugins.files-engine`: `["cargo","test","-p","rho-files-engine","-p","rho-files-owner","-p","rho-process-engine","--lib","--tests","--locked"]`
 - `plugins.files-independent`: `["node","scripts/test-files-plugin-engine.mjs"]`
+- `plugins.files-manifest`: `["node","plugins/files/generate-manifest.mjs","--check"]`
+- `plugins.files-native`: `["node","scripts/test-files-plugin.mjs"]`
 - `plugins.files-protocol`: `["node","plugins/files/generate-sdk.mjs","--check"]`
 - `plugins.files-public-types`: `["node","scripts/test-files-protocol.mjs"]`
 - `plugins.help`: `["node","scripts/test-help-plugin.mjs"]`

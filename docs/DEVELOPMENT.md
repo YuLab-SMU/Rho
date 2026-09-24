@@ -73,6 +73,20 @@ The Host boundary check is
 It covers the original file operations and public protected-path metadata,
 including an external backend's explicitly granted reverse query.
 
+The ordinary native Files package is assembled with
+`node scripts/build-files-plugin.mjs /absolute/new/directory`. Iterate on its owner
+with `cargo test -p rho-files-backend --lib --locked`; check its generated capability
+manifest with `node plugins/files/generate-manifest.mjs --check`.
+`node scripts/test-files-plugin.mjs` first compiles its Host acceptance target, then
+builds Files outside the checkout from eight public/plugin packages using locked
+offline dependencies. It verifies unchanged Host target bytes, runs executable
+wire/fault cases, and explicitly runs the otherwise ignored native acceptance.
+That case uses a disposable Git project, two exact revisions, real protected Host
+paths and an injected journal commit failure. It does not require R or restart a
+user Host. This is backend acceptance; it does not establish Files/Editor UI or
+default scenario delivery. Set `RHO_FILES_PLUGIN_PACKAGE` to reuse an independently
+built package while recompiling and testing a changed Host.
+
 When one cross-boundary check needs several packages, prefer one Cargo invocation
 with multiple `-p` selections and the required target selectors when possible.
 Cargo [unifies their dependency features](https://doc.rust-lang.org/cargo/reference/resolver.html#feature-unification),

@@ -6052,6 +6052,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-files-backend"
+version = "0.1.0"
+dependencies = [
+ "rho-files-api",
+ "rho-files-engine",
+ "rho-files-owner",
+ "rho-plugin-sdk",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "rho-files-engine"
 version = "0.1.0"
 dependencies = [

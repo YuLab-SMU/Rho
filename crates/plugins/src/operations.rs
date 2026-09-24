@@ -279,6 +279,9 @@ impl OperationHandler for RoutingHandler {
                 })
                 .await
                 .map_err(unavailable)?;
+            if let RpcBody::Error { code, message, .. } = response {
+                return Err(OperationError::ProviderObservation { code, message });
+            }
             let RpcBody::QueryResult {
                 data,
                 completeness: ObservationCompleteness::Complete,
@@ -588,6 +591,9 @@ impl QueryHandler for RoutingHandler {
             })
             .await
             .map_err(unavailable)?;
+        if let RpcBody::Error { code, message, .. } = reply {
+            return Err(OperationError::ProviderObservation { code, message });
+        }
         let RpcBody::QueryResult {
             data,
             completeness,

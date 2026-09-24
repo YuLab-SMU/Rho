@@ -89,12 +89,30 @@ pub enum OperationError {
     BudgetExceeded(String),
     #[error("capability is unavailable: {0}")]
     Unavailable(String),
+    /// A bound provider's read/preflight diagnostic, never an execution result
+    /// or an authorization decision. Retain unknown owner codes verbatim too.
+    #[error("provider observation failed ({code}): {message}")]
+    ProviderObservation { code: String, message: String },
 }
 
 impl OperationError {
     pub fn diagnostic(&self) -> rho_contract::Diagnostic {
         use rho_contract::{DiagnosticCode as Code, DiagnosticContinuation as Continue};
         let (code, continuation) = match self {
+            Self::ProviderObservation { code, .. } => {
+                // Only an exact public diagnostic code supplies a typed hint.
+                // Message text cannot reclassify a provider's observation.
+                let code = serde_json::from_value::<Code>(serde_json::Value::String(code.clone()))
+                    .unwrap_or(Code::Unavailable);
+                let continuation = match code {
+                    Code::Busy => Continue::ReadAgain,
+                    Code::StaleSession | Code::ObservationExpired | Code::ContentChanged => Continue::RefreshObservation,
+                    Code::BudgetExceeded | Code::InvalidInput | Code::NotFound => Continue::CorrectInput,
+                    Code::IdempotencyConflict | Code::OutcomeUncertain => Continue::InspectOriginal,
+                    _ => Continue::None,
+                };
+                (code, continuation)
+            }
             Self::HostBusy | Self::ProjectBusy(_) => (Code::Busy, Continue::ReadAgain),
             Self::StaleSession(_) => (Code::StaleSession, Continue::RefreshObservation),
             Self::ObservationExpired(_) => (Code::ObservationExpired, Continue::RefreshObservation),
@@ -1136,6 +1154,23 @@ mod tests {
     use super::*;
     use rho_contract::CapabilityKind;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn provider_observation_codes_survive_without_parsing_message_text() {
+        use rho_contract::{DiagnosticCode as Code, DiagnosticContinuation as Continue};
+        let changed = OperationError::ProviderObservation {
+            code: "content_changed".into(), message: "unavailable appears in native output".into(),
+        }.diagnostic();
+        assert_eq!((changed.code, changed.continuation), (Code::ContentChanged, Continue::RefreshObservation));
+        let unknown = OperationError::ProviderObservation {
+            code: "owner.future_diagnostic".into(), message: "content_changed is only text".into(),
+        };
+        assert_eq!((unknown.diagnostic().code, unknown.diagnostic().continuation), (Code::Unavailable, Continue::None));
+        assert!(unknown.to_string().contains("owner.future_diagnostic"));
+        assert!(unknown.diagnostic().next_reads.is_empty());
+        let busy = OperationError::ProviderObservation { code: "busy".into(), message: "Original result awaits settlement".into() }.diagnostic();
+        assert_eq!((busy.code, busy.continuation), (Code::Busy, Continue::ReadAgain));
+    }
 
     #[test]
     fn registry_rejects_duplicate_capability_owner() {
