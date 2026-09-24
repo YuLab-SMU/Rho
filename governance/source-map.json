@@ -308,6 +308,12 @@
         "node",
         "scripts/test-r-console.mjs"
       ]
+    },
+    "plugins.objects": {
+      "command": [
+        "node",
+        "scripts/test-objects-plugin.mjs"
+      ]
     }
   },
   "areas": {
@@ -458,7 +464,8 @@
         "scripts/test-console-plugin.mjs",
         "ui/e2e/console-editor.spec.ts",
         "scripts/test-r-console.mjs",
-        "ui/e2e/r-plugin-console.spec.ts"
+        "ui/e2e/r-plugin-console.spec.ts",
+        "scripts/test-objects-plugin.mjs"
       ],
       "checks": [
         "docs.index",
@@ -481,7 +488,8 @@
         "plugins.r-public-types",
         "plugins.console",
         "plugins.console-editor",
-        "plugins.r-console"
+        "plugins.r-console",
+        "plugins.objects"
       ]
     }
   }

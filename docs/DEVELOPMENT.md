@@ -349,6 +349,12 @@ force active/lazy bindings nor change loaded namespaces, search paths or library
 paths. The fixture explicitly loads its test prerequisite before taking the
 read-only baseline. It also checks busy/unstarted behavior and unchanged Operation
 history. Public declarations alone do not establish those native results.
+`node scripts/test-objects-plugin.mjs` compiles the in-progress Objects model in a
+fresh external directory using only public R/plugin declarations and existing locked
+test tools. It covers directory/reference bounds, stale/busy behavior, independent
+view demands, exact vector copying and scalar/color/field semantics. It does not
+start R or establish a working plugin view; native and browser acceptance remain
+separate checks when that package is assembled.
 `node scripts/test-plugin-ui.mjs` compiles the public UI SDK outside the checkout
 and exercises its channel using real MessagePorts. After client generation/build
 and `cargo build --locked`, use `npm run test:browser --prefix ui --

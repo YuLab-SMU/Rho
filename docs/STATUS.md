@@ -144,6 +144,14 @@ execution continuing after view closure, and retained transcript reads after the
 R instance is released and its revision removed. Generic close-time draft flushing,
 plot navigation and full native interaction acceptance remain unfinished.
 
+The Objects viewing model and scalar/vector/field semantics now have an independent
+source under `plugins/objects`. They consume public R inspection envelopes and
+preserve native diagnostic codes. Original reference, continuation, copy and local
+view-state tests pass outside the checkout, with added session-event fencing and
+unavailable-envelope cases. The view/channel connection, container navigation and
+installable UI artifact are not assembled yet; the old UI remains until this
+migration is complete. This does not establish an ordinary Objects UI acceptance.
+
 ### Current verification
 
 Cargo checks remain serial with `CARGO_BUILD_JOBS=1`. Slow local compiler and test
@@ -151,6 +159,7 @@ executable startup is allowed to finish; silence is not treated as a test failur
 
 | Executed check | Result and scope |
 | --- | --- |
+| `node scripts/test-objects-plugin.mjs` | Independent source compilation and 40 model/display tests passed across four files. No native R or UI acceptance in this check. |
 | `cargo test -p rho-r-api -p rho-r-backend --lib --bins --locked` | 11 passed (3 API, 8 backend); shared validation, caller-scope rejection and bounded inspection envelopes. Exporter target had no tests. |
 | `cargo test -p rho-workspace --lib --locked` | 14 passed after extracting query validation into the R package. |
 | `node plugins/r/generate-sdk.mjs`, `node scripts/test-r-protocol.mjs` | New R declarations, schemas and manifest generated; strict independent consumer passed. |
@@ -543,6 +552,14 @@ reference, then passed after the fix; explicit deletion releases that old copy's
 library reference. Incomplete bookkeeping blocks cleanup instead of discarding an
 unknown dependency. Component delivery validates explicit R arguments and is exercised
 in an isolated install layout with matching manifest paths and byte hashes.
+
+The Objects viewing model and scalar/vector/field semantics now have an independent
+source under `plugins/objects`. They consume public R inspection envelopes and
+preserve native diagnostic codes. Original reference, continuation, copy and local
+view-state tests pass outside the checkout, with added session-event fencing and
+unavailable-envelope cases. The view/channel connection, container navigation and
+installable UI artifact are not assembled yet; the old UI remains until this
+migration is complete. This does not establish an ordinary Objects UI acceptance.
 
 ### Current verification
 

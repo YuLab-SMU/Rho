@@ -94,6 +94,7 @@ Sources:
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`
+- `scripts/test-objects-plugin.mjs`
 - `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
 - `scripts/test-plugin-ui.mjs`
@@ -116,6 +117,7 @@ Checks:
 - `plugins.console`: `["node","scripts/test-console-plugin.mjs"]`
 - `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
+- `plugins.objects`: `["node","scripts/test-objects-plugin.mjs"]`
 - `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
 - `plugins.r-console`: `["node","scripts/test-r-console.mjs"]`
