@@ -793,6 +793,29 @@ async fn ui_only_views_have_scoped_channels_durable_state_and_independent_instan
     assert!(tokio::time::timeout(std::time::Duration::from_millis(25),second.as_mut()).await.is_err());
     let (second,first)=tokio::join!(second,host.dispatch_plugin_view(&context,"window-a",&ordered_connection.call_token,ordered_message(1)));
     assert!(first.is_ok() && second.is_ok());
+    let copy_message = |sequence, body: Value| serde_json::from_value::<PluginViewMessage>(json!({
+        "protocol_version":1,"connection":ordered_connection.connection,"view":ordered.view,
+        "sequence":sequence,"request":format!("copy-{sequence}"),"body":body
+    })).unwrap();
+    let before_copy = query(&host,&context,"operation.list_recent",json!({"limit":100})).await;
+    assert!(host.dispatch_plugin_view(&context,"foreign-window",&ordered_connection.call_token,
+        copy_message(3,json!({"type":"begin_text_copy"}))).await.is_err());
+    let authorized = host.dispatch_plugin_view(&context,"window-a",&ordered_connection.call_token,
+        copy_message(3,json!({"type":"begin_text_copy"}))).await.unwrap();
+    assert_eq!(authorized,json!({"authorized_view":ordered.view}));
+    let mut no_view_authority = context.clone();
+    no_view_authority.scopes.remove("plugins.run");
+    assert!(host.dispatch_plugin_view(&no_view_authority,"window-a",&ordered_connection.call_token,
+        copy_message(4,json!({"type":"finish_text_copy","copy_id":"copy","text":"unrecorded copy text"}))).await.is_err());
+    for (sequence, body) in [
+        (5,json!({"type":"finish_text_copy","copy_id":"copy","text":"unrecorded copy text"})),
+        (6,json!({"type":"cancel_text_copy","copy_id":"copy"})),
+    ] {
+        let reply = host.dispatch_plugin_view(&context,"window-a",&ordered_connection.call_token,copy_message(sequence,body)).await.unwrap();
+        assert_eq!(reply,json!({"authorized_view":ordered.view}),"Host acknowledgement never claims clipboard completion");
+    }
+    assert_eq!(query(&host,&context,"operation.list_recent",json!({"limit":100})).await,before_copy);
+    assert!(!format!("{:?}",copy_message(7,json!({"type":"finish_text_copy","copy_id":"copy","text":"unrecorded copy text"}))).contains("unrecorded copy text"));
     assert_eq!(run(&host,&context,"ordered-close","views.close",json!({"view":ordered.view})).await.status,OperationStatus::Succeeded);
     let saved = host
         .dispatch_plugin_view(

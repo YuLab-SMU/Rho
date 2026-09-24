@@ -349,18 +349,26 @@ force active/lazy bindings nor change loaded namespaces, search paths or library
 paths. The fixture explicitly loads its test prerequisite before taking the
 read-only baseline. It also checks busy/unstarted behavior and unchanged Operation
 history. Public declarations alone do not establish those native results.
-`node scripts/test-objects-plugin.mjs` compiles the in-progress Objects model in a
-fresh external directory using only public R/plugin declarations and existing locked
-test tools. It covers directory/reference bounds, stale/busy behavior, independent
-view demands, exact vector copying and scalar/color/field semantics. It does not
-start R or establish a working plugin view; native and browser acceptance remain
+`node scripts/test-objects-plugin.mjs` compiles the in-progress Objects model and
+React components in a fresh external directory using public R/plugin declarations,
+the UI SDK and existing locked tools. It covers directory/reference bounds,
+stale/busy behavior, independent expanded-view demands, exact vector copying,
+reservation before collection, native confirmation and scalar/color/field semantics.
+It does not start R or establish a working plugin view; native and browser acceptance remain
 separate checks when that package is assembled.
 `node scripts/test-plugin-ui.mjs` compiles the public UI SDK outside the checkout
 and exercises its channel using real MessagePorts. After client generation/build
 and `cargo build --locked`, use `npm run test:browser --prefix ui --
 e2e/plugin-view.spec.ts` for the independent UI-only package, opaque iframe,
-scoped reads, state persistence, Unicode input and revocation. The fixture uses a
-disposable project, not a user's active scientific session.
+scoped reads, state persistence, Unicode input and revocation. It also verifies
+native text copying, delayed collection beyond transient activation, refusal of
+automatic/direct iframe writes, and no clipboard replacement after failed
+collection or view closure. Clipboard-read permission belongs only to that
+disposable browser context while asserting known text; clear the permission
+override before the next user action so it cannot deny normal writes. The fixture
+uses a disposable project, not a user's active scientific session, and retains
+its project on failure. `ui/tests/plugin-clipboard.test.ts` separately checks
+reservation expiry, bounds and native refusal.
 `node scripts/test-viewer-plugin.mjs` independently builds the ordinary Viewer and
 checks original Operation/resource identities. `node scripts/test-r-viewer.mjs`
 requires explicit existing `RHO_ARK`, `RHO_R_HOME`, the R package `DT`, Chrome and a

@@ -222,6 +222,15 @@ keep their fixed provider and original commit owner. Browser subresources are
 restricted; neither iframe self-navigation nor trusted native code is claimed to
 have an OS network sandbox.
 
+Text copy is intrinsic view presentation cooperation through the same scoped
+channel. The containing browser requires focus and a current user activation;
+the Host validates each request's original view authority without recording text
+or creating an Operation. A native `ClipboardItem` reserves the gesture before
+bounded asynchronous content collection. The SDK reports success only after the
+browser confirms writing. Unsubmitted reservations expire or are released on
+failure/closure. Submitted native writes cannot be rolled back. The iframe keeps
+direct clipboard access disabled, and the SDK has no clipboard-read operation.
+
 The public UI SDK reads retained resources through the declared `resources.read`
 query. It captures the exact reference, bounds allocation, validates every chunk's
 owner/range/length and verifies the final SHA-256 before returning bytes. Stopping

@@ -58,6 +58,58 @@
       "description": "Every request crosses the containing shell's scoped Host port. No browser\ncredential, project root or user identity is accepted from the iframe.",
       "oneOf": [
         {
+          "description": "Reserve a browser text-copy action while the user gesture is current.\nHost validation is not confirmation that the clipboard was written.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "begin_text_copy"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "finish_text_copy"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "copy_id",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "copy_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "cancel_text_copy"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "copy_id"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "arguments": true,

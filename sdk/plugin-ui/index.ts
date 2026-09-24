@@ -8,6 +8,7 @@ export interface ViewInitialization {
   protocol_version: number;
   connection: string;
   view: PluginViewRecord;
+  features?: string[];
 }
 export interface ViewReply {
   protocol_version: number;
@@ -73,6 +74,28 @@ export class PluginViewClient {
   }
   operation<T = unknown>(operationId: string) { return this.request<T>({ type: "get_operation", operation_id: operationId }); }
   cancel<T = unknown>(operationId: string) { return this.request<T>({ type: "cancel", operation_id: operationId }); }
+  /** Invoke from an explicit Copy action. The producer runs only after the
+   * containing browser reserves that gesture, allowing bounded asynchronous
+   * scientific reads to finish before any clipboard content is published. */
+  async copyText(source: string | (() => Promise<string>)): Promise<void> {
+    if (!this.initialization.features?.includes("text_copy_v1")) throw new Error("Text copying is unavailable in this view container.");
+    const reservation = await this.request<{ copy_id: string }>({ type: "begin_text_copy" });
+    if (typeof reservation?.copy_id !== "string" || !reservation.copy_id) throw new Error("Text copy reservation is invalid.");
+    let confirmed = false;
+    try {
+      const text = typeof source === "function" ? await source() : source;
+      if (typeof text !== "string") throw new Error("Text copying requires a string.");
+      const body: PluginViewRequest = { type: "finish_text_copy", copy_id: reservation.copy_id, text };
+      if (!boundedJson(body)) throw new Error("Text copy exceeds the view message quota.");
+      const result = await this.request<{ copied: boolean }>(body);
+      if (result?.copied !== true) throw new Error("Clipboard completion is unconfirmed.");
+      confirmed = true;
+    } finally {
+      // This releases only an unsubmitted reservation, including a request that
+      // failed its framing quota. It never rolls back a submitted native copy.
+      if (!confirmed) await this.request({ type: "cancel_text_copy", copy_id: reservation.copy_id }).catch(() => undefined);
+    }
+  }
   setState(state: JsonValue): Promise<PluginViewRecord> {
     const captured = structuredClone(state);
     const task = this.stateQueue.then(async () => {
@@ -117,7 +140,8 @@ export function connectPluginView(timeoutMs = 15000): Promise<PluginViewClient> 
       if (!data || data.type !== "rho:view:connect" || data.nonce !== nonce || !boundedJson(data) || data.protocol_version !== UI_PROTOCOL_VERSION ||
         typeof data.connection !== "string" || typeof data.view?.view !== "string" || event.ports.length !== 1) return;
       cleanup();
-      resolve(new PluginViewClient(event.ports[0], { protocol_version: data.protocol_version, connection: data.connection, view: data.view }));
+      const features = Array.isArray(data.features) && data.features.length <= 16 && data.features.every((item: unknown) => typeof item === "string" && item.length <= 64) ? data.features : [];
+      resolve(new PluginViewClient(event.ports[0], { protocol_version: data.protocol_version, connection: data.connection, view: data.view, features }));
     };
     const timer = setTimeout(() => { cleanup(); reject(new Error("Rho view connection timed out")); }, timeoutMs);
     window.addEventListener("message", listener);

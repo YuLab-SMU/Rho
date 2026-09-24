@@ -109,20 +109,25 @@ export class Objects extends Model<ObjectsSnapshot> {
       return observed.page.values.slice(0, (observed.page.metadata.length ?? Infinity) <= 8 ? 8 : 4);
     return this.metadata(name)?.preview ?? [];
   }
+  /** Pin a copy to one live observation across asynchronous content collection. */
+  copyFence(name: string, reference: string, cancelled?: () => boolean): () => void {
+    const scope = { ...this.ports.context() }, revision = this.revision, invalidation = this.invalidation;
+    if (!scope.connected || scope.runtimeState !== "idle") throw new Error("R is busy or disconnected. The previous observation is retained.");
+    const check = () => {
+      const ref = this.references.get(name);
+      if (cancelled?.()) throw new Error("Copy cancelled.");
+      if (!this.ports.context().connected) throw new Error("R is disconnected. The previous observation is retained.");
+      if (this.stopped || revision !== this.revision || invalidation !== this.invalidation || !sameScope(scope, this.ports.context(), true) || !ref?.validated || ref.reference !== reference || Date.now() >= ref.expiresAt)
+        throw new Error("The object observation changed. Refresh before copying again.");
+    };
+    check(); return check;
+  }
   /** Explicit user copy reads are bounded and may never combine observations. */
   async collectVector(name: string, path: ObjectPathElement[], options: {
     reference: string; basis?: "values" | "levels"; range?: { start: number; count: number }; cancelled?: () => boolean;
   }): Promise<CollectedVector> {
-    const scope = { ...this.ports.context() }, revision = this.revision, invalidation = this.invalidation;
-    if (!scope.connected || scope.runtimeState !== "idle") throw new Error("R is busy or disconnected. The previous observation is retained.");
+    const check = this.copyFence(name, options.reference, options.cancelled);
     let bytes = 0;
-    const check = () => {
-      const ref = this.references.get(name);
-      if (options.cancelled?.()) throw new Error("Copy cancelled.");
-      if (!this.ports.context().connected) throw new Error("R is disconnected. The previous observation is retained.");
-      if (this.stopped || revision !== this.revision || invalidation !== this.invalidation || !sameScope(scope, this.ports.context(), true) || !ref?.validated || ref.reference !== options.reference || Date.now() >= ref.expiresAt)
-        throw new Error("The object observation changed. Refresh before copying again.");
-    };
     const read = async (request: ObjectPageRequest) => {
       check(); const page = await this.readPage(name, { ...request, path }, { cancelled: options.cancelled }); check();
       if (page.object_ref !== options.reference) throw new Error("The object changed during copy.");

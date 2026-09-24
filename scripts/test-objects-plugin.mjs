@@ -7,12 +7,12 @@ import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'rho-objects-unit-'));
 try {
-  for(const [from,to] of [['plugins/objects','.'],['plugins/r/sdk','public/r-protocol'],['sdk/plugin-protocol','public/plugin-protocol']])
+  for(const [from,to] of [['plugins/objects','.'],['sdk/plugin-ui','public/plugin-ui'],['plugins/r/sdk','public/r-protocol'],['sdk/plugin-protocol','public/plugin-protocol']])
     fs.cpSync(path.join(root,from),path.join(temporary,to),{recursive:true,filter:source=>!/[\\/](?:node_modules|compiled|dist)(?:[\\/]|$)/.test(source)});
   fs.symlinkSync(path.join(root,'ui/node_modules'),path.join(temporary,'node_modules'),'dir');
   const manifest=JSON.parse(fs.readFileSync(path.join(temporary,'package.json'),'utf8'));
   const lock=JSON.parse(fs.readFileSync(path.join(temporary,'dependencies.lock'),'utf8'));
-  for(const [name,version] of Object.entries(manifest.devDependencies))
+  for(const [name,version] of Object.entries({...manifest.dependencies,...manifest.devDependencies}))
     assert.equal(JSON.parse(fs.readFileSync(path.join(temporary,'node_modules',name,'package.json'),'utf8')).version,version);
   for(const [name,expected] of Object.entries(lock.packages)) {
     const file=path.join(temporary,name,'package.json');
@@ -21,5 +21,5 @@ try {
   }
   execFileSync(process.execPath,[path.join(temporary,'node_modules/typescript/bin/tsc'),'--project','tsconfig.json'],{cwd:temporary,stdio:'inherit'});
   execFileSync(process.execPath,[path.join(temporary,'node_modules/vitest/vitest.mjs'),'run'],{cwd:temporary,stdio:'inherit'});
-  console.log('Independent Objects model and display semantics passed with public R/plugin declarations.');
+  console.log('Independent Objects model, view components and copy flow passed with public R/plugin declarations and UI SDK.');
 } finally {fs.rmSync(temporary,{recursive:true,force:true});}

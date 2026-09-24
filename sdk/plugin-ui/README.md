@@ -58,8 +58,33 @@ from the iframe channel. The iframe allows scripts but not same-origin privilege
 forms, popups, downloads or top-level navigation. Asset responses also sandbox
 direct navigation and restrict subresource loads; this is not an OS sandbox or a
 claim that browser self-navigation cannot issue a network request. A subsequent
-frame navigation fences the container. Clipboard APIs are denied; ordinary editable
-text and browser keyboard copy/paste remain browser behavior.
+frame navigation fences the container. Direct clipboard APIs remain denied;
+ordinary editable text and browser keyboard copy/paste remain browser behavior.
+
+For a Copy button, use `await client.copyText(text)` or
+`await client.copyText(async () => collectBoundedText())` from its explicit action
+handler. The `text_copy_v1` container feature reserves a native write while the
+focused view has a current user gesture, then calls the producer. This permits
+asynchronous object/text reads before any clipboard content is published. The
+producer must preserve its original observations and copy budget. If collection
+fails, the reservation is released without supplying clipboard data. The SDK
+reports success only after the browser confirms the write. Missing features,
+permission refusal, expired reservations and uncertain completion are errors.
+
+One copy reservation per view expires after 60 seconds without submission. The
+existing 1 MiB serialized-message quota still applies, including JSON escaping and
+envelope bytes. Closure releases unsubmitted data; a submitted or timed-out native
+write is never described as rolled back. Host validation checks the live view,
+window, principal, sequence and parent's existing `plugins.run` authority, and
+creates no Operation or retained text. It acknowledges identity only; a standalone
+Host request cannot claim to have changed the browser clipboard. Clipboard reading
+is not exposed by this API.
+
+The container uses a promised `text/plain` Blob through
+[ClipboardItem](https://developer.mozilla.org/en-US/docs/Web/API/ClipboardItem/ClipboardItem),
+with the browser's [user activation](https://html.spec.whatwg.org/multipage/interaction.html#tracking-user-activation)
+and clipboard permissions. This is browser presentation cooperation, not an
+operating-system sandbox guarantee.
 
 `views.open`, `views.update` and `views.close` use the common Operation port.
 `views.inspect` reads durable state; `views.connection` observes an already-open

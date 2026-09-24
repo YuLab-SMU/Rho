@@ -73,6 +73,14 @@ future view calls and leaves accepted native work running. The standalone frame
 still needs integration into scenario layouts, along with public focus, theme,
 menu, shortcut and context cooperation.
 
+Public text-copy cooperation now validates the exact live view, window, principal
+and current parent authority before the containing browser reserves a native write.
+The focused frame must have a current user gesture. Asynchronous collection can
+complete after that gesture expires; failure, expiry or pre-submission closure
+releases the reservation. Success requires browser acknowledgement. Direct iframe
+clipboard access stays disabled; the SDK exposes no clipboard read, text retention
+or additional Operation. A submitted native write is not described as reversible.
+
 R-owned contracts live in `plugins/r/api`; the sole R implementation and seven
 unchanged bridge files live in `plugins/r/backend/engine`. The legacy Host adapter
 still reuses that implementation while the remaining composition migrates. The
@@ -144,13 +152,15 @@ execution continuing after view closure, and retained transcript reads after the
 R instance is released and its revision removed. Generic close-time draft flushing,
 plot navigation and full native interaction acceptance remain unfinished.
 
-The Objects viewing model and scalar/vector/field semantics now have an independent
-source under `plugins/objects`. They consume public R inspection envelopes and
-preserve native diagnostic codes. Original reference, continuation, copy and local
-view-state tests pass outside the checkout, with added session-event fencing and
-unavailable-envelope cases. The view/channel connection, container navigation and
-installable UI artifact are not assembled yet; the old UI remains until this
-migration is complete. This does not establish an ordinary Objects UI acceptance.
+The Objects model and React directory, table, vector, field and summary components
+now have independent sources under `plugins/objects`. They consume public R
+inspection envelopes and preserve native diagnostic codes. Connection-local
+services replace the private Studio context. Copy actions reserve the container's
+native gesture before collecting complete values and retain their original
+observation fence. Model, expanded-view and copy-flow tests pass outside the
+checkout. The channel connection, container navigation and installable entrypoint
+are not assembled yet; the old UI remains until this migration is complete.
+This does not establish an ordinary Objects UI or visual acceptance.
 
 ### Current verification
 
@@ -159,7 +169,8 @@ executable startup is allowed to finish; silence is not treated as a test failur
 
 | Executed check | Result and scope |
 | --- | --- |
-| `node scripts/test-objects-plugin.mjs` | Independent source compilation and 40 model/display tests passed across four files. No native R or UI acceptance in this check. |
+| `node scripts/test-objects-plugin.mjs` | Independent source compilation and 43 model/component tests passed across six files, including expanded table demand and copy collection/confirmation. No native R or browser acceptance in this check. |
+| `cargo test -p rho-plugin-protocol --lib --locked`, `cargo test -p rho-host --test plugins --locked` | 2 protocol and 9 Host plugin tests passed, including text-copy authority, no clipboard claim from Host acknowledgement and unchanged Operation history. |
 | `cargo test -p rho-r-api -p rho-r-backend --lib --bins --locked` | 11 passed (3 API, 8 backend); shared validation, caller-scope rejection and bounded inspection envelopes. Exporter target had no tests. |
 | `cargo test -p rho-workspace --lib --locked` | 14 passed after extracting query validation into the R package. |
 | `node plugins/r/generate-sdk.mjs`, `node scripts/test-r-protocol.mjs` | New R declarations, schemas and manifest generated; strict independent consumer passed. |
@@ -169,16 +180,27 @@ executable startup is allowed to finish; silence is not treated as a test failur
 | `cargo test -p rho-host --test plugins pending_cancellation_survives --locked` | Focused corrected case passed. |
 | `cargo test -p rho-host --lib --test plugins --test port_contracts --locked` | Corrected full run: 62 passed (48/9/5), two library tests ignored. Includes callable cancellation grants, view disconnect and unrelated admission, original scopes, commit recovery and visibility. |
 | `node scripts/test-console-plugin.mjs` | Independent package build and model checks pass: original source/resource identity, ordered/deduplicated events, UTF-8/history bounds, captured drafts/retries, clear positions and transient stdin. |
-| `npm run test --prefix ui` | 456 passed across 42 files. |
+| `npm run test --prefix ui` | 460 passed across 43 files, including native copy reservation bounds, expiry, closure and refusal. |
 | Architecture, plugin and frontend boundary checks; governance validation | Pass. |
 | `cargo test -p rho-mcp --lib --test plugins --locked` | 16 passed: 15 library tests and the existing-connection plugin lifecycle case. |
 | `cargo fmt --all --check` | Fails with formatting differences in 128 files, including 107 files unchanged by this work; no repository-wide reformat applied. |
 | `npm run generate --prefix ui`, `npm run build --prefix ui`, `npm run check --prefix ui` | Pass; public protocol/client bindings and embedded assets are current. |
 | `node scripts/test-plugin-protocol.mjs`, `node scripts/test-plugin-ui.mjs` | Current generated declarations compile in independent strict consumers. |
-| `cargo build --locked` | Pass; current Host binary built. |
+| `cargo build --locked` | Pass; current Host binary built. SHA-256: `a95c85e9aa0ba9d2c288ac2a1a33f9710a76e0679f982e82651e3704a83d2617`. |
+| `npm run test:browser --prefix ui -- plugin-view.spec.ts` | Corrected full run passed (15.4s body, 26.4s total). Actual Chrome clipboard writes, 6.5-second collection, automatic/direct iframe refusal, failed collection, closed-view refusal and unchanged Operation history passed. Current 1440px/390px conformance-fixture screenshots inspected. |
 | `npm run test:browser --prefix ui -- console-editor.spec.ts` | Pass with the public MessagePort fixture: editing/composition guards, selection, transient password answers, controls, clear/new output, saved draft and scroll restoration. 1440px/1920px/390px screenshots inspected; the corrected capture waits for iframe resizing. |
-| `npm run test:browser --prefix ui -- r-plugin-console.spec.ts` with independently built R/Console packages and explicit Ark/R | Current run passed (12.4s body, 27.9s total), including discovery of newly contributed object queries and reading a real Console-created Unicode value. Native flow, drafts, close/reopen and retained history also passed. All three current viewport screenshots inspected. Host SHA-256 remains `f5c8755aac91605d0be8bc4fa9917ed73a61da9e3a50da950073d6dda6f51ff0`. |
+| `npm run test:browser --prefix ui -- r-plugin-console.spec.ts` with independently built R/Console packages and explicit Ark/R | Current run passed (12.4s body, 27.9s total), including discovery of newly contributed object queries and reading a real Console-created Unicode value. Native flow, drafts, close/reopen and retained history also passed. All three current viewport screenshots inspected. That inspection/Console run used Host SHA-256 `f5c8755aac91605d0be8bc4fa9917ed73a61da9e3a50da950073d6dda6f51ff0`. |
 | `cargo test -p rho-host --test r_plugin_real_r --locked -- --ignored --nocapture` with independently built R package and explicit Ark/R | Current run passed (one case, 24.95s). Adds unstarted/busy inspections, directory/table continuation, non-forcing bindings, foreign/expired references, package counts/copy identity, Help continuation/changed files, unchanged namespaces/search/library paths and unchanged Operation history. Existing instance, queue, stdin, cancellation, settlement and retained-resource regression also passed. |
+
+The first copy-container client build failed because a local reply was used before
+its declaration; the corrected build and generated-asset check pass. The first
+Objects component compilation lacked CSS module declarations; the corrected
+independent compilation and 43-test run pass. The first copy browser case failed
+with native write refusal: its clipboard-read permission override also denied
+clipboard-write. The fixture now grants read only around known-text assertions and
+clears the override before user actions. The corrected full browser run passes
+with unchanged production permissions and binary. Initial logs, trace and failed
+fixture remain retained; these initial failures are not passes.
 
 The first combined owner command failed to compile a new test because an identifier
 was moved while borrowed; its corrected rerun passes. The first combined Host
@@ -214,9 +236,10 @@ changing the core binary. All eight 1440px/1920px/390px HTML, DT and source-deta
 screenshots were inspected, including Unicode input. The public UI conformance
 browser passed opaque boundaries, state, controls, sequence recovery and view
 closure; normal/narrow screenshots were inspected. The prior client generation,
-build/check and 456 tests across 42 files remain the baseline. Native OS IME,
-clipboard, drag, cross-window shortcuts and full scenario continuity are not
-established by these checks. The earlier exploratory `cargo build --locked` that
+build/check and 456 tests across 42 files remain the preceding baseline. The
+current conformance case establishes SDK text copying in Chrome. Native OS IME,
+keyboard copy/paste, drag, cross-window shortcuts and full scenario continuity are
+not established by these checks. The earlier exploratory `cargo build --locked` that
 was interrupted after a reverted CSP edit remains incomplete, not a pass. Existing
 scientific real-R regression evidence is retained below and in Git; automatic
 continuation and optional real-model/alternate-R cases remain unexecuted.
@@ -552,14 +575,6 @@ reference, then passed after the fix; explicit deletion releases that old copy's
 library reference. Incomplete bookkeeping blocks cleanup instead of discarding an
 unknown dependency. Component delivery validates explicit R arguments and is exercised
 in an isolated install layout with matching manifest paths and byte hashes.
-
-The Objects viewing model and scalar/vector/field semantics now have an independent
-source under `plugins/objects`. They consume public R inspection envelopes and
-preserve native diagnostic codes. Original reference, continuation, copy and local
-view-state tests pass outside the checkout, with added session-event fencing and
-unavailable-envelope cases. The view/channel connection, container navigation and
-installable UI artifact are not assembled yet; the old UI remains until this
-migration is complete. This does not establish an ordinary Objects UI acceptance.
 
 ### Current verification
 

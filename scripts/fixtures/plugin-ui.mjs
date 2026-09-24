@@ -31,6 +31,12 @@ document.querySelector('#denied').onclick=async()=>{try{await client.query({id:'
 for(const [id,label] of [['answer','Answer native input'],['denied-answer','Try undeclared control']]){const button=document.createElement('button');button.id=id;button.textContent=label;result.before(button);}
 document.querySelector('#answer').onclick=async()=>{try{const reply=await client.control({id:'fixture.answer',version:2},{binding:client.view.configuration.binding,arguments:{value:input.value}});result.textContent=reply.submitted?'Answer accepted':'Answer unconfirmed';}catch(e){result.textContent=e.message;}};
 document.querySelector('#denied-answer').onclick=async()=>{try{await client.control({id:'undeclared.answer',version:2},{value:input.value});result.textContent='Unexpectedly allowed';}catch(e){result.textContent=e.message;}};
+for(const [id,label] of [['copy','Copy note'],['copy-later','Copy after collection'],['copy-fail','Copy failing collection']]){const button=document.createElement('button');button.id=id;button.textContent=label;result.before(button);}
+const automatic=document.createElement('output');automatic.id='automatic-copy';result.before(automatic);
+client.copyText('Unrequested clipboard change').then(()=>automatic.textContent='Unexpected automatic copy',e=>automatic.textContent=e.message);
+document.querySelector('#copy').onclick=async()=>{try{await client.copyText(input.value);result.textContent='Copied';}catch(e){result.textContent=e.message;}};
+document.querySelector('#copy-later').onclick=async()=>{try{await client.copyText(async()=>{const captured=input.value;result.textContent='Collecting';await new Promise(done=>setTimeout(done,6500));return captured+' · collected';});result.textContent='Copied after collection';}catch(e){result.textContent=e.message;}};
+document.querySelector('#copy-fail').onclick=async()=>{try{await client.copyText(async()=>{throw new Error('Original copy observation expired');});}catch(e){result.textContent=e.message;}};
 window.addEventListener('pagehide',()=>client.dispose());`);
   fs.writeFileSync(path.join(project,"build.mjs"),"import{cpSync}from'node:fs';cpSync(new URL('./src/',import.meta.url),new URL('./dist/',import.meta.url),{recursive:true});");
   fs.writeFileSync(path.join(project,"BUILD.md"),"Run node build.mjs. All source, including the compiled public browser SDK, is present. No download or core checkout is needed.");

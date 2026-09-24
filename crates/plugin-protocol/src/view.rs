@@ -62,6 +62,16 @@ pub struct PluginViewConnection {
 #[derive(Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PluginViewRequest {
+    /// Reserve a browser text-copy action while the user gesture is current.
+    /// Host validation is not confirmation that the clipboard was written.
+    BeginTextCopy,
+    FinishTextCopy {
+        copy_id: RequestId,
+        text: String,
+    },
+    CancelTextCopy {
+        copy_id: RequestId,
+    },
     Control {
         capability: CapabilityKey,
         arguments: Value,
@@ -90,6 +100,9 @@ pub enum PluginViewRequest {
 impl std::fmt::Debug for PluginViewRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let kind = match self {
+            Self::BeginTextCopy => "BeginTextCopy",
+            Self::FinishTextCopy { .. } => "FinishTextCopy",
+            Self::CancelTextCopy { .. } => "CancelTextCopy",
             Self::Control { .. } => "Control",
             Self::Query { .. } => "Query",
             Self::Invoke { .. } => "Invoke",

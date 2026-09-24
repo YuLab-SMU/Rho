@@ -62,6 +62,19 @@ impl NextHost {
             .await?;
         let cancel = matches!(&message.body, PluginViewRequest::Cancel { .. });
         let request = match message.body {
+            PluginViewRequest::BeginTextCopy
+            | PluginViewRequest::FinishTextCopy { .. }
+            | PluginViewRequest::CancelTextCopy { .. } => {
+                // Intrinsic presentation cooperation, bound to this exact live
+                // view. Only its containing browser can perform the native copy;
+                // this acknowledgement never claims a clipboard side effect.
+                if !parent.scopes.contains(rho_plugins::PLUGINS_RUN_SCOPE) {
+                    return Err(OperationError::InvalidInput(
+                        "text copy requires the parent's existing view authority".into(),
+                    ));
+                }
+                return Ok(json!({"authorized_view":message.view}));
+            }
             PluginViewRequest::Control { arguments, .. } => HostRequest::Control(rho_contract::ControlRequest {
                 capability: cap.unwrap(), arguments,
             }),

@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { buildUiFixture, buildControlFixture } from "../../scripts/fixtures/plugin-ui.mjs";
 
 let directory: string, project: string, url: URL, process_: ReturnType<typeof spawn>, view: any, instance: any;
+let completed = false;
 const windowId = "external.view-window";
 async function port(method: string, params: any) {
   const reply = await fetch(new URL("/api/host", url), { method: "POST", headers: { Authorization: `Bearer ${url.hash.slice(7)}`, "Content-Type": "application/json", "X-Rho-Studio-Window": windowId },
@@ -42,20 +43,42 @@ test.afterAll(async () => {
   if (process_?.exitCode === null) {
     process_.kill("SIGINT"); await new Promise<void>(done => process_.once("exit", () => done()));
   }
-  if (directory) await rm(directory, { recursive: true, force: true });
+  if (directory && completed) await rm(directory, { recursive: true, force: true });
+  else if (directory) console.error(`External UI fixture retained at ${directory}`);
 });
-test("external UI SDK runs in an opaque frame with persistent scoped state", async ({ page, request }) => {
+test("external UI SDK runs in an opaque frame with persistent scoped state", async ({ page, request, context }) => {
   const address = new URL(url); address.searchParams.set("window", windowId); address.searchParams.set("plugin-view", view.view);
   const faults: string[] = []; page.on("pageerror", error => faults.push(error.message));
   await page.goto(address.href);
   const frame = page.frameLocator("iframe");
   await expect(frame.locator("#connection")).toHaveText("Connected");
+  await expect(frame.locator("#automatic-copy")).toContainText("explicit Copy action");
   await expect(frame.getByLabel("View note")).toHaveValue("Initial Ω");
   await frame.getByLabel("View note").fill("中文输入 · αβ Ω");
   await page.keyboard.press("End"); await page.keyboard.insertText(" ✓");
   await frame.getByRole("button", { name: "Save note" }).click();
   await expect(frame.locator("#result")).toHaveText("Saved");
   expect((await query("views.inspect", { view: view.view })).state.text).toBe("中文输入 · αβ Ω ✓");
+  // Chromium's permission override denies permissions not listed, including
+  // clipboard-write. Enable read only for assertions, then restore normal
+  // gesture-based writes. Production receives no clipboard-read permission.
+  const copiedText = async () => {
+    await context.grantPermissions(["clipboard-read"], { origin: url.origin });
+    try { return await page.evaluate(() => navigator.clipboard.readText()); }
+    finally { await context.clearPermissions(); }
+  };
+  const beforeCopy = await query("operation.list_recent", { limit: 100 });
+  await frame.getByRole("button", { name: "Copy note", exact: true }).click();
+  await expect(frame.locator("#result")).toHaveText("Copied");
+  expect(await copiedText()).toBe("中文输入 · αβ Ω ✓");
+  await frame.getByRole("button", { name: "Copy after collection", exact: true }).click();
+  await expect(frame.locator("#result")).toHaveText("Collecting");
+  await expect(frame.locator("#result")).toHaveText("Copied after collection", { timeout: 12000 });
+  expect(await copiedText()).toBe("中文输入 · αβ Ω ✓ · collected");
+  await frame.getByRole("button", { name: "Copy failing collection", exact: true }).click();
+  await expect(frame.locator("#result")).toHaveText("Original copy observation expired");
+  expect(await copiedText()).toBe("中文输入 · αβ Ω ✓ · collected");
+  expect(await query("operation.list_recent", { limit: 100 })).toEqual(beforeCopy);
   let releaseRead!: () => void, sawRead!: () => void, held = false;
   const readGate = new Promise<void>(resolve => releaseRead = resolve), observedRead = new Promise<void>(resolve => sawRead = resolve);
   await page.route("**/api/plugin-view", async route => {
@@ -80,13 +103,14 @@ test("external UI SDK runs in an opaque frame with persistent scoped state", asy
   await frame.getByRole("button", { name: "Try undeclared control" }).click();
   await expect(frame.locator("#result")).toContainText("not granted");
   const isolation = await page.frames()[1].evaluate(async () => {
-    let parentBlocked = false, storageBlocked = false, apiBlocked = false;
+    let parentBlocked = false, storageBlocked = false, apiBlocked = false, clipboardBlocked = false;
     try { void parent.document.body; } catch { parentBlocked = true; }
     try { void sessionStorage.getItem("rho-token"); } catch { storageBlocked = true; }
     try { await fetch("/api/info"); } catch { apiBlocked = true; }
-    return { parentBlocked, storageBlocked, apiBlocked, token: new URL(location.href).hash.includes("token=") };
+    try { await navigator.clipboard.writeText("Direct iframe write must fail"); } catch { clipboardBlocked = true; }
+    return { parentBlocked, storageBlocked, apiBlocked, clipboardBlocked, token: new URL(location.href).hash.includes("token=") };
   });
-  expect(isolation).toEqual({ parentBlocked: true, storageBlocked: true, apiBlocked: true, token: false });
+  expect(isolation).toEqual({ parentBlocked: true, storageBlocked: true, apiBlocked: true, clipboardBlocked: true, token: false });
   expect(await page.locator("iframe").getAttribute("sandbox")).toBe("allow-scripts");
   const assets = await request.get(new URL(await page.locator("iframe").getAttribute("src") as string, url.origin).href);
   expect(assets.headers()["content-security-policy"]).toContain("sandbox allow-scripts");
@@ -101,10 +125,15 @@ test("external UI SDK runs in an opaque frame with persistent scoped state", asy
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(frame.getByRole("button", { name: "Save note" })).toBeVisible();
   await page.screenshot({ path: "../target/plugin-refactor/external-ui-narrow.png" });
+  await frame.getByRole("button", { name: "Copy after collection", exact: true }).click();
+  await expect(frame.locator("#result")).toHaveText("Collecting");
   await invoke("views.close", { view: view.view });
+  await expect(frame.locator("#result")).toContainText("view connection", { timeout: 12000 });
+  expect(await copiedText()).toBe("中文输入 · αβ Ω ✓ · collected");
   const still = await query("plugins.instance", { instance: instance.identity }); expect(still.instance.state).toBe("active");
   await frame.getByRole("button", { name: "Read plugins", exact: true }).click();
   await expect(frame.locator("#result")).toContainText("view connection");
   await invoke("plugins.release", { instance: instance.identity });
   expect(faults).toEqual([]);
+  completed = true;
 });
