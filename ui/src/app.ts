@@ -9,9 +9,10 @@ import "./style.css";
 import "./shell.css";
 import { AppShell } from "./app-shell";
 import { PluginViewWindow } from "./plugin-view-window";
+import { PluginWorkspaceWindow } from "./plugin-workspace-window";
 
 setNonce(
   document.querySelector<HTMLMetaElement>("meta[name=rho-csp-nonce]")!.content,
 );
 const pluginView = new URL(location.href).searchParams.get("plugin-view");
-createRoot(document.getElementById("root")!).render(pluginView ? createElement(PluginViewWindow, { view: pluginView }) : createElement(AppShell));
+createRoot(document.getElementById("root")!).render(pluginView ? createElement(PluginViewWindow, { view: pluginView }) : new URL(location.href).searchParams.has("plugin-window") ? createElement(PluginWorkspaceWindow) : createElement(AppShell));

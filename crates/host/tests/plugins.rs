@@ -1024,7 +1024,20 @@ async fn ui_only_views_have_scoped_channels_durable_state_and_independent_instan
     }
     assert_eq!(query(&host,&context,"operation.list_recent",json!({"limit":100})).await,before_copy);
     assert!(!format!("{:?}",copy_message(7,json!({"type":"finish_text_copy","copy_id":"copy","text":"unrecorded copy text"}))).contains("unrecorded copy text"));
+    let external = json!({"type":"open_external_url","url":"https://example.org/docs?context=unrecorded#topic"});
+    assert!(host.dispatch_plugin_view(&context,"foreign-window",&ordered_connection.call_token,
+        copy_message(7,external.clone())).await.is_err());
+    assert!(host.dispatch_plugin_view(&no_view_authority,"window-a",&ordered_connection.call_token,
+        copy_message(7,external.clone())).await.is_err());
+    assert!(host.dispatch_plugin_view(&context,"window-a",&ordered_connection.call_token,
+        copy_message(8,json!({"type":"open_external_url","url":"javascript:alert(1)"}))).await.is_err());
+    assert_eq!(host.dispatch_plugin_view(&context,"window-a",&ordered_connection.call_token,
+        copy_message(9,external.clone())).await.unwrap(),json!({"authorized_view":ordered.view}));
+    assert_eq!(query(&host,&context,"operation.list_recent",json!({"limit":100})).await,before_copy);
+    assert!(!format!("{:?}",copy_message(10,external.clone())).contains("unrecorded"));
     assert_eq!(run(&host,&context,"ordered-close","views.close",json!({"view":ordered.view})).await.status,OperationStatus::Succeeded);
+    assert!(host.dispatch_plugin_view(&context,"window-a",&ordered_connection.call_token,
+        copy_message(10,external)).await.is_err());
     let saved = host
         .dispatch_plugin_view(
             &context,

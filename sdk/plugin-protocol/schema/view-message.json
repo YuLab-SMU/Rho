@@ -197,6 +197,24 @@
           ]
         },
         {
+          "description": "Request a new browser tab after an explicit gesture. The Host verifies\nview authority; only the container can acknowledge native navigation.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "open_external_url"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "url"
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "arguments": true,

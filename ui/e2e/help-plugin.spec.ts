@@ -68,11 +68,12 @@ test("ordinary Help preserves exact-copy reading, static links, Unicode and ackn
         } else if (["register_close_handler", "observe_lifecycle"].includes(body.type)) result = { view: view.view, state_version: view.state_version, close: fixture.close };
         else if (body.type === "prepare_close") { fixture.close = { phase: "prepared", operation: body.operation, state_version: body.state_version }; result = { view: view.view, state_version: view.state_version, close: fixture.close }; }
         else if (body.type === "refuse_close") { fixture.close = { phase: "refused", operation: body.operation, reason: body.reason }; result = { view: view.view, state_version: view.state_version, close: fixture.close }; }
+        else if (body.type === "open_external_url") result = { navigation_requested: true };
         else error = `Unexpected request ${body.type}`;
         channel.port1.postMessage({ protocol_version: 1, connection: "help-connection", view: view.view, sequence: ++sequence, request: message.request,
           ok: !error, result: structuredClone(result), error });
       };
-      (event.source as Window).postMessage({ type: "rho:view:connect", nonce: "help", protocol_version: 1, connection: "help-connection", view, features: ["view_close_v1"] }, "*", [channel.port2]);
+      (event.source as Window).postMessage({ type: "rho:view:connect", nonce: "help", protocol_version: 1, connection: "help-connection", view, features: ["view_close_v1", "external_links_v1"] }, "*", [channel.port2]);
     }); mount();
   });
   const frame = page.frameLocator('iframe[title="Help"]');
@@ -84,6 +85,11 @@ test("ordinary Help preserves exact-copy reading, static links, Unicode and ackn
     await frame.locator(".help-panel").evaluate(() => document.fonts.ready);
     await page.screenshot({ path: info.outputPath(`help-plugin-${width}.png`) });
   }
+  expect(await page.evaluate(() => (window as any).fixture.calls.filter((c: any) => c.type === "open_external_url"))).toEqual([]);
+  await frame.getByRole("link", { name: "R project", exact: true }).click();
+  await expect(frame.getByText("Documentation navigation requested in a new tab.", { exact: false })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).fixture.calls.filter((c: any) => c.type === "open_external_url"))).toEqual([{ type: "open_external_url", url: "https://r-project.org/" }]);
+  await frame.getByRole("button", { name: "Dismiss link notice" }).click();
   await frame.getByRole("link", { name: "Linear models" }).click(); await expect(frame.getByText("Select an installed copy of stats", { exact: false })).toBeVisible();
   expect(await page.evaluate(() => (window as any).fixture.calls.filter((c: any) => c.type === "query" && c.capability.id === "r.read_help").length)).toBe(1);
   await frame.getByRole("button", { name: "Dismiss link notice" }).click();

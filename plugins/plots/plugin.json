@@ -1,0 +1,202 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.plots",
+  "name": "Plots",
+  "version": "0.1.0",
+  "description": "Retained R plots, original-resource inspection and independent comparison views.",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "README.md",
+      "build.mjs",
+      "index.html",
+      "package.json",
+      "src/actions.ts",
+      "src/connection.ts",
+      "src/export.ts",
+      "src/history.ts",
+      "src/main.tsx",
+      "src/media-cache.ts",
+      "src/media-image.tsx",
+      "src/output-ports.ts",
+      "src/outputs.ts",
+      "src/plot-panel.tsx",
+      "src/plot-viewport.ts",
+      "src/plots.ts",
+      "src/primitives.tsx",
+      "src/shared/model.ts",
+      "src/style.css",
+      "src/styles.d.ts",
+      "src/view-services.tsx",
+      "tests/actions.test.ts",
+      "tests/connection.test.ts",
+      "tests/export.test.ts",
+      "tests/history.test.ts",
+      "tests/media-cache.test.ts",
+      "tests/outputs.test.ts",
+      "tests/plot-viewport.test.ts",
+      "tests/plots.test.ts",
+      "tsconfig.json"
+    ],
+    "lockfiles": [
+      "dependencies.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "resources.read",
+        "version": 1
+      },
+      "scopes": [
+        "resources.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.layout",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.open_view",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run",
+        "operation.read",
+        "resources.read"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "plots",
+      "title": "Plots",
+      "entrypoint": "dist/index.html",
+      "state_schema": {
+        "type": "object"
+      },
+      "configuration_schema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "instance": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "plugin": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "artifact": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "additionalProperties": false
+          },
+          "selection": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "operation_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "resource_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              }
+            },
+            "required": [
+              "operation_id",
+              "resource_id"
+            ],
+            "additionalProperties": false
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "plot_group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9._:/-]+$"
+          }
+        },
+        "required": [
+          "source",
+          "selection",
+          "pinned",
+          "plot_group"
+        ],
+        "additionalProperties": false
+      },
+      "resource_kinds": []
+    }
+  ],
+  "capabilities": [],
+  "contexts": [],
+  "backend": null,
+  "configuration_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "default_configuration": {}
+}

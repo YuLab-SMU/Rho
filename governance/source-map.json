@@ -360,6 +360,68 @@
         "node",
         "scripts/test-r-help.mjs"
       ]
+    },
+    "plugins.packages-browser": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui",
+        "--",
+        "packages-plugin.spec.ts"
+      ]
+    },
+    "plugins.r-packages": {
+      "command": [
+        "node",
+        "scripts/test-r-packages.mjs"
+      ]
+    },
+    "plugins.plots": {
+      "command": [
+        "node",
+        "scripts/test-plots-plugin.mjs"
+      ]
+    },
+    "plugins.plots-browser": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui",
+        "--",
+        "plots-plugin.spec.ts"
+      ]
+    },
+    "plugins.r-plots": {
+      "command": [
+        "node",
+        "scripts/test-r-plots.mjs"
+      ]
+    },
+    "plugins.window-browser": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui",
+        "--",
+        "plugin-workspace.spec.ts"
+      ]
+    },
+    "plugins.download-browser": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui",
+        "--",
+        "plugin-download.spec.ts"
+      ]
     }
   },
   "areas": {
@@ -522,7 +584,19 @@
         "scripts/test-help-plugin.mjs",
         "scripts/test-r-help.mjs",
         "ui/e2e/help-plugin.spec.ts",
-        "ui/e2e/r-plugin-help.spec.ts"
+        "ui/e2e/r-plugin-help.spec.ts",
+        "scripts/build-packages-plugin.mjs",
+        "scripts/test-r-packages.mjs",
+        "ui/e2e/packages-plugin.spec.ts",
+        "ui/e2e/r-plugin-packages.spec.ts",
+        "scripts/build-plots-plugin.mjs",
+        "scripts/test-plots-plugin.mjs",
+        "scripts/test-r-plots.mjs",
+        "ui/e2e/plots-plugin.spec.ts",
+        "ui/e2e/r-plugin-plots.spec.ts",
+        "ui/e2e/plugin-workspace.spec.ts",
+        "ui/e2e/plugin-download.spec.ts",
+        "ui/e2e/fixtures/plugin-download.ts"
       ],
       "checks": [
         "docs.index",
@@ -552,7 +626,14 @@
         "plugins.r-objects",
         "plugins.help",
         "plugins.help-browser",
-        "plugins.r-help"
+        "plugins.r-help",
+        "plugins.packages-browser",
+        "plugins.r-packages",
+        "plugins.plots",
+        "plugins.plots-browser",
+        "plugins.r-plots",
+        "plugins.window-browser",
+        "plugins.download-browser"
       ]
     }
   }

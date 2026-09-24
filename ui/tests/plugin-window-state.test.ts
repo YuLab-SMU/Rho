@@ -57,3 +57,10 @@ it("accepts equivalent Host JSON with sorted object keys without changing meanin
   await owner.load(); owner.change(tabs); await owner.save();
   expect(owner.getSnapshot().dirty).toBe(false); await owner.save(); expect(write).toHaveBeenCalledTimes(1);
 });
+it("keeps unchanged observations referentially stable and rejects unversioned or older replacements", async () => {
+  const read=vi.fn(async()=>({...initial,version:2,layout:tabs}));
+  const owner=new PluginWindowState('window',{read,write:async args=>result(args)});await owner.load();const snapshot=owner.getSnapshot();
+  await owner.load();expect(owner.getSnapshot()).toBe(snapshot);
+  read.mockResolvedValueOnce({...initial,version:2,layout:empty as typeof tabs});await expect(owner.load()).rejects.toThrow('without a new owner version');
+  read.mockResolvedValueOnce({...initial,version:1,layout:tabs});await expect(owner.load()).rejects.toThrow('older');expect(owner.getSnapshot()).toBe(snapshot);
+});

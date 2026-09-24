@@ -287,6 +287,15 @@ browser confirms writing. Unsubmitted reservations expire or are released on
 failure/closure. Submitted native writes cannot be rolled back. The iframe keeps
 direct clipboard access disabled, and the SDK has no clipboard-read operation.
 
+External HTTP(S) links use the same intrinsic presentation channel. The Host
+validates the original view/window/principal and existing run authority; it
+retains no URL and creates no Operation. The containing browser independently
+parses the bounded destination, rejects credentials and non-HTTP schemes, and
+requires the focused frame's current user gesture. It requests a fresh tab with
+no opener or referrer. A navigation acknowledgement is not evidence that the
+remote page loaded; blocked or uncertain requests remain errors. Close preparation
+fences new link actions. The opaque iframe itself gains no popup permission.
+
 The public UI SDK reads retained resources through the declared `resources.read`
 query. It captures the exact reference, bounds allocation, validates every chunk's
 owner/range/length and verifies the final SHA-256 before returning bytes. Stopping

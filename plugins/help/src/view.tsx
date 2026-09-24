@@ -4,7 +4,7 @@ import { helpLink, staticHelpHtml } from "./content.js";
 
 /** The existing Help reading layout, with explicit observed-copy topic selection.
  * Documentation is static; rendering and following a topic cannot execute R. */
-export function HelpView({ help, copyText }: { help: Help; copyText(text: string): Promise<void> }) {
+export function HelpView({ help, copyText, openExternal }: { help: Help; copyText(text: string): Promise<void>; openExternal(url: string): Promise<void> }) {
   const state = useSyncExternalStore(help.subscribe, help.getSnapshot);
   const { copy, index, page, topic, raw, notice, loading, requiresNewObservation, indexVisible: topics } = state;
   const [linkNotice, setLinkNotice] = useState(""), [linkUrl, setLinkUrl] = useState("");
@@ -16,7 +16,10 @@ export function HelpView({ help, copyText }: { help: Help; copyText(text: string
     if (link.kind === "topic") help.open(link.topic);
     else if (link.kind === "anchor") content.current?.querySelector(`#${CSS.escape(link.id)}`)?.scrollIntoView({ block: "start" });
     else if (link.kind === "copy") setLinkNotice(`Select an installed copy of ${link.package} in Packages to read ${link.topic}.`);
-    else if (link.kind === "external") { setLinkNotice("External documentation link"); setLinkUrl(link.url); }
+    else if (link.kind === "external") {
+      setLinkUrl(link.url);
+      void openExternal(link.url).then(() => setLinkNotice("Documentation navigation requested in a new tab."), error => setLinkNotice(String(error)));
+    }
     else setLinkNotice("This link is not a static Help topic in the selected copy.");
   }
   return <section className="help-panel">

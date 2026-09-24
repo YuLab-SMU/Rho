@@ -60,6 +60,20 @@ try {
   assert.equal(collected,false);
   assert.deepEqual(copies.map(item=>item.type),['begin_text_copy']);
   copyClient.dispose();copyChannel.port2.close();
+  await assert.rejects(client.openExternal('https://example.org/'),/unavailable/);
+  const externalChannel=new MessageChannel(),externalClient=new sdk.PluginViewClient(externalChannel.port1,{...init,features:['external_links_v1']});
+  let externalSequence=0,confirmExternal=true;const links=[];
+  externalChannel.port2.on('message',message=>{
+    links.push(message.body);
+    externalChannel.port2.postMessage({protocol_version:1,connection:'connection',view:'view',sequence:++externalSequence,request:message.request,ok:true,result:{navigation_requested:confirmExternal}});
+  });
+  await externalClient.openExternal('HTTPS://example.org/中文?q=1#topic');
+  assert.deepEqual(links,[{type:'open_external_url',url:'https://example.org/%E4%B8%AD%E6%96%87?q=1#topic'}]);
+  for(const url of ['javascript:alert(1)','file:///private','//example.org','https://user:pass@example.org/','https://example.org/\\bad','https://example.org/ bad','https://example.org/'+ 'x'.repeat(8192)])
+    await assert.rejects(externalClient.openExternal(url),/External links/);
+  assert.equal(links.length,1);
+  confirmExternal=false;await assert.rejects(externalClient.openExternal('https://example.org/'),/unconfirmed/);
+  externalClient.dispose();externalChannel.port2.close();
   const quotaChannel=new MessageChannel(),quota=new sdk.PluginViewClient(quotaChannel.port1,init);
   const pending=Array.from({length:sdk.MAX_UI_PENDING},()=>quota.operation("op").catch(e=>e));
   await assert.rejects(quota.operation("op"),/quota/);

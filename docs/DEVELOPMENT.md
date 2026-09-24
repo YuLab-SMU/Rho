@@ -138,6 +138,24 @@ changed; this establishes no new native build. Pass a distinct `--output` direct
 to retain each browser run. Help viewing must preserve namespace/search/library
 state and must not create scientific execution records.
 
+The ordinary Packages package uses `node scripts/test-packages-plugin.mjs` for
+independent source compilation and model/connection/navigation checks, and
+`packages-plugin.spec.ts` for the approved responsive inspection, explicit source
+links and capture-before-Help flow. `node scripts/test-r-packages.mjs` assembles
+Packages and Help and runs the disposable native cross-package path. It has the
+same explicit Ark/R prerequisites and optional unchanged R-package reuse as Help.
+Its navigation receipt must identify the original selected copy, provider and
+session. Closing either view must preserve the native R session.
+
+The independent Plots package is built and checked with
+`node scripts/test-plots-plugin.mjs`; `plots-plugin.spec.ts` covers its isolated
+presentation. `node scripts/test-r-plots.mjs` builds the UI outside the repository
+and runs the native PNG acceptance with explicit existing `RHO_ARK` and
+`RHO_R_HOME`. Set `RHO_R_PLUGIN_PACKAGE` to reuse a previously verified native
+package without invoking Cargo. Native Packages and Plots checks use the generic
+window, including newly opened Help and pinned comparison tabs. A written fixture
+is not a passing result; current executed evidence is in Status.
+
 ### Optional workspace audit
 
 The complete workspace audit is intentionally not part of every development
@@ -398,7 +416,14 @@ restore from saved layout. Its close gesture must reach the owner callback witho
 removing the frame. It does not exercise Host persistence or close-time flushing.
 The `plugin-layout`, `plugin-frame-layer`, `plugin-window-state` and
 `plugin-window-client` unit checks cover protocol conversion, fixed DOM order,
-versioned saves, lost acknowledgements and original Operation outcomes.
+versioned saves, lost acknowledgements and original Operation outcomes. The
+`plugin-window-views` and `plugin-window-close` checks add scoped connections,
+retained hidden documents, confirmed closure and retries of the original request.
+`plugin-workspace.spec.ts` exercises the generic `?plugin-window` composition with
+real Host ports and an independently built fixture package. It checks automatic
+placement, retained drafts, close refusal and lost-close acknowledgements. This
+entrypoint is under integration; the final default scenario replaces the fixed
+shell after all feature packages are available.
 `node scripts/test-objects-plugin.mjs` compiles the in-progress Objects model and
 React components in a fresh external directory using public R/plugin declarations,
 the UI SDK and existing locked tools. It covers directory/reference bounds,

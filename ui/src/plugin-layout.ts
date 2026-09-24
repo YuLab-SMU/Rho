@@ -1,4 +1,4 @@
-import { Model, Orientation, RowNode, TabNode, TabSetNode } from "flexlayout-react";
+import { Actions, Model, Orientation, RowNode, TabNode, TabSetNode } from "flexlayout-react";
 import type { IJsonRowNode, IJsonTabSetNode, Node } from "flexlayout-react";
 import type { PluginWindowNode } from "../../sdk/plugin-protocol/index.js";
 
@@ -74,4 +74,13 @@ export function pluginLayoutDocument(model: Model): PluginWindowNode {
 
 export function pluginLayoutViews(layout: PluginWindowNode): string[] {
   return layout.kind === "tabs" ? [...layout.views] : layout.kind === "split" ? layout.children.flatMap(pluginLayoutViews) : [];
+}
+
+/** Names are presentation metadata; changing them never changes a view identity. */
+export function namePluginLayoutViews(model: Model, names: ReadonlyMap<string, string>) {
+  for (const [id, title] of names) {
+    const node = model.getNodeById(id);
+    if (node instanceof TabNode && node.getName() !== title)
+      model.doAction(Actions.updateNodeAttributes(id, { name: title }));
+  }
 }

@@ -22,7 +22,7 @@ try {
     const state = useSyncExternalStore(connection.subscribe, connection.getSnapshot);
     const close = useSyncExternalStore(closing.subscribe, closing.getSnapshot);
     return <main className="help-root">
-      <HelpView help={connection.help} copyText={text => client.copyText(text)} />
+      <HelpView help={connection.help} copyText={text => client.copyText(text)} openExternal={url => client.openExternal(url)} />
       {(close.error || state.notice || state.saveError) && <aside className="help-status" aria-label="Help status">
         {close.error && <p role="alert">{close.error}</p>}{state.notice && <p role="status">{state.notice}</p>}
         {state.saveError && <p role="alert">{state.saveError}<button onClick={() => ignore(connection.flush())}>Retry Save</button></p>}

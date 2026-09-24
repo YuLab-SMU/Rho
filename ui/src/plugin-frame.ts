@@ -1,6 +1,7 @@
 import type { PluginViewConnection, PluginViewMessage } from "../../sdk/plugin-protocol/index.js";
 import type { SessionReply } from "./generated/SessionReply";
 import { HostClient } from "./host-client";
+import { requestExternalNavigation } from "./plugin-external";
 import { PluginClipboard } from "./plugin-clipboard";
 
 const maxMessage = 1024 * 1024;
@@ -33,7 +34,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
       message.view !== connection.view.view || message.sequence !== sequence + 1 || typeof message.request !== "string" ||
       !message.body || typeof message.body.type !== "string" || pending >= 128) { fence("The view connection failed its identity, sequence or size check."); return; }
     sequence++; pending++;
-    const copyGesture = message.body.type === "begin_text_copy" && clipboardAvailable &&
+    const currentGesture = (message.body.type === "open_external_url" || message.body.type === "begin_text_copy" && clipboardAvailable) &&
       document.hasFocus() && document.activeElement === iframe && navigator.userActivation?.isActive === true;
     // Allocate the wire sequence before starting concurrent requests. The Host
     // orders their acceptance, not completion: slow reads cannot block control.
@@ -54,7 +55,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
             throw new Error("The Host did not validate this view's copy request.");
           const body = message.body;
           if (body.type === "begin_text_copy") {
-            if (!copyGesture || !document.hasFocus() || document.activeElement !== iframe || !navigator.userActivation?.isActive)
+            if (!currentGesture || !document.hasFocus() || document.activeElement !== iframe || !navigator.userActivation?.isActive)
               throw new Error("Use an explicit Copy action in this view.");
             reply = { ...reply, result: clipboard.begin() };
           } else if (body.type === "finish_text_copy") {
@@ -62,6 +63,17 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
           } else if (body.type === "cancel_text_copy") {
             reply = { ...reply, result: clipboard.cancel(body.copy_id) };
           }
+        } catch (error) {
+          reply = { ...reply, ok: false, result: undefined, error: error instanceof Error ? error.message : String(error) };
+        }
+      }
+      if (reply.ok && message.body.type === "open_external_url") {
+        try {
+          if ((reply.result as { authorized_view?: string })?.authorized_view !== connection.view.view)
+            throw new Error("The Host did not validate this view's link request.");
+          if (!currentGesture || !document.hasFocus() || document.activeElement !== iframe || !navigator.userActivation?.isActive)
+            throw new Error("Use an explicit link action in this view.");
+          reply = { ...reply, result: requestExternalNavigation(message.body.url) };
         } catch (error) {
           reply = { ...reply, ok: false, result: undefined, error: error instanceof Error ? error.message : String(error) };
         }
@@ -86,7 +98,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
     // Opaque origins require '*'; the transferred port is addressed to this
     // exact WindowProxy and bootstrap is tied to this document's random nonce.
     iframe.contentWindow?.postMessage({ type: "rho:view:connect", protocol_version: 1, nonce,
-      connection: connection.connection, view: connection.view, features: ["view_close_v1", ...(clipboardAvailable ? ["text_copy_v1"] : [])] }, "*", [channel.port2]);
+      connection: connection.connection, view: connection.view, features: ["view_close_v1", "external_links_v1", ...(clipboardAvailable ? ["text_copy_v1"] : [])] }, "*", [channel.port2]);
   };
   window.addEventListener("message", ready);
   container.append(iframe);

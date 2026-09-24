@@ -1,6 +1,8 @@
 /** Public browser SDK. No React, Studio, Host credential or scientific owner. */
 import type { JsonValue, CapabilityKey, PluginViewMessage, PluginViewRecord, PluginViewRequest } from "../plugin-protocol/index.js";
 import { ViewCloseCooperation, type ViewCloseHandler } from "./view-close.js";
+import { externalUrl } from "./external.js";
+export { externalUrl } from "./external.js";
 export { ViewCloseCooperation } from "./view-close.js";
 export type { ViewCloseHandler, ViewCloseSnapshot } from "./view-close.js";
 export type { CapabilityKey, PluginViewRecord, PluginViewRequest } from "../plugin-protocol/index.js";
@@ -68,7 +70,7 @@ export class PluginViewClient {
   }
   request<T = unknown>(body: PluginViewRequest): Promise<T> {
     if (this.closed) return Promise.reject(new Error("View connection is closed"));
-    if (this.closeCooperation?.getSnapshot().preparing && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy"].includes(body.type))
+    if (this.closeCooperation?.getSnapshot().preparing && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy", "open_external_url"].includes(body.type))
       return Promise.reject(new Error("View closure is preparing; wait before starting another action."));
     if (this.pending.size >= MAX_UI_PENDING) return Promise.reject(new Error("View request quota reached"));
     if (this.sequence >= 0xffffffff) { this.dispose("View sequence exhausted"); return Promise.reject(new Error("View sequence exhausted")); }
@@ -98,6 +100,13 @@ export class PluginViewClient {
   }
   operation<T = unknown>(operationId: string) { return this.request<T>({ type: "get_operation", operation_id: operationId }); }
   cancel<T = unknown>(operationId: string) { return this.request<T>({ type: "cancel", operation_id: operationId }); }
+  /** Explicit link action only. Acknowledges a new browser navigation request,
+   * not remote page loading. No opener, referrer or Host credential is sent. */
+  async openExternal(url: string): Promise<void> {
+    if (!this.initialization.features?.includes("external_links_v1")) throw new Error("External links are unavailable in this view container.");
+    const result = await this.request<{ navigation_requested: boolean }>({ type: "open_external_url", url: externalUrl(url) });
+    if (result?.navigation_requested !== true) throw new Error("External navigation is unconfirmed.");
+  }
   /** Invoke from an explicit Copy action. The producer runs only after the
    * containing browser reserves that gesture, allowing bounded asynchronous
    * scientific reads to finish before any clipboard content is published. */

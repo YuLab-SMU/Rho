@@ -86,6 +86,23 @@ with the browser's [user activation](https://html.spec.whatwg.org/multipage/inte
 and clipboard permissions. This is browser presentation cooperation, not an
 operating-system sandbox guarantee.
 
+For an explicit documentation or project link, call
+`await client.openExternal(url)` from the user's action handler. The
+`external_links_v1` feature accepts bounded absolute HTTP(S) URLs without embedded
+credentials, whitespace or backslashes. The containing browser independently
+validates the destination, current focused-frame gesture and Host acknowledgement
+before requesting a fresh tab. It severs the opener and suppresses the referrer;
+neither the private Workbench address nor Host credentials are forwarded.
+The acknowledgement means navigation was requested, not that the remote page
+loaded. A blocked popup, missing gesture/feature or uncertain reply is an error.
+The Host validates only view authority and does not open a browser, persist the
+URL or create an Operation. Closure fences this action with other new work.
+
+The container uses a fresh blank [Window.open](https://developer.mozilla.org/en-US/docs/Web/API/Window/open)
+handle and a [no-referrer link](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy)
+so a blocked tab can be distinguished from a requested navigation. It never
+targets an existing named browsing context.
+
 `views.open`, `views.update` and `views.close` use the common Operation port.
 Install the document's close handler after constructing its presentation model:
 

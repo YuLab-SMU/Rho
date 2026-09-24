@@ -90,6 +90,8 @@ Sources:
 - `scripts/build-console-plugin.mjs`
 - `scripts/build-help-plugin.mjs`
 - `scripts/build-objects-plugin.mjs`
+- `scripts/build-packages-plugin.mjs`
+- `scripts/build-plots-plugin.mjs`
 - `scripts/build-r-plugin.mjs`
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
@@ -100,12 +102,15 @@ Sources:
 - `scripts/test-help-plugin.mjs`
 - `scripts/test-objects-plugin.mjs`
 - `scripts/test-packages-plugin.mjs`
+- `scripts/test-plots-plugin.mjs`
 - `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
 - `scripts/test-plugin-ui.mjs`
 - `scripts/test-r-console.mjs`
 - `scripts/test-r-help.mjs`
 - `scripts/test-r-objects-plugin.mjs`
+- `scripts/test-r-packages.mjs`
+- `scripts/test-r-plots.mjs`
 - `scripts/test-r-plugin-engine.mjs`
 - `scripts/test-r-plugin.mjs`
 - `scripts/test-r-protocol.mjs`
@@ -113,11 +118,18 @@ Sources:
 - `scripts/test-viewer-plugin.mjs`
 - `sdk/**`
 - `ui/e2e/console-editor.spec.ts`
+- `ui/e2e/fixtures/plugin-download.ts`
 - `ui/e2e/help-plugin.spec.ts`
 - `ui/e2e/objects-plugin.spec.ts`
+- `ui/e2e/packages-plugin.spec.ts`
+- `ui/e2e/plots-plugin.spec.ts`
+- `ui/e2e/plugin-download.spec.ts`
+- `ui/e2e/plugin-workspace.spec.ts`
 - `ui/e2e/r-plugin-console.spec.ts`
 - `ui/e2e/r-plugin-help.spec.ts`
 - `ui/e2e/r-plugin-objects.spec.ts`
+- `ui/e2e/r-plugin-packages.spec.ts`
+- `ui/e2e/r-plugin-plots.spec.ts`
 
 Checks:
 
@@ -127,12 +139,16 @@ Checks:
 - `plugins.boundary-tests`: `["node","scripts/check-plugin-boundaries.mjs","--self-test"]`
 - `plugins.console`: `["node","scripts/test-console-plugin.mjs"]`
 - `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
+- `plugins.download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-download.spec.ts"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.help`: `["node","scripts/test-help-plugin.mjs"]`
 - `plugins.help-browser`: `["npm","run","test:browser","--prefix","ui","--","help-plugin.spec.ts"]`
 - `plugins.objects`: `["node","scripts/test-objects-plugin.mjs"]`
 - `plugins.objects-browser`: `["npm","run","test:browser","--prefix","ui","--","objects-plugin.spec.ts"]`
 - `plugins.packages`: `["node","scripts/test-packages-plugin.mjs"]`
+- `plugins.packages-browser`: `["npm","run","test:browser","--prefix","ui","--","packages-plugin.spec.ts"]`
+- `plugins.plots`: `["node","scripts/test-plots-plugin.mjs"]`
+- `plugins.plots-browser`: `["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"]`
 - `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
 - `plugins.r-console`: `["node","scripts/test-r-console.mjs"]`
@@ -141,12 +157,15 @@ Checks:
 - `plugins.r-independent`: `["node","scripts/test-r-plugin-engine.mjs"]`
 - `plugins.r-native`: `["node","scripts/test-r-plugin.mjs"]`
 - `plugins.r-objects`: `["node","scripts/test-r-objects-plugin.mjs"]`
+- `plugins.r-packages`: `["node","scripts/test-r-packages.mjs"]`
+- `plugins.r-plots`: `["node","scripts/test-r-plots.mjs"]`
 - `plugins.r-protocol`: `["node","plugins/r/generate-sdk.mjs","--check"]`
 - `plugins.r-public-types`: `["node","scripts/test-r-protocol.mjs"]`
 - `plugins.r-viewer`: `["node","scripts/test-r-viewer.mjs"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
 - `plugins.viewer`: `["node","scripts/test-viewer-plugin.mjs"]`
+- `plugins.window-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`
 - `system.client`: `["node","scripts/client.mjs","check"]`
 

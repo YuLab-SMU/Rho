@@ -37,7 +37,7 @@ test.beforeAll(async () => {
   const nativeInstance = (await invoke("plugins.activate", { revision: native.revision, artifact: native.artifacts[0], target: "aarch64-apple-darwin", alias: "native", configuration: {} })).instance;
   instance = (await invoke("plugins.activate", { revision: installed.revision, artifact: installed.artifacts[0], target: "ui-web", alias: "external", configuration: {} })).instance;
   const binding = await query("plugins.resolve", { capability: { id: "fixture.answer", version: 2 }, instance: nativeInstance.identity });
-  view = await invoke("views.open", { instance: instance.identity, contribution: "view", window: windowId, configuration: { binding }, state: { text: "Initial Ω" } });
+  view = await invoke("views.open", { instance: instance.identity, contribution: "view", window: windowId, configuration: { binding, external_url: "https://rho-external.invalid/document?read=1#topic" }, state: { text: "Initial Ω" } });
 });
 test.afterAll(async () => {
   if (process_?.exitCode === null) {
@@ -54,6 +54,25 @@ test("external UI SDK runs in an opaque frame with persistent scoped state", asy
   await expect(frame.locator("#connection")).toHaveText("Connected");
   await expect(frame.locator("#automatic-copy")).toContainText("explicit Copy action");
   await expect(frame.getByLabel("View note")).toHaveValue("Initial Ω");
+  await expect(frame.locator("#automatic-link")).toContainText("explicit link action");
+  const linkRequests: Array<Record<string, string>> = [];
+  await context.route("https://rho-external.invalid/**", async route => {
+    linkRequests.push(await route.request().allHeaders());
+    await route.fulfill({ contentType: "text/html", body: "<!doctype html><title>External documentation</title><h1>External documentation</h1>" });
+  });
+  const beforeLink = await query("operation.list_recent", { limit: 100 });
+  const popupEvent = page.waitForEvent("popup");
+  await frame.getByRole("button", { name: "Open documentation (new tab)", exact: true }).click();
+  const popup = await popupEvent;
+  await popup.waitForURL("https://rho-external.invalid/document?read=1#topic");
+  await expect(popup.getByRole("heading", { name: "External documentation" })).toBeVisible();
+  expect(await popup.evaluate(() => ({ opener: window.opener === null, referrer: document.referrer }))).toEqual({ opener: true, referrer: "" });
+  expect(linkRequests).toHaveLength(1); expect(linkRequests[0].referer).toBeUndefined();
+  await popup.close(); await page.bringToFront();
+  await expect(frame.locator("#result")).toHaveText("Navigation requested");
+  expect(await query("operation.list_recent", { limit: 100 })).toEqual(beforeLink);
+  await context.unroute("https://rho-external.invalid/**");
+
   await frame.getByLabel("View note").fill("中文输入 · αβ Ω");
   await page.keyboard.press("End"); await page.keyboard.insertText(" ✓");
   await frame.getByRole("button", { name: "Save note" }).click();

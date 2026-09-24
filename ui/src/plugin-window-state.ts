@@ -44,6 +44,12 @@ export class PluginWindowState extends Model<WindowSnapshot> {
     if (this.stopped || version !== this.readVersion) return;
     if (this.getSnapshot().dirty) return;
     this.validateScope(value);
+    if (this.saved && value.version < this.saved.version) throw new Error("Window observation is older than its acknowledged layout.");
+    if (this.saved && value.version === this.saved.version) {
+      if (!equal(this.saved.layout, value.layout)) throw new Error("Window layout changed without a new owner version.");
+      if (this.error) { this.error = ""; this.publish(); }
+      return;
+    }
     this.saved = immutable(structuredClone(value)); this.layout = this.saved.layout; this.error = ""; this.publish();
   }
   change(value: PluginWindowNode) {

@@ -85,6 +85,24 @@ impl NextHost {
                 }
                 return Ok(json!({"authorized_view":message.view}));
             }
+            PluginViewRequest::OpenExternalUrl { url } => {
+                if !parent.scopes.contains(rho_plugins::PLUGINS_RUN_SCOPE) {
+                    return Err(OperationError::InvalidInput(
+                        "external navigation requires the parent's existing view authority".into(),
+                    ));
+                }
+                let scheme = url.to_ascii_lowercase();
+                if url.len() > 8192 || url.chars().any(|c| c.is_control() || c.is_whitespace())
+                    || !(scheme.starts_with("https://") || scheme.starts_with("http://"))
+                {
+                    return Err(OperationError::InvalidInput("external navigation requires a bounded HTTP(S) URL".into()));
+                }
+                // This is authority for presentation only, not an Operation or
+                // evidence that the browser opened or loaded the destination.
+                // The browser independently parses the URL and checks a current
+                // focused-frame gesture before creating a new browsing context.
+                return Ok(json!({"authorized_view":message.view}));
+            }
             PluginViewRequest::Control { arguments, .. } => HostRequest::Control(rho_contract::ControlRequest {
                 capability: cap.unwrap(), arguments,
             }),
