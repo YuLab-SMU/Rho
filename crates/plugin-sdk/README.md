@@ -12,11 +12,24 @@ incoming call identity with `validate_call`; enforce native identity and
 preconditions in the owner. Return a query observation or a proposed CommitPlan.
 The Host's Operation mechanism commits results. Never write its database.
 
+Initialization may include a Host-issued `environment` with the normalized
+`project_root` and a private, persistent `data_root` for this exact instance.
+Use these paths for owner storage; do not infer a project from the artifact working
+directory or accept configuration as authority over another instance’s data.
+The data directory is retained after release, including failed initialization.
+It does not grant access through other Host ports or provide an OS sandbox.
+
 Use one dedicated reader task, and serialize writes through `RpcWriter`. The
 reader checks the Host-issued instance/connection and ordered sequences. Split
 the connection's public reader/writer fields when execution must run concurrently
 with cancellation or reverse calls. The small `echo-backend` example implements
 a read-only provider without any Host or scientific crate.
+
+A dedicated reader using Tokio stdin can leave an uncancellable blocking read
+after `Release`. A standalone backend that owns its runtime must finish and
+await its native owner work, then shut down without waiting for that idle stdin
+thread (for example, `Runtime::shutdown_background`). Do not use runtime shutdown
+as confirmation that scientific work stopped. See [Tokio stdin](https://docs.rs/tokio/latest/tokio/io/struct.Stdin.html).
 
 A reverse `HostCall` names its active parent request and one declared grant;
 the Host bounds it by that parent's project, principal and scopes. It carries

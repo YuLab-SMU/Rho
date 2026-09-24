@@ -37,6 +37,23 @@
     "body"
   ],
   "$defs": {
+    "BackendEnvironment": {
+      "description": "Host-issued native paths, separate from user configuration. The project is\nnormalized by the Host; data belongs to this exact instance and is retained\nafter release. These paths are not a sandbox or a general Host credential.",
+      "type": "object",
+      "properties": {
+        "data_root": {
+          "type": "string"
+        },
+        "project_root": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project_root",
+        "data_root"
+      ]
+    },
     "CapabilityKey": {
       "type": "object",
       "properties": {
@@ -351,6 +368,16 @@
             "data": {
               "type": "object",
               "properties": {
+                "environment": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/BackendEnvironment"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "grants": {
                   "type": "array",
                   "items": {

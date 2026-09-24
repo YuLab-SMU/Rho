@@ -4,6 +4,7 @@ members = [
   "crates/plugin-protocol",
   "plugins/r/api",
   "plugins/r/backend/engine",
+  "plugins/r/backend",
   "crates/plugin-sdk",
   "crates/plugins",
   "crates/contract",

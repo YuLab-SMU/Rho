@@ -718,6 +718,7 @@ impl Manage {
                             artifact: args.artifact,
                             target: args.target,
                             project: service.project.clone(),
+                            project_root: Some(service.scope.clone().into()),
                             principal,
                             alias: args.alias,
                             configuration: args.configuration,

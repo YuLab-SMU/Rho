@@ -186,6 +186,7 @@ pub(crate) async fn start(
                 RpcBody::Initialize {
                     instance: prepared.record.clone(),
                     grants: prepared.grants.clone(),
+                    environment: prepared.environment.clone(),
                     resource_channel,
                 },
             )

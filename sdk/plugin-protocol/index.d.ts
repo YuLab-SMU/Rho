@@ -2,6 +2,7 @@ export type * from "./types/ActivatePlugin.js";
 export type * from "./types/AdvancePluginBranch.js";
 export type * from "./types/ArtifactId.js";
 export type * from "./types/BackendEntrypoint.js";
+export type * from "./types/BackendEnvironment.js";
 export type * from "./types/BranchId.js";
 export type * from "./types/BranchPlugin.js";
 export type * from "./types/BuildArtifact.js";

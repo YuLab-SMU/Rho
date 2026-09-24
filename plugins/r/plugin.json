@@ -1,0 +1,244 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.r",
+  "name": "R",
+  "version": "0.1.0",
+  "description": "An isolated R workspace with exact native sessions and retained original output.",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "backend/src/main.rs",
+      "backend/src/owner.rs",
+      "BUILD.md",
+      "build.mjs"
+    ],
+    "lockfiles": [
+      "Cargo.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [],
+  "views": [],
+  "contexts": [],
+  "backend": {
+    "executable": "dist/rho-r-backend",
+    "arguments": []
+  },
+  "configuration_schema": {
+    "type": "object",
+    "properties": {
+      "ark": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "minLength": 1
+      },
+      "r_home": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "minLength": 1
+      },
+      "execution_timeout_seconds": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 86400
+      }
+    },
+    "additionalProperties": false
+  },
+  "default_configuration": {},
+  "capabilities": [
+    {
+      "capability": {
+        "id": "r.session",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "r.session",
+      "description": "Observe this instance without starting R.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "examples": [
+        {}
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.prepare",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "r.prepare",
+      "description": "Freeze this native session before operation admission; no runtime starts.",
+      "input_schema": {
+        "type": "object"
+      },
+      "examples": [
+        {
+          "capability": {
+            "id": "r.create_session",
+            "version": 1
+          },
+          "arguments": {},
+          "target": null,
+          "preconditions": null
+        }
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.create_session",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "r.create_session",
+      "description": "Create one R session for this exact plugin instance.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "examples": [
+        {}
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r"
+      ],
+      "effects": [
+        "r.session"
+      ],
+      "cancellation": "unsupported",
+      "preflight": {
+        "id": "r.prepare",
+        "version": 1
+      }
+    },
+    {
+      "capability": {
+        "id": "r.execute",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "r.execute",
+      "description": "Execute in the admitted session and retain output with the original Operation.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 262144
+          },
+          "expected_session": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "expected_session"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "code": "1 + 1",
+          "expected_session": "copy-session-from-r.session"
+        }
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r"
+      ],
+      "effects": [
+        "r.session"
+      ],
+      "cancellation": "request",
+      "preflight": {
+        "id": "r.prepare",
+        "version": 1
+      }
+    },
+    {
+      "capability": {
+        "id": "r.snapshot",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "r.snapshot",
+      "description": "Observe bounded objects in an existing idle session.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "expected_session": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "expected_session"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "limit": 20,
+          "expected_session": "copy-session-from-r.session"
+        }
+      ],
+      "output_schema": {
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    }
+  ]
+}

@@ -24,6 +24,8 @@ pub struct PluginActivation {
     pub artifact: ArtifactId,
     pub target: String,
     pub project: ProjectId,
+    /// Trusted Host project root, never taken from plugin configuration.
+    pub project_root: Option<PathBuf>,
     pub principal: PrincipalId,
     pub alias: InstanceAlias,
     pub configuration: Value,
@@ -618,6 +620,7 @@ pub(crate) struct PreparedInstance {
     pub record: PluginInstance,
     pub manifest: PluginManifest,
     pub grants: Vec<CapabilityRequirement>,
+    pub environment: Option<BackendEnvironment>,
     pub directory: TempDir,
     pub executable: Option<PathBuf>,
     pub repository: Arc<Mutex<PluginRepository>>,
@@ -706,11 +709,15 @@ impl PreparedInstance {
             state: InstanceState::Preparing,
             diagnostic: None,
         };
+        let environment = request.project_root.as_ref().filter(|_| manifest.backend.is_some())
+            .map(|project| prepare_environment(repo.root(), project, &record.identity.instance))
+            .transpose()?;
         preflight_control(
             &record.identity.instance,
             RpcBody::Initialize {
                 instance: record.clone(),
                 grants: request.grants.clone(),
+                environment: environment.clone(),
                 resource_channel: Some(ResourceChannel {
                     version: RESOURCE_CHANNEL_VERSION,
                     socket: "x".repeat(104),
@@ -723,6 +730,7 @@ impl PreparedInstance {
             record,
             manifest,
             grants: request.grants,
+            environment,
             directory,
             executable,
             repository: repository.clone(),
@@ -748,6 +756,31 @@ impl PreparedInstance {
             ));
         }
     }
+}
+
+fn prepare_environment(root: &std::path::Path, project: &std::path::Path, instance: &PluginInstanceId) -> Result<BackendEnvironment, PluginError> {
+    let project = project.canonicalize()?;
+    ensure(project.is_dir(), "native project root must be a directory")?;
+    let parent = root.join("instance-data-v1");
+    match fs::create_dir(&parent) {
+        Ok(()) => {},
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {},
+        Err(error) => return Err(error.into()),
+    }
+    let metadata = parent.symlink_metadata()?;
+    ensure(metadata.is_dir() && !metadata.file_type().is_symlink() && parent.canonicalize()? == parent,
+        "instance data parent must be a contained directory")?;
+    // Never reuse an old instance's files, including after a failed activation.
+    let data = parent.join(format!("instance-{instance}"));
+    fs::create_dir(&data)?;
+    #[cfg(unix)] {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&data, fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(BackendEnvironment {
+        project_root: project.to_str().ok_or_else(|| PluginError::Invalid("project root must be UTF-8".into()))?.into(),
+        data_root: data.to_str().ok_or_else(|| PluginError::Invalid("instance data root must be UTF-8".into()))?.into(),
+    })
 }
 impl Drop for PreparedInstance {
     fn drop(&mut self) {

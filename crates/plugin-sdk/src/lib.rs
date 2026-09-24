@@ -26,6 +26,7 @@ pub enum SdkError {
 pub struct BackendConnection<R, W> {
     pub instance: PluginInstance,
     pub grants: Vec<CapabilityRequirement>,
+    pub environment: Option<BackendEnvironment>,
     pub resource_channel: Option<ResourceChannel>,
     pub reader: RpcReader<R>,
     pub writer: RpcWriter<W>,
@@ -39,7 +40,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> BackendConnection<R, W> {
         let frame = read_frame(&mut input)
             .await?
             .ok_or_else(|| SdkError::Invalid("Host disconnected before initialization".into()))?;
-        let RpcBody::Initialize { instance, grants, resource_channel } = &frame.body else {
+        let RpcBody::Initialize { instance, grants, environment, resource_channel } = &frame.body else {
             return Err(SdkError::Invalid(
                 "first frame must initialize the backend".into(),
             ));
@@ -57,6 +58,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> BackendConnection<R, W> {
         Ok(Self {
             instance: instance.clone(),
             grants: grants.clone(),
+            environment: environment.clone(),
             resource_channel: resource_channel.clone(),
             reader: RpcReader::with_guard(input, guard),
             writer: RpcWriter::new(output, frame.instance, frame.connection),

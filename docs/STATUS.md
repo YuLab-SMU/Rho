@@ -109,9 +109,53 @@ integrity and governance checks pass. The exact command
 `cargo test -p rho-host --lib --test observer --test plugins --locked` reports
 58 passed and 2 ignored; ignored tests are not counted as passes. The explicit
 real-R suite separately passes the recovery-copy case; automatic continuation
-remains unexecuted. An installable R backend entry, original-Operation
-RPC integration and retained-resource Viewer remain outstanding; source extraction
-and direct native tests do not establish complete plugin vertical acceptance.
+remains unexecuted.
+
+The ordinary `org.rho.r` backend now builds outside the checkout from public
+SDK/protocol, R-owned sources and pinned Jet only. Its standard manifest and
+immutable artifact activate through the existing plugin lifecycle. Generic
+initialization supplies a normalized Host project root and a fresh, protected,
+persistent data directory independently of user configuration. Activation and
+queries do not start R; `r.create_session` starts one explicit session per instance,
+`r.prepare` freezes its native identity, and `r.execute` uses the original
+Operation with a serialized native lane and concurrent cancellation reception.
+Reports, output-event logs, HTML and PNG bytes use the shared resource store.
+Failed launches and post-effect retention failures preserve uncertainty and
+recovery material; reading a lost session never replaces it.
+
+`node scripts/test-r-plugin.mjs` passes with explicit existing Ark/R. It builds the
+complete backend independently, activates two exact revisions through the real
+Host ports, verifies different sessions and isolated objects, original Operation
+identity and idempotency, Unicode/HTML/PNG evidence, actual native cancellation,
+partial effects after an R error, and uncertainty after native exit. Both native
+owners confirm shutdown; removing child then parent revisions leaves retained
+HTML readable after Host restart, and the original request returns its committed
+record without any provider. Two additional runtime tests pass for Host-bound,
+unique retained directories and rejection of symlinked data parents.
+The initial native acceptance failed on release timeout caused by Tokio's idle
+blocking stdin read. The backend now awaits all scientific cleanup before ending
+its owned runtime without waiting for that read; the full native acceptance
+passes after this fix. An intermediate fixture also tried to delete a protected
+parent before its child; the repository correctly rejected it and the fixture's
+removal order was corrected. These failed attempts are retained in the local
+verification logs and are not counted as passes.
+
+The settled RPC change also passes `cargo test -p rho-plugin-protocol -p
+rho-plugin-sdk --locked` (14), `cargo test -p rho-plugins --locked` (33),
+`cargo test -p rho-host --lib --test plugins --test observer --locked` (58 passed,
+2 ignored), and `cargo test -p rho-mcp --lib --test plugins --locked` (15).
+`npm run generate --prefix ui`, `npm run build --prefix ui` and `npm run check
+--prefix ui` pass with the regenerated public initialization types. Independent
+Rust backend examples, strict TypeScript protocol/UI consumers, architecture,
+plugin source boundaries and governance checks pass. The two ignored Host tests
+remain separate from the explicitly executed native plugin check. No full
+workspace audit or new browser visual acceptance was run for this backend change;
+client rendering is unchanged and the container-stage evidence below retains its
+original scope.
+
+Full Console input/queue controls, checkpoint ownership, the other R inspection
+contributions and retained-resource Viewer UI still need migration. The native
+slice does not establish complete R/Viewer or Studio acceptance.
 
 The remaining scientific owners and fixed Studio panels have not yet migrated into
 packages. The standalone generic frame is the container conformance surface;

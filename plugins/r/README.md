@@ -1,12 +1,20 @@
 # R plugin source
 
 The R owner is being moved here as part of the unified-plugin implementation.
-This source tree is not yet an installable plugin archive; the backend RPC entry
-and package manifest are the next integration step. Current product acceptance
-and the remaining migration are recorded in `docs/STATUS.md` at the repository root.
+The public-protocol executable and package manifest now provide explicit session
+creation, bounded snapshots and execution through original Operations.
+`node scripts/build-r-plugin.mjs DEST` assembles and builds a self-contained package
+outside the checkout; see [build instructions](BUILD.md). Current acceptance and
+the remaining migration are recorded in `docs/STATUS.md` at the repository root.
 
 - `api/` owns R data contracts and the native owner port. It depends on the public
   plugin protocol, without any Host, Operation journal or application implementation.
+- `backend/src/` owns the public RPC connection, one native session and its lane.
+  It receives normalized Host paths independently of user configuration, freezes
+  native session preconditions, handles cancellation concurrently and retains
+  original reports, output events, HTML and images through the public data channel.
+  Initialization and queries never start R. Failed launches cannot be retried in
+  the same instance, and release requires confirmed native shutdown.
 - `backend/engine/` owns Ark startup and shutdown, native input, R inspection,
   package/help queries, captured outputs and recovery-copy artifacts. Its embedded
   R bridge travels with the engine. It receives an original operation identity
@@ -28,3 +36,10 @@ no compiler or dependency installation is attempted.
 With `--real-r`, explicitly configured `RHO_ARK` and `RHO_R_HOME` additionally run
 native R in a disposable project, verify retained HTML output and confirm shutdown.
 The test never connects to an existing user session.
+
+Run `node scripts/test-r-plugin.mjs` with explicit `RHO_ARK` and `RHO_R_HOME`
+to build the complete backend outside the checkout and exercise it through the
+shared Host Operation/Query ports in disposable projects. The test covers two
+coexisting revisions, session fencing, Unicode, HTML/PNG retention, cancellation
+and original records after package removal and Host restart. It does not establish
+Viewer UI, Console controls or complete scientific-owner migration acceptance.

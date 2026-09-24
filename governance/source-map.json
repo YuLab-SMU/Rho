@@ -254,6 +254,12 @@
         "node",
         "scripts/test-r-plugin-engine.mjs"
       ]
+    },
+    "plugins.r-native": {
+      "command": [
+        "node",
+        "scripts/test-r-plugin.mjs"
+      ]
     }
   },
   "areas": {
@@ -392,7 +398,10 @@
         "scripts/test-plugin-backend.mjs",
         "scripts/test-plugin-ui.mjs",
         "scripts/fixtures/plugin-ui.mjs",
-        "scripts/test-r-plugin-engine.mjs"
+        "scripts/test-r-plugin-engine.mjs",
+        "scripts/build-r-plugin.mjs",
+        "scripts/test-r-plugin.mjs",
+        "crates/host/tests/r_plugin_real_r.rs"
       ],
       "checks": [
         "docs.index",
@@ -407,7 +416,8 @@
         "plugins.public-types",
         "plugins.ui-sdk",
         "plugins.r-engine",
-        "plugins.r-independent"
+        "plugins.r-independent",
+        "plugins.r-native"
       ]
     }
   }

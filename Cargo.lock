@@ -6221,6 +6221,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-r-backend"
+version = "0.1.0"
+dependencies = [
+ "rho-plugin-sdk",
+ "rho-r-api",
+ "rho-r-engine",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+]
+
+[[package]]
 name = "rho-r-engine"
 version = "0.1.0"
 dependencies = [

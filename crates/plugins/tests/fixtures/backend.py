@@ -80,6 +80,7 @@ frame = read()
 identity = frame["body"]["data"]["instance"]["identity"]
 connection = frame["connection"]
 configuration = frame["body"]["data"]["instance"]["configuration"]
+environment = frame["body"]["data"].get("environment")
 resource_channel = frame["body"]["data"].get("resource_channel")
 if configuration.get("mode") == "init_hang":
     import time
@@ -109,7 +110,9 @@ while True:
                 "owner_context":{"native_session":"fixed-session"}})
             continue
         action = args.get("action", "echo")
-        if action == "resource_put":
+        if action == "environment":
+            query_result(request, {"environment": environment, "cwd": os.getcwd()})
+        elif action == "resource_put":
             reference = retain_resource(request, args)
             send(request, "query_result", {"data": {"reference": reference}, "completeness": "complete", "source": reference})
         elif action == "spoof":

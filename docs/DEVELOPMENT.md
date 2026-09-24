@@ -69,8 +69,13 @@ cargo test -p rho-host --lib --locked
 node scripts/test-process-recovery.mjs
 ```
 
-Real R acceptance uses disposable projects and explicit bindings. The complete
-native matrix is:
+Real R acceptance uses disposable projects and explicit bindings. The independently
+packaged R backend path is checked with explicit existing
+`RHO_ARK` and `RHO_R_HOME` using `node scripts/test-r-plugin.mjs`. It assembles
+public SDKs plus R sources outside the checkout and tests original Operations,
+coexisting revisions, cancellation and retained resources through the Host.
+
+The complete native matrix is:
 
 ```sh
 node scripts/test-real-r.mjs

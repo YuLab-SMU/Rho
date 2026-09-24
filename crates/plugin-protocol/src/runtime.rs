@@ -46,6 +46,16 @@ pub struct PluginInstancePage {
     pub total: u64,
 }
 
+/// Host-issued native paths, separate from user configuration. The project is
+/// normalized by the Host; data belongs to this exact instance and is retained
+/// after release. These paths are not a sandbox or a general Host credential.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct BackendEnvironment {
+    pub project_root: String,
+    pub data_root: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderBinding {
@@ -161,6 +171,8 @@ pub enum RpcBody {
     Initialize {
         instance: PluginInstance,
         grants: Vec<CapabilityRequirement>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        environment: Option<BackendEnvironment>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         resource_channel: Option<ResourceChannel>,
     },

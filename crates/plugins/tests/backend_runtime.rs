@@ -61,6 +61,7 @@ fn activation(archive: &PluginArchive, configuration: Value) -> PluginActivation
         artifact: archive.artifacts[0].id.clone(),
         target: "native-test".into(),
         project: ProjectId::new("project-a").unwrap(),
+        project_root: None,
         principal: PrincipalId::new("owner-a").unwrap(),
         alias: InstanceAlias::new("test").unwrap(),
         configuration,
@@ -560,4 +561,53 @@ async fn logs_are_bounded_and_invalid_commit_plans_never_reach_the_caller_as_suc
     drop(query);
     drop(operation);
     runtime.release(&instance.identity).await.unwrap();
+}
+
+#[tokio::test]
+async fn native_environment_is_host_bound_unique_and_retained() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let project = root.join("project");
+    fs::create_dir(&project).unwrap();
+    fs::create_dir(project.join("child")).unwrap();
+    let archive = fixture(&root.join("package"), "1", false);
+    let mut repo = PluginRepository::open(&root.join("store")).unwrap();
+    repo.import(&archive).unwrap();
+    let runtime = runtime(Arc::new(Mutex::new(repo)));
+    let mut paths = vec![];
+    for _ in 0..2 {
+        let mut request = activation(&archive, json!({"project_root":"/forged", "data_root":"/forged"}));
+        request.project_root = Some(project.join("child/.."));
+        let instance = runtime.activate(request).await.unwrap();
+        let lease = resolve(&runtime, &instance, false);
+        let result = data(lease.call(call(&lease, json!({"action":"environment"}), false)).await.unwrap());
+        assert_eq!(result["environment"]["project_root"], project.to_str().unwrap());
+        assert_ne!(result["cwd"], result["environment"]["project_root"]);
+        let directory = std::path::PathBuf::from(result["environment"]["data_root"].as_str().unwrap());
+        assert!(directory.starts_with(root.join("store/instance-data-v1")));
+        fs::write(directory.join("evidence"), "original bytes").unwrap();
+        drop(lease);
+        runtime.release(&instance.identity).await.unwrap();
+        assert_eq!(fs::read_to_string(directory.join("evidence")).unwrap(), "original bytes");
+        paths.push(directory);
+    }
+    assert_ne!(paths[0], paths[1]);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn native_environment_rejects_symlinked_data_parent_before_spawn() {
+    let temp = tempfile::tempdir().unwrap();
+    let archive = fixture(&temp.path().join("package"), "1", false);
+    let mut repo = PluginRepository::open(&temp.path().join("store")).unwrap();
+    repo.import(&archive).unwrap();
+    let outside = temp.path().join("outside");
+    fs::create_dir(&outside).unwrap();
+    std::os::unix::fs::symlink(&outside, repo.root().join("instance-data-v1")).unwrap();
+    let runtime = runtime(Arc::new(Mutex::new(repo)));
+    let mut request = activation(&archive, json!({}));
+    request.project_root = Some(temp.path().into());
+    assert!(runtime.activate(request).await.is_err());
+    assert!(runtime.observe().is_empty());
+    assert_eq!(fs::read_dir(outside).unwrap().count(), 0);
 }

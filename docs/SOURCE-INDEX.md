@@ -82,10 +82,12 @@ Documentation:
 Sources:
 
 - `crates/cli/src/plugins.rs`
+- `crates/host/tests/r_plugin_real_r.rs`
 - `crates/plugin-protocol/**`
 - `crates/plugin-sdk/**`
 - `crates/plugins/**`
 - `plugins/**`
+- `scripts/build-r-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/plugin-protocol.mjs`
@@ -93,6 +95,7 @@ Sources:
 - `scripts/test-plugin-protocol.mjs`
 - `scripts/test-plugin-ui.mjs`
 - `scripts/test-r-plugin-engine.mjs`
+- `scripts/test-r-plugin.mjs`
 - `sdk/**`
 
 Checks:
@@ -106,6 +109,7 @@ Checks:
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
 - `plugins.r-engine`: `["cargo","test","-p","rho-r-engine","--locked"]`
 - `plugins.r-independent`: `["node","scripts/test-r-plugin-engine.mjs"]`
+- `plugins.r-native`: `["node","scripts/test-r-plugin.mjs"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`

@@ -40,8 +40,14 @@ The native owner receives an opaque original Operation identity and returns boun
 observations, output evidence and recovery material. It never receives a journal
 handle. The existing in-process Host temporarily uses `rho-r-runtime` as a thin
 adapter to this one implementation; this adapter is removed with the old scientific
-composition when the complete RPC path replaces it. Relocating the owner does not
-by itself establish plugin activation or R/Viewer vertical acceptance.
+composition when the complete RPC path replaces it. The ordinary `rho-r-backend`
+entry now uses the public SDK for explicit session creation, bounded snapshots and
+original-Operation execution. Its own lane freezes native session identity and
+keeps cancellation reception independent of execution. Original reports, bounded
+output logs and verified HTML/image bytes go through the shared resource owner.
+Retention failure after native execution remains uncertain with recovery material;
+a failed native launch cannot be silently retried in the same instance. Full
+Console, recovery and Viewer interaction migration remains in progress.
 
 The public Rust transport SDK is `rho-plugin-sdk`. Backend RPC uses a four-byte
 big-endian length followed by at most 1 MiB of JSON, with one ordered writer and
@@ -50,6 +56,13 @@ Reverse calls name an active parent request and inherit its project/principal,
 the declared grant's scopes, and whether only queries are allowed. They receive
 no generic Host credential. The Host service still enforces capability kind and
 native preconditions before delegating work.
+
+Initialization carries native paths separately from configuration: a normalized
+Host project root and a newly created persistent data directory for the exact
+instance. The generic runtime refuses existing per-instance directories and
+symlinked data parents; it never derives the project from the artifact directory.
+Release and failed activation preserve these bytes for owner recovery. Paths
+do not constitute an OS sandbox or grant another owner’s Host capabilities.
 
 `rho-plugins` publishes all contributions of a backend instance only after the
 exact revision/artifact acknowledges readiness. Instance admission leases survive
@@ -1173,7 +1186,7 @@ package inspection.
 | `crates/workspace`, `project`, `environment`, `execution` | Scientific owners and native port definitions |
 | `crates/application`, `skills` | Application context/control and method/source ports, separate from scientific execution |
 | `crates/adapters/` | SQLite, Git, package, process and SSH/Slurm implementations; transitional adapter to the R package |
-| `plugins/r/api`, `plugins/r/backend/engine` | Public R data/native ports and the sole Ark/R implementation |
+| `plugins/r/api`, `plugins/r/backend` | Public R data/native ports, isolated RPC owner and the sole Ark/R engine |
 | `crates/host` | Concrete composition and runtime configuration |
 | `crates/agent-client` | Bounded native Codex app-server / Kimi and DeepSeek ACP clients; no scientific handlers or Agent behavior loop |
 | `crates/agents` | Optional Rig integration; only Application/contract ports, no scientific owners or native adapter dependencies |

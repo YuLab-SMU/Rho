@@ -133,6 +133,7 @@ async fn sdk_initialization_and_call_validation_keep_the_host_binding() {
             RpcBody::Initialize {
                 instance: instance.clone(),
                 grants: vec![],
+                environment: Some(BackendEnvironment { project_root: "/project".into(), data_root: "/instance".into() }),
                 resource_channel: None,
             },
         )
@@ -142,6 +143,7 @@ async fn sdk_initialization_and_call_validation_keep_the_host_binding() {
         .await
         .unwrap();
     assert_eq!(backend.instance, instance);
+    assert_eq!(backend.environment.as_ref().unwrap().project_root, "/project");
     backend.ready().await.unwrap();
     let ready = host_reader.receive().await.unwrap().unwrap();
     assert_eq!(ready.request, initialize);
