@@ -116,6 +116,9 @@ Saved-run checks verify the frozen file/R capture, original save completion befo
 R admission, unchanged-file observations, lost acknowledgements, failure and
 uncertainty, later typing, close during both admission preparations and explicit
 continuation only from the original view. Reopening and inspection do not start R.
+Session-selection checks cover bounded project/principal-scoped capability
+discovery, unstarted and unavailable providers, retained target selection and
+original operations that remain attached to their captured provider after a switch.
 After building the current client and Host,
 `npm run test:browser --prefix ui -- editor-plugin.spec.ts` uses independently built
 Files and Editor packages in a disposable project; set `RHO_FILES_PLUGIN_PACKAGE`

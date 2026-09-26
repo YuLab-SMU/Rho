@@ -24,20 +24,26 @@ function label(path: string | null) {
   for (const char of name) { if (bytes(result + char).length > 508) return result + '…'; result += char; }
   return result;
 }
-function validProvider(value: unknown): value is InstanceRef {
+export function validProvider(value: unknown): value is InstanceRef {
   const owner = value as InstanceRef;
   return !!owner && [owner.instance, owner.plugin].every(value => typeof value === 'string' && /^[A-Za-z0-9._:/-]{1,160}$/.test(value)) &&
     [owner.revision, owner.artifact].every(value => typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value));
 }
 /** An optional exact native R owner. Observing it never creates a session. */
 export class EditorCodeActions {
-  readonly source: InstanceRef | null;
+  private selected: InstanceRef | null;
   constructor(private readonly client: Client, source: InstanceRef | null = null) {
     if (source !== null && !validProvider(source)) throw new Error('Select an exact R provider for Editor code actions.');
-    this.source = source && structuredClone(source);
+    this.selected = source && structuredClone(source);
+  }
+  get source() { return this.selected && structuredClone(this.selected); }
+  select(source: InstanceRef | null) {
+    if (source !== null && !validProvider(source)) throw new Error('Select an exact R provider for Editor code actions.');
+    this.selected = source && structuredClone(source);
   }
   async prepare(document: Pick<EditorDocument, 'snapshot' | 'state'>, requested: 'document' | 'selection' | 'format' | 'file'): Promise<CodeAction> {
-    if (!this.source) throw new Error('No R provider is configured for this Editor.');
+    const provider = this.source;
+    if (!provider) throw new Error('No R provider is configured for this Editor.');
     const capture = document.snapshot, text = document.state.doc.toString(), selection = document.state.selection.main;
     if (capture.readonly !== null || capture.path !== null && !/\.[rR]$/.test(capture.path)) throw new Error('Select an editable R document.');
     let kind: CodeActionKind = requested, from = 0, to = text.length;
@@ -49,7 +55,7 @@ export class EditorCodeActions {
     if (bytes(code).length > limit || code.includes('\0') || kind !== 'format' && !code.trim())
       throw new Error(kind === 'format' ? 'Formatting accepts at most 64 KiB of UTF-8 text.' : 'Running accepts nonempty text up to 256 KiB of UTF-8. Select a smaller range.');
     const observed = await this.client.query<{ status: string; data?: { session_id?: unknown } }>({ id: 'r.session', version: 1 },
-      json({ binding: { capability: { id: 'r.session', version: 1 }, provider: this.source, project: this.client.view.project, target: null }, arguments: {} }));
+      json({ binding: { capability: { id: 'r.session', version: 1 }, provider, project: this.client.view.project, target: null }, arguments: {} }));
     const session = observed.data?.session_id;
     if (observed.status !== 'ready' || typeof session !== 'string' || !session || bytes(session).length > 160 || session.includes('\0'))
       throw new Error('Start the selected R session in Console before using Editor code actions.');
@@ -58,7 +64,7 @@ export class EditorCodeActions {
     const arguments_ = kind === 'format' ? { expected_session: session, code, source } : { expected_session: session, run: { code, source, output_mode: 'console' } };
     return { kind, version: capture.version, path: capture.path, text, from, to, status: null, error: null, formatted: null, applied: false,
       intent: { view: this.client.view.view, request: crypto.randomUUID(), operation: null, capability,
-        arguments: json({ binding: { capability, provider: this.source, project: this.client.view.project, target: session }, arguments: arguments_, preconditions: null }) } };
+        arguments: json({ binding: { capability, provider, project: this.client.view.project, target: session }, arguments: arguments_, preconditions: null }) } };
   }
   validate(action: CodeAction) {
     if (!action || !['document', 'selection', 'line', 'format', 'file'].includes(action.kind) || typeof action.version !== 'string' || !action.version ||
@@ -78,10 +84,11 @@ export class EditorCodeActions {
     const code = action.text.slice(action.from, action.to), formatting = action.kind === 'format', args = action.intent.arguments as any;
     const capability = { id: formatting ? 'r.format' : 'r.execute', version: formatting ? 1 : 2 };
     const session = args?.arguments?.expected_session, source = { view_id: action.intent.view, label: label(action.path), kind: action.kind };
-    if (!this.source || !same(action.intent.capability, capability) || typeof session !== 'string' || !session || bytes(session).length > 160 || session.includes('\0') ||
+    const provider = args?.binding?.provider;
+    if (!validProvider(provider) || !same(action.intent.capability, capability) || typeof session !== 'string' || !session || bytes(session).length > 160 || session.includes('\0') ||
       bytes(code).length > (formatting ? 65536 : 262144) || !formatting && !code.trim() ||
       ['format', 'document', 'file'].includes(action.kind) && (action.from !== 0 || action.to !== action.text.length) ||
-      !same(args, { binding: { capability, provider: this.source, project: this.client.view.project, target: session },
+      !same(args, { binding: { capability, provider, project: this.client.view.project, target: session },
         arguments: formatting ? { expected_session: session, code, source } : { expected_session: session, run: { code, source, output_mode: 'console' } }, preconditions: null }))
       throw new Error('The retained Editor code request differs from its captured text, R provider or session.');
   }

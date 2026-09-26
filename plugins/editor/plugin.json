@@ -237,6 +237,10 @@
                 "type": "null"
               }
             ]
+          },
+          "session_selection": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -286,6 +290,24 @@
       },
       "scopes": [
         "resources.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instances",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
       ]
     }
   ]

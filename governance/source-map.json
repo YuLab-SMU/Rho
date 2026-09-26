@@ -746,6 +746,7 @@
         "scripts/fixtures/editor-code.mjs",
         "scripts/fixtures/editor-format.mjs",
         "scripts/fixtures/editor-save-run.mjs",
+        "scripts/fixtures/editor-sessions.mjs",
         "ui/e2e/editor-plugin.spec.ts",
         "ui/e2e/editor-code.spec.ts",
         "ui/e2e/files-plugin.spec.ts",

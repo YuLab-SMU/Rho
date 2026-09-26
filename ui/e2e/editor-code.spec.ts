@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, realpathSync, rmSy
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-let directory: string, project: string, url: URL, host: ReturnType<typeof spawn>, view: any, files: any, editor: any, r: any, console_: any;
+let directory: string, project: string, url: URL, host: ReturnType<typeof spawn>, view: any, files: any, editor: any, r: any, alternate: any, console_: any;
 let completed=false;
 const windowId='editor-code-window',binary=resolve('../target/debug/rho'),filename='编辑与格式化.R',initial='\ufeffformat_should_not_execute=42\r\n';
 const hash=(input:Buffer|string)=>'sha256:'+createHash('sha256').update(input).digest('hex');
@@ -16,8 +16,8 @@ async function port(method:string,params:any){
 }
 async function invoke(id:string,args:any){const record=await port('invoke',{capability:{id,version:1},arguments:args,preconditions:[],client_request_id:crypto.randomUUID()});expect(record.status,JSON.stringify(record.error)).toBe('succeeded');return record.output;}
 async function query(id:string,args:any){return(await port('query_snapshot',{capability:{id,version:1},arguments:args})).data;}
-async function native(id:string,args:any){return query(id,{binding:await query('plugins.resolve',{capability:{id,version:1},instance:r.identity}),arguments:args});}
-async function run(code:string){const session=await native('r.session',{});return invoke('r.execute',{binding:await query('plugins.resolve',{capability:{id:'r.execute',version:1},instance:r.identity}),arguments:{expected_session:session.session_id,code}});}
+async function native(id:string,args:any,provider=r){return query(id,{binding:await query('plugins.resolve',{capability:{id,version:1},instance:provider.identity}),arguments:args});}
+async function run(code:string,provider=r){const session=await native('r.session',{},provider);return invoke('r.execute',{binding:await query('plugins.resolve',{capability:{id:'r.execute',version:1},instance:provider.identity}),arguments:{expected_session:session.session_id,code}});}
 async function open(configuration:any,state:any={}){const layout=await query('windows.layout',{window:windowId});return(await invoke('windows.open_view',{expected_layout_version:layout.version,group:layout.layout.kind==='tabs'?layout.layout.id:null,
   view:{instance:editor.identity,contribution:'editor',window:windowId,configuration,state}})).view;}
 test.beforeAll(async()=>{
@@ -34,15 +34,16 @@ test.beforeAll(async()=>{
   url=new URL(await new Promise<string>((done,reject)=>{let output='',errors='';const timer=setTimeout(()=>reject(new Error(`Editor code Host startup timed out: ${errors}`)),90000);
     host.stderr!.on('data',bytes=>errors+=bytes);host.stdout!.on('data',bytes=>{output+=bytes;const found=output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});
     host.once('exit',code=>{clearTimeout(timer);reject(new Error(`Editor code Host exited ${code}: ${errors}`));});}));
-  const activate=async(name:string,configuration:any={},optional_capabilities:any[]=[])=>
-    (await invoke('plugins.activate',{revision:captured[name].revision,artifact:captured[name].artifacts[0],target:['r','files'].includes(name)?'aarch64-apple-darwin':'ui-web',alias:name,configuration,optional_capabilities})).instance;
+  const activate=async(name:string,configuration:any={},optional_capabilities:any[]=[],alias=name)=>
+    (await invoke('plugins.activate',{revision:captured[name].revision,artifact:captured[name].artifacts[0],target:['r','files'].includes(name)?'aarch64-apple-darwin':'ui-web',alias,configuration,optional_capabilities})).instance;
   files=await activate('files');
   r=await activate('r',{ark:realpathSync(process.env.RHO_ARK!),r_home:realpathSync(process.env.RHO_R_HOME!),execution_timeout_seconds:30});
-  editor=await activate('editor',{},[{id:'r.session',version:1},{id:'r.execute',version:2},{id:'r.format',version:1},{id:'resources.read',version:1}]);
+  alternate=await activate('r',r.configuration,[],'analysis-alt');
+  editor=await activate('editor',{},[{id:'r.session',version:1},{id:'r.execute',version:2},{id:'r.format',version:1},{id:'resources.read',version:1},{id:'plugins.instances',version:1},{id:'plugins.inspect',version:1}]);
   console_=await activate('console');
   const binding=await query('plugins.resolve',{capability:{id:'files.snapshot',version:1},instance:files.identity});
   const file=(await query('files.snapshot',{binding,arguments:{paths:[filename],limit:1}})).files[0];
-  view=await open({source:files.identity,file,runtime:r.identity});
+  view=await open({source:files.identity,file,runtime:r.identity,session_selection:true});
 });
 test.afterAll(async()=>{
   if(host?.exitCode===null){host.kill('SIGINT');await new Promise<void>(done=>host.once('exit',()=>done()));}
@@ -143,7 +144,7 @@ test('ordinary Editor retains native formatting, captured Console runs and save-
   expect(readFileSync(join(project,filename),'utf8')).toBe('\ufeffmust_not_run_after_close <- TRUE');
   await page.screenshot({path:info.outputPath('editor-saved-run-reopened.png')});
   await third.getByRole('button',{name:'Dismiss Result',exact:true}).click();await expect(third.locator('#code-recovery')).toBeHidden();
-  const newView=await open({source:files.identity,file:null,runtime:r.identity}),newFrame=frame(newView.view),newCode=newFrame.getByRole('textbox',{name:'Code Editor',exact:true});
+  const newView=await open({source:files.identity,file:null,runtime:r.identity,session_selection:true}),newFrame=frame(newView.view),newCode=newFrame.getByRole('textbox',{name:'Code Editor',exact:true});
   await expect(newCode).toBeVisible();await newCode.fill('new_saved_file <- 7');await newFrame.getByRole('button',{name:'Save and Run',exact:true}).click();
   const newDialog=newFrame.getByRole('dialog',{name:'Save and Run',exact:true});await expect(newDialog).toBeVisible();
   await newDialog.getByLabel('Project-relative file path',{exact:true}).fill('created-中文.R');
@@ -155,14 +156,42 @@ test('ordinary Editor retains native formatting, captured Console runs and save-
   await newDialog.getByRole('button',{name:'Save and Run File',exact:true}).click();await expect(newDialog).toBeHidden();
   await expect(newFrame.locator('#code-status')).toContainText('succeeded');expect(readFileSync(join(project,'created-中文.R'),'utf8')).toBe('new_saved_file <- 7');
   expect((await run('new_saved_file')).value).toBe(7);
+  await newFrame.locator('#choose-session').click();const sessions=newFrame.getByRole('dialog',{name:'Run in Session',exact:true});
+  await expect(sessions.getByRole('button',{name:'analysis-alt unstarted',exact:true})).toBeVisible();
+  for(const width of [1440,1920,390,220]){
+    await page.setViewportSize({width,height:900});await expect.poll(()=>sessions.evaluate((element,width)=>{
+      const rect=element.getBoundingClientRect();return Math.abs(innerWidth-width)<4&&rect.left>=0&&rect.right<=innerWidth;
+    },width)).toBe(true);await page.screenshot({path:info.outputPath(`editor-sessions-${width}.png`)});
+  }
+  await sessions.getByRole('button',{name:'analysis-alt unstarted',exact:true}).click();await expect(sessions).toBeHidden();
+  expect((await native('r.session',{},alternate)).state).toBe('unstarted');
+  await newFrame.getByRole('button',{name:'Run Document',exact:true}).click();await expect(newFrame.locator('#error')).toContainText('Start the selected R session');
+  expect((await native('r.session',{},alternate)).state).toBe('unstarted');
+  const alternateLayout=await query('windows.layout',{window:windowId});
+  const alternateConsole=(await invoke('windows.open_view',{expected_layout_version:alternateLayout.version,group:alternateLayout.layout.id,view:{instance:console_.identity,contribution:'console',window:windowId,configuration:{source:alternate.identity},state:{}}})).view;
+  await frame(alternateConsole.view).getByRole('button',{name:'Start R',exact:true}).click();await expect.poll(async()=>(await native('r.session',{},alternate)).state,{timeout:60000}).toBe('idle');
+  await page.getByRole('tab',{name:'Editor',exact:true}).last().click();await newCode.click();await newCode.press('Meta+a');await page.keyboard.insertText('Sys.sleep(2); isolated_target <- "alternate"');
+  await newFrame.getByRole('button',{name:'Run Document',exact:true}).click();
+  await newFrame.locator('#choose-session').click();await expect(sessions.getByRole('button',{name:/^r idle/})).toBeVisible();
+  await sessions.getByRole('button',{name:/^r idle/}).click();await expect(sessions).toBeHidden();
+  await expect(newFrame.locator('#code-status')).toContainText('succeeded');
+  expect((await run('isolated_target',alternate)).value).toBe('alternate');expect((await run('exists("isolated_target", envir=.GlobalEnv, inherits=FALSE)')).value).toBe(false);
+  await newFrame.locator('#choose-session').click();await sessions.getByRole('button',{name:'analysis-alt idle',exact:true}).click();await expect(sessions).toBeHidden();
+  await page.getByRole('tab',{name:'Editor',exact:true}).last().locator('[data-layout-path$="/button/close"]').click();await expect(region(newView.view)).toHaveCount(0);
+  const selectionClosed=await query('views.inspect',{view:newView.view}),selectionReopened=await open(newView.configuration,selectionClosed.state),selectedFrame=frame(selectionReopened.view);
+  await expect(selectedFrame.getByRole('textbox',{name:'Code Editor',exact:true})).toContainText('isolated_target');
+  await selectedFrame.locator('#choose-session').click();await expect(selectedFrame.getByRole('button',{name:'analysis-alt idle · Selected',exact:true})).toBeVisible();
+  await selectedFrame.getByRole('button',{name:'Close',exact:true}).click();
   const operations:any[]=[];let cursor:any=null;
   for(let n=0;n<10;n++){const page=await query('operation.list_recent',{limit:100,...(cursor===null?{}:{before_cursor:cursor})});operations.push(...page.operations);cursor=page.next_cursor;if(cursor===null)break;}
   expect(cursor).toBeNull();const editorRuns=operations.filter((op:any)=>op.capability.id==='r.execute'&&op.capability.version===2);
-  expect(editorRuns).toHaveLength(3);const originals=await Promise.all(editorRuns.map(op=>port('get_operation',{operation_id:op.operation_id})));
-  const originalRun=originals.find(op=>op.operation.normalized_arguments.arguments.run.source.kind==='document');
+  expect(editorRuns).toHaveLength(4);const originals=await Promise.all(editorRuns.map(op=>port('get_operation',{operation_id:op.operation_id})));
+  const originalRun=originals.find(op=>op.operation.normalized_arguments.arguments.run.source.view_id===view.view);
   expect(originalRun.operation.normalized_arguments.arguments.run.source).toEqual({view_id:view.view,label:filename,kind:'document'});
   const savedRun=originals.find(op=>op.operation.normalized_arguments.arguments.run.source.kind==='file'&&op.operation.normalized_arguments.arguments.run.source.label===filename);
   expect(savedRun.operation.normalized_arguments.arguments.run).toEqual({code:captured,source:{view_id:reopened.view,label:filename,kind:'file'},output_mode:'console'});
+  const alternateRun=originals.find(op=>op.operation.normalized_arguments.binding.provider.instance===alternate.identity.instance);
+  expect(alternateRun.operation.normalized_arguments.arguments.run.code).toBe('Sys.sleep(2); isolated_target <- "alternate"');
   expect(operations.filter((op:any)=>op.capability.id==='r.format')).toHaveLength(3);expect(operations.filter((op:any)=>op.capability.id==='files.apply_patch')).toHaveLength(4);
   expect(errors).toEqual([]);completed=true;
 });

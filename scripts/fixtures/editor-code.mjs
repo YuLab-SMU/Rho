@@ -5,16 +5,18 @@ export async function checkEditorCode({EditorController,fixture,sdk,history,undo
   const source={plugin:'org.rho.r',instance:'r-selected',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
   const wait=async condition=>{for(let i=0;i<2000&&!condition();i++)await new Promise(resolve=>setImmediate(resolve));assert.ok(condition());};
   const edit=(controller,text)=>controller.document.update(controller.document.state.update({changes:{from:0,to:controller.document.state.doc.length,insert:text},userEvent:'input.type'}));
-  const make=async(initial='x=1\ny=2',isNew=true)=>{
+  const make=async(initial='x=1\ny=2',isNew=true,sessionSelection=false)=>{
     const f=await fixture(isNew);f.controller.stop();
-    const state={records:[],attempts:[],session:'session',sessionGate:null,admissionGate:null,readGate:null,lost:false,queries:[]};
+    const state={records:[],attempts:[],session:'session',sessionGate:null,admissionGate:null,readGate:null,lost:false,queries:[],providers:new Map()};
     const query=f.client.query,invoke=f.client.invoke,operation=f.client.operation;
     f.client.query=async(cap,args)=>{
       state.queries.push(clone({cap,args}));
       if(cap.id==='r.session'){
-        assert.deepEqual(args,{binding:{provider:source,capability:cap,project:'project',target:null},arguments:{}});
+        const selected=state.providers.get(args.binding.provider.instance);
+        assert.deepEqual(args,{binding:{provider:selected?.provider??source,capability:cap,project:'project',target:null},arguments:{}});
         if(state.sessionGate)await state.sessionGate;
-        return{status:'ready',data:{session_id:state.session}};
+        const session=selected?selected.session:state.session;
+        return{status:'ready',data:{state:session===null?'unstarted':'idle',session_id:session}};
       }
       if(cap.id==='operation.get'){
         const record=state.records.find(record=>record.operation.operation_id===args.operation_id);
@@ -28,7 +30,8 @@ export async function checkEditorCode({EditorController,fixture,sdk,history,undo
       if(!['r.execute','r.format'].includes(cap.id))return invoke(cap,args,options);
       state.attempts.push(clone({cap,args,options}));assert.deepEqual(f.stored().code.intent.arguments,args,'code and exact request are synchronized before native admission');
       assert.equal(f.stored().code.intent.request,options.requestId);
-      assert.deepEqual(args.binding.provider,source);assert.equal(args.binding.target,'session');
+      const selected=state.providers.get(args.binding.provider.instance);
+      assert.deepEqual(args.binding.provider,selected?.provider??source);assert.equal(args.binding.target,selected?.session??'session');
       const request=await sdk.operationRequestId(f.client.view.view,options.requestId);
       let record=state.records.find(record=>record.operation.client_request_id===request);
       if(!record){record={operation:{operation_id:'r-native-'+state.records.length,caller:{kind:'plugin',id:f.client.view.view},client_request_id:request,capability:clone(cap),normalized_arguments:{...clone(args),preconditions:args.preconditions??null},preconditions:[]},status:'accepted',outcome:null,output:null,error:null};state.records.push(record);}
@@ -37,13 +40,13 @@ export async function checkEditorCode({EditorController,fixture,sdk,history,undo
       return clone(record);
     };
     f.client.operation=async id=>{const record=state.records.find(record=>record.operation.operation_id===id);if(record){if(state.readGate)await state.readGate;return clone(record);}return operation(id);};
-    const configuration={...f.configuration,runtime:source},controller=new EditorController(f.client,configuration);await controller.open();edit(controller,initial);
+    const configuration={...f.configuration,runtime:source,session_selection:sessionSelection},controller=new EditorController(f.client,configuration);await controller.open();edit(controller,initial);
     const finish=(code='x <- 1\ny <- 2',status='succeeded')=>{
       const record=state.records.at(-1),args=record.operation.normalized_arguments.arguments,format=record.operation.capability.id==='r.format';
       record.status=record.outcome=status;record.error=status==='succeeded'?null:'Original '+status;
       record.output={operation_id:record.operation.operation_id,session_id:args.expected_session,source:clone(format?args.source:args.run.source),output_mode:format?null:'console',
         value_in_report:false,value:format?{code,changed:code!==args.code,tool_version:'fixture'}:null,
-        report:{owner:clone(source),resource:'report',digest:'sha256:'+'c'.repeat(64),bytes:1,media_type:'application/json'}};
+        report:{owner:clone(record.operation.normalized_arguments.binding.provider),resource:'report',digest:'sha256:'+'c'.repeat(64),bytes:1,media_type:'application/json'}};
     };
     return{...f,configuration,controller,r:state,finish,finishFile:f.finish};
   };

@@ -8,6 +8,8 @@ import { connectPluginView } from '../public/plugin-ui/index.js';
 import { EditorController } from './controller.js';
 import { isR, rSupport } from './r-language.js';
 import { terminal } from './operations.js';
+import { same } from './operations.js';
+import { readSessions, type SessionChoice } from './sessions.js';
 const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const client = await connectPluginView();
 let editor: EditorView | null = null, stopped = false, preparing = false, composing = false, compositionEndedAt = -Infinity;
@@ -16,6 +18,9 @@ let controller: EditorController;
 let closeInstalled = false;
 const language = new Compartment();
 let rLanguage = false, comparedVersion = '', saveThenRun = false;
+let sessionChoices: SessionChoice[] = [], sessionNext: string | null = null, sessionsLoading = false, sessionGeneration = 0;
+let sessionRenderKey = '';
+const sessionCursors = new Set<string>();
 const show = (id: string, text: string) => { const element = get(id); element.textContent = text; element.hidden = !text; };
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 function render() {
@@ -30,9 +35,14 @@ function render() {
   get('file-state').textContent = readonly ? 'Read-only' : controller.pending ? 'Save unconfirmed' : doc?.dirty ? 'Unsaved' : doc ? 'Saved' : '';
   for (const id of ['save', 'save-as']) get<HTMLButtonElement>(id).disabled = !doc || readonly || busy || composing || !!controller.pending || controller.drafts.unresolved || !!controller.disk || controller.awaitingSavedRun;
   get<HTMLButtonElement>('compare-disk').disabled = !doc?.path || readonly || busy || !!controller.pending || controller.drafts.unresolved || controller.awaitingSavedRun;
-  get('r-actions').hidden = !controller.runtime.source;
+  get('r-actions').hidden = !controller.runtime.source && !controller.sessionSelection;
+  get('choose-session').hidden = !controller.sessionSelection;
+  get<HTMLButtonElement>('choose-session').disabled = busy || composing;
+  const selectedSession = sessionChoices.find(item => same(item.provider, controller.runtime.source));
+  get('choose-session').textContent = selectedSession ? `Run in ${selectedSession.label}` : controller.runtime.source ? 'Choose Session' : 'Select R Session';
+  get('choose-session').title = controller.runtime.source?.instance ?? 'No R session is selected';
   const code = controller.code, canStart = !code || code.status === 'succeeded' && (code.kind !== 'format' || code.applied);
-  for (const id of ['run-selection', 'run-document', 'save-run', 'format']) get<HTMLButtonElement>(id).disabled = !doc || !isR(doc.path) || readonly || busy || composing ||
+  for (const id of ['run-selection', 'run-document', 'save-run', 'format']) get<HTMLButtonElement>(id).disabled = !controller.runtime.source || !doc || !isR(doc.path) || readonly || busy || composing ||
     !!controller.pending || !!controller.disk || controller.drafts.unresolved || !canStart;
   get('code-recovery').hidden = !code;
   get('code-status').textContent = !code ? '' : controller.awaitingSavedRun ? controller.fileRun?.phase === 'ready' ? code.intent.view === client.view.view ?
@@ -77,6 +87,46 @@ function render() {
     const head = doc.state.selection.main.head, line = doc.state.doc.lineAt(head);
     get('position').textContent = `Ln ${line.number}, Col ${head - line.from + 1} · ${doc.snapshot.byteSize.toLocaleString()} bytes`;
   }
+  renderSessions();
+}
+function renderSessions() {
+  const dialog = get<HTMLDialogElement>('sessions-dialog');
+  if (!dialog.open) return;
+  const list = get('session-list'), key = JSON.stringify([sessionChoices, controller.runtime.source, sessionsLoading, controller.busy, preparing]);
+  if (key !== sessionRenderKey) {
+  sessionRenderKey = key; list.replaceChildren();
+  for (const item of sessionChoices) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'session-choice';
+    const selected = same(item.provider, controller.runtime.source);
+    button.setAttribute('aria-pressed', String(selected)); button.disabled = sessionsLoading || controller.busy || preparing || item.state === 'unavailable';
+    const name = document.createElement('strong'); name.textContent = item.label;
+    const detail = document.createElement('span'); detail.textContent = `${item.state.replaceAll('_', ' ')}${selected ? ' · Selected' : ''}`;
+    button.append(name, detail); button.title = `${item.provider.plugin}\n${item.provider.instance}\n${item.provider.revision}`;
+    button.onclick = () => action(async () => {
+      try { await controller.selectSession(item.provider); if (!preparing) dialog.close(); }
+      catch (error) { show('sessions-error', message(error)); throw error; }
+    }); list.append(button);
+  }
+  }
+  get('sessions-status').textContent = sessionsLoading ? 'Observing sessions…' : !sessionChoices.length ? 'No compatible active R provider was found on this page.' :
+    sessionChoices.length >= 200 ? 'Showing at most 200 sessions. Refresh to return to the first page.' : `${sessionChoices.length} session${sessionChoices.length === 1 ? '' : 's'} observed. Refresh to check current availability.`;
+  get<HTMLButtonElement>('refresh-sessions').disabled = sessionsLoading || controller.busy || preparing;
+  get('more-sessions').hidden = sessionNext === null; get<HTMLButtonElement>('more-sessions').disabled = sessionsLoading || controller.busy || preparing;
+}
+async function loadSessions(more = false) {
+  if (!controller.sessionSelection || sessionsLoading || preparing || stopped) return;
+  const generation = ++sessionGeneration; sessionsLoading = true; show('sessions-error', ''); renderSessions();
+  try {
+    if (!more) sessionCursors.clear();
+    if (more && sessionNext === null) return;
+    const page = await readSessions(client, more ? sessionNext : null);
+    if (stopped || preparing || generation !== sessionGeneration) return;
+    if (page.next !== null && sessionCursors.has(page.next)) throw new Error('The session catalog repeated a page. Refresh before continuing.');
+    if (page.next !== null) sessionCursors.add(page.next);
+    sessionChoices = (more ? [...sessionChoices, ...page.items.filter(item => !sessionChoices.some(previous => same(previous.provider, item.provider)))] : page.items).slice(0, 200);
+    sessionNext = sessionChoices.length >= 200 ? null : page.next;
+  } catch (error) { if (!stopped && !preparing && generation === sessionGeneration) show('sessions-error', message(error)); }
+  finally { sessionsLoading = false; if (!stopped) render(); }
 }
 function report(error: unknown) { if (!stopped) { controller.error = message(error); render(); } }
 async function flush() {
@@ -161,6 +211,9 @@ function wireActions() {
   get('run-selection').onclick = () => action(() => controller.startCode('selection'));
   get('run-document').onclick = () => action(() => controller.startCode('document'));
   get('format').onclick = () => action(() => controller.startCode('format'));
+  get('choose-session').onclick = () => { if (preparing || composing || stopped) return; get<HTMLDialogElement>('sessions-dialog').showModal(); renderSessions(); void loadSessions(); };
+  get('close-sessions').onclick = () => get<HTMLDialogElement>('sessions-dialog').close();
+  get('refresh-sessions').onclick = () => void loadSessions(); get('more-sessions').onclick = () => void loadSessions(true);
   get('inspect-code').onclick = () => action(() => controller.inspectCode());
   get('retry-code').onclick = () => action(() => controller.retryCode());
   get('continue-saved-run').onclick = () => action(() => controller.continueSavedRun());

@@ -68,9 +68,17 @@ uncertainty, lost acknowledgements and explicit original-view continuation.
 Native acceptance passes for the keyboard action, delayed file acknowledgement,
 Console output, new-file Save and Run and close/reopen without an unsubmitted R
 run; the file-only Editor regression also passes. The updated four-width toolbar,
-recovered saved-run state and narrow new-file dialogs were inspected. Session
-selection, document context, editor preferences and default composition
-remain within the continuing Editor migration.
+recovered saved-run state and narrow new-file dialogs were inspected. Editor now
+also offers optional session selection through bounded public instance/manifest
+queries. Choosing an unstarted provider does not start R; the exact selection is
+retained with the draft, separately from each original execution target.
+Independent checks and two-provider native acceptance pass: explicit Console
+startup, target switching during a run, distinct R memory and restored selection.
+The file-only regression passes. Four-width session dialogs were inspected; a
+truncated narrow toolbar label was corrected, the complete native rerun passes,
+and the affected narrow layouts were inspected again.
+Document context, editor preferences and default composition remain within the
+continuing Editor migration.
 
 The ordinary Objects, Packages, Help and Plots views are assembled. Packages-to-Help
 and pinned Plots comparisons now pass native acceptance in the generic window;

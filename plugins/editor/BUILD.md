@@ -17,6 +17,15 @@ or current line; Run Document captures the whole text. Both use versioned Consol
 output and retain the originating document label. Code is captured before native
 observation, and the original request is synchronized before submission.
 
+To allow target selection, also select `plugins.instances@1` and
+`plugins.inspect@1`, and set the view's `session_selection` to `true`. The picker
+reads one page of project/principal-scoped instances at a time, inspects exact
+capability declarations and observes existing session state. It never starts or
+resumes R. The selected exact provider is retained with the document; previously
+captured actions keep their own provider/session even when the next target changes.
+A disabled selection configuration keeps its configured provider fixed. File-only
+views need none of these optional grants.
+
 Save and Run (Command Shift Enter) captures the text and existing session before
 asynchronous work, saves the captured bytes, and verifies the original file result
 before submitting that captured code. Later typing remains unsaved in the editor.
