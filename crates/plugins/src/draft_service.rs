@@ -32,6 +32,40 @@ fn fault(fault: PluginError) -> OperationError {
     }
 }
 
+/// Existing, explicitly granted self-draft storage remains usable by an open
+/// document after its instance stops accepting calls. No provider is called.
+pub(crate) fn view_persistence_capability(id: &str, version: u16) -> bool {
+    version == 1
+        && matches!(
+            id,
+            "documents.inspect" | "documents.read" | "documents.stage" | "documents.save"
+        )
+}
+pub(crate) fn view_persistence_write(request: &PluginViewRequest) -> bool {
+    match request {
+        PluginViewRequest::Control { capability, .. } => {
+            capability.version == 1 && capability.id.as_str() == "documents.stage"
+        }
+        PluginViewRequest::Invoke { capability, .. } => {
+            capability.version == 1 && capability.id.as_str() == "documents.save"
+        }
+        _ => false,
+    }
+}
+fn check_source(
+    required: Option<&DraftSource>,
+    source: Option<&DraftSource>,
+) -> Result<(), OperationError> {
+    if let (Some(required), Some(source)) = (required, source)
+        && required != source
+    {
+        return Err(invalid(
+            "a closing or inactive view can synchronize only its own draft encoding",
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn register(
     service: &Arc<PluginService>,
     registry: &mut CapabilityRegistry,
@@ -160,7 +194,9 @@ impl QueryHandler for Read {
         let principal = plugin_principal_id(context.principal());
         let (window, draft, data) = if self.descriptor.capability.id == "documents.inspect" {
             let args: DocumentDraftArguments = decode(value)?;
-            self.service.check_window_context(context, &args.window)?;
+            let source = self
+                .service
+                .draft_view_source(context, &args.window, false)?;
             let data = self
                 .service
                 .repository
@@ -168,10 +204,30 @@ impl QueryHandler for Read {
                 .unwrap()
                 .document_draft(&self.service.project, &principal, &args)
                 .map_err(fault)?;
+            check_source(source.as_ref(), data.as_ref().map(|draft| &draft.source))?;
             (args.window, args.draft, json!(data))
         } else {
             let args: ReadDocumentDraft = decode(value)?;
-            self.service.check_window_context(context, &args.window)?;
+            let source = self
+                .service
+                .draft_view_source(context, &args.window, false)?;
+            if source.is_some() {
+                let current = self
+                    .service
+                    .repository
+                    .lock()
+                    .unwrap()
+                    .document_draft(
+                        &self.service.project,
+                        &principal,
+                        &DocumentDraftArguments {
+                            window: args.window.clone(),
+                            draft: args.draft.clone(),
+                        },
+                    )
+                    .map_err(fault)?;
+                check_source(source.as_ref(), current.as_ref().map(|draft| &draft.source))?;
+            }
             let data = self
                 .service
                 .repository
@@ -209,7 +265,26 @@ impl ControlHandler for Stage {
         value: Value,
     ) -> Result<Value, OperationError> {
         let args: StageDraftChunk = decode(&value)?;
-        self.service.check_window_context(context, &args.window)?;
+        let source = self
+            .service
+            .draft_view_source(context, &args.window, true)?;
+        if source.is_some() {
+            let current = self
+                .service
+                .repository
+                .lock()
+                .unwrap()
+                .document_draft(
+                    &self.service.project,
+                    &plugin_principal_id(context.principal()),
+                    &DocumentDraftArguments {
+                        window: args.window.clone(),
+                        draft: args.draft.clone(),
+                    },
+                )
+                .map_err(fault)?;
+            check_source(source.as_ref(), current.as_ref().map(|draft| &draft.source))?;
+        }
         // Keep transient content out of diagnostics just as at other Control edges.
         let result = self
             .service
@@ -310,7 +385,8 @@ impl OperationHandler for Write {
             ));
         }
         let (window, draft, source, version) = self.identity(value)?;
-        self.service.check_window_context(context, &window)?;
+        let required_source = self.service.draft_view_source(context, &window, true)?;
+        check_source(required_source.as_ref(), Some(&source))?;
         let repo = self.service.repository.lock().unwrap();
         let revision = repo.revision(&source.revision).map_err(fault)?;
         if !revision
@@ -423,6 +499,56 @@ impl ExecutionLease for DraftLease {
     }
 }
 impl PluginService {
+    /// Native scope and lifetime, never a caller assertion of ownership. Normal
+    /// active views keep their declared authority. Close-time/inactive-instance
+    /// persistence is narrowed to the original view's exact encoding source.
+    fn draft_view_source(
+        &self,
+        context: &host::CallContext,
+        window: &WindowId,
+        writing: bool,
+    ) -> Result<Option<DraftSource>, OperationError> {
+        self.check_window_context(context, window)?;
+        if context.caller.kind != host::CallerKind::Plugin {
+            return Ok(None);
+        }
+        let Ok(view) = ViewInstanceId::new(&context.caller.id) else {
+            return Ok(None);
+        };
+        let record = match self.view_record(context, &view) {
+            Ok(record) => record,
+            Err(OperationError::NotFound(_)) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if record.closed {
+            return Err(invalid("view is closed"));
+        }
+        let closing = {
+            let views = self.views.lock().unwrap();
+            let live = views
+                .get(&view)
+                .ok_or_else(|| invalid("view connection is no longer present"))?;
+            if writing
+                && live
+                    .closing
+                    .as_ref()
+                    .is_some_and(|close| close.sealed(live.renderers.len()))
+            {
+                return Err(OperationError::ContentChanged(
+                    "view drafts are sealed for closure".into(),
+                ));
+            }
+            live.closing.is_some()
+        };
+        let active = self.runtime.observe().iter().any(|observation| {
+            observation.instance.identity == record.instance
+                && observation.instance.state == InstanceState::Active
+        });
+        Ok((closing || !active).then_some(DraftSource {
+            revision: record.instance.revision,
+            contribution: record.contribution,
+        }))
+    }
     pub(crate) fn complete_draft_save(
         &self,
         record: &host::OperationRecord,

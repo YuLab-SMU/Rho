@@ -107,8 +107,17 @@ discard fences, exact view grants, original replay, failed journal writes,
 cleanup failure and original commit recovery after restart and successor edits.
 `node scripts/test-plugin-ui.mjs` builds the public UI SDK outside the checkout and
 checks frozen captures, verified staging/read transfers, malformed content,
-acknowledgement identity, interruptions and existing view cooperation. These checks
-do not establish close-time large-draft persistence or the Editor UI.
+acknowledgement identity, interruptions and view cooperation. The Host draft target
+also covers a draining instance's open view flushing large content through original
+grants, refusal of another encoding, all-renderer preparation and the final write
+fence. The SDK check verifies that preparation waits for the original save and
+its synchronized reference state. After building the current client and Host,
+`npm run test:browser --prefix ui -- plugin-drafts.spec.ts` uses an independent
+ordinary view to flush more than 512 KiB while draining, hold the original receipt
+before closing, and restore exact Unicode bytes in another view. It seeds bulk
+fixture text after checking small normal input; it is not Editor input-performance
+or native IME acceptance. `plugin-workspace.spec.ts` retains the general close,
+lost-acknowledgement and saved-state recovery regression.
 After contract changes, regenerate with `npm run generate --prefix ui` and run
 `node scripts/test-plugin-protocol.mjs` for an independent TypeScript consumer.
 

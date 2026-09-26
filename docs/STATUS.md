@@ -87,7 +87,7 @@ rho-plugin-protocol --lib --test package_repository --locked`). Generated public
 declarations compile in an independent strict TypeScript consumer; client build
 and generated-type/embedded-asset checks pass. The shared Host now registers scoped
 `documents.inspect/read/stage/save/discard` ports. Save admission retains the exact
-capture; original commit settlement releases it. All four Host draft cases pass
+capture; original commit settlement releases it. All five Host draft cases pass
 (`cargo test -p rho-host --test plugin_drafts --locked`), including greater-than-1-MiB
 Unicode content, view grants/window fences, stale versions, discard/removal,
 original replay, failed cleanup and durable commit recovery after restart and
@@ -95,9 +95,25 @@ successor edits. An uncertain result without a durable candidate retains its byt
 and refuses discard; matching current content cannot establish the lost outcome.
 Public SDK byte capture/staging/verified reads also pass
 the independent strict TypeScript consumer and transfer checks
-(`node scripts/test-plugin-ui.mjs`), and client build/check pass. SDK close-time
-flushing and the ordinary Editor UI remain to be implemented. These draft ports
-require a newly built Host; no existing user Host was restarted.
+(`node scripts/test-plugin-ui.mjs`), and client build/check pass. Close-time flushing
+now permits exactly the declared self-draft staging/save ports while retaining
+original scope and source fences. A draining instance's open view can finish its
+flush; all renderers must acknowledge before further writes are sealed. Open views
+still prevent completing instance release. The focused Host target covers this
+lifecycle and 13 existing Host plugin regression cases pass after the change
+(`cargo test -p rho-host --test plugins --locked`).
+The independent native-browser draft fixture passes (`npm run test:browser --prefix
+ui -- plugin-drafts.spec.ts`): greater-than-512-KiB Unicode content, holding the
+original save receipt before closure, exact restoration in another view, two
+original saves, final release/discard/removal and unchanged sandbox. Both screenshots
+were inspected. The generic window browser case also passes. The initial large-text
+Fill attempt timed out before saving; the retained failure is separate from the
+passing rerun, which seeds bulk fixture text after a small normal input. This is
+transport/close acceptance, not Editor input performance or native IME acceptance.
+The first lifecycle test also incorrectly expected release to succeed with an open
+view; its corrected expectation preserves the established draining lifecycle.
+The ordinary Editor UI remains to be implemented. These draft ports require a
+newly built Host; no existing user Host was restarted.
 All 20 existing Host plugin, scoped-path, self-grant and shared-port regression
 cases also pass (`cargo test -p rho-host --test plugins --test port_contracts
 --test plugin_self_requirements --test plugin_workspace_paths --locked`).

@@ -483,7 +483,7 @@ impl PluginService {
                 observation.instance.identity == live.connection.view.instance
                     && observation.instance.state == InstanceState::Active
             });
-            if !active {
+            if !active && !crate::draft_service::view_persistence_capability(&cap.id, cap.version) {
                 return Err(invalid("view instance is no longer accepting calls"));
             }
             let grant = live

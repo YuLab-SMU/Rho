@@ -92,6 +92,15 @@ including after a Host restart and successor edits. Explicit
 authority. An uncertain outcome without a durable candidate keeps its material;
 current matching text is not evidence of the original save's outcome.
 
+Close-time synchronization uses those same declared draft ports. While a view is
+preparing to close, only staging and saving its own exact revision/contribution's
+drafts can continue; discard and unrelated new actions stay fenced. After all
+renderers have acknowledged the synchronized view-state version, further staging
+and saves are refused. An instance that has stopped accepting calls can still let
+its existing view read and synchronize its own drafts under the original grants
+and parent scopes. This does not finish instance release: open views still prevent
+that lifecycle step, and accepted work retains its original ownership.
+
 The R domain contracts now live in `plugins/r/api`; the native Ark/R implementation
 and its R bridge live in `plugins/r/backend/engine`. They depend only on public
 plugin contracts and third-party libraries, not Host or Operation implementation.

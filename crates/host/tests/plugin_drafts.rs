@@ -784,3 +784,328 @@ async fn declared_view_draft_calls_use_exact_parent_scope_and_original_window() 
         original.output.unwrap()
     );
 }
+
+struct DraftChannel {
+    connection: PluginViewConnection,
+    sequence: u32,
+}
+impl DraftChannel {
+    async fn send(
+        &mut self,
+        host: &NextHost,
+        context: &CallContext,
+        body: Value,
+    ) -> Result<Value, OperationError> {
+        self.sequence += 1;
+        let message = serde_json::from_value(json!({"protocol_version":1,"connection":self.connection.connection,
+            "view":self.connection.view.view,"sequence":self.sequence,"request":format!("flush-{}",self.sequence),"body":body})).unwrap();
+        host.dispatch_plugin_view(
+            context,
+            self.connection.view.window.as_str(),
+            &self.connection.call_token,
+            message,
+        )
+        .await
+    }
+    async fn operation(
+        &mut self,
+        host: &NextHost,
+        context: &CallContext,
+        operation: &OperationId,
+    ) -> OperationRecord {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let record: OperationRecord = serde_json::from_value(
+                    self.send(
+                        host,
+                        context,
+                        json!({"type":"get_operation","operation_id":operation}),
+                    )
+                    .await
+                    .unwrap(),
+                )
+                .unwrap();
+                if record.status.is_terminal() {
+                    break record;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap()
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn close_flush_uses_only_declared_own_draft_ports_while_draining_and_fences_sealed_state() {
+    let fixture = Fixture::new();
+    let context = NextHost::local_context();
+    let foreign_path = fixture.temp.path().join("another-encoding");
+    package(&foreign_path);
+    fs::write(
+        foreign_path.join("index.html"),
+        "<!doctype html><p>Another exact encoding revision</p>",
+    )
+    .unwrap();
+    fs::copy(
+        foreign_path.join("index.html"),
+        foreign_path.join("dist/index.html"),
+    )
+    .unwrap();
+    let foreign = snapshot_directory(&foreign_path, None, "ui-web").unwrap();
+    PluginRepository::open(&repository_path(&fixture.db))
+        .unwrap()
+        .import(&foreign)
+        .unwrap();
+    let host = NextHost::open_project(&fixture.db, &fixture.root)
+        .await
+        .unwrap();
+    let empty = json!({"digest":content_digest(b""),"bytes":0,"chunks":[]});
+    succeeded(
+        host.invoke(
+            &context,
+            invoke(
+                "acknowledged",
+                "documents.save",
+                fixture.save("acknowledged", None, empty.clone()),
+            ),
+        )
+        .await
+        .unwrap(),
+    );
+    let mut foreign_args = fixture.save("foreign", None, empty);
+    foreign_args["draft"] = json!("foreign-draft");
+    foreign_args["source"]["revision"] = json!(foreign.revision.id);
+    succeeded(
+        host.invoke(
+            &context,
+            invoke("foreign", "documents.save", foreign_args.clone()),
+        )
+        .await
+        .unwrap(),
+    );
+    let instance=succeeded(host.invoke(&context,invoke("activate","plugins.activate",json!({"revision":fixture.archive.revision.id,"artifact":fixture.archive.artifacts[0].id,"target":"ui-web","alias":"document","configuration":{}}))).await.unwrap()).output.unwrap()["instance"]["identity"].clone();
+    let view=succeeded(host.invoke(&context,invoke("open","views.open",json!({"instance":instance,"contribution":"document","window":"window-a","configuration":{},"state":{}}))).await.unwrap()).output.unwrap()["view"].clone();
+    let connection = serde_json::from_value(
+        query(&host, &context, "views.connection", json!({"view":view}))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let mut channel = DraftChannel {
+        connection,
+        sequence: 0,
+    };
+    let observed=channel.send(&host,&context,json!({"type":"query","capability":{"id":"documents.inspect","version":1},"arguments":{"window":"window-a","draft":"foreign-draft"}})).await.unwrap();
+    assert_eq!(
+        observed["data"]["source"]["revision"],
+        json!(foreign.revision.id),
+        "normal active declared authority can inspect another encoding"
+    );
+    let release = host
+        .invoke(
+            &context,
+            invoke("release", "plugins.release", json!({"instance":instance})),
+        )
+        .await
+        .unwrap();
+    assert_ne!(
+        release.status,
+        OperationStatus::Succeeded,
+        "open views prevent completed release"
+    );
+    assert_eq!(
+        query(
+            &host,
+            &context,
+            "plugins.instance",
+            json!({"instance":instance})
+        )
+        .await
+        .unwrap()["instance"]["state"],
+        "draining"
+    );
+    assert!(channel.send(&host,&context,json!({"type":"query","capability":{"id":"documents.inspect","version":1},"arguments":{"window":"window-a","draft":"foreign-draft"}})).await.is_err(),"draining-view persistence is limited to its original encoding");
+    assert!(channel.send(&host,&context,json!({"type":"invoke","capability":{"id":"documents.discard","version":1},"arguments":fixture.discard(1),"request_id":"no-discard","preconditions":[]})).await.is_err(),"release does not reopen general action authority");
+    for renderer in ["first", "second"] {
+        channel
+            .send(
+                &host,
+                &context,
+                json!({"type":"register_close_handler","renderer":renderer}),
+            )
+            .await
+            .unwrap();
+    }
+    let close: OperationRecord = serde_json::from_value(
+        host.dispatch(
+            &context,
+            HostRequest::Invoke(InvokeRequest {
+                invocation: invoke("close", "views.close", json!({"view":view})),
+                return_after_acceptance: Some(true),
+            }),
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    let requested = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let state = channel
+                .send(
+                    &host,
+                    &context,
+                    json!({"type":"observe_lifecycle","renderer":"first"}),
+                )
+                .await
+                .unwrap();
+            if state["close"]["phase"] == "requested" {
+                break state;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        requested["close"]["operation"],
+        json!(close.operation.operation_id)
+    );
+    let stage_message = |args: Value| json!({"type":"control","capability":{"id":"documents.stage","version":1},"arguments":args});
+    let mut weak = context.clone();
+    weak.scopes.remove("documents.write");
+    assert!(
+        channel
+            .send(
+                &host,
+                &weak,
+                stage_message(stage_args("flush", b"captured"))
+            )
+            .await
+            .is_err(),
+        "a flush cannot expand its parent's authority"
+    );
+    let mut bad_stage = stage_args("flush", b"captured");
+    bad_stage["draft"] = json!("foreign-draft");
+    assert!(
+        channel
+            .send(&host, &context, stage_message(bad_stage))
+            .await
+            .is_err()
+    );
+    foreign_args["draft"] = json!("another-draft");
+    assert!(channel.send(&host,&context,json!({"type":"invoke","capability":{"id":"documents.save","version":1},"arguments":foreign_args,"request_id":"foreign-save","preconditions":[]})).await.is_err());
+    let bytes = "关闭前的草稿 α🙂\r\n".repeat(20_000).into_bytes();
+    assert!(bytes.len() > 256 * 1024);
+    let mut chunks = vec![];
+    for part in bytes.chunks(65536) {
+        chunks.push(
+            channel
+                .send(&host, &context, stage_message(stage_args("flush", part)))
+                .await
+                .unwrap(),
+        );
+    }
+    let args = fixture.save(
+        "flush",
+        Some(1),
+        json!({"digest":content_digest(&bytes),"bytes":bytes.len(),"chunks":chunks}),
+    );
+    let saved:OperationRecord=serde_json::from_value(channel.send(&host,&context,json!({"type":"invoke","capability":{"id":"documents.save","version":1},"arguments":args,"request_id":"original-flush","preconditions":[]})).await.unwrap()).unwrap();
+    let saved = succeeded(
+        channel
+            .operation(&host, &context, &saved.operation.operation_id)
+            .await,
+    );
+    assert_eq!(saved.output.as_ref().unwrap()["version"], 2);
+    let acknowledged=channel.send(&host,&context,json!({"type":"set_state","expected_version":0,"state":{"draft":"draft-a","version":2}})).await.unwrap();
+    assert_eq!(acknowledged["status"], "succeeded");
+    channel.send(&host,&context,json!({"type":"prepare_close","renderer":"first","operation":close.operation.operation_id,"state_version":1})).await.unwrap();
+    assert!(
+        !host
+            .get_operation(&context, &close.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status
+            .is_terminal(),
+        "one document cannot attest for another renderer"
+    );
+    let current=channel.send(&host,&context,json!({"type":"query","capability":{"id":"documents.inspect","version":1},"arguments":{"window":"window-a","draft":"draft-a"}})).await.unwrap();
+    assert_eq!(current["data"], saved.output.unwrap());
+    channel.send(&host,&context,json!({"type":"prepare_close","renderer":"second","operation":close.operation.operation_id,"state_version":1})).await.unwrap();
+    // This current-thread test has not yielded to native closure since sealing.
+    // Even a correctly granted self-persistence write must now be refused.
+    let sealed = channel
+        .send(
+            &host,
+            &context,
+            stage_message(stage_args("after-seal", b"late")),
+        )
+        .await
+        .unwrap_err();
+    assert!(sealed.to_string().contains("sealed"), "{sealed}");
+    let closed = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let record = host
+                .get_operation(&context, &close.operation.operation_id)
+                .await
+                .unwrap()
+                .unwrap();
+            if record.status.is_terminal() {
+                break succeeded(record);
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        closed.output.as_ref().unwrap()["state"],
+        json!({"draft":"draft-a","version":2})
+    );
+    assert!(
+        channel
+            .send(
+                &host,
+                &context,
+                stage_message(stage_args("closed", b"late"))
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        query(
+            &host,
+            &context,
+            "documents.inspect",
+            json!({"window":"window-a","draft":"draft-a"})
+        )
+        .await
+        .unwrap()["content"]["digest"],
+        json!(content_digest(&bytes))
+    );
+    assert_eq!(fixture.pin_count(), 0);
+    succeeded(
+        host.invoke(
+            &context,
+            invoke(
+                "finish-release",
+                "plugins.release",
+                json!({"instance":instance}),
+            ),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(
+        host.get_operation(&context, &release.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        release.status,
+        "finishing after confirmed view closure does not rewrite the original refused release"
+    );
+    host.drain().await;
+}

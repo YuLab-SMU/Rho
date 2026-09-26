@@ -11,6 +11,9 @@ export type { CapabilityKey, PluginViewRecord, PluginViewRequest } from "../plug
 export const UI_PROTOCOL_VERSION = 1;
 export const MAX_UI_MESSAGE_BYTES = 1024 * 1024;
 export const MAX_UI_PENDING = 128;
+const isDraftFlush = (body: PluginViewRequest) =>
+  (body.type === "control" && body.capability.id === "documents.stage" && body.capability.version === 1) ||
+  (body.type === "invoke" && body.capability.id === "documents.save" && body.capability.version === 1);
 export interface ViewInitialization {
   protocol_version: number;
   connection: string;
@@ -72,7 +75,7 @@ export class PluginViewClient {
   }
   request<T = unknown>(body: PluginViewRequest): Promise<T> {
     if (this.closed) return Promise.reject(new Error("View connection is closed"));
-    if (this.closeCooperation?.getSnapshot().preparing && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy", "open_external_url", "download_resource"].includes(body.type))
+    if (this.closeCooperation?.getSnapshot().preparing && !isDraftFlush(body) && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy", "open_external_url", "download_resource"].includes(body.type))
       return Promise.reject(new Error("View closure is preparing; wait before starting another action."));
     if (this.pending.size >= MAX_UI_PENDING) return Promise.reject(new Error("View request quota reached"));
     if (this.sequence >= 0xffffffff) { this.dispose("View sequence exhausted"); return Promise.reject(new Error("View sequence exhausted")); }

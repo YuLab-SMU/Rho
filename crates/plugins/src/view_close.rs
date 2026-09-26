@@ -197,6 +197,11 @@ impl PluginService {
             .ok_or_else(|| OperationError::NotFound("view connection".into()))?;
         if let Some(close) = &live.closing {
             match request {
+                request if crate::draft_service::view_persistence_write(request) => {
+                    if close.sealed(live.renderers.len()) {
+                        return Err(OperationError::ContentChanged("view drafts are sealed for closure".into()));
+                    }
+                }
                 PluginViewRequest::Invoke { .. }
                 | PluginViewRequest::Control { .. }
                 | PluginViewRequest::Cancel { .. }

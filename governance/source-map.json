@@ -528,6 +528,17 @@
         "draft",
         "--locked"
       ]
+    },
+    "plugins.draft-browser": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui",
+        "--",
+        "plugin-drafts.spec.ts"
+      ]
     }
   },
   "areas": {
@@ -712,7 +723,10 @@
         "scripts/test-files-protocol.mjs",
         "scripts/test-files-ui.mjs",
         "ui/e2e/files-plugin.spec.ts",
-        "crates/host/tests/plugin_self_requirements.rs"
+        "crates/host/tests/plugin_self_requirements.rs",
+        "scripts/fixtures/plugin-drafts.mjs",
+        "scripts/fixtures/plugin-draft-view.mjs",
+        "ui/e2e/plugin-drafts.spec.ts"
       ],
       "checks": [
         "docs.index",
@@ -762,7 +776,8 @@
         "plugins.files-browser",
         "plugins.self-requirements",
         "plugins.drafts",
-        "plugins.draft-ports"
+        "plugins.draft-ports",
+        "plugins.draft-browser"
       ]
     }
   }

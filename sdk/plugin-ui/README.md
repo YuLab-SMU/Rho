@@ -55,8 +55,18 @@ view state before invoking. Admission is not a saved-draft acknowledgement: insp
 the original Operation until its outcome is established. Keep pending captures
 separate from later edits, and never replace an uncertain request with a new ID.
 Staging and read helpers accept an AbortSignal; interruption stops further transfer
-without cancelling accepted work or claiming rollback. These helpers do not bypass
-the existing close-time action fence.
+without cancelling accepted work or claiming rollback.
+
+A close handler may stage and invoke `documents.save@1`, wait for the original
+save to succeed, and persist its draft ID/version through `setState` before
+returning. These exact two mutation ports are allowed during close preparation;
+discard, other capability versions and unrelated actions remain fenced. The Host
+still requires declared grants and parent authority, and restricts closing or
+inactive views to their own exact encoding revision/contribution and window.
+All renderers must finish before closure; once their state is sealed, new staging
+or saves are refused. An existing view may finish its own draft synchronization
+while its instance is draining. Completing instance release still requires closing
+its views, and does not cancel their accepted work.
 
 `readDraft(client, record, { maxBytes, signal })` requires explicit
 `documents.inspect@1` and `documents.read@1` grants under `documents.read`. It checks
