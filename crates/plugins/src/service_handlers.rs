@@ -626,12 +626,19 @@ impl OperationHandler for Manage {
                         grant.capability.id.as_str(),
                         grant.capability.version.try_into().map_err(invalid)?,
                     )?;
-                    let descriptor = registry.descriptor(&capability).ok_or_else(|| {
-                        OperationError::UnknownCapability(capability.display_key())
-                    })?;
-                    if (descriptor.kind == host::CapabilityKind::Control
-                        && registry.control_handler(&capability).is_err())
-                        || !descriptor.required_scopes.is_subset(&grant.scopes)
+                    let (required_scopes, available) = if let Some(descriptor) = registry.descriptor(&capability) {
+                        (&descriptor.required_scopes, descriptor.kind != host::CapabilityKind::Control
+                            || registry.control_handler(&capability).is_ok())
+                    } else if let Some(own) = stored.manifest.capabilities.iter().find(|own| own.capability == grant.capability) {
+                        // A combined UI/backend package can require its own exact
+                        // contribution before its first instance exists. This is
+                        // only grant validation: publication still waits for Ready
+                        // and every eventual call uses the normal scoped router.
+                        (&own.required_scopes, true)
+                    } else {
+                        return Err(OperationError::UnknownCapability(capability.display_key()));
+                    };
+                    if !available || !required_scopes.is_subset(&grant.scopes)
                         || !grant.scopes.is_subset(&context.scopes)
                     {
                         return Err(OperationError::AccessDenied {capability:capability.display_key(),missing:vec!["declared grant must fit the existing caller authority and an available handler contract".into()]});
