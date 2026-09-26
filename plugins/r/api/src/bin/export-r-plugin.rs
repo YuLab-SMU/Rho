@@ -11,6 +11,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_out_dir(root.join("types"))
         .with_large_int("number");
     ExecuteR::export_all(&types)?;
+    FormatRCode::export_all(&types)?;
+    FormatResult::export_all(&types)?;
     CheckRCode::export_all(&types)?;
     ReadREvents::export_all(&types)?;
     REventsObservation::export_all(&types)?;
@@ -39,6 +41,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
         ("execute", schemars::schema_for!(ExecuteR)),
+        ("format", schemars::schema_for!(FormatRCode)),
+        ("formatted-code", schemars::schema_for!(FormatResult)),
         ("execute-result", schemars::schema_for!(RExecutionOutput)),
         ("check-code", schemars::schema_for!(CheckRCode)),
         ("code-completeness", schemars::schema_for!(CodeCompleteness)),

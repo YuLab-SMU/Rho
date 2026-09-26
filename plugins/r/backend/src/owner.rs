@@ -134,6 +134,13 @@ impl Owner {
         validate_r_input(&run.code, run.source.as_ref())?;
         Ok(run)
     }
+    fn validate_format(&self, value: &Value, version: u32) -> Result<FormatRCode, String> {
+        if version != 1 { return Err("Unsupported R formatting version".into()); }
+        let args: FormatRCode = serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
+        if args.expected_session != self.runtime()?.session_id() { return Err("R session precondition changed".into()); }
+        validate_r_format(&args.code, args.source.as_ref())?;
+        Ok(args)
+    }
     pub fn admit(&self, call: &PluginCall) -> Result<(), String> {
         if call.binding.target.as_deref() != Some(&self.target())
             || call.owner_context != json!({"session_target":self.target()})
@@ -144,6 +151,9 @@ impl Owner {
         match call.binding.capability.id.as_str() {
             "r.execute" => {
                 self.validate_execute(&call.arguments, call.binding.capability.version)?;
+            }
+            "r.format" => {
+                self.validate_format(&call.arguments, call.binding.capability.version)?;
             }
             "r.create_session" if call.arguments == json!({}) => (),
             _ => return Err("Unsupported R invocation".into()),
@@ -278,6 +288,9 @@ impl Owner {
                     }
                     "r.execute" => {
                         self.validate_execute(&args.arguments, args.capability.version)?;
+                    }
+                    "r.format" => {
+                        self.validate_format(&args.arguments, args.capability.version)?;
                     }
                     _ => return Err("unknown R operation".into()),
                 }
@@ -573,15 +586,24 @@ impl Owner {
                 *self.runtime.lock().unwrap() = Some(runtime);
                 Ok(plan(PluginOutcome::Succeeded, output, vec![]))
             }
-            "r.execute" => {
-                let args = self
-                    .validate_execute(&call.arguments, call.binding.capability.version)
-                    .map_err(NativeError::before_effect)?;
+            "r.execute" | "r.format" => {
+                let formatting = call.binding.capability.id.as_str() == "r.format";
+                let args = if formatting {
+                    let format = self.validate_format(&call.arguments, call.binding.capability.version)
+                        .map_err(NativeError::before_effect)?;
+                    RunRArguments { code: format.code, source: format.source, output_mode: None }
+                } else {
+                    self.validate_execute(&call.arguments, call.binding.capability.version)
+                        .map_err(NativeError::before_effect)?
+                };
                 let runtime = self.runtime().map_err(NativeError::before_effect)?;
                 *self.inspection_cache_key.lock().unwrap() = format!("{operation}:running");
-                let report = runtime
-                    .execute_controlled(&operation, &args, cancellation)
-                    .await;
+                let report = if formatting {
+                    runtime.execute_tool_controlled(&operation,
+                        &WorkspaceToolRequest::Format(FormatArguments { code: args.code.clone() }), cancellation).await
+                } else {
+                    runtime.execute_controlled(&operation, &args, cancellation).await
+                };
                 // Native return includes failure/uncertainty. This invalidates
                 // presentation only; the original journal decides the outcome.
                 *self.inspection_cache_key.lock().unwrap() = format!("{operation}:returned");
@@ -593,7 +615,7 @@ impl Owner {
                         evidence.extend(outputs.iter().map(|(_, reference)| reference.clone()));
                         let value = serde_json::to_vec(&report.value)
                             .map_err(|e| NativeError::after_possible_effect(e.to_string(), None))?;
-                        let output = if call.binding.capability.version == 2 {
+                        let output = if formatting || call.binding.capability.version == 2 {
                             json!(RExecutionResult {
                                 operation_id: operation.clone(),
                                 session_id: report.session_id.clone(),
@@ -722,7 +744,7 @@ impl Owner {
     pub fn prepare_pending_cancellation(&self, cancellation: &PendingCancellation) -> Result<bool, String> {
         let binding = &cancellation.binding;
         if binding.provider != self.instance || binding.target.as_deref() != Some(self.target().as_str())
-            || binding.capability.id.as_str() != "r.execute" || !matches!(binding.capability.version, 1 | 2) {
+            || !matches!((binding.capability.id.as_str(), binding.capability.version), ("r.execute", 1 | 2) | ("r.format", 1)) {
             return Err("Pending cancellation requires the exact admitted R execution".into());
         }
         self.queue.prepare_pending_cancellation(cancellation)

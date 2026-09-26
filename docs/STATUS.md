@@ -19,6 +19,23 @@ The R owner now also exposes session-scoped inspection readiness and a cache key
 that changes around execution. Objects has a public-SDK connection for this
 observation; its independent model checks and the new native readiness acceptance
 pass. The Host binary remained unchanged for the independent R package check.
+The ordinary R owner also exposes `r.format@1` with exact existing-session and
+UTF-8 byte checks, source retention and the shared execution/commit queue. It
+uses installed `styler`; complete results remain in original retained reports.
+The four public API and ten backend tests pass after generating the contributed
+manifest. Independent native acceptance passes through the unchanged Host:
+empty/Unicode input, no input evaluation or project-file write, restored options,
+large retained results, syntax failure, original-request replay, pending
+cancellation and result reads after release. Existing versioned Console execution
+also passes in that fixture. The first native run was unconfirmed because the
+transport route was omitted; that route is fixed. Two later fixture failures
+expected a duplicate Console value and reused a stale pause identity; the fixture
+now checks printed output and observes the current pause before explicit resume.
+Those failed runs remain retained; the complete rerun passed. Native R tools,
+independent public types, generated SDK freshness, client generation/build/check
+and architecture/boundary/governance checks pass. Editor's run/format integration
+is still in progress; this backend capability does not establish UI acceptance.
+
 The ordinary Objects, Packages, Help and Plots views are assembled. Packages-to-Help
 and pinned Plots comparisons now pass native acceptance in the generic window;
 Original Plots export also passes before and after R release. Default scenario

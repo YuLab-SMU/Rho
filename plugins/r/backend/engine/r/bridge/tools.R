@@ -245,7 +245,7 @@ rho_format <- function(payload) {
   previous <- options("styler.cache_name", "styler.quiet")
   on.exit(options(previous), add = TRUE)
   if (!requireNamespace("styler", quietly = TRUE)) {
-    stop("workspace.format requires an installed styler package; no package was installed")
+    stop("Formatting requires an installed styler package; no package was installed")
   }
   options(styler.cache_name = NULL, styler.quiet = TRUE)
   text <- paste(as.character(styler::style_text(

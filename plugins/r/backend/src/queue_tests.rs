@@ -181,6 +181,26 @@ async fn fifo_waits_for_original_settlement_and_old_ack_cannot_advance_the_next_
     assert!(queue.is_empty());
 }
 
+#[test]
+fn formatting_retains_its_own_binding_and_source_in_the_shared_queue() {
+    let queue = Queue::default();
+    let mut current = call("format-original");
+    current.binding.capability.id = rho_plugin_sdk::protocol::ContributionId::new("r.format").unwrap();
+    let source = json!({"view_id":"document:one","label":"分析.R","kind":"format"});
+    current.arguments = json!({"expected_session":"native-session","code":"中文=42","source":source});
+    queue.admit(&current).unwrap();
+    current.arguments["code"] = json!("later edits");
+    let observed = queue.observe("native-session", None);
+    assert_eq!(observed.console.pending[0].summary, "中文=42");
+    assert_eq!(serde_json::to_value(&observed.console.pending[0].source).unwrap(), source);
+    let cancellation = PendingCancellation { operation_id: id(&current), binding: current.binding.clone() };
+    assert!(queue.prepare_pending_cancellation(&cancellation).unwrap());
+    assert_eq!(queue.observe("native-session", None).pending_cancellations, vec![id(&current)]);
+    let mut wrong = cancellation;
+    wrong.binding.capability.id = rho_plugin_sdk::protocol::ContributionId::new("r.execute").unwrap();
+    assert!(queue.prepare_pending_cancellation(&wrong).is_err());
+}
+
 #[tokio::test]
 async fn cancellation_while_paused_or_waiting_for_a_read_lane_has_no_native_start() {
     for paused in [false, true] {

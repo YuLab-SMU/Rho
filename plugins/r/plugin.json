@@ -4279,6 +4279,323 @@
       "effects": [],
       "cancellation": "unsupported",
       "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.format",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Format R code",
+      "description": "Format captured text in the exact existing session using an installed styler. Does not evaluate the text, install tooling or write a project file. The original retained report contains the complete FormatResult; value_in_report marks an oversized inline value.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "FormatRCode",
+        "description": "An explicit code-tool Operation in an already selected native session.\nFormatting parses text; it does not evaluate it or write a project file.",
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 65536
+          },
+          "expected_session": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RunSource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session",
+          "code"
+        ],
+        "$defs": {
+          "RunSource": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "view_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "view_id",
+              "label",
+              "kind"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "code": "value=1",
+          "source": {
+            "view_id": "editor-view",
+            "label": "analysis.R",
+            "kind": "format"
+          }
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RExecutionOutput",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RExecutionResult"
+          },
+          {
+            "$ref": "#/$defs/RExecutionNotStarted"
+          }
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RExecutionNotStarted": {
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "started": {
+                "description": "Always false when the owner confirms cancellation before native execution.",
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "started"
+            ]
+          },
+          "RExecutionResult": {
+            "type": "object",
+            "properties": {
+              "events": {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "output_mode": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RunROutputMode"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "outputs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/RetainedROutput"
+                }
+              },
+              "report": {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              "session_id": {
+                "type": "string"
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RunSource"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "stderr": {
+                "type": "string"
+              },
+              "stdout": {
+                "type": "string"
+              },
+              "value": {
+                "description": "R's dynamic value; larger values remain in the full retained report."
+              },
+              "value_in_report": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "session_id",
+              "value",
+              "value_in_report",
+              "stdout",
+              "stderr",
+              "report",
+              "events",
+              "outputs"
+            ]
+          },
+          "ResourceReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ]
+          },
+          "RetainedROutput": {
+            "type": "object",
+            "properties": {
+              "native": {
+                "type": "object",
+                "properties": {
+                  "byte_size": {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0
+                  },
+                  "display_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "mime_type": {
+                    "type": "string"
+                  },
+                  "operation_id": {
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "type": "integer",
+                    "format": "uint64",
+                    "minimum": 0
+                  },
+                  "sha256": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "operation_id",
+                  "sequence",
+                  "mime_type",
+                  "byte_size",
+                  "sha256"
+                ]
+              },
+              "reference": {
+                "$ref": "#/$defs/ResourceReference"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "native",
+              "reference"
+            ]
+          },
+          "RunROutputMode": {
+            "type": "string",
+            "enum": [
+              "console"
+            ]
+          },
+          "RunSource": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "view_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "view_id",
+              "label",
+              "kind"
+            ]
+          }
+        }
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r"
+      ],
+      "effects": [
+        "r.session"
+      ],
+      "cancellation": "request",
+      "preflight": {
+        "id": "r.prepare",
+        "version": 1
+      }
     }
   ]
 }

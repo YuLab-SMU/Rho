@@ -17,6 +17,17 @@ or additional authority. `r.execute@1` retains its original code-only contract.
 `RExecutionOutput` also represents confirmed cancellation before native execution
 as `{operation_id, started: false}`; it is not a completed native report.
 
+`r.format@1` accepts `FormatRCode` in an existing exact session, with at most
+65536 UTF-8 bytes of code (empty input is allowed) and the same source-label
+bounds. It uses the installed `styler` package without installing tools, evaluating
+the input or writing a project file. The original `RExecutionOutput` preserves
+source labels and has no Console output mode. Successful `value` is `FormatResult`;
+if `value_in_report` is true, read and verify the complete retained report resource
+instead. Formatted text is never silently truncated. A caller must still compare
+its captured document before applying the result; formatter success cannot prove
+that later edits match the original input. Formatting shares the native queue,
+original commit settlement and pending-cancellation rules with execution.
+
 `r.check_code@1` requires an existing exact session with no queued work or unsettled
 result. It returns `CodeCompleteness` without evaluating the code. Refusal while
 busy is not a successful code check. `r.output_events@1` observes the same exact

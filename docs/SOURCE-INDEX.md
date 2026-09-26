@@ -120,6 +120,7 @@ Sources:
 - `scripts/test-plugin-protocol.mjs`
 - `scripts/test-plugin-ui.mjs`
 - `scripts/test-r-console.mjs`
+- `scripts/test-r-format.mjs`
 - `scripts/test-r-help.mjs`
 - `scripts/test-r-objects-plugin.mjs`
 - `scripts/test-r-packages.mjs`
@@ -184,6 +185,7 @@ Checks:
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
 - `plugins.r-console`: `["node","scripts/test-r-console.mjs"]`
 - `plugins.r-engine`: `["cargo","test","-p","rho-r-engine","--locked"]`
+- `plugins.r-format`: `["node","scripts/test-r-format.mjs"]`
 - `plugins.r-help`: `["node","scripts/test-r-help.mjs"]`
 - `plugins.r-independent`: `["node","scripts/test-r-plugin-engine.mjs"]`
 - `plugins.r-native`: `["node","scripts/test-r-plugin.mjs"]`

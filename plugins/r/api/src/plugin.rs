@@ -14,6 +14,18 @@ pub struct ExecuteR {
     pub expected_session: String,
     pub run: RunRArguments,
 }
+/// An explicit code-tool Operation in an already selected native session.
+/// Formatting parses text; it does not evaluate it or write a project file.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct FormatRCode {
+    #[schemars(length(min = 1, max = 160))]
+    pub expected_session: String,
+    #[schemars(length(max = 65536))]
+    pub code: String,
+    #[serde(default)]
+    pub source: Option<RunSource>,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct CheckRCode {
@@ -87,6 +99,15 @@ pub fn validate_r_input(code: &str, source: Option<&RunSource>) -> Result<(), St
     if code.is_empty() || code.len() > 256 * 1024 || code.contains('\0') {
         return Err("R code must contain 1–262144 UTF-8 bytes without NUL".into());
     }
+    validate_r_source(source)
+}
+pub fn validate_r_format(code: &str, source: Option<&RunSource>) -> Result<(), String> {
+    if code.len() > 64 * 1024 || code.contains('\0') {
+        return Err("R formatting accepts at most 65536 UTF-8 bytes without NUL".into());
+    }
+    validate_r_source(source)
+}
+fn validate_r_source(source: Option<&RunSource>) -> Result<(), String> {
     if let Some(source) = source {
         for (value, max) in [
             (&source.view_id, 160),
@@ -105,6 +126,23 @@ pub fn validate_r_input(code: &str, source: Option<&RunSource>) -> Result<(), St
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn formatting_has_independent_byte_bounds_and_retains_source() {
+        let value = json!({"expected_session":"native","code":"中文=1","source":{"view_id":"document:one","label":"分析.R","kind":"format"}});
+        let args: FormatRCode = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&args).unwrap(), value);
+        validate_r_format(&args.code, args.source.as_ref()).unwrap();
+        assert!(validate_r_format("", None).is_ok());
+        assert!(validate_r_format(&"x".repeat(65536), None).is_ok());
+        assert!(validate_r_format(&"中".repeat(21846), None).is_err());
+        assert!(validate_r_format("x\0", None).is_err());
+        let mut source = args.source.unwrap();
+        source.label = "中".repeat(200);
+        assert!(validate_r_format("x=1", Some(&source)).is_err());
+        let mut invalid = value;
+        invalid["install_missing"] = json!(true);
+        assert!(serde_json::from_value::<FormatRCode>(invalid).is_err());
+    }
     #[test]
     fn original_run_options_are_retained_and_byte_bounds_apply_before_admission() {
         let value = json!({"expected_session":"native","run":{"code":"中文 <- 1","output_mode":"console","source":{"view_id":"draft:1","label":"分析.R","kind":"selection"}}});

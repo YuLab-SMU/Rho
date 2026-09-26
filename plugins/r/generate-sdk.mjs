@@ -40,6 +40,9 @@ try{
   const session='copy-session-from-r.session';
   const additions=[
     {...structuredClone(manifest.capabilities.find(item=>item.capability.id==='r.execute'&&item.capability.version===1)),
+      capability:{id:'r.format',version:1},title:'Format R code',description:'Format captured text in the exact existing session using an installed styler. Does not evaluate the text, install tooling or write a project file. The original retained report contains the complete FormatResult; value_in_report marks an oversized inline value.',
+      input_schema:schema('format'),output_schema:schema('execute-result'),examples:[{expected_session:session,code:'value=1',source:{view_id:'editor-view',label:'analysis.R',kind:'format'}}]},
+    {...structuredClone(manifest.capabilities.find(item=>item.capability.id==='r.execute'&&item.capability.version===1)),
       capability:{id:'r.execute',version:2},title:'Execute R input with source',description:'Execute the supplied code, output mode and source labels in the exact admitted session. Labels do not attest to a Host document capture.',
       input_schema:schema('execute'),output_schema:schema('execute-result'),examples:[{expected_session:'copy-session-from-r.session',run:{code:'1 + 1',output_mode:'console',source}}]},
     ...[

@@ -476,12 +476,23 @@ TypeScript consumption is checked by `node scripts/test-plugin-protocol.mjs`.
 R-owned public declarations and capability schemas are generated with
 `node plugins/r/generate-sdk.mjs`; use `--check` for freshness and
 `node scripts/test-r-protocol.mjs` for a strict independent TypeScript consumer.
-The generator invokes Cargo and runs serially. R Console protocol changes require
+The generator invokes Cargo and runs serially. Generate before backend checks so
+the transport-routing test checks the current contributed manifest. R Console protocol changes require
 `cargo test -p rho-r-api -p rho-r-backend --locked` and the existing real-R
 `node scripts/test-r-plugin.mjs`, whose Console fixture checks parser nonexecution,
 source retention, visible Console output, live event pagination during stdin,
 pending cancellation and exact instance boundaries. Full Application document
 capture and Console UI acceptance remain separate migration work.
+The ordinary R formatting capability has a separate native check:
+`RHO_ARK=/absolute/ark RHO_R_HOME=/absolute/R/home node scripts/test-r-format.mjs`.
+It requires the existing `styler` package, builds the R package outside the checkout,
+and exercises the unchanged Host in a disposable project. It checks explicit
+session selection, nonexecution of input, restored formatting options, exact
+retained large results, original-request replay, syntax failure and pending
+cancellation. Set `RHO_R_PLUGIN_PACKAGE` to reuse an already assembled package;
+the default build invokes Cargo and must run serially. Failed native evidence is
+retained; only the fixture's own Host is stopped. Editor application of the result
+and later-edit protection require their separate UI acceptance.
 R inspection changes use the same native acceptance: its inspection fixture reads
 object directories and table continuations, refuses foreign/expired references,
 reads Packages and Help from one observed copy, and verifies that queries neither

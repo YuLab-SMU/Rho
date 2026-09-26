@@ -192,7 +192,7 @@ fn supported_call(capability: &CapabilityKey, is_query: bool) -> bool {
     let valid_kind = match capability.id.as_str() {
         "r.session" | "r.console" | "r.snapshot" | "r.prepare" | "r.check_code" | "r.output_events" | "r.inspection_state" => is_query,
         id if rho_r_api::r_inspection_kind(id).is_some() => is_query,
-        "r.create_session" | "r.execute" => !is_query,
+        "r.create_session" | "r.execute" | "r.format" => !is_query,
         _ => false,
     };
     valid_kind && (capability.version == 1 || (capability.id.as_str() == "r.execute" && capability.version == 2))

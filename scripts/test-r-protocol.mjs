@@ -8,8 +8,10 @@ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'rho-r-types-'));
 try{
   fs.cpSync(path.join(root,'plugins/r/sdk'),path.join(directory,'sdk'),{recursive:true});
   fs.writeFileSync(path.join(directory,'package.json'),' {"type":"module"}');
-  fs.writeFileSync(path.join(directory,'consumer.ts'),`import type {ExecuteR,RExecutionOutput,REventsObservation,ReadREvents,CheckRCode,ConsoleState,RespondInput,RInspection,RInspectionState,RInspectionStateArguments,ObjectReadPage,ListObjectsArguments,ReadPackageHelpArguments} from './sdk/index.js';
+  fs.writeFileSync(path.join(directory,'consumer.ts'),`import type {ExecuteR,FormatRCode,FormatResult,RExecutionOutput,REventsObservation,ReadREvents,CheckRCode,ConsoleState,RespondInput,RInspection,RInspectionState,RInspectionStateArguments,ObjectReadPage,ListObjectsArguments,ReadPackageHelpArguments} from './sdk/index.js';
 const execute:ExecuteR={expected_session:'native',run:{code:'中文 <- 42',source:{view_id:'document',label:'分析.R',kind:'selection'},output_mode:'console'}};
+const formatting:FormatRCode={expected_session:execute.expected_session,code:'中文=42',source:{view_id:'document',label:'分析.R',kind:'format'}};
+const formatted:FormatResult={code:'中文 <- 42',tool_version:'installed',changed:true};
 const check:CheckRCode={expected_session:execute.expected_session,code:execute.run.code};
 const events:ReadREvents={expected_session:execute.expected_session,operation_id:'original',after_sequence:0,limit:100};
 const notStarted:RExecutionOutput={operation_id:'original',started:false};
@@ -24,7 +26,7 @@ const readiness:RInspectionState={session_id:'native',status:'ready',cache_key:'
 const readinessInput:RInspectionStateArguments={expected_session:null};
 function inspect(observation:RInspection<ObjectReadPage>){return observation.data?.columns[0]?.values[0]?.text??observation.diagnostic?.code;}
 function continueHelp(args:ReadPackageHelpArguments,offset:number,files:ReadPackageHelpArguments['expected_help_files']){return {...args,offset_utf8:offset,expected_help_files:files};}
-void [execute,check,events,notStarted,contradictory,observe,output,answer,directory,busy,readiness,readinessInput,inspect,continueHelp];
+void [execute,formatting,formatted,check,events,notStarted,contradictory,observe,output,answer,directory,busy,readiness,readinessInput,inspect,continueHelp];
 `);
   execFileSync(process.execPath,[path.join(root,'ui/node_modules/typescript/bin/tsc'),'--noEmit','--strict','--target','ES2022','--module','NodeNext','--moduleResolution','NodeNext','--rootDir',directory,path.join(directory,'consumer.ts')],{cwd:directory,stdio:'inherit'});
   console.log('Independent R protocol consumer compiles with only public declarations.');

@@ -5,6 +5,8 @@ export type * from "./types/CodeCompleteness.js";
 export type * from "./types/ConsoleState.js";
 export type * from "./types/ContentDigest.js";
 export type * from "./types/ExecuteR.js";
+export type * from "./types/FormatRCode.js";
+export type * from "./types/FormatResult.js";
 export type * from "./types/HelpFormat.js";
 export type * from "./types/InputRequest.js";
 export type * from "./types/InspectArguments.js";

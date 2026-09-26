@@ -7,6 +7,10 @@ Operations. Object directories, progressive object reads, installed package copi
 static indexes and Help use the exact existing session; see [public interfaces](sdk/README.md).
 Read-only inspection readiness includes a session-scoped cache key that changes
 around native execution so views can notice short runs between refreshes.
+Explicit `r.format` Operations use installed `styler` in the selected existing
+session, share execution's queue and original-result retention, and never evaluate
+the supplied text or save it to a project file. Oversized inline values remain
+available in the complete retained report; Editor application is a separate action.
 `node scripts/build-r-plugin.mjs DEST` assembles and builds a self-contained package
 outside the checkout; see [build instructions](BUILD.md). Current acceptance and
 the remaining migration are recorded in `docs/STATUS.md` at the repository root.
