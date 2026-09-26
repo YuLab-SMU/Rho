@@ -529,6 +529,9 @@
         "--locked"
       ]
     },
+    "plugins.editor-model": {
+      "command": ["node", "scripts/test-editor-plugin.mjs"]
+    },
     "plugins.draft-browser": {
       "command": [
         "npm",
@@ -722,6 +725,7 @@
         "crates/host/tests/files_plugin.rs",
         "scripts/test-files-protocol.mjs",
         "scripts/test-files-ui.mjs",
+        "scripts/test-editor-plugin.mjs",
         "ui/e2e/files-plugin.spec.ts",
         "crates/host/tests/plugin_self_requirements.rs",
         "scripts/fixtures/plugin-drafts.mjs",
@@ -777,7 +781,8 @@
         "plugins.self-requirements",
         "plugins.drafts",
         "plugins.draft-ports",
-        "plugins.draft-browser"
+        "plugins.draft-browser",
+        "plugins.editor-model"
       ]
     }
   }

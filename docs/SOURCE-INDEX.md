@@ -105,6 +105,7 @@ Sources:
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`
+- `scripts/test-editor-plugin.mjs`
 - `scripts/test-files-plugin-engine.mjs`
 - `scripts/test-files-plugin.mjs`
 - `scripts/test-files-protocol.mjs`
@@ -156,6 +157,7 @@ Checks:
 - `plugins.draft-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-drafts.spec.ts"]`
 - `plugins.draft-ports`: `["cargo","test","-p","rho-host","--test","plugin_drafts","--locked"]`
 - `plugins.drafts`: `["cargo","test","-p","rho-plugins","-p","rho-plugin-protocol","--lib","draft","--locked"]`
+- `plugins.editor-model`: `["node","scripts/test-editor-plugin.mjs"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.files-backend`: `["cargo","test","-p","rho-files-backend","--lib","--locked"]`
 - `plugins.files-browser`: `["npm","run","test:browser","--prefix","ui","--","files-plugin.spec.ts"]`

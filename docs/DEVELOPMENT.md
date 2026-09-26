@@ -98,6 +98,13 @@ navigation. The Editor is a routing fixture, not document-editing acceptance.
 combined packages can declare exact self-capability grants before first activation
 without early publication, scope escalation or undeclared access.
 
+`node scripts/test-editor-plugin.mjs` compiles the Editor owner outside the checkout
+using only its locked dependencies, public plugin/UI SDK and Files declarations.
+It checks resident text/undo, bounded exact file reads, queued captured drafts,
+original-request recovery, receipt identity and failure/uncertain retention. This
+source-model check does not establish an installable Editor view, native file saves,
+R execution or iframe input/visual acceptance.
+
 The generic draft storage and public content contracts are checked with
 `cargo test -p rho-plugins -p rho-plugin-protocol --lib draft --locked`. These
 checks cover storage, captured/accepted chunk leases, version fences and source

@@ -112,8 +112,17 @@ passing rerun, which seeds bulk fixture text after a small normal input. This is
 transport/close acceptance, not Editor input performance or native IME acceptance.
 The first lifecycle test also incorrectly expected release to succeed with an open
 view; its corrected expectation preserves the established draining lifecycle.
-The ordinary Editor UI remains to be implemented. These draft ports require a
-newly built Host; no existing user Host was restarted.
+The ordinary Editor source now has independent document, exact Files-read and
+draft-synchronization models (`node scripts/test-editor-plugin.mjs`). Their external
+strict TypeScript build and checks pass: BOM/mixed newline preservation, resident
+undo/selection, later edits after a captured save, bounded read-only previews,
+page/full-content verification, queued frozen drafts, original-request inspection
+and retry, copied-view refusal to replay, and failure/uncertain retention. Large
+invalid-UTF-8 files retain a bounded replacement preview. The independently built
+Editor owner currently has no retiring-client import.
+The contributed Editor view, file/R action controller and native/browser acceptance
+remain to be implemented; the directory is not yet an installable plugin package.
+These draft ports require a newly built Host; no existing user Host was restarted.
 All 20 existing Host plugin, scoped-path, self-grant and shared-port regression
 cases also pass (`cargo test -p rho-host --test plugins --test port_contracts
 --test plugin_self_requirements --test plugin_workspace_paths --locked`).
