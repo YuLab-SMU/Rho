@@ -702,6 +702,42 @@
         "visibility",
         "--locked"
       ]
+    },
+    "plugins.environment-backend": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-environment-backend",
+        "--lib",
+        "--locked"
+      ]
+    },
+    "plugins.environment-manifest": {
+      "command": [
+        "node",
+        "plugins/environment/generate-manifest.mjs",
+        "--check"
+      ]
+    },
+    "plugins.environment-protocol": {
+      "command": [
+        "node",
+        "plugins/environment/generate-sdk.mjs",
+        "--check"
+      ]
+    },
+    "plugins.environment-types": {
+      "command": [
+        "node",
+        "scripts/test-environment-plugin-types.mjs"
+      ]
+    },
+    "plugins.environment-native": {
+      "command": [
+        "node",
+        "scripts/test-environment-plugin.mjs"
+      ]
     }
   },
   "areas": {
@@ -913,7 +949,10 @@
         "scripts/build-remote-plugin.mjs",
         "scripts/test-remote-plugin.mjs",
         "scripts/test-remote-plugin-types.mjs",
-        "scripts/test-environment-plugin-owner.mjs"
+        "scripts/test-environment-plugin-owner.mjs",
+        "scripts/build-environment-plugin.mjs",
+        "scripts/test-environment-plugin-types.mjs",
+        "scripts/test-environment-plugin.mjs"
       ],
       "checks": [
         "docs.index",
@@ -989,7 +1028,12 @@
         "plugins.remote-public-types",
         "plugins.environment-owner",
         "plugins.environment-independent",
-        "plugins.environment-visibility"
+        "plugins.environment-visibility",
+        "plugins.environment-backend",
+        "plugins.environment-manifest",
+        "plugins.environment-protocol",
+        "plugins.environment-types",
+        "plugins.environment-native"
       ]
     }
   }

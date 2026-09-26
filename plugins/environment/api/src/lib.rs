@@ -1,5 +1,8 @@
 //! Public Environment data. Native operations are owned by the package.
 #![forbid(unsafe_code)]
+mod plugin;
+mod validation;
+pub use plugin::*;
 use rho_process_api::ProcessReport;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

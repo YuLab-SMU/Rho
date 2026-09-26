@@ -265,10 +265,39 @@ an outdated lost-commit assertion; the fixture now verifies durable pending stat
 read purity and explicit idempotent reconciliation before purge. A second run
 retained material when native process absence could not be established; the
 unchanged complete rerun passed. Those failures remain recorded. Client generation,
-build/check and architecture, package-boundary and documentation checks pass. Ordinary
-Environment RPC packaging is the next integration step; this native directory is
-not yet an installable revision. Existing user Hosts and R sessions were not
-restarted; the relocated Host adapter requires a new binary.
+build/check and architecture, package-boundary and documentation checks pass.
+
+The ordinary `org.rho.environment` package now assembles from eight public/plugin
+crates outside the checkout. Its twelve contributions cover explicit configuration
+refresh, pak/renv planning and isolated realization, verification, original native
+recovery, inventory and admission queries. Activation and observations do not start
+R. A cooperating owner exclusively holds its material directory until release;
+replacement requires the same admitted native scope and original source record.
+Full reports use bounded, digest-verified resources, including principal-scoped
+Host reads of previous-instance reports. Unconfirmed resource transfer retains the
+original identity and uncertainty without replay. Accepted work holds its native
+lane until matching settlement; EOF abandons queued work and preserves recovery.
+The two public API cases and ten focused backend cases pass both in the checkout
+and independent source package, including incomplete resource reads, cancellation,
+directory replacement and observation bounds. Shipped executable wire checks pass
+resource failure, settlement fencing, bounded/reordered source queries, queued
+cancellation, EOF and forged-identity refusal. `node scripts/test-environment-plugin.mjs`
+passes through the existing Host without rebuilding it: real pak/renv, isolated
+libraries, failed digest verification, actual installer cancellation with confirmed
+descendant cleanup, original idempotency, replacement-instance source consumption,
+recovery and retained reports after release. Host SHA256 remains
+`405cdc322923c2649ff950dc862f488461b20e7b9319116526943a01b11df2b8`.
+Two initial Host initialization timeouts remain recorded, without changing deadlines.
+A subsequent run exposed a fixture distinction: refused initialization leaves the
+original lifecycle operation uncertain and the instance failed. The corrected
+test verifies both states, the native lock refusal, absent process and unchanged
+original owner; the full run passes. Public TypeScript consumption, manifest/SDK
+consistency, client generation/build/check, architecture/package boundaries and
+documentation checks pass. Material
+collection, live-library retention across ordinary R providers and explicit R
+library binding remain to be integrated; this package does not yet replace the
+entire Environment feature. Existing user Hosts and R sessions were not restarted;
+the relocated Host adapter requires a new binary.
 
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.

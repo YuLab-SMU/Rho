@@ -20,6 +20,24 @@ pub(super) struct NativeConfiguration {
 }
 
 impl REnvironmentOwner {
+    /// Explicit ordinary-plugin operation: preserve its original process marker
+    /// and cancellation evidence while establishing configuration for later reads.
+    pub async fn refresh_configuration(
+        &self,
+        operation_id: &str,
+        cancellation: watch::Receiver<bool>,
+    ) -> Result<EnvironmentObservation, EnvironmentOwnerError> {
+        self.helper_call(
+            Some(operation_id),
+            "observe",
+            json!({"library":null,"limit":1}),
+            cancellation,
+        )
+        .await?;
+        self.observe_filesystem(None, 500)
+            .await
+            .map_err(|error| EnvironmentOwnerError::after_possible_effect(error, None))
+    }
     /// Explicit lifecycle setup, never called by a QueryHandler. Failure is
     /// retained so the query reports why native configuration is unavailable.
     pub async fn initialize_observation(&self) -> Result<(), String> {

@@ -29,7 +29,21 @@ outside the checkout and runs the focused storage/observation tests without R.
 `node scripts/test-environment.mjs` exercises the real R Host bridge, including
 isolated pak/renv realization, cancellation, retention, recovery and restart
 binding. It requires the already installed R, Ark and package prerequisites and
-does not install tools. Ordinary Environment RPC packaging remains in progress.
+does not install tools. The ordinary backend is `plugins/environment/backend`. Iterate with
+`cargo test -p rho-environment-backend --lib --locked`; generate public declarations
+and contributed schemas with `node plugins/environment/generate-sdk.mjs` and
+`node plugins/environment/generate-manifest.mjs` (both support `--check`).
+`node scripts/test-environment-plugin-types.mjs` checks an independent TypeScript
+consumer. `node scripts/build-environment-plugin.mjs /absolute/new/package`
+assembles eight public/plugin Rust crates outside the checkout and builds offline
+with locked dependencies. The shipped `python3 tests/protocol.py
+/absolute/package/dist/rho-environment-backend` exercises the actual executable
+without R. With an already built Host and the installed R prerequisites,
+`RHO_ENVIRONMENT_PLUGIN_PACKAGE=/absolute/package node scripts/test-environment-plugin.mjs`
+checks ordinary activation, original source/report authority, native pak/renv,
+verification, installer cancellation and previous-instance resource reads through
+that unchanged Host. It retains failed evidence and only cleans test-owned native
+markers. Ordinary material collection and R-session binding remain in progress.
 `cargo test -p rho-environment visibility --locked` verifies scoped realization,
 retention and cleanup reads through the actual query gateway, including delegated
 principals and denial before native observation.

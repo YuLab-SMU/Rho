@@ -1,24 +1,44 @@
-# Environment native owner
+# Environment plugin
 
-The public `api` and native `backend/owner` own the existing Environment data,
-pak/renv execution, verification, native recovery and staged-material lifecycle.
-The R helpers travel with this source. Dependencies are public/plugin-owned Process
-libraries; this owner does not import private core modules or maintain a journal.
+The package owns the public Environment data, the sole native pak/renv execution
+and recovery implementation, and an ordinary process backend. The R helpers travel
+with the source. It imports only public/plugin libraries and maintains no journal.
+The core Operation mechanism retains and commits its reports and original outcomes.
 
-The retiring Host adapter delegates to this same implementation. It converts native
-uncertainty and confirmed cancellation into the core operation port. Scoped source
-authorization, live-library retention and authoritative commits remain the caller's
-responsibility. Native observations read previously established configuration and
-bounded files; they do not start R or test namespace loading.
+`environment.status@1` observes configured activity. The initial version-2 RPC
+contributions provide `environment.plan`, `environment.realize`, `environment.verify`,
+`environment.reconcile`, `environment.refresh` and `environment.observe`; each
+operation has its declared preflight query. Activation stays disconnected unless an
+existing Rscript executable is explicitly configured. Activation, preflight and
+inventory queries never start R or test namespace loading. Refresh is an explicit
+operation that establishes cached native configuration for later inventory reads.
+This is separate from read-only Workspace package inspection.
 
-Ordinary RPC contributions and installable package assembly are still in progress.
-This directory is not yet an installable plugin revision. Existing explicit
-Environment operations are being migrated; package inspection stays read-only.
+Full reports use bounded resource references, preserving owner, digest and size.
+Realization, verification and selected-library observation require an original
+successful result from this project and principal. Reconciliation accepts a
+terminal original attempt and preserves its outcome without replaying work.
+`operation.get` and `resources.read` are explicit Host grants, including reads
+from previous instances. No raw path, resource identifier or copied native marker
+alone authorizes work.
 
-From the repository, run `cargo test -p rho-environment-api -p
-rho-environment-owner --lib --locked` for focused storage/observation checks.
-`node scripts/test-environment-plugin-owner.mjs` assembles six public/plugin crates
-outside the checkout and runs those checks with the installed required toolchain,
-locked dependencies and offline resolution. It starts no R runtime. The existing
-`node scripts/test-environment.mjs` covers real R through the retiring Host in
-disposable projects and isolated libraries, using already installed prerequisites.
+A configured instance holds a cooperative lock on its exact material directory.
+Another instance can reopen that directory after release; concurrent instances
+use independent directories. Native work retains its lane until the matching
+Operation settlement, and unconfirmed output transfer preserves uncertainty.
+Closing a view does not release this service. These are lifecycle guarantees,
+not an OS sandbox for native code.
+
+See [BUILD.md](BUILD.md) for independent source assembly, prerequisites and builds.
+Public TypeScript declarations and JSON schemas are generated into `sdk/`.
+The shipped `tests/protocol.py` exercises the actual framed executable without R.
+`node scripts/test-environment-plugin.mjs` uses an independently assembled package
+and an unchanged, already built Host in disposable projects and libraries.
+It requires installed R, pak, renv, ps and jsonlite; it never installs tools.
+
+The retiring `rho-r-environment` adapter delegates to the same native owner.
+`node scripts/test-environment.mjs` covers that real-R bridge, including live-library
+retention and legacy Host restart binding. These old composition paths are still
+being migrated. Ordinary material collection, live-library usage and ordinary-R
+binding remain in progress; this package is not yet a complete replacement for
+all Environment behavior. Successful and uncertain material stays retained.

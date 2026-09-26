@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnvironmentReconciliation",
+  "type": "object",
+  "properties": {
+    "cleanup_confirmed": {
+      "type": "boolean"
+    },
+    "native_marker": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "project_root": {
+      "type": "string"
+    },
+    "retained_stage_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source_operation_id": {
+      "type": "string"
+    },
+    "stopped_pids": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0
+      }
+    }
+  },
+  "required": [
+    "source_operation_id",
+    "project_root",
+    "cleanup_confirmed",
+    "stopped_pids",
+    "retained_stage_paths",
+    "notices"
+  ]
+}

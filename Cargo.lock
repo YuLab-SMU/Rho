@@ -6046,11 +6046,29 @@ dependencies = [
 name = "rho-environment-api"
 version = "0.1.0"
 dependencies = [
+ "rho-plugin-protocol",
  "rho-process-api",
  "schemars 1.2.1",
  "serde",
  "serde_json",
  "ts-rs",
+]
+
+[[package]]
+name = "rho-environment-backend"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "rho-environment-api",
+ "rho-environment-owner",
+ "rho-plugin-sdk",
+ "rho-process-api",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

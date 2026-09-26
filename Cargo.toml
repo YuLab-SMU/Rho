@@ -10,6 +10,7 @@ members = [
   "plugins/editor/backend",
   "plugins/process/api",
   "plugins/environment/api",
+  "plugins/environment/backend",
   "plugins/environment/backend/owner",
   "plugins/remote/api",
   "plugins/remote/backend",

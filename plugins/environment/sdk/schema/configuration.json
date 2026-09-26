@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnvironmentConfiguration",
+  "type": "object",
+  "properties": {
+    "rscript": {
+      "description": "An explicit installed executable; activation never discovers or installs R.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "storage_root": {
+      "description": "Reopen an existing material directory after its previous owner has exited.\nNone uses this instance's Host-provided data directory.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "format": "uint64",
+      "default": 300,
+      "maximum": 86400,
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnvironmentRealization",
+  "type": "object",
+  "properties": {
+    "activation": {
+      "type": "string"
+    },
+    "library_digest": {
+      "type": "string"
+    },
+    "library_path": {
+      "type": "string"
+    },
+    "lock_digest": {
+      "type": "string"
+    },
+    "manager": {
+      "type": "string"
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PackageVersion"
+      }
+    },
+    "plan_operation_id": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "probes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NamespaceProbe"
+      }
+    },
+    "project_root": {
+      "type": "string"
+    },
+    "r_version": {
+      "type": "string"
+    },
+    "renv_lockfile": {
+      "type": "string"
+    },
+    "restart_required": {
+      "type": "boolean"
+    },
+    "verified": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "project_root",
+    "plan_operation_id",
+    "manager",
+    "lock_digest",
+    "library_path",
+    "library_digest",
+    "renv_lockfile",
+    "r_version",
+    "platform",
+    "packages",
+    "probes",
+    "verified",
+    "restart_required",
+    "activation"
+  ],
+  "$defs": {
+    "NamespaceProbe": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "library": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loadable": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "loadable"
+      ]
+    },
+    "PackageVersion": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ]
+    }
+  }
+}

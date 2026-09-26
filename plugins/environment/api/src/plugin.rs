@@ -1,0 +1,90 @@
+//! Bounded ordinary-plugin results. Full native reports travel as resources.
+use crate::EnvironmentObservation;
+use rho_plugin_protocol::{ContentDigest, OperationId, ResourceReference};
+use rho_process_api::ProcessActivity;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EnvironmentConfiguration {
+    /// An explicit installed executable; activation never discovers or installs R.
+    pub rscript: Option<String>,
+    /// Reopen an existing material directory after its previous owner has exited.
+    /// None uses this instance's Host-provided data directory.
+    pub storage_root: Option<String>,
+    #[serde(default = "default_timeout")]
+    #[schemars(range(min = 1, max = 86400))]
+    pub timeout_seconds: u64,
+}
+fn default_timeout() -> u64 {
+    300
+}
+impl Default for EnvironmentConfiguration {
+    fn default() -> Self {
+        Self {
+            rscript: None,
+            storage_root: None,
+            timeout_seconds: default_timeout(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EnvironmentStatus {
+    pub project_root: String,
+    pub storage_root: String,
+    pub rscript: Option<String>,
+    pub target_key: Option<String>,
+    pub activities: Vec<ProcessActivity>,
+    pub capacity: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum EnvironmentSnapshotStatus {
+    Ready,
+    Busy,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EnvironmentSnapshot {
+    pub status: EnvironmentSnapshotStatus,
+    pub observation: Option<EnvironmentObservation>,
+    pub notices: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum EnvironmentReportKind {
+    Plan,
+    Realization,
+    Verification,
+    Reconciliation,
+    Configuration,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EnvironmentResult {
+    pub operation: OperationId,
+    pub kind: EnvironmentReportKind,
+    pub report: ResourceReference,
+    /// None for planning/configuration; false never means successful verification.
+    pub verified: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EnvironmentRecovery {
+    pub operation: OperationId,
+    pub storage_root: String,
+    pub native_recovery: Option<ResourceReference>,
+    pub report_digest: Option<ContentDigest>,
+    pub automatic_reexecution: bool,
+    pub action: String,
+}

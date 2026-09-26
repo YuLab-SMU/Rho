@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnvironmentRealizeRecovery",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/EnvironmentStageRecovery"
+    },
+    {
+      "$ref": "#/$defs/EnvironmentRuntimeRecovery"
+    }
+  ],
+  "$defs": {
+    "EnvironmentRuntimeRecovery": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "process": {
+          "$ref": "#/$defs/ProcessReport"
+        },
+        "process_tree_marker": {
+          "type": "string"
+        },
+        "tree_cleanup_confirmed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "process",
+        "process_tree_marker",
+        "tree_cleanup_confirmed",
+        "action"
+      ]
+    },
+    "EnvironmentStageRecovery": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "plan_operation_id": {
+          "type": "string"
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EnvironmentRuntimeRecovery"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stage": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "plan_operation_id",
+        "action"
+      ]
+    },
+    "OutputCapture": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          }
+        },
+        "eof": {
+          "type": "boolean"
+        },
+        "total_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bytes",
+        "total_bytes",
+        "truncated",
+        "eof"
+      ]
+    },
+    "ProcessReport": {
+      "type": "object",
+      "properties": {
+        "cleanup_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cleanup_requested": {
+          "type": "boolean"
+        },
+        "elapsed_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "exit_signal": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "pid": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "stderr": {
+          "$ref": "#/$defs/OutputCapture"
+        },
+        "stdin_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stdout": {
+          "$ref": "#/$defs/OutputCapture"
+        },
+        "supervision": {
+          "type": "string"
+        },
+        "termination": {
+          "$ref": "#/$defs/ProcessTermination"
+        }
+      },
+      "required": [
+        "termination",
+        "stdout",
+        "stderr",
+        "elapsed_ms",
+        "supervision",
+        "cleanup_requested"
+      ]
+    },
+    "ProcessTermination": {
+      "type": "string",
+      "enum": [
+        "exited",
+        "cancelled",
+        "timed_out",
+        "uncertain"
+      ]
+    }
+  }
+}

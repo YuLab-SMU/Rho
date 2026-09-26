@@ -73,7 +73,15 @@ authorization, live-library retention decisions and the core commit mechanism.
 An observation of a realization, stage or cleanup requires the original principal
 throughout its source chain; missing and foreign references remain indistinguishable.
 Reading cached native configuration or material never starts R, loads a namespace
-or performs recovery. Ordinary Environment RPC packaging remains in progress.
+or performs recovery. The ordinary Environment RPC backend uses explicitly granted
+`operation.get` and `resources.read` Host observations, preserving original provider
+bindings and verifying full report bytes against their retained digests. Report
+resources from older instances are read through those grants, never through the
+current instance's private resource channel. A cooperative lock prevents two native
+owners from concurrently opening one material directory; separate directories can
+coexist. Native execution keeps its lane until the matching core settlement.
+Ordinary collection and R library binding still require complete usage protection;
+unknown references cannot be treated as an unused library.
 
 The public `workspace.paths@1` query exposes the normalized Host project root and
 bounded protected storage paths under `project.read`. These boundaries come from
