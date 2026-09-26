@@ -241,6 +241,37 @@
           "session_selection": {
             "type": "boolean",
             "default": false
+          },
+          "preferences": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "font_size",
+              "indent_width"
+            ],
+            "properties": {
+              "font_size": {
+                "type": "integer",
+                "enum": [
+                  12,
+                  14,
+                  16,
+                  18
+                ]
+              },
+              "indent_width": {
+                "type": "integer",
+                "enum": [
+                  2,
+                  4,
+                  8
+                ]
+              }
+            },
+            "default": {
+              "font_size": 14,
+              "indent_width": 4
+            }
           }
         }
       },

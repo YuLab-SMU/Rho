@@ -1,7 +1,7 @@
 import { EditorState, StateEffect, Compartment } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightSpecialChars, drawSelection } from '@codemirror/view';
 import { history, defaultKeymap, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { bracketMatching, indentOnInput, foldGutter } from '@codemirror/language';
+import { bracketMatching, indentOnInput, foldGutter, indentUnit } from '@codemirror/language';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { connectPluginView } from '../public/plugin-ui/index.js';
@@ -10,6 +10,7 @@ import { isR, rSupport } from './r-language.js';
 import { terminal } from './operations.js';
 import { same } from './operations.js';
 import { readSessions, type SessionChoice } from './sessions.js';
+import type { EditorPreferences } from './preferences.js';
 const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const client = await connectPluginView();
 let editor: EditorView | null = null, stopped = false, preparing = false, composing = false, compositionEndedAt = -Infinity;
@@ -17,6 +18,8 @@ let timer: ReturnType<typeof setTimeout> | undefined, observing: ReturnType<type
 let controller: EditorController;
 let closeInstalled = false;
 const language = new Compartment();
+const preferences = new Compartment();
+let renderedPreferences = '';
 let rLanguage = false, comparedVersion = '', saveThenRun = false;
 let sessionChoices: SessionChoice[] = [], sessionNext: string | null = null, sessionsLoading = false, sessionGeneration = 0;
 let sessionRenderKey = '';
@@ -27,6 +30,9 @@ function render() {
   if (!controller || stopped) return;
   const doc = controller.document, busy = controller.busy || preparing, readonly = !!doc?.snapshot.readonly;
   const synchronizing = !!pendingFlush || controller.busy && controller.drafts.unresolved;
+  if (editor && doc && renderedPreferences !== JSON.stringify(controller.preferences)) {
+    renderedPreferences = JSON.stringify(controller.preferences); doc.update(doc.state.update({ effects: preferences.reconfigure(preferenceExtensions()) }));
+  }
   if (editor && doc && rLanguage !== isR(doc.path)) {
     rLanguage = isR(doc.path); doc.update(doc.state.update({ effects: language.reconfigure(rLanguage ? rSupport() : []) }));
   }
@@ -35,6 +41,8 @@ function render() {
   get('file-state').textContent = readonly ? 'Read-only' : controller.pending ? 'Save unconfirmed' : doc?.dirty ? 'Unsaved' : doc ? 'Saved' : '';
   for (const id of ['save', 'save-as']) get<HTMLButtonElement>(id).disabled = !doc || readonly || busy || composing || !!controller.pending || controller.drafts.unresolved || !!controller.disk || controller.awaitingSavedRun;
   get<HTMLButtonElement>('compare-disk').disabled = !doc?.path || readonly || busy || !!controller.pending || controller.drafts.unresolved || controller.awaitingSavedRun;
+  get<HTMLButtonElement>('editor-settings').disabled = !doc || busy || composing || controller.drafts.unresolved;
+  get<HTMLButtonElement>('apply-preferences').disabled = busy || controller.drafts.unresolved;
   get('r-actions').hidden = !controller.runtime.source && !controller.sessionSelection;
   get('choose-session').hidden = !controller.sessionSelection;
   get<HTMLButtonElement>('choose-session').disabled = busy || composing;
@@ -85,9 +93,13 @@ function render() {
   get('draft-state').textContent = synchronizing ? 'Synchronizing draft…' : controller.drafts.unresolved ? 'Draft save unconfirmed' : controller.synchronizationError ? 'Draft synchronization failed' : controller.drafts.snapshot.draft ? 'Draft synchronized' : 'Draft in this view';
   if (doc) {
     const head = doc.state.selection.main.head, line = doc.state.doc.lineAt(head);
-    get('position').textContent = `Ln ${line.number}, Col ${head - line.from + 1} · ${doc.snapshot.byteSize.toLocaleString()} bytes`;
+    get('position').textContent = `Ln ${line.number}, Col ${head - line.from + 1} · ${doc.snapshot.byteSize.toLocaleString()} bytes · ${controller.preferences.indent_width} spaces`;
   }
   renderSessions();
+}
+function preferenceExtensions() {
+  const value = controller.preferences;
+  return [EditorState.tabSize.of(value.indent_width), indentUnit.of(' '.repeat(value.indent_width)), EditorView.theme({ '&.cm-editor': { fontSize: `${value.font_size}px` } })];
 }
 function renderSessions() {
   const dialog = get<HTMLDialogElement>('sessions-dialog');
@@ -163,6 +175,7 @@ function mount() {
   if (editor || !controller.document) return;
   const doc = controller.document; get('opening').hidden = true;
   rLanguage = isR(doc.path);
+  renderedPreferences = JSON.stringify(controller.preferences);
   const shortcut = (kind: 'document' | 'selection' | 'format') => (view: EditorView) => {
     if (!controller.runtime.source || !isR(doc.path) || composing || view.compositionStarted || performance.now() - compositionEndedAt < 100) return false;
     action(() => controller.startCode(kind)); return true;
@@ -170,7 +183,7 @@ function mount() {
   doc.update(doc.state.update({ effects: StateEffect.reconfigure.of([
     history(), lineNumbers(), highlightActiveLine(), highlightSpecialChars(), drawSelection(), bracketMatching(), indentOnInput(), foldGutter(), closeBrackets(), highlightSelectionMatches(),
     EditorState.readOnly.of(!!doc.snapshot.readonly), EditorView.editable.of(!doc.snapshot.readonly),
-    EditorView.contentAttributes.of({ 'aria-label': 'Code Editor', spellcheck: 'false' }), language.of(rLanguage ? rSupport() : []),
+    EditorView.contentAttributes.of({ 'aria-label': 'Code Editor', spellcheck: 'false' }), language.of(rLanguage ? rSupport() : []), preferences.of(preferenceExtensions()),
     keymap.of([{ key: 'Mod-s', run: view => { if (composing || view.compositionStarted || performance.now() - compositionEndedAt < 100) return false; save(); return true; } },
       { key: 'Mod-Enter', run: shortcut('selection') }, { key: 'Mod-Shift-Enter', run: view => {
         if (!controller.runtime.source || !isR(doc.path) || composing || view.compositionStarted || performance.now() - compositionEndedAt < 100) return false;
@@ -207,6 +220,18 @@ async function ensureClose() {
   poll();
 }
 function wireActions() {
+  get('editor-settings').onclick = () => {
+    if (preparing || stopped || composing) return;
+    get<HTMLSelectElement>('font-size').value = String(controller.preferences.font_size); get<HTMLSelectElement>('indent-width').value = String(controller.preferences.indent_width);
+    show('preferences-error', ''); get<HTMLDialogElement>('preferences-dialog').showModal();
+  };
+  get('close-preferences').onclick = () => get<HTMLDialogElement>('preferences-dialog').close();
+  get('apply-preferences').onclick = () => action(async () => {
+    try {
+      await controller.setPreferences({ font_size: Number(get<HTMLSelectElement>('font-size').value), indent_width: Number(get<HTMLSelectElement>('indent-width').value) } as EditorPreferences);
+      if (!preparing) get<HTMLDialogElement>('preferences-dialog').close();
+    } catch (error) { show('preferences-error', message(error)); throw error; }
+  });
   get('save').onclick = save; get('save-as').onclick = () => saveAs(); get('save-run').onclick = saveAndRun;
   get('run-selection').onclick = () => action(() => controller.startCode('selection'));
   get('run-document').onclick = () => action(() => controller.startCode('document'));

@@ -119,6 +119,9 @@ continuation only from the original view. Reopening and inspection do not start 
 Session-selection checks cover bounded project/principal-scoped capability
 discovery, unstarted and unavailable providers, retained target selection and
 original operations that remain attached to their captured provider after a switch.
+Editor preference checks preserve document state and native file identities while
+synchronizing bounded font/indent choices; the native file browser case checks
+their actual rendering, indentation, undo and restoration after closing the view.
 After building the current client and Host,
 `npm run test:browser --prefix ui -- editor-plugin.spec.ts` uses independently built
 Files and Editor packages in a disposable project; set `RHO_FILES_PLUGIN_PACKAGE`

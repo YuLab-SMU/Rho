@@ -94,6 +94,15 @@ export async function checkEditorController({EditorController,make,sdk,applyPatc
   assert.equal(closing.native.attempts.length,0);assert.equal(closing.stored().save,null);assert.equal(closing.controller.document.dirty,true);
   const corrupt=await fixture();corrupt.controller.document.update(corrupt.controller.document.state.update({changes:{from:0,insert:'new'}}));await corrupt.controller.save();await corrupt.finish();
   corrupt.native.records[0].output.after.files[0].sha256='sha256:'+'e'.repeat(64);await assert.rejects(corrupt.controller.inspectSave(),/receipt/);assert.ok(corrupt.controller.pending);assert.equal(corrupt.controller.document.snapshot.baseRaw,initial);
+  const preferences=await fixture(),originalBody=preferences.controller.document.snapshot,originalState=preferences.controller.document.state;
+  const choice={font_size:18,indent_width:2},setting=preferences.controller.setPreferences(choice);choice.font_size=12;await setting;
+  assert.deepEqual(preferences.controller.preferences,{font_size:18,indent_width:2});assert.equal(preferences.controller.document.state,originalState);
+  assert.deepEqual(preferences.controller.document.snapshot,originalBody);assert.equal(preferences.native.attempts.length,0,'preferences do not write the project file');
+  const copy=preferences.controller.preferences;copy.indent_width=8;assert.equal(preferences.controller.preferences.indent_width,2);
+  await preferences.controller.pause();preferences.controller.stop();preferences.client.view={...preferences.client.view,view:'preferences-reopened'};
+  const configured=new EditorController(preferences.client,{...preferences.configuration,preferences:{font_size:16,indent_width:8}});await configured.open();
+  assert.deepEqual(configured.preferences,{font_size:18,indent_width:2},'restored document settings take precedence over new-view defaults');
+  assert.throws(()=>configured.setPreferences({font_size:13,indent_width:3}),/supported/);assert.deepEqual(configured.document.snapshot,originalBody);
   console.log('Editor controller checks passed: durable pre-admission captures, later edits, non-blocking close, original-result reopening, native conflicts, explicit replacement, idempotent retry and false-receipt refusal.');
   return {fixture};
 }

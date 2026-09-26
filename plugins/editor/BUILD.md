@@ -26,6 +26,13 @@ captured actions keep their own provider/session even when the next target chang
 A disabled selection configuration keeps its configured provider fixed. File-only
 views need none of these optional grants.
 
+The view's optional `preferences` config supplies `font_size` (12, 14, 16 or
+18 pixels) and `indent_width` (2, 4 or 8 spaces); defaults are 14 and 4. Editor
+Settings applies to this document and is retained in its synchronized draft.
+Changing presentation preserves text, selection, undo, the disk base and captured
+operations. A reopened document keeps its saved choices ahead of new-view defaults.
+Scenario composition can supply common defaults through this public config.
+
 Save and Run (Command Shift Enter) captures the text and existing session before
 asynchronous work, saves the captured bytes, and verifies the original file result
 before submitting that captured code. Later typing remains unsaved in the editor.

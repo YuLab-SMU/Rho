@@ -48,6 +48,19 @@ test('Editor preserves later edits across a native save and close, restores orig
   const region=(id:string)=>page.locator(`[data-plugin-frame="${id}"]`),frame=(id:string)=>region(id).frameLocator('iframe');
   const first=frame(view.view),code=first.getByRole('textbox',{name:'Code Editor',exact:true});await expect(code).toBeVisible();
   await expect(first.locator('#file-state')).toHaveText('Saved');
+  await first.getByRole('button',{name:'Editor Settings',exact:true}).click();
+  const settings=first.getByRole('dialog',{name:'Editor Settings',exact:true});await expect(settings).toBeVisible();
+  await settings.getByLabel('Code Font Size',{exact:true}).selectOption('18');await settings.getByLabel('Indent Width',{exact:true}).selectOption('2');
+  for(const width of [1440,1920,390,220]){
+    await page.setViewportSize({width,height:900});await expect.poll(()=>settings.evaluate((element,width)=>{
+      const rect=element.getBoundingClientRect();return Math.abs(innerWidth-width)<4&&rect.left>=0&&rect.right<=innerWidth;
+    },width)).toBe(true);await page.screenshot({path:info.outputPath(`editor-settings-${width}.png`)});
+  }
+  await settings.getByRole('button',{name:'Apply Settings',exact:true}).click();await expect(settings).toBeHidden();
+  await expect.poll(()=>code.evaluate(element=>getComputedStyle(element.closest('.cm-editor')!).fontSize)).toBe('18px');
+  await expect(first.locator('#file-state')).toHaveText('Saved');
+  await code.click();await code.press('Meta+a');await page.keyboard.insertText('indent_probe');await code.press('Tab');await expect.poll(()=>first.locator('.cm-line').first().textContent()).toBe('  indent_probe');
+  await code.press('Meta+z');await expect(code).toHaveText('indent_probe');
   for(const width of [1440,1920,390,220]){
     await page.setViewportSize({width,height:900});await code.click();await expect(code).toBeFocused();
     expect(await code.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
@@ -72,6 +85,7 @@ test('Editor preserves later edits across a native save and close, restores orig
   expect(Buffer.byteLength(JSON.stringify(closed.state))).toBeLessThan(32768);
   const secondView=await open(view.configuration,closed.state),second=frame(secondView.view),restored=second.getByRole('textbox',{name:'Code Editor',exact:true});
   await expect(restored).toBeVisible();await expect(restored).toContainText('later 编辑');await expect(second.locator('#file-state')).toHaveText('Unsaved');
+  await expect.poll(()=>restored.evaluate(element=>getComputedStyle(element.closest('.cm-editor')!).fontSize)).toBe('18px');await expect(second.locator('#position')).toContainText('2 spaces');
   await expect(second.locator('#file-recovery')).toBeHidden();
   await second.getByRole('button',{name:'Save',exact:true}).click();await expect(second.locator('#file-state')).toHaveText('Saved');
   const expected='\ufeffx <- 3\r\n# later 编辑\r\n';expect(readFileSync(join(project,filename),'utf8')).toBe(expected);

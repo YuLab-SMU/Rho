@@ -77,8 +77,13 @@ startup, target switching during a run, distinct R memory and restored selection
 The file-only regression passes. Four-width session dialogs were inspected; a
 truncated narrow toolbar label was corrected, the complete native rerun passes,
 and the affected narrow layouts were inspected again.
-Document context, editor preferences and default composition remain within the
-continuing Editor migration.
+Editor font size and indentation now use public view defaults and per-document
+settings retained with the draft. Independent checks preserve text, selection,
+document version and native file state. Both native browser cases pass, including
+actual font size, two-space indentation, undo and restoration after close. The
+settings dialog and larger-font Editor were inspected at all four widths, as were
+the affected narrow R controls. Shared defaults, document context and default composition remain within
+the continuing Editor migration.
 
 The ordinary Objects, Packages, Help and Plots views are assembled. Packages-to-Help
 and pinned Plots comparisons now pass native acceptance in the generic window;

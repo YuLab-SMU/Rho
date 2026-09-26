@@ -8,10 +8,11 @@ import { bytes, filePatch, sha256, validatePath, normalizeText, MAX_EDIT_BYTES }
 import { EditorCodeActions, validProvider, type CodeAction } from './r-actions.js';
 import { readFormattedCode } from './r-format.js';
 import { observeSession } from './sessions.js';
+import { type EditorPreferences, defaultPreferences, editorPreferences } from './preferences.js';
 interface FileSave { intent: Intent; path: string; raw: string; before: string | null; baseHash: string | null; digest: string; }
 interface DiskComparison { path: string; raw: string; digest: string; }
 interface FileRun { path: string; raw: string; digest: string; save: FileSave | null; phase: 'saving' | 'ready' | 'submitting'; }
-interface Payload { schema: 1; files: InstanceRef; runtime: InstanceRef | null; document: DocumentBody; save: FileSave | null; disk: DiskComparison | null; code: CodeAction | null; fileRun: FileRun | null; }
+interface Payload { schema: 1; files: InstanceRef; runtime: InstanceRef | null; preferences: EditorPreferences; document: DocumentBody; save: FileSave | null; disk: DiskComparison | null; code: CodeAction | null; fileRun: FileRun | null; }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 /** Coordinates a single ordinary Editor view. Native file actions and generic
  * draft saves keep separate requests, outcomes and capture identities. */
@@ -20,6 +21,7 @@ export class EditorController {
   readonly drafts: DraftSync;
   readonly runtime: EditorCodeActions;
   readonly sessionSelection: boolean;
+  private settings: EditorPreferences;
   document: EditorDocument | null = null;
   pending: FileSave | null = null;
   disk: DiskComparison | null = null;
@@ -34,7 +36,7 @@ export class EditorController {
   // Closing, reopening or a failed continuation never recreates that authority.
   private automaticFileRun = false;
   private initial: FileObservation | null;
-  constructor(private readonly client: Client, configuration: { source: InstanceRef; file: FileObservation | null; runtime?: InstanceRef | null; session_selection?: boolean }, private changed: () => void = () => {}) {
+  constructor(private readonly client: Client, configuration: { source: InstanceRef; file: FileObservation | null; runtime?: InstanceRef | null; session_selection?: boolean; preferences?: EditorPreferences }, private changed: () => void = () => {}) {
     this.files = new EditorFiles(client, configuration?.source);
     if (!configuration || !Object.hasOwn(configuration, 'file')) throw new Error('The Editor configuration needs an explicit file capture or null.');
     this.initial = structuredClone(configuration.file);
@@ -42,7 +44,9 @@ export class EditorController {
     this.runtime = new EditorCodeActions(client, configuration.runtime);
     if (configuration.session_selection !== undefined && typeof configuration.session_selection !== 'boolean') throw new Error('Session selection configuration must be a boolean.');
     this.sessionSelection = configuration.session_selection ?? false;
+    this.settings = editorPreferences(configuration.preferences ?? defaultPreferences);
   }
+  get preferences() { return { ...this.settings }; }
   get busy() { return this.task !== null; }
   private live() { if (this.stopped) throw new Error('The Editor is closed. Original work is retained.'); }
   private editable() { this.live(); if (this.paused) throw new Error('The Editor is preparing to close.'); }
@@ -56,7 +60,7 @@ export class EditorController {
   }
   private payload(): Payload {
     if (!this.document) throw new Error('No acknowledged Editor document is available.');
-    return { schema: 1, files: this.files.source, runtime: this.runtime.source, document: this.document.snapshot, save: this.pending && structuredClone(this.pending), disk: this.disk && structuredClone(this.disk), code: this.code && structuredClone(this.code), fileRun: this.fileRun && structuredClone(this.fileRun) };
+    return { schema: 1, files: this.files.source, runtime: this.runtime.source, preferences: this.preferences, document: this.document.snapshot, save: this.pending && structuredClone(this.pending), disk: this.disk && structuredClone(this.disk), code: this.code && structuredClone(this.code), fileRun: this.fileRun && structuredClone(this.fileRun) };
   }
   async open() {
     this.live();
@@ -66,7 +70,8 @@ export class EditorController {
     const retained = await this.drafts.read(); this.live();
     if (retained !== null) {
       const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(retained)) as Payload;
-      if (value.schema !== 1 || !same(value.files, this.files.source) || !['save', 'disk', 'code', 'fileRun', 'runtime'].every(key => Object.hasOwn(value, key))) throw new Error('The retained Editor body has another encoding or Files provider.');
+      if (value.schema !== 1 || !same(value.files, this.files.source) || !['save', 'disk', 'code', 'fileRun', 'runtime', 'preferences'].every(key => Object.hasOwn(value, key))) throw new Error('The retained Editor body has another encoding or Files provider.');
+      const settings = editorPreferences(value.preferences);
       if (value.runtime !== null && !validProvider(value.runtime)) throw new Error('The retained document has an invalid R provider identity.');
       if (!this.sessionSelection && !same(value.runtime, this.runtime.source)) throw new Error('The retained document has another R provider or session configuration.');
       const document = new EditorDocument(value.document);
@@ -81,6 +86,7 @@ export class EditorController {
       this.code = structuredClone(value.code);
       this.fileRun = structuredClone(value.fileRun);
       this.runtime.select(value.runtime);
+      this.settings = settings;
     } else {
       if (this.drafts.unresolved) throw new Error('The first draft save remains unconfirmed. Inspect its original Operation before opening another document.');
       if (this.initial) {
@@ -131,6 +137,10 @@ export class EditorController {
       await observeSession(this.client, captured); this.editable();
       this.runtime.select(captured); await this.flush();
     });
+  }
+  setPreferences(value: EditorPreferences): Promise<void> {
+    const captured = editorPreferences(value);
+    return this.act(async () => { this.settings = captured; await this.flush(); });
   }
   private async checkSave(save: FileSave, currentBinding: boolean) {
     if (!save || !save.intent || typeof save.raw !== 'string' || !(save.before === null || typeof save.before === 'string') ||
