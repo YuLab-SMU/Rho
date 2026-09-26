@@ -1,5 +1,7 @@
 //! Public SSH execution and Slurm identities, reports and original-operation recovery.
 #![forbid(unsafe_code)]
+mod plugin;
+pub use plugin::*;
 mod validation;
 use rho_process_api::ProcessReport;
 use schemars::JsonSchema;

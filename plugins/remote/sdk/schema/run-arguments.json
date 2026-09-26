@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunLocalArguments",
+  "type": "object",
+  "properties": {
+    "args": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "output_limit_bytes": {
+      "type": "integer",
+      "format": "uint",
+      "default": 65536,
+      "maximum": 131072,
+      "minimum": 1
+    },
+    "program": {
+      "type": "string"
+    },
+    "stdin": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "timeout_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "default": 60000,
+      "maximum": 3600000,
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "program"
+  ]
+}

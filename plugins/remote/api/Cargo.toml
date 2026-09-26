@@ -6,6 +6,12 @@ rust-version = "1.97"
 license = "AGPL-3.0-only"
 repository = "https://github.com/YuLab-SMU/Rho"
 
+[[bin]]
+name = "export-remote-plugin"
+path = "src/bin/export-remote-plugin.rs"
+test = false
+bench = false
+
 [dependencies]
 rho-plugin-protocol = { path = "../../../crates/plugin-protocol" }
 rho-process-api = { path = "../../process/api" }

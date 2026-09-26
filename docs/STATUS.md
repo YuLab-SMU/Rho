@@ -202,8 +202,35 @@ scheduler cancellation requests remain separate from terminal job observations,
 and the caller retains source authorization and the authoritative journal.
 The retiring Slurm query now requires authenticated context and verifies the
 original principal before native reads, closing its previous unscoped read path.
-Ordinary remote RPC contributions and packaging are the next integration step;
-this native source directory is not yet an installable plugin revision.
+The ordinary `org.rho.remote` package now assembles from seven public/plugin crates
+outside the checkout. Its ten contributions provide explicitly configured SSH
+execution and Slurm operations, preflight and bounded observations. Default
+activation stays disconnected. Original submissions are read through a scoped
+`operation.get` grant; recovery freezes the source binding and exact target even
+when a replacement instance performs it. Native work stays serialized until core
+settlement, and only the core commits operation records. Resource-transfer loss
+retains uncertain output evidence without replay. The six focused backend cases
+pass in both the main and independent source workspaces. The standalone public
+TypeScript consumer and generated SDK/manifest checks also pass. The independent
+test first rejected the older default Rust compiler; selecting the already installed
+required toolchain passed, and the package build instructions explain that selection.
+The executable RPC fixture passes resource loss, bounded/reordered source reads,
+pre-start and active-transport cancellation, unsupported scheduler cancellation,
+settlement fencing, replacement, EOF and forged-provider refusal. The ordinary
+Host transcript passes configured activation, exact target checks, Unicode/NUL
+resource bytes, failed/uncertain native exits, original-request idempotency, lost
+submission receipt without resubmission, query purity, cancellation observations,
+ambiguous-job refusal and immutable source recovery after provider release.
+Retained resource reads and original replay also pass after both providers release.
+The Host binary was unchanged throughout this independent-package acceptance.
+Earlier attempts include an activation timeout and a framed-command reply timeout;
+those remain failures, not passes. The complete current rerun passes without
+changing deadlines. Fixture corrections normalized macOS temporary paths, bound
+fake tool state directly instead of relying on forwarded test environment variables,
+and read recovery through the public owner-recovery envelope. These local fake
+executables establish no real remote-cluster acceptance. Environment, Agent,
+annotation/context, remaining scenario/Studio work and removal of fixed composition
+remain part of the active whole-plan implementation.
 The six focused API/native cases also pass in an independent five-crate build.
 Its executable local transcript passes strict SSH options and literal quoting,
 exit-code classification, pre-start cancellation, uncertain timeout, lost submission

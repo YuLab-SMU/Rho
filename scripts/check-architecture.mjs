@@ -36,6 +36,7 @@ const allowed = {
   "rho-process-engine": ["rho-process-api"],
   "rho-process-owner": ["rho-process-api", "rho-process-engine", "rho-plugin-protocol"],
   "rho-process-backend": ["rho-process-api", "rho-process-owner", "rho-plugin-sdk"],
+  "rho-remote-backend": ["rho-remote-api", "rho-remote-owner", "rho-process-api", "rho-plugin-sdk"],
   "rho-remote-api": ["rho-plugin-protocol", "rho-process-api"],
   "rho-remote-owner": ["rho-remote-api", "rho-process-api", "rho-process-engine", "rho-plugin-protocol"],
   "rho-contract": ["rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api", "rho-remote-api"],

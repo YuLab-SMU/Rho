@@ -27,10 +27,28 @@ assembles only five public/plugin crates outside the checkout, runs the focused
 checks and exercises fake SSH/Slurm transcripts. `node scripts/test-remote-protocol.mjs`
 checks the retiring Host bridge, including authoritative idempotency, reconciliation
 and query purity. Both use temporary local executables and never contact a real
-cluster. They do not establish remote-host acceptance. Ordinary RPC packaging is
-still being implemented; the native owner has no journal or automatic replay.
+cluster. They do not establish remote-host acceptance. The native owner has no
+journal or automatic replay.
 `cargo test -p rho-execution slurm --locked` verifies that the retiring query
 gateway checks the original principal and read scope before contacting a scheduler.
+
+The ordinary Remote RPC backend is `plugins/remote/backend`. Iterate with
+`cargo test -p rho-remote-backend --lib --locked`. Generate its public declarations
+and manifest with `node plugins/remote/generate-sdk.mjs` and
+`node plugins/remote/generate-manifest.mjs` (both support `--check`).
+`node scripts/test-remote-plugin-types.mjs` compiles an independent public consumer.
+`node scripts/build-remote-plugin.mjs /absolute/new/package` assembles seven
+public/plugin crates and builds with the locked offline dependency closure.
+Run `node /absolute/package/tests/protocol.mjs /absolute/package/dist/rho-remote-backend`
+for resource loss, source correlation, cancellation observations, settlement and
+EOF fault checks. After building the current Host explicitly,
+`RHO_REMOTE_PLUGIN_PACKAGE=/absolute/package node scripts/test-remote-plugin.mjs`
+checks ordinary installation, configured invocation, retained output resources,
+lost submission receipt, native observations and original-source recovery through
+a replacement instance. It verifies unchanged Host bytes, uses disposable local
+SSH/Slurm substitutes and never contacts a real cluster. Omit the package variable
+to assemble a new standalone package first. Default activation stays disconnected;
+preparing and observing local status never start SSH.
 
 Local process launch and native recovery live in `plugins/process/backend/owner`.
 Use `cargo test -p rho-process-owner --lib --locked` while

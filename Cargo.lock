@@ -6399,6 +6399,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-remote-backend"
+version = "0.1.0"
+dependencies = [
+ "rho-plugin-sdk",
+ "rho-process-api",
+ "rho-remote-api",
+ "rho-remote-owner",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "rho-remote-owner"
 version = "0.1.0"
 dependencies = [

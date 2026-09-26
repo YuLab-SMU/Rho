@@ -638,6 +638,42 @@
         "node",
         "scripts/test-remote-plugin-owner.mjs"
       ]
+    },
+    "plugins.remote-backend": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-remote-backend",
+        "--lib",
+        "--locked"
+      ]
+    },
+    "plugins.remote-native": {
+      "command": [
+        "node",
+        "scripts/test-remote-plugin.mjs"
+      ]
+    },
+    "plugins.remote-protocol": {
+      "command": [
+        "node",
+        "plugins/remote/generate-sdk.mjs",
+        "--check"
+      ]
+    },
+    "plugins.remote-manifest": {
+      "command": [
+        "node",
+        "plugins/remote/generate-manifest.mjs",
+        "--check"
+      ]
+    },
+    "plugins.remote-public-types": {
+      "command": [
+        "node",
+        "scripts/test-remote-plugin-types.mjs"
+      ]
     }
   },
   "areas": {
@@ -845,7 +881,10 @@
         "scripts/test-process-plugin.mjs",
         "scripts/test-process-protocol.mjs",
         "scripts/test-remote-plugin-owner.mjs",
-        "scripts/fixtures/ssh-slurm.mjs"
+        "scripts/fixtures/ssh-slurm.mjs",
+        "scripts/build-remote-plugin.mjs",
+        "scripts/test-remote-plugin.mjs",
+        "scripts/test-remote-plugin-types.mjs"
       ],
       "checks": [
         "docs.index",
@@ -913,7 +952,12 @@
         "plugins.process-public-types",
         "plugins.remote-owner",
         "plugins.remote-visibility",
-        "plugins.remote-independent"
+        "plugins.remote-independent",
+        "plugins.remote-backend",
+        "plugins.remote-native",
+        "plugins.remote-protocol",
+        "plugins.remote-manifest",
+        "plugins.remote-public-types"
       ]
     }
   }

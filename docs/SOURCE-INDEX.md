@@ -101,6 +101,7 @@ Sources:
 - `scripts/build-plots-plugin.mjs`
 - `scripts/build-process-plugin.mjs`
 - `scripts/build-r-plugin.mjs`
+- `scripts/build-remote-plugin.mjs`
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/fixtures/editor-code.mjs`
@@ -143,6 +144,8 @@ Sources:
 - `scripts/test-r-protocol.mjs`
 - `scripts/test-r-viewer.mjs`
 - `scripts/test-remote-plugin-owner.mjs`
+- `scripts/test-remote-plugin-types.mjs`
+- `scripts/test-remote-plugin.mjs`
 - `scripts/test-viewer-plugin.mjs`
 - `sdk/**`
 - `ui/e2e/console-editor.spec.ts`
@@ -220,8 +223,13 @@ Checks:
 - `plugins.r-protocol`: `["node","plugins/r/generate-sdk.mjs","--check"]`
 - `plugins.r-public-types`: `["node","scripts/test-r-protocol.mjs"]`
 - `plugins.r-viewer`: `["node","scripts/test-r-viewer.mjs"]`
+- `plugins.remote-backend`: `["cargo","test","-p","rho-remote-backend","--lib","--locked"]`
 - `plugins.remote-independent`: `["node","scripts/test-remote-plugin-owner.mjs"]`
+- `plugins.remote-manifest`: `["node","plugins/remote/generate-manifest.mjs","--check"]`
+- `plugins.remote-native`: `["node","scripts/test-remote-plugin.mjs"]`
 - `plugins.remote-owner`: `["cargo","test","-p","rho-remote-api","-p","rho-remote-owner","--lib","--locked"]`
+- `plugins.remote-protocol`: `["node","plugins/remote/generate-sdk.mjs","--check"]`
+- `plugins.remote-public-types`: `["node","scripts/test-remote-plugin-types.mjs"]`
 - `plugins.remote-visibility`: `["cargo","test","-p","rho-execution","slurm","--locked"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
 - `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts"]`

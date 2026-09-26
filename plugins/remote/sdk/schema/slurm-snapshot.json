@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SlurmSnapshot",
+  "type": "object",
+  "properties": {
+    "lookup": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SlurmLookup"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "notice": {
+      "type": "string"
+    },
+    "source_operation": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/SlurmSnapshotStatus"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "source_operation",
+    "status",
+    "notice"
+  ],
+  "$defs": {
+    "SlurmJobRef": {
+      "type": "object",
+      "properties": {
+        "cluster": {
+          "type": "string"
+        },
+        "host_alias": {
+          "type": "string"
+        },
+        "job_id": {
+          "type": "string"
+        },
+        "operation_marker": {
+          "type": "string"
+        },
+        "project_root": {
+          "type": "string"
+        },
+        "stderr_path": {
+          "type": "string"
+        },
+        "stdout_path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "host_alias",
+        "cluster",
+        "job_id",
+        "operation_marker",
+        "project_root",
+        "stdout_path",
+        "stderr_path"
+      ]
+    },
+    "SlurmLookup": {
+      "type": "object",
+      "properties": {
+        "accounting_lookback_days": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SlurmObservation"
+          }
+        },
+        "source_operation_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_operation_id",
+        "jobs",
+        "accounting_lookback_days"
+      ]
+    },
+    "SlurmObservation": {
+      "type": "object",
+      "properties": {
+        "exit_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job": {
+          "$ref": "#/$defs/SlurmJobRef"
+        },
+        "source": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "job",
+        "state",
+        "source"
+      ]
+    },
+    "SlurmSnapshotStatus": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "busy",
+        "unavailable"
+      ]
+    }
+  }
+}
