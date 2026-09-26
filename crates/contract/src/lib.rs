@@ -228,10 +228,22 @@ impl CallerIdentity {
     }
 }
 
+/// Native restrictions inherited from an authenticated view. They are held by
+/// the Host while a backend call is pending, never accepted from plugin RPC.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ViewCallScope {
+    pub window: rho_plugin_protocol::WindowId,
+    /// Close-time persistence may inspect only the originating view's encoding.
+    pub draft_source: Option<rho_plugin_protocol::DraftSource>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CallContext {
     pub caller: CallerIdentity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view_scope: Option<ViewCallScope>,
     /// Authenticated local account behind an actor. Only a trusted edge sets this.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub principal: Option<CallerIdentity>,

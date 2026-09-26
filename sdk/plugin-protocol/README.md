@@ -255,3 +255,21 @@ retains an identity tombstone but releases content and the revision reference.
 Public types are emitted as `.d.ts` declarations with ESM `.js` specifiers. They
 contain no runtime implementation and do not force a consumer to widen its
 TypeScript source root. The external conformance check pins a separate `rootDir`.
+
+## Contributed context
+
+The four `schema/context-search.json`, `schema/context-page.json`,
+`schema/preview-context.json` and `schema/context-preview.json` files are standalone
+contracts for contributed queries.
+
+`ContextSearch` / `ContextPage` and `PreviewContext` / `ContextPreview` describe
+bounded read-only discovery and preview. A `ContextContribution` declares its own
+search and preview queries; consumers resolve the exact active provider. A
+`ContextReference` retains that provider, contribution, explicit window and an
+opaque owner-defined selector. The owner must revalidate the selector's native
+identity/version before preview; references grant no scope and do not retain bytes.
+Page cursors are owner-defined, with at most 20 items per response. Preview text
+is plain text bounded to 64 KiB, with explicit truncation, bounded presentation
+data and at most eight resource references. Scientific inclusion choices and
+source freshness remain owner semantics. A read must not activate a provider,
+flush an editor, recover work or perform scientific writes.

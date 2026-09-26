@@ -10,6 +10,9 @@ impl crate::PluginService {
         context: &rho_contract::CallContext,
         window: &WindowId,
     ) -> Result<(), rho_operation::OperationError> {
+        if context.view_scope.as_ref().is_some_and(|scope| &scope.window != window) {
+            return Err(crate::service::invalid("call is restricted to its original window"));
+        }
         if context.caller.kind == rho_contract::CallerKind::Plugin
             && let Ok(view) = ViewInstanceId::new(&context.caller.id)
         {

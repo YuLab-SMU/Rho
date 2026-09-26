@@ -362,6 +362,12 @@ iframe or backend package. Plugins use `views.inspect` for public metadata/state
 The core checks principal/window/connection/message ordering and declared grants,
 then delegates to the same Host ports. HTTP arrival reordering has a bounded wait;
 acceptance order does not serialize completion or block controls behind slow reads.
+The Host carries the originating window and any close-time draft-source restriction
+through backend queries, controls, admission preflight and accepted execution.
+These restrictions are pending-call state, outside the public RPC payload; reverse
+calls and further backend hops inherit them without gaining authority. Closing a
+view does not redirect or widen already accepted work. Backend caller identity and
+original principal remain distinct for journal ownership and idempotency.
 Self-state is limited to the connected
 view. Result reads and cancellation are limited to that view's own Operations;
 read authority comes from the original parent, and cancellation keeps its original

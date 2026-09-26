@@ -837,6 +837,7 @@ mod media_authority_tests {
             id: "owner".into(),
         };
         let context = CallContext {
+            view_scope: None,
             caller: caller.clone(),
             principal: None,
             scopes: BTreeSet::from([WORKSPACE_READ_SCOPE.into()]),

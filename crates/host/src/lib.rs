@@ -702,6 +702,7 @@ impl NextHost {
     /// Context for a local, OS-user-owned CLI. Callers cannot put identity in Invocation.
     pub fn local_context() -> CallContext {
         CallContext {
+            view_scope: None,
             principal: None,
             caller: CallerIdentity {
                 kind: CallerKind::Human,

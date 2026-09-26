@@ -1449,6 +1449,7 @@ mod evidence_tests {
     }
     fn context() -> CallContext {
         CallContext {
+            view_scope: None,
             caller: CallerIdentity {
                 kind: CallerKind::Agent,
                 id: "external-agent".into(),

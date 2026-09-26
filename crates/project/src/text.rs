@@ -149,6 +149,7 @@ mod diagnostic_tests {
     #[tokio::test]
     async fn typed_native_failures_reach_the_shared_gateway_without_message_inference() {
         let context = CallContext {
+            view_scope: None,
             caller: CallerIdentity {
                 kind: CallerKind::Agent,
                 id: "text-reader".into(),

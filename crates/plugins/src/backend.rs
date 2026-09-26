@@ -20,6 +20,7 @@ enum CommandMessage {
     Call {
         call: PluginCall,
         kind: CapabilityKind,
+        view_scope: Option<rho_contract::ViewCallScope>,
         response: Response,
     },
     Cancel {
@@ -65,12 +66,13 @@ impl ProcessClient {
             _ => Err(PluginError::Invalid("native settlement was not acknowledged".into())),
         }
     }
-    pub async fn call(&self, call: PluginCall, kind: CapabilityKind) -> Result<RpcBody, PluginError> {
+    pub async fn call(&self, call: PluginCall, kind: CapabilityKind, view_scope: Option<rho_contract::ViewCallScope>) -> Result<RpcBody, PluginError> {
         let (response, receiver) = oneshot::channel();
         self.sender
             .send(CommandMessage::Call {
                 call,
                 kind,
+                view_scope,
                 response,
             })
             .await
@@ -275,7 +277,7 @@ pub(crate) async fn start(
 }
 
 enum PendingKind {
-    Call { call: PluginCall, kind: CapabilityKind },
+    Call { call: PluginCall, kind: CapabilityKind, view_scope: Option<rho_contract::ViewCallScope> },
     Cancel { operation: String },
     PrepareCancellation(PendingCancellation),
     Settlement(OperationSettlement),
@@ -322,7 +324,7 @@ async fn run(
                 counter += 1;
                 let request = RequestId::new(format!("host-{counter}")).unwrap();
                 let (body, request_pending) = match command {
-                    CommandMessage::Call { mut call, kind, response } => {
+                    CommandMessage::Call { mut call, kind, view_scope, response } => {
                         if pending.len() >= MAX_PENDING_PLUGIN_CALLS {
                             let _ = response.send(Err("backend pending-call quota reached before dispatch".into())); continue;
                         }
@@ -330,7 +332,7 @@ async fn run(
                         #[cfg(unix)]
                         if kind != CapabilityKind::Control { if let Some(channel) = &data_channel { channel.session.insert(&call); } }
                         let body = match kind { CapabilityKind::Query => RpcBody::Query(call.clone()), CapabilityKind::Control => RpcBody::Control(call.clone()), _ => RpcBody::Invoke(call.clone()) };
-                        (body, Pending { kind: PendingKind::Call { call, kind }, responses: vec![response] })
+                        (body, Pending { kind: PendingKind::Call { call, kind, view_scope }, responses: vec![response] })
                     }
                     CommandMessage::Cancel { operation, capability, response } => {
                         if !pending.values().any(|p| matches!(&p.kind, PendingKind::Call {call, ..}
@@ -420,15 +422,15 @@ async fn run(
                     }
                     let grant = prepared.grants.iter().find(|g| g.capability == capability);
                     let parent = pending.get(&parent_request).and_then(|p| match &p.kind {
-                        PendingKind::Call {call, kind} => Some((call, !matches!(kind, CapabilityKind::Operation | CapabilityKind::Runtime))), _ => None });
+                        PendingKind::Call {call, kind, view_scope} => Some((call, !matches!(kind, CapabilityKind::Operation | CapabilityKind::Runtime), view_scope)), _ => None });
                     let delegated = match (grant, parent) {
-                        (Some(grant), Some((parent, query))) if grant.scopes.is_subset(&parent.scopes) => {
+                        (Some(grant), Some((parent, query, view_scope))) if grant.scopes.is_subset(&parent.scopes) => {
                             let mut parent = parent.clone();
                             // The reverse call receives only the grant's scopes,
                             // never all capabilities of the original caller.
                             parent.scopes = grant.scopes.clone();
                             Some(DelegatedPluginCall { request: frame.request.clone(), provider: prepared.record.identity.clone(), parent,
-                                grant: grant.clone(), query_only: query, arguments })
+                                grant: grant.clone(), query_only: query, arguments, view_scope: view_scope.clone() })
                         }
                         _ => None,
                     };
@@ -478,7 +480,7 @@ async fn run(
                     cancellation_prepared.push_back((frame.request.clone(), cancellation.clone(), Some(*prepared)));
                     if cancellation_prepared.len() > MAX_PENDING_PLUGIN_CALLS { cancellation_prepared.pop_front(); }
                 }
-                if let PendingKind::Call { call, kind: CapabilityKind::Operation | CapabilityKind::Runtime } = &expected.kind {
+                if let PendingKind::Call { call, kind: CapabilityKind::Operation | CapabilityKind::Runtime, .. } = &expected.kind {
                     let returned = pending.iter().filter_map(|(request, entry)| match &entry.kind {
                         PendingKind::PrepareCancellation(cancellation) if call.operation_id.as_deref() == Some(cancellation.operation_id.as_str()) && call.binding == cancellation.binding => Some((request.clone(), cancellation.clone())),
                         _ => None,

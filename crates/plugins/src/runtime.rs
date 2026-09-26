@@ -59,6 +59,8 @@ pub struct DelegatedPluginCall {
     pub grant: CapabilityRequirement,
     pub query_only: bool,
     pub arguments: Value,
+    /// Host-owned visibility copied from the pending parent, outside plugin RPC.
+    pub view_scope: Option<rho_contract::ViewCallScope>,
 }
 
 #[async_trait]
@@ -499,6 +501,13 @@ impl ProviderLease {
     /// The Host has already admitted an invocation in Operation before calling
     /// here. Errors after dispatch are uncertain, and must not be replayed.
     pub async fn call(&self, call: PluginCall) -> Result<RpcBody, PluginError> {
+        self.call_scoped(call, None).await
+    }
+    pub async fn call_scoped(
+        &self,
+        call: PluginCall,
+        view_scope: Option<rho_contract::ViewCallScope>,
+    ) -> Result<RpcBody, PluginError> {
         {
             let state = self.entry.state.lock().unwrap();
             ensure(
@@ -535,7 +544,7 @@ impl ProviderLease {
                 _ => RpcBody::Invoke(call.clone()),
             },
         )?;
-        let reply = self.entry.process.get().unwrap().call(call, kind).await?;
+        let reply = self.entry.process.get().unwrap().call(call, kind, view_scope).await?;
         if let Err(error) = validate_reply(&self.contribution, &self.identity, &reply) {
             return Err(PluginError::InvalidResponse {message:error.to_string(),response:Box::new(reply)});
         }

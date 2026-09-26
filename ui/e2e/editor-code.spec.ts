@@ -29,13 +29,13 @@ test.beforeAll(async()=>{
   }
   expect(hash(readFileSync(binary))).toBe(before);
   const database=join(directory,'state.sqlite'),snapshot=(path:string,target:string)=>JSON.parse(execFileSync(binary,['--database',database,'plugins','snapshot',path,'--target',target],{encoding:'utf8'})).result;
-  const captured:any={};for(const name of Object.keys(packages))captured[name]=snapshot(packages[name],['r','files'].includes(name)?'aarch64-apple-darwin':'ui-web');
+  const captured:any={};for(const name of Object.keys(packages))captured[name]=snapshot(packages[name],['r','files','editor'].includes(name)?'aarch64-apple-darwin':'ui-web');
   host=spawn(binary,['--database',database,'--project',project,'workbench'],{stdio:['ignore','pipe','pipe']});
   url=new URL(await new Promise<string>((done,reject)=>{let output='',errors='';const timer=setTimeout(()=>reject(new Error(`Editor code Host startup timed out: ${errors}`)),90000);
     host.stderr!.on('data',bytes=>errors+=bytes);host.stdout!.on('data',bytes=>{output+=bytes;const found=output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});
     host.once('exit',code=>{clearTimeout(timer);reject(new Error(`Editor code Host exited ${code}: ${errors}`));});}));
   const activate=async(name:string,configuration:any={},optional_capabilities:any[]=[],alias=name)=>
-    (await invoke('plugins.activate',{revision:captured[name].revision,artifact:captured[name].artifacts[0],target:['r','files'].includes(name)?'aarch64-apple-darwin':'ui-web',alias,configuration,optional_capabilities})).instance;
+    (await invoke('plugins.activate',{revision:captured[name].revision,artifact:captured[name].artifacts[0],target:['r','files','editor'].includes(name)?'aarch64-apple-darwin':'ui-web',alias,configuration,optional_capabilities})).instance;
   files=await activate('files');
   r=await activate('r',{ark:realpathSync(process.env.RHO_ARK!),r_home:realpathSync(process.env.RHO_R_HOME!),execution_timeout_seconds:30});
   alternate=await activate('r',r.configuration,[],'analysis-alt');

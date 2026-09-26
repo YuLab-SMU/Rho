@@ -52,6 +52,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     UpdatePluginWindowLayout::export_all(&types)?;
     OpenPluginWindowView::export_all(&types)?;
     OpenedPluginWindowView::export_all(&types)?;
+    ContextSearch::export_all(&types)?;
+    ContextPage::export_all(&types)?;
+    PreviewContext::export_all(&types)?;
+    ContextPreview::export_all(&types)?;
     DocumentDraft::export_all(&types)?;
     StageDraftChunk::export_all(&types)?;
     SaveDocumentDraft::export_all(&types)?;
@@ -78,6 +82,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "window-open-view",
             schemars::schema_for!(OpenPluginWindowView),
         ),
+        ("context-search", schemars::schema_for!(ContextSearch)),
+        ("context-page", schemars::schema_for!(ContextPage)),
+        ("preview-context", schemars::schema_for!(PreviewContext)),
+        ("context-preview", schemars::schema_for!(ContextPreview)),
         ("document-draft", schemars::schema_for!(DocumentDraft)),
         (
             "list-document-drafts",

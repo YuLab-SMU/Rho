@@ -537,6 +537,15 @@
         "--locked"
       ]
     },
+    "plugins.view-delegation": {
+      "command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_view_delegation", "--locked"]
+    },
+    "plugins.editor-context": {
+      "command": ["cargo", "test", "-p", "rho-editor-backend", "--lib", "--locked"]
+    },
+    "plugins.editor-context-manifest": {
+      "command": ["node", "scripts/generate-editor-context.mjs", "--check"]
+    },
     "plugins.editor-model": {
       "command": ["node", "scripts/test-editor-plugin.mjs"]
     },
@@ -742,6 +751,7 @@
         "scripts/test-files-ui.mjs",
         "scripts/test-editor-plugin.mjs",
         "scripts/build-editor-plugin.mjs",
+        "scripts/generate-editor-context.mjs",
         "scripts/fixtures/editor-controller.mjs",
         "scripts/fixtures/editor-code.mjs",
         "scripts/fixtures/editor-format.mjs",
@@ -750,6 +760,8 @@
         "ui/e2e/editor-plugin.spec.ts",
         "ui/e2e/editor-code.spec.ts",
         "ui/e2e/files-plugin.spec.ts",
+        "crates/host/tests/plugin_view_delegation.rs",
+        "crates/host/tests/fixtures/view_delegation.py",
         "crates/host/tests/plugin_self_requirements.rs",
         "crates/host/tests/plugin_optional_requirements.rs",
         "scripts/fixtures/plugin-drafts.mjs",
@@ -807,6 +819,9 @@
         "plugins.drafts",
         "plugins.draft-ports",
         "plugins.draft-browser",
+        "plugins.view-delegation",
+        "plugins.editor-context",
+        "plugins.editor-context-manifest",
         "plugins.editor-model",
         "plugins.editor-browser",
         "plugins.editor-code-browser"

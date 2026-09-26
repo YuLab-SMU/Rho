@@ -1832,6 +1832,7 @@ impl InstanceOwner {
     }
     fn internal_context(operation: &Operation) -> CallContext {
         CallContext {
+            view_scope: None,
             caller: operation.caller.clone(),
             principal: operation.principal.clone(),
             scopes: BTreeSet::from([

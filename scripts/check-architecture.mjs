@@ -29,6 +29,7 @@ const allowed = {
   "rho-r-engine": ["rho-r-api", "rho-plugin-protocol"],
   "rho-files-api": [],
   "rho-files-backend": ["rho-plugin-sdk", "rho-files-api", "rho-files-engine", "rho-files-owner"],
+  "rho-editor-backend": ["rho-plugin-sdk"],
   "rho-files-owner": ["rho-files-api"],
   "rho-files-engine": ["rho-files-api", "rho-process-engine"],
   "rho-process-api": [],

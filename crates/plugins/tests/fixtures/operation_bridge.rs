@@ -39,6 +39,7 @@ impl Harness {
         }
         let scope = temp.path().to_str().unwrap().to_owned();
         let context = host::CallContext {
+            view_scope: None,
             caller: host::CallerIdentity {
                 kind: host::CallerKind::Agent,
                 id: "agent-a".into(),

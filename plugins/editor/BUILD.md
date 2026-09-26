@@ -1,6 +1,6 @@
 # Build Editor
 
-This ordinary UI-only package uses the included public plugin protocol and UI SDK,
+This ordinary UI and native backend package uses the included public plugin protocol and UI SDK,
 public Files/R declarations, locked CodeMirror/diff libraries and its own document
 owner. It opens captured files, preserves local editing state, synchronizes opaque
 drafts and saves through the exact configured Files backend. Disk comparisons
@@ -59,7 +59,27 @@ unchanged. Later edits remain resident; the retained comparison can be inspected
 discarded or explicitly applied against its displayed version. Applying never
 saves the project file. Close retains pending identities and later edits; reopening
 can inspect an original request but cannot replay it under another view identity.
-Document context contributions and default scenario composition remain in progress.
+Default scenario composition remains in progress.
+
+The `documents` context contribution uses `editor.context.search@1` and
+`editor.context.preview@1`. Search matches synchronized names and paths for this
+exact Editor revision in an explicit window, at most 20 metadata rows per read.
+The opaque continuation belongs to the original query; empty matching pages can
+still have a continuation. Preview accepts `inclusion: {kind: "document"}` or
+`{kind: "selection"}` and a `max_bytes` bound of 1–65536. It verifies the original
+draft version, digest, source, principal and every returned content page before
+interpreting the Editor payload. Changed or discarded sources require a new
+selection. Text uses normalized newlines and captured UTF-16 selection offsets;
+truncation preserves Unicode boundaries. Read-only file prefixes remain labeled.
+These queries do not read native files, create R sessions, flush live input, write
+resources, or return other captured file/R action payloads.
+
+Build with an installed Rust 1.97 toolchain and the included Cargo lockfile.
+The native backend depends only on the public backend SDK/protocol and locked
+libraries. Its `dist/rho-editor-backend` executable uses the native artifact target
+(`aarch64-apple-darwin` for this delivery); it runs as the same ordinary package as
+the UI. The build compiles it offline and regenerates the context contribution
+schemas from the public contracts. Missing tools or dependencies are diagnostics.
 
 Use Node.js and the exact dependency versions in `package.json` and
 `dependencies.lock`. Select an existing installed dependency directory with

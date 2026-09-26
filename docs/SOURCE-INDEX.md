@@ -83,8 +83,10 @@ Sources:
 
 - `crates/cli/src/plugins.rs`
 - `crates/host/tests/files_plugin.rs`
+- `crates/host/tests/fixtures/view_delegation.py`
 - `crates/host/tests/plugin_optional_requirements.rs`
 - `crates/host/tests/plugin_self_requirements.rs`
+- `crates/host/tests/plugin_view_delegation.rs`
 - `crates/host/tests/r_plugin_real_r.rs`
 - `crates/plugin-protocol/**`
 - `crates/plugin-sdk/**`
@@ -110,6 +112,7 @@ Sources:
 - `scripts/fixtures/plugin-draft-view.mjs`
 - `scripts/fixtures/plugin-drafts.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
+- `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`
 - `scripts/test-editor-plugin.mjs`
@@ -169,6 +172,8 @@ Checks:
 - `plugins.drafts`: `["cargo","test","-p","rho-plugins","-p","rho-plugin-protocol","--lib","draft","--locked"]`
 - `plugins.editor-browser`: `["npm","run","test:browser","--prefix","ui","--","editor-plugin.spec.ts"]`
 - `plugins.editor-code-browser`: `["npm","run","test:browser","--prefix","ui","--","editor-code.spec.ts"]`
+- `plugins.editor-context`: `["cargo","test","-p","rho-editor-backend","--lib","--locked"]`
+- `plugins.editor-context-manifest`: `["node","scripts/generate-editor-context.mjs","--check"]`
 - `plugins.editor-model`: `["node","scripts/test-editor-plugin.mjs"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.files-backend`: `["cargo","test","-p","rho-files-backend","--lib","--locked"]`
@@ -206,6 +211,7 @@ Checks:
 - `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts"]`
 - `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
+- `plugins.view-delegation`: `["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"]`
 - `plugins.viewer`: `["node","scripts/test-viewer-plugin.mjs"]`
 - `plugins.window-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`

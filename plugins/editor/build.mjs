@@ -6,6 +6,10 @@ const root=fileURLToPath(new URL('.',import.meta.url));
 const dependencies=path.join(root,'node_modules');
 let borrowed=false;
 try {
+  if(!fs.existsSync(path.join(root,'Cargo.toml'))) throw new Error('Assemble the standalone Editor source package before building.');
+  execFileSync(process.env.RHO_PLUGIN_CARGO??'cargo',['build','--locked','--offline','-p','rho-editor-backend','--bins'],{cwd:root,stdio:'inherit'});
+  const target=process.env.CARGO_TARGET_DIR?path.resolve(root,process.env.CARGO_TARGET_DIR):path.join(root,'target');
+  execFileSync(path.join(target,'debug/export-editor-context'),[path.join(root,'plugin.json')],{cwd:root,stdio:'inherit'});
   if(!fs.existsSync(dependencies)) {
     if(!process.env.RHO_PLUGIN_NODE_MODULES) throw new Error('Select an existing dependency directory with RHO_PLUGIN_NODE_MODULES.');
     fs.symlinkSync(fs.realpathSync(process.env.RHO_PLUGIN_NODE_MODULES),dependencies,'dir');borrowed=true;
@@ -17,6 +21,8 @@ try {
   }
   execFileSync(process.execPath,[path.join(dependencies,'typescript/bin/tsc'),'--project','tsconfig.json'],{cwd:root,stdio:'inherit'});
   execFileSync(process.execPath,[path.join(dependencies,'vite/bin/vite.js'),'build','--base=./','--outDir=dist'],{cwd:root,stdio:'inherit'});
+  fs.copyFileSync(path.join(target,'debug/rho-editor-backend'),path.join(root,'dist/rho-editor-backend'));
+  fs.chmodSync(path.join(root,'dist/rho-editor-backend'),0o755);
   const lock=JSON.parse(fs.readFileSync(new URL('dependencies.lock',import.meta.url),'utf8'));
   const notices=[];
   for(const name of Object.keys(lock.packages).sort()) {

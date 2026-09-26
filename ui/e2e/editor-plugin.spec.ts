@@ -17,6 +17,9 @@ async function port(method:string,params:any){
 }
 async function invoke(id:string,args:any){const record=await port('invoke',{capability:{id,version:1},arguments:args,preconditions:[],client_request_id:crypto.randomUUID()});expect(record.status,JSON.stringify(record.error)).toBe('succeeded');return record.output;}
 async function query(id:string,args:any){return(await port('query_snapshot',{capability:{id,version:1},arguments:args})).data;}
+async function contextQuery(id:string,args:any){return query(id,{binding:await query('plugins.resolve',{capability:{id,version:1},instance:editor.identity}),arguments:args});}
+async function contextSearch(text:string){return contextQuery('editor.context.search',{window:windowId,text,after:null,limit:20});}
+async function contextPreview(reference:any,kind='document',max_bytes=65536){return contextQuery('editor.context.preview',{reference,inclusion:{kind},max_bytes});}
 async function capture(path:string){const binding=await query('plugins.resolve',{capability:{id:'files.snapshot',version:1},instance:files.identity});return(await query('files.snapshot',{binding,arguments:{paths:[path],limit:1}})).files[0];}
 async function open(configuration:any,state:any={}){const layout=await query('windows.layout',{window:windowId});return(await invoke('windows.open_view',{expected_layout_version:layout.version,group:layout.layout.kind==='tabs'?layout.layout.id:null,
   view:{instance:editor.identity,contribution:'editor',window:windowId,configuration,state}})).view;}
@@ -29,13 +32,13 @@ test.beforeAll(async()=>{
   if(!process.env.RHO_EDITOR_PLUGIN_PACKAGE)execFileSync(process.execPath,[resolve('../scripts/build-editor-plugin.mjs'),editorPath],{stdio:'inherit'});
   expect(hash(readFileSync(binary))).toBe(before);
   const database=join(directory,'state.sqlite'),snapshot=(path:string,target:string)=>JSON.parse(execFileSync(binary,['--database',database,'plugins','snapshot',path,'--target',target],{encoding:'utf8'})).result;
-  const filesPackage=snapshot(filesPath,'aarch64-apple-darwin'),editorPackage=snapshot(editorPath,'ui-web');
+  const filesPackage=snapshot(filesPath,'aarch64-apple-darwin'),editorPackage=snapshot(editorPath,'aarch64-apple-darwin');
   process_=spawn(binary,['--database',database,'--project',project,'workbench'],{stdio:['ignore','pipe','pipe']});
   url=new URL(await new Promise<string>((done,reject)=>{let output='',errors='';const timer=setTimeout(()=>reject(new Error(`Editor Host startup timed out: ${errors}`)),90000);
     process_.stderr!.on('data',bytes=>errors+=bytes);process_.stdout!.on('data',bytes=>{output+=bytes;const found=output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});
     process_.once('exit',code=>{clearTimeout(timer);reject(new Error(`Editor Host exited ${code}: ${errors}`));});}));
   files=(await invoke('plugins.activate',{revision:filesPackage.revision,artifact:filesPackage.artifacts[0],target:'aarch64-apple-darwin',alias:'files',configuration:{}})).instance;
-  editor=(await invoke('plugins.activate',{revision:editorPackage.revision,artifact:editorPackage.artifacts[0],target:'ui-web',alias:'editor',configuration:{}})).instance;
+  editor=(await invoke('plugins.activate',{revision:editorPackage.revision,artifact:editorPackage.artifacts[0],target:'aarch64-apple-darwin',alias:'editor',configuration:{}})).instance;
   view=await open({source:files.identity,file:await capture(filename)});
 });
 test.afterAll(async()=>{
@@ -59,6 +62,11 @@ test('Editor preserves later edits across a native save and close, restores orig
   await settings.getByRole('button',{name:'Apply Settings',exact:true}).click();await expect(settings).toBeHidden();
   await expect.poll(()=>code.evaluate(element=>getComputedStyle(element.closest('.cm-editor')!).fontSize)).toBe('18px');
   await expect(first.locator('#file-state')).toHaveText('Saved');
+  // This ordinary native context owner sees only acknowledged draft captures.
+  await expect.poll(async()=>(await contextSearch(filename)).items.length).toBe(1);
+  const originalContext=(await contextSearch(filename)).items[0].reference;
+  expect((await contextPreview(originalContext)).text).toBe('x <- 1\n# 说明 中文\n');
+  expect((await contextPreview(originalContext,'selection')).text).toBe('');
   await code.click();await code.press('Meta+a');await page.keyboard.insertText('indent_probe');await code.press('Tab');await expect.poll(()=>first.locator('.cm-line').first().textContent()).toBe('  indent_probe');
   await code.press('Meta+z');await expect(code).toHaveText('indent_probe');
   for(const width of [1440,1920,390,220]){
@@ -82,6 +90,14 @@ test('Editor preserves later edits across a native save and close, restores orig
   await expect(region(view.view)).toHaveCount(0);await page.unroute('**/api/plugin-view');
   expect(readFileSync(join(project,filename),'utf8')).toBe('\ufeffx <- 2\r\n# captured 中文\r\n');
   const closed=await query('views.inspect',{view:view.view});expect(closed.state.pending).toBeNull();
+  await expect(contextPreview(originalContext)).rejects.toThrow(/changed/i);
+  const synchronized=(await contextSearch(filename)).items[0];
+  const unsavedContext=await contextPreview(synchronized.reference);
+  expect(unsavedContext.text).toBe('x <- 3\n# later 编辑\n');
+  expect(unsavedContext.data.synchronized).toBe(true);expect(unsavedContext.resources).toEqual([]);
+  expect(JSON.stringify(unsavedContext)).not.toContain('fileRun');
+  // The disk still contains the earlier capture; context reads never save it.
+  expect(readFileSync(join(project,filename),'utf8')).toBe('\ufeffx <- 2\r\n# captured 中文\r\n');
   expect(Buffer.byteLength(JSON.stringify(closed.state))).toBeLessThan(32768);
   const secondView=await open(view.configuration,closed.state),second=frame(secondView.view),restored=second.getByRole('textbox',{name:'Code Editor',exact:true});
   await expect(restored).toBeVisible();await expect(restored).toContainText('later 编辑');await expect(second.locator('#file-state')).toHaveText('Unsaved');
@@ -143,6 +159,10 @@ test('Editor preserves later edits across a native save and close, restores orig
   const largeFrame=frame(largeView.view);await expect(largeFrame.getByRole('textbox',{name:'Code Editor'})).toBeVisible();
   await page.getByRole('tab',{name:'Editor',exact:true}).locator('[data-layout-path$="/button/close"]').click();await expect(region(largeView.view)).toHaveCount(0);
   const retained=await query('views.inspect',{view:largeView.view});expect(retained.state.draft.content.bytes).toBeGreaterThan(512*1024);
+  const largeContext=(await contextSearch('large.R')).items[0];
+  const bounded=await contextPreview(largeContext.reference,'document',31);
+  expect(bounded.truncated).toBe(true);expect(Buffer.byteLength(bounded.text)).toBeLessThanOrEqual(31);
+  expect(bounded.text).not.toContain('�');
   const reloaded=await open(largeView.configuration,retained.state);await expect(frame(reloaded.view).getByRole('textbox',{name:'Code Editor'})).toBeVisible();
   await expect(frame(reloaded.view).locator('#file-state')).toHaveText('Saved');await page.setViewportSize({width:1920,height:900});
   await page.screenshot({path:info.outputPath('editor-large-restored-1920.png')});

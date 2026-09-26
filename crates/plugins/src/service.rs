@@ -347,6 +347,7 @@ impl Services {
                 OperationError::Unavailable("delegated principal is no longer bound".into())
             })?;
         let context = host::CallContext {
+            view_scope: call.view_scope.clone(),
             caller: host::CallerIdentity {
                 kind: host::CallerKind::Plugin,
                 id: call.provider.instance.to_string(),

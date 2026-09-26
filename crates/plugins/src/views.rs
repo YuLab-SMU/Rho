@@ -475,11 +475,34 @@ impl PluginService {
         }
         live.sequence = sequence;
         let mut context = live.context.clone();
+        let active = self.runtime.observe().iter().any(|observation| {
+            observation.instance.identity == live.connection.view.instance
+                && observation.instance.state == InstanceState::Active
+        });
+        let mut scope = host::ViewCallScope {
+            window: live.connection.view.window.clone(),
+            draft_source: (live.closing.is_some() || !active).then(|| DraftSource {
+                revision: live.connection.view.instance.revision.clone(),
+                contribution: live.connection.view.contribution.clone(),
+            }),
+        };
+        // Both the original opener and the current authenticated parent may
+        // restrict this call; neither a new view nor a reverse call widens them.
+        for inherited in [context.view_scope.as_ref(), parent.view_scope.as_ref()]
+            .into_iter().flatten()
+        {
+            if inherited.window != scope.window {
+                return Err(invalid("call is restricted to its original window"));
+            }
+            if let Some(source) = &inherited.draft_source {
+                if scope.draft_source.as_ref().is_some_and(|current| current != source) {
+                    return Err(invalid("call is restricted to its original draft source"));
+                }
+                scope.draft_source = Some(source.clone());
+            }
+        }
+        context.view_scope = Some(scope);
         if let Some(cap) = capability {
-            let active = self.runtime.observe().iter().any(|observation| {
-                observation.instance.identity == live.connection.view.instance
-                    && observation.instance.state == InstanceState::Active
-            });
             if !active && !crate::draft_service::view_persistence_capability(&cap.id, cap.version) {
                 return Err(invalid("view instance is no longer accepting calls"));
             }

@@ -21,6 +21,7 @@ impl Fixture {
         let application = ApplicationOwner::new("/project".into(), store.clone());
         let owner = ComponentAgentOwner::new(store.clone(), "component-host".into());
         let context = CallContext {
+            view_scope: None,
             caller: CallerIdentity {
                 kind: CallerKind::Human,
                 id: "local".into(),

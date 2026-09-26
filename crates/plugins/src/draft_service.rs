@@ -556,15 +556,16 @@ impl PluginService {
         writing: bool,
     ) -> Result<Option<DraftSource>, OperationError> {
         self.check_window_context(context, window)?;
+        let inherited = context.view_scope.as_ref().and_then(|scope| scope.draft_source.clone());
         if context.caller.kind != host::CallerKind::Plugin {
-            return Ok(None);
+            return Ok(inherited);
         }
         let Ok(view) = ViewInstanceId::new(&context.caller.id) else {
-            return Ok(None);
+            return Ok(inherited);
         };
         let record = match self.view_record(context, &view) {
             Ok(record) => record,
-            Err(OperationError::NotFound(_)) => return Ok(None),
+            Err(OperationError::NotFound(_)) => return Ok(inherited),
             Err(error) => return Err(error),
         };
         if record.closed {
@@ -591,10 +592,18 @@ impl PluginService {
             observation.instance.identity == record.instance
                 && observation.instance.state == InstanceState::Active
         });
-        Ok((closing || !active).then_some(DraftSource {
-            revision: record.instance.revision,
-            contribution: record.contribution,
-        }))
+        if closing || !active {
+            let source = DraftSource {
+                revision: record.instance.revision,
+                contribution: record.contribution,
+            };
+            if inherited.as_ref().is_some_and(|original| original != &source) {
+                return Err(invalid("call is restricted to its original draft source"));
+            }
+            Ok(Some(source))
+        } else {
+            Ok(inherited)
+        }
     }
     pub(crate) fn complete_draft_save(
         &self,

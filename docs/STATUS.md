@@ -82,8 +82,8 @@ settings retained with the draft. Independent checks preserve text, selection,
 document version and native file state. Both native browser cases pass, including
 actual font size, two-space indentation, undo and restoration after close. The
 settings dialog and larger-font Editor were inspected at all four widths, as were
-the affected narrow R controls. Shared defaults, document context and default
-composition remain within the continuing Editor migration.
+the affected narrow R controls. Shared defaults and default composition remain
+within the continuing Editor migration.
 
 The generic `documents.list@1` query now returns bounded synchronized metadata
 for one explicit window, with exact source filtering and an exclusive identity
@@ -98,9 +98,33 @@ including closing-source restrictions and refusal of listing after instance drai
 Editor publishes names, paths, text versions, selections and read-only flags with
 the same synchronized capture. Its independent controller checks and outside-checkout
 package build pass, including later typing, selection-only changes and save-result updates.
-This prepares context discovery; Editor search/preview contributions are not yet
-registered. The added core query requires a newly built Host. Existing user Hosts
-and R sessions have not been restarted.
+Editor now registers ordinary native search/preview contributions, using public
+bounded context DTOs and an owner-defined selector. Search matches synchronized
+names/paths for an exact Editor revision and window. Preview verifies the original
+draft version, digest and all content pages before returning document text or the
+captured selection. It preserves Unicode boundaries, labels read-only prefixes,
+refuses changed sources and omits captured file/R actions. The independently built
+combined UI/backend package depends only on public SDKs and leaves the freshly
+built Host binary unchanged. Its four backend cases and executable framed-RPC
+fixture pass, including 16 concurrent reads, reversed replies, excess-read refusal,
+native errors and release. Native Editor browser acceptance passes for retained
+unsaved text after close, stale-reference refusal, selection and bounded large-file
+previews without changing disk bytes. The initial three-case browser run timed out
+initializing Files before any test body; that failure is retained separately from
+the passing reruns of all three cases (Editor, Editor/R/Console and Files).
+No initialization deadline changed. The current narrow Editor screenshot was
+inspected; existing presentation is unchanged.
+Public type generation, independent TypeScript consumption, the Editor model,
+client build/check and generated context manifest check pass.
+
+The Host now carries original view window/close-time source restrictions separately
+from serialized plugin RPC. Nested backend calls, preflight, controls and accepted
+operations preserve that scope; a backend cannot replace it through arguments.
+The focused runtime case and all 12 affected Host delegation/draft/shared-port
+cases pass. The first delegation fixture attempted release before native settlement;
+the final fixture waits for settlement and passes without weakening release rules.
+These capabilities require the newly built Host. Existing user Hosts and R sessions
+have not been restarted; native acceptance uses disposable projects.
 
 The ordinary Objects, Packages, Help and Plots views are assembled. Packages-to-Help
 and pinned Plots comparisons now pass native acceptance in the generic window;
@@ -241,9 +265,9 @@ The first combined browser
 run timed out initializing the Files backend before the Editor test body; its
 failure evidence is retained separately. Files passed in that run, and the isolated
 Editor rerun passed with the same artifacts. No startup deadline was weakened.
-Native input-method acceptance is not established. Dynamic outer tab labels,
-R actions/formatting/context and default composition remain
-to be completed. The retiring Editor still owns the default workspace experience.
+Native input-method acceptance is not established. Dynamic outer tab labels
+and default composition remain to be completed. The retiring Editor still owns
+the default workspace experience.
 These draft ports require a newly built Host; no existing user Host was restarted.
 All 20 existing Host plugin, scoped-path, self-grant and shared-port regression
 cases also pass (`cargo test -p rho-host --test plugins --test port_contracts

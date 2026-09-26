@@ -396,6 +396,7 @@ fn native(error: WorkspaceRuntimeError, operation: &Operation) -> HandlerError {
 
 fn context(operation: &Operation) -> CallContext {
     CallContext {
+        view_scope: None,
         caller: operation.caller.clone(),
         principal: Some(operation.principal().clone()),
         scopes: BTreeSet::new(),

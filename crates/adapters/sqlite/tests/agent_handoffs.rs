@@ -16,6 +16,7 @@ struct Fixture {
 }
 fn context(id: &str) -> CallContext {
     CallContext {
+        view_scope: None,
         caller: CallerIdentity {
             kind: CallerKind::Human,
             id: id.into(),

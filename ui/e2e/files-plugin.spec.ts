@@ -31,7 +31,7 @@ test.beforeAll(async () => {
   if (!process.env.RHO_EDITOR_PLUGIN_PACKAGE) execFileSync(process.execPath, [resolve("../scripts/build-editor-plugin.mjs"), editorPath], { stdio: "inherit" });
   expect(digest(binary)).toBe(before);
   const database = join(directory, "state.sqlite"), snapshot = (path: string, target: string) => JSON.parse(execFileSync(binary, ["--database", database, "plugins", "snapshot", path, "--target", target], { encoding: "utf8" })).result;
-  const files = snapshot(packagePath, "aarch64-apple-darwin"), target = snapshot(editorPath, "ui-web");
+  const files = snapshot(packagePath, "aarch64-apple-darwin"), target = snapshot(editorPath, "aarch64-apple-darwin");
   process_ = spawn(binary, ["--database", database, "--project", project, "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = "", errors = ""; const timer = setTimeout(() => reject(new Error(`Files fixture Host startup timed out: ${errors}`)), 90000);
@@ -39,7 +39,7 @@ test.beforeAll(async () => {
     process_.once("exit", code => { clearTimeout(timer); reject(new Error(`Files fixture Host exited ${code}: ${errors}`)); });
   }));
   instance = (await invoke("plugins.activate", { revision: files.revision, artifact: files.artifacts[0], target: "aarch64-apple-darwin", alias: "files", configuration: {} })).instance;
-  editor = (await invoke("plugins.activate", { revision: target.revision, artifact: target.artifacts[0], target: "ui-web", alias: "editor", configuration: {} })).instance;
+  editor = (await invoke("plugins.activate", { revision: target.revision, artifact: target.artifacts[0], target: "aarch64-apple-darwin", alias: "editor", configuration: {} })).instance;
   view = (await invoke("windows.open_view", { expected_layout_version: 0, group: null,
     view: { instance: instance.identity, contribution: "files", window: windowId, configuration: { editor: editor.identity, editor_group: null }, state: {} } })).view;
 });

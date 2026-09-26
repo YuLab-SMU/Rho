@@ -507,9 +507,16 @@ async fn reverse_calls_inherit_active_parent_and_declared_scope_without_host_cre
         .await
         .unwrap();
     let lease = resolve(&runtime, &instance, false);
+    let scope = rho_contract::ViewCallScope {
+        window: WindowId::new("origin-window").unwrap(),
+        draft_source: Some(DraftSource {
+            revision: instance.identity.revision.clone(),
+            contribution: ContributionId::new("document").unwrap(),
+        }),
+    };
     let reply = data(
         lease
-            .call(call(&lease, json!({"action":"delegate"}), false))
+            .call_scoped(call(&lease, json!({"action":"delegate", "view_scope":{"window":"forged"}}), false), Some(scope.clone()))
             .await
             .unwrap(),
     );
@@ -526,6 +533,8 @@ async fn reverse_calls_inherit_active_parent_and_declared_scope_without_host_cre
     let calls = host.0.lock().unwrap();
     assert_eq!(calls.len(), 1);
     assert!(calls[0].query_only);
+    assert_eq!(calls[0].view_scope, Some(scope));
+    assert!(serde_json::to_value(&calls[0].parent).unwrap().get("view_scope").is_none());
     assert_eq!(calls[0].parent.binding.project, instance.project);
     assert_eq!(calls[0].parent.principal, instance.principal);
     assert_eq!(calls[0].provider, instance.identity);

@@ -20,6 +20,25 @@ commands to complete instead of polling them with sleep loops.
 
 ## Testing SOP
 
+Editor context is an ordinary native backend in the Editor package. Use
+`cargo test -p rho-editor-backend --lib --locked` for its bounded search, exact
+source/version/digest checks, multi-page content verification and Unicode selection
+behavior. Regenerate its contributed manifest with `node scripts/generate-editor-context.mjs`;
+use `--check` to verify committed schemas. After independent assembly,
+`python3 /absolute/package/tests/protocol.py /absolute/package/dist/rho-editor-backend`
+checks executable RPC concurrency, correlation, errors and release. The public context DTOs are included in protocol generation and the
+independent strict TypeScript consumer. The native `editor-plugin.spec.ts` path
+also reads actual synchronized Editor captures through the context contribution;
+assemble Editor with the native artifact target before that case. The three
+Editor/Files browser fixtures now use that combined package target.
+
+`cargo test -p rho-host --test plugin_view_delegation --test plugin_drafts
+--test port_contracts --locked` checks Host-owned view restrictions through an
+independent public-RPC backend, including nested delegation, preflight, controls,
+close-time encoding scope and accepted work after closure. The fixture waits for
+native settlement before releasing the instance; a terminal journal record alone
+does not prove that backend settlement has finished.
+
 The ordinary Console package has an independent build/model check,
 `node scripts/test-console-plugin.mjs`. Its isolated editing case is
 `npm run test:browser --prefix ui -- console-editor.spec.ts`; this case supplies

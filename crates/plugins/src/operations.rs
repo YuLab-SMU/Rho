@@ -267,7 +267,7 @@ impl OperationHandler for RoutingHandler {
                 preconditions: request.preconditions.clone(),
             })?;
             let response = prepare
-                .call(PluginCall {
+                .call_scoped(PluginCall {
                     request: request_id(),
                     binding: prepare.binding(request.binding.target.clone()),
                     principal: principal.clone(),
@@ -276,7 +276,7 @@ impl OperationHandler for RoutingHandler {
                     preconditions: Value::Null,
                     owner_context: Value::Null,
                     operation_id: None,
-                })
+                }, context.view_scope.clone())
                 .await
                 .map_err(unavailable)?;
             if let RpcBody::Error { code, message, .. } = response {
@@ -324,6 +324,7 @@ impl OperationHandler for RoutingHandler {
             lease,
             principal,
             scopes: context.scopes.clone(),
+            view_scope: context.view_scope.clone(),
             owner_context,
         })))
     }
@@ -336,6 +337,7 @@ struct BoundHandler {
     lease: Arc<ProviderLease>,
     principal: PrincipalId,
     scopes: std::collections::BTreeSet<String>,
+    view_scope: Option<host::ViewCallScope>,
     owner_context: Value,
 }
 struct PluginExecutionLease {
@@ -425,7 +427,7 @@ impl OperationHandler for BoundHandler {
             owner_context: self.owner_context.clone(),
             operation_id: Some(operation.operation_id.as_str().to_owned()),
         };
-        let response = self.lease.call(call);
+        let response = self.lease.call_scoped(call, self.view_scope.clone());
         tokio::pin!(response);
         let reply = tokio::select! {
             biased;
@@ -544,12 +546,12 @@ impl ControlHandler for RoutingHandler {
     async fn control(&self, context: &host::CallContext, value: Value) -> Result<Value, OperationError> {
         let request = self.request(&value).map_err(|_| OperationError::InvalidInput("Control binding or arguments are invalid (redacted)".into()))?;
         let lease = self.resolve(context, &request)?;
-        let reply = lease.call(PluginCall {
+        let reply = lease.call_scoped(PluginCall {
             request: request_id(), binding: request.binding,
             principal: plugin_principal_id(context.principal()), scopes: context.scopes.clone(),
             arguments: request.arguments, preconditions: request.preconditions,
             owner_context: Value::Null, operation_id: None,
-        }).await.map_err(|_| OperationError::Unavailable("Control completion is unconfirmed; inspect the original native request (arguments redacted)".into()))?;
+        }, context.view_scope.clone()).await.map_err(|_| OperationError::Unavailable("Control completion is unconfirmed; inspect the original native request (arguments redacted)".into()))?;
         match reply {
             RpcBody::ControlResult { data } => Ok(data),
             _ => Err(OperationError::Unavailable("The bound owner did not confirm control; inspect its current request (arguments redacted)".into())),
@@ -579,7 +581,7 @@ impl QueryHandler for RoutingHandler {
         let lease = self.resolve(context, &request)?;
         let principal = plugin_principal_id(context.principal());
         let reply = lease
-            .call(PluginCall {
+            .call_scoped(PluginCall {
                 request: request_id(),
                 binding: request.binding.clone(),
                 principal: principal.clone(),
@@ -588,7 +590,7 @@ impl QueryHandler for RoutingHandler {
                 preconditions: request.preconditions,
                 owner_context: Value::Null,
                 operation_id: None,
-            })
+            }, context.view_scope.clone())
             .await
             .map_err(unavailable)?;
         if let RpcBody::Error { code, message, .. } = reply {

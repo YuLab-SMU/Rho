@@ -49,7 +49,7 @@ mod tests {
     async fn task_operation_lookup_keeps_the_original_operation_read_permission() {
         let journal=Arc::new(SqliteOperationJournal::open_in_memory().unwrap()); journal.admit(&operation("operation-original","task:a")).await.unwrap();
         let gateway=OperationGateway::new(Arc::new(CapabilityRegistry::new()),journal,Arc::new(SystemClock),Arc::new(UuidOperationIdGenerator)).with_project_scope(Some("/project".into()));
-        let mut context=CallContext{caller:principal("alice"),principal:None,scopes:Default::default(),connection_id:"test".into(),correlation_id:None,causation_id:None,trace_parent:None};
+        let mut context=CallContext{view_scope: None,caller:principal("alice"),principal:None,scopes:Default::default(),connection_id:"test".into(),correlation_id:None,causation_id:None,trace_parent:None};
         let args=RecentOperationsArguments{before_cursor:None,client_request_id:None,operation_id:None,limit:8};
         assert!(matches!(gateway.recent_for_caller(&context,&actor("task:a"),&args).await,Err(OperationError::AccessDenied{..})));
         context.scopes.insert("operation.read".into());

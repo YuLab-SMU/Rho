@@ -6015,6 +6015,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-editor-backend"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "rho-plugin-sdk",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+]
+
+[[package]]
 name = "rho-environment"
 version = "0.1.0"
 dependencies = [

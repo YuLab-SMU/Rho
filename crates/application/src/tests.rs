@@ -192,6 +192,7 @@ impl ApplicationRepository for MemoryRepository {
 }
 fn actor(agent: bool) -> CallContext {
     CallContext {
+        view_scope: None,
         caller: CallerIdentity {
             kind: if agent {
                 CallerKind::Agent
