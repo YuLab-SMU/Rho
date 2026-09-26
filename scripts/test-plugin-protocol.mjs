@@ -14,7 +14,13 @@ try {
   const consumer = path.join(temp, "consumer");
   fs.mkdirSync(consumer);
   fs.writeFileSync(path.join(consumer, "consumer.mts"), `
-import type { WorkspacePaths, PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout, OpenPluginWindowView, ClosePluginView, PluginViewLifecycle, SaveDocumentDraft, StageDraftChunk, DocumentDraftChunk } from "../protocol/index.js";
+import type { ActivatePlugin, WorkspacePaths, PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout, OpenPluginWindowView, ClosePluginView, PluginViewLifecycle, SaveDocumentDraft, StageDraftChunk, DocumentDraftChunk } from "../protocol/index.js";
+const activation: ActivatePlugin = { revision: "revision", artifact: "artifact", target: "ui-web", alias: "editor", configuration: {} };
+const selected: ActivatePlugin = { ...activation, optional_capabilities: [{ id: "language.run", version: 1 }] };
+const none: Pick<PluginManifest, "optional_requires"> = {};
+const optional: Pick<PluginManifest, "optional_requires"> = { optional_requires: [{ capability: selected.optional_capabilities![0]!, scopes: ["workspace.run"] }] };
+// @ts-expect-error Omission is allowed; null is not an optional capability list.
+const invalid: ActivatePlugin = { ...activation, optional_capabilities: null };
 const paths: WorkspacePaths = { project_root: "/project", protected_paths: ["/project/records.sqlite-wal"] };
 const staged: StageDraftChunk = { window: "window", draft: "draft", upload: "capture", digest: "sha256:" + "a".repeat(64), base64: "YQ==" };
 const draft: SaveDocumentDraft = { window: "window", draft: "draft", upload: staged.upload, expected_version: null,
@@ -34,7 +40,7 @@ const prepare: RpcFrame = { ...frame, body: { type: "prepare_pending_cancellatio
 const ready: RpcFrame = { ...frame, body: { type: "ready", data: { revision: original.binding.provider.revision, artifact: original.binding.provider.artifact } } };
 const extended: RpcFrame = { ...frame, body: { type: "ready", data: { revision: original.binding.provider.revision, artifact: original.binding.provider.artifact, features: ["pending_cancellation_v1"] } } };
 export function inspect(manifest: PluginManifest, visual: VisualDocument, page: PluginRevisionPage) {
-  return [paths, staged, draft, part, frame, prepare, ready, extended, layout, open, close, lifecycle, manifest.views[0]?.entrypoint, visual.nodes[visual.root], page.next];
+  return [activation, selected, none, optional, invalid, paths, staged, draft, part, frame, prepare, ready, extended, layout, open, close, lifecycle, manifest.views[0]?.entrypoint, visual.nodes[visual.root], page.next];
 }
 `);
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),

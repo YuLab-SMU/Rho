@@ -1,4 +1,4 @@
-import { EditorState, StateEffect } from '@codemirror/state';
+import { EditorState, StateEffect, Compartment } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightSpecialChars, drawSelection } from '@codemirror/view';
 import { history, defaultKeymap, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, indentOnInput, foldGutter } from '@codemirror/language';
@@ -7,23 +7,47 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { connectPluginView } from '../public/plugin-ui/index.js';
 import { EditorController } from './controller.js';
 import { isR, rSupport } from './r-language.js';
+import { terminal } from './operations.js';
 const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const client = await connectPluginView();
 let editor: EditorView | null = null, stopped = false, preparing = false, composing = false, compositionEndedAt = -Infinity;
 let timer: ReturnType<typeof setTimeout> | undefined, observing: ReturnType<typeof setTimeout> | undefined, pendingFlush: Promise<void> | null = null;
 let controller: EditorController;
 let closeInstalled = false;
+const language = new Compartment();
+let rLanguage = false, comparedVersion = '';
 const show = (id: string, text: string) => { const element = get(id); element.textContent = text; element.hidden = !text; };
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 function render() {
   if (!controller || stopped) return;
   const doc = controller.document, busy = controller.busy || preparing, readonly = !!doc?.snapshot.readonly;
   const synchronizing = !!pendingFlush || controller.busy && controller.drafts.unresolved;
+  if (editor && doc && rLanguage !== isR(doc.path)) {
+    rLanguage = isR(doc.path); doc.update(doc.state.update({ effects: language.reconfigure(rLanguage ? rSupport() : []) }));
+  }
   if (editor && doc && editor.state !== doc.state) editor.setState(doc.state);
   get('name').textContent = doc?.name ?? 'Editor'; get('name').title = doc?.path ?? 'Untitled.R';
   get('file-state').textContent = readonly ? 'Read-only' : controller.pending ? 'Save unconfirmed' : doc?.dirty ? 'Unsaved' : doc ? 'Saved' : '';
   for (const id of ['save', 'save-as']) get<HTMLButtonElement>(id).disabled = !doc || readonly || busy || composing || !!controller.pending || controller.drafts.unresolved || !!controller.disk;
   get<HTMLButtonElement>('compare-disk').disabled = !doc?.path || readonly || busy || !!controller.pending || controller.drafts.unresolved;
+  get('r-actions').hidden = !controller.runtime.source;
+  const code = controller.code, canStart = !code || code.status === 'succeeded' && (code.kind !== 'format' || code.applied);
+  for (const id of ['run-selection', 'run-document', 'format']) get<HTMLButtonElement>(id).disabled = !doc || !isR(doc.path) || readonly || busy || composing ||
+    !!controller.pending || !!controller.disk || controller.drafts.unresolved || !canStart;
+  get('code-recovery').hidden = !code;
+  get('code-status').textContent = !code ? '' : code.applied ? 'Formatting complete. Save writes the current edits.' : code.formatted ? 'A formatting result is retained. Your current edits are unchanged.' :
+    `${code.kind === 'format' ? 'Formatting' : 'R run'} · ${code.status ?? 'admission unconfirmed'}${code.kind !== 'format' && code.status === 'succeeded' ? ' · Output is available in Console.' : ''}`;
+  get('code-operation').textContent = code?.intent.operation ?? 'Original code request retained.';
+  show('code-error', code?.error ?? '');
+  get<HTMLButtonElement>('inspect-code').disabled = busy;
+  get<HTMLButtonElement>('retry-code').disabled = busy || code?.intent.view !== client.view.view || !!code?.status && terminal(code.status);
+  get<HTMLButtonElement>('dismiss-code').disabled = busy || !['succeeded', 'failed', 'cancelled'].includes(code?.status ?? '');
+  get('compare-format').hidden = !code?.formatted || code.applied;
+  get<HTMLButtonElement>('compare-format').disabled = busy || !!controller.disk;
+  get<HTMLButtonElement>('apply-format').disabled = busy || controller.drafts.unresolved || !!controller.disk;
+  get<HTMLButtonElement>('refresh-format').disabled = busy;
+  get<HTMLButtonElement>('discard-format').disabled = busy || controller.drafts.unresolved;
+  if (get<HTMLDialogElement>('format-dialog').open && (!code?.formatted || code.applied)) get<HTMLDialogElement>('format-dialog').close();
   const diskDialog = get<HTMLDialogElement>('disk-dialog');
   get<HTMLButtonElement>('cancel-disk').disabled = busy;
   for (const id of ['refresh-disk', 'keep-edits', 'use-disk']) get<HTMLButtonElement>(id).disabled = busy || controller.drafts.unresolved;
@@ -65,14 +89,34 @@ function saveAs() {
   show('path-error', ''); get<HTMLDialogElement>('save-dialog').showModal(); get<HTMLInputElement>('path').focus();
 }
 function save() { if (controller.document?.path) action(() => controller.save()); else saveAs(); }
+function compareFormat() {
+  action(async () => {
+    try {
+      // A restored cache is not scientific authority. Re-read the original
+      // before showing its text alongside the resident document.
+      await controller.inspectCode(false);
+      const doc = controller.document, result = controller.code?.formatted;
+      if (!doc || !result || preparing) return;
+      comparedVersion = doc.snapshot.version;
+      get('format-local').textContent = doc.state.doc.toString(); get('format-result').textContent = result.code;
+      show('format-error', ''); const dialog = get<HTMLDialogElement>('format-dialog'); if (!dialog.open) dialog.showModal();
+    } catch (error) { show('format-error', message(error)); throw error; }
+  });
+}
 function mount() {
   if (editor || !controller.document) return;
   const doc = controller.document; get('opening').hidden = true;
+  rLanguage = isR(doc.path);
+  const shortcut = (kind: 'document' | 'selection' | 'format') => (view: EditorView) => {
+    if (!controller.runtime.source || !isR(doc.path) || composing || view.compositionStarted || performance.now() - compositionEndedAt < 100) return false;
+    action(() => controller.startCode(kind)); return true;
+  };
   doc.update(doc.state.update({ effects: StateEffect.reconfigure.of([
     history(), lineNumbers(), highlightActiveLine(), highlightSpecialChars(), drawSelection(), bracketMatching(), indentOnInput(), foldGutter(), closeBrackets(), highlightSelectionMatches(),
     EditorState.readOnly.of(!!doc.snapshot.readonly), EditorView.editable.of(!doc.snapshot.readonly),
-    EditorView.contentAttributes.of({ 'aria-label': 'Code Editor', spellcheck: 'false' }), ...(isR(doc.path) ? rSupport() : []),
+    EditorView.contentAttributes.of({ 'aria-label': 'Code Editor', spellcheck: 'false' }), language.of(rLanguage ? rSupport() : []),
     keymap.of([{ key: 'Mod-s', run: view => { if (composing || view.compositionStarted || performance.now() - compositionEndedAt < 100) return false; save(); return true; } },
+      { key: 'Mod-Enter', run: shortcut('selection') }, { key: 'Mod-Shift-Enter', run: shortcut('document') }, { key: 'Alt-Shift-f', run: shortcut('format') },
       ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     EditorView.domEventHandlers({ scroll: (_event, view) => { if (!preparing) { doc.setScroll(view.scrollDOM.scrollTop, view.scrollDOM.scrollLeft); schedule(); } } }),
   ]) }));
@@ -105,6 +149,18 @@ async function ensureClose() {
 }
 function wireActions() {
   get('save').onclick = save; get('save-as').onclick = saveAs;
+  get('run-selection').onclick = () => action(() => controller.startCode('selection'));
+  get('run-document').onclick = () => action(() => controller.startCode('document'));
+  get('format').onclick = () => action(() => controller.startCode('format'));
+  get('inspect-code').onclick = () => action(() => controller.inspectCode());
+  get('retry-code').onclick = () => action(() => controller.retryCode());
+  get('dismiss-code').onclick = () => action(() => controller.dismissCode());
+  get('compare-format').onclick = compareFormat; get('refresh-format').onclick = compareFormat;
+  get('close-format').onclick = () => get<HTMLDialogElement>('format-dialog').close();
+  get('apply-format').onclick = () => { const version = comparedVersion; action(async () => {
+    try { await controller.applyFormat(version); } catch (error) { show('format-error', message(error)); throw error; }
+  }); };
+  get('discard-format').onclick = () => action(() => controller.dismissCode());
   get('compare-disk').onclick = () => action(() => controller.compareDisk());
   get('refresh-disk').onclick = () => action(() => controller.compareDisk());
   get('keep-edits').onclick = () => action(() => controller.acceptDisk(false));
@@ -140,7 +196,12 @@ function poll() {
   clearTimeout(observing);
   if (stopped || preparing) return;
   observing = setTimeout(() => {
-    const inspect = controller.pending?.intent.operation && !controller.busy && !controller.drafts.unresolved ? controller.inspectSave().catch(() => undefined) : Promise.resolve();
+    const inspect = (async () => {
+      if (controller.busy || controller.drafts.unresolved) return;
+      if (controller.pending?.intent.operation) await controller.inspectSave().catch(() => undefined);
+      if (!preparing && !controller.busy && !controller.drafts.unresolved && controller.code?.intent.operation && !terminal(controller.code.status ?? 'accepted'))
+        await controller.inspectCode().catch(() => undefined);
+    })();
     void inspect.finally(() => { render(); poll(); });
   }, 1500);
 }

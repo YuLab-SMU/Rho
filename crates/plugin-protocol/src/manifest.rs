@@ -25,6 +25,10 @@ pub struct PluginManifest {
     pub source: SourceDeclaration,
     pub dependencies: BTreeMap<InstanceAlias, PluginDependency>,
     pub requires: Vec<CapabilityRequirement>,
+    /// Available only when explicitly selected by the activation request.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<_>", optional)]
+    pub optional_requires: Vec<CapabilityRequirement>,
     pub views: Vec<ViewContribution>,
     pub capabilities: Vec<CapabilityContribution>,
     pub contexts: Vec<ContextContribution>,
@@ -204,6 +208,27 @@ pub struct SourceFileDifference {
 }
 
 impl PluginManifest {
+    /// Selection does not grant authority: Host admission must still validate
+    /// every selected contract and scope against the caller and registry.
+    pub fn activation_requirements(&self, optional: &[CapabilityKey]) -> Result<Vec<CapabilityRequirement>, ProtocolError> {
+        require(optional.len() <= self.optional_requires.len(), "too many optional capability selections")?;
+        let mut seen = BTreeSet::new();
+        let mut grants = self.requires.clone();
+        for key in optional {
+            require(seen.insert(key), "duplicate optional capability selection")?;
+            let grant = self.optional_requires.iter().find(|item| &item.capability == key)
+                .ok_or_else(|| ProtocolError("optional capability is not declared by this revision".into()))?;
+            grants.push(grant.clone());
+        }
+        Ok(grants)
+    }
+    pub fn validate_activation_grants(&self, grants: &[CapabilityRequirement]) -> Result<(), ProtocolError> {
+        let optional = grants.iter().filter(|grant| !self.requires.contains(grant))
+            .map(|grant| grant.capability.clone()).collect::<Vec<_>>();
+        let expected = self.activation_requirements(&optional)?;
+        require(grants.len() == expected.len() && expected.iter().all(|grant| grants.iter().filter(|item| *item == grant).count() == 1),
+            "activation grants do not match declared requirements")
+    }
     pub fn validate(&self) -> Result<(), ProtocolError> {
         require(
             self.protocol_version == PLUGIN_PROTOCOL_VERSION,
@@ -252,7 +277,7 @@ impl PluginManifest {
             bounded_text(&build.command[0], 1024, "build executable")?;
         }
         require(
-            self.dependencies.len() <= 128 && self.requires.len() <= 256,
+            self.dependencies.len() <= 128 && self.requires.len() + self.optional_requires.len() <= 256,
             "too many dependencies or requirements",
         )?;
         require(
@@ -323,7 +348,7 @@ impl PluginManifest {
                 )?;
             }
         }
-        for req in &self.requires {
+        for req in self.requires.iter().chain(&self.optional_requires) {
             require(
                 req.capability.version > 0 && requirements.insert(&req.capability),
                 "invalid or duplicate capability requirement",
@@ -366,4 +391,67 @@ pub(crate) fn schema_shape(value: &Value) -> Result<(), ProtocolError> {
         value.is_object() || value.is_boolean(),
         "schemas must be JSON Schema objects or booleans",
     )
+}
+
+#[cfg(test)]
+mod optional_tests {
+    use super::*;
+    use serde_json::json;
+    fn manifest() -> PluginManifest {
+        serde_json::from_value(json!({"protocol_version":1,"id":"example.editor","name":"Editor","version":"1","description":"Text editing","license":"MIT",
+            "source":{"files":["src/editor.ts"],"lockfiles":["dependencies.lock"],"build_instructions":"BUILD.md","build":null},"dependencies":{},
+            "requires":[{"capability":{"id":"files.read","version":1},"scopes":["project.read"]}],
+            "optional_requires":[{"capability":{"id":"language.run","version":2},"scopes":["workspace.run"]},
+                {"capability":{"id":"language.observe","version":1},"scopes":["workspace.read"]}],
+            "views":[],"capabilities":[],"contexts":[],"backend":null,"configuration_schema":{},"default_configuration":{}})).unwrap()
+    }
+    #[test]
+    fn optional_requirements_are_explicit_exact_and_cannot_change_required_scopes() {
+        let manifest = manifest();
+        manifest.validate().unwrap();
+        assert_eq!(manifest.activation_requirements(&[]).unwrap(), manifest.requires);
+        let selected = manifest.optional_requires[0].capability.clone();
+        let grants = manifest.activation_requirements(&[selected.clone()]).unwrap();
+        assert_eq!(grants, vec![manifest.requires[0].clone(), manifest.optional_requires[0].clone()]);
+        manifest.validate_activation_grants(&grants).unwrap();
+        assert!(manifest.activation_requirements(&[selected.clone(), selected.clone()]).is_err());
+        let mut wrong = selected;
+        wrong.version += 1;
+        assert!(manifest.activation_requirements(&[wrong]).is_err());
+        assert!(manifest.activation_requirements(&[manifest.requires[0].capability.clone()]).is_err());
+        for index in 0..grants.len() {
+            let mut weakened = grants.clone();
+            weakened[index].scopes.clear();
+            assert!(manifest.validate_activation_grants(&weakened).is_err());
+            let mut enlarged = grants.clone();
+            enlarged[index].scopes.insert("another.scope".into());
+            assert!(manifest.validate_activation_grants(&enlarged).is_err());
+        }
+        assert!(manifest.validate_activation_grants(&grants[1..]).is_err());
+        let mut duplicated = grants;
+        duplicated.push(manifest.requires[0].clone());
+        assert!(manifest.validate_activation_grants(&duplicated).is_err());
+    }
+    #[test]
+    fn optional_declarations_share_bounds_and_do_not_change_omitted_defaults() {
+        let mut manifest = manifest();
+        manifest.optional_requires.push(manifest.requires[0].clone());
+        assert!(manifest.validate().is_err());
+        manifest.optional_requires.clear();
+        let value = serde_json::to_value(&manifest).unwrap();
+        assert!(!value.as_object().unwrap().contains_key("optional_requires"));
+        let restored: PluginManifest = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(restored).unwrap(), value);
+        let optional: CapabilityRequirement = serde_json::from_value(json!({"capability":{"id":"optional","version":0},"scopes":[]})).unwrap();
+        manifest.optional_requires.push(optional);
+        assert!(manifest.validate().is_err());
+        manifest.optional_requires[0].capability.version = 1;
+        manifest.optional_requires[0].scopes.insert("bad\0scope".into());
+        assert!(manifest.validate().is_err());
+        manifest.optional_requires.clear();
+        for version in 1..=256 {
+            manifest.optional_requires.push(CapabilityRequirement { capability: CapabilityKey { id: ContributionId::new("optional").unwrap(), version }, scopes: BTreeSet::new() });
+        }
+        assert!(manifest.validate().unwrap_err().to_string().contains("too many dependencies"));
+    }
 }

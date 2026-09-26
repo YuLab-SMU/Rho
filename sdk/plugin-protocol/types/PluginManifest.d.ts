@@ -14,4 +14,8 @@ export type PluginManifest = { protocol_version: number, id: PluginId, name: str
 /**
  * Human-readable only. All bindings use revision and artifact digests.
  */
-version: string, description: string, license: string, source: SourceDeclaration, dependencies: { [key in InstanceAlias]: PluginDependency }, requires: Array<CapabilityRequirement>, views: Array<ViewContribution>, capabilities: Array<CapabilityContribution>, contexts: Array<ContextContribution>, backend: BackendEntrypoint | null, configuration_schema: JsonValue, default_configuration: JsonValue, };
+version: string, description: string, license: string, source: SourceDeclaration, dependencies: { [key in InstanceAlias]: PluginDependency }, requires: Array<CapabilityRequirement>,
+/**
+ * Available only when explicitly selected by the activation request.
+ */
+optional_requires?: Array<CapabilityRequirement>, views: Array<ViewContribution>, capabilities: Array<CapabilityContribution>, contexts: Array<ContextContribution>, backend: BackendEntrypoint | null, configuration_schema: JsonValue, default_configuration: JsonValue, };

@@ -11,6 +11,17 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+Package activation now supports explicitly selected optional capability grants.
+Unselected declarations add no authority, even when the provider is available;
+configuration and subsequent views cannot expand the frozen selection. View
+delegation still intersects the current parent's scopes. The 56 affected protocol,
+plugin-owner, backend and package-repository cases and all 20 Host optional/self
+grant, lifecycle and shared-port cases pass. The Files manifest constructor is
+updated for the public field; its three backend cases and generated-manifest check
+pass. Public protocol generation, an independent strict TypeScript consumer, client
+build and generated/embedded-asset checks pass. This change requires a newly built
+Host; existing user Hosts and R memory have not been restarted.
+
 The ordinary R package now exposes object, Packages and Help inspection, verified
 through disposable native R and an unchanged Host binary. Shared input validation
 lives in `plugins/r/api`; the retiring adapter delegates to it. Exact sessions,
@@ -33,8 +44,25 @@ expected a duplicate Console value and reused a stale pause identity; the fixtur
 now checks printed output and observes the current pause before explicit resume.
 Those failed runs remain retained; the complete rerun passed. Native R tools,
 independent public types, generated SDK freshness, client generation/build/check
-and architecture/boundary/governance checks pass. Editor's run/format integration
-is still in progress; this backend capability does not establish UI acceptance.
+and architecture/boundary/governance checks pass. Editor now has optional R actions
+against an exact configured existing session, plus independently checked captured
+selection/line/document requests and formatting-result verification. The controller
+synchronizes the original intent before admission, preserves later edits and close
+recovery, and refuses replay from a replacement view. Unchanged documents receive
+one undoable formatting edit; retained comparisons re-read the original result and
+apply only against the displayed document version. These changes do not save a
+file implicitly. Independent models, package assembly and native Editor/R/Console
+browser acceptance pass, as does the file-only Editor regression. The native case
+verifies no implicit R startup, formatting without evaluation, explicit save,
+Console output, close/reopen recovery and one original run. Editor and formatting
+comparison screenshots at 1440, 1920, 390 and 220 pixels were inspected. The first
+run exposed a missing normalized null precondition in the captured request;
+Editor now preserves that public default. Two subsequent runs failed fixture
+viewport assertions (container borders and an element-evaluation argument);
+both assertions are corrected and the complete rerun passes. Failed evidence
+remains retained. Save-and-run,
+session selection, document context, editor preferences and default composition
+remain within the continuing Editor migration.
 
 The ordinary Objects, Packages, Help and Plots views are assembled. Packages-to-Help
 and pinned Plots comparisons now pass native acceptance in the generic window;

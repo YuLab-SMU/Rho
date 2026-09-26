@@ -83,6 +83,7 @@ Sources:
 
 - `crates/cli/src/plugins.rs`
 - `crates/host/tests/files_plugin.rs`
+- `crates/host/tests/plugin_optional_requirements.rs`
 - `crates/host/tests/plugin_self_requirements.rs`
 - `crates/host/tests/r_plugin_real_r.rs`
 - `crates/plugin-protocol/**`
@@ -99,7 +100,9 @@ Sources:
 - `scripts/build-r-plugin.mjs`
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
+- `scripts/fixtures/editor-code.mjs`
 - `scripts/fixtures/editor-controller.mjs`
+- `scripts/fixtures/editor-format.mjs`
 - `scripts/fixtures/plugin-close.mjs`
 - `scripts/fixtures/plugin-download.mjs`
 - `scripts/fixtures/plugin-draft-view.mjs`
@@ -132,6 +135,7 @@ Sources:
 - `scripts/test-viewer-plugin.mjs`
 - `sdk/**`
 - `ui/e2e/console-editor.spec.ts`
+- `ui/e2e/editor-code.spec.ts`
 - `ui/e2e/editor-plugin.spec.ts`
 - `ui/e2e/files-plugin.spec.ts`
 - `ui/e2e/fixtures/plugin-download.ts`
@@ -162,6 +166,7 @@ Checks:
 - `plugins.draft-ports`: `["cargo","test","-p","rho-host","--test","plugin_drafts","--locked"]`
 - `plugins.drafts`: `["cargo","test","-p","rho-plugins","-p","rho-plugin-protocol","--lib","draft","--locked"]`
 - `plugins.editor-browser`: `["npm","run","test:browser","--prefix","ui","--","editor-plugin.spec.ts"]`
+- `plugins.editor-code-browser`: `["npm","run","test:browser","--prefix","ui","--","editor-code.spec.ts"]`
 - `plugins.editor-model`: `["node","scripts/test-editor-plugin.mjs"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.files-backend`: `["cargo","test","-p","rho-files-backend","--lib","--locked"]`
@@ -197,7 +202,7 @@ Checks:
 - `plugins.r-viewer`: `["node","scripts/test-r-viewer.mjs"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
 - `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts"]`
-- `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--locked"]`
+- `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
 - `plugins.viewer`: `["node","scripts/test-viewer-plugin.mjs"]`
 - `plugins.window-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"]`

@@ -64,6 +64,16 @@ export class EditorDocument {
     if (!hash(digest) || bytes(raw).length > MAX_EDIT_BYTES || raw.includes('\0') || this.body.readonly !== null) throw new Error('The file-save receipt is invalid.');
     this.body.path = path; this.body.baseRaw = raw; this.body.baseHash = digest;
   }
+  /** Replace presentation text as one undoable edit, retaining BOM, line-ending
+   * policy and the saved disk base. A late result cannot consume a newer edit. */
+  format(code: string, expectedVersion: string) {
+    if (this.body.readonly !== null) throw new Error('This file preview is read-only.');
+    if (this.body.version !== expectedVersion) throw new Error('The document changed while formatting. Compare the retained result before applying it.');
+    const text = normalizeText(code), selection = this.state.selection.main;
+    if (text === this.state.doc.toString()) return;
+    this.update(this.state.update({ changes: { from: 0, to: this.state.doc.length, insert: text },
+      selection: { anchor: Math.min(selection.anchor, text.length), head: Math.min(selection.head, text.length) }, userEvent: 'input.format' }));
+  }
   /** An explicit disk replacement keeps the resident undo history. Its exact
    * BOM/newlines become the new base; undoing text leaves that base unchanged. */
   useDisk(raw: string, digest: string) {

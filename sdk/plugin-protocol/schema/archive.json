@@ -325,6 +325,13 @@
         "name": {
           "type": "string"
         },
+        "optional_requires": {
+          "description": "Available only when explicitly selected by the activation request.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CapabilityRequirement"
+          }
+        },
         "protocol_version": {
           "type": "integer",
           "format": "uint32",

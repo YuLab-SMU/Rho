@@ -202,6 +202,41 @@
                 "type": "null"
               }
             ]
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "plugin",
+                  "instance",
+                  "revision",
+                  "artifact"
+                ],
+                "properties": {
+                  "plugin": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "instance": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "revision": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "artifact": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -215,5 +250,43 @@
     "type": "object",
     "additionalProperties": false
   },
-  "default_configuration": {}
+  "default_configuration": {},
+  "optional_requires": [
+    {
+      "capability": {
+        "id": "r.session",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.execute",
+        "version": 2
+      },
+      "scopes": [
+        "workspace.run_r"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.format",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.run_r"
+      ]
+    },
+    {
+      "capability": {
+        "id": "resources.read",
+        "version": 1
+      },
+      "scopes": [
+        "resources.read"
+      ]
+    }
+  ]
 }

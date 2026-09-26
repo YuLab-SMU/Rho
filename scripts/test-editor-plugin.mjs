@@ -5,10 +5,12 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { checkEditorController } from './fixtures/editor-controller.mjs';
+import { checkEditorFormat } from './fixtures/editor-format.mjs';
+import { checkEditorCode } from './fixtures/editor-code.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'rho-editor-model-'));
 try {
-  for(const [from,to] of [['plugins/editor','.'],['sdk/plugin-ui','public/plugin-ui'],['sdk/plugin-protocol','public/plugin-protocol'],['plugins/files/sdk','public/files-protocol']])
+  for(const [from,to] of [['plugins/editor','.'],['sdk/plugin-ui','public/plugin-ui'],['sdk/plugin-protocol','public/plugin-protocol'],['plugins/files/sdk','public/files-protocol'],['plugins/r/sdk','public/r-protocol']])
     fs.cpSync(path.join(root,from),path.join(temporary,to),{recursive:true,filter:source=>!/[\\/](?:node_modules|compiled|dist)(?:[\\/]|$)/.test(source)});
   fs.symlinkSync(path.join(root,'ui/node_modules'),path.join(temporary,'node_modules'),'dir');
   const manifest=JSON.parse(fs.readFileSync(path.join(temporary,'package.json'),'utf8'));
@@ -22,6 +24,8 @@ try {
   }
   execFileSync(process.execPath,[path.join(temporary,'node_modules/typescript/bin/tsc'),'--project','tsconfig.json'],{cwd:temporary,stdio:'inherit'});
   const sdk=await import(pathToFileURL(path.join(temporary,'compiled/public/plugin-ui/index.js')).href);
+  const {readFormattedCode}=await import(pathToFileURL(path.join(temporary,'compiled/src/r-format.js')).href);
+  await checkEditorFormat({readFormattedCode,sdk});
   const {DraftSync}=await import(pathToFileURL(path.join(temporary,'compiled/src/draft-sync.js')).href);
   const {filePatch,rawOffset,normalizeText}=await import(pathToFileURL(path.join(temporary,'compiled/src/text.js')).href);
   const {applyPatch}=await import(pathToFileURL(path.join(root,'ui/node_modules/diff/libesm/index.js')).href);
@@ -47,6 +51,12 @@ try {
   assert.throws(()=>doc.update(doc.state.update({changes:{from:0,insert:'\0'}})),/without NUL/);assert.equal(doc.state,oldState);
   doc.update(doc.state.update({effects:StateEffect.reconfigure.of([history()])}));assert.equal(undo({state:doc.state,dispatch:transaction=>doc.update(transaction)}),true);
   const restoredDoc=new EditorDocument(doc.snapshot);assert.equal(restoredDoc.raw,doc.raw);assert.equal(restoredDoc.path,doc.path);
+  const formattedDoc=EditorDocument.create('\ufeffa=1\r\nb=2\n','format.R',await hash('\ufeffa=1\r\nb=2\n'));
+  formattedDoc.update(formattedDoc.state.update({effects:StateEffect.reconfigure.of([history()])}));
+  const formatVersion=formattedDoc.snapshot.version;formattedDoc.format('a <- 1\nb <- 2',formatVersion);
+  assert.equal(formattedDoc.raw,'\ufeffa <- 1\r\nb <- 2');assert.equal(formattedDoc.snapshot.baseRaw,'\ufeffa=1\r\nb=2\n');assert.equal(formattedDoc.dirty,true);
+  assert.throws(()=>formattedDoc.format('late',formatVersion),/document changed/);
+  assert.equal(undo({state:formattedDoc.state,dispatch:transaction=>formattedDoc.update(transaction)}),true);assert.equal(formattedDoc.state.doc.toString(),'a=1\nb=2\n');
   const diskDoc=EditorDocument.create('local\n','disk.R',await hash('local\n'));
   diskDoc.update(diskDoc.state.update({effects:StateEffect.reconfigure.of([history()])}));
   diskDoc.update(diskDoc.state.update({changes:{from:0,insert:'recent '},userEvent:'input.type'}));
@@ -163,6 +173,7 @@ try {
   while(!stopped.state.records.length)await new Promise(done=>setImmediate(done));stopped.owner.stop();finish();await assert.rejects(inFlight,/closed/);assert.equal(stopped.state.calls.length,1);
   assert.throws(()=>new DraftSync({...normal.client,view:{...normal.client.view,window:'other',state:normal.owner.snapshot}}),/scope/);
   const {EditorController}=await import(pathToFileURL(path.join(temporary,'compiled/src/controller.js')).href);
-  await checkEditorController({EditorController,make,sdk,applyPatch});
+  const {fixture}=await checkEditorController({EditorController,make,sdk,applyPatch});
+  await checkEditorCode({EditorController,fixture,sdk,history,undo,StateEffect});
   console.log('Independent Editor text and draft synchronization checks passed: frozen/queued captures, exact reads, original request recovery, failure/uncertain retention, scope/receipt fences and close interruption.');
 } finally {fs.rmSync(temporary,{recursive:true,force:true});}

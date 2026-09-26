@@ -5,29 +5,34 @@ import { EditorFiles } from './files.js';
 import { DraftSync } from './draft-sync.js';
 import { type Client, type Intent, type RecordReply, inspectOriginal, verifyOriginal, same, json, terminal } from './operations.js';
 import { bytes, filePatch, sha256, validatePath, MAX_EDIT_BYTES } from './text.js';
+import { EditorCodeActions, type CodeAction } from './r-actions.js';
+import { readFormattedCode } from './r-format.js';
 interface FileSave { intent: Intent; path: string; raw: string; before: string | null; baseHash: string | null; digest: string; }
 interface DiskComparison { path: string; raw: string; digest: string; }
-interface Payload { schema: 1; files: InstanceRef; document: DocumentBody; save: FileSave | null; disk: DiskComparison | null; }
+interface Payload { schema: 1; files: InstanceRef; document: DocumentBody; save: FileSave | null; disk: DiskComparison | null; code: CodeAction | null; }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 /** Coordinates a single ordinary Editor view. Native file actions and generic
  * draft saves keep separate requests, outcomes and capture identities. */
 export class EditorController {
   readonly files: EditorFiles;
   readonly drafts: DraftSync;
+  readonly runtime: EditorCodeActions;
   document: EditorDocument | null = null;
   pending: FileSave | null = null;
   disk: DiskComparison | null = null;
+  code: CodeAction | null = null;
   error = '';
   synchronizationError = '';
   private paused = false;
   private stopped = false;
   private task: Promise<unknown> | null = null;
   private initial: FileObservation | null;
-  constructor(private readonly client: Client, configuration: { source: InstanceRef; file: FileObservation | null }, private changed: () => void = () => {}) {
+  constructor(private readonly client: Client, configuration: { source: InstanceRef; file: FileObservation | null; runtime?: InstanceRef | null }, private changed: () => void = () => {}) {
     this.files = new EditorFiles(client, configuration?.source);
     if (!configuration || !Object.hasOwn(configuration, 'file')) throw new Error('The Editor configuration needs an explicit file capture or null.');
     this.initial = structuredClone(configuration.file);
     this.drafts = new DraftSync(client);
+    this.runtime = new EditorCodeActions(client, configuration.runtime);
   }
   get busy() { return this.task !== null; }
   private live() { if (this.stopped) throw new Error('The Editor is closed. Original work is retained.'); }
@@ -42,7 +47,7 @@ export class EditorController {
   }
   private payload(): Payload {
     if (!this.document) throw new Error('No acknowledged Editor document is available.');
-    return { schema: 1, files: this.files.source, document: this.document.snapshot, save: this.pending && structuredClone(this.pending), disk: this.disk && structuredClone(this.disk) };
+    return { schema: 1, files: this.files.source, document: this.document.snapshot, save: this.pending && structuredClone(this.pending), disk: this.disk && structuredClone(this.disk), code: this.code && structuredClone(this.code) };
   }
   async open() {
     this.live();
@@ -52,14 +57,16 @@ export class EditorController {
     const retained = await this.drafts.read(); this.live();
     if (retained !== null) {
       const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(retained)) as Payload;
-      if (value.schema !== 1 || !same(value.files, this.files.source) || !Object.hasOwn(value, 'save') || !Object.hasOwn(value, 'disk')) throw new Error('The retained Editor body has another encoding or Files provider.');
+      if (value.schema !== 1 || !same(value.files, this.files.source) || !Object.hasOwn(value, 'save') || !Object.hasOwn(value, 'disk') || !Object.hasOwn(value, 'code')) throw new Error('The retained Editor body has another encoding or Files provider.');
       const document = new EditorDocument(value.document);
       if (value.save !== null) await this.checkSave(value.save, false);
+      if (value.code !== null) this.runtime.validate(value.code);
       if (value.disk !== null && (!value.disk || value.disk.path !== document.path || typeof value.disk.raw !== 'string' ||
         bytes(value.disk.raw).length > MAX_EDIT_BYTES || value.disk.raw.includes('\0') || await sha256(value.disk.raw) !== value.disk.digest))
         throw new Error('The retained disk comparison has another file or content digest.');
       this.live(); this.document = document; this.pending = structuredClone(value.save);
       this.disk = structuredClone(value.disk);
+      this.code = structuredClone(value.code);
     } else {
       if (this.drafts.unresolved) throw new Error('The first draft save remains unconfirmed. Inspect its original Operation before opening another document.');
       if (this.initial) {
@@ -196,6 +203,77 @@ export class EditorController {
     const record = await inspectOriginal(this.client, this.pending.intent); this.live();
     if (!['failed', 'cancelled'].includes(record.status)) throw new Error('The original file save has no confirmed failure.');
     this.pending = null; await this.flush();
+  }); }
+  startCode(kind: 'document' | 'selection' | 'format'): Promise<void> {
+    const capturedDocument = this.document && { snapshot: this.document.snapshot, state: this.document.state };
+    return this.act(async () => {
+    if (!this.document || this.pending || this.disk) throw new Error('Finish the current file save or disk comparison before running a code action.');
+    if (this.code) {
+      const previous = await inspectOriginal(this.client, this.code.intent); this.editable();
+      if (previous.status !== 'succeeded' || this.code.kind === 'format' && !this.code.applied)
+        throw new Error('Inspect the original code action before starting another.');
+      this.code = null;
+    }
+    const capture = await this.runtime.prepare(capturedDocument!, kind); this.editable();
+    this.runtime.validate(capture); this.code = capture;
+    let attempted = false;
+    try { await this.flush(); this.editable(); await this.submitCode(() => { attempted = true; }); }
+    catch (error) {
+      if (!attempted) { this.code = null; await this.flush().catch(() => undefined); }
+      throw error;
+    }
+  }); }
+  private async submitCode(attempt: () => void = () => {}) {
+    const action = this.code!; this.runtime.validate(action); this.editable();
+    if (action.intent.view !== this.client.view.view) throw new Error('This code action belongs to another view. Inspect its original Operation instead of replaying it.');
+    attempt();
+    const record = await verifyOriginal(await this.client.invoke(action.intent.capability, structuredClone(action.intent.arguments), { requestId: action.intent.request }), action.intent);
+    this.live(); action.intent.operation = record.operation.operation_id; await this.consumeCode(record); await this.flush();
+  }
+  retryCode(): Promise<void> { return this.act(async () => {
+    if (!this.code) throw new Error('No original code action is retained.');
+    await this.flush(); await this.submitCode();
+  }); }
+  inspectCode(applyUnchanged = true): Promise<RecordReply> { return this.act(async () => {
+    if (!this.code) throw new Error('No original code action is retained.');
+    const before = JSON.stringify(this.payload()), record = await inspectOriginal(this.client, this.code.intent); this.live();
+    this.code.intent.operation = record.operation.operation_id; await this.consumeCode(record, applyUnchanged);
+    if (JSON.stringify(this.payload()) !== before) await this.flush();
+    return record;
+  }); }
+  private async consumeCode(record: RecordReply, applyUnchanged = true) {
+    const action = this.code!, document = this.document!; this.runtime.validate(action);
+    action.status = record.status; action.error = record.error;
+    if (record.status !== 'succeeded') return;
+    if (action.kind !== 'format') {
+      const result = record.output as any, args = action.intent.arguments as any;
+      if (result?.operation_id !== record.operation.operation_id || result.session_id !== args.arguments.expected_session ||
+        result.output_mode !== 'console' || !same(result.source, args.arguments.run.source))
+        throw new Error('The original R run result does not match the captured session and source.');
+      return;
+    }
+    if (action.applied) return;
+    const formatted = await readFormattedCode(this.client, record, action.intent); this.live();
+    action.formatted = formatted;
+    if (applyUnchanged && !this.paused && !this.disk && document.path === action.path && document.snapshot.version === action.version && document.state.doc.toString() === action.text) {
+      document.format(formatted.code, action.version); action.applied = true; action.formatted = null;
+    }
+  }
+  applyFormat(expectedVersion: string): Promise<void> { return this.act(async () => {
+    const action = this.code, document = this.document;
+    if (!action || action.kind !== 'format' || action.applied || !document || this.disk) throw new Error('No unapplied formatting result is available.');
+    const path = document.path;
+    const record = await inspectOriginal(this.client, action.intent); this.editable();
+    const result = await readFormattedCode(this.client, record, action.intent); this.editable();
+    if (document.path !== path) throw new Error('The document path changed while checking the formatting result.');
+    document.format(result.code, expectedVersion); action.status = 'succeeded'; action.error = null; action.applied = true; action.formatted = null;
+    await this.flush();
+  }); }
+  dismissCode(): Promise<void> { return this.act(async () => {
+    if (!this.code) throw new Error('No original code action is retained.');
+    const record = await inspectOriginal(this.client, this.code.intent); this.editable();
+    if (!['succeeded', 'failed', 'cancelled'].includes(record.status)) throw new Error('The original code action has no confirmed terminal result.');
+    this.code = null; await this.flush();
   }); }
   async pause() { this.paused = true; await this.task?.catch(() => undefined); await this.flush(); }
   resume() { this.paused = false; this.notify(); }

@@ -276,6 +276,9 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         descriptor.documentation.effects = "Read configuration metadata only. No runtime, filesystem scan, recovery or Operation is started.".into();
         descriptor.documentation.related_capabilities = vec![];
     }
+    if id == "plugins.activate" {
+        descriptor.documentation.limitations.push("Optional capabilities must be declared by this exact manifest and explicitly selected in optional_capabilities. Selection cannot enlarge declared scopes or caller authority; it does not install or start another provider. The selected grants stay fixed for this instance and its views.".into());
+    }
     if id.starts_with("resources.") {
         descriptor.domain = "resources".into();
         descriptor.documentation.owner = "resources".into();
@@ -621,7 +624,8 @@ impl OperationHandler for Manage {
                 )
                 .map_err(error)?;
                 let registry = self.service.registry()?.snapshot();
-                for grant in &stored.manifest.requires {
+                grants = stored.manifest.activation_requirements(&args.optional_capabilities).map_err(error)?;
+                for grant in &grants {
                     let capability = host::CapabilityRef::new(
                         grant.capability.id.as_str(),
                         grant.capability.version.try_into().map_err(invalid)?,
@@ -645,7 +649,6 @@ impl OperationHandler for Manage {
                     }
                 }
                 revision = Some(args.revision);
-                grants = stored.manifest.requires;
                 target = host::TargetRef {
                     kind: "plugin_instance".into(),
                     identity: format!("plugin-{}", uuid::Uuid::new_v4().simple()),

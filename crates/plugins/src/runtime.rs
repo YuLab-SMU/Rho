@@ -96,6 +96,7 @@ pub(crate) type SharedBackendState = Arc<Mutex<BackendState>>;
 struct Entry {
     published: AtomicBool,
     manifest: PluginManifest,
+    grants: Vec<CapabilityRequirement>,
     state: SharedBackendState,
     process: OnceLock<backend::ProcessClient>,
 }
@@ -153,6 +154,7 @@ impl PluginRuntime {
         let entry = Arc::new(Entry {
             published: AtomicBool::new(publish),
             manifest,
+            grants: prepared.grants.clone(),
             state: state.clone(),
             process: OnceLock::new(),
         });
@@ -268,6 +270,16 @@ impl PluginRuntime {
         publish
     }
 
+    /// Exact authority frozen at activation. An absent optional provider cannot
+    /// add a grant later merely by becoming available.
+    pub(crate) fn view_grants(&self, identity: &InstanceRef) -> Result<Vec<CapabilityRequirement>, PluginError> {
+        let entries = self.entries.lock().unwrap();
+        let entry = entries.get(&identity.instance).ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
+        let state = entry.state.lock().unwrap();
+        ensure(state.record.identity == *identity && state.record.state == InstanceState::Active,
+            "view requires the exact active instance")?;
+        Ok(entry.grants.clone())
+    }
     /// Bounded observations do not create processes, reconnect, or recover work.
     pub fn observe(&self) -> Vec<BackendObservation> {
         self.entries
@@ -703,18 +715,7 @@ impl PreparedInstance {
             &request.configuration,
             "configuration",
         )?;
-        ensure(
-            request.grants.len() == manifest.requires.len()
-                && manifest.requires.iter().all(|required| {
-                    request
-                        .grants
-                        .iter()
-                        .filter(|granted| *granted == required)
-                        .count()
-                        == 1
-                }),
-            "activation grants do not match declared requirements",
-        )?;
+        manifest.validate_activation_grants(&request.grants)?;
         for dependency in manifest.dependencies.values() {
             ensure(
                 repo.revision(&dependency.revision)?.manifest.id == dependency.plugin,

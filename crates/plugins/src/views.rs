@@ -62,6 +62,7 @@ impl PluginService {
         if !observed.observed_in_this_host || observed.instance.state != InstanceState::Active {
             return Err(invalid("view requires an active instance in this Host"));
         }
+        let grants = self.runtime.view_grants(&args.instance).map_err(error)?;
         let repo = self.repository.lock().unwrap();
         let manifest = repo
             .revision(&args.instance.revision)
@@ -86,7 +87,7 @@ impl PluginService {
             "view configuration",
         )
         .map_err(error)?;
-        for grant in &manifest.requires {
+        for grant in &grants {
             if !grant.scopes.is_subset(&context.scopes) {
                 return Err(invalid("view grants exceed the caller's authority"));
             }
@@ -156,16 +157,12 @@ impl PluginService {
         placement: Option<(u32, Option<NodeId>)>,
     ) -> Result<(PluginViewRecord, Option<PluginWindowLayout>), OperationError> {
         let contribution = self.prepare_view(context, &args)?;
+        let grants = self.runtime.view_grants(&args.instance).map_err(error)?;
         let mut views = self.views.lock().unwrap();
         if views.len() >= MAX_OPEN_VIEWS {
             return Err(invalid("open view quota reached"));
         }
         let mut repo = self.repository.lock().unwrap();
-        let grants = repo
-            .revision(&args.instance.revision)
-            .map_err(error)?
-            .manifest
-            .requires;
         let record = PluginViewRecord {
             view: id,
             instance: args.instance,

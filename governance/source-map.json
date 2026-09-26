@@ -508,6 +508,8 @@
         "rho-host",
         "--test",
         "plugin_self_requirements",
+        "--test",
+        "plugin_optional_requirements",
         "--locked"
       ]
     },
@@ -540,6 +542,9 @@
     },
     "plugins.editor-browser": {
       "command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "editor-plugin.spec.ts"]
+    },
+    "plugins.editor-code-browser": {
+      "command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "editor-code.spec.ts"]
     },
     "plugins.draft-browser": {
       "command": [
@@ -738,9 +743,13 @@
         "scripts/test-editor-plugin.mjs",
         "scripts/build-editor-plugin.mjs",
         "scripts/fixtures/editor-controller.mjs",
+        "scripts/fixtures/editor-code.mjs",
+        "scripts/fixtures/editor-format.mjs",
         "ui/e2e/editor-plugin.spec.ts",
+        "ui/e2e/editor-code.spec.ts",
         "ui/e2e/files-plugin.spec.ts",
         "crates/host/tests/plugin_self_requirements.rs",
+        "crates/host/tests/plugin_optional_requirements.rs",
         "scripts/fixtures/plugin-drafts.mjs",
         "scripts/fixtures/plugin-draft-view.mjs",
         "ui/e2e/plugin-drafts.spec.ts"
@@ -797,7 +806,8 @@
         "plugins.draft-ports",
         "plugins.draft-browser",
         "plugins.editor-model",
-        "plugins.editor-browser"
+        "plugins.editor-browser",
+        "plugins.editor-code-browser"
       ]
     }
   }

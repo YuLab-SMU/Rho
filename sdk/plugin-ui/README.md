@@ -19,8 +19,11 @@ const accepted = await client.invoke({ id: "example.run", version: 1 }, {}, {
 // A cancellation request or a disconnected iframe does not confirm native stop.
 ```
 
-Declare every external capability and its scopes in `manifest.requires`; the
-original caller must already possess that authority. Query and invocation results
+Declare mandatory external capabilities and scopes in `manifest.requires`.
+Optional features use `manifest.optional_requires` and an explicit selection in
+the instance's activation request. An unselected declaration creates no grant,
+even when the capability is available. The original caller must already possess
+the selected authority. Query and invocation results
 retain their shared Host envelopes. Capability payloads and native preconditions
 come from their public owner contracts. Invocation returns after admission; its
 accepted record may still be running. `operation(id)` and `cancel(id)` address only

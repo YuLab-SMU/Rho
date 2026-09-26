@@ -95,4 +95,5 @@ export async function checkEditorController({EditorController,make,sdk,applyPatc
   const corrupt=await fixture();corrupt.controller.document.update(corrupt.controller.document.state.update({changes:{from:0,insert:'new'}}));await corrupt.controller.save();await corrupt.finish();
   corrupt.native.records[0].output.after.files[0].sha256='sha256:'+'e'.repeat(64);await assert.rejects(corrupt.controller.inspectSave(),/receipt/);assert.ok(corrupt.controller.pending);assert.equal(corrupt.controller.document.snapshot.baseRaw,initial);
   console.log('Editor controller checks passed: durable pre-admission captures, later edits, non-blocking close, original-result reopening, native conflicts, explicit replacement, idempotent retry and false-receipt refusal.');
+  return {fixture};
 }

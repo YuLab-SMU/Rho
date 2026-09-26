@@ -142,6 +142,7 @@ pub fn manifest() -> PluginManifest {
             scopes: scopes.into_iter().map(String::from).collect(),
         })
         .collect(),
+        optional_requires: vec![],
         capabilities,
         views: vec![ViewContribution {
             id: ContributionId::new("files").unwrap(),

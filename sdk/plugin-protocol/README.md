@@ -56,6 +56,17 @@ instance. A stored `PluginInstanceObservation` does not establish process livene
 check `observed_in_this_host` together with its lifecycle state. Instance pages
 are scoped to the current project and original principal before pagination.
 
+`manifest.requires` declares mandatory capability grants. `optional_requires`
+declares capabilities that an activation may explicitly select using
+`ActivatePlugin.optional_capabilities`. Omitting the selection grants none of
+those optional capabilities, even if their providers are available. Selected
+versions and scopes must match this exact revision; Host admission checks every
+selected handler and the original caller's authority. Unknown, repeated,
+unavailable or unauthorized selections fail before activation. Configuration,
+opening a view and later provider installation cannot change these frozen grants.
+A view receives its instance's selected grants only when its opening caller can
+delegate all of them; each subsequent call still intersects current parent scopes.
+
 The recovery CLI and active Host use `plugins-v1` beside the configured database,
 with an explicit CLI `--store` override. Importing or observing a revision never
 activates it. Lifecycle operations use stable caller request identities and the

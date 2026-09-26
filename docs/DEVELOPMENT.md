@@ -101,12 +101,17 @@ combined packages can declare exact self-capability grants before first activati
 without early publication, scope escalation or undeclared access.
 
 `node scripts/test-editor-plugin.mjs` compiles the Editor owner outside the checkout
-using only its locked dependencies, public plugin/UI SDK and Files declarations.
+using only its locked dependencies, public plugin/UI SDK and Files/R declarations.
 It checks resident text/undo, bounded exact file reads, queued captured drafts,
 original-request recovery, receipt identity and failure/uncertain retention, plus
 the native save controller's durable intent, later edits, non-blocking close and
 conflict/explicit replacement behavior. Assemble the ordinary UI package with
 `node scripts/build-editor-plugin.mjs /absolute/new/directory`.
+Code-action checks cover explicitly observed existing sessions, capture before
+asynchronous observation, selection/line/document requests, byte limits, original
+admission and close/reopen recovery. Formatting checks verify complete retained
+reports, exact request/session/source identities, unchanged-document application,
+resident undo, later edits and version-fenced explicit comparison choices.
 After building the current client and Host,
 `npm run test:browser --prefix ui -- editor-plugin.spec.ts` uses independently built
 Files and Editor packages in a disposable project; set `RHO_FILES_PLUGIN_PACKAGE`
@@ -117,6 +122,17 @@ CodeMirror presentation. Comparisons preserve local edits, recheck the captured
 digest before choosing a base and do not write files; replacement retains undo.
 This does
 not establish R execution, native input-method behavior or default composition.
+
+`npm run test:browser --prefix ui -- editor-code.spec.ts` exercises ordinary Editor,
+R, Console and Files packages in a disposable native project. Supply existing
+`RHO_ARK` and `RHO_R_HOME`; `RHO_R_PLUGIN_PACKAGE`, `RHO_FILES_PLUGIN_PACKAGE`,
+`RHO_EDITOR_PLUGIN_PACKAGE` and `RHO_CONSOLE_PLUGIN_PACKAGE` can reuse exact built
+packages. Build the current client and Host first. This case selects Editor's
+optional R grants explicitly and starts R through Console. It checks formatting
+without input evaluation, explicit file save, captured document execution and
+Console output, delayed admission during closure, a restored original formatting
+comparison, undo and responsive presentation. It does not install R packages,
+restart user sessions or establish native input-method acceptance.
 
 The generic draft storage and public content contracts are checked with
 `cargo test -p rho-plugins -p rho-plugin-protocol --lib draft --locked`. These
@@ -473,6 +489,12 @@ Python 3 on PATH. `node scripts/test-plugin-backend.mjs` copies the public Rust
 crates outside the repository and compiles the example with no private source;
 it invokes Cargo, so run it serially with every other Cargo command. Public
 TypeScript consumption is checked by `node scripts/test-plugin-protocol.mjs`.
+Capability-grant changes require both `plugin_self_requirements` and
+`plugin_optional_requirements` Host tests. The optional case covers activation
+without an available optional provider, explicit exact selection, invalid scopes,
+unchosen grants and current-parent intersection when a view calls the Host.
+The protocol's optional requirement tests also check combined declaration bounds,
+duplicate versions and unchanged serialization when no optional entry is present.
 R-owned public declarations and capability schemas are generated with
 `node plugins/r/generate-sdk.mjs`; use `--check` for freshness and
 `node scripts/test-r-protocol.mjs` for a strict independent TypeScript consumer.

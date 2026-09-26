@@ -98,6 +98,11 @@ pub struct ActivatePlugin {
     pub target: String,
     pub alias: InstanceAlias,
     pub configuration: Value,
+    /// Exact optional declarations selected for this activation, never inferred
+    /// from configuration, package availability or an eventual view request.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<_>", optional)]
+    pub optional_capabilities: Vec<CapabilityKey>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]

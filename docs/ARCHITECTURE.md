@@ -246,6 +246,16 @@ instances. Instance observations filter project/principal before pagination and
 separate current-Host ownership from historical state and recorded process IDs.
 Lifecycle admission retains managed revisions until the original terminal commit.
 
+Capability requirements are explicit activation declarations. `requires` supplies
+mandatory grants; `optional_requires` supplies only entries named in that original
+activation's `optional_capabilities`. Both share the same declaration bounds,
+contract/version validation and caller-scope checks. Missing optional selections
+do not consult or start providers. Selected grants remain fixed in the live
+instance; new provider availability, configuration or opening another view cannot
+expand them. View preparation and connections use those actual grants, and require
+the opening caller to delegate their scopes. This is a generic package rule,
+independent of any scientific language or panel.
+
 Native reverse calls use the same gateways with the original principal, a plugin
 actor, the manifest's existing-authority grants and the original parent Operation
 as causation. Query parents cannot delegate mutations or controls. Delegated work
