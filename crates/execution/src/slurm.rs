@@ -21,21 +21,7 @@ pub use rho_contract::{
     SlurmCancellation, SlurmJobRef, SlurmLookup, SlurmObservation, SlurmSourceArguments,
     SlurmSubmitArguments,
 };
-pub fn terminal_state(state: &str) -> bool {
-    matches!(
-        state.split([' ', '+']).next().unwrap_or(state),
-        "BOOT_FAIL"
-            | "CANCELLED"
-            | "COMPLETED"
-            | "DEADLINE"
-            | "FAILED"
-            | "NODE_FAIL"
-            | "OUT_OF_MEMORY"
-            | "PREEMPTED"
-            | "REVOKED"
-            | "TIMEOUT"
-    )
-}
+pub use rho_contract::{safe_name, terminal_state};
 #[async_trait]
 pub trait SlurmRuntime: Send + Sync {
     fn target(&self) -> TargetRef;
@@ -68,20 +54,24 @@ impl SlurmOwner {
     async fn source(
         &self,
         id: &str,
-        caller: Option<&CallerIdentity>,
+        principal: &CallerIdentity,
     ) -> Result<OperationRecord, HandlerError> {
         let source = self
             .records
             .get(id)
             .await
             .map_err(HandlerError::before_effect)?
-            .ok_or_else(|| HandlerError::before_effect("Slurm submission was not found"))?;
+            .ok_or_else(|| {
+                HandlerError::before_effect(
+                    "Slurm submission was not found in this target/caller scope",
+                )
+            })?;
         if source.operation.capability != CapabilityRef::new(SUBMIT_CAPABILITY, 1).unwrap()
             || source.operation.idempotency_scope.as_deref() != Some(self.runtime.scope())
-            || caller.is_some_and(|caller| caller != source.operation.principal())
+            || principal != source.operation.principal()
         {
             return Err(HandlerError::before_effect(
-                "Slurm source is outside this target/caller scope",
+                "Slurm submission was not found in this target/caller scope",
             ));
         }
         Ok(source)
@@ -164,20 +154,7 @@ impl OperationHandler for SlurmHandler {
         if matches!(self.action, SlurmAction::Submit) {
             let args: SlurmSubmitArguments =
                 serde_json::from_value(value.clone()).map_err(invalid)?;
-            if args.body.trim().is_empty()
-                || args.body.len() > 128 * 1024
-                || args.body.contains('\0')
-                || !(1..=512).contains(&args.cpus)
-                || !(1..=1_048_576).contains(&args.memory_mb)
-                || !(1..=10080).contains(&args.time_minutes)
-                || args.gpus > 64
-                || [&args.partition, &args.account]
-                    .into_iter()
-                    .flatten()
-                    .any(|value| !safe_name(value))
-            {
-                return Err(invalid("Slurm request exceeds its schema bounds"));
-            }
+            args.validate().map_err(invalid)?;
             serde_json::to_value(args).map_err(invalid)
         } else {
             normalize_source(value)
@@ -196,7 +173,7 @@ impl OperationHandler for SlurmHandler {
                 serde_json::from_value(operation.normalized_arguments.clone()).map_err(before)?;
             let source = self
                 .owner
-                .source(&args.submission_operation_id, Some(operation.principal()))
+                .source(&args.submission_operation_id, operation.principal())
                 .await?;
             if !source.status.is_terminal() {
                 return Err(HandlerError::before_effect(
@@ -307,11 +284,20 @@ impl QueryHandler for SlurmQueryHandler {
     fn normalize_arguments(&self, value: &Value) -> Result<Value, OperationError> {
         normalize_source(value)
     }
-    async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
+    async fn query(&self, _: &Value) -> Result<QuerySnapshot, OperationError> {
+        Err(invalid(
+            "Slurm observations require an authenticated caller",
+        ))
+    }
+    async fn query_for(
+        &self,
+        context: &rho_contract::CallContext,
+        value: &Value,
+    ) -> Result<QuerySnapshot, OperationError> {
         let args: SlurmSourceArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
         let source = self
             .owner
-            .source(&args.submission_operation_id, None)
+            .source(&args.submission_operation_id, context.principal())
             .await
             .map_err(|error| invalid(error.message))?;
         let mut snapshot = QuerySnapshot {
@@ -362,15 +348,8 @@ impl QueryHandler for SlurmQueryHandler {
 }
 fn normalize_source(value: &Value) -> Result<Value, OperationError> {
     let args: SlurmSourceArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
-    rho_contract::OperationId::new(&args.submission_operation_id).map_err(invalid)?;
+    args.source_id().map_err(invalid)?;
     serde_json::to_value(args).map_err(invalid)
-}
-pub fn safe_name(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 128
-        && value
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
 }
 fn invalid(error: impl std::fmt::Display) -> OperationError {
     OperationError::InvalidInput(error.to_string())
@@ -381,3 +360,6 @@ fn before(error: impl std::fmt::Display) -> HandlerError {
 fn after(error: impl std::fmt::Display) -> HandlerError {
     HandlerError::after_possible_effect(error.to_string(), None)
 }
+
+#[cfg(test)]
+mod tests;

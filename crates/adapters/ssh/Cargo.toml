@@ -11,10 +11,5 @@ async-trait.workspace = true
 rho-contract = { path = "../../contract" }
 rho-operation = { path = "../../operation" }
 rho-execution = { path = "../../execution" }
-rho-process = { path = "../process" }
-serde_json.workspace = true
-sha2.workspace = true
+rho-remote-owner = { path = "../../../plugins/remote/backend/owner" }
 tokio.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true

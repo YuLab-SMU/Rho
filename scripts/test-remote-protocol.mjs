@@ -1,6 +1,7 @@
 // Local protocol acceptance only. PATH contains fake OpenSSH/Slurm executables;
 // no remote host is contacted and no real scheduler job is submitted.
 import assert from "node:assert/strict";
+import { createRemoteFixture } from "./fixtures/ssh-slurm.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import readline from "node:readline";
@@ -12,7 +13,10 @@ import { fileURLToPath } from "node:url";
 assert.notEqual(process.platform, "win32", "this POSIX transcript fixture is not Windows/remote acceptance");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { cwd: root, encoding: "utf8", timeout: command === "cargo" ? 900_000 : 60_000, ...options });
+  // The current Host catalog contains generated contracts for every registered
+  // capability and exceeds Node's default 1 MiB pipe buffer. This is a fixture
+  // capture bound, separate from native command output and execution deadlines.
+  const result = spawnSync(command, args, { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: command === "cargo" ? 900_000 : 60_000, ...options });
   assert.equal(result.status, 0, result.error?.message || result.stderr || result.signal);
   return result.stdout;
 }
@@ -20,71 +24,8 @@ run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-cli", "--lock
 const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--offline"]));
 const binary = path.join(metadata.target_directory, "debug/rho");
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "rho-remote-protocol-"));
-const project = path.join(directory, "local");
-const remote = path.join(directory, "remote ' space $(literal)");
-const bin = path.join(directory, "bin");
-for (const dir of [project, remote, bin]) fs.mkdirSync(dir);
-const state = path.join(directory, "scheduler.json");
-const log = path.join(directory, "ssh.jsonl");
+const { project, remote, state, log, env } = createRemoteFixture(directory);
 const database = path.join(directory, "next.sqlite");
-const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
-const helper = path.join(directory, "fake-tool.mjs");
-fs.writeFileSync(state, JSON.stringify({ submissions: 0, jobs: [], cancel_requests: 0 }));
-fs.writeFileSync(helper, `
-import assert from "node:assert/strict";
-import fs from "node:fs";
-import { spawnSync } from "node:child_process";
-const [tool, ...args] = process.argv.slice(2);
-const file = process.env.RHO_TEST_REMOTE_STATE;
-const state = JSON.parse(fs.readFileSync(file, "utf8"));
-const save = () => fs.writeFileSync(file, JSON.stringify(state));
-const flag = (name) => args.find((arg) => arg.startsWith(name + "="))?.slice(name.length + 1);
-if (tool === "ssh") {
-  for (const required of ["-T", "BatchMode=yes", "StrictHostKeyChecking=yes", "ForwardAgent=no", "ControlPath=none"]) assert.ok(args.includes(required));
-  assert.equal(args.at(-2), "fixture");
-  fs.appendFileSync(process.env.RHO_TEST_REMOTE_LOG, JSON.stringify(args) + "\\n");
-  const result = spawnSync("/bin/sh", ["-c", args.at(-1)], { input: fs.readFileSync(0), env: process.env });
-  if (result.status === 0 && process.env.RHO_TEST_DROP_SUBMIT === "1" && args.at(-1).includes("sbatch")) process.exit(255);
-  if (result.stdout) process.stdout.write(result.stdout);
-  if (result.stderr) process.stderr.write(result.stderr);
-  process.exit(result.status ?? 255);
-}
-if (tool === "scontrol") {
-  console.log("ClusterName = " + (process.env.RHO_TEST_BAD_CLUSTER ? "other_cluster" : "fixture_cluster"));
-} else if (tool === "sbatch") {
-  assert.ok(args.includes("--parsable"));
-  assert.ok(!Object.keys(process.env).some((name) => name.startsWith("SBATCH_")));
-  const script = fs.readFileSync(0, "utf8");
-  assert.match(script, /^#!\\/bin\\/bash\\nexport RHO_OPERATION_ID=/);
-  const marker = flag("--job-name");
-  assert.match(marker, /^rho-[a-f0-9]{64}$/);
-  const id = String(4200 + ++state.submissions);
-  state.jobs.push({ id, marker, root: fs.realpathSync(process.cwd()), state: "RUNNING", script });
-  save();
-  console.log(id + ";fixture_cluster");
-} else if (tool === "squeue" || tool === "sacct") {
-  assert.ok(flag("--user"));
-  assert.ok(args.includes("--local"));
-  if (tool === "sacct") assert.ok(args.includes("--starttime=now-30days"));
-  for (const job of state.jobs.filter((job) => job.marker === flag("--name"))) {
-    if (tool === "squeue" && job.state === "RUNNING") console.log([job.id, job.state, job.marker, job.root].join("|"));
-    if (tool === "sacct" && job.state !== "RUNNING") console.log([job.id, job.state, "0:15", job.marker, job.root].join("|"));
-  }
-} else if (tool === "scancel") {
-  assert.ok(!args.includes("--ctld"), "Slurm 19.05 does not support --ctld");
-  assert.ok(flag("--user"));
-  assert.ok(!Object.keys(process.env).some((name) => name.startsWith("SCANCEL_")));
-  const jobs = state.jobs.filter((job) => job.marker === flag("--name"));
-  assert.equal(jobs.length, 1);
-  ++state.cancel_requests;
-  save(); // request accepted, but deliberately do not change RUNNING yet
-} else { throw new Error("unexpected fixture tool " + tool); }
-`);
-for (const name of ["ssh", "scontrol", "sbatch", "squeue", "sacct", "scancel"]) {
-  fs.writeFileSync(path.join(bin, name), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(helper)} ${quote(name)} "$@"\n`, { mode: 0o700 });
-}
-const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, RHO_TEST_REMOTE_STATE: state, RHO_TEST_REMOTE_LOG: log,
-  SBATCH_ARRAY_INX: "1-100", SCANCEL_INTERACTIVE: "1" };
 const common = ["--database", database, "--project", project, "--remote-host", "fixture", "--remote-root", fs.realpathSync(remote), "--slurm-cluster", "fixture_cluster"];
 const invoke = (id, capability, arguments_, extra = {}) => JSON.parse(run(binary, [...common, "invoke", "--client-request-id", id,
   "--capability", capability, "--arguments", JSON.stringify(arguments_)], { env: { ...env, ...extra } })).operation;
@@ -113,6 +54,7 @@ const query = async (id) => {
     clearTimeout(watchdog);
   }
 };
+let complete = false;
 try {
   const ready = JSON.parse(run(binary, [...common, "session"], { env, input: "" }));
   assert.ok(ready.capabilities.some((capability) => capability.capability.id === "slurm.submit"));
@@ -171,4 +113,8 @@ try {
   assert.equal(invoke("cluster-mismatch", "slurm.submit", args, { RHO_TEST_BAD_CLUSTER: "1" }).status, "uncertain");
   assert.equal(JSON.parse(fs.readFileSync(state)).submissions, 2);
   console.log("Verified LOCAL-ONLY SSH/Slurm transcript: strict SSH options, quoting, no startup connection, native refs, lost receipt without replay, query purity and cancellation observation. No remote acceptance performed.");
-} finally { fs.rmSync(directory, { recursive: true, force: true }); }
+  complete = true;
+} finally {
+  if (complete) fs.rmSync(directory, { recursive: true, force: true });
+  else console.error(`Local SSH/Slurm evidence retained at ${directory}`);
+}

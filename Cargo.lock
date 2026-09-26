@@ -6007,6 +6007,7 @@ dependencies = [
  "rho-plugin-protocol",
  "rho-process-api",
  "rho-r-api",
+ "rho-remote-api",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -6386,6 +6387,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-remote-api"
+version = "0.1.0"
+dependencies = [
+ "rho-plugin-protocol",
+ "rho-process-api",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "ts-rs",
+]
+
+[[package]]
+name = "rho-remote-owner"
+version = "0.1.0"
+dependencies = [
+ "rho-plugin-protocol",
+ "rho-process-api",
+ "rho-process-engine",
+ "rho-remote-api",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "rho-skills"
 version = "0.1.0"
 dependencies = [
@@ -6424,10 +6451,7 @@ dependencies = [
  "rho-contract",
  "rho-execution",
  "rho-operation",
- "rho-process",
- "serde_json",
- "sha2",
- "tempfile",
+ "rho-remote-owner",
  "tokio",
 ]
 

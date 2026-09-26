@@ -36,7 +36,9 @@ const allowed = {
   "rho-process-engine": ["rho-process-api"],
   "rho-process-owner": ["rho-process-api", "rho-process-engine", "rho-plugin-protocol"],
   "rho-process-backend": ["rho-process-api", "rho-process-owner", "rho-plugin-sdk"],
-  "rho-contract": ["rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api"],
+  "rho-remote-api": ["rho-plugin-protocol", "rho-process-api"],
+  "rho-remote-owner": ["rho-remote-api", "rho-process-api", "rho-process-engine", "rho-plugin-protocol"],
+  "rho-contract": ["rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api", "rho-remote-api"],
   "rho-operation": ["rho-contract", "rho-plugin-protocol"],
   "rho-application": ["rho-contract"],
   "rho-agents": ["rho-application", "rho-contract"],
@@ -47,7 +49,7 @@ const allowed = {
   "rho-environment": ["rho-contract", "rho-operation"],
   "rho-execution": ["rho-contract", "rho-operation"],
   "rho-process": ["rho-contract", "rho-operation", "rho-execution", "rho-process-engine", "rho-process-owner"],
-  "rho-ssh": ["rho-contract", "rho-operation", "rho-execution", "rho-process"],
+  "rho-ssh": ["rho-contract", "rho-operation", "rho-execution", "rho-remote-owner"],
   "rho-r-environment": ["rho-environment", "rho-operation", "rho-process"],
   "rho-git": ["rho-files-engine"],
   "rho-sqlite": ["rho-contract", "rho-operation", "rho-application"],
@@ -59,6 +61,7 @@ const allowed = {
   "rho-cli": ["rho-contract", "rho-host", "rho-mcp", "rho-workbench", "rho-plugin-protocol", "rho-plugins"],
 };
 const pluginLibraries = {
+  "rho-remote-api": "plugins/remote/api", "rho-remote-owner": "plugins/remote/backend/owner",
   "rho-r-api": "plugins/r/api", "rho-r-engine": "plugins/r/backend/engine",
   "rho-files-owner": "plugins/files/backend/owner",
   "rho-files-api": "plugins/files/api", "rho-files-engine": "plugins/files/backend/engine",

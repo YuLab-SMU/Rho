@@ -1,4 +1,4 @@
-use crate::{RunLocalArguments, normalize_run_arguments};
+use crate::RunLocalArguments;
 use async_trait::async_trait;
 use rho_contract::{
     CancellationClass, CapabilityDescriptor, CapabilityKind, CapabilityRef, EffectHint,
@@ -67,17 +67,12 @@ impl OperationHandler for RemoteRunHandler {
         Some(self.runtime.scope().into())
     }
     fn normalize_arguments(&self, value: &Value) -> Result<Value, OperationError> {
-        let value = normalize_run_arguments(value)?;
-        if value["program"]
-            .as_str()
-            .is_some_and(|program| program.starts_with('-'))
-        {
-            return Err(OperationError::InvalidInput(
-                "remote program cannot start with '-' (use an explicit path)".into(),
-            ));
-        }
-        Ok(value)
+        let args: RunLocalArguments = serde_json::from_value(value.clone())
+            .map_err(|error| OperationError::InvalidInput(error.to_string()))?;
+        rho_contract::validate_run_arguments(&args).map_err(OperationError::InvalidInput)?;
+        serde_json::to_value(args).map_err(|error| OperationError::InvalidInput(error.to_string()))
     }
+
     fn resolve_target(&self, _: &Value) -> Result<TargetRef, OperationError> {
         Ok(self.runtime.target())
     }
@@ -102,8 +97,13 @@ impl OperationHandler for RemoteRunHandler {
             serde_json::to_value(&report)
                 .map_err(|error| HandlerError::after_possible_effect(error.to_string(), None))?,
         );
-        plan.outcome = report.outcome;
-        if report.outcome == OperationOutcome::Uncertain {
+        plan.outcome = match report.outcome {
+            rho_contract::RemoteExecutionOutcome::Succeeded => OperationOutcome::Succeeded,
+            rho_contract::RemoteExecutionOutcome::Failed => OperationOutcome::Failed,
+            rho_contract::RemoteExecutionOutcome::Cancelled => OperationOutcome::Cancelled,
+            rho_contract::RemoteExecutionOutcome::Uncertain => OperationOutcome::Uncertain,
+        };
+        if plan.outcome == OperationOutcome::Uncertain {
             plan.error = Some(report.notice.clone());
             plan.recovery = Some(json!(RemoteProcessRecovery {
                 target: report.target.clone(),
@@ -111,7 +111,7 @@ impl OperationHandler for RemoteRunHandler {
                 action: "observe_remote_owner_before_retry".into(),
                 automatic_reexecution: false
             }));
-        } else if report.outcome == OperationOutcome::Failed {
+        } else if plan.outcome == OperationOutcome::Failed {
             plan.error = Some(format!("remote exit code {:?}", report.remote_exit_code));
         }
         plan.effect_observations.push(EffectObservation { kind: "remote_execution".into(), source: "ssh".into(),

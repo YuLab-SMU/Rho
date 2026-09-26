@@ -1455,10 +1455,11 @@ package inspection.
 | `crates/operation` | Operation and Query gateways, handler/journal ports and commit discipline |
 | `crates/workspace`, `project`, `environment`, `execution` | Scientific owners and native port definitions |
 | `crates/application`, `skills` | Application context/control and method/source ports, separate from scientific execution |
-| `crates/adapters/` | SQLite, package and SSH/Slurm implementations; transitional adapters to package-owned R, Files/Git and local process owners |
+| `crates/adapters/` | SQLite and package implementations; transitional adapters to package-owned R, Files/Git, local process and SSH/Slurm owners |
 | `plugins/r/api`, `plugins/r/backend` | Public R data/native ports, isolated RPC owner and the sole Ark/R engine |
 | `plugins/files/api`, `plugins/files/backend/engine` | Public filesystem/text/Git contracts and the contained native implementation |
 | `plugins/process/api`, `plugins/process/backend` | Public local process requests/reports and ordinary RPC backend; `engine` supervises execution and `owner` manages canonical launch scope and original-operation native recovery |
+| `plugins/remote/api`, `plugins/remote/backend/owner` | Public remote/Slurm contracts and the sole native SSH/scheduler implementation; caller-owned journal and source authorization remain outside the native library |
 | `crates/host` | Concrete composition and runtime configuration |
 | `crates/agent-client` | Bounded native Codex app-server / Kimi and DeepSeek ACP clients; no scientific handlers or Agent behavior loop |
 | `crates/agents` | Optional Rig integration; only Application/contract ports, no scientific owners or native adapter dependencies |

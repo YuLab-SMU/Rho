@@ -617,6 +617,27 @@
         "node",
         "scripts/test-process-protocol.mjs"
       ]
+    },
+    "plugins.remote-owner": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-remote-api",
+        "-p",
+        "rho-remote-owner",
+        "--lib",
+        "--locked"
+      ]
+    },
+    "plugins.remote-visibility": {
+      "command": ["cargo", "test", "-p", "rho-execution", "slurm", "--locked"]
+    },
+    "plugins.remote-independent": {
+      "command": [
+        "node",
+        "scripts/test-remote-plugin-owner.mjs"
+      ]
     }
   },
   "areas": {
@@ -822,7 +843,9 @@
         "ui/e2e/plugin-drafts.spec.ts",
         "scripts/build-process-plugin.mjs",
         "scripts/test-process-plugin.mjs",
-        "scripts/test-process-protocol.mjs"
+        "scripts/test-process-protocol.mjs",
+        "scripts/test-remote-plugin-owner.mjs",
+        "scripts/fixtures/ssh-slurm.mjs"
       ],
       "checks": [
         "docs.index",
@@ -887,7 +910,10 @@
         "plugins.process-native",
         "plugins.process-protocol",
         "plugins.process-manifest",
-        "plugins.process-public-types"
+        "plugins.process-public-types",
+        "plugins.remote-owner",
+        "plugins.remote-visibility",
+        "plugins.remote-independent"
       ]
     }
   }

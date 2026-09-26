@@ -16,3 +16,4 @@ rho-plugin-protocol = { path = "../plugin-protocol" }
 rho-r-api = { path = "../../plugins/r/api" }
 rho-files-api = { path = "../../plugins/files/api" }
 rho-process-api = { path = "../../plugins/process/api" }
+rho-remote-api = { path = "../../plugins/remote/api" }

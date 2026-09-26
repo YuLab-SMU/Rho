@@ -113,6 +113,7 @@ Sources:
 - `scripts/fixtures/plugin-draft-view.mjs`
 - `scripts/fixtures/plugin-drafts.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
+- `scripts/fixtures/ssh-slurm.mjs`
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`
@@ -141,6 +142,7 @@ Sources:
 - `scripts/test-r-plugin.mjs`
 - `scripts/test-r-protocol.mjs`
 - `scripts/test-r-viewer.mjs`
+- `scripts/test-remote-plugin-owner.mjs`
 - `scripts/test-viewer-plugin.mjs`
 - `sdk/**`
 - `ui/e2e/console-editor.spec.ts`
@@ -218,6 +220,9 @@ Checks:
 - `plugins.r-protocol`: `["node","plugins/r/generate-sdk.mjs","--check"]`
 - `plugins.r-public-types`: `["node","scripts/test-r-protocol.mjs"]`
 - `plugins.r-viewer`: `["node","scripts/test-r-viewer.mjs"]`
+- `plugins.remote-independent`: `["node","scripts/test-remote-plugin-owner.mjs"]`
+- `plugins.remote-owner`: `["cargo","test","-p","rho-remote-api","-p","rho-remote-owner","--lib","--locked"]`
+- `plugins.remote-visibility`: `["cargo","test","-p","rho-execution","slurm","--locked"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
 - `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts"]`
 - `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`

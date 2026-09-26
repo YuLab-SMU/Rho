@@ -192,6 +192,34 @@ system startup delays have been eliminated. SSH/Slurm and the remaining scientif
 composition stay in progress. The updated standalone Files/Git closure includes
 the public plugin protocol with its five native/API libraries; all 25 file, owner
 and process-supervision checks pass after the Process API added resource references.
+SSH/Slurm contracts, validation and native execution now live under
+`plugins/remote/api` and `backend/owner`; the retiring SSH adapter delegates to this
+single implementation. The native owner depends only on public protocol and
+plugin-owned Process libraries. It validates the canonical local project before
+native work and checks the entire original job reference before cancellation,
+including already-terminal observations. Transport loss remains uncertain,
+scheduler cancellation requests remain separate from terminal job observations,
+and the caller retains source authorization and the authoritative journal.
+The retiring Slurm query now requires authenticated context and verifies the
+original principal before native reads, closing its previous unscoped read path.
+Ordinary remote RPC contributions and packaging are the next integration step;
+this native source directory is not yet an installable plugin revision.
+The six focused API/native cases also pass in an independent five-crate build.
+Its executable local transcript passes strict SSH options and literal quoting,
+exit-code classification, pre-start cancellation, uncertain timeout, lost submission
+receipt, scheduler lookup and cancellation observation without resubmission.
+Those checks use fake local executables and do not establish real-cluster acceptance.
+The retiring Host transcript also passes original-request idempotency, immutable
+source recovery, query purity and ambiguous-job refusal. Its first attempt failed
+because the complete capability catalog exceeded the test capture's default 1 MiB
+buffer; the corrected bounded capture passes without changing runtime deadlines.
+The focused query-gateway test passes native-read refusal for another principal,
+missing scope and context-free access, while preserving the authorized principal's
+agent reads. Its initial fixture omitted the related operation-read registration;
+the complete registered fixture now passes. No real remote target or user session
+was changed. Public/client generation, client build/check and architecture,
+plugin-boundary and documentation checks pass.
+
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.
 Its nine capabilities expose bounded file/Git observations and explicit patches.

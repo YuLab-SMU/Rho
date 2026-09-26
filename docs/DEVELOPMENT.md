@@ -20,6 +20,18 @@ commands to complete instead of polling them with sleep loops.
 
 ## Testing SOP
 
+SSH/Slurm contracts and native execution live in `plugins/remote/api` and
+`plugins/remote/backend/owner`. Iterate with `cargo test -p rho-remote-api -p
+rho-remote-owner --lib --locked`. `node scripts/test-remote-plugin-owner.mjs`
+assembles only five public/plugin crates outside the checkout, runs the focused
+checks and exercises fake SSH/Slurm transcripts. `node scripts/test-remote-protocol.mjs`
+checks the retiring Host bridge, including authoritative idempotency, reconciliation
+and query purity. Both use temporary local executables and never contact a real
+cluster. They do not establish remote-host acceptance. Ordinary RPC packaging is
+still being implemented; the native owner has no journal or automatic replay.
+`cargo test -p rho-execution slurm --locked` verifies that the retiring query
+gateway checks the original principal and read scope before contacting a scheduler.
+
 Local process launch and native recovery live in `plugins/process/backend/owner`.
 Use `cargo test -p rho-process-owner --lib --locked` while
 iterating, and `node scripts/test-process-plugin-owner.mjs` to assemble the public
