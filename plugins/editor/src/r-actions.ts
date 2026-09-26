@@ -4,7 +4,7 @@ import type { EditorDocument } from './document.js';
 import { type Client, type Intent, json, same } from './operations.js';
 import { bytes, validatePath } from './text.js';
 
-export type CodeActionKind = 'document' | 'selection' | 'line' | 'format';
+export type CodeActionKind = 'document' | 'selection' | 'line' | 'format' | 'file';
 export interface CodeAction {
   intent: Intent;
   kind: CodeActionKind;
@@ -36,7 +36,7 @@ export class EditorCodeActions {
     if (source !== null && !validProvider(source)) throw new Error('Select an exact R provider for Editor code actions.');
     this.source = source && structuredClone(source);
   }
-  async prepare(document: Pick<EditorDocument, 'snapshot' | 'state'>, requested: 'document' | 'selection' | 'format'): Promise<CodeAction> {
+  async prepare(document: Pick<EditorDocument, 'snapshot' | 'state'>, requested: 'document' | 'selection' | 'format' | 'file'): Promise<CodeAction> {
     if (!this.source) throw new Error('No R provider is configured for this Editor.');
     const capture = document.snapshot, text = document.state.doc.toString(), selection = document.state.selection.main;
     if (capture.readonly !== null || capture.path !== null && !/\.[rR]$/.test(capture.path)) throw new Error('Select an editable R document.');
@@ -61,7 +61,7 @@ export class EditorCodeActions {
         arguments: json({ binding: { capability, provider: this.source, project: this.client.view.project, target: session }, arguments: arguments_, preconditions: null }) } };
   }
   validate(action: CodeAction) {
-    if (!action || !['document', 'selection', 'line', 'format'].includes(action.kind) || typeof action.version !== 'string' || !action.version ||
+    if (!action || !['document', 'selection', 'line', 'format', 'file'].includes(action.kind) || typeof action.version !== 'string' || !action.version ||
       typeof action.text !== 'string' || action.text.includes('\0') || bytes(action.text).length > 512 * 1024 || action.text.includes('\r') ||
       !Number.isSafeInteger(action.from) || !Number.isSafeInteger(action.to) || action.from < 0 || action.to < action.from || action.to > action.text.length ||
       !action.intent || typeof action.intent.view !== 'string' || !action.intent.view || bytes(action.intent.view).length > 160 ||
@@ -80,7 +80,7 @@ export class EditorCodeActions {
     const session = args?.arguments?.expected_session, source = { view_id: action.intent.view, label: label(action.path), kind: action.kind };
     if (!this.source || !same(action.intent.capability, capability) || typeof session !== 'string' || !session || bytes(session).length > 160 || session.includes('\0') ||
       bytes(code).length > (formatting ? 65536 : 262144) || !formatting && !code.trim() ||
-      ['format', 'document'].includes(action.kind) && (action.from !== 0 || action.to !== action.text.length) ||
+      ['format', 'document', 'file'].includes(action.kind) && (action.from !== 0 || action.to !== action.text.length) ||
       !same(args, { binding: { capability, provider: this.source, project: this.client.view.project, target: session },
         arguments: formatting ? { expected_session: session, code, source } : { expected_session: session, run: { code, source, output_mode: 'console' } }, preconditions: null }))
       throw new Error('The retained Editor code request differs from its captured text, R provider or session.');

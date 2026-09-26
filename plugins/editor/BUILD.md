@@ -17,6 +17,17 @@ or current line; Run Document captures the whole text. Both use versioned Consol
 output and retain the originating document label. Code is captured before native
 observation, and the original request is synchronized before submission.
 
+Save and Run (Command Shift Enter) captures the text and existing session before
+asynchronous work, saves the captured bytes, and verifies the original file result
+before submitting that captured code. Later typing remains unsaved in the editor.
+Unchanged files are verified without another write. File failure, uncertainty or
+unconfirmed admission never starts R. Closing interrupts the unsubmitted part of
+this sequence; reopening can inspect the saved file result but cannot automatically
+start R or reuse another view's caller identity. The original open view can
+explicitly continue its verified saved capture after an interrupted preparation.
+Confirmed unsent runs can be dismissed without undoing the file write. Each native
+file/R request retains its own identity for original-result recovery.
+
 Formatting uses installed `styler` in the same existing R session. It accepts up
 to 64 KiB of UTF-8; running accepts up to 256 KiB. The Editor's independent editing
 limit remains 512 KiB. Neither operation truncates input. Formatting verifies the

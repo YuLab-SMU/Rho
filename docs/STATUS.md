@@ -54,14 +54,22 @@ apply only against the displayed document version. These changes do not save a
 file implicitly. Independent models, package assembly and native Editor/R/Console
 browser acceptance pass, as does the file-only Editor regression. The native case
 verifies no implicit R startup, formatting without evaluation, explicit save,
-Console output, close/reopen recovery and one original run. Editor and formatting
+Console output, close/reopen recovery and exact original runs. Editor and formatting
 comparison screenshots at 1440, 1920, 390 and 220 pixels were inspected. The first
 run exposed a missing normalized null precondition in the captured request;
 Editor now preserves that public default. Two subsequent runs failed fixture
 viewport assertions (container borders and an element-evaluation argument);
 both assertions are corrected and the complete rerun passes. Failed evidence
-remains retained. Save-and-run,
-session selection, document context, editor preferences and default composition
+remains retained. Save-and-run now captures file bytes and the existing R session
+together, confirms the original native file receipt before R admission, and
+preserves later edits. Unchanged files require a fresh observation without another
+write. Its independent checks pass for both admission boundaries, conflicts,
+uncertainty, lost acknowledgements and explicit original-view continuation.
+Native acceptance passes for the keyboard action, delayed file acknowledgement,
+Console output, new-file Save and Run and close/reopen without an unsubmitted R
+run; the file-only Editor regression also passes. The updated four-width toolbar,
+recovered saved-run state and narrow new-file dialogs were inspected. Session
+selection, document context, editor preferences and default composition
 remain within the continuing Editor migration.
 
 The ordinary Objects, Packages, Help and Plots views are assembled. Packages-to-Help

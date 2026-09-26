@@ -48,7 +48,7 @@ test.afterAll(async()=>{
   if(host?.exitCode===null){host.kill('SIGINT');await new Promise<void>(done=>host.once('exit',()=>done()));}
   if(directory&&completed)rmSync(directory,{recursive:true,force:true});else if(directory)console.error(`Editor code fixture retained at ${directory}`);
 });
-test('ordinary Editor formats without evaluation, runs captured code in Console and compares a late original result after reopening',async({page},info)=>{
+test('ordinary Editor retains native formatting, captured Console runs and save-before-run recovery across reopening',async({page},info)=>{
   test.setTimeout(240000);const address=new URL(url);address.searchParams.set('window',windowId);address.searchParams.set('plugin-window','');
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(address.href);
   const region=(id:string)=>page.locator(`[data-plugin-frame="${id}"]`),frame=(id:string)=>region(id).frameLocator('iframe');
@@ -104,11 +104,65 @@ test('ordinary Editor formats without evaluation, runs captured code in Console 
     await page.setViewportSize({width,height:900});await expect.poll(()=>restored.evaluate((_element,width)=>Math.abs(innerWidth-width)<4,width)).toBe(true);
     expect(await restored.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);await page.screenshot({path:info.outputPath(`editor-code-${width}.png`)});
   }
+  await page.setViewportSize({width:1440,height:900});await run('editor_saved_count <- 0');
+  const captured='editor_saved_count <- editor_saved_count + 1\ncat("已保存运行", editor_saved_count)',later='later_save_run <- TRUE';
+  await restored.click();await restored.press('Meta+a');await page.keyboard.insertText(captured);
+  let releaseSave!:()=>void,observeSave!:()=>void,heldSave=false;
+  const saveGate=new Promise<void>(done=>releaseSave=done),saveAccepted=new Promise<void>(done=>observeSave=done);
+  await page.route('**/api/plugin-view',async route=>{const body=route.request().postDataJSON()?.message?.body;
+    if(!heldSave&&body?.type==='invoke'&&body.capability?.id==='files.apply_patch'){
+      heldSave=true;const response=await route.fetch();observeSave();await saveGate;await route.fulfill({response});return;
+    }await route.continue();});
+  try{
+    await restored.press('Meta+Shift+Enter');await saveAccepted;
+    await restored.click();await restored.press('Meta+a');await page.keyboard.insertText(later);
+    expect((await run('editor_saved_count')).value).toBe(0);
+  }finally{releaseSave();}
+  await expect(second.locator('#code-status')).toContainText('succeeded');await page.unroute('**/api/plugin-view');
+  await expect(restored).toContainText(later);await expect(second.locator('#file-state')).toHaveText('Unsaved');
+  expect(readFileSync(join(project,filename),'utf8')).toBe('\ufeff'+captured.replaceAll('\n','\r\n'));
+  expect((await run('editor_saved_count')).value).toBe(1);expect((await run('exists("later_save_run", envir=.GlobalEnv, inherits=FALSE)')).value).toBe(false);
+  await page.getByRole('tab',{name:'Console',exact:true}).click();await expect(consoleFrame.getByRole('textbox',{name:'Console Transcript',exact:true})).toContainText('已保存运行 1');
+  await page.getByRole('tab',{name:'Editor',exact:true}).click();await restored.click();await restored.press('Meta+a');await page.keyboard.insertText('must_not_run_after_close <- TRUE');
+  let releaseClose!:()=>void,observeClose!:()=>void,heldClose=false;
+  const closeGate=new Promise<void>(done=>releaseClose=done),closeAccepted=new Promise<void>(done=>observeClose=done);
+  await page.route('**/api/plugin-view',async route=>{const body=route.request().postDataJSON()?.message?.body;
+    if(!heldClose&&body?.type==='invoke'&&body.capability?.id==='files.apply_patch'){
+      heldClose=true;const response=await route.fetch();observeClose();await closeGate;await route.fulfill({response});return;
+    }await route.continue();});
+  try{
+    await second.getByRole('button',{name:'Save and Run',exact:true}).click();await closeAccepted;
+    await page.getByRole('tab',{name:'Editor',exact:true}).locator('[data-layout-path$="/button/close"]').click();
+    await expect.poll(()=>restored.evaluate(()=>document.body.inert)).toBe(true);
+  }finally{releaseClose();}
+  await expect(region(reopened.view)).toHaveCount(0);await page.unroute('**/api/plugin-view');
+  const savedClose=await query('views.inspect',{view:reopened.view}),savedReopen=await open(reopened.configuration,savedClose.state),third=frame(savedReopen.view);
+  await expect(third.locator('#code-status')).toHaveText('Saved before closing. No R run was submitted. Dismiss this result to run the current document.');
+  await expect(third.getByRole('button',{name:'Run Saved Capture',exact:true})).toBeHidden();
+  expect((await run('exists("must_not_run_after_close", envir=.GlobalEnv, inherits=FALSE)')).value).toBe(false);
+  expect(readFileSync(join(project,filename),'utf8')).toBe('\ufeffmust_not_run_after_close <- TRUE');
+  await page.screenshot({path:info.outputPath('editor-saved-run-reopened.png')});
+  await third.getByRole('button',{name:'Dismiss Result',exact:true}).click();await expect(third.locator('#code-recovery')).toBeHidden();
+  const newView=await open({source:files.identity,file:null,runtime:r.identity}),newFrame=frame(newView.view),newCode=newFrame.getByRole('textbox',{name:'Code Editor',exact:true});
+  await expect(newCode).toBeVisible();await newCode.fill('new_saved_file <- 7');await newFrame.getByRole('button',{name:'Save and Run',exact:true}).click();
+  const newDialog=newFrame.getByRole('dialog',{name:'Save and Run',exact:true});await expect(newDialog).toBeVisible();
+  await newDialog.getByLabel('Project-relative file path',{exact:true}).fill('created-中文.R');
+  for(const width of [390,220]){
+    await page.setViewportSize({width,height:900});await expect.poll(()=>newDialog.evaluate((element,width)=>{
+      const rect=element.getBoundingClientRect();return Math.abs(innerWidth-width)<4&&rect.left>=0&&rect.right<=innerWidth;
+    },width)).toBe(true);await page.screenshot({path:info.outputPath(`editor-save-run-as-${width}.png`)});
+  }
+  await newDialog.getByRole('button',{name:'Save and Run File',exact:true}).click();await expect(newDialog).toBeHidden();
+  await expect(newFrame.locator('#code-status')).toContainText('succeeded');expect(readFileSync(join(project,'created-中文.R'),'utf8')).toBe('new_saved_file <- 7');
+  expect((await run('new_saved_file')).value).toBe(7);
   const operations:any[]=[];let cursor:any=null;
   for(let n=0;n<10;n++){const page=await query('operation.list_recent',{limit:100,...(cursor===null?{}:{before_cursor:cursor})});operations.push(...page.operations);cursor=page.next_cursor;if(cursor===null)break;}
   expect(cursor).toBeNull();const editorRuns=operations.filter((op:any)=>op.capability.id==='r.execute'&&op.capability.version===2);
-  expect(editorRuns).toHaveLength(1);const originalRun=await port('get_operation',{operation_id:editorRuns[0].operation_id});
+  expect(editorRuns).toHaveLength(3);const originals=await Promise.all(editorRuns.map(op=>port('get_operation',{operation_id:op.operation_id})));
+  const originalRun=originals.find(op=>op.operation.normalized_arguments.arguments.run.source.kind==='document');
   expect(originalRun.operation.normalized_arguments.arguments.run.source).toEqual({view_id:view.view,label:filename,kind:'document'});
-  expect(operations.filter((op:any)=>op.capability.id==='r.format')).toHaveLength(3);expect(operations.filter((op:any)=>op.capability.id==='files.apply_patch')).toHaveLength(1);
+  const savedRun=originals.find(op=>op.operation.normalized_arguments.arguments.run.source.kind==='file'&&op.operation.normalized_arguments.arguments.run.source.label===filename);
+  expect(savedRun.operation.normalized_arguments.arguments.run).toEqual({code:captured,source:{view_id:reopened.view,label:filename,kind:'file'},output_mode:'console'});
+  expect(operations.filter((op:any)=>op.capability.id==='r.format')).toHaveLength(3);expect(operations.filter((op:any)=>op.capability.id==='files.apply_patch')).toHaveLength(4);
   expect(errors).toEqual([]);completed=true;
 });

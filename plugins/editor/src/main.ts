@@ -15,7 +15,7 @@ let timer: ReturnType<typeof setTimeout> | undefined, observing: ReturnType<type
 let controller: EditorController;
 let closeInstalled = false;
 const language = new Compartment();
-let rLanguage = false, comparedVersion = '';
+let rLanguage = false, comparedVersion = '', saveThenRun = false;
 const show = (id: string, text: string) => { const element = get(id); element.textContent = text; element.hidden = !text; };
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 function render() {
@@ -28,20 +28,24 @@ function render() {
   if (editor && doc && editor.state !== doc.state) editor.setState(doc.state);
   get('name').textContent = doc?.name ?? 'Editor'; get('name').title = doc?.path ?? 'Untitled.R';
   get('file-state').textContent = readonly ? 'Read-only' : controller.pending ? 'Save unconfirmed' : doc?.dirty ? 'Unsaved' : doc ? 'Saved' : '';
-  for (const id of ['save', 'save-as']) get<HTMLButtonElement>(id).disabled = !doc || readonly || busy || composing || !!controller.pending || controller.drafts.unresolved || !!controller.disk;
-  get<HTMLButtonElement>('compare-disk').disabled = !doc?.path || readonly || busy || !!controller.pending || controller.drafts.unresolved;
+  for (const id of ['save', 'save-as']) get<HTMLButtonElement>(id).disabled = !doc || readonly || busy || composing || !!controller.pending || controller.drafts.unresolved || !!controller.disk || controller.awaitingSavedRun;
+  get<HTMLButtonElement>('compare-disk').disabled = !doc?.path || readonly || busy || !!controller.pending || controller.drafts.unresolved || controller.awaitingSavedRun;
   get('r-actions').hidden = !controller.runtime.source;
   const code = controller.code, canStart = !code || code.status === 'succeeded' && (code.kind !== 'format' || code.applied);
-  for (const id of ['run-selection', 'run-document', 'format']) get<HTMLButtonElement>(id).disabled = !doc || !isR(doc.path) || readonly || busy || composing ||
+  for (const id of ['run-selection', 'run-document', 'save-run', 'format']) get<HTMLButtonElement>(id).disabled = !doc || !isR(doc.path) || readonly || busy || composing ||
     !!controller.pending || !!controller.disk || controller.drafts.unresolved || !canStart;
   get('code-recovery').hidden = !code;
-  get('code-status').textContent = !code ? '' : code.applied ? 'Formatting complete. Save writes the current edits.' : code.formatted ? 'A formatting result is retained. Your current edits are unchanged.' :
+  get('code-status').textContent = !code ? '' : controller.awaitingSavedRun ? controller.fileRun?.phase === 'ready' ? code.intent.view === client.view.view ?
+    'File save confirmed. The captured R run has not been submitted.' : 'Saved before closing. No R run was submitted. Dismiss this result to run the current document.' :
+    'File save unconfirmed. No R run has been submitted.' : code.applied ? 'Formatting complete. Save writes the current edits.' : code.formatted ? 'A formatting result is retained. Your current edits are unchanged.' :
     `${code.kind === 'format' ? 'Formatting' : 'R run'} · ${code.status ?? 'admission unconfirmed'}${code.kind !== 'format' && code.status === 'succeeded' ? ' · Output is available in Console.' : ''}`;
   get('code-operation').textContent = code?.intent.operation ?? 'Original code request retained.';
   show('code-error', code?.error ?? '');
-  get<HTMLButtonElement>('inspect-code').disabled = busy;
-  get<HTMLButtonElement>('retry-code').disabled = busy || code?.intent.view !== client.view.view || !!code?.status && terminal(code.status);
-  get<HTMLButtonElement>('dismiss-code').disabled = busy || !['succeeded', 'failed', 'cancelled'].includes(code?.status ?? '');
+  get<HTMLButtonElement>('inspect-code').disabled = busy || controller.awaitingSavedRun;
+  get<HTMLButtonElement>('retry-code').disabled = busy || controller.awaitingSavedRun || code?.intent.view !== client.view.view || !!code?.status && terminal(code.status);
+  get('continue-saved-run').hidden = !controller.awaitingSavedRun || code?.intent.view !== client.view.view;
+  get<HTMLButtonElement>('continue-saved-run').disabled = busy || controller.drafts.unresolved || !controller.canContinueSavedRun;
+  get<HTMLButtonElement>('dismiss-code').disabled = busy || (controller.awaitingSavedRun ? !!controller.pending : !['succeeded', 'failed', 'cancelled'].includes(code?.status ?? ''));
   get('compare-format').hidden = !code?.formatted || code.applied;
   get<HTMLButtonElement>('compare-format').disabled = busy || !!controller.disk;
   get<HTMLButtonElement>('apply-format').disabled = busy || controller.drafts.unresolved || !!controller.disk;
@@ -83,12 +87,14 @@ async function flush() {
 }
 function schedule() { clearTimeout(timer); if (!stopped && !preparing) timer = setTimeout(() => void flush().catch(() => undefined), 350); }
 function action(work: () => Promise<unknown>) { if (preparing || stopped || composing) return; void work().catch(report).finally(render); }
-function saveAs() {
+function saveAs(run = false) {
   if (!controller.document || preparing || composing) return;
+  saveThenRun = run; get('save-heading').textContent = run ? 'Save and Run' : 'Save As'; get('confirm-save').textContent = run ? 'Save and Run File' : 'Save File';
   get<HTMLInputElement>('path').value = controller.document.path ?? 'Untitled.R'; get<HTMLInputElement>('replace').checked = false;
   show('path-error', ''); get<HTMLDialogElement>('save-dialog').showModal(); get<HTMLInputElement>('path').focus();
 }
 function save() { if (controller.document?.path) action(() => controller.save()); else saveAs(); }
+function saveAndRun() { if (controller.document?.path) action(() => controller.saveAndRun()); else saveAs(true); }
 function compareFormat() {
   action(async () => {
     try {
@@ -116,7 +122,10 @@ function mount() {
     EditorState.readOnly.of(!!doc.snapshot.readonly), EditorView.editable.of(!doc.snapshot.readonly),
     EditorView.contentAttributes.of({ 'aria-label': 'Code Editor', spellcheck: 'false' }), language.of(rLanguage ? rSupport() : []),
     keymap.of([{ key: 'Mod-s', run: view => { if (composing || view.compositionStarted || performance.now() - compositionEndedAt < 100) return false; save(); return true; } },
-      { key: 'Mod-Enter', run: shortcut('selection') }, { key: 'Mod-Shift-Enter', run: shortcut('document') }, { key: 'Alt-Shift-f', run: shortcut('format') },
+      { key: 'Mod-Enter', run: shortcut('selection') }, { key: 'Mod-Shift-Enter', run: view => {
+        if (!controller.runtime.source || !isR(doc.path) || composing || view.compositionStarted || performance.now() - compositionEndedAt < 100) return false;
+        saveAndRun(); return true;
+      } }, { key: 'Alt-Shift-f', run: shortcut('format') },
       ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     EditorView.domEventHandlers({ scroll: (_event, view) => { if (!preparing) { doc.setScroll(view.scrollDOM.scrollTop, view.scrollDOM.scrollLeft); schedule(); } } }),
   ]) }));
@@ -148,12 +157,13 @@ async function ensureClose() {
   poll();
 }
 function wireActions() {
-  get('save').onclick = save; get('save-as').onclick = saveAs;
+  get('save').onclick = save; get('save-as').onclick = () => saveAs(); get('save-run').onclick = saveAndRun;
   get('run-selection').onclick = () => action(() => controller.startCode('selection'));
   get('run-document').onclick = () => action(() => controller.startCode('document'));
   get('format').onclick = () => action(() => controller.startCode('format'));
   get('inspect-code').onclick = () => action(() => controller.inspectCode());
   get('retry-code').onclick = () => action(() => controller.retryCode());
+  get('continue-saved-run').onclick = () => action(() => controller.continueSavedRun());
   get('dismiss-code').onclick = () => action(() => controller.dismissCode());
   get('compare-format').onclick = compareFormat; get('refresh-format').onclick = compareFormat;
   get('close-format').onclick = () => get<HTMLDialogElement>('format-dialog').close();
@@ -172,7 +182,7 @@ function wireActions() {
     if (preparing || composing || controller.busy) return;
     const path = get<HTMLInputElement>('path').value, overwrite = get<HTMLInputElement>('replace').checked;
     get<HTMLButtonElement>('confirm-save').disabled = true;
-    void controller.save(path, overwrite).then(() => get<HTMLDialogElement>('save-dialog').close()).catch(error => show('path-error', message(error)))
+    void (saveThenRun ? controller.saveAndRun(path, overwrite) : controller.save(path, overwrite)).then(() => get<HTMLDialogElement>('save-dialog').close()).catch(error => show('path-error', message(error)))
       .finally(() => { get<HTMLButtonElement>('confirm-save').disabled = false; render(); });
   };
   get('confirm-save').onclick = confirm;
@@ -199,6 +209,7 @@ function poll() {
     const inspect = (async () => {
       if (controller.busy || controller.drafts.unresolved) return;
       if (controller.pending?.intent.operation) await controller.inspectSave().catch(() => undefined);
+      if (!preparing && !controller.busy && !controller.drafts.unresolved) await controller.advanceSavedRun().catch(() => undefined);
       if (!preparing && !controller.busy && !controller.drafts.unresolved && controller.code?.intent.operation && !terminal(controller.code.status ?? 'accepted'))
         await controller.inspectCode().catch(() => undefined);
     })();

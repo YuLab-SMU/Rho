@@ -4,12 +4,13 @@ import { EditorDocument, type DocumentBody } from './document.js';
 import { EditorFiles } from './files.js';
 import { DraftSync } from './draft-sync.js';
 import { type Client, type Intent, type RecordReply, inspectOriginal, verifyOriginal, same, json, terminal } from './operations.js';
-import { bytes, filePatch, sha256, validatePath, MAX_EDIT_BYTES } from './text.js';
+import { bytes, filePatch, sha256, validatePath, normalizeText, MAX_EDIT_BYTES } from './text.js';
 import { EditorCodeActions, type CodeAction } from './r-actions.js';
 import { readFormattedCode } from './r-format.js';
 interface FileSave { intent: Intent; path: string; raw: string; before: string | null; baseHash: string | null; digest: string; }
 interface DiskComparison { path: string; raw: string; digest: string; }
-interface Payload { schema: 1; files: InstanceRef; document: DocumentBody; save: FileSave | null; disk: DiskComparison | null; code: CodeAction | null; }
+interface FileRun { path: string; raw: string; digest: string; save: FileSave | null; phase: 'saving' | 'ready' | 'submitting'; }
+interface Payload { schema: 1; files: InstanceRef; document: DocumentBody; save: FileSave | null; disk: DiskComparison | null; code: CodeAction | null; fileRun: FileRun | null; }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 /** Coordinates a single ordinary Editor view. Native file actions and generic
  * draft saves keep separate requests, outcomes and capture identities. */
@@ -21,11 +22,15 @@ export class EditorController {
   pending: FileSave | null = null;
   disk: DiskComparison | null = null;
   code: CodeAction | null = null;
+  fileRun: FileRun | null = null;
   error = '';
   synchronizationError = '';
   private paused = false;
   private stopped = false;
   private task: Promise<unknown> | null = null;
+  // Only the resident initiating action may automatically cross from save to R.
+  // Closing, reopening or a failed continuation never recreates that authority.
+  private automaticFileRun = false;
   private initial: FileObservation | null;
   constructor(private readonly client: Client, configuration: { source: InstanceRef; file: FileObservation | null; runtime?: InstanceRef | null }, private changed: () => void = () => {}) {
     this.files = new EditorFiles(client, configuration?.source);
@@ -47,7 +52,7 @@ export class EditorController {
   }
   private payload(): Payload {
     if (!this.document) throw new Error('No acknowledged Editor document is available.');
-    return { schema: 1, files: this.files.source, document: this.document.snapshot, save: this.pending && structuredClone(this.pending), disk: this.disk && structuredClone(this.disk), code: this.code && structuredClone(this.code) };
+    return { schema: 1, files: this.files.source, document: this.document.snapshot, save: this.pending && structuredClone(this.pending), disk: this.disk && structuredClone(this.disk), code: this.code && structuredClone(this.code), fileRun: this.fileRun && structuredClone(this.fileRun) };
   }
   async open() {
     this.live();
@@ -57,16 +62,18 @@ export class EditorController {
     const retained = await this.drafts.read(); this.live();
     if (retained !== null) {
       const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(retained)) as Payload;
-      if (value.schema !== 1 || !same(value.files, this.files.source) || !Object.hasOwn(value, 'save') || !Object.hasOwn(value, 'disk') || !Object.hasOwn(value, 'code')) throw new Error('The retained Editor body has another encoding or Files provider.');
+      if (value.schema !== 1 || !same(value.files, this.files.source) || !['save', 'disk', 'code', 'fileRun'].every(key => Object.hasOwn(value, key))) throw new Error('The retained Editor body has another encoding or Files provider.');
       const document = new EditorDocument(value.document);
       if (value.save !== null) await this.checkSave(value.save, false);
       if (value.code !== null) this.runtime.validate(value.code);
+      await this.checkFileRun(value.fileRun, value.code, value.save);
       if (value.disk !== null && (!value.disk || value.disk.path !== document.path || typeof value.disk.raw !== 'string' ||
         bytes(value.disk.raw).length > MAX_EDIT_BYTES || value.disk.raw.includes('\0') || await sha256(value.disk.raw) !== value.disk.digest))
         throw new Error('The retained disk comparison has another file or content digest.');
       this.live(); this.document = document; this.pending = structuredClone(value.save);
       this.disk = structuredClone(value.disk);
       this.code = structuredClone(value.code);
+      this.fileRun = structuredClone(value.fileRun);
     } else {
       if (this.drafts.unresolved) throw new Error('The first draft save remains unconfirmed. Inspect its original Operation before opening another document.');
       if (this.initial) {
@@ -78,7 +85,7 @@ export class EditorController {
   }
   compareDisk(): Promise<void> { return this.act(async () => {
     const document = this.document;
-    if (!document?.path || document.snapshot.readonly || this.pending) throw new Error('A saved editable file without an unconfirmed save is required.');
+    if (!document?.path || document.snapshot.readonly || this.pending || this.fileRun && this.fileRun.phase !== 'submitting') throw new Error('A saved editable file without an unconfirmed save or saved run is required.');
     await this.files.connect(); this.editable(); const observed = await this.files.inspect(document.path); this.editable();
     if (!observed) throw new Error('The path is no longer a regular file. Your edits are retained.');
     const captured = await this.files.read(observed); this.editable();
@@ -125,6 +132,23 @@ export class EditorController {
       !same(args.preconditions, [{ kind: 'file.sha256', subject: save.path, expected: save.baseHash }]) ||
       currentBinding && !same(args.binding, this.files.binding('files.apply_patch'))) throw new Error('The retained save differs from its original file, provider or native precondition.');
   }
+  private async checkFileRun(run: FileRun | null, code: CodeAction | null, pending: FileSave | null) {
+    if (run === null) {
+      if (code?.kind === 'file') throw new Error('The saved run has no retained file capture.');
+      return;
+    }
+    if (!run || code?.kind !== 'file' || run.path !== code.path || typeof run.raw !== 'string' || bytes(run.raw).length > MAX_EDIT_BYTES ||
+      normalizeText(run.raw.replace(/^\ufeff/, '')) !== code.text || await sha256(run.raw) !== run.digest ||
+      !['saving', 'ready', 'submitting'].includes(run.phase) ||
+      run.phase !== 'submitting' && (code.intent.operation !== null || code.status !== null) ||
+      run.phase === 'saving' && !same(run.save, pending) || run.phase === 'ready' && pending !== null)
+      throw new Error('The saved run differs from its captured file or submission phase.');
+    if (run.save !== null) {
+      await this.checkSave(run.save, false);
+      if (run.save.path !== run.path || run.save.raw !== run.raw || run.save.digest !== run.digest || run.save.intent.view !== code.intent.view)
+        throw new Error('The saved run has another original file save.');
+    }
+  }
   /** Resolves only admission, not a running native operation. Close preparation
    * can retain the exact pending request without waiting for scientific work. */
   save(path = this.document?.path ?? '', overwrite = false): Promise<void> {
@@ -132,41 +156,52 @@ export class EditorController {
     if (!document || document.snapshot.readonly) return Promise.reject(new Error('The document is not editable.'));
     const raw = document.raw, base = document.snapshot;
     return this.act(async () => {
-      if (this.pending) throw new Error('Inspect the original file save before starting another.');
-      if (this.disk) throw new Error('Finish the disk comparison before saving.');
-      if (!path) throw new Error('Choose a project-relative path with Save As.');
-      validatePath(path); await this.files.connect(); this.editable();
-      let before = base.baseRaw, baseHash = base.baseHash;
-      if (path !== base.path || before === null) {
-        const target = await this.files.inspect(path); this.editable();
-        if (target) {
-          if (!overwrite) throw new Error('The target exists. Choose another path or explicitly replace it.');
-          const captured = await this.files.read(target); this.editable();
-          if (captured.readonly) throw new Error('A read-only target cannot be replaced from this Editor.');
-          before = captured.raw; baseHash = captured.file.sha256;
-        } else { before = null; baseHash = null; }
-      }
-      const digest = await sha256(raw); this.editable();
-      if (before === raw && baseHash === digest) {
-        const current = await this.files.inspect(path); this.editable();
-        if (current?.sha256 !== digest) throw new Error('The file changed on disk. Save remains unconfirmed.');
-        document.saved(path, raw, digest); await this.flush(); return;
-      }
-      const binding = this.files.binding('files.apply_patch'), args = { binding, arguments: { patch: filePatch(path, before, raw) },
-        preconditions: [{ kind: 'file.sha256', subject: path, expected: baseHash }] };
-      this.pending = { path, raw, before, baseHash, digest, intent: { view: this.client.view.view, request: crypto.randomUUID(),
-        capability: { id: 'files.apply_patch', version: 1 }, arguments: json(args), operation: null } };
-      let attempted = false;
-      try {
-        await this.flush(); this.editable();
-        await this.submit(() => { attempted = true; });
-      } catch (error) {
-        // This branch has direct evidence that no file invocation was attempted.
-        // Close waits for this preparation before taking its final body capture.
-        if (!attempted) { this.pending = null; await this.flush().catch(() => undefined); }
-        throw error;
-      }
+      if (this.fileRun && this.fileRun.phase !== 'submitting') throw new Error('Finish or dismiss the retained saved run before another save.');
+      await this.saveCaptured(document, raw, base, path, overwrite);
     });
+  }
+  private async saveCaptured(document: EditorDocument, raw: string, base: DocumentBody, path: string, overwrite: boolean) {
+    if (this.pending) throw new Error('Inspect the original file save before starting another.');
+    if (this.disk) throw new Error('Finish the disk comparison before saving.');
+    if (!path) throw new Error('Choose a project-relative path with Save As.');
+    validatePath(path); await this.files.connect(); this.editable();
+    let before = base.baseRaw, baseHash = base.baseHash;
+    if (path !== base.path || before === null) {
+      const target = await this.files.inspect(path); this.editable();
+      if (target) {
+        if (!overwrite) throw new Error('The target exists. Choose another path or explicitly replace it.');
+        const captured = await this.files.read(target); this.editable();
+        if (captured.readonly) throw new Error('A read-only target cannot be replaced from this Editor.');
+        before = captured.raw; baseHash = captured.file.sha256;
+      } else { before = null; baseHash = null; }
+    }
+    const digest = await sha256(raw); this.editable();
+    if (before === raw && baseHash === digest) {
+      const current = await this.files.inspect(path); this.editable();
+      if (current?.sha256 !== digest) throw new Error('The file changed on disk. Save remains unconfirmed.');
+      document.saved(path, raw, digest);
+      if (this.fileRun?.phase === 'saving') this.fileRun.phase = 'ready';
+      await this.flush(); return;
+    }
+    const binding = this.files.binding('files.apply_patch'), args = { binding, arguments: { patch: filePatch(path, before, raw) },
+      preconditions: [{ kind: 'file.sha256', subject: path, expected: baseHash }] };
+    this.pending = { path, raw, before, baseHash, digest, intent: { view: this.client.view.view, request: crypto.randomUUID(),
+      capability: { id: 'files.apply_patch', version: 1 }, arguments: json(args), operation: null } };
+    if (this.fileRun?.phase === 'saving') this.fileRun.save = structuredClone(this.pending);
+    let attempted = false;
+    try {
+      await this.flush(); this.editable();
+      await this.submit(() => { attempted = true; });
+    } catch (error) {
+      // This branch has direct evidence that no file invocation was attempted.
+      // Close waits for this preparation before taking its final body capture.
+      if (!attempted) {
+        this.pending = null;
+        if (this.fileRun?.phase === 'saving') this.fileRun.save = null;
+        await this.flush().catch(() => undefined);
+      }
+      throw error;
+    }
   }
   private async submit(attempt: () => void = () => {}) {
     const pending = this.pending!; await this.checkSave(pending, true); this.editable();
@@ -190,30 +225,85 @@ export class EditorController {
   }); }
   private async consume(record: RecordReply) {
     const pending = this.pending!;
+    if (this.fileRun?.phase === 'saving') this.fileRun.save = structuredClone(pending);
     if (record.status === 'succeeded') {
-      const result = record.output as ProjectPatchResult, binding = (pending.intent.arguments as any).binding;
-      const file = result?.after?.files?.find(item => item.path === pending.path);
-      if (result?.after?.root !== binding.target || file?.kind !== 'regular' || file.sha256 !== pending.digest || file.byte_size !== bytes(pending.raw).length ||
-        !Array.isArray(result.affected_paths) || !result.affected_paths.includes(pending.path)) throw new Error('The original file-save receipt does not match the captured bytes.');
+      this.verifyFileReceipt(record, pending);
+      if (this.fileRun?.phase === 'saving') this.fileRun.phase = 'ready';
       this.document!.saved(pending.path, pending.raw, pending.digest); this.pending = null; this.error = '';
     } else if (terminal(record.status)) this.error = record.error || `The original file save is ${record.status}.`;
+  }
+  private verifyFileReceipt(record: RecordReply, save: FileSave) {
+    const result = record.output as ProjectPatchResult, binding = (save.intent.arguments as any).binding;
+    const file = result?.after?.files?.find(item => item.path === save.path);
+    if (record.status !== 'succeeded' || result?.after?.root !== binding.target || file?.kind !== 'regular' || file.sha256 !== save.digest || file.byte_size !== bytes(save.raw).length ||
+      !Array.isArray(result.affected_paths) || !result.affected_paths.includes(save.path)) throw new Error('The original file-save receipt does not match the captured bytes.');
   }
   acknowledgeFileFailure(): Promise<void> { return this.act(async () => {
     if (!this.pending) throw new Error('No original file save is retained.');
     const record = await inspectOriginal(this.client, this.pending.intent); this.live();
     if (!['failed', 'cancelled'].includes(record.status)) throw new Error('The original file save has no confirmed failure.');
-    this.pending = null; await this.flush();
+    this.pending = null;
+    if (this.fileRun?.phase === 'saving') { this.fileRun = null; this.code = null; this.automaticFileRun = false; }
+    await this.flush();
   }); }
+  private async clearCompletedCode() {
+    if (!this.code) return;
+    if (this.fileRun && this.fileRun.phase !== 'submitting') throw new Error('Finish or dismiss the retained saved run before starting another.');
+    const previous = await inspectOriginal(this.client, this.code.intent); this.editable();
+    if (previous.status !== 'succeeded' || this.code.kind === 'format' && !this.code.applied)
+      throw new Error('Inspect the original code action before starting another.');
+    this.code = null; this.fileRun = null;
+  }
+  /** Save and run share a frozen click capture but retain separate native
+   * Operations. File admission alone cannot authorize the R submission. */
+  saveAndRun(path = this.document?.path ?? '', overwrite = false): Promise<void> {
+    const document = this.document, raw = document?.raw, snapshot = document?.snapshot, state = document?.state;
+    return this.act(async () => {
+      if (!document || document.snapshot.readonly || this.pending || this.disk) throw new Error('Finish the current file save or disk comparison before saving and running.');
+      validatePath(path);
+      if (!/\.[rR]$/.test(path)) throw new Error('Choose an R file path before saving and running.');
+      await this.clearCompletedCode();
+      const action = await this.runtime.prepare({ snapshot: { ...snapshot!, path }, state: state! }, 'file'); this.editable();
+      const digest = await sha256(raw!); this.editable(); this.runtime.validate(action);
+      this.code = action; this.fileRun = { path, raw: raw!, digest, save: null, phase: 'saving' }; this.automaticFileRun = true;
+      try {
+        await this.saveCaptured(document, raw!, snapshot!, path, overwrite);
+        if (this.automaticFileRun && !this.paused && this.fileRun?.phase === 'ready') await this.submitSavedRun();
+      } catch (error) {
+        this.automaticFileRun = false;
+        if (this.fileRun?.phase === 'saving' && !this.pending) { this.code = null; this.fileRun = null; await this.flush().catch(() => undefined); }
+        throw error;
+      }
+    });
+  }
+  get awaitingSavedRun() { return !!this.fileRun && this.fileRun.phase !== 'submitting'; }
+  get canContinueSavedRun() { return this.fileRun?.phase === 'ready' && this.code?.intent.view === this.client.view.view; }
+  advanceSavedRun(): Promise<void> {
+    if (!this.automaticFileRun || !this.canContinueSavedRun || this.paused || this.stopped || this.busy) return Promise.resolve();
+    return this.continueSavedRun();
+  }
+  continueSavedRun(): Promise<void> { return this.act(() => this.submitSavedRun()); }
+  private async submitSavedRun() {
+    this.automaticFileRun = false;
+    const run = this.fileRun, code = this.code;
+    if (!run || run.phase !== 'ready' || !code || code.intent.view !== this.client.view.view) throw new Error('Only the original open view can continue this saved run.');
+    await this.checkFileRun(run, code, this.pending); this.editable();
+    if (run.save) {
+      const record = await inspectOriginal(this.client, run.save.intent); this.editable(); this.verifyFileReceipt(record, run.save);
+    } else {
+      await this.files.connect(); this.editable(); const file = await this.files.inspect(run.path); this.editable();
+      if (file?.sha256 !== run.digest) throw new Error('The saved file changed. No R run was submitted.');
+    }
+    run.phase = 'submitting';
+    let attempted = false;
+    try { await this.flush(); this.editable(); await this.submitCode(() => { attempted = true; }); }
+    catch (error) { if (!attempted) { run.phase = 'ready'; await this.flush().catch(() => undefined); } throw error; }
+  }
   startCode(kind: 'document' | 'selection' | 'format'): Promise<void> {
     const capturedDocument = this.document && { snapshot: this.document.snapshot, state: this.document.state };
     return this.act(async () => {
     if (!this.document || this.pending || this.disk) throw new Error('Finish the current file save or disk comparison before running a code action.');
-    if (this.code) {
-      const previous = await inspectOriginal(this.client, this.code.intent); this.editable();
-      if (previous.status !== 'succeeded' || this.code.kind === 'format' && !this.code.applied)
-        throw new Error('Inspect the original code action before starting another.');
-      this.code = null;
-    }
+    await this.clearCompletedCode();
     const capture = await this.runtime.prepare(capturedDocument!, kind); this.editable();
     this.runtime.validate(capture); this.code = capture;
     let attempted = false;
@@ -225,6 +315,7 @@ export class EditorController {
   }); }
   private async submitCode(attempt: () => void = () => {}) {
     const action = this.code!; this.runtime.validate(action); this.editable();
+    if (action.kind === 'file' && this.fileRun?.phase !== 'submitting') throw new Error('The captured file save must be confirmed before its R run.');
     if (action.intent.view !== this.client.view.view) throw new Error('This code action belongs to another view. Inspect its original Operation instead of replaying it.');
     attempt();
     const record = await verifyOriginal(await this.client.invoke(action.intent.capability, structuredClone(action.intent.arguments), { requestId: action.intent.request }), action.intent);
@@ -236,6 +327,7 @@ export class EditorController {
   }); }
   inspectCode(applyUnchanged = true): Promise<RecordReply> { return this.act(async () => {
     if (!this.code) throw new Error('No original code action is retained.');
+    if (this.awaitingSavedRun) throw new Error('No R run has been submitted. Inspect the original file save first.');
     const before = JSON.stringify(this.payload()), record = await inspectOriginal(this.client, this.code.intent); this.live();
     this.code.intent.operation = record.operation.operation_id; await this.consumeCode(record, applyUnchanged);
     if (JSON.stringify(this.payload()) !== before) await this.flush();
@@ -271,11 +363,16 @@ export class EditorController {
   }); }
   dismissCode(): Promise<void> { return this.act(async () => {
     if (!this.code) throw new Error('No original code action is retained.');
+    if (this.awaitingSavedRun) {
+      if (this.pending) throw new Error('Inspect or acknowledge the original file save before dismissing this saved run.');
+      await this.checkFileRun(this.fileRun, this.code, this.pending); this.editable();
+      this.code = null; this.fileRun = null; this.automaticFileRun = false; await this.flush(); return;
+    }
     const record = await inspectOriginal(this.client, this.code.intent); this.editable();
     if (!['succeeded', 'failed', 'cancelled'].includes(record.status)) throw new Error('The original code action has no confirmed terminal result.');
-    this.code = null; await this.flush();
+    this.code = null; this.fileRun = null; this.automaticFileRun = false; await this.flush();
   }); }
-  async pause() { this.paused = true; await this.task?.catch(() => undefined); await this.flush(); }
+  async pause() { this.paused = true; this.automaticFileRun = false; await this.task?.catch(() => undefined); await this.flush(); }
   resume() { this.paused = false; this.notify(); }
   stop() { this.stopped = true; this.drafts.stop(); this.files.stop(); }
 }

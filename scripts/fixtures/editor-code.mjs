@@ -5,8 +5,8 @@ export async function checkEditorCode({EditorController,fixture,sdk,history,undo
   const source={plugin:'org.rho.r',instance:'r-selected',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
   const wait=async condition=>{for(let i=0;i<2000&&!condition();i++)await new Promise(resolve=>setImmediate(resolve));assert.ok(condition());};
   const edit=(controller,text)=>controller.document.update(controller.document.state.update({changes:{from:0,to:controller.document.state.doc.length,insert:text},userEvent:'input.type'}));
-  const make=async(initial='x=1\ny=2')=>{
-    const f=await fixture(true);f.controller.stop();
+  const make=async(initial='x=1\ny=2',isNew=true)=>{
+    const f=await fixture(isNew);f.controller.stop();
     const state={records:[],attempts:[],session:'session',sessionGate:null,admissionGate:null,readGate:null,lost:false,queries:[]};
     const query=f.client.query,invoke=f.client.invoke,operation=f.client.operation;
     f.client.query=async(cap,args)=>{
@@ -45,7 +45,7 @@ export async function checkEditorCode({EditorController,fixture,sdk,history,undo
         value_in_report:false,value:format?{code,changed:code!==args.code,tool_version:'fixture'}:null,
         report:{owner:clone(source),resource:'report',digest:'sha256:'+'c'.repeat(64),bytes:1,media_type:'application/json'}};
     };
-    return{...f,configuration,controller,r:state,finish};
+    return{...f,configuration,controller,r:state,finish,finishFile:f.finish};
   };
   const independent=await fixture(true);await assert.rejects(independent.controller.startCode('document'),/No R provider/);assert.equal(independent.native.attempts.length,0);
   const missing=await make();missing.r.session=null;await assert.rejects(missing.controller.startCode('document'),/Start the selected R session/);assert.equal(missing.r.attempts.length,0);
@@ -98,4 +98,5 @@ export async function checkEditorCode({EditorController,fixture,sdk,history,undo
   const payload=forged.stored();payload.code.text='changed';await forged.owner.save(encode(JSON.stringify(payload)));forged.client.view.state=clone(forged.owner.snapshot);
   const restored=new EditorController(forged.client,forged.configuration);await assert.rejects(restored.open(),/captured text/);
   console.log('Editor R action checks passed: explicit existing session, captured selection/line/document, durable original admission, close/reopen recovery, late-result comparison, version-fenced undoable formatting and no implicit file write.');
+  return {make,edit,wait};
 }

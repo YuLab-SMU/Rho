@@ -112,6 +112,10 @@ asynchronous observation, selection/line/document requests, byte limits, origina
 admission and close/reopen recovery. Formatting checks verify complete retained
 reports, exact request/session/source identities, unchanged-document application,
 resident undo, later edits and version-fenced explicit comparison choices.
+Saved-run checks verify the frozen file/R capture, original save completion before
+R admission, unchanged-file observations, lost acknowledgements, failure and
+uncertainty, later typing, close during both admission preparations and explicit
+continuation only from the original view. Reopening and inspection do not start R.
 After building the current client and Host,
 `npm run test:browser --prefix ui -- editor-plugin.spec.ts` uses independently built
 Files and Editor packages in a disposable project; set `RHO_FILES_PLUGIN_PACKAGE`

@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { checkEditorController } from './fixtures/editor-controller.mjs';
 import { checkEditorFormat } from './fixtures/editor-format.mjs';
 import { checkEditorCode } from './fixtures/editor-code.mjs';
+import { checkEditorSaveRun } from './fixtures/editor-save-run.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'rho-editor-model-'));
 try {
@@ -174,6 +175,7 @@ try {
   assert.throws(()=>new DraftSync({...normal.client,view:{...normal.client.view,window:'other',state:normal.owner.snapshot}}),/scope/);
   const {EditorController}=await import(pathToFileURL(path.join(temporary,'compiled/src/controller.js')).href);
   const {fixture}=await checkEditorController({EditorController,make,sdk,applyPatch});
-  await checkEditorCode({EditorController,fixture,sdk,history,undo,StateEffect});
+  const codeFixture=await checkEditorCode({EditorController,fixture,sdk,history,undo,StateEffect});
+  await checkEditorSaveRun({EditorController,...codeFixture});
   console.log('Independent Editor text and draft synchronization checks passed: frozen/queued captures, exact reads, original request recovery, failure/uncertain retention, scope/receipt fences and close interruption.');
 } finally {fs.rmSync(temporary,{recursive:true,force:true});}

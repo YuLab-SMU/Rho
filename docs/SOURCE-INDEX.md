@@ -103,6 +103,7 @@ Sources:
 - `scripts/fixtures/editor-code.mjs`
 - `scripts/fixtures/editor-controller.mjs`
 - `scripts/fixtures/editor-format.mjs`
+- `scripts/fixtures/editor-save-run.mjs`
 - `scripts/fixtures/plugin-close.mjs`
 - `scripts/fixtures/plugin-download.mjs`
 - `scripts/fixtures/plugin-draft-view.mjs`
