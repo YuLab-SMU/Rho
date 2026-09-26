@@ -24,7 +24,7 @@ const allowed = {
   "rho-plugin-protocol": [],
   "rho-plugin-sdk": ["rho-plugin-protocol"],
   "rho-plugins": ["rho-plugin-protocol", "rho-plugin-sdk", "rho-contract", "rho-operation"],
-  "rho-r-backend": ["rho-plugin-sdk", "rho-r-api", "rho-r-engine"],
+  "rho-r-backend": ["rho-plugin-sdk", "rho-r-api", "rho-r-engine", "rho-environment-api"],
   "rho-r-api": ["rho-plugin-protocol"],
   "rho-r-engine": ["rho-r-api", "rho-plugin-protocol"],
   "rho-files-api": [],

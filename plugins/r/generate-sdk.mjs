@@ -38,7 +38,15 @@ try{
   const schema=name=>JSON.parse(fs.readFileSync(path.join(temporary,'schema',name+'.json'),'utf8'));
   const source={view_id:'console-view',label:'Console',kind:'console'};
   const session='copy-session-from-r.session';
+  const environmentScopes=['workspace.run_r','project.read','environment.read','environment.write','operation.read','resources.read'];
+  const environmentExample={environment:{binding:{capability:{id:'environment.library',version:2},provider:{plugin:'org.rho.environment',instance:'copy-original-instance',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)},project:'copy-original-project',target:null},realization:'copy-original-realization'}};
   const additions=[
+    {...structuredClone(manifest.capabilities.find(item=>item.capability.id==='r.create_session'&&item.capability.version===1)),
+      capability:{id:'r.create_session',version:2},title:'Create R with a realized Environment',description:'Create one session using an exact original Environment realization. Explicitly delegates native verification to the selected provider, preserves its original operation and report, then checks the new native R installation. Does not rebind an existing session or replay an unconfirmed creation.',
+      input_schema:schema('create-session'),output_schema:schema('session-created'),examples:[environmentExample],required_scopes:environmentScopes,effects:['r.session','environment.verify','process.spawn','network'],preflight:{id:'r.prepare_environment',version:2}},
+    {...structuredClone(manifest.capabilities.find(item=>item.capability.id==='r.prepare'&&item.capability.version===1)),
+      capability:{id:'r.prepare_environment',version:2},title:'Select Environment for a new R session',description:'Read and pin a verified original library through the exact selected Environment provider. Never starts R or tests namespace loading.',
+      examples:[{capability:{id:'r.create_session',version:2},arguments:environmentExample,target:null,preconditions:null}],required_scopes:environmentScopes},
     {...structuredClone(manifest.capabilities.find(item=>item.capability.id==='r.execute'&&item.capability.version===1)),
       capability:{id:'r.format',version:1},title:'Format R code',description:'Format captured text in the exact existing session using an installed styler. Does not evaluate the text, install tooling or write a project file. The original retained report contains the complete FormatResult; value_in_report marks an oversized inline value.',
       input_schema:schema('format'),output_schema:schema('execute-result'),examples:[{expected_session:session,code:'value=1',source:{view_id:'editor-view',label:'analysis.R',kind:'format'}}]},
@@ -59,6 +67,12 @@ try{
     ].map(([id,title,description,input,output,example])=>({capability:{id,version:1},kind:'query',title,description,input_schema:schema(input),examples:[example],output_schema:schema(output),recovery_schema:true,required_scopes:['workspace.read'],effects:[],cancellation:'unsupported',preflight:null})),
   ];
   for(const addition of additions){const index=manifest.capabilities.findIndex(item=>item.capability.id===addition.capability.id&&item.capability.version===addition.capability.version);if(index<0)manifest.capabilities.push(addition);else manifest.capabilities[index]=addition;}
+  manifest.optional_requires??=[];
+  for(const requirement of [
+    {capability:{id:'environment.library',version:2},scopes:['project.read','environment.read','operation.read','resources.read']},
+    {capability:{id:'environment.verify',version:2},scopes:['project.read','environment.write','operation.read','resources.read']},
+    {capability:{id:'resources.read',version:1},scopes:['resources.read']},
+  ]){const index=manifest.optional_requires.findIndex(item=>item.capability.id===requirement.capability.id&&item.capability.version===requirement.capability.version);if(index<0)manifest.optional_requires.push(requirement);else manifest.optional_requires[index]=requirement;}
   synchronize(path.join(root,'plugin.json'),JSON.stringify(manifest,null,2)+'\n');
   console.log(`R public declarations, schemas and contributed contracts ${check?'verified':'generated'}.`);
 }finally{fs.rmSync(temporary,{recursive:true,force:true});}

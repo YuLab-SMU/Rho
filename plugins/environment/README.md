@@ -7,12 +7,20 @@ The core Operation mechanism retains and commits its reports and original outcom
 
 `environment.status@1` observes configured activity. The initial version-2 RPC
 contributions provide `environment.plan`, `environment.realize`, `environment.verify`,
-`environment.reconcile`, `environment.refresh` and `environment.observe`; each
+`environment.reconcile`, `environment.refresh`, `environment.observe` and
+`environment.library`; each
 operation has its declared preflight query. Activation stays disconnected unless an
 existing Rscript executable is explicitly configured. Activation, preflight and
 inventory queries never start R or test namespace loading. Refresh is an explicit
 operation that establishes cached native configuration for later inventory reads.
 This is separate from read-only Workspace package inspection.
+
+`environment.library@2` qualifies a successful original realization, its report,
+current library digest, exact provider and R installation without starting R.
+An ordinary R provider can explicitly select that observation for a new session.
+R delegates native `environment.verify@2` before launch; the core retains both
+original Operations and their causal link. Releasing this Environment provider
+does not end an existing R session or change its selected library.
 
 Full reports use bounded resource references, preserving owner, digest and size.
 Realization, verification and selected-library observation require an original
@@ -39,6 +47,6 @@ It requires installed R, pak, renv, ps and jsonlite; it never installs tools.
 The retiring `rho-r-environment` adapter delegates to the same native owner.
 `node scripts/test-environment.mjs` covers that real-R bridge, including live-library
 retention and legacy Host restart binding. These old composition paths are still
-being migrated. Ordinary material collection, live-library usage and ordinary-R
-binding remain in progress; this package is not yet a complete replacement for
+being migrated. Ordinary material collection and complete live-library usage
+protection remain in progress; this package is not yet a complete replacement for
 all Environment behavior. Successful and uncertain material stays retained.

@@ -43,7 +43,20 @@ without R. With an already built Host and the installed R prerequisites,
 checks ordinary activation, original source/report authority, native pak/renv,
 verification, installer cancellation and previous-instance resource reads through
 that unchanged Host. It retains failed evidence and only cleans test-owned native
-markers. Ordinary material collection and R-session binding remain in progress.
+markers. Ordinary material collection and complete live-library retention remain
+in progress. `environment.library@2` is a pure original-realization observation;
+`r.create_session@2` explicitly delegates native verification before starting R.
+`RHO_ENVIRONMENT_PLUGIN_PACKAGE=/absolute/environment-package
+RHO_R_PLUGIN_PACKAGE=/absolute/r-package RHO_ARK=/absolute/ark
+RHO_R_HOME=/absolute/R node scripts/test-r-environment.mjs` exercises their
+independently built packages through the existing unchanged Host. It checks grants,
+preflight purity, library tampering, delegated verification, namespace failure,
+two R revisions, replacement Environment instances, original records and retained
+reports. All sessions and libraries belong to disposable fixtures. It also runs
+the shipped R `tests/environment_protocol.py` against that executable for bounded
+and reversed Host replies, lost verification acknowledgement and pending-call EOF.
+That wire check can run directly with `python3 tests/environment_protocol.py
+/absolute/r-package/dist/rho-r-backend`; its fake R/Ark must never be launched.
 `cargo test -p rho-environment visibility --locked` verifies scoped realization,
 retention and cleanup reads through the actual query gateway, including delegated
 principals and denial before native observation.

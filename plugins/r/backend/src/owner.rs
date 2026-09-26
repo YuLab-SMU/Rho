@@ -1,4 +1,6 @@
 use crate::queue::Queue;
+use crate::{environment as environment_binding, host_calls::HostCalls};
+use rho_environment_api::EnvironmentLibrary;
 use rho_plugin_sdk::{ResourceClient, protocol::*};
 use rho_r_api::*;
 use rho_r_engine::{ArkConfig, ArkRuntime, OutputStore};
@@ -43,10 +45,14 @@ pub struct Owner {
     instance: InstanceRef,
     runtime: Mutex<Option<Arc<ArkRuntime>>>,
     launch_attempt: Mutex<Option<OperationId>>,
+    creation_state: Mutex<Option<&'static str>>,
     inspection_cache_key: Mutex<String>,
     lane: Arc<Lane<()>>,
     queue: Queue,
     resources: ResourceClient,
+    host: HostCalls,
+    environment_enabled: bool,
+    selected_environment: Mutex<Option<RSessionEnvironment>>,
 }
 impl Owner {
     pub fn new(
@@ -54,6 +60,8 @@ impl Owner {
         environment: BackendEnvironment,
         instance: InstanceRef,
         resources: ResourceClient,
+        host: HostCalls,
+        environment_enabled: bool,
     ) -> Result<Self, String> {
         let config: Configuration =
             serde_json::from_value(configuration).map_err(|e| e.to_string())?;
@@ -87,11 +95,29 @@ impl Owner {
             instance,
             runtime: Mutex::new(None),
             launch_attempt: Mutex::new(None),
+            creation_state: Mutex::new(None),
             inspection_cache_key: Mutex::new("initial".into()),
             lane: Arc::new(Lane::new(())),
             queue: Queue::default(),
             resources,
+            host,
+            environment_enabled,
+            selected_environment: Mutex::new(None),
         })
+    }
+    fn admitted_environment(&self, call: &PluginCall, target: &str) -> Result<Option<EnvironmentLibrary>, String> {
+        if call.binding.capability.id.as_str()=="r.create_session" && call.binding.capability.version==2 {
+            let r_home=self.config.r_home.as_deref().ok_or("R is not configured")?;
+            environment_binding::qualify(call,target,self.environment_enabled,&self.environment.project_root,r_home).map(Some)
+        } else if call.owner_context==json!({"session_target":target}) { Ok(None) }
+        else {Err("R target or environment changed after admission".into())}
+    }
+    fn can_create_session(&self) -> Result<(),String> {
+        if self.config.ark.is_none() || self.config.r_home.is_none() {return Err("Configure existing Ark and R paths before creating a session".into());}
+        if self.runtime.lock().unwrap().is_some() || self.launch_attempt.lock().unwrap().is_some() {
+            return Err("This instance already owns a session or an unconfirmed creation attempt".into());
+        }
+        Ok(())
     }
     fn runtime(&self) -> Result<Arc<ArkRuntime>, String> {
         self.runtime
@@ -143,11 +169,11 @@ impl Owner {
     }
     pub fn admit(&self, call: &PluginCall) -> Result<(), String> {
         if call.binding.target.as_deref() != Some(&self.target())
-            || call.owner_context != json!({"session_target":self.target()})
             || (!call.preconditions.is_null() && call.preconditions != json!({}))
         {
             return Err("R target or preconditions changed after admission".into());
         }
+        self.admitted_environment(call,&self.target())?;
         match call.binding.capability.id.as_str() {
             "r.execute" => {
                 self.validate_execute(&call.arguments, call.binding.capability.version)?;
@@ -155,7 +181,7 @@ impl Owner {
             "r.format" => {
                 self.validate_format(&call.arguments, call.binding.capability.version)?;
             }
-            "r.create_session" if call.arguments == json!({}) => (),
+            "r.create_session" if call.binding.capability.version==2 || call.arguments == json!({}) => (),
             _ => return Err("Unsupported R invocation".into()),
         }
         self.queue.admit(call)
@@ -225,11 +251,11 @@ impl Owner {
             "r.session" => Ok(match self.runtime.lock().unwrap().as_ref() {
                 Some(runtime) => {
                     json!({"state":runtime.execution_state(), "session_id":runtime.session_id(), "queue_target":runtime.session_id(),
-                    "process":runtime.process_identity(), "installation":runtime.installation_identity(), "input":runtime.input_request()})
+                    "process":runtime.process_identity(), "installation":runtime.installation_identity(), "input":runtime.input_request(), "environment":*self.selected_environment.lock().unwrap()})
                 }
                 None => {
                     let attempt = self.launch_attempt.lock().unwrap();
-                    json!({"state":if attempt.is_some() { "launch_unconfirmed" } else { "unstarted" }, "session_id":null, "queue_target":format!("unstarted:{}",self.instance.instance), "launch_operation":*attempt})
+                    json!({"state":self.creation_state.lock().unwrap().unwrap_or(if attempt.is_some() { "launch_unconfirmed" } else { "unstarted" }), "session_id":null, "queue_target":format!("unstarted:{}",self.instance.instance), "launch_operation":*attempt,"environment":*self.selected_environment.lock().unwrap()})
                 }
             }),
             "r.console" => {
@@ -257,6 +283,23 @@ impl Owner {
                             .and_then(|r| r.input_request())
                     )
                 ))
+            }
+            "r.prepare_environment" => {
+                self.can_create_session()?;
+                let target=self.target();
+                let request:PluginPreflightRequest=serde_json::from_value(call.arguments.clone()).map_err(|e|e.to_string())?;
+                if request.capability!=environment_binding::key("r.create_session",2)
+                    || request.target.as_ref().is_some_and(|value|value!=&target)
+                    || call.binding.target.as_ref().is_some_and(|value|value!=&target)
+                    || !call.owner_context.is_null() || !(call.preconditions.is_null() || call.preconditions==json!({}))
+                    || !(request.preconditions.is_null() || request.preconditions==json!({})) {
+                    return Err("Environment session preflight changed its target or preconditions".into());
+                }
+                let mut args=environment_binding::arguments(call,request.arguments,self.environment_enabled)?;
+                let environment=environment_binding::select(&self.host,call,&args.environment,&self.environment.project_root,self.config.r_home.as_deref().unwrap()).await?;
+                self.can_create_session()?;
+                args.environment.binding=environment.binding.clone();
+                Ok(json!(PluginPreflightResult {arguments:json!(args),target:Some(target.clone()),owner_context:json!(environment_binding::Qualification {session_target:target,environment})}))
             }
             "r.prepare" => {
                 let args: PluginPreflightRequest =
@@ -550,13 +593,12 @@ impl Owner {
             })?)
             .map_err(|e| NativeError::before_effect(e.to_string()))?;
         let target = self.target();
-        if call.binding.target.as_deref() != Some(&target)
-            || call.owner_context != json!({"session_target":target})
-        {
+        if call.binding.target.as_deref() != Some(&target) {
             return Err(NativeError::before_effect(
                 "R native target changed after admission",
             ));
         }
+        let environment=self.admitted_environment(call,&target).map_err(NativeError::before_effect)?;
         if *cancellation.borrow() {
             return Ok(plan(
                 PluginOutcome::Cancelled,
@@ -568,22 +610,45 @@ impl Owner {
             "r.create_session" => {
                 if self.runtime.lock().unwrap().is_some()
                     || self.launch_attempt.lock().unwrap().is_some()
-                    || call.arguments != json!({})
+                    || (call.binding.capability.version==1 && call.arguments != json!({}))
                 {
                     return Err(NativeError::before_effect(
                         "This instance already owns a session or creation arguments are invalid",
                     ));
                 }
                 *self.launch_attempt.lock().unwrap() = Some(operation.clone());
+                if let Some(library)=&environment {
+                    *self.creation_state.lock().unwrap()=Some("verifying_environment");
+                    let verified=match environment_binding::verify(&self.host,call,library,&self.environment.project_root,self.config.r_home.as_deref().unwrap(),Duration::from_secs(self.config.execution_timeout_seconds)).await {
+                        Ok(verified)=>verified,
+                        Err(error)=>{
+                            *self.creation_state.lock().unwrap()=Some(if error.effect_may_have_occurred {"environment_unconfirmed"}else{"environment_failed"});
+                            return Err(error);
+                        }
+                    };
+                    *self.selected_environment.lock().unwrap()=Some(verified);
+                    if *cancellation.borrow() {
+                        *self.creation_state.lock().unwrap()=Some("environment_verified_without_session");
+                        return Err(NativeError::after_possible_effect("Control channel ended after Environment verification; R session launch was not started",Some(json!({"operation_id":operation,"environment":*self.selected_environment.lock().unwrap(),"automatic_reexecution":false,"action":"inspect_original_creation_and_verification"}))));
+                    }
+                }
+                *self.creation_state.lock().unwrap()=Some("launch_unconfirmed");
                 let runtime = Arc::new(ArkRuntime::launch(ArkConfig {
                     checkpoint_helper_path: None, executable: self.config.ark.clone().ok_or_else(|| NativeError::before_effect("Ark is not configured"))?,
                     r_home: self.config.r_home.clone().ok_or_else(|| NativeError::before_effect("R is not configured"))?,
                     project_root: self.environment.project_root.clone().into(), data_root: self.environment.data_root.clone().into(),
-                    execution_timeout: Duration::from_secs(self.config.execution_timeout_seconds), library_path: None,
+                    execution_timeout: Duration::from_secs(self.config.execution_timeout_seconds), library_path: environment.as_ref().map(|selected|selected.library_path.clone().into()),
                 }).await.map_err(|error| NativeError::after_possible_effect(error, Some(json!({"instance":self.instance, "data_root":self.environment.data_root, "action":"inspect_native_launch_before_retry"}))))?);
-                let output = json!({"operation_id":operation, "session_id":runtime.session_id(), "process":runtime.process_identity(),
-                    "installation":runtime.installation_identity(), "project_root":runtime.project_root()});
-                *self.runtime.lock().unwrap() = Some(runtime);
+                *self.runtime.lock().unwrap() = Some(runtime.clone());
+                if let Some(selected)=environment {
+                    if !runtime.installation_identity().is_some_and(|actual|actual.r_version==selected.r_version && actual.platform==selected.platform && Some(PathBuf::from(actual.r_home))==self.config.r_home) {
+                        runtime.begin_shutdown();
+                        let stopped=runtime.shutdown().await;
+                        return Err(NativeError::after_possible_effect("New native R installation differs from the selected Environment",Some(json!({"operation_id":operation,"session_id":runtime.session_id(),"process":runtime.process_identity(),"environment":*self.selected_environment.lock().unwrap(),"shutdown_confirmed":stopped.is_ok(),"shutdown_error":stopped.err().map(|e|e.message),"automatic_reexecution":false,"action":"inspect_original_native_session_before_new_creation"}))));
+                    }
+                }
+                let native_root=runtime.project_root().filter(|root|*root==self.environment.project_root).ok_or_else(||NativeError::after_possible_effect("New R session did not confirm its original project",Some(json!({"operation_id":operation,"session_id":runtime.session_id(),"automatic_reexecution":false}))))?;
+                let output = json!(RSessionCreated {operation_id:operation,session_id:runtime.session_id().into(),process:runtime.process_identity(),installation:runtime.installation_identity(),project_root:native_root.into(),environment:self.selected_environment.lock().unwrap().clone()});
                 Ok(plan(PluginOutcome::Succeeded, output, vec![]))
             }
             "r.execute" | "r.format" => {

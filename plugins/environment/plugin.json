@@ -144,6 +144,202 @@
     },
     {
       "capability": {
+        "id": "environment.library",
+        "version": 2
+      },
+      "kind": "query",
+      "title": "Select a realized Environment library",
+      "description": "Select an authorized original realization, checking managed library identity and content digest without starting R or loading packages. Explicit native verification remains required before session creation.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "realization_operation_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "realization_operation_id"
+        ],
+        "title": "VerifyArguments",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "realization_operation_id": "original-realization"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "CapabilityKey": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ProviderBinding": {
+            "additionalProperties": false,
+            "properties": {
+              "capability": {
+                "$ref": "#/$defs/CapabilityKey"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "target": {
+                "description": "Owner-defined native identity, fixed at admission. Not interpreted by core.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "capability",
+              "provider",
+              "project"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Current read-only selection of an original, verified realization. This is not\na namespace probe or an authorization to change an existing R session.",
+        "properties": {
+          "binding": {
+            "$ref": "#/$defs/ProviderBinding"
+          },
+          "library_digest": {
+            "type": "string"
+          },
+          "library_path": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "project_root": {
+            "type": "string"
+          },
+          "r_version": {
+            "type": "string"
+          },
+          "realization": {
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/$defs/ResourceReference"
+          },
+          "rscript": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/ProviderBinding"
+          },
+          "storage_root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "binding",
+          "realization",
+          "source",
+          "report",
+          "project_root",
+          "storage_root",
+          "rscript",
+          "library_path",
+          "library_digest",
+          "r_version",
+          "platform"
+        ],
+        "title": "EnvironmentLibrary",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "type": "null"
+      },
+      "required_scopes": [
+        "environment.read",
+        "operation.read",
+        "project.read",
+        "resources.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
         "id": "environment.observe",
         "version": 2
       },

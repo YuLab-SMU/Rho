@@ -268,18 +268,19 @@ unchanged complete rerun passed. Those failures remain recorded. Client generati
 build/check and architecture, package-boundary and documentation checks pass.
 
 The ordinary `org.rho.environment` package now assembles from eight public/plugin
-crates outside the checkout. Its twelve contributions cover explicit configuration
+crates outside the checkout. Its thirteen contributions cover explicit configuration
 refresh, pak/renv planning and isolated realization, verification, original native
-recovery, inventory and admission queries. Activation and observations do not start
+recovery, inventory, pure library selection and admission queries. Activation and observations do not start
 R. A cooperating owner exclusively holds its material directory until release;
 replacement requires the same admitted native scope and original source record.
 Full reports use bounded, digest-verified resources, including principal-scoped
 Host reads of previous-instance reports. Unconfirmed resource transfer retains the
 original identity and uncertainty without replay. Accepted work holds its native
 lane until matching settlement; EOF abandons queued work and preserves recovery.
-The two public API cases and ten focused backend cases pass both in the checkout
-and independent source package, including incomplete resource reads, cancellation,
-directory replacement and observation bounds. Shipped executable wire checks pass
+The current two public API, six native-owner and eleven backend cases pass in the
+checkout, including incomplete resource reads, cancellation, directory replacement,
+observation bounds and current library bytes. The previous independent backend
+suite passed ten cases; current independent executable wire checks pass
 resource failure, settlement fencing, bounded/reordered source queries, queued
 cancellation, EOF and forged-identity refusal. `node scripts/test-environment-plugin.mjs`
 passes through the existing Host without rebuilding it: real pak/renv, isolated
@@ -294,10 +295,39 @@ test verifies both states, the native lock refusal, absent process and unchanged
 original owner; the full run passes. Public TypeScript consumption, manifest/SDK
 consistency, client generation/build/check, architecture/package boundaries and
 documentation checks pass. Material
-collection, live-library retention across ordinary R providers and explicit R
-library binding remain to be integrated; this package does not yet replace the
+collection and complete live-library retention across ordinary R providers remain
+to be integrated; this package does not yet replace the
 entire Environment feature. Existing user Hosts and R sessions were not restarted;
 the relocated Host adapter requires a new binary.
+
+The ordinary R package now supports explicit Environment binding through
+`r.create_session@2`. Three optional grants are selected at activation; default
+creation still works without Environment. Preflight pins the exact provider,
+original realization, report, library digest and configured R installation without
+starting R. Creation delegates native verification as a child of the original
+Operation, checks its complete retained report and unchanged library, then launches
+Ark and confirms the actual R installation. Lost replies retain original recovery
+identities without automatic replay. Session observations distinguish verification
+failure, uncertainty and native launch; existing sessions keep their original binding.
+The four public R API and twelve backend cases pass. Both independent packages build
+outside the checkout using only public/plugin sources; R adds only public Environment
+and Process contracts. Its shipped wire test passes grant refusal, 16 bounded and
+reversed reads, lost/failed verification, no retry, exact settlement, release, forged
+identity/reply refusal and EOF during delegation without starting R. Native
+`scripts/test-r-environment.mjs` acceptance passes through the unchanged Host above:
+default/bound R revision coexistence, digest refusal, parent/child records, idempotency,
+actual package use, failed namespace validation without session creation, replacement
+Environment consumption of the old realization and retained reports after release.
+The first wire fixture used an invalid uppercase instance alias; it was corrected
+and the complete rerun passes, with failed evidence retained. One slow test startup
+was sampled at the system loader entry before test code; all tests subsequently
+completed, without changing any startup deadline.
+The default-session `scripts/test-r-format.mjs` native regression also passes,
+including Console execution, original results, failed syntax and pending
+cancellation. Independent public types, both generated SDKs and the Environment
+manifest, client generation/build/check, architecture/package boundaries and
+documentation checks pass. These ordinary package changes require importing the
+new revisions, not rebuilding the verified Host; no running user session was changed.
 
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.

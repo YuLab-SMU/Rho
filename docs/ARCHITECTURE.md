@@ -80,8 +80,17 @@ resources from older instances are read through those grants, never through the
 current instance's private resource channel. A cooperative lock prevents two native
 owners from concurrently opening one material directory; separate directories can
 coexist. Native execution keeps its lane until the matching core settlement.
-Ordinary collection and R library binding still require complete usage protection;
-unknown references cannot be treated as an unused library.
+The pure `environment.library@2` observation qualifies an original realization,
+its full report and current material bytes without loading packages. An ordinary
+R instance can explicitly select this provider and realization for
+`r.create_session@2`, using optional Environment/resource grants fixed at activation.
+Creation delegates `environment.verify@2` through the public Host port; the core
+retains the child Operation under the original creation's causation. R verifies
+the complete result resource and unchanged selection before launching Ark, then
+checks the actual R installation. Existing sessions retain their original provider
+and library binding. Failed or unconfirmed verification starts no session and is
+never automatically replayed. Ordinary material collection still needs complete
+live-library usage protection; unknown references cannot be treated as unused.
 
 The public `workspace.paths@1` query exposes the normalized Host project root and
 bounded protected storage paths under `project.read`. These boundaries come from

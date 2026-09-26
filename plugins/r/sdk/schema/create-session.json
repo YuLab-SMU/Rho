@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CreateRSession",
+  "type": "object",
+  "properties": {
+    "environment": {
+      "$ref": "#/$defs/REnvironmentSelection"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "environment"
+  ],
+  "$defs": {
+    "CapabilityKey": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "ProviderBinding": {
+      "type": "object",
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/CapabilityKey"
+        },
+        "project": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "target": {
+          "description": "Owner-defined native identity, fixed at admission. Not interpreted by core.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "provider",
+        "project"
+      ]
+    },
+    "REnvironmentSelection": {
+      "description": "Exact Environment provider and original successful realization. Selecting it\ndoes not start R; creation performs explicit verification under this binding.",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ProviderBinding"
+        },
+        "realization": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "binding",
+        "realization"
+      ]
+    }
+  }
+}

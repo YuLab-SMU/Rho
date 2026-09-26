@@ -175,10 +175,13 @@ impl Owner {
     }
     fn query_arguments(&self, call: &PluginCall) -> Result<(String, Value), String> {
         self.query_call(call)?;
-        if call.binding.capability.id.as_str() == source::OBSERVE {
+        if matches!(
+            call.binding.capability.id.as_str(),
+            source::OBSERVE | source::LIBRARY
+        ) {
             Ok((
-                source::OBSERVE.into(),
-                source::normalize(source::OBSERVE, call.arguments.clone())?,
+                call.binding.capability.id.to_string(),
+                source::normalize(call.binding.capability.id.as_str(), call.arguments.clone())?,
             ))
         } else {
             let request = self.preflight(call)?;
@@ -247,7 +250,7 @@ impl Owner {
             &args,
             &observation,
         )?;
-        if action == source::OBSERVE {
+        if matches!(action.as_str(), source::OBSERVE | source::LIBRARY) {
             let source = qualified.source.unwrap();
             let receipt: EnvironmentRealization =
                 serde_json::from_slice(&self.read(call, source.report.as_ref().unwrap()).await?)
@@ -256,6 +259,30 @@ impl Owner {
                 return Err(
                     "Original Environment realization is not verified for this project".into(),
                 );
+            }
+            if action == source::LIBRARY {
+                let _lane = self.lane.try_lock().map_err(
+                    |_| "Environment work or settlement is pending; retry library selection",
+                )?;
+                self.common(call)?;
+                self.native()?.inspect_realization_library(&receipt).await?;
+                self.common(call)?;
+                let scope = self.scope()?;
+                let mut binding = call.binding.clone();
+                binding.target = self.target.clone();
+                return Ok(json!(EnvironmentLibrary {
+                    binding,
+                    realization: source.operation,
+                    source: source.binding,
+                    report: source.report.unwrap(),
+                    project_root: self.root.clone(),
+                    storage_root: scope.storage_root.clone(),
+                    rscript: scope.rscript.clone(),
+                    library_path: receipt.library_path,
+                    library_digest: ContentDigest::new(receipt.library_digest).map_err(error)?,
+                    r_version: receipt.r_version,
+                    platform: receipt.platform,
+                }));
             }
             return self
                 .observe(
@@ -408,6 +435,8 @@ impl Owner {
                 let bytes = self
                     .read(call, source.report.as_ref().unwrap())
                     .await
+                    .map_err(EnvironmentOwnerError::before_effect)?;
+                self.common(call)
                     .map_err(EnvironmentOwnerError::before_effect)?;
                 if *cancellation.borrow() {
                     let mut error = EnvironmentOwnerError::before_effect(

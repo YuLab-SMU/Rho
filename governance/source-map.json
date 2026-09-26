@@ -283,6 +283,9 @@
         "scripts/test-r-format.mjs"
       ]
     },
+    "plugins.r-environment": {
+      "command": ["node", "scripts/test-r-environment.mjs"]
+    },
     "plugins.viewer": {
       "command": [
         "node",
@@ -882,6 +885,7 @@
         "scripts/build-r-plugin.mjs",
         "scripts/test-r-plugin.mjs",
         "scripts/test-r-format.mjs",
+        "scripts/test-r-environment.mjs",
         "crates/host/tests/r_plugin_real_r.rs",
         "scripts/build-viewer-plugin.mjs",
         "scripts/test-viewer-plugin.mjs",
@@ -970,6 +974,7 @@
         "plugins.r-independent",
         "plugins.r-native",
         "plugins.r-format",
+        "plugins.r-environment",
         "plugins.viewer",
         "plugins.r-viewer",
         "plugins.r-protocol",

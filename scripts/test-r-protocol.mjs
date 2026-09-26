@@ -8,7 +8,10 @@ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'rho-r-types-'));
 try{
   fs.cpSync(path.join(root,'plugins/r/sdk'),path.join(directory,'sdk'),{recursive:true});
   fs.writeFileSync(path.join(directory,'package.json'),' {"type":"module"}');
-  fs.writeFileSync(path.join(directory,'consumer.ts'),`import type {ExecuteR,FormatRCode,FormatResult,RExecutionOutput,REventsObservation,ReadREvents,CheckRCode,ConsoleState,RespondInput,RInspection,RInspectionState,RInspectionStateArguments,ObjectReadPage,ListObjectsArguments,ReadPackageHelpArguments} from './sdk/index.js';
+  fs.writeFileSync(path.join(directory,'consumer.ts'),`import type {CreateRSession,RSessionCreated,ExecuteR,FormatRCode,FormatResult,RExecutionOutput,REventsObservation,ReadREvents,CheckRCode,ConsoleState,RespondInput,RInspection,RInspectionState,RInspectionStateArguments,ObjectReadPage,ListObjectsArguments,ReadPackageHelpArguments} from './sdk/index.js';
+function created(value:RSessionCreated){return [value.session_id,value.environment?.source.provider,value.environment?.verification_report,value.environment?.library_digest];}
+// @ts-expect-error A raw library path cannot replace the exact provider and original realization.
+const unqualified:CreateRSession={environment:{library_path:'/library'}};
 const execute:ExecuteR={expected_session:'native',run:{code:'中文 <- 42',source:{view_id:'document',label:'分析.R',kind:'selection'},output_mode:'console'}};
 const formatting:FormatRCode={expected_session:execute.expected_session,code:'中文=42',source:{view_id:'document',label:'分析.R',kind:'format'}};
 const formatted:FormatResult={code:'中文 <- 42',tool_version:'installed',changed:true};
@@ -26,7 +29,7 @@ const readiness:RInspectionState={session_id:'native',status:'ready',cache_key:'
 const readinessInput:RInspectionStateArguments={expected_session:null};
 function inspect(observation:RInspection<ObjectReadPage>){return observation.data?.columns[0]?.values[0]?.text??observation.diagnostic?.code;}
 function continueHelp(args:ReadPackageHelpArguments,offset:number,files:ReadPackageHelpArguments['expected_help_files']){return {...args,offset_utf8:offset,expected_help_files:files};}
-void [execute,formatting,formatted,check,events,notStarted,contradictory,observe,output,answer,directory,busy,readiness,readinessInput,inspect,continueHelp];
+void [created,unqualified,execute,formatting,formatted,check,events,notStarted,contradictory,observe,output,answer,directory,busy,readiness,readinessInput,inspect,continueHelp];
 `);
   execFileSync(process.execPath,[path.join(root,'ui/node_modules/typescript/bin/tsc'),'--noEmit','--strict','--target','ES2022','--module','NodeNext','--moduleResolution','NodeNext','--rootDir',directory,path.join(directory,'consumer.ts')],{cwd:directory,stdio:'inherit'});
   console.log('Independent R protocol consumer compiles with only public declarations.');

@@ -11,13 +11,16 @@ const output=path.join(parent,path.basename(destination));
 assert.ok(output !== root && !output.startsWith(root+path.sep),"Use an independent directory outside the core checkout");
 fs.mkdirSync(output); // Refuse replacing existing source or builds.
 for(const [from,to] of [["plugins/r","."],["crates/plugin-protocol","public/plugin-protocol"],
-  ["crates/plugin-sdk","public/plugin-sdk"],["vendor/jet-core","vendor/jet-core"]]) {
+  ["crates/plugin-sdk","public/plugin-sdk"],["vendor/jet-core","vendor/jet-core"],
+  ["plugins/environment/api","environment/api"],["plugins/process/api","process/api"]]) {
   fs.cpSync(path.join(root,from),path.join(output,to),{recursive:true,filter:source=>!/[\\/](?:target|dist|node_modules)(?:[\\/]|$)/.test(source)});
 }
 fs.copyFileSync(path.join(root,"LICENSE"),path.join(output,"LICENSE"));
 const changes={
  "api/Cargo.toml":[["../../../crates/plugin-protocol","../public/plugin-protocol"]],
- "backend/Cargo.toml":[["../../../crates/plugin-sdk","../public/plugin-sdk"]],
+ "backend/Cargo.toml":[["../../../crates/plugin-sdk","../public/plugin-sdk"],["../../environment/api","../environment/api"]],
+ "environment/api/Cargo.toml":[["../../../crates/plugin-protocol","../../public/plugin-protocol"]],
+ "process/api/Cargo.toml":[["../../../crates/plugin-protocol","../../public/plugin-protocol"]],
  "backend/engine/Cargo.toml":[["../../../../crates/plugin-protocol","../../public/plugin-protocol"],["../../../../vendor/jet-core","../../vendor/jet-core"]],
 };
 for(const [file,pairs] of Object.entries(changes)) {
@@ -25,7 +28,7 @@ for(const [file,pairs] of Object.entries(changes)) {
  for(const [from,to] of pairs){assert.ok(text.includes(from),`${file}: dependency layout changed`);text=text.replace(from,to);}
  fs.writeFileSync(path.join(output,file),text);
 }
-fs.writeFileSync(path.join(output,"Cargo.toml"),'[workspace]\nresolver = "3"\nmembers = ["public/plugin-protocol", "public/plugin-sdk", "api", "backend", "backend/engine"]\nexclude = ["vendor/jet-core"]\n');
+fs.writeFileSync(path.join(output,"Cargo.toml"),'[workspace]\nresolver = "3"\nmembers = ["public/plugin-protocol", "public/plugin-sdk", "api", "backend", "backend/engine", "environment/api", "process/api"]\nexclude = ["vendor/jet-core"]\n');
 fs.copyFileSync(path.join(root,"Cargo.lock"),path.join(output,"Cargo.lock"));
 const installed=name=>fs.realpathSync(execFileSync("rustup",["which",name],{cwd:root,encoding:"utf8"}).trim());
 const env={...process.env,RHO_PLUGIN_CARGO:installed("cargo"),RUSTC:installed("rustc"),RUSTDOC:installed("rustdoc"),
@@ -33,7 +36,7 @@ const env={...process.env,RHO_PLUGIN_CARGO:installed("cargo"),RUSTC:installed("r
 // Resolve the standalone dependency closure offline, then all builds are locked.
 execFileSync(env.RHO_PLUGIN_CARGO,["metadata","--offline","--format-version","1"],{cwd:output,env,stdio:"ignore"});
 const metadata=JSON.parse(execFileSync(env.RHO_PLUGIN_CARGO,["metadata","--no-deps","--offline","--format-version","1"],{cwd:output,env,encoding:"utf8"}));
-assert.deepEqual(metadata.packages.map(p=>p.name).sort(),["rho-plugin-protocol","rho-plugin-sdk","rho-r-api","rho-r-backend","rho-r-engine"]);
+assert.deepEqual(metadata.packages.map(p=>p.name).sort(),["rho-environment-api","rho-plugin-protocol","rho-plugin-sdk","rho-process-api","rho-r-api","rho-r-backend","rho-r-engine"]);
 for(const pkg of metadata.packages) for(const dep of pkg.dependencies) if(dep.path) assert.ok(dep.path.startsWith(output+path.sep),`${pkg.name}: source escapes standalone package`);
 const walk=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{
  assert.ok(!entry.isSymbolicLink(),"source package cannot contain symlinks");

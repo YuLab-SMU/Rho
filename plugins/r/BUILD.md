@@ -2,7 +2,7 @@
 
 The repository source is assembled with `node scripts/build-r-plugin.mjs DEST`.
 Use a new destination outside the repository. The assembly includes the complete
-R API, engine, backend, public Rust SDK/protocol, pinned Jet source and licenses,
+R API, engine, backend, public Environment/Process contracts, Rust SDK/protocol, pinned Jet source and licenses,
 a standalone Cargo workspace and dependency lock. No private core crate is used.
 The manifest source inventory is generated from these exact files.
 The package's `sdk/` directory contains public R TypeScript declarations and JSON
@@ -50,6 +50,27 @@ Session creation
 retains its existing unsupported-cancellation contract; it can be paused before
 starting and resumed through the unstarted queue target.
 
+`r.create_session@2` selects an original Environment realization using an exact
+`environment.library@2` provider binding. At R activation, explicitly select its
+three optional grants: `environment.library@2`, `environment.verify@2` and
+`resources.read@1`. Default R session creation remains available without those
+grants or any Environment provider. Preflight reads and pins the original library,
+provider, digest and configured R installation without launching R. The explicit
+creation operation delegates native verification through the same provider and
+records that child Operation and report. Only a confirmed, unchanged selection
+can launch the new native session. The native R installation is checked again.
+Existing sessions retain their original binding across provider replacement.
+Failed or unconfirmed verification never starts R and never triggers automatic
+re-verification; inspect the original creation and its causally linked child.
+Verification and native-launch uncertainty remain distinct in `r.session`.
+The shipped `python3 tests/environment_protocol.py dist/rho-r-backend` checks
+the actual executable with fake R/Ark paths: bounded/reversed Host replies,
+grant refusal, failed or lost verification, no replay, settlement and EOF cleanup.
+It must not start either native executable. Cross-plugin native acceptance from
+the checkout is `scripts/test-r-environment.mjs`; select independently assembled
+R and Environment packages and the already installed R/Ark as documented in the
+project's Testing SOP. It uses disposable sessions and an unchanged Host binary.
+
 `r.execute@2` adds the original `run` object with code, source labels and optional
 Console output mode; it keeps the code-only `r.execute@1` contract available for
 existing consumers. The source is retained in queue observations and the terminal
@@ -61,5 +82,5 @@ are bounded by both event count and encoded bytes. They never imply completion;
 inspect the original Operation for that. See [public contracts](sdk/README.md).
 
 Release confirms native shutdown and keeps original resource bytes. The ordinary
-Viewer package can read retained HTML; Console UI, captured document execution,
-checkpoints and package/help contributions still need migration.
+Viewer package can read retained HTML. Console and inspection views consume the
+public contracts; captured document execution and checkpoints still need integration.

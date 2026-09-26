@@ -107,7 +107,7 @@ async fn original(owner: &Owner) -> Value {
 async fn disconnected_activation_and_native_queries_do_not_start_r() {
     let manifest = crate::manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 12);
+    assert_eq!(manifest.capabilities.len(), 13);
     assert_eq!(manifest.requires.len(), 2);
     let (_directory, owner, _reads) = fixture(false);
     let status = owner
@@ -260,8 +260,8 @@ async fn channel_loss_abandons_unsupported_reconciliation_before_native_recovery
 async fn source_resources_use_scoped_host_pages_and_reject_incomplete_or_changed_bytes() {
     use base64::Engine;
     use sha2::{Digest, Sha256};
-    for fault in ["none", "offset", "digest", "partial", "cancel"] {
-        let (_directory, owner, mut reads) = fixture(true);
+    for fault in ["none", "offset", "digest", "partial", "cancel", "directory"] {
+        let (directory, owner, mut reads) = fixture(true);
         let mut record = original(&owner).await;
         // A valid bounded report from another instance, deliberately belonging to
         // another native project: even the good transfer stops before launching R.
@@ -300,6 +300,16 @@ async fn source_resources_use_scoped_host_pages_and_reject_incomplete_or_changed
                 assert_eq!(read.arguments["reference"]["owner"]["instance"], "previous");
                 let end = (offset + MAX_RESOURCE_READ_BYTES as usize).min(bytes.len());
                 let mut chunk = bytes[offset..end].to_vec();
+                if fault == "directory" && index == 1 {
+                    let root = directory.path().canonicalize().unwrap();
+                    std::fs::rename(root.join("materials"), root.join("moved-materials")).unwrap();
+                    std::fs::create_dir(root.join("materials")).unwrap();
+                    std::fs::rename(
+                        root.join("moved-materials/.rho-environment-owner.lock"),
+                        root.join("materials/.rho-environment-owner.lock"),
+                    )
+                    .unwrap();
+                }
                 if fault == "digest" {
                     chunk[0] = b'!';
                 }
@@ -322,6 +332,7 @@ async fn source_resources_use_scoped_host_pages_and_reject_incomplete_or_changed
                 "offset" => "chunk changed",
                 "digest" => "digest changed",
                 "cancel" => "before consuming",
+                "directory" => "directory was replaced",
                 _ => "incomplete",
             }),
             "{result:?}"
@@ -374,5 +385,63 @@ async fn lost_resource_ack_preserves_uncertainty_and_lane_until_original_settlem
             .await
             .unwrap()["status"],
         "unavailable"
+    );
+}
+
+#[tokio::test]
+async fn library_selection_checks_current_bytes_and_keeps_original_and_current_providers() {
+    use base64::Engine;
+    use sha2::{Digest, Sha256};
+    let (directory, owner, mut reads) = fixture(true);
+    let root = directory.path().canonicalize().unwrap();
+    let library = root.join("materials/realized-library");
+    std::fs::create_dir(&library).unwrap();
+    let mut observation = original(&owner).await;
+    let record = &mut observation["data"]["record"];
+    let mut binding = record["operation"]["normalized_arguments"]["binding"].clone();
+    binding["capability"]["id"] = json!(source::REALIZE);
+    record["operation"]["operation_id"] = json!("original-realization");
+    record["operation"]["capability"] = binding["capability"].clone();
+    record["operation"]["normalized_arguments"] =
+        json!({"binding":binding,"arguments":{"plan_operation_id":"original-plan"}});
+    record["operation"]["admission"]["owner_context"]["binding"] = binding.clone();
+    let receipt = json!({"project_root":root,"plan_operation_id":"original-plan","manager":"pak","lock_digest":"unused","library_path":library,"library_digest":format!("sha256:{:x}",Sha256::digest([])),"renv_lockfile":"unused","r_version":"4.5","platform":"fixture","packages":[],"probes":[],"verified":true,"restart_required":true,"activation":"available_not_active"});
+    let bytes = serde_json::to_vec(&receipt).unwrap();
+    let reference = json!({"owner":binding["provider"],"resource":"realization-resource","digest":format!("sha256:{:x}",Sha256::digest(&bytes)),"media_type":"application/json","bytes":bytes.len()});
+    record["output"] = json!({"operation":"original-realization","kind":"realization","report":reference,"verified":true});
+    let call = query(
+        source::LIBRARY,
+        json!({"realization_operation_id":"original-realization"}),
+    );
+    assert_eq!(
+        owner.source_request(&call).unwrap().unwrap().as_str(),
+        "original-realization"
+    );
+    for changed in [false, true] {
+        if changed {
+            std::fs::write(library.join("changed"), "new content").unwrap();
+        }
+        let respond = async {
+            let request = reads.recv().await.unwrap();
+            assert_eq!(request.capability.id.as_str(), "resources.read");
+            assert_eq!(request.arguments["reference"], reference);
+            request.reply.send(Ok(json!({"status":"ready","completeness":"complete","data":{"reference":reference,"offset":0,"next":null,"base64":base64::engine::general_purpose::STANDARD.encode(&bytes)}}))).unwrap();
+        };
+        let (result, ()) = tokio::join!(owner.complete_source(&call, observation.clone()), respond);
+        if changed {
+            assert!(result.unwrap_err().contains("bytes changed"));
+        } else {
+            let selected: EnvironmentLibrary = serde_json::from_value(result.unwrap()).unwrap();
+            assert_eq!(selected.binding.provider, identity());
+            assert_eq!(selected.source.provider.instance.as_str(), "previous");
+            assert_eq!(selected.report.owner, selected.source.provider);
+            assert_eq!(selected.realization.as_str(), "original-realization");
+            assert_eq!(selected.binding.target, selected.source.target);
+            assert_eq!(selected.library_path, library.to_str().unwrap());
+        }
+    }
+    assert!(
+        !root.join("materials/recovery").exists(),
+        "Selection must never start native R"
     );
 }

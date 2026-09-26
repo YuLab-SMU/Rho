@@ -11,6 +11,7 @@ pub const VERIFY: &str = "environment.verify";
 pub const RECONCILE: &str = "environment.reconcile";
 pub const REFRESH: &str = "environment.refresh";
 pub const OBSERVE: &str = "environment.observe";
+pub const LIBRARY: &str = "environment.library";
 pub const STATUS: &str = "environment.status";
 pub const MAX_REPORT_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -52,17 +53,17 @@ pub fn scopes(id: &str) -> BTreeSet<String> {
     let id = prepared_operation(id).unwrap_or(id);
     let mut scopes: BTreeSet<String> = [
         "project.read".into(),
-        if matches!(id, STATUS | OBSERVE) {
+        if matches!(id, STATUS | OBSERVE | LIBRARY) {
             "environment.read".into()
         } else {
             "environment.write".into()
         },
     ]
     .into();
-    if matches!(id, REALIZE | VERIFY | RECONCILE | OBSERVE) {
+    if matches!(id, REALIZE | VERIFY | RECONCILE | OBSERVE | LIBRARY) {
         scopes.insert("operation.read".into());
     }
-    if matches!(id, REALIZE | VERIFY | OBSERVE) {
+    if matches!(id, REALIZE | VERIFY | OBSERVE | LIBRARY) {
         scopes.insert("resources.read".into());
     }
     scopes
@@ -80,7 +81,7 @@ pub fn normalize(id: &str, value: Value) -> Result<Value, String> {
             OperationId::new(&args.plan_operation_id).map_err(|e| e.to_string())?;
             json!(args)
         }
-        VERIFY => {
+        VERIFY | LIBRARY => {
             let args: VerifyArguments = serde_json::from_value(value).map_err(invalid)?;
             OperationId::new(&args.realization_operation_id).map_err(|e| e.to_string())?;
             json!(args)
@@ -111,7 +112,7 @@ pub fn source_id(id: &str, value: &Value) -> Result<Option<OperationId>, String>
     let normalized = normalize(id, value.clone())?;
     let key = match id {
         REALIZE => "plan_operation_id",
-        VERIFY | OBSERVE => "realization_operation_id",
+        VERIFY | OBSERVE | LIBRARY => "realization_operation_id",
         RECONCILE => "operation_id",
         _ => return Ok(None),
     };
@@ -123,7 +124,7 @@ pub fn source_id(id: &str, value: &Value) -> Result<Option<OperationId>, String>
 fn source_capability(action: &str, original: &str) -> bool {
     match action {
         REALIZE => original == PLAN,
-        VERIFY | OBSERVE => original == REALIZE,
+        VERIFY | OBSERVE | LIBRARY => original == REALIZE,
         RECONCILE => matches!(original, PLAN | REALIZE | VERIFY | REFRESH),
         _ => false,
     }

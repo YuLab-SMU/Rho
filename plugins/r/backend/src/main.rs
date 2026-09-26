@@ -1,9 +1,11 @@
 //! Ordinary public-protocol executable; no Host, journal or edge implementation.
 mod owner;
 mod queue;
+mod environment;
+mod host_calls;
 use owner::Owner;
 use rho_plugin_sdk::{ResourceClient, accept_stdio, protocol::*, validate_settlement};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::{BTreeMap,BTreeSet}, sync::Arc};
 use tokio::{
     sync::{mpsc, watch},
     task::JoinSet,
@@ -24,6 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let mut connection = accept_stdio().await?;
+    let (host_sender,mut host_calls)=mpsc::channel::<host_calls::HostRequest>(32);
     let owner = Arc::new(Owner::new(
         connection.instance.configuration.clone(),
         connection
@@ -37,6 +40,8 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                 .clone()
                 .ok_or("Host resources are unavailable")?,
         )?,
+        host_calls::HostCalls(host_sender),
+        environment::granted(&connection.grants),
     )?);
     connection.ready_with_features([PENDING_CANCELLATION_FEATURE.into()].into()).await?;
     let instance = connection.instance.clone();
@@ -55,14 +60,36 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let mut jobs = JoinSet::new();
     let mut query_jobs = 0_usize;
     let mut cancellations: BTreeMap<String, watch::Sender<bool>> = BTreeMap::new();
-    let result: Result<(), String> = loop {
+    let mut active=BTreeSet::new();
+    let mut delegated:BTreeMap<RequestId,host_calls::HostRequest>=BTreeMap::new();
+    let mut serial=0u64;
+    let result: Result<(), String> = 'serve: loop {
         tokio::select! {
+            call=host_calls.recv() => {
+                let Some(call)=call else {break Err("R delegation channel ended".into());};
+                if call.reply.is_closed(){continue;}
+                if !active.contains(&call.parent) || delegated.len()>=32 {
+                    let _=call.reply.send(Err("R delegation parent is inactive or its bounded capacity is exhausted".into()));continue;
+                }
+                let request=match call.request.clone() {
+                    Some(request)=>request,
+                    None=>loop {
+                        let Some(next)=serial.checked_add(1) else {break 'serve Err("R request counter exhausted".into());};serial=next;
+                        let request=RequestId::new(format!("r-host-read-{serial}")).unwrap();
+                        if !delegated.contains_key(&request) && !active.contains(&request) {break request;}
+                    }
+                };
+                if delegated.contains_key(&request) || active.contains(&request) {break Err("R delegated request identity is already active".into());}
+                if let Err(error)=writer.send(request.clone(),RpcBody::HostCall {parent_request:call.parent.clone(),capability:call.capability.clone(),arguments:call.arguments.clone()}).await {break Err(error.to_string());}
+                delegated.insert(request,call);
+            }
             completed = jobs.join_next(), if !jobs.is_empty() => {
                 let Some(Ok((request, operation, reply))) = completed else {
                     break Err("R owner task ended without a result; native outcome is unconfirmed".into());
                 };
                 if let Some(operation) = operation { cancellations.remove(&operation); }
                 else { query_jobs -= 1; }
+                active.remove(&request);
                 if let Err(error) = writer.send(request, reply).await { break Err(error.to_string()); }
             }
             incoming = frames.recv() => {
@@ -71,6 +98,14 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                     Some(Err(error)) => break Err(error),
                     _ => break Ok(()),
                 };
+                if let Some(call)=delegated.remove(&frame.request) {
+                    let result=match frame.body {
+                        RpcBody::HostResult {result}=>Ok(result),
+                        RpcBody::Error {code,message,..}=>Err(format!("{code}: {message}")),
+                        _=>break Err("R expected its correlated delegated result".into())
+                    };
+                    let _=call.reply.send(result);continue;
+                }
                 let operation_message = matches!(&frame.body, RpcBody::Invoke(_));
                 let reply = match frame.body {
                     RpcBody::Control(call) => {
@@ -93,6 +128,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                             break Err("R call identity differs from the initialized instance".into());
                         }
                         let is_query = call.operation_id.is_none();
+                        if active.contains(&call.request) || delegated.contains_key(&call.request) {break Err("R call request is already in flight".into());}
                         if !supported_call(&call.binding.capability, is_query) {
                             Some(error("unsupported", "unsupported R capability or message kind"))
                         } else if is_query && query_jobs >= 16 {
@@ -109,6 +145,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                                 if cancellations.contains_key(operation) { break Err("duplicate active original Operation".into()); }
                                 cancellations.insert(operation.clone(), cancel);
                             } else { query_jobs += 1; }
+                            active.insert(call.request.clone());
                             let owner = owner.clone();
                             jobs.spawn(async move {
                                 let reply = if is_query {
@@ -157,7 +194,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                     RpcBody::Release => {
-                        if !jobs.is_empty() || !owner.ready_to_release() { Some(error("busy", "Accepted owner calls and their original settlements must finish before release")) }
+                        if !jobs.is_empty() || !delegated.is_empty() || !owner.ready_to_release() { Some(error("busy", "Accepted owner calls and their original settlements must finish before release")) }
                         else {
                             match owner.shutdown().await {
                                 Ok(()) => {
@@ -178,6 +215,8 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     // EOF and broken pipes preserve original data. They never produce a success
     // or cancellation acknowledgement. Stop only this backend's native process.
     reader_task.abort();
+    drop(delegated);
+    drop(host_calls);
     owner.begin_shutdown();
     for cancel in cancellations.values() {
         cancel.send_replace(true);
@@ -190,12 +229,16 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
 }
 fn supported_call(capability: &CapabilityKey, is_query: bool) -> bool {
     let valid_kind = match capability.id.as_str() {
-        "r.session" | "r.console" | "r.snapshot" | "r.prepare" | "r.check_code" | "r.output_events" | "r.inspection_state" => is_query,
+        "r.session" | "r.console" | "r.snapshot" | "r.prepare" | "r.prepare_environment" | "r.check_code" | "r.output_events" | "r.inspection_state" => is_query,
         id if rho_r_api::r_inspection_kind(id).is_some() => is_query,
         "r.create_session" | "r.execute" | "r.format" => !is_query,
         _ => false,
     };
-    valid_kind && (capability.version == 1 || (capability.id.as_str() == "r.execute" && capability.version == 2))
+    valid_kind && match capability.id.as_str() {
+        "r.prepare_environment"=>capability.version==2,
+        "r.create_session"|"r.execute"=>matches!(capability.version,1|2),
+        _=>capability.version==1,
+    }
 }
 #[cfg(test)]
 mod routing_tests {

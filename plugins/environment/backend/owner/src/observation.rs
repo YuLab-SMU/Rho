@@ -20,6 +20,24 @@ pub(super) struct NativeConfiguration {
 }
 
 impl REnvironmentOwner {
+    /// Read the exact managed library and its digest without launching R or
+    /// loading namespaces. Explicit verification remains a separate operation.
+    pub async fn inspect_realization_library(
+        &self,
+        receipt: &rho_environment_api::EnvironmentRealization,
+    ) -> Result<std::path::PathBuf, String> {
+        if receipt.project_root != self.root || !receipt.verified {
+            return Err("Library selection requires a verified realization in this project".into());
+        }
+        let library = self.owned_path(&receipt.library_path)?;
+        if library != std::path::Path::new(&receipt.library_path) || !library.is_dir() {
+            return Err("Realized library identity changed".into());
+        }
+        if super::digest(&library).await? != receipt.library_digest {
+            return Err("Managed library bytes changed after realization".into());
+        }
+        Ok(library)
+    }
     /// Explicit ordinary-plugin operation: preserve its original process marker
     /// and cancellation evidence while establishing configuration for later reads.
     pub async fn refresh_configuration(

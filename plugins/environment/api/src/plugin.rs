@@ -1,6 +1,6 @@
 //! Bounded ordinary-plugin results. Full native reports travel as resources.
 use crate::EnvironmentObservation;
-use rho_plugin_protocol::{ContentDigest, OperationId, ResourceReference};
+use rho_plugin_protocol::{ContentDigest, OperationId, ProviderBinding, ResourceReference};
 use rho_process_api::ProcessActivity;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -56,6 +56,24 @@ pub struct EnvironmentSnapshot {
     pub status: EnvironmentSnapshotStatus,
     pub observation: Option<EnvironmentObservation>,
     pub notices: Vec<String>,
+}
+
+/// Current read-only selection of an original, verified realization. This is not
+/// a namespace probe or an authorization to change an existing R session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EnvironmentLibrary {
+    pub binding: ProviderBinding,
+    pub realization: OperationId,
+    pub source: ProviderBinding,
+    pub report: ResourceReference,
+    pub project_root: String,
+    pub storage_root: String,
+    pub rscript: String,
+    pub library_path: String,
+    pub library_digest: ContentDigest,
+    pub r_version: String,
+    pub platform: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]

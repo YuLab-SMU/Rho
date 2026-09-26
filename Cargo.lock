@@ -6375,12 +6375,15 @@ dependencies = [
 name = "rho-r-backend"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "rho-environment-api",
  "rho-plugin-sdk",
  "rho-r-api",
  "rho-r-engine",
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "tokio",
 ]
 

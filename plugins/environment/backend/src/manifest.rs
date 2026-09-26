@@ -39,6 +39,7 @@ fn contribution(
             source::RECONCILE => "Inspect and clean up the native process tree of one terminal original Environment operation. Keep its records and staged files; never repeat the installation.",
             source::REFRESH => "Explicitly establish native R configuration for later read-only inventory queries. This operation may launch R; observation and activation do not.",
             source::OBSERVE => "Read cached native configuration and bounded DESCRIPTION metadata. Requires an authorized successful source for a selected realization; never launch R, load packages or recover native work.",
+            source::LIBRARY => "Select an authorized original realization, checking managed library identity and content digest without starting R or loading packages. Explicit native verification remains required before session creation.",
             _ => "Observe configured activity or qualify explicit work without starting R or installing packages.",
         }.into(), input_schema:input, output_schema:output, examples:vec![example],
         recovery_schema:if operation { schema_for!(EnvironmentRecovery).to_value() } else { json!({"type":"null"}) },
@@ -56,6 +57,13 @@ pub fn manifest() -> PluginManifest {
             schema_for!(EnvironmentStatus).to_value(),
             json!({}),
             "Observe Environment activity",
+        ),
+        contribution(
+            source::LIBRARY,
+            schema_for!(VerifyArguments).to_value(),
+            schema_for!(EnvironmentLibrary).to_value(),
+            json!({"realization_operation_id":"original-realization"}),
+            "Select a realized Environment library",
         ),
         contribution(
             source::OBSERVE,

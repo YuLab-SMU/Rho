@@ -36,6 +36,8 @@ caller and project; a report reference is not authority. The same rule applies t
 `operation.get`. Failed acknowledgement never authorizes automatic re-execution.
 
 This package's initial RPC contributions cover configuration, planning, realization,
-verification, native recovery and inventory. Material collection and ordinary-R
-library binding are still being integrated; the package does not yet replace the
+verification, native recovery, inventory and pure library qualification. The
+ordinary R package can explicitly select the original realization and delegate
+verification before launch. Material collection and complete live-library usage
+protection are still being integrated; the package does not yet replace the
 entire Environment feature. Keep successful and uncertain materials intact.
