@@ -6241,14 +6241,12 @@ name = "rho-process"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "nix",
  "rho-contract",
  "rho-execution",
  "rho-operation",
  "rho-process-engine",
+ "rho-process-owner",
  "serde_json",
- "sysinfo",
- "tempfile",
  "tokio",
 ]
 
@@ -6269,6 +6267,18 @@ dependencies = [
  "nix",
  "process-wrap",
  "rho-process-api",
+ "tokio",
+]
+
+[[package]]
+name = "rho-process-owner"
+version = "0.1.0"
+dependencies = [
+ "nix",
+ "rho-plugin-protocol",
+ "rho-process-api",
+ "rho-process-engine",
+ "sysinfo",
  "tokio",
 ]
 

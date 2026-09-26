@@ -142,7 +142,11 @@ impl OperationHandler for ReconcileProcessHandler {
             kind: "tagged_process_reconciliation".into(), source: "os/sysinfo".into(),
             detail: json!({"source_operation_id":args.operation_id,"signalled":report.signalled,"remaining":report.remaining}),
             observed_at_ms: SystemClock.now_ms().map_err(|error| HandlerError::after_possible_effect(error.to_string(), None))?,
-            completeness: report.completeness,
+            completeness: match report.completeness {
+                rho_contract::ProcessObservationCompleteness::Complete => ObservationCompleteness::Complete,
+                rho_contract::ProcessObservationCompleteness::Partial => ObservationCompleteness::Partial,
+                rho_contract::ProcessObservationCompleteness::Unknown => ObservationCompleteness::Unknown,
+            },
         });
         plan.events.push(PlannedEvent {
             kind: "execution.processes_reconciled".into(),
@@ -281,20 +285,7 @@ fn invalid(error: impl std::fmt::Display) -> OperationError {
 
 pub fn normalize_run_arguments(value: &Value) -> Result<Value, OperationError> {
     let args: RunLocalArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
-    if args.program.is_empty()
-        || args.program.len() > 4096
-        || args.program.contains('\0')
-        || args.args.len() > 256
-        || args.args.iter().any(|arg| arg.contains('\0'))
-        || args
-            .stdin
-            .as_ref()
-            .is_some_and(|input| input.len() > 128 * 1024)
-        || !(1..=3_600_000).contains(&args.timeout_ms)
-        || !(1..=131072).contains(&args.output_limit_bytes)
-    {
-        return Err(invalid("process arguments exceed their declared bounds"));
-    }
+    args.validate().map_err(invalid)?;
     serde_json::to_value(args).map_err(invalid)
 }
 

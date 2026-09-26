@@ -1,51 +1,13 @@
-use crate::{ObservationCompleteness, OperationOutcome};
+use crate::OperationOutcome;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-fn default_timeout() -> u64 {
-    60_000
-}
-fn default_output() -> usize {
-    64 * 1024
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
-#[serde(deny_unknown_fields)]
-pub struct RunLocalArguments {
-    pub program: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub stdin: Option<String>,
-    #[serde(default = "default_timeout")]
-    #[schemars(range(min = 1, max = 3600000))]
-    pub timeout_ms: u64,
-    #[serde(default = "default_output")]
-    #[schemars(range(min = 1, max = 131072))]
-    pub output_limit_bytes: usize,
-}
-pub use rho_process_api::{OutputCapture, ProcessTermination, ProcessReport};
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
-pub struct NativeProcessIdentity {
-    pub pid: u32,
-    pub started_at_seconds: u64,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
-pub struct ProcessReconciliation {
-    pub source_operation_id: String,
-    pub observed: Vec<NativeProcessIdentity>,
-    pub signalled: Vec<NativeProcessIdentity>,
-    pub remaining: Vec<NativeProcessIdentity>,
-    pub no_matching_processes_observed: bool,
-    pub completeness: ObservationCompleteness,
-    pub notices: Vec<String>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
-#[serde(deny_unknown_fields)]
-pub struct ReconcileProcessArguments {
-    /// Original terminal process.run_local Operation, never a caller-supplied PID.
-    pub operation_id: String,
-}
+pub use rho_process_api::{
+    RunLocalArguments, OutputCapture, ProcessTermination, ProcessReport, NativeProcessIdentity,
+    ProcessReconciliation, ProcessObservationCompleteness, ReconcileProcessArguments,
+    LocalProcessRecovery, ProcessReconcileRecovery,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 pub struct RemoteTarget {
@@ -129,21 +91,6 @@ pub struct SlurmCancellation {
     pub notice: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
-#[serde(deny_unknown_fields)]
-pub struct LocalProcessRecovery {
-    pub source_operation_id: String,
-    pub pid: Option<u32>,
-    pub root: String,
-    pub action: String,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
-#[serde(deny_unknown_fields)]
-pub struct ProcessReconcileRecovery {
-    pub source_operation_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub action: Option<String>,
-}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct RemoteProcessRecovery {

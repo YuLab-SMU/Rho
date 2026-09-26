@@ -10,6 +10,7 @@ members = [
   "plugins/editor/backend",
   "plugins/process/api",
   "plugins/process/backend/engine",
+  "plugins/process/backend/owner",
   "plugins/r/backend/engine",
   "plugins/r/backend",
   "crates/plugin-sdk",

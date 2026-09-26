@@ -8,17 +8,10 @@ repository.workspace = true
 
 [dependencies]
 rho-process-engine = { path = "../../../plugins/process/backend/engine" }
+rho-process-owner = { path = "../../../plugins/process/backend/owner" }
 async-trait.workspace = true
 rho-contract = { path = "../../contract" }
 rho-operation = { path = "../../operation" }
 rho-execution = { path = "../../execution" }
 tokio.workspace = true
-sysinfo.workspace = true
 serde_json.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-nix = { version = "0.31", default-features = false }
-
-[dev-dependencies]
-tempfile.workspace = true
-tokio = { workspace = true, features = ["net"] }

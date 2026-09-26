@@ -1,6 +1,22 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.process-owner": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-process-owner",
+        "--lib",
+        "--locked"
+      ]
+    },
+    "plugins.process-independent": {
+      "command": [
+        "node",
+        "scripts/test-process-plugin-owner.mjs"
+      ]
+    },
     "system.architecture": {
       "command": [
         "node",
@@ -744,6 +760,7 @@
         "ui/e2e/plugin-resource-download.spec.ts",
         "ui/e2e/fixtures/plugin-download.ts",
         "scripts/test-files-plugin-engine.mjs",
+        "scripts/test-process-plugin-owner.mjs",
         "scripts/build-files-plugin.mjs",
         "scripts/test-files-plugin.mjs",
         "crates/host/tests/files_plugin.rs",
@@ -808,6 +825,8 @@
         "plugins.resource-download-browser",
         "plugins.files-engine",
         "plugins.files-independent",
+        "plugins.process-owner",
+        "plugins.process-independent",
         "plugins.files-protocol",
         "plugins.files-backend",
         "plugins.files-manifest",

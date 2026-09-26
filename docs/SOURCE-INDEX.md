@@ -127,6 +127,7 @@ Sources:
 - `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
 - `scripts/test-plugin-ui.mjs`
+- `scripts/test-process-plugin-owner.mjs`
 - `scripts/test-r-console.mjs`
 - `scripts/test-r-format.mjs`
 - `scripts/test-r-help.mjs`
@@ -193,6 +194,8 @@ Checks:
 - `plugins.packages-browser`: `["npm","run","test:browser","--prefix","ui","--","packages-plugin.spec.ts"]`
 - `plugins.plots`: `["node","scripts/test-plots-plugin.mjs"]`
 - `plugins.plots-browser`: `["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"]`
+- `plugins.process-independent`: `["node","scripts/test-process-plugin-owner.mjs"]`
+- `plugins.process-owner`: `["cargo","test","-p","rho-process-owner","--lib","--locked"]`
 - `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
 - `plugins.r-console`: `["node","scripts/test-r-console.mjs"]`

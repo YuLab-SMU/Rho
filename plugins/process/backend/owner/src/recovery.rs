@@ -1,5 +1,5 @@
-use rho_contract::ObservationCompleteness;
-use rho_execution::{NativeProcessIdentity, ProcessReconciliation};
+use rho_process_api::ProcessObservationCompleteness as ObservationCompleteness;
+use rho_process_api::{NativeProcessIdentity, ProcessReconciliation};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
@@ -277,7 +277,7 @@ pub fn inspect_process_marker_in_session(
     if not_before_seconds > now {
         return Err("native process marker timestamp is in the future".into());
     }
-    rho_contract::OperationId::new(operation_id).map_err(|error| error.to_string())?;
+    rho_plugin_protocol::OperationId::new(operation_id).map_err(|error| error.to_string())?;
     if !sysinfo::IS_SUPPORTED_SYSTEM {
         return Err("native process inspection is unsupported on this platform".into());
     }
@@ -304,7 +304,8 @@ pub fn inspect_process_marker_in_session(
 
 /// Query fresh native state. No PID saved in a result or journal authorizes a signal.
 /// Environment values are inspected transiently and are never included in output.
-pub(super) fn reconcile_tagged(operation_id: &str) -> Result<ProcessReconciliation, String> {
+pub fn reconcile_tagged(operation_id: &str) -> Result<ProcessReconciliation, String> {
+    rho_plugin_protocol::OperationId::new(operation_id).map_err(|error| error.to_string())?;
     if !sysinfo::IS_SUPPORTED_SYSTEM {
         return Err("native process inspection is unsupported on this platform".into());
     }

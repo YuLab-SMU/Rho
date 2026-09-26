@@ -34,6 +34,7 @@ const allowed = {
   "rho-files-engine": ["rho-files-api", "rho-process-engine"],
   "rho-process-api": [],
   "rho-process-engine": ["rho-process-api"],
+  "rho-process-owner": ["rho-process-api", "rho-process-engine", "rho-plugin-protocol"],
   "rho-contract": ["rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api"],
   "rho-operation": ["rho-contract", "rho-plugin-protocol"],
   "rho-application": ["rho-contract"],
@@ -44,7 +45,7 @@ const allowed = {
   "rho-project": ["rho-contract", "rho-operation", "rho-files-api", "rho-files-owner"],
   "rho-environment": ["rho-contract", "rho-operation"],
   "rho-execution": ["rho-contract", "rho-operation"],
-  "rho-process": ["rho-contract", "rho-operation", "rho-execution", "rho-process-engine"],
+  "rho-process": ["rho-contract", "rho-operation", "rho-execution", "rho-process-engine", "rho-process-owner"],
   "rho-ssh": ["rho-contract", "rho-operation", "rho-execution", "rho-process"],
   "rho-r-environment": ["rho-environment", "rho-operation", "rho-process"],
   "rho-git": ["rho-files-engine"],
@@ -60,7 +61,7 @@ const pluginLibraries = {
   "rho-r-api": "plugins/r/api", "rho-r-engine": "plugins/r/backend/engine",
   "rho-files-owner": "plugins/files/backend/owner",
   "rho-files-api": "plugins/files/api", "rho-files-engine": "plugins/files/backend/engine",
-  "rho-process-api": "plugins/process/api", "rho-process-engine": "plugins/process/backend/engine",
+  "rho-process-api": "plugins/process/api", "rho-process-engine": "plugins/process/backend/engine", "rho-process-owner": "plugins/process/backend/owner",
 };
 for (const pkg of metadata.packages) {
   assertAgentEngineBoundary(pkg);

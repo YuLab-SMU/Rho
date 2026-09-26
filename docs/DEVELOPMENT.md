@@ -20,6 +20,15 @@ commands to complete instead of polling them with sleep loops.
 
 ## Testing SOP
 
+Local process launch and native recovery live in `plugins/process/backend/owner`.
+Use `cargo test -p rho-process-owner --lib --locked` while
+iterating, and `node scripts/test-process-plugin-owner.mjs` to assemble the public
+protocol/API/engine/owner sources independently and run their native tests.
+The retiring Host bridge is covered by `cargo test -p rho-host --test process
+--locked`. `node scripts/test-process-recovery.mjs` builds the current binary and
+checks actual Host interruption, original-operation recovery and unrelated-process
+preservation in a disposable project. It never operates on a user Host.
+
 Editor context is an ordinary native backend in the Editor package. Use
 `cargo test -p rho-editor-backend --lib --locked` for its bounded search, exact
 source/version/digest checks, multi-page content verification and Unicode selection

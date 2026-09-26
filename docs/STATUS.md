@@ -135,6 +135,21 @@ Plugin Studio stay in scope.
 Files/Git contracts, native implementation and search/patch interpretation now
 reside under `plugins/files`; shared subprocess supervision and reports live under
 `plugins/process`. Retiring adapters and project handlers reuse these owners.
+Local process request validation, canonical launch scope and native
+inspection/reconciliation now also live under `plugins/process/api` and
+`backend/owner`. The retiring process adapter delegates to this implementation.
+Native evidence still binds same-user process lifetime and original operation
+markers; inaccessible environments remain unknown. The four migrated native
+inspection cases pass, as does their independent build/run using only public
+protocol/API/engine/owner sources. Both Host process cases pass, covering scope
+refusal, shared scheduling, cancellation/commit and original-request idempotency.
+Client type generation, build and generated/embedded-content checks pass.
+`node scripts/test-process-recovery.mjs` also passes with the current rebuilt
+binary: interruption preserves original uncertainty, explicit reconciliation
+cleans the tagged parent and detached child, unrelated processes survive, and
+repeated original requests do not execute again. All native work used disposable
+fixtures; existing user Hosts and R memory remain untouched. The ordinary process RPC,
+settlement protocol and installable package remain to be completed.
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.
 Its nine capabilities expose bounded file/Git observations and explicit patches.
