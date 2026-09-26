@@ -1,7 +1,9 @@
 //! Public bounded process reports.
 #![forbid(unsafe_code)]
 mod local;
+mod plugin;
 pub use local::*;
+pub use plugin::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;

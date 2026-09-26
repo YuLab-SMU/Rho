@@ -29,6 +29,22 @@ The retiring Host bridge is covered by `cargo test -p rho-host --test process
 checks actual Host interruption, original-operation recovery and unrelated-process
 preservation in a disposable project. It never operates on a user Host.
 
+The ordinary Process RPC backend is `plugins/process/backend`. Iterate with
+`cargo test -p rho-process-backend --lib --locked`; generate its public declarations
+and manifest with `node plugins/process/generate-sdk.mjs` and
+`node plugins/process/generate-manifest.mjs` (both support `--check`).
+`node scripts/test-process-protocol.mjs` compiles an independent public TypeScript
+consumer. `node scripts/build-process-plugin.mjs /absolute/new/package` assembles
+six public/plugin Rust crates outside the checkout, with locked offline builds.
+After building the current Host explicitly, `node scripts/test-process-plugin.mjs`
+builds the external package and verifies unchanged Host bytes while exercising
+actual process execution, resource evidence, project targeting, original-request
+idempotency, cancellation, settlement and replay after release. Set
+`RHO_PROCESS_PLUGIN_PACKAGE` to reuse an independently built package. The included
+`tests/protocol.py` additionally checks executable RPC failures and settlement
+fencing. This acceptance uses disposable projects and no R runtime. It does not
+establish the still-pending plugin reconciliation or SSH/Slurm behavior.
+
 Editor context is an ordinary native backend in the Editor package. Use
 `cargo test -p rho-editor-backend --lib --locked` for its bounded search, exact
 source/version/digest checks, multi-page content verification and Unicode selection
@@ -91,8 +107,8 @@ in `plugins/process/api`. Search and patch interpretation live in
 these implementations. Iterate with
 `cargo test -p rho-files-engine -p rho-files-owner -p rho-process-engine --lib --tests --locked`.
 For the source boundary, `node scripts/test-files-plugin-engine.mjs` materializes
-only those five libraries outside the checkout and runs their native tests with
-the installed toolchain. It is not a backend activation or packaging test.
+those five libraries and the public plugin protocol outside the checkout, and
+runs their native tests with the installed toolchain. It is not a backend activation or packaging test.
 Generate public Files declarations with `node plugins/files/generate-sdk.mjs`,
 then run `node scripts/test-files-protocol.mjs`. Contract moves also require the
 normal client generation check, even when wire shapes remain unchanged.

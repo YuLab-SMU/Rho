@@ -21,12 +21,17 @@ try {
       });
     }
   }
-  fs.writeFileSync(path.join(temporary, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["files/api", "files/backend/engine", "files/backend/owner", "process/api", "process/backend/engine"]\n');
+  fs.cpSync(path.join(root, 'crates/plugin-protocol'), path.join(temporary, 'public/plugin-protocol'), {recursive: true});
+  const processApi = path.join(temporary, 'process/api/Cargo.toml');
+  const processSource = fs.readFileSync(processApi, 'utf8');
+  assert.ok(processSource.includes('../../../crates/plugin-protocol'), 'Process protocol dependency layout changed');
+  fs.writeFileSync(processApi, processSource.replace('../../../crates/plugin-protocol', '../../public/plugin-protocol'));
+  fs.writeFileSync(path.join(temporary, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["files/api", "files/backend/engine", "files/backend/owner", "process/api", "process/backend/engine", "public/plugin-protocol"]\n');
   fs.copyFileSync(path.join(root, 'Cargo.lock'), path.join(temporary, 'Cargo.lock'));
   // Resolve only this standalone closure offline. Subsequent compilation is locked.
   const metadata = JSON.parse(execFileSync(cargo, ['metadata', '--offline', '--filter-platform', target, '--format-version', '1'], { cwd: temporary, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }));
   const members = metadata.packages.filter(pkg => metadata.workspace_members.includes(pkg.id));
-  assert.deepEqual(members.map(pkg => pkg.name).sort(), ['rho-files-api', 'rho-files-engine', 'rho-files-owner', 'rho-process-api', 'rho-process-engine']);
+  assert.deepEqual(members.map(pkg => pkg.name).sort(), ['rho-files-api', 'rho-files-engine', 'rho-files-owner', 'rho-plugin-protocol', 'rho-process-api', 'rho-process-engine']);
   for (const pkg of members) for (const dep of pkg.dependencies) if (dep.path) {
     assert.ok(dep.path.startsWith(temporary + path.sep), `${pkg.name}: dependency leaves standalone source`);
   }

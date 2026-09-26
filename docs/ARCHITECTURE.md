@@ -47,6 +47,16 @@ ordinary backend and operation integration are completed. Moving the implementat
 does not relax canonical project roots, protected-path exclusions, symlink checks,
 bounded reads or native file identity requirements.
 
+The ordinary Process backend uses the public framed RPC, canonical Host project
+environment and scoped resource channel. Preflight fixes its target and normalized
+arguments before admission. Local execution retains original stdout/stderr bytes
+and native termination evidence in a digest-bound resource; its result references
+that resource and original Operation. Resource transfer failure after execution
+is uncertainty, not absence of effects. Native scheduling remains fenced until
+Host settlement of the exact binding; neither returning a candidate result nor
+receiving a cancellation request proves committed completion. Activity queries
+observe this native scheduling only. The backend owns no scientific result database.
+
 The public `workspace.paths@1` query exposes the normalized Host project root and
 bounded protected storage paths under `project.read`. These boundaries come from
 Host composition, including future sidecars and the project lease; plugin
@@ -1440,7 +1450,7 @@ package inspection.
 | `crates/adapters/` | SQLite, package and SSH/Slurm implementations; transitional adapters to package-owned R, Files/Git and local process owners |
 | `plugins/r/api`, `plugins/r/backend` | Public R data/native ports, isolated RPC owner and the sole Ark/R engine |
 | `plugins/files/api`, `plugins/files/backend/engine` | Public filesystem/text/Git contracts and the contained native implementation |
-| `plugins/process/api`, `plugins/process/backend/engine`, `plugins/process/backend/owner` | Public local process requests/reports, native supervision, canonical launch scope and original-operation recovery |
+| `plugins/process/api`, `plugins/process/backend` | Public local process requests/reports and ordinary RPC backend; `engine` supervises execution and `owner` manages canonical launch scope and original-operation native recovery |
 | `crates/host` | Concrete composition and runtime configuration |
 | `crates/agent-client` | Bounded native Codex app-server / Kimi and DeepSeek ACP clients; no scientific handlers or Agent behavior loop |
 | `crates/agents` | Optional Rig integration; only Application/contract ports, no scientific owners or native adapter dependencies |

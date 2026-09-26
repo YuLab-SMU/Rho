@@ -148,8 +148,34 @@ Client type generation, build and generated/embedded-content checks pass.
 binary: interruption preserves original uncertainty, explicit reconciliation
 cleans the tagged parent and detached child, unrelated processes survive, and
 repeated original requests do not execute again. All native work used disposable
-fixtures; existing user Hosts and R memory remain untouched. The ordinary process RPC,
-settlement protocol and installable package remain to be completed.
+fixtures; existing user Hosts and R memory remain untouched.
+
+The ordinary `org.rho.process` package now contributes local execution and preflight
+at version 2, plus bounded native activity at version 1. Its independent assembly
+contains six public/plugin Rust crates and no private Host dependency. Output bytes
+and native cleanup evidence use a digest-verified resource; unconfirmed report
+transfer preserves uncertainty and bounded output evidence without re-execution.
+The native lane remains fenced until original-operation settlement, and release
+refuses unsettled work. Three backend unit cases and an independent public
+TypeScript consumer pass, as do generated declaration/manifest freshness and
+architecture, plugin-boundary and documentation checks. Executable RPC acceptance passes transfer uncertainty,
+false-success settlement refusal, queued cancellation, release and forged-provider
+refusal. Real CLI acceptance passes exact Unicode/NUL output, resource digest,
+target refusal, original-request idempotency, active cancellation and confirmed
+closure, settlement, retained resources and replay after release. Its first run
+failed a test assertion using the wrong operation identity field; the corrected
+fixture passes without backend changes. Independent package construction and
+native acceptance left the previously built Host binary unchanged. The combined
+wire/native wrapper subsequently failed three runs at backend initialization,
+before local-execution test bodies. Sampling its own disposable backend found the
+main thread at `_dyld_start`, before plugin code, with a 96 KiB footprint. These
+initialization timeouts remain failures, separately from the earlier successful
+native run and passing wire checks; the startup deadline was not changed. This evidence
+does not establish plugin-native interrupted-instance reconciliation or SSH/Slurm;
+those capabilities and the remaining scientific composition stay in progress.
+The updated standalone Files/Git closure includes the public plugin protocol with
+its five native/API libraries; all 25 file, owner and process-supervision checks
+pass after the Process API added public resource references.
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.
 Its nine capabilities expose bounded file/Git observations and explicit patches.
@@ -616,7 +642,7 @@ executable startup is allowed to finish; silence is not treated as a test failur
 | --- | --- |
 | `cargo test -p rho-files-owner --lib --locked` | Four passed: native hash/absence preconditions, success/failure/uncertain effect classification, recovery after post-write observation failure, and query-bound search continuation. The retiring project handlers delegate to these same functions. |
 | `node plugins/files/generate-sdk.mjs`, `node plugins/files/generate-sdk.mjs --check`, `node scripts/test-files-protocol.mjs` | Public Files declarations/schemas generated and verified; an independent strict TypeScript consumer passed without private client imports. |
-| `node scripts/test-files-plugin-engine.mjs` | Standalone locked/offline build and all 25 cases passed (13 Files, four owner interpretation, eight subprocess supervision), using only five public Files/process libraries and their third-party dependencies. The copied sources contain no private core dependency; this check does not build or restart the Host. |
+| `node scripts/test-files-plugin-engine.mjs` | Standalone locked/offline build and all 25 cases passed (13 Files, four owner interpretation, eight subprocess supervision), using five public Files/process libraries plus the public plugin protocol and third-party dependencies. The copied sources contain no private core dependency; this check does not build or restart the Host. |
 | `cargo test -p rho-host --test project --test ownership --test plugin_workspace_paths --locked` | All 23 passed (15 project, seven ownership, one public-path integration). Covers original native preconditions, dirty/staged/untracked files, protected stores, aliases, original Operations, uncertain effects and a declared external reverse query. The first run exposed the old duplicated-descriptor lock behavior; the original failure and deterministic pre-change reproduction are retained under `target/plugin-refactor`. Full affected checks passed after the explicit unlock fix. |
 | `cargo test -p rho-host --lib ownership::tests::last_owner_releases_the_lock_despite_a_duplicated_descriptor --locked` | One passed; 50 unrelated cases filtered out. Accepted work retains the lease, final-owner release permits reacquisition despite an extra descriptor, and closing that old descriptor does not unlock the replacement owner. |
 | `cargo test -p rho-host --test plugins original_download --locked` | Passed. Requires declared read scope and current parent authority, refuses changed resource/name/size and close preparation, reads retained bytes after provider release, redacts diagnostics and makes no download or extra-Operation claim. |

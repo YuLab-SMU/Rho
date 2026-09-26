@@ -1,4 +1,4 @@
-# Process owner
+# Processes
 
 `api` owns local process requests, validation and bounded native/recovery reports.
 `backend/engine` contains the single
@@ -20,9 +20,16 @@ not authorize a signal: the owner rechecks same-user identity, native start time
 and the original operation tag. Incomplete native evidence remains uncertain.
 The retiring adapter delegates to this owner; there is one native implementation.
 
-The executable tests moved with their owners, including parent/descendant cleanup
-and read-only marker inspection. Run `cargo test -p rho-process-owner --lib --locked` for focused owner checks and
-`node scripts/test-process-plugin-owner.mjs` for independent source assembly and
-native checks without private core crates. The ordinary process plugin RPC,
-operation-result settlement and user-facing composition remain to be implemented;
-this directory is not yet an installable package.
+`backend/src` implements the ordinary `org.rho.process` RPC service. Its local
+execution capability returns a resource-backed report; only the Host commits the
+original scientific result. The native execution lane stays held until exact
+settlement. Unconfirmed output transfer retains uncertainty and recovery evidence
+without replay. The package also provides read-only preflight and activity queries.
+
+See [BUILD.md](BUILD.md) for independent assembly, public contracts and executable
+acceptance. Focused checks use `cargo test -p rho-process-backend --lib --locked`
+and `cargo test -p rho-process-owner --lib --locked`.
+`node scripts/test-process-plugin-owner.mjs` separately assembles the native owner
+without private core crates. Parent/descendant cleanup and read-only marker
+inspection tests live with those owners. Plugin reconciliation, SSH/Slurm and
+default scenario composition remain under implementation.

@@ -11,6 +11,7 @@ members = [
   "plugins/process/api",
   "plugins/process/backend/engine",
   "plugins/process/backend/owner",
+  "plugins/process/backend",
   "plugins/r/backend/engine",
   "plugins/r/backend",
   "crates/plugin-sdk",

@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProcessRunRecovery",
+  "type": "object",
+  "properties": {
+    "automatic_reexecution": {
+      "type": "boolean"
+    },
+    "native_termination": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProcessTermination"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "operation": {
+      "type": "string"
+    },
+    "pid": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0
+    },
+    "project_root": {
+      "type": "string"
+    },
+    "report": {
+      "description": "Native report transfer may fail after execution. An empty reference never\nestablishes absence of effects or authorizes another execution.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResourceReference"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "report_digest": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "report_transfer_confirmed": {
+      "type": "boolean"
+    },
+    "stderr": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OutputCapture"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stdout": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OutputCapture"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "operation",
+    "project_root",
+    "report_transfer_confirmed",
+    "automatic_reexecution"
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "OutputCapture": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          }
+        },
+        "eof": {
+          "type": "boolean"
+        },
+        "total_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bytes",
+        "total_bytes",
+        "truncated",
+        "eof"
+      ]
+    },
+    "ProcessTermination": {
+      "type": "string",
+      "enum": [
+        "exited",
+        "cancelled",
+        "timed_out",
+        "uncertain"
+      ]
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "resource",
+        "digest",
+        "media_type",
+        "bytes"
+      ]
+    }
+  }
+}

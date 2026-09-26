@@ -14,6 +14,7 @@ for (const [from, to] of [['plugins/files', '.'], ['plugins/process/api', 'proce
 fs.copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));
 for (const [file, from, to] of [
   ['backend/Cargo.toml', '../../../crates/plugin-sdk', '../public/plugin-sdk'],
+  ['process/api/Cargo.toml', '../../../crates/plugin-protocol', '../../public/plugin-protocol'],
   ['backend/engine/Cargo.toml', '../../../process/backend/engine', '../../process/backend/engine'],
 ]) {
   const location = path.join(output, file), source = fs.readFileSync(location, 'utf8');

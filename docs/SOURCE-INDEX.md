@@ -99,6 +99,7 @@ Sources:
 - `scripts/build-objects-plugin.mjs`
 - `scripts/build-packages-plugin.mjs`
 - `scripts/build-plots-plugin.mjs`
+- `scripts/build-process-plugin.mjs`
 - `scripts/build-r-plugin.mjs`
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
@@ -128,6 +129,8 @@ Sources:
 - `scripts/test-plugin-protocol.mjs`
 - `scripts/test-plugin-ui.mjs`
 - `scripts/test-process-plugin-owner.mjs`
+- `scripts/test-process-plugin.mjs`
+- `scripts/test-process-protocol.mjs`
 - `scripts/test-r-console.mjs`
 - `scripts/test-r-format.mjs`
 - `scripts/test-r-help.mjs`
@@ -194,8 +197,13 @@ Checks:
 - `plugins.packages-browser`: `["npm","run","test:browser","--prefix","ui","--","packages-plugin.spec.ts"]`
 - `plugins.plots`: `["node","scripts/test-plots-plugin.mjs"]`
 - `plugins.plots-browser`: `["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"]`
+- `plugins.process-backend`: `["cargo","test","-p","rho-process-backend","--lib","--locked"]`
 - `plugins.process-independent`: `["node","scripts/test-process-plugin-owner.mjs"]`
+- `plugins.process-manifest`: `["node","plugins/process/generate-manifest.mjs","--check"]`
+- `plugins.process-native`: `["node","scripts/test-process-plugin.mjs"]`
 - `plugins.process-owner`: `["cargo","test","-p","rho-process-owner","--lib","--locked"]`
+- `plugins.process-protocol`: `["node","plugins/process/generate-sdk.mjs","--check"]`
+- `plugins.process-public-types`: `["node","scripts/test-process-protocol.mjs"]`
 - `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
 - `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
 - `plugins.r-console`: `["node","scripts/test-r-console.mjs"]`

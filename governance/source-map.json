@@ -581,6 +581,42 @@
         "--",
         "plugin-drafts.spec.ts"
       ]
+    },
+    "plugins.process-backend": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-process-backend",
+        "--lib",
+        "--locked"
+      ]
+    },
+    "plugins.process-native": {
+      "command": [
+        "node",
+        "scripts/test-process-plugin.mjs"
+      ]
+    },
+    "plugins.process-protocol": {
+      "command": [
+        "node",
+        "plugins/process/generate-sdk.mjs",
+        "--check"
+      ]
+    },
+    "plugins.process-manifest": {
+      "command": [
+        "node",
+        "plugins/process/generate-manifest.mjs",
+        "--check"
+      ]
+    },
+    "plugins.process-public-types": {
+      "command": [
+        "node",
+        "scripts/test-process-protocol.mjs"
+      ]
     }
   },
   "areas": {
@@ -783,7 +819,10 @@
         "crates/host/tests/plugin_optional_requirements.rs",
         "scripts/fixtures/plugin-drafts.mjs",
         "scripts/fixtures/plugin-draft-view.mjs",
-        "ui/e2e/plugin-drafts.spec.ts"
+        "ui/e2e/plugin-drafts.spec.ts",
+        "scripts/build-process-plugin.mjs",
+        "scripts/test-process-plugin.mjs",
+        "scripts/test-process-protocol.mjs"
       ],
       "checks": [
         "docs.index",
@@ -843,7 +882,12 @@
         "plugins.editor-context-manifest",
         "plugins.editor-model",
         "plugins.editor-browser",
-        "plugins.editor-code-browser"
+        "plugins.editor-code-browser",
+        "plugins.process-backend",
+        "plugins.process-native",
+        "plugins.process-protocol",
+        "plugins.process-manifest",
+        "plugins.process-public-types"
       ]
     }
   }
