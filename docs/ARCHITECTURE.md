@@ -65,6 +65,16 @@ Operation records partial native visibility without changing the source outcome
 or replaying its command. Transport loss abandons queued recovery before signalling;
 an already-started bounded native inspection finishes with its real evidence.
 
+Environment data, native pak/renv execution, staged materials and recovery now
+live in `plugins/environment/api` and `backend/owner`, including the R helpers.
+The native library returns possible effects, confirmed cancellation and recovery
+material without committing records. The transitional Host port retains source
+authorization, live-library retention decisions and the core commit mechanism.
+An observation of a realization, stage or cleanup requires the original principal
+throughout its source chain; missing and foreign references remain indistinguishable.
+Reading cached native configuration or material never starts R, loads a namespace
+or performs recovery. Ordinary Environment RPC packaging remains in progress.
+
 The public `workspace.paths@1` query exposes the normalized Host project root and
 bounded protected storage paths under `project.read`. These boundaries come from
 Host composition, including future sidecars and the project lease; plugin
@@ -1461,11 +1471,12 @@ package inspection.
 | `plugins/process/api`, `plugins/process/backend` | Public local process requests/reports and ordinary RPC backend; `engine` supervises execution and `owner` manages canonical launch scope and original-operation native recovery |
 | `plugins/remote/api`, `plugins/remote/backend/owner` | Public remote/Slurm contracts and the sole native SSH/scheduler implementation; caller-owned journal and source authorization remain outside the native library |
 | `plugins/remote/backend` | Ordinary configured Remote RPC provider; scoped original-submission reads, fixed target qualifications, resource evidence and settlement fencing; no independent journal or automatic resubmission |
+| `plugins/environment/api`, `plugins/environment/backend/owner` | Public Environment data and sole native execution, observation, staging and recovery implementation; transitional Host adapter preserves the core operation port |
 | `crates/host` | Concrete composition and runtime configuration |
 | `crates/agent-client` | Bounded native Codex app-server / Kimi and DeepSeek ACP clients; no scientific handlers or Agent behavior loop |
 | `crates/agents` | Optional Rig integration; only Application/contract ports, no scientific owners or native adapter dependencies |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
-| `plugins/r/backend/engine/r/bridge`, `r/environment` | Native R execution, bounded observation and environment helpers |
+| `plugins/r/backend/engine/r/bridge`, `plugins/environment/backend/owner/r` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |
 | `.agents/skills/` | Standard method packages, read by native clients or the shared Skills owner |
 

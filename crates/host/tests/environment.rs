@@ -1,4 +1,7 @@
-use rho_contract::{CapabilityRef, Invocation, OperationStatus, QueryRequest, QueryStatus};
+use rho_contract::{
+    CapabilityRef, Invocation, OperationCommitPhase, OperationCommitStatus, OperationStatus,
+    QueryRequest, QueryStatus, ReconcileOperationCommit,
+};
 use rho_host::{ArkConfig, NextHost, REnvironmentConfig};
 use serde_json::{Value, json};
 use std::{
@@ -274,6 +277,17 @@ async fn real_environment_cancellation_stops_installer_and_retains_staging() {
         other => panic!("{other:?}"),
     };
     assert!(!stage.exists());
+    let pending: OperationCommitStatus = serde_json::from_value(
+        material_view(
+            &host,
+            "operation.commit_status",
+            json!({"operation_id":lost_id}),
+        )
+        .await,
+    )
+    .unwrap();
+    assert_eq!(pending.phase, OperationCommitPhase::Durable);
+    let retained_reference = pending.reference.unwrap();
     fault
         .execute_batch("DROP TRIGGER fail_material_commit;")
         .unwrap();
@@ -294,12 +308,60 @@ async fn real_environment_cancellation_stops_installer_and_retains_staging() {
     )
     .await
     .unwrap();
-    let uncertain_cleanup = host
+    let pending_cleanup = host
         .get_operation(&NextHost::local_context(), &lost_id)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(uncertain_cleanup.status, OperationStatus::Uncertain);
+    assert_eq!(pending_cleanup.status, OperationStatus::Reconciling);
+    let pending: OperationCommitStatus = serde_json::from_value(
+        material_view(
+            &host,
+            "operation.commit_status",
+            json!({"operation_id":lost_id}),
+        )
+        .await,
+    )
+    .unwrap();
+    assert_eq!(pending.phase, OperationCommitPhase::Durable);
+    assert_eq!(pending.reference.as_ref(), Some(&retained_reference));
+    assert!(
+        host.query_snapshot(
+            &NextHost::local_context(),
+            QueryRequest {
+                capability: CapabilityRef::new("environment.cleanup_status", 1).unwrap(),
+                arguments: json!({"cleanup_operation_id":lost_id}),
+            }
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(
+        host.get_operation(&NextHost::local_context(), &lost_id)
+            .await
+            .unwrap()
+            .unwrap(),
+        pending_cleanup
+    );
+    assert!(!stage.exists());
+    // Read-only inspection preserves the pending commit. Explicit reconciliation
+    // commits the retained result without repeating the directory rename.
+    let reconciliation = ReconcileOperationCommit {
+        reference: retained_reference,
+    };
+    let committed_cleanup = host
+        .reconcile_commit(&NextHost::local_context(), &reconciliation)
+        .await
+        .unwrap();
+    assert_eq!(committed_cleanup.status, OperationStatus::Succeeded);
+    assert_eq!(committed_cleanup.operation.operation_id, lost_id);
+    assert_eq!(
+        host.reconcile_commit(&NextHost::local_context(), &reconciliation)
+            .await
+            .unwrap(),
+        committed_cleanup
+    );
+    assert!(!stage.exists());
     let state = material_view(
         &host,
         "environment.cleanup_status",
@@ -321,7 +383,7 @@ async fn real_environment_cancellation_stops_installer_and_retains_staging() {
             .await
             .unwrap()
             .unwrap(),
-        uncertain_cleanup
+        committed_cleanup
     );
     assert_eq!(
         host.get_operation(&NextHost::local_context(), &id)

@@ -1,5 +1,5 @@
 use super::*;
-use rho_environment::InstalledEnvironmentPackage;
+use rho_environment_api::InstalledEnvironmentPackage;
 use std::collections::BTreeMap;
 
 /// The native helper is run only by explicit Host startup or effectful operations.
@@ -19,7 +19,7 @@ pub(super) struct NativeConfiguration {
     source: String,
 }
 
-impl REnvironment {
+impl REnvironmentOwner {
     /// Explicit lifecycle setup, never called by a QueryHandler. Failure is
     /// retained so the query reports why native configuration is unavailable.
     pub async fn initialize_observation(&self) -> Result<(), String> {
@@ -54,7 +54,7 @@ impl REnvironment {
         if native.library_paths.is_empty() || native.library_paths.len() > 128 {
             return Err("Native Environment library configuration exceeds its bounds".into());
         }
-        native.observed_at_ms = SystemClock.now_ms().map_err(display)?;
+        native.observed_at_ms = now_ms().map_err(display)?;
         native.source = operation_id.map_or_else(
             || "explicit_host_startup".into(),
             |id| format!("environment_operation:{id}"),
@@ -200,7 +200,7 @@ fn inventory(
         pak_available: native.pak_available,
         configuration_observed_at_ms: native.observed_at_ms,
         configuration_source: native.source,
-        inventory_observed_at_ms: SystemClock.now_ms().map_err(display)?,
+        inventory_observed_at_ms: now_ms().map_err(display)?,
         active_workspace_library: None,
         notices,
     })

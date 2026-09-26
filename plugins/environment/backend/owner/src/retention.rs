@@ -1,8 +1,9 @@
 use super::{
-    MaterialAction, MaterialChange, MaterialKind, MaterialState, REnvironment, before, display,
+    MaterialAction, MaterialChange, MaterialKind, MaterialState, REnvironmentOwner, before, display,
 };
-use rho_environment::{EnvironmentMaterialRecovery, MaterialObject};
-use rho_operation::HandlerError;
+use crate::EnvironmentOwnerError;
+use rho_environment_api::{EnvironmentMaterialRecovery, MaterialObject};
+use rho_process_owner::recovery as process_recovery;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::{
@@ -14,7 +15,7 @@ use std::{
 fn name(id: &str) -> String {
     format!("{:x}", Sha256::digest(id.as_bytes()))
 }
-impl REnvironment {
+impl REnvironmentOwner {
     fn material_paths(
         &self,
         source: &str,
@@ -60,7 +61,7 @@ impl REnvironment {
             let marker = marker.marker.clone();
             let source = source.to_string();
             tokio::task::spawn_blocking(move || {
-                rho_process::inspect_process_marker_in_session(
+                process_recovery::inspect_process_marker_in_session(
                     &marker,
                     &source,
                     original_session_id,
@@ -96,7 +97,7 @@ impl REnvironment {
         cleanup: &str,
         action: MaterialAction,
         expected: &str,
-    ) -> Result<MaterialChange, HandlerError> {
+    ) -> Result<MaterialChange, EnvironmentOwnerError> {
         let state = self
             .inspect_material(source, kind, Some(cleanup))
             .await
@@ -176,7 +177,7 @@ impl REnvironment {
         .map_err(display)
         .and_then(|result| result);
         result.map_err(|error| {
-            HandlerError::after_possible_effect(
+            EnvironmentOwnerError::after_possible_effect(
                 error,
                 Some(json!(EnvironmentMaterialRecovery::Paths {
                     source_operation_id: source.into(),
@@ -190,7 +191,7 @@ impl REnvironment {
         let (check_stage, check_trash) =
             self.material_paths(source, kind, Some(cleanup))
                 .map_err(|error| {
-                    HandlerError::after_possible_effect(
+                    EnvironmentOwnerError::after_possible_effect(
                         error,
                         Some(json!(EnvironmentMaterialRecovery::Identity {
                             cleanup_operation_id: cleanup.into()
@@ -207,7 +208,7 @@ impl REnvironment {
             MaterialAction::Purge => check_trash.as_ref().is_some_and(|path| !path.exists()),
         };
         if !agrees {
-            return Err(HandlerError::after_possible_effect(
+            return Err(EnvironmentOwnerError::after_possible_effect(
                 "filesystem does not agree with material change",
                 Some(json!(EnvironmentMaterialRecovery::Identity {
                     cleanup_operation_id: cleanup.into()

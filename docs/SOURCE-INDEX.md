@@ -119,6 +119,7 @@ Sources:
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`
 - `scripts/test-editor-plugin.mjs`
+- `scripts/test-environment-plugin-owner.mjs`
 - `scripts/test-files-plugin-engine.mjs`
 - `scripts/test-files-plugin.mjs`
 - `scripts/test-files-protocol.mjs`
@@ -184,6 +185,9 @@ Checks:
 - `plugins.editor-context`: `["cargo","test","-p","rho-editor-backend","--lib","--locked"]`
 - `plugins.editor-context-manifest`: `["node","scripts/generate-editor-context.mjs","--check"]`
 - `plugins.editor-model`: `["node","scripts/test-editor-plugin.mjs"]`
+- `plugins.environment-independent`: `["node","scripts/test-environment-plugin-owner.mjs"]`
+- `plugins.environment-owner`: `["cargo","test","-p","rho-environment-api","-p","rho-environment-owner","--lib","--locked"]`
+- `plugins.environment-visibility`: `["cargo","test","-p","rho-environment","visibility","--locked"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.files-backend`: `["cargo","test","-p","rho-files-backend","--lib","--locked"]`
 - `plugins.files-browser`: `["npm","run","test:browser","--prefix","ui","--","files-plugin.spec.ts"]`

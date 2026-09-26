@@ -133,21 +133,25 @@ impl EnvironmentOwner {
         &self,
         id: &str,
         capability: &str,
-        caller: Option<&CallerIdentity>,
+        caller: &CallerIdentity,
     ) -> Result<Value, HandlerError> {
         let record = self
             .records
             .get(id)
             .await
             .map_err(HandlerError::before_effect)?
-            .ok_or_else(|| HandlerError::before_effect("environment operation was not found"))?;
+            .ok_or_else(|| {
+                HandlerError::before_effect(
+                    "Environment reference is unavailable in this project/caller scope",
+                )
+            })?;
         if record.status != rho_contract::OperationStatus::Succeeded
             || record.operation.capability.id != capability
             || record.operation.idempotency_scope.as_deref() != Some(self.runtime.root())
-            || caller.is_some_and(|caller| record.operation.principal() != caller)
+            || record.operation.principal() != caller
         {
             return Err(HandlerError::before_effect(
-                "environment reference is not a successful operation in this project/caller scope",
+                "Environment reference is unavailable in this project/caller scope",
             ));
         }
         record
@@ -165,7 +169,11 @@ impl EnvironmentOwner {
             .get(id)
             .await
             .map_err(HandlerError::before_effect)?
-            .ok_or_else(|| HandlerError::before_effect("environment operation was not found"))?;
+            .ok_or_else(|| {
+                HandlerError::before_effect(
+                    "Environment reference is unavailable in this project/caller scope",
+                )
+            })?;
         if !record.status.is_terminal()
             || record.operation.principal() != caller
             || record.operation.idempotency_scope.as_deref() != Some(self.runtime.root())
@@ -355,7 +363,7 @@ impl OperationHandler for EnvironmentHandler {
                         .output(
                             &args.plan_operation_id,
                             PLAN_CAPABILITY,
-                            Some(operation.principal()),
+                            operation.principal(),
                         )
                         .await?,
                 )
@@ -383,7 +391,7 @@ impl OperationHandler for EnvironmentHandler {
                         .output(
                             &args.realization_operation_id,
                             REALIZE_CAPABILITY,
-                            Some(operation.principal()),
+                            operation.principal(),
                         )
                         .await?,
                 )
@@ -482,7 +490,16 @@ impl QueryHandler for EnvironmentObserveHandler {
         }
         serde_json::to_value(args).map_err(invalid)
     }
-    async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
+    async fn query(&self, _: &Value) -> Result<QuerySnapshot, OperationError> {
+        Err(OperationError::InvalidInput(
+            "Environment reads require authenticated caller context".into(),
+        ))
+    }
+    async fn query_for(
+        &self,
+        context: &rho_contract::CallContext,
+        value: &Value,
+    ) -> Result<QuerySnapshot, OperationError> {
         let args: ObserveArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
         let mut reply = QuerySnapshot {
             next_reads: Vec::new(),
@@ -515,7 +532,7 @@ impl QueryHandler for EnvironmentObserveHandler {
             ));
             let receipt: EnvironmentRealization = serde_json::from_value(
                 self.owner
-                    .output(id, REALIZE_CAPABILITY, None)
+                    .output(id, REALIZE_CAPABILITY, context.principal())
                     .await
                     .map_err(|e| invalid(e.message))?,
             )
@@ -633,3 +650,6 @@ fn documentation(id: &str) -> rho_contract::CapabilityDocumentation {
 fn invalid(error: impl std::fmt::Display) -> OperationError {
     OperationError::InvalidInput(error.to_string())
 }
+
+#[cfg(test)]
+mod visibility_tests;

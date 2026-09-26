@@ -9,6 +9,8 @@ members = [
   "plugins/files/backend",
   "plugins/editor/backend",
   "plugins/process/api",
+  "plugins/environment/api",
+  "plugins/environment/backend/owner",
   "plugins/remote/api",
   "plugins/remote/backend",
   "plugins/remote/backend/owner",

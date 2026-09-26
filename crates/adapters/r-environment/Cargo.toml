@@ -10,9 +10,5 @@ repository.workspace = true
 async-trait.workspace = true
 rho-environment = { path = "../../environment" }
 rho-operation = { path = "../../operation" }
-rho-process = { path = "../process" }
-serde.workspace = true
-serde_json.workspace = true
-sha2.workspace = true
-tempfile.workspace = true
+rho-environment-owner = { path = "../../../plugins/environment/backend/owner" }
 tokio.workspace = true

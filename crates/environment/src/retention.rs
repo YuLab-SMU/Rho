@@ -19,7 +19,7 @@ impl EnvironmentOwner {
     async fn material_source(
         &self,
         id: &str,
-        caller: Option<&CallerIdentity>,
+        caller: &CallerIdentity,
     ) -> Result<(OperationRecord, MaterialKind), HandlerError> {
         let record = self
             .records
@@ -27,13 +27,15 @@ impl EnvironmentOwner {
             .await
             .map_err(HandlerError::before_effect)?
             .ok_or_else(|| {
-                HandlerError::before_effect("material source Operation was not found")
+                HandlerError::before_effect(
+                    "Environment material reference is unavailable in this project/caller scope",
+                )
             })?;
         if record.operation.idempotency_scope.as_deref() != Some(self.runtime.root())
-            || caller.is_some_and(|caller| caller != record.operation.principal())
+            || caller != record.operation.principal()
         {
             return Err(HandlerError::before_effect(
-                "material source is outside this project/caller scope",
+                "Environment material reference is unavailable in this project/caller scope",
             ));
         }
         let kind = match record.operation.capability.id.as_str() {
@@ -50,24 +52,28 @@ impl EnvironmentOwner {
     async fn cleanup_source(
         &self,
         id: &str,
-        caller: Option<&CallerIdentity>,
+        caller: &CallerIdentity,
     ) -> Result<(OperationRecord, MaterialKind), HandlerError> {
         let record = self
             .records
             .get(id)
             .await
             .map_err(HandlerError::before_effect)?
-            .ok_or_else(|| HandlerError::before_effect("cleanup Operation was not found"))?;
+            .ok_or_else(|| {
+                HandlerError::before_effect(
+                    "Environment material reference is unavailable in this project/caller scope",
+                )
+            })?;
         if record.operation.capability.id != CLEANUP_CAPABILITY
             || !matches!(
                 record.status,
                 OperationStatus::Succeeded | OperationStatus::Uncertain
             )
             || record.operation.idempotency_scope.as_deref() != Some(self.runtime.root())
-            || caller.is_some_and(|caller| caller != record.operation.principal())
+            || caller != record.operation.principal()
         {
             return Err(HandlerError::before_effect(
-                "invalid cleanup reference or scope",
+                "Environment material reference is unavailable in this project/caller scope",
             ));
         }
         let input: CleanupArguments =
@@ -231,7 +237,16 @@ impl QueryHandler for RetentionQuery {
         rho_contract::OperationId::new(id).map_err(invalid)?;
         Ok(value.clone())
     }
-    async fn query(&self, value: &Value) -> Result<QuerySnapshot, OperationError> {
+    async fn query(&self, _: &Value) -> Result<QuerySnapshot, OperationError> {
+        Err(OperationError::InvalidInput(
+            "Environment material reads require authenticated caller context".into(),
+        ))
+    }
+    async fn query_for(
+        &self,
+        context: &rho_contract::CallContext,
+        value: &Value,
+    ) -> Result<QuerySnapshot, OperationError> {
         let mut reply = QuerySnapshot {
             next_reads: Vec::new(),
             diagnostics: Vec::new(),
@@ -254,7 +269,7 @@ impl QueryHandler for RetentionQuery {
             let input: TrashArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
             let (source, kind) = self
                 .owner
-                .cleanup_source(&input.cleanup_operation_id, None)
+                .cleanup_source(&input.cleanup_operation_id, context.principal())
                 .await
                 .map_err(|error| invalid(error.message))?;
             (source, kind, Some(input.cleanup_operation_id))
@@ -262,7 +277,7 @@ impl QueryHandler for RetentionQuery {
             let input: SourceArguments = serde_json::from_value(value.clone()).map_err(invalid)?;
             let (source, kind) = self
                 .owner
-                .material_source(&input.operation_id, None)
+                .material_source(&input.operation_id, context.principal())
                 .await
                 .map_err(|error| invalid(error.message))?;
             (source, kind, None)
@@ -378,7 +393,7 @@ impl OperationHandler for RetentionHandler {
                         .map_err(before)?;
                 let (source, kind) = self
                     .owner
-                    .material_source(&args.operation_id, Some(operation.principal()))
+                    .material_source(&args.operation_id, operation.principal())
                     .await?;
                 (
                     source,
@@ -392,7 +407,7 @@ impl OperationHandler for RetentionHandler {
                         .map_err(before)?;
                 let (source, kind) = self
                     .owner
-                    .cleanup_source(&args.cleanup_operation_id, Some(operation.principal()))
+                    .cleanup_source(&args.cleanup_operation_id, operation.principal())
                     .await?;
                 (
                     source,

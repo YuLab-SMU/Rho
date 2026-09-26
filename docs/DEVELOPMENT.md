@@ -20,6 +20,20 @@ commands to complete instead of polling them with sleep loops.
 
 ## Testing SOP
 
+Environment contracts, native execution and R helpers live in
+`plugins/environment/api` and `plugins/environment/backend/owner`. The retiring
+`rho-r-environment` adapter delegates to this owner. Iterate with
+`cargo test -p rho-environment-api -p rho-environment-owner --lib --locked`.
+`node scripts/test-environment-plugin-owner.mjs` copies six public/plugin crates
+outside the checkout and runs the focused storage/observation tests without R.
+`node scripts/test-environment.mjs` exercises the real R Host bridge, including
+isolated pak/renv realization, cancellation, retention, recovery and restart
+binding. It requires the already installed R, Ark and package prerequisites and
+does not install tools. Ordinary Environment RPC packaging remains in progress.
+`cargo test -p rho-environment visibility --locked` verifies scoped realization,
+retention and cleanup reads through the actual query gateway, including delegated
+principals and denial before native observation.
+
 SSH/Slurm contracts and native execution live in `plugins/remote/api` and
 `plugins/remote/backend/owner`. Iterate with `cargo test -p rho-remote-api -p
 rho-remote-owner --lib --locked`. `node scripts/test-remote-plugin-owner.mjs`

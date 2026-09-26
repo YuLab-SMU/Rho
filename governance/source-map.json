@@ -674,6 +674,34 @@
         "node",
         "scripts/test-remote-plugin-types.mjs"
       ]
+    },
+    "plugins.environment-owner": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-environment-api",
+        "-p",
+        "rho-environment-owner",
+        "--lib",
+        "--locked"
+      ]
+    },
+    "plugins.environment-independent": {
+      "command": [
+        "node",
+        "scripts/test-environment-plugin-owner.mjs"
+      ]
+    },
+    "plugins.environment-visibility": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-environment",
+        "visibility",
+        "--locked"
+      ]
     }
   },
   "areas": {
@@ -884,7 +912,8 @@
         "scripts/fixtures/ssh-slurm.mjs",
         "scripts/build-remote-plugin.mjs",
         "scripts/test-remote-plugin.mjs",
-        "scripts/test-remote-plugin-types.mjs"
+        "scripts/test-remote-plugin-types.mjs",
+        "scripts/test-environment-plugin-owner.mjs"
       ],
       "checks": [
         "docs.index",
@@ -957,7 +986,10 @@
         "plugins.remote-native",
         "plugins.remote-protocol",
         "plugins.remote-manifest",
-        "plugins.remote-public-types"
+        "plugins.remote-public-types",
+        "plugins.environment-owner",
+        "plugins.environment-independent",
+        "plugins.environment-visibility"
       ]
     }
   }

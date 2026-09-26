@@ -247,6 +247,29 @@ the complete registered fixture now passes. No real remote target or user sessio
 was changed. Public/client generation, client build/check and architecture,
 plugin-boundary and documentation checks pass.
 
+Environment contracts and the sole native implementation now live in
+`plugins/environment/api` and `backend/owner`, with their R helpers. The retiring
+Host adapter delegates to those public/plugin sources and translates native
+uncertainty and confirmed cancellation into the core operation port. The helper
+bytes are unchanged; staging, recovery markers and live-library retention remain
+in force. The seven focused API/native cases pass. Realization, retention and
+cleanup queries now require the original principal throughout the source chain;
+the query-gateway regression passes foreign/missing identity equivalence, scope
+denial before native reads, authorized Agent reads and mismatched cleanup/source
+principals. The same seven cases pass from six public/plugin crates assembled
+outside the checkout. Full `node scripts/test-environment.mjs` acceptance passes:
+real pak/renv, installer cancellation, live-library retention, quarantine/restore/
+purge, commit reconciliation, CLI activation and actual disposable Host crash
+recovery, with original outcomes and user libraries preserved. The first run found
+an outdated lost-commit assertion; the fixture now verifies durable pending state,
+read purity and explicit idempotent reconciliation before purge. A second run
+retained material when native process absence could not be established; the
+unchanged complete rerun passed. Those failures remain recorded. Client generation,
+build/check and architecture, package-boundary and documentation checks pass. Ordinary
+Environment RPC packaging is the next integration step; this native directory is
+not yet an installable revision. Existing user Hosts and R sessions were not
+restarted; the relocated Host adapter requires a new binary.
+
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.
 Its nine capabilities expose bounded file/Git observations and explicit patches.
