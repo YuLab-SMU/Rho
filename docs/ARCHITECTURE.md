@@ -56,6 +56,14 @@ is uncertainty, not absence of effects. Native scheduling remains fenced until
 Host settlement of the exact binding; neither returning a candidate result nor
 receiving a cancellation request proves committed completion. Activity queries
 observe this native scheduling only. The backend owns no scientific result database.
+Recovery preflight reads the original terminal Operation through a delegated
+`operation.get` query under the active parent's project/principal scope. It retains
+the source's exact admitted provider binding and native project; a later instance
+of the same plugin may reconcile that source without retargeting it. Native cleanup
+uses fresh same-user lifetime/tag evidence, never a caller-supplied PID. Its own
+Operation records partial native visibility without changing the source outcome
+or replaying its command. Transport loss abandons queued recovery before signalling;
+an already-started bounded native inspection finishes with its real evidence.
 
 The public `workspace.paths@1` query exposes the normalized Host project root and
 bounded protected storage paths under `project.read`. These boundaries come from

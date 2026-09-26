@@ -25,11 +25,15 @@ execution capability returns a resource-backed report; only the Host commits the
 original scientific result. The native execution lane stays held until exact
 settlement. Unconfirmed output transfer retains uncertainty and recovery evidence
 without replay. The package also provides read-only preflight and activity queries.
+Explicit reconciliation obtains the original terminal record through a delegated
+Host query, fixes its original binding and cleans only freshly verified native
+processes retaining that operation tag. It records its own result without changing
+the original outcome; incomplete native visibility stays explicit.
 
 See [BUILD.md](BUILD.md) for independent assembly, public contracts and executable
 acceptance. Focused checks use `cargo test -p rho-process-backend --lib --locked`
 and `cargo test -p rho-process-owner --lib --locked`.
 `node scripts/test-process-plugin-owner.mjs` separately assembles the native owner
 without private core crates. Parent/descendant cleanup and read-only marker
-inspection tests live with those owners. Plugin reconciliation, SSH/Slurm and
-default scenario composition remain under implementation.
+inspection tests live with those owners. SSH/Slurm and default scenario composition
+remain under implementation.

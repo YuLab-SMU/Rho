@@ -1,3 +1,4 @@
+use crate::reconcile;
 use rho_plugin_sdk::{ResourceClient, protocol::*};
 use rho_process_api::*;
 use rho_process_owner::LocalProcessOwner;
@@ -48,6 +49,22 @@ impl Owner {
     }
     fn root(&self) -> &str {
         self.native.root()
+    }
+    pub fn reconciliation_request(&self, call: &PluginCall) -> Result<OperationId, String> {
+        self.native
+            .check_root()
+            .map_err(|error| error.to_string())?;
+        reconcile::request(call, self.root())
+    }
+    pub fn prepare_reconciliation(
+        &self,
+        call: &PluginCall,
+        observation: Value,
+    ) -> Result<Value, String> {
+        self.native
+            .check_root()
+            .map_err(|error| error.to_string())?;
+        reconcile::prepare(call, self.root(), observation)
     }
     fn qualify(&self, call: &PluginCall, running: bool) -> Result<(), String> {
         if !call.scopes.contains("project.read")
@@ -119,17 +136,21 @@ impl Owner {
     }
     pub fn admit(&self, call: &PluginCall) -> Result<(), String> {
         self.qualify(call, true)?;
-        if call.binding.capability.id.as_str() != "process.run_local"
-            || call.binding.capability.version != 2
-            || call.binding.target.as_deref() != Some(self.root())
-            || call.owner_context != json!({"project_root":self.root()})
-            || !(call.preconditions.is_null() || call.preconditions == json!([]))
-        {
-            return Err("Process call differs from its original preflight".into());
+        if call.binding.capability.id.as_str() == reconcile::EXECUTE {
+            reconcile::admitted(call, self.root())?;
+        } else {
+            if call.binding.capability.id.as_str() != "process.run_local"
+                || call.binding.capability.version != 2
+                || call.binding.target.as_deref() != Some(self.root())
+                || call.owner_context != json!({"project_root":self.root()})
+                || !(call.preconditions.is_null() || call.preconditions == json!([]))
+            {
+                return Err("Process call differs from its original preflight".into());
+            }
+            let args: RunLocalArguments = serde_json::from_value(call.arguments.clone())
+                .map_err(|error| error.to_string())?;
+            args.validate()?;
         }
-        let args: RunLocalArguments =
-            serde_json::from_value(call.arguments.clone()).map_err(|error| error.to_string())?;
-        args.validate()?;
         let id = original(call)?;
         let mut entries = self.accepted.lock().unwrap();
         if entries.contains_key(&id) {
@@ -158,28 +179,40 @@ impl Owner {
             Ok(id) => id,
             Err(error) => return failed(error),
         };
+        let reconciling = call.binding.capability.id.as_str() == reconcile::EXECUTE;
         let lane = tokio::select! {
-            biased;
-            _ = cancelled(&mut cancellation) => None,
-            lane = self.lane.clone().lock_owned() => Some(lane),
+                biased;
+                _ = cancelled(&mut cancellation) => None,
+                lane = self.lane.clone().lock_owned() => Some(lane),
         };
         let plan = if lane.is_none() || *cancellation.borrow() {
-            PluginCommitPlan {
-                outcome: PluginOutcome::Cancelled,
-                output: None,
-                error: None,
-                recovery: None,
-                facts: vec![],
-                evidence: vec![],
-                cancellation_confirmed: true,
+            if reconciling {
+                // Core does not offer cancellation for reconciliation. Channel
+                // loss must still release queued work before any native signal,
+                // without waiting forever behind an unconfirmed settlement.
+                failed("Reconciliation did not start before its control channel ended")
+            } else {
+                PluginCommitPlan {
+                    outcome: PluginOutcome::Cancelled,
+                    output: None,
+                    error: None,
+                    recovery: None,
+                    facts: vec![],
+                    evidence: vec![],
+                    cancellation_confirmed: true,
+                }
             }
         } else {
             self.accepted.lock().unwrap().get_mut(&id).unwrap().phase = ProcessPhase::Running;
-            let args = serde_json::from_value::<RunLocalArguments>(call.arguments.clone())
-                .expect("validated admission");
-            match self.native.run(&id, &args, cancellation).await {
-                Ok(report) => self.publish(call, &id, report).await,
-                Err(error) => failed(error.to_string()),
+            if reconciling {
+                self.reconcile(call).await
+            } else {
+                let args = serde_json::from_value::<RunLocalArguments>(call.arguments.clone())
+                    .expect("validated admission");
+                match self.native.run(&id, &args, cancellation).await {
+                    Ok(report) => self.publish(call, &id, report).await,
+                    Err(error) => failed(error.to_string()),
+                }
             }
         };
         let mut entries = self.accepted.lock().unwrap();
@@ -190,6 +223,72 @@ impl Owner {
         // Only Host settlement releases a native scheduling fence. Returning a
         // candidate here never declares that its scientific record was committed.
         plan
+    }
+    async fn reconcile(&self, call: &PluginCall) -> PluginCommitPlan {
+        let source = match reconcile::admitted(call, self.root()) {
+            Ok(qualification) => qualification.source_operation,
+            Err(error) => return failed(error),
+        };
+        if let Err(error) = self.native.check_root() {
+            return failed(error.to_string());
+        }
+        let operation = source.to_string();
+        let result = tokio::task::spawn_blocking(move || {
+            rho_process_owner::recovery::reconcile_tagged(&operation)
+        })
+        .await;
+        let report = match result {
+            Ok(Ok(report))
+                if report.source_operation_id == source.as_str()
+                    && report.no_matching_processes_observed == report.remaining.is_empty() =>
+            {
+                Ok(report)
+            }
+            Ok(Ok(_)) => {
+                Err("Native reconciliation returned inconsistent original evidence".into())
+            }
+            Ok(Err(error)) => Err(error),
+            Err(error) => Err(error.to_string()),
+        };
+        let recovery = || {
+            json!(ProcessReconcileRecovery {
+                source_operation_id: source.to_string(),
+                action: Some("inspect_tagged_processes_without_reexecuting_source".into()),
+            })
+        };
+        match report {
+            Ok(report) => {
+                let finished = report.no_matching_processes_observed;
+                PluginCommitPlan {
+                    outcome: if finished {
+                        PluginOutcome::Succeeded
+                    } else {
+                        PluginOutcome::Uncertain
+                    },
+                    output: Some(json!(report)),
+                    error: (!finished).then(|| {
+                        "Tagged processes remain after bounded native reconciliation".into()
+                    }),
+                    recovery: (!finished).then(recovery),
+                    facts: vec![ProposedFact {
+                        schema: "org.rho.process.reconciliation.v1".into(),
+                        key: call.operation_id.clone().unwrap(),
+                        value: json!(report),
+                    }],
+                    evidence: vec![],
+                    cancellation_confirmed: false,
+                }
+            }
+            Err(error) => PluginCommitPlan {
+                outcome: PluginOutcome::Uncertain,
+                output: None,
+                error: Some(error),
+                recovery: Some(recovery()),
+                facts: vec![],
+                evidence: vec![],
+                cancellation_confirmed: false,
+            },
+        }
     }
     async fn publish(
         &self,

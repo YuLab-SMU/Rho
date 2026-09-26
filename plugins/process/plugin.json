@@ -22,7 +22,17 @@
     }
   },
   "dependencies": {},
-  "requires": [],
+  "requires": [
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    }
+  ],
   "views": [],
   "capabilities": [
     {
@@ -559,6 +569,244 @@
       "cancellation": "request",
       "preflight": {
         "id": "process.prepare_local",
+        "version": 2
+      }
+    },
+    {
+      "capability": {
+        "id": "process.prepare_reconcile",
+        "version": 2
+      },
+      "kind": "query",
+      "title": "Verify original process recovery scope",
+      "description": "Observe native process scheduling or validate a prospective request. Does not start a process, recover work or install software.",
+      "input_schema": {
+        "$defs": {
+          "CapabilityKey": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arguments": true,
+          "capability": {
+            "$ref": "#/$defs/CapabilityKey"
+          },
+          "preconditions": true,
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "capability",
+          "arguments",
+          "preconditions"
+        ],
+        "title": "PluginPreflightRequest",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "arguments": {
+            "operation_id": "original-process"
+          },
+          "capability": {
+            "id": "process.reconcile",
+            "version": 2
+          },
+          "preconditions": null,
+          "target": null
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arguments": true,
+          "owner_context": true,
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "arguments",
+          "owner_context"
+        ],
+        "title": "PluginPreflightResult",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "type": "null"
+      },
+      "required_scopes": [
+        "operation.read",
+        "process.run_local",
+        "project.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "process.reconcile",
+        "version": 2
+      },
+      "kind": "operation",
+      "title": "Reconcile original tagged processes",
+      "description": "Explicitly clean visible same-user processes retaining the verified terminal original operation tag. Recheck native identity before signalling; never replay or change the original outcome. Partial observation is not OS containment or rollback.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "operation_id": {
+            "description": "Original terminal process.run_local Operation, never a caller-supplied PID.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id"
+        ],
+        "title": "ReconcileProcessArguments",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "operation_id": "original-process"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "NativeProcessIdentity": {
+            "properties": {
+              "pid": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "started_at_seconds": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "pid",
+              "started_at_seconds"
+            ],
+            "type": "object"
+          },
+          "ProcessObservationCompleteness": {
+            "description": "Completeness of visible native process evidence, distinct from transport status.",
+            "enum": [
+              "complete",
+              "partial",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "completeness": {
+            "$ref": "#/$defs/ProcessObservationCompleteness"
+          },
+          "no_matching_processes_observed": {
+            "type": "boolean"
+          },
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "observed": {
+            "items": {
+              "$ref": "#/$defs/NativeProcessIdentity"
+            },
+            "type": "array"
+          },
+          "remaining": {
+            "items": {
+              "$ref": "#/$defs/NativeProcessIdentity"
+            },
+            "type": "array"
+          },
+          "signalled": {
+            "items": {
+              "$ref": "#/$defs/NativeProcessIdentity"
+            },
+            "type": "array"
+          },
+          "source_operation_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_operation_id",
+          "observed",
+          "signalled",
+          "remaining",
+          "no_matching_processes_observed",
+          "completeness",
+          "notices"
+        ],
+        "title": "ProcessReconciliation",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_operation_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_operation_id"
+        ],
+        "title": "ProcessReconcileRecovery",
+        "type": "object"
+      },
+      "required_scopes": [
+        "operation.read",
+        "process.run_local",
+        "project.read"
+      ],
+      "effects": [
+        "process.signal"
+      ],
+      "cancellation": "unsupported",
+      "preflight": {
+        "id": "process.prepare_reconcile",
         "version": 2
       }
     }

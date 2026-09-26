@@ -8,10 +8,12 @@ Assemble from the Rho checkout using `node scripts/build-process-plugin.mjs
 The build runs offline and never installs a toolchain or dependencies. Native
 artifacts use `aarch64-apple-darwin` for the current delivery target.
 
-The package contributes `process.run_local@2`, its read-only
-`process.prepare_local@2` preflight and `process.status@1`. Execution requires
-`project.read` and `process.run_local`; status requires `project.read`. No view or
-reverse Host capability grant is needed. The Host supplies the canonical project
+The package contributes `process.run_local@2`, `process.reconcile@2`, their read-only
+`process.prepare_local@2` and `process.prepare_reconcile@2` preflights, and
+`process.status@1`. Execution requires `project.read` and `process.run_local`;
+reconciliation additionally requires `operation.read`. Status requires
+`project.read`. The package declares the read-only `operation.get@1` Host grant
+to verify original recovery scope. It contributes no view. The Host supplies the canonical project
 root separately from the empty user configuration. Preflight does not start a
 process and cannot authorize another target or arbitrary preconditions.
 
@@ -37,6 +39,14 @@ declarations. In the Rho checkout, `node plugins/process/generate-manifest.mjs
 source inventory. `node scripts/test-process-plugin.mjs` exercises the package
 through an already-built Host in a disposable project without recompiling it.
 
-The ordinary plugin's interrupted-instance reconciliation and SSH/Slurm capabilities
-are still under implementation. The shared native recovery owner is present in
-the source; its presence does not register those RPC capabilities.
+Reconciliation reads the original record through its active parent's scoped Host
+query. Only a terminal `process.run_local@2` from the same project and plugin
+identity, with its matching retained admission, can qualify. The original revision
+and instance may differ from the current recovery instance; their exact binding is
+retained. A caller cannot substitute a PID, target or native qualification.
+The bounded native cleanup rechecks same-user process lifetime and the original
+operation tag immediately before signalling. Its report remains a partial
+observation of visible tagged work. Reconciliation creates its own Operation,
+preserves the original outcome and never re-executes the source command. This
+cleanup has no cancellation capability; it finishes its bounded native inspection.
+SSH/Slurm and default scenario composition remain under implementation.

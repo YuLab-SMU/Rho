@@ -220,5 +220,178 @@ fn preflight_scopes_native_target_and_qualifications_are_not_caller_substitutabl
     let manifest = crate::manifest::manifest();
     manifest.validate().unwrap();
     assert!(manifest.views.is_empty());
-    assert!(manifest.requires.is_empty());
+    assert_eq!(manifest.requires.len(), 1);
+    assert_eq!(manifest.requires[0].capability.id.as_str(), "operation.get");
+    assert_eq!(
+        manifest.requires[0].scopes,
+        ["operation.read".into()].into()
+    );
+}
+
+#[test]
+fn native_recovery_child_fixture() {
+    if std::env::var("RHO_PROCESS_RECOVERY_FIXTURE").as_deref() != Ok("1") {
+        return;
+    }
+    println!("RHO_PROCESS_RECOVERY_READY");
+    std::thread::sleep(Duration::from_secs(60));
+}
+
+#[tokio::test]
+async fn disconnected_queued_recovery_does_not_wait_forever_for_an_unconfirmed_settlement() {
+    let (directory, owner, _) = fixture();
+    let first = prepare(
+        &owner,
+        "unsettled-source",
+        json!({"program":"/usr/bin/printf","args":["retained"]}),
+    );
+    owner.admit(&first).unwrap();
+    let (_send, receive) = watch::channel(false);
+    assert_eq!(
+        owner.execute(&first, receive).await.outcome,
+        PluginOutcome::Uncertain
+    );
+    let mut call = query(
+        "process.reconcile",
+        2,
+        json!({"operation_id":"unsettled-source"}),
+    );
+    call.scopes.insert("operation.read".into());
+    call.request = RequestId::new("disconnected-reconcile").unwrap();
+    call.operation_id = Some("reconciliation-never-started".into());
+    call.binding.target = first.binding.target.clone();
+    call.owner_context = json!(crate::reconcile::Qualification {
+        project_root: directory
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .into(),
+        source_operation: OperationId::new("unsettled-source").unwrap(),
+        source_binding: first.binding.clone(),
+    });
+    owner.admit(&call).unwrap();
+    let (disconnect, receive) = watch::channel(false);
+    let execution_owner = owner.clone();
+    let execution_call = call.clone();
+    let task = tokio::spawn(async move { execution_owner.execute(&execution_call, receive).await });
+    tokio::task::yield_now().await;
+    assert!(!task.is_finished());
+    disconnect.send_replace(true);
+    let stopped = tokio::time::timeout(Duration::from_secs(1), task)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stopped.outcome, PluginOutcome::Failed);
+    assert!(!stopped.cancellation_confirmed);
+    assert!(stopped.facts.is_empty() && stopped.output.is_none());
+    owner
+        .settle(&settlement(&call, PluginOutcome::Failed))
+        .unwrap();
+    owner
+        .settle(&settlement(&first, PluginOutcome::Uncertain))
+        .unwrap();
+    assert!(owner.ready_to_release());
+}
+
+#[tokio::test]
+async fn native_reconciliation_preserves_other_work_and_waits_for_original_settlement() {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    async fn child(marker: &str) -> tokio::process::Child {
+        let mut child = tokio::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tests::native_recovery_child_fixture",
+                "--nocapture",
+            ])
+            .env("RHO_PROCESS_RECOVERY_FIXTURE", "1")
+            .env("RHO_OPERATION_ID", marker)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let mut stdout = BufReader::new(child.stdout.take().unwrap()).lines();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let line = stdout
+                    .next_line()
+                    .await
+                    .unwrap()
+                    .expect("native child readiness");
+                if line.contains("RHO_PROCESS_RECOVERY_READY") {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        child
+    }
+    let (directory, owner, _) = fixture();
+    let source = format!(
+        "original-{}",
+        directory.path().file_name().unwrap().to_str().unwrap()
+    );
+    let mut matched = child(&source).await;
+    let mut unrelated = child(&format!("unrelated-{source}")).await;
+    let matched_pid = matched.id().unwrap();
+    let mut call = query("process.reconcile", 2, json!({"operation_id":source}));
+    call.scopes.insert("operation.read".into());
+    call.request = RequestId::new("reconcile-native").unwrap();
+    call.operation_id = Some("new-native-reconciliation".into());
+    call.binding.target = Some(
+        directory
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .into(),
+    );
+    let mut binding = call.binding.clone();
+    binding.capability.id = ContributionId::new("process.run_local").unwrap();
+    binding.provider.instance = PluginInstanceId::new("original-disconnected-instance").unwrap();
+    call.owner_context = json!(crate::reconcile::Qualification {
+        project_root: binding.target.clone().unwrap(),
+        source_operation: OperationId::new(&source).unwrap(),
+        source_binding: binding,
+    });
+    owner.admit(&call).unwrap();
+    let (_send, receive) = watch::channel(false);
+    let plan = owner.execute(&call, receive).await;
+    assert_eq!(plan.outcome, PluginOutcome::Succeeded, "{plan:?}");
+    assert!(!plan.cancellation_confirmed);
+    let report: rho_process_api::ProcessReconciliation =
+        serde_json::from_value(plan.output.unwrap()).unwrap();
+    assert_eq!(report.source_operation_id, source);
+    assert!(
+        report
+            .signalled
+            .iter()
+            .any(|native| native.pid == matched_pid && native.started_at_seconds > 0)
+    );
+    assert!(report.remaining.is_empty());
+    assert_eq!(
+        report.completeness,
+        rho_process_api::ProcessObservationCompleteness::Partial
+    );
+    tokio::time::timeout(Duration::from_secs(5), matched.wait())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(unrelated.try_wait().unwrap().is_none());
+    assert!(!owner.ready_to_release());
+    assert!(
+        owner
+            .settle(&settlement(&call, PluginOutcome::Cancelled))
+            .is_err()
+    );
+    owner
+        .settle(&settlement(&call, PluginOutcome::Succeeded))
+        .unwrap();
+    assert!(owner.ready_to_release());
+    unrelated.kill().await.unwrap();
+    unrelated.wait().await.unwrap();
 }

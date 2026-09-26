@@ -42,8 +42,14 @@ actual process execution, resource evidence, project targeting, original-request
 idempotency, cancellation, settlement and replay after release. Set
 `RHO_PROCESS_PLUGIN_PACKAGE` to reuse an independently built package. The included
 `tests/protocol.py` additionally checks executable RPC failures and settlement
-fencing. This acceptance uses disposable projects and no R runtime. It does not
-establish the still-pending plugin reconciliation or SSH/Slurm behavior.
+fencing, bounded/reordered original-operation reads and EOF cleanup of queued
+recovery. The Host case also exercises tagged-process reconciliation, retained
+original outcomes and source/recovery idempotency. Backend unit checks include
+fresh native cleanup with unrelated work preserved. The Host case then kills only
+its freshly observed disposable backend, verifies original uncertainty, and uses
+a replacement instance to reconcile surviving work without changing or replaying
+the source. These cases use disposable
+projects and no R runtime; they do not establish SSH/Slurm behavior.
 
 Editor context is an ordinary native backend in the Editor package. Use
 `cargo test -p rho-editor-backend --lib --locked` for its bounded search, exact

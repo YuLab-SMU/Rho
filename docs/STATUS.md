@@ -150,32 +150,48 @@ cleans the tagged parent and detached child, unrelated processes survive, and
 repeated original requests do not execute again. All native work used disposable
 fixtures; existing user Hosts and R memory remain untouched.
 
-The ordinary `org.rho.process` package now contributes local execution and preflight
-at version 2, plus bounded native activity at version 1. Its independent assembly
-contains six public/plugin Rust crates and no private Host dependency. Output bytes
-and native cleanup evidence use a digest-verified resource; unconfirmed report
-transfer preserves uncertainty and bounded output evidence without re-execution.
-The native lane remains fenced until original-operation settlement, and release
-refuses unsettled work. Three backend unit cases and an independent public
-TypeScript consumer pass, as do generated declaration/manifest freshness and
-architecture, plugin-boundary and documentation checks. Executable RPC acceptance passes transfer uncertainty,
-false-success settlement refusal, queued cancellation, release and forged-provider
-refusal. Real CLI acceptance passes exact Unicode/NUL output, resource digest,
-target refusal, original-request idempotency, active cancellation and confirmed
-closure, settlement, retained resources and replay after release. Its first run
-failed a test assertion using the wrong operation identity field; the corrected
-fixture passes without backend changes. Independent package construction and
-native acceptance left the previously built Host binary unchanged. The combined
-wire/native wrapper subsequently failed three runs at backend initialization,
-before local-execution test bodies. Sampling its own disposable backend found the
-main thread at `_dyld_start`, before plugin code, with a 96 KiB footprint. These
-initialization timeouts remain failures, separately from the earlier successful
-native run and passing wire checks; the startup deadline was not changed. This evidence
-does not establish plugin-native interrupted-instance reconciliation or SSH/Slurm;
-those capabilities and the remaining scientific composition stay in progress.
-The updated standalone Files/Git closure includes the public plugin protocol with
-its five native/API libraries; all 25 file, owner and process-supervision checks
-pass after the Process API added public resource references.
+The ordinary `org.rho.process` package now contributes local execution and explicit
+reconciliation at version 2, their read-only preflights, and bounded native activity
+at version 1. Its independent assembly contains six public/plugin Rust crates and
+no private Host dependency. Output bytes and native cleanup evidence use a
+verified resource. Unconfirmed report transfer retains uncertainty and bounded
+output evidence without re-execution. The native lane stays held until exact
+original-operation settlement, and release refuses unsettled work.
+
+Reconciliation obtains a visible terminal original through a scoped `operation.get`
+reverse query. It fixes the original project's admitted provider/version/instance
+binding; caller-supplied PIDs or replacement scope cannot qualify. Native cleanup
+rechecks same-user lifetime and original tags before signalling, records partial
+visibility, and leaves the source outcome unchanged. Channel loss ends queued
+recovery before signalling rather than waiting forever for an old settlement;
+already-started bounded native inspection completes with its actual evidence.
+
+The current independent backend suite passes all nine tests, including native
+cleanup preserving unrelated work and queued-recovery disconnect behavior. The
+public TypeScript consumer, generated declaration/manifest checks and architecture,
+plugin-boundary and documentation checks pass. Executable RPC acceptance passes
+transfer uncertainty, false-success settlement refusal, queued cancellation,
+16 bounded original reads, reversed reply correlation, missing-source errors,
+recovery EOF cleanup, release and forged-provider refusal. Current real CLI
+acceptance passes exact Unicode/NUL bytes and resource digests, target refusal,
+idempotency, active cancellation, tagged reconciliation and native closure.
+A further actual backend-crash case passes: the source becomes uncertain, a new
+instance explicitly cleans its surviving tagged process, original uncertainty
+and recovery stay immutable, and repeated source/recovery requests do not execute
+again. Resources remain readable after provider loss and replacement release;
+the preceding normal-release case also passed with this implementation. Independent
+construction and all native runs left the previously built Host bytes unchanged.
+
+The first local-execution fixture used the wrong operation identity field; its
+corrected run passed. Three earlier combined runs failed backend initialization
+before their execution bodies. Sampling the disposable backend found its main
+thread at `_dyld_start`, before plugin code, with a 96 KiB footprint. Those timeouts
+remain recorded failures; later current-package native and replacement acceptance
+passed without changing the startup deadline. This is not a claim that intermittent
+system startup delays have been eliminated. SSH/Slurm and the remaining scientific
+composition stay in progress. The updated standalone Files/Git closure includes
+the public plugin protocol with its five native/API libraries; all 25 file, owner
+and process-supervision checks pass after the Process API added resource references.
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.
 Its nine capabilities expose bounded file/Git observations and explicit patches.

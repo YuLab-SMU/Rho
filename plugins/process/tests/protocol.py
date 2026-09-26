@@ -24,7 +24,8 @@ class Backend:
         try:
             self.send("initialize", "initialize", dict(
                 instance=dict(identity=self.identity, project="project", principal="principal", alias="process",
-                              configuration={}, state="preparing", diagnostic=None), grants=[],
+                              configuration={}, state="preparing", diagnostic=None),
+                grants=[dict(capability=dict(id="operation.get", version=1), scopes=["operation.read"])],
                 environment=dict(project_root=self.root, data_root=self.root),
                 resource_channel=dict(version=1, socket=self.root + "/missing.sock", token="a" * 64)))
             self.read("initialize", "ready")
@@ -56,21 +57,35 @@ class Backend:
             result.extend(chunk)
         return bytes(result)
 
-    def read(self, request, kind):
+    def receive(self):
         size = struct.unpack(">I", self.exact(4))[0]
         assert 0 < size <= 1024 * 1024
         frame = json.loads(self.exact(size))
         self.received += 1
         assert (frame["protocol_version"], frame["connection"], frame["instance"], frame["sequence"]) == (
             1, "wire-connection", self.identity["instance"], self.received), frame
+        return frame
+
+    def read(self, request, kind):
+        frame = self.receive()
         assert frame["request"] == request and frame["body"]["type"] == kind, frame
         return frame["body"].get("data")
 
     def call(self, request, operation=None, arguments=None):
         return dict(request=request, binding=dict(capability=dict(id="process.run_local" if operation else "process.status", version=2 if operation else 1),
                     provider=self.identity, project="project", target=self.root), principal="principal",
-                    scopes=["project.read", "process.run_local"], arguments=arguments or {}, preconditions=None,
+                    scopes=["project.read", "process.run_local", "operation.read"], arguments=arguments or {}, preconditions=None,
                     owner_context=dict(project_root=self.root) if operation else None, operation_id=operation)
+
+    def prepare_reconciliation(self, request, source):
+        call = self.call(request)
+        call["binding"]["capability"] = dict(id="process.prepare_reconcile", version=2)
+        call["arguments"] = dict(capability=dict(id="process.reconcile", version=2), arguments=dict(operation_id=source), target=None, preconditions=None)
+        self.send(request, "query", call)
+        reverse = self.receive()
+        assert reverse["body"]["type"] == "host_call", reverse
+        assert reverse["body"]["data"] == dict(parent_request=request, capability=dict(id="operation.get", version=1), arguments=dict(operation_id=source)), reverse
+        return reverse["request"]
 
     def settle(self, request, call, outcome, expected="settlement_acknowledged"):
         self.send(request, "operation_settled", dict(operation_id=call["operation_id"], binding=call["binding"], outcome=outcome))
@@ -113,8 +128,57 @@ with tempfile.TemporaryDirectory(prefix="rho-proc-wire-", dir="/tmp") as directo
         backend.settle("settle-first", first, "uncertain")
         # Settlement acknowledgement retries must not recreate or re-execute work.
         backend.settle("repeat-settlement", first, "uncertain")
+        pending = [(f"source-{index}", backend.prepare_reconciliation(f"source-{index}", f"original-{index}")) for index in range(16)]
+        overflow = backend.call("source-overflow")
+        overflow["binding"]["capability"] = dict(id="process.prepare_reconcile", version=2)
+        backend.send("source-overflow", "query", overflow)
+        assert backend.read("source-overflow", "error")["code"] == "busy"
+        backend.send("release-observing", "release")
+        assert backend.read("release-observing", "error")["code"] == "busy"
+        # Reverse replies complete only their own parent, even out of order.
+        for parent, reverse in reversed(pending):
+            backend.send(reverse, "error", dict(code="not_visible", message="Original operation is unavailable", recovery=None))
+            assert backend.read(parent, "error")["code"] == "not_visible"
+        reverse = backend.prepare_reconciliation("qualify-source", "original-first")
+        observation = dict(status="ready", completeness="complete", data=dict(record=dict(status="uncertain", operation=dict(
+            operation_id="original-first", idempotency_scope=backend.root, capability=first["binding"]["capability"],
+            normalized_arguments=dict(binding=first["binding"], arguments=first["arguments"]),
+            admission=dict(owner_context=dict(binding=first["binding"], qualification=dict(project_root=backend.root)))))))
+        backend.send(reverse, "host_result", dict(result=observation))
+        prepared = backend.read("qualify-source", "query_result")["data"]
+        assert prepared["owner_context"]["source_operation"] == "original-first"
+        assert prepared["owner_context"]["source_binding"] == first["binding"]
+        assert observation["data"]["record"]["status"] == "uncertain"
         backend.send("release", "release")
         backend.read("release", "released")
+        backend.process.wait(timeout=10)
+        assert backend.process.returncode == 0
+    finally:
+        backend.close()
+    backend = Backend(sys.argv[1], root)
+    try:
+        first = backend.call("held-result", "unsettled-original", dict(program="/usr/bin/printf", args=["retained"]))
+        backend.send("held-result", "invoke", first)
+        assert backend.read("held-result", "commit_plan")["outcome"] == "uncertain"
+        reverse = backend.prepare_reconciliation("prepare-queued-recovery", "unsettled-original")
+        observation = dict(status="ready", completeness="complete", data=dict(record=dict(status="uncertain", operation=dict(
+            operation_id="unsettled-original", idempotency_scope=backend.root, capability=first["binding"]["capability"],
+            normalized_arguments=dict(binding=first["binding"], arguments=first["arguments"]),
+            admission=dict(owner_context=dict(binding=first["binding"], qualification=dict(project_root=backend.root)))))))
+        backend.send(reverse, "host_result", dict(result=observation))
+        prepared = backend.read("prepare-queued-recovery", "query_result")["data"]
+        recovery = backend.call("queued-recovery", "new-recovery", prepared["arguments"])
+        recovery["binding"]["capability"] = dict(id="process.reconcile", version=2)
+        recovery["owner_context"] = prepared["owner_context"]
+        backend.send("queued-recovery", "invoke", recovery)
+        backend.send("unsupported-cancel", "cancel", dict(operation_id="new-recovery"))
+        assert not backend.read("unsupported-cancel", "cancel_acknowledged")["confirmed"]
+        backend.send("queue-state", "query", backend.call("queue-state"))
+        activities = backend.read("queue-state", "query_result")["data"]["activities"]
+        assert next(item for item in activities if item["operation"] == "new-recovery")["phase"] == "waiting"
+        # No settlement can arrive after EOF. Queued recovery must terminate
+        # before native signalling, instead of deadlocking behind the old result.
+        backend.process.stdin.close()
         backend.process.wait(timeout=10)
         assert backend.process.returncode == 0
     finally:
@@ -128,4 +192,4 @@ with tempfile.TemporaryDirectory(prefix="rho-proc-wire-", dir="/tmp") as directo
         assert backend.process.returncode != 0, "Forged provider must disconnect without a result"
     finally:
         backend.close()
-print("Independent Process RPC passed transfer uncertainty, settlement fencing, queued cancellation, release and identity refusal.")
+print("Independent Process RPC passed transfer uncertainty, settlement fencing, queued cancellation, scoped original reads, reverse correlation, recovery disconnect cleanup, release and identity refusal.")
