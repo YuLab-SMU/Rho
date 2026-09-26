@@ -1,20 +1,26 @@
-# Editor source build
+# Build Editor
 
-The document owner is under migration. Its source currently provides resident
-CodeMirror state, byte-preserving text and patches, exact Files observations and
-scoped draft synchronization through the public UI SDK. The contributed runtime
-view and file/R action controller are still being assembled; this directory is
-not yet an installable plugin artifact.
+This ordinary UI-only package uses the included public plugin protocol and UI SDK,
+public Files declarations, locked CodeMirror/diff libraries and its own document
+owner. It opens captured files, preserves local editing state, synchronizes opaque
+drafts and saves through the exact configured Files backend. R execution,
+formatting and document context contributions are still under migration.
 
-Use Node.js with the exact dependency versions in `package.json` and
-`dependencies.lock`. Copy the public UI SDK and protocol sources to
-`public/plugin-ui` and `public/plugin-protocol`, and the public Files declarations
-to `public/files-protocol`. Run the locked TypeScript compiler with
-`--project tsconfig.json`. Compiled modules are emitted under `compiled/`.
-No private Host/client source or scientific database connection is required.
+Use Node.js and the exact dependency versions in `package.json` and
+`dependencies.lock`. Select an existing installed dependency directory with
+`RHO_PLUGIN_NODE_MODULES`, then run `node build.mjs`; alternatively provide the
+same locked dependencies in this package's own `node_modules`. The build checks
+direct and transitive versions, requires missing tools to be supplied explicitly,
+and never installs dependencies.
 
-In the checkout, `node scripts/test-editor-plugin.mjs` copies these sources and
-public declarations to a disposable external directory, verifies existing locked
-dependencies, compiles them and exercises document/read/draft recovery behavior.
-It installs no tools and does not start R. Native file-save, R execution, iframe
-input and visual acceptance remain separate steps once the view is assembled.
+The runtime entry is `dist/index.html`; JavaScript and styles are bundled locally.
+Available dependency licenses/notices are retained in
+`dist/THIRD-PARTY-NOTICES.txt`. `compiled/` contains unbundled modules for owner
+checks and is not a runtime entry point. All first-party sources, public SDKs,
+locked dependency metadata and these instructions belong in exported packages.
+
+In the checkout, `node scripts/build-editor-plugin.mjs /absolute/new/directory`
+assembles the package outside the checkout and selects the existing locked tools.
+`node scripts/test-editor-plugin.mjs` independently compiles and checks its document,
+Files read, original-operation and draft/save controllers. Neither action starts R.
+Native file saves, isolated iframe input and visual acceptance are separate checks.

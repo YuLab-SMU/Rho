@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { checkEditorController } from './fixtures/editor-controller.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'rho-editor-model-'));
 try {
@@ -117,7 +118,13 @@ try {
   const first=await saved;assert.ok(first.content.bytes>512*1024);assert.deepEqual(await normal.owner.read(),body);
   assert.ok(normal.state.readCalls>1);assert.equal(normal.state.saved.at(-1).pending,null);
   assert.ok(Buffer.byteLength(JSON.stringify(normal.state.saved.at(-1)))<32768);
+  const stateWrites=normal.state.saved.length;
   await normal.owner.save(body,{encoding:'test'});assert.equal(normal.state.calls.length,1,'identical capture persists only its reference');
+  assert.equal(normal.state.saved.length,stateWrites,'unchanged acknowledged reference creates no view-state operation');
+  normal.state.document.version++;
+  await assert.rejects(normal.owner.save(body,{encoding:'test'}),/draft version changed/);
+  assert.equal(normal.state.saved.length,stateWrites,'a replaced native version cannot be confirmed from matching local bytes');
+  normal.state.document.version--;
   const changed=new TextEncoder().encode('later edits');await normal.owner.save(changed,{encoding:'test'});assert.equal(normal.state.document.version,2);assert.deepEqual(await normal.owner.read(),changed);
   const frozen=make();let release;frozen.state.settlementGate=new Promise(done=>release=done);
   const a=frozen.owner.save(new TextEncoder().encode('first')),b=frozen.owner.save(new TextEncoder().encode('second'));
@@ -148,5 +155,7 @@ try {
   const stopped=make();let finish;stopped.state.settlementGate=new Promise(done=>finish=done);const inFlight=stopped.owner.save(body);
   while(!stopped.state.records.length)await new Promise(done=>setImmediate(done));stopped.owner.stop();finish();await assert.rejects(inFlight,/closed/);assert.equal(stopped.state.calls.length,1);
   assert.throws(()=>new DraftSync({...normal.client,view:{...normal.client.view,window:'other',state:normal.owner.snapshot}}),/scope/);
+  const {EditorController}=await import(pathToFileURL(path.join(temporary,'compiled/src/controller.js')).href);
+  await checkEditorController({EditorController,make,sdk,applyPatch});
   console.log('Independent Editor text and draft synchronization checks passed: frozen/queued captures, exact reads, original request recovery, failure/uncertain retention, scope/receipt fences and close interruption.');
 } finally {fs.rmSync(temporary,{recursive:true,force:true});}

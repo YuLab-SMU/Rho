@@ -532,6 +532,9 @@
     "plugins.editor-model": {
       "command": ["node", "scripts/test-editor-plugin.mjs"]
     },
+    "plugins.editor-browser": {
+      "command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "editor-plugin.spec.ts"]
+    },
     "plugins.draft-browser": {
       "command": [
         "npm",
@@ -726,6 +729,9 @@
         "scripts/test-files-protocol.mjs",
         "scripts/test-files-ui.mjs",
         "scripts/test-editor-plugin.mjs",
+        "scripts/build-editor-plugin.mjs",
+        "scripts/fixtures/editor-controller.mjs",
+        "ui/e2e/editor-plugin.spec.ts",
         "ui/e2e/files-plugin.spec.ts",
         "crates/host/tests/plugin_self_requirements.rs",
         "scripts/fixtures/plugin-drafts.mjs",
@@ -782,7 +788,8 @@
         "plugins.drafts",
         "plugins.draft-ports",
         "plugins.draft-browser",
-        "plugins.editor-model"
+        "plugins.editor-model",
+        "plugins.editor-browser"
       ]
     }
   }

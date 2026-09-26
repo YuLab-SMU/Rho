@@ -1,0 +1,219 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.editor",
+  "name": "Editor",
+  "version": "0.1.0",
+  "description": "Captured text documents, verified project files and synchronized drafts",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "src/main.ts"
+    ],
+    "lockfiles": [
+      "dependencies.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [
+    {
+      "capability": {
+        "id": "workspace.paths",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.snapshot",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.read_file",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.apply_patch",
+        "version": 1
+      },
+      "scopes": [
+        "project.read",
+        "project.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "documents.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.read",
+        "version": 1
+      },
+      "scopes": [
+        "documents.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.stage",
+        "version": 1
+      },
+      "scopes": [
+        "documents.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.save",
+        "version": 1
+      },
+      "scopes": [
+        "documents.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "editor",
+      "title": "Editor",
+      "entrypoint": "dist/index.html",
+      "state_schema": {
+        "type": "object"
+      },
+      "configuration_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "file"
+        ],
+        "properties": {
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "plugin",
+              "instance",
+              "revision",
+              "artifact"
+            ],
+            "properties": {
+              "plugin": {
+                "type": "string",
+                "minLength": 1
+              },
+              "instance": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "string",
+                "minLength": 1
+              },
+              "artifact": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "path",
+                  "kind",
+                  "sha256",
+                  "byte_size"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "regular"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "byte_size": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "mode": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "modified_at_ns": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "resource_kinds": []
+    }
+  ],
+  "capabilities": [],
+  "contexts": [],
+  "backend": null,
+  "configuration_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "default_configuration": {}
+}

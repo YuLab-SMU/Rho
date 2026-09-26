@@ -120,8 +120,24 @@ page/full-content verification, queued frozen drafts, original-request inspectio
 and retry, copied-view refusal to replay, and failure/uncertain retention. Large
 invalid-UTF-8 files retain a bounded replacement preview. The independently built
 Editor owner currently has no retiring-client import.
-The contributed Editor view, file/R action controller and native/browser acceptance
-remain to be implemented; the directory is not yet an installable plugin package.
+The ordinary Editor now assembles outside the checkout as an installable UI package,
+without changing the Host binary. Its file controller durably captures the native
+save intent before admission, verifies the original receipt, and preserves edits
+made while that save is pending. Close preparation captures outstanding work without
+waiting for native completion. Independent controller checks pass, including native
+conflicts, explicit Save As replacement, idempotent retry and false-receipt refusal.
+Native Chrome acceptance passes (`npm run test:browser --prefix ui -- editor-plugin.spec.ts`):
+real CodeMirror edits, held admission reply during close, restored later edits and
+original-result inspection in a new view, exact BOM/newline file bytes, Unicode
+Save As and a 333,903-byte file whose retained draft exceeds the view-state limit.
+The test observed exactly three native file writes and no R execution. Screenshots
+at 1440, 1920, 390 and 220 pixels, narrow Save As and the restored large file were
+inspected. The initial run failed only its final history query's excessive page
+size; the rerun uses bounded pagination and passes. The first independent build's
+composition-event typing error was corrected before the successful assembly.
+Native input-method acceptance is not established. Files-to-real-Editor navigation,
+dynamic outer tab labels, R actions/formatting/context and default composition remain
+to be completed. The retiring Editor still owns the default workspace experience.
 These draft ports require a newly built Host; no existing user Host was restarted.
 All 20 existing Host plugin, scoped-path, self-grant and shared-port regression
 cases also pass (`cargo test -p rho-host --test plugins --test port_contracts

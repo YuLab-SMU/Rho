@@ -2,7 +2,7 @@
  * state contains references, never an alternative body or file-save receipt. */
 import type { DocumentDraft, DraftSource, JsonValue, SaveDocumentDraft } from '../public/plugin-protocol/index.js';
 import { captureDraftContent, stageDraftContent, readDraft, isDocumentDraft, isDraftContent, MAX_DRAFT_BYTES } from '../public/plugin-ui/index.js';
-import { type Client, type Intent, type RecordReply, inspectOriginal, verifyOriginal, json, same, terminal } from './operations.js';
+import { type Client, type Intent, type RecordReply, inspectOriginal, verifyOriginal, json, same, canonical, terminal } from './operations.js';
 export interface DraftState { schema: 1; draft: DocumentDraft | null; pending: Intent | null; }
 const empty = (): DraftState => ({ schema: 1, draft: null, pending: null });
 const identity = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(value);
@@ -12,10 +12,12 @@ export class DraftSync {
   private stopped = false;
   private transfers = new AbortController();
   private last: RecordReply | null = null;
+  private acknowledged: string;
   readonly source: DraftSource;
   constructor(private readonly client: Client) {
     this.source = Object.freeze({ revision: client.view.instance.revision, contribution: client.view.contribution });
     const saved = client.view.state;
+    this.acknowledged = canonical(saved);
     if (saved !== null && (typeof saved !== 'object' || Array.isArray(saved))) throw new Error('The saved Editor state is invalid.');
     this.state = saved && Object.keys(saved).length ? structuredClone(saved) as unknown as DraftState : empty();
     if (this.state.schema !== 1 || !Object.hasOwn(this.state, 'draft') || !Object.hasOwn(this.state, 'pending') ||
@@ -39,7 +41,11 @@ export class DraftSync {
       this.state.draft !== null && args.draft !== this.state.draft.draft) throw new Error('The retained draft save differs from its original source or version.');
   }
   private live() { if (this.stopped) throw new Error('The Editor draft connection is closed. Accepted work is unchanged.'); }
-  private async persist() { this.live(); await this.client.setState(json(this.state)); this.live(); }
+  private async persist() {
+    this.live(); const encoded = canonical(this.state);
+    if (encoded === this.acknowledged) return;
+    await this.client.setState(json(this.state)); this.live(); this.acknowledged = encoded;
+  }
   private serial<T>(work: () => Promise<T>): Promise<T> {
     const next = this.queue.then(() => { this.live(); return work(); }); this.queue = next.catch(() => undefined); return next;
   }
@@ -62,6 +68,9 @@ export class DraftSync {
       if (previous && same(previous.content, capture.content) && same(previous.metadata, savedMetadata)) {
         // A prior save may have succeeded while its reference acknowledgement
         // was lost. Persist that exact reference again without another save.
+        const observed = await this.client.query<{ status: string; data?: unknown }>({ id: 'documents.inspect', version: 1 },
+          { window: previous.window, draft: previous.draft }); this.live();
+        if (observed.status !== 'ready' || !same(observed.data, previous)) throw new Error('The synchronized draft version changed. This view is retained.');
         await this.persist(); return structuredClone(previous);
       }
       const draft = previous?.draft ?? crypto.randomUUID(), upload = crypto.randomUUID();

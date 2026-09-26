@@ -101,9 +101,17 @@ without early publication, scope escalation or undeclared access.
 `node scripts/test-editor-plugin.mjs` compiles the Editor owner outside the checkout
 using only its locked dependencies, public plugin/UI SDK and Files declarations.
 It checks resident text/undo, bounded exact file reads, queued captured drafts,
-original-request recovery, receipt identity and failure/uncertain retention. This
-source-model check does not establish an installable Editor view, native file saves,
-R execution or iframe input/visual acceptance.
+original-request recovery, receipt identity and failure/uncertain retention, plus
+the native save controller's durable intent, later edits, non-blocking close and
+conflict/explicit replacement behavior. Assemble the ordinary UI package with
+`node scripts/build-editor-plugin.mjs /absolute/new/directory`.
+After building the current client and Host,
+`npm run test:browser --prefix ui -- editor-plugin.spec.ts` uses independently built
+Files and Editor packages in a disposable project; set `RHO_FILES_PLUGIN_PACKAGE`
+and `RHO_EDITOR_PLUGIN_PACKAGE` to reuse exact built packages. It checks native file
+saves, held admission during close, original-result restoration, Unicode Save As,
+larger-than-view-state drafts and responsive CodeMirror presentation. This does
+not establish R execution, native input-method behavior or default composition.
 
 The generic draft storage and public content contracts are checked with
 `cargo test -p rho-plugins -p rho-plugin-protocol --lib draft --locked`. These

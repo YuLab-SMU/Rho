@@ -90,6 +90,7 @@ Sources:
 - `crates/plugins/**`
 - `plugins/**`
 - `scripts/build-console-plugin.mjs`
+- `scripts/build-editor-plugin.mjs`
 - `scripts/build-files-plugin.mjs`
 - `scripts/build-help-plugin.mjs`
 - `scripts/build-objects-plugin.mjs`
@@ -98,6 +99,7 @@ Sources:
 - `scripts/build-r-plugin.mjs`
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
+- `scripts/fixtures/editor-controller.mjs`
 - `scripts/fixtures/plugin-close.mjs`
 - `scripts/fixtures/plugin-download.mjs`
 - `scripts/fixtures/plugin-draft-view.mjs`
@@ -129,6 +131,7 @@ Sources:
 - `scripts/test-viewer-plugin.mjs`
 - `sdk/**`
 - `ui/e2e/console-editor.spec.ts`
+- `ui/e2e/editor-plugin.spec.ts`
 - `ui/e2e/files-plugin.spec.ts`
 - `ui/e2e/fixtures/plugin-download.ts`
 - `ui/e2e/help-plugin.spec.ts`
@@ -157,6 +160,7 @@ Checks:
 - `plugins.draft-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-drafts.spec.ts"]`
 - `plugins.draft-ports`: `["cargo","test","-p","rho-host","--test","plugin_drafts","--locked"]`
 - `plugins.drafts`: `["cargo","test","-p","rho-plugins","-p","rho-plugin-protocol","--lib","draft","--locked"]`
+- `plugins.editor-browser`: `["npm","run","test:browser","--prefix","ui","--","editor-plugin.spec.ts"]`
 - `plugins.editor-model`: `["node","scripts/test-editor-plugin.mjs"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.files-backend`: `["cargo","test","-p","rho-files-backend","--lib","--locked"]`
