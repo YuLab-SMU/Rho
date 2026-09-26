@@ -49,11 +49,16 @@ export async function checkEditorController({EditorController,make,sdk,applyPatc
     return{...f,native,controller,stored,finish,configuration};
   };
   const f=await fixture();assert.equal(f.controller.document.raw,initial);
+  const metadataFor=body=>({encoding:'org.rho.editor.document.v1',path:body.path,name:body.path?.split('/').at(-1)??'Untitled.R',document_version:body.version,selection:{anchor:body.anchor,head:body.head},read_only:body.readonly!==null});
   f.controller.document.update(f.controller.document.state.update({changes:{from:2,to:3,insert:'新'}}));const captured=f.controller.document.raw;
   let accepted;f.native.gate=new Promise(resolve=>accepted=resolve);const save=f.controller.save();await ready(()=>f.native.records.length===1);
+  assert.deepEqual(f.state.document.metadata,metadataFor(f.stored().document),'search metadata belongs to the same synchronized content capture');
+  const capturedVersion=f.state.document.metadata.document_version;
   f.controller.document.update(f.controller.document.state.update({changes:{from:f.controller.document.state.doc.length,insert:'later'}}));const later=f.controller.document.raw;
+  assert.equal(f.state.document.metadata.document_version,capturedVersion,'later typing cannot alter acknowledged context metadata');
   accepted();await save;assert.equal(f.controller.pending.intent.operation,'native-0');assert.equal(f.native.files.get(path),initial);
   await f.controller.pause();assert.equal(f.stored().document.raw,'甲\r\n新\nlater');assert.equal(f.stored().save.raw,captured);
+  assert.deepEqual(f.state.document.metadata,metadataFor(f.stored().document));assert.notEqual(f.state.document.metadata.document_version,capturedVersion);
   f.controller.resume();const draftSaves=f.state.calls.length,stateWrites=f.state.saved.length;
   await f.controller.inspectSave();await f.controller.inspectSave();
   assert.equal(f.state.calls.length,draftSaves,'unchanged native observations do not create draft saves');
@@ -79,8 +84,10 @@ export async function checkEditorController({EditorController,make,sdk,applyPatc
   await assert.rejects(loadDisk.controller.save(),/Finish the disk comparison/);await loadDisk.controller.acceptDisk(true);
   assert.equal(loadDisk.controller.document.raw,diskRaw);assert.equal(loadDisk.controller.document.dirty,false);assert.equal(loadDisk.native.attempts.length,0);
   const fresh=await fixture(true);fresh.controller.document.update(fresh.controller.document.state.update({changes:{from:0,insert:'新 file\n'}}));
+  await fresh.controller.flush();assert.equal(fresh.state.document.metadata.name,'Untitled.R');assert.equal(fresh.state.document.metadata.path,null);
   await assert.rejects(fresh.controller.save(path),/target exists/);assert.equal(fresh.native.attempts.length,0);
   await fresh.controller.save('new.R');assert.equal(fresh.native.attempts[0].args.preconditions[0].expected,null);await fresh.finish();await fresh.controller.inspectSave();assert.equal(fresh.native.files.get('new.R'),'新 file\n');assert.equal(fresh.controller.document.dirty,false);
+  assert.deepEqual(fresh.state.document.metadata,metadataFor(fresh.stored().document));assert.equal(fresh.state.document.metadata.path,'new.R');
   const replace=await fixture(true);replace.controller.document.update(replace.controller.document.state.update({changes:{from:0,insert:'replace\n'}}));
   await replace.controller.save(path,true);assert.equal(replace.native.attempts[0].args.preconditions[0].expected,await hash(initial));await replace.finish();await replace.controller.inspectSave();assert.equal(replace.native.files.get(path),'replace\n');
   const lost=await fixture();lost.controller.document.update(lost.controller.document.state.update({changes:{from:0,insert:'new'}}));lost.native.lost=true;
@@ -103,6 +110,14 @@ export async function checkEditorController({EditorController,make,sdk,applyPatc
   const configured=new EditorController(preferences.client,{...preferences.configuration,preferences:{font_size:16,indent_width:8}});await configured.open();
   assert.deepEqual(configured.preferences,{font_size:18,indent_width:2},'restored document settings take precedence over new-view defaults');
   assert.throws(()=>configured.setPreferences({font_size:13,indent_width:3}),/supported/);assert.deepEqual(configured.document.snapshot,originalBody);
+  const selected=await fixture(),textVersion=selected.controller.document.snapshot.version;
+  selected.controller.document.update(selected.controller.document.state.update({selection:{anchor:0,head:2}}));await selected.controller.flush();
+  const synchronized=clone(selected.state.document);
+  selected.controller.document.update(selected.controller.document.state.update({selection:{anchor:2,head:3}}));
+  assert.deepEqual(selected.state.document.metadata.selection,{anchor:0,head:2},'unsynchronized selection does not rewrite context');
+  await selected.controller.flush();assert.deepEqual(selected.state.document.metadata,metadataFor(selected.stored().document));
+  assert.equal(selected.state.document.metadata.document_version,textVersion,'text identity is distinct from the synchronized draft version');
+  assert.equal(selected.state.document.version,synchronized.version+1);assert.equal(selected.native.attempts.length,0);
   console.log('Editor controller checks passed: durable pre-admission captures, later edits, non-blocking close, original-result reopening, native conflicts, explicit replacement, idempotent retry and false-receipt refusal.');
   return {fixture};
 }

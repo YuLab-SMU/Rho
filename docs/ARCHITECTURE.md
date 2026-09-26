@@ -79,7 +79,7 @@ storage limits are 8 MiB per draft, 32 KiB metadata, and per project/principal
 256 accepted captures awaiting original settlement.
 Exhaustion is an explicit failure that leaves the acknowledged draft intact.
 
-The public `documents.inspect` and `documents.read` queries require
+The public `documents.list`, `documents.inspect` and `documents.read` queries require
 `documents.read`. `documents.stage` is a bounded transient Control;
 `documents.save` and `documents.discard` are caller-scoped Operations under
 `documents.write`. Host derives project/principal and fences view callers to
@@ -91,6 +91,15 @@ including after a Host restart and successor edits. Explicit
 `plugins.reconcile_references` can retry failed retention cleanup using original
 authority. An uncertain outcome without a durable candidate keeps its material;
 current matching text is not evidence of the original save's outcome.
+
+Listing returns at most 20 non-discarded metadata summaries in one explicit window,
+optionally filtered to an exact source revision/contribution. Its exclusive draft
+identity cursor survives discard; each page observes current state, without
+freezing subsequent pages. A content consumer must inspect/read the returned
+version and digest. Enumeration neither reads content nor collects staging leases,
+and does not claim that the renderer's latest input has synchronized. A closing
+view's listing is limited to its own encoding source; listing is not part of an
+inactive instance's persistence exception.
 
 Close-time synchronization uses those same declared draft ports. While a view is
 preparing to close, only staging and saving its own exact revision/contribution's

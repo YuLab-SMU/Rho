@@ -7,6 +7,13 @@ drafts and saves through the exact configured Files backend. Disk comparisons
 retain their exact observed bytes, verify freshness before applying a choice, and
 preserve resident text undo when loading the disk version.
 
+Each synchronized capture publishes compact metadata for `documents.list`: encoding,
+name, path, document text version, selection and a read-only flag. Selection offsets
+use UTF-16 units in normalized Editor text. Metadata and body belong to the same
+save; later unsynchronized input cannot change that observation. Consumers must
+pin the draft version and digest, since a selection can change without changing
+the text version. These labels do not establish current disk state or live input.
+
 R actions are optional. To use them, explicitly select `r.session@1`, `r.execute@2`,
 `r.format@1` and `resources.read@1` in the Editor activation's
 `optional_capabilities`, then configure the view's `runtime` with an exact R

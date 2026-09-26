@@ -9,6 +9,7 @@ use ts_rs::TS;
 pub const MAX_DRAFT_CHUNK_BYTES: u32 = 64 * 1024;
 pub const MAX_DRAFT_BYTES: u32 = 8 * 1024 * 1024;
 pub const MAX_DRAFT_METADATA_BYTES: usize = 32 * 1024;
+pub const MAX_DRAFT_PAGE_SIZE: u16 = 20;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
@@ -118,6 +119,47 @@ impl SaveDocumentDraft {
 pub struct DocumentDraftArguments {
     pub window: WindowId,
     pub draft: DraftId,
+}
+
+/// Enumerate retained, non-discarded drafts in one explicit window. Each page
+/// is a current observation, not an immutable snapshot across subsequent reads.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ListDocumentDrafts {
+    pub window: WindowId,
+    pub source: Option<DraftSource>,
+    /// Exclusive identity cursor, independent of the cursor draft's existence.
+    pub after: Option<DraftId>,
+    #[schemars(range(min = 1, max = 20))]
+    pub limit: u16,
+}
+impl ListDocumentDrafts {
+    pub fn validate(&self) -> Result<(), ProtocolError> {
+        require(
+            (1..=MAX_DRAFT_PAGE_SIZE).contains(&self.limit),
+            "draft page limit must be 1–20",
+        )
+    }
+}
+
+/// Opaque synchronized metadata; content is read separately at this version.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentDraftSummary {
+    pub draft: DraftId,
+    pub source: DraftSource,
+    pub version: u32,
+    pub digest: ContentDigest,
+    pub bytes: u32,
+    pub metadata: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentDraftPage {
+    #[schemars(length(max = 20))]
+    pub drafts: Vec<DocumentDraftSummary>,
+    pub next: Option<DraftId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]

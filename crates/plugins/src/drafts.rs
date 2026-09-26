@@ -84,19 +84,31 @@ fn observed(
         params![project.as_str(), principal.as_str(), window.as_str(), id.as_str()],
         |row| row.get::<_, String>(0)).optional()?;
     value
-        .map(|value| {
-            let record: DocumentDraft = serde_json::from_str(&value)?;
-            ensure(
-                &record.project == project
-                    && &record.principal == principal
-                    && &record.window == window
-                    && &record.draft == id,
-                "draft does not match its stored scope",
-            )?;
-            record.content.validate()?;
-            Ok(record)
-        })
+        .map(|value| decode_record(&value, project, principal, window, id))
         .transpose()
+}
+
+fn decode_record(
+    value: &str,
+    project: &ProjectId,
+    principal: &PrincipalId,
+    window: &WindowId,
+    id: &DraftId,
+) -> Result<DocumentDraft, PluginError> {
+    let record: DocumentDraft = serde_json::from_str(value)?;
+    ensure(
+        &record.project == project
+            && &record.principal == principal
+            && &record.window == window
+            && &record.draft == id,
+        "draft does not match its stored scope",
+    )?;
+    record.content.validate()?;
+    ensure(
+        serde_json::to_vec(&record.metadata)?.len() <= MAX_DRAFT_METADATA_BYTES,
+        "draft metadata exceeds 32 KiB",
+    )?;
+    Ok(record)
 }
 
 fn chunk_bytes(
@@ -438,6 +450,65 @@ impl PluginRepository {
         )
     }
 
+    /// Bounded current metadata in lexical identity order. Discard tombstones
+    /// stay available through inspect but never reappear as discoverable content.
+    /// This observation does not collect expired staging leases or read bytes.
+    pub fn document_drafts(
+        &self,
+        project: &ProjectId,
+        principal: &PrincipalId,
+        args: &ListDocumentDrafts,
+    ) -> Result<DocumentDraftPage, PluginError> {
+        args.validate()?;
+        let mut statement = self.connection.prepare(
+            "SELECT id, document FROM document_drafts
+            WHERE project=?1 AND principal=?2 AND window=?3 AND discarded=0
+            AND (?4 IS NULL OR id>?4)
+            AND (?5 IS NULL OR (json_extract(document,'$.source.revision')=?5
+                AND json_extract(document,'$.source.contribution')=?6))
+            ORDER BY id LIMIT ?7",
+        )?;
+        let rows = statement.query_map(
+            params![
+                project.as_str(),
+                principal.as_str(),
+                args.window.as_str(),
+                args.after.as_ref().map(DraftId::as_str),
+                args.source.as_ref().map(|source| source.revision.as_str()),
+                args.source
+                    .as_ref()
+                    .map(|source| source.contribution.as_str()),
+                u32::from(args.limit) + 1,
+            ],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )?;
+        let mut drafts = Vec::new();
+        for row in rows {
+            let (id, value) = row?;
+            let record =
+                decode_record(&value, project, principal, &args.window, &DraftId::new(id)?)?;
+            ensure(
+                !record.discarded,
+                "draft discard index does not match its record",
+            )?;
+            drafts.push(DocumentDraftSummary {
+                draft: record.draft,
+                source: record.source,
+                version: record.version,
+                digest: record.content.digest,
+                bytes: record.content.bytes,
+                metadata: record.metadata,
+            });
+        }
+        let next = if drafts.len() > usize::from(args.limit) {
+            drafts.pop();
+            drafts.last().map(|draft| draft.draft.clone())
+        } else {
+            None
+        };
+        Ok(DocumentDraftPage { drafts, next })
+    }
+
     /// Publish the complete verified content, metadata, exact source reference
     /// and owner version in one transaction. Native file/runtime state is absent.
     pub fn save_document_draft(
@@ -696,7 +767,7 @@ mod tests {
                 "protocol_version":1,"id":"fixture.draft","name":"Draft fixture","version":"1","description":"Generic draft owner test","license":"MIT",
                 "source":{"files":["index.html"],"lockfiles":["dependencies.lock"],"build_instructions":"BUILD.md","build":null},
                 "dependencies":{},"requires":[],"capabilities":[],"contexts":[],"backend":null,
-                "views":[{"id":"editor","title":"Editor","entrypoint":"dist/index.html","state_schema":{"type":"object"},"configuration_schema":{"type":"object"},"resource_kinds":[]}],
+                "views":[{"id":"editor","title":"Editor","entrypoint":"dist/index.html","state_schema":{"type":"object"},"configuration_schema":{"type":"object"},"resource_kinds":[]},{"id":"notes","title":"Notes","entrypoint":"dist/index.html","state_schema":{"type":"object"},"configuration_schema":{"type":"object"},"resource_kinds":[]}],
                 "configuration_schema":{"type":"object"},"default_configuration":{}
             })).unwrap()).unwrap();
             let archive = crate::snapshot_directory(&package, None, "ui-web").unwrap();
@@ -809,6 +880,140 @@ mod tests {
                 .query_row("SELECT COUNT(*) FROM draft_chunks", [], |row| row.get(0))
                 .unwrap()
         }
+    }
+
+    #[test]
+    fn draft_listing_is_scoped_bounded_and_current_without_collecting_leases() {
+        let mut f = Fixture::new();
+        let mut saved = Vec::new();
+        for id in ["b", "d", "a", "c"] {
+            let mut args = f.stage(id, id, id.as_bytes(), 100);
+            if id == "c" {
+                args.source.contribution = ContributionId::new("notes").unwrap();
+            }
+            saved.push(f.save(args));
+        }
+        f.stage("staged-only", "unaccepted", b"not published", 0);
+        let chunk_count = f.chunk_count();
+        let mut args = ListDocumentDrafts {
+            window: WindowId::new("window").unwrap(),
+            source: None,
+            after: None,
+            limit: 2,
+        };
+        let page = f
+            .repo
+            .document_drafts(&f.project, &f.principal, &args)
+            .unwrap();
+        assert_eq!(
+            page.drafts
+                .iter()
+                .map(|draft| draft.draft.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        assert_eq!(page.next.as_ref().unwrap().as_str(), "b");
+        assert_eq!(page.drafts[0].digest, content_digest(b"a"));
+        assert_eq!(page.drafts[0].bytes, 1);
+        assert_eq!(page.drafts[0].metadata, saved[2].metadata);
+        assert_eq!(
+            f.chunk_count(),
+            chunk_count,
+            "listing does not collect or read staged bytes"
+        );
+
+        f.discard(&saved[0]).unwrap(); // Cursor identity remains valid after discard.
+        let mut changed = f.stage("d", "successor", b"new content", 100);
+        changed.expected_version = Some(1);
+        let successor = f.save(changed);
+        args.after = page.next;
+        let second = f
+            .repo
+            .document_drafts(&f.project, &f.principal, &args)
+            .unwrap();
+        assert_eq!(
+            second
+                .drafts
+                .iter()
+                .map(|draft| draft.draft.as_str())
+                .collect::<Vec<_>>(),
+            ["c", "d"]
+        );
+        assert_eq!(second.next, None);
+        assert_eq!(second.drafts[1].version, successor.version);
+        assert_eq!(second.drafts[1].digest, successor.content.digest);
+        assert!(matches!(
+            f.read(&saved[1], 0, 100),
+            Err(PluginError::Conflict)
+        ));
+
+        args.after = None;
+        args.source = Some(f.source.clone());
+        let own = f
+            .repo
+            .document_drafts(&f.project, &f.principal, &args)
+            .unwrap();
+        assert_eq!(
+            own.drafts
+                .iter()
+                .map(|draft| draft.draft.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "d"]
+        );
+        assert_eq!(own.next, None);
+        args.source.as_mut().unwrap().revision =
+            RevisionId::new(content_digest(b"another revision").to_string()).unwrap();
+        assert!(
+            f.repo
+                .document_drafts(&f.project, &f.principal, &args)
+                .unwrap()
+                .drafts
+                .is_empty()
+        );
+        args.source = None;
+        for (project, principal, window) in [
+            (
+                ProjectId::new("other").unwrap(),
+                f.principal.clone(),
+                args.window.clone(),
+            ),
+            (
+                f.project.clone(),
+                PrincipalId::new("other").unwrap(),
+                args.window.clone(),
+            ),
+            (
+                f.project.clone(),
+                f.principal.clone(),
+                WindowId::new("other").unwrap(),
+            ),
+        ] {
+            let mut scoped = args.clone();
+            scoped.window = window;
+            assert!(
+                f.repo
+                    .document_drafts(&project, &principal, &scoped)
+                    .unwrap()
+                    .drafts
+                    .is_empty()
+            );
+        }
+        for limit in [0, MAX_DRAFT_PAGE_SIZE + 1, u16::MAX] {
+            args.limit = limit;
+            assert!(
+                f.repo
+                    .document_drafts(&f.project, &f.principal, &args)
+                    .is_err()
+            );
+        }
+        args.limit = MAX_DRAFT_PAGE_SIZE;
+        args.after = Some(DraftId::new("never-published").unwrap());
+        let end = f
+            .repo
+            .document_drafts(&f.project, &f.principal, &args)
+            .unwrap();
+        assert!(end.drafts.is_empty());
+        assert_eq!(end.next, None);
     }
 
     #[test]

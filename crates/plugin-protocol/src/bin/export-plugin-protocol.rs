@@ -56,6 +56,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     StageDraftChunk::export_all(&types)?;
     SaveDocumentDraft::export_all(&types)?;
     DocumentDraftArguments::export_all(&types)?;
+    ListDocumentDrafts::export_all(&types)?;
+    DocumentDraftPage::export_all(&types)?;
     ReadDocumentDraft::export_all(&types)?;
     DocumentDraftChunk::export_all(&types)?;
     DiscardDocumentDraft::export_all(&types)?;
@@ -72,11 +74,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("view-message", schemars::schema_for!(PluginViewMessage)),
         ("view-close", schemars::schema_for!(ClosePluginView)),
         ("window-layout", schemars::schema_for!(PluginWindowLayout)),
-        ("window-open-view", schemars::schema_for!(OpenPluginWindowView)),
+        (
+            "window-open-view",
+            schemars::schema_for!(OpenPluginWindowView),
+        ),
         ("document-draft", schemars::schema_for!(DocumentDraft)),
-        ("save-document-draft", schemars::schema_for!(SaveDocumentDraft)),
-        ("resource-transfer-request", schemars::schema_for!(ResourceTransferRequest)),
-        ("resource-transfer-response", schemars::schema_for!(ResourceTransferResponse)),
+        (
+            "list-document-drafts",
+            schemars::schema_for!(ListDocumentDrafts),
+        ),
+        (
+            "document-draft-page",
+            schemars::schema_for!(DocumentDraftPage),
+        ),
+        (
+            "save-document-draft",
+            schemars::schema_for!(SaveDocumentDraft),
+        ),
+        (
+            "resource-transfer-request",
+            schemars::schema_for!(ResourceTransferRequest),
+        ),
+        (
+            "resource-transfer-response",
+            schemars::schema_for!(ResourceTransferResponse),
+        ),
         ("scenario", schemars::schema_for!(ScenarioRevision)),
         ("visual-document", schemars::schema_for!(VisualDocument)),
     ] {

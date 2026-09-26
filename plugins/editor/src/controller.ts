@@ -121,8 +121,11 @@ export class EditorController {
     this.initial = current; await this.open(); this.editable(); await this.flush();
   }); }
   flush(): Promise<void> {
-    this.live(); const capture = bytes(JSON.stringify(this.payload()));
-    return this.drafts.save(capture, { encoding: 'org.rho.editor.document.v1' }).then(() => { this.synchronizationError = ''; })
+    this.live(); const payload = this.payload(), capture = bytes(JSON.stringify(payload));
+    const metadata = { encoding: 'org.rho.editor.document.v1', path: payload.document.path,
+      name: payload.document.path?.split('/').at(-1) ?? 'Untitled.R', document_version: payload.document.version,
+      selection: { anchor: payload.document.anchor, head: payload.document.head }, read_only: payload.document.readonly !== null };
+    return this.drafts.save(capture, metadata).then(() => { this.synchronizationError = ''; })
       .catch(error => { this.synchronizationError = message(error); throw error; }).finally(() => this.notify());
   }
   async inspectDraft() {

@@ -16,7 +16,7 @@ fn package(path: &Path) -> PluginArchive {
     ] {
         fs::write(path.join(name), contents).unwrap();
     }
-    let requirements = ["documents.inspect", "documents.read", "documents.stage", "documents.save", "documents.discard"].map(|id| json!({"capability":{"id":id,"version":1},"scopes":[if matches!(id,"documents.inspect"|"documents.read") {"documents.read"}else{"documents.write"}]}));
+    let requirements = ["documents.list", "documents.inspect", "documents.read", "documents.stage", "documents.save", "documents.discard"].map(|id| json!({"capability":{"id":id,"version":1},"scopes":[if matches!(id,"documents.list"|"documents.inspect"|"documents.read") {"documents.read"}else{"documents.write"}]}));
     fs::write(path.join("plugin.json"), serde_json::to_vec(&json!({
         "protocol_version":1,"id":"example.drafts","name":"Draft fixture","version":"1","description":"Independent generic draft view","license":"MIT",
         "source":{"files":["index.html"],"lockfiles":["deps.lock"],"build_instructions":"BUILD.md","build":null},
@@ -125,6 +125,125 @@ async fn stage(host: &NextHost, context: &CallContext, upload: &str, bytes: &[u8
 fn succeeded(record: OperationRecord) -> OperationRecord {
     assert_eq!(record.status, OperationStatus::Succeeded, "{record:?}");
     record
+}
+
+#[tokio::test]
+async fn draft_listing_uses_public_scopes_and_never_publishes_or_recovers_content() {
+    let fixture = Fixture::new();
+    let host = NextHost::open_project(&fixture.db, &fixture.root)
+        .await
+        .unwrap();
+    let context = NextHost::local_context();
+    let args = json!({"window":"window-a","source":null,"after":null,"limit":1});
+    let empty = json!({"drafts":[],"next":null});
+    assert_eq!(
+        query(&host, &context, "documents.list", args.clone())
+            .await
+            .unwrap(),
+        empty
+    );
+    let content = stage(&host, &context, "capture", b"retained document").await;
+    assert_eq!(
+        query(&host, &context, "documents.list", args.clone())
+            .await
+            .unwrap(),
+        empty
+    );
+    succeeded(
+        host.invoke(
+            &context,
+            invoke(
+                "save",
+                "documents.save",
+                fixture.save("capture", None, content.clone()),
+            ),
+        )
+        .await
+        .unwrap(),
+    );
+    let page = query(&host, &context, "documents.list", args.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        page["drafts"],
+        json!([{"draft":"draft-a","source":{"revision":fixture.archive.revision.id,"contribution":"document"},"version":1,"digest":content["digest"],"bytes":content["bytes"],"metadata":{"name":"研究.R","encoding":"opaque-test"}}])
+    );
+    assert_eq!(page["next"], Value::Null);
+    let mut weak = context.clone();
+    weak.scopes.remove("documents.read");
+    assert!(
+        query(&host, &weak, "documents.list", args.clone())
+            .await
+            .is_err()
+    );
+    let mut foreign = context.clone();
+    foreign.caller.id = "another-user".into();
+    assert_eq!(
+        query(&host, &foreign, "documents.list", args.clone())
+            .await
+            .unwrap(),
+        empty
+    );
+    for field in ["principal", "project"] {
+        let mut spoofed = args.clone();
+        spoofed[field] = json!("local");
+        assert!(
+            query(&host, &context, "documents.list", spoofed)
+                .await
+                .is_err()
+        );
+    }
+    let mut another = args.clone();
+    another["window"] = json!("window-b");
+    assert_eq!(
+        query(&host, &context, "documents.list", another)
+            .await
+            .unwrap(),
+        empty
+    );
+    for limit in [0, 21, 65536] {
+        let mut invalid = args.clone();
+        invalid["limit"] = json!(limit);
+        assert!(
+            query(&host, &context, "documents.list", invalid)
+                .await
+                .is_err()
+        );
+    }
+    let journal = rusqlite::Connection::open(&fixture.db).unwrap();
+    assert_eq!(
+        journal
+            .query_row("SELECT COUNT(*) FROM operations", [], |row| row
+                .get::<_, u32>(0))
+            .unwrap(),
+        1
+    );
+    succeeded(
+        host.invoke(
+            &context,
+            invoke("discard", "documents.discard", fixture.discard(1)),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(
+        query(&host, &context, "documents.list", args)
+            .await
+            .unwrap(),
+        empty
+    );
+    assert_eq!(
+        query(
+            &host,
+            &context,
+            "documents.inspect",
+            json!({"window":"window-a","draft":"draft-a"})
+        )
+        .await
+        .unwrap()["discarded"],
+        true
+    );
+    host.drain().await;
 }
 
 #[tokio::test]
@@ -763,12 +882,22 @@ async fn declared_view_draft_calls_use_exact_parent_scope_and_original_window() 
         .await
         .unwrap();
     let accepted: OperationRecord = serde_json::from_value(result).unwrap();
-    host.drain().await;
     let original = succeeded(
-        host.get_operation(&context, &accepted.operation.operation_id)
-            .await
-            .unwrap()
-            .unwrap(),
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let record = host
+                    .get_operation(&context, &accepted.operation.operation_id)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                if record.status.is_terminal() {
+                    break record;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap(),
     );
     assert_eq!(original.operation.caller.id, view.as_str().unwrap());
     assert_eq!(original.operation.principal(), context.principal());
@@ -783,6 +912,42 @@ async fn declared_view_draft_calls_use_exact_parent_scope_and_original_window() 
         .unwrap(),
         original.output.unwrap()
     );
+    let list_args = json!({"window":"window-a","source":null,"after":null,"limit":20});
+    let listed = host
+        .dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.call_token,
+            message(7, "query", "documents.list", list_args.clone()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(listed["data"]["drafts"][0]["draft"], "draft-a");
+    let mut another = list_args.clone();
+    another["window"] = json!("window-b");
+    assert!(
+        host.dispatch_plugin_view(
+            &context,
+            "window-a",
+            &connection.call_token,
+            message(8, "query", "documents.list", another)
+        )
+        .await
+        .is_err()
+    );
+    let mut weak = context.clone();
+    weak.scopes.remove("documents.read");
+    assert!(
+        host.dispatch_plugin_view(
+            &weak,
+            "window-a",
+            &connection.call_token,
+            message(9, "query", "documents.list", list_args)
+        )
+        .await
+        .is_err()
+    );
+    host.drain().await;
 }
 
 struct DraftChannel {
@@ -902,6 +1067,90 @@ async fn close_flush_uses_only_declared_own_draft_ports_while_draining_and_fence
         json!(foreign.revision.id),
         "normal active declared authority can inspect another encoding"
     );
+    let listing = json!({"type":"query","capability":{"id":"documents.list","version":1},"arguments":{"window":"window-a","source":null,"after":null,"limit":20}});
+    assert_eq!(
+        channel
+            .send(&host, &context, listing.clone())
+            .await
+            .unwrap()["data"]["drafts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    channel
+        .send(
+            &host,
+            &context,
+            json!({"type":"register_close_handler","renderer":"first"}),
+        )
+        .await
+        .unwrap();
+    let first_close: OperationRecord = serde_json::from_value(
+        host.dispatch(
+            &context,
+            HostRequest::Invoke(InvokeRequest {
+                invocation: invoke("close-for-listing", "views.close", json!({"view":view})),
+                return_after_acceptance: Some(true),
+            }),
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let lifecycle = channel
+                .send(
+                    &host,
+                    &context,
+                    json!({"type":"observe_lifecycle","renderer":"first"}),
+                )
+                .await
+                .unwrap();
+            if lifecycle["close"]["phase"] == "requested" {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let own = channel
+        .send(&host, &context, listing.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        own["data"]["drafts"].as_array().unwrap().len(),
+        1,
+        "closing views cannot enumerate another encoding"
+    );
+    assert_eq!(own["data"]["drafts"][0]["draft"], "draft-a");
+    let mut foreign_listing = listing;
+    foreign_listing["arguments"]["source"] = foreign_args["source"].clone();
+    assert!(
+        channel
+            .send(&host, &context, foreign_listing)
+            .await
+            .is_err()
+    );
+    channel.send(&host, &context, json!({"type":"refuse_close","renderer":"first","operation":first_close.operation.operation_id,"reason":"Keep this fixture open for the draining check"})).await.unwrap();
+    let refused = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let record = host
+                .get_operation(&context, &first_close.operation.operation_id)
+                .await
+                .unwrap()
+                .unwrap();
+            if record.status.is_terminal() {
+                break record;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(refused.status, OperationStatus::Failed);
     let release = host
         .invoke(
             &context,
@@ -926,6 +1175,7 @@ async fn close_flush_uses_only_declared_own_draft_ports_while_draining_and_fence
         "draining"
     );
     assert!(channel.send(&host,&context,json!({"type":"query","capability":{"id":"documents.inspect","version":1},"arguments":{"window":"window-a","draft":"foreign-draft"}})).await.is_err(),"draining-view persistence is limited to its original encoding");
+    assert!(channel.send(&host,&context,json!({"type":"query","capability":{"id":"documents.list","version":1},"arguments":{"window":"window-a","source":null,"after":null,"limit":20}})).await.is_err(),"draft listing cannot extend inactive-instance persistence grants");
     assert!(channel.send(&host,&context,json!({"type":"invoke","capability":{"id":"documents.discard","version":1},"arguments":fixture.discard(1),"request_id":"no-discard","preconditions":[]})).await.is_err(),"release does not reopen general action authority");
     for renderer in ["first", "second"] {
         channel

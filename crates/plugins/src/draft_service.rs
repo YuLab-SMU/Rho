@@ -70,7 +70,7 @@ pub(crate) fn register(
     service: &Arc<PluginService>,
     registry: &mut CapabilityRegistry,
 ) -> Result<(), OperationError> {
-    for id in ["documents.inspect", "documents.read"] {
+    for id in ["documents.list", "documents.inspect", "documents.read"] {
         registry.register_query(Arc::new(Read {
             service: service.clone(),
             descriptor: descriptor(id),
@@ -91,12 +91,22 @@ pub(crate) fn register(
 }
 
 fn descriptor(id: &str) -> host::CapabilityDescriptor {
-    let scope = if matches!(id, "documents.inspect" | "documents.read") {
+    let scope = if matches!(
+        id,
+        "documents.list" | "documents.inspect" | "documents.read"
+    ) {
         DOCUMENTS_READ_SCOPE
     } else {
         DOCUMENTS_WRITE_SCOPE
     };
     let (kind, input, output, summary, example) = match id {
+        "documents.list" => (
+            host::CapabilityKind::Query,
+            schema_for!(ListDocumentDrafts).to_value(),
+            schema_for!(DocumentDraftPage).to_value(),
+            "List bounded synchronized draft metadata in one window",
+            json!({"window":"window-example","source":null,"after":null,"limit":20}),
+        ),
         "documents.inspect" => (
             host::CapabilityKind::Query,
             schema_for!(DocumentDraftArguments).to_value(),
@@ -150,6 +160,7 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
                 "A draft version is current synchronized content, not a file-save receipt, immutable execution capture, scientific result or runtime checkpoint. Reads never start providers, create drafts or collect bytes.".into(),
                 "Unaccepted chunks expire after ten minutes; accepted captures remain protected until original settlement. Discard leaves a tombstone and cannot erase a pending save. An uncertain original outcome retains recovery material.".into(),
                 "Save/discard checks the exact document version and source inside the publication transaction; an absent version creates only an unused draft identity.".into(),
+                "Listing excludes discarded drafts and returns at most 20 metadata summaries in lexical identity order. Its exclusive cursor is not a snapshot: subsequent pages can observe later changes. Inspect/read verifies an exact version before using content. Listing does not extend close-time or inactive-instance persistence grants.".into(),
             ],
             effects: match kind {
                 host::CapabilityKind::Query => "Bounded read of retained metadata or exact current bytes.",
@@ -160,7 +171,7 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             cancellation_rule: "Disconnect or timeout cannot undo a save, discard content or confirm cancellation.".into(),
             preconditions: vec![],
             examples: vec![host::CapabilityExample { arguments: example, result_explanation: "Scoped native draft metadata or bytes, distinct from the original Operation's authoritative outcome.".into() }],
-            related_capabilities: vec![key("documents.inspect"), key("documents.read"), key("documents.save"), key("operation.get"), key("operation.commit_status")],
+            related_capabilities: vec![key("documents.list"), key("documents.inspect"), key("documents.read"), key("documents.save"), key("operation.get"), key("operation.commit_status")],
             related_skills: vec![],
             position_units: vec!["Offsets, limits and lengths are bytes. Chunks/read pages are at most 64 KiB, complete content at most 8 MiB, and metadata at most 32 KiB.".into()],
         },
@@ -177,10 +188,14 @@ impl QueryHandler for Read {
         &self.descriptor
     }
     fn normalize_arguments(&self, value: &Value) -> Result<Value, OperationError> {
-        if self.descriptor.capability.id == "documents.inspect" {
-            normalize::<DocumentDraftArguments>(value)
-        } else {
-            normalize::<ReadDocumentDraft>(value)
+        match self.descriptor.capability.id.as_str() {
+            "documents.list" => {
+                let args: ListDocumentDrafts = decode(value)?;
+                args.validate().map_err(invalid)?;
+                serde_json::to_value(args).map_err(invalid)
+            }
+            "documents.inspect" => normalize::<DocumentDraftArguments>(value),
+            _ => normalize::<ReadDocumentDraft>(value),
         }
     }
     async fn query(&self, _: &Value) -> Result<host::QuerySnapshot, OperationError> {
@@ -192,7 +207,33 @@ impl QueryHandler for Read {
         value: &Value,
     ) -> Result<host::QuerySnapshot, OperationError> {
         let principal = plugin_principal_id(context.principal());
-        let (window, draft, data) = if self.descriptor.capability.id == "documents.inspect" {
+        let (target, data) = if self.descriptor.capability.id == "documents.list" {
+            let mut args: ListDocumentDrafts = decode(value)?;
+            if let Some(source) = self
+                .service
+                .draft_view_source(context, &args.window, false)?
+            {
+                check_source(Some(&source), args.source.as_ref())?;
+                args.source = Some(source);
+            }
+            let data = self
+                .service
+                .repository
+                .lock()
+                .unwrap()
+                .document_drafts(&self.service.project, &principal, &args)
+                .map_err(fault)?;
+            (
+                host::TargetRef {
+                    kind: "document_drafts".into(),
+                    identity: content_digest(
+                        format!("{}:{principal}:{}", self.service.project, args.window).as_bytes(),
+                    )
+                    .to_string(),
+                },
+                json!(data),
+            )
+        } else if self.descriptor.capability.id == "documents.inspect" {
             let args: DocumentDraftArguments = decode(value)?;
             let source = self
                 .service
@@ -205,7 +246,10 @@ impl QueryHandler for Read {
                 .document_draft(&self.service.project, &principal, &args)
                 .map_err(fault)?;
             check_source(source.as_ref(), data.as_ref().map(|draft| &draft.source))?;
-            (args.window, args.draft, json!(data))
+            (
+                target(&self.service, &principal, &args.window, &args.draft),
+                json!(data),
+            )
         } else {
             let args: ReadDocumentDraft = decode(value)?;
             let source = self
@@ -235,10 +279,13 @@ impl QueryHandler for Read {
                 .unwrap()
                 .read_document_draft(&self.service.project, &principal, args.clone())
                 .map_err(fault)?;
-            (args.window, args.draft, json!(data))
+            (
+                target(&self.service, &principal, &args.window, &args.draft),
+                json!(data),
+            )
         };
         Ok(host::QuerySnapshot {
-            target: target(&self.service, &principal, &window, &draft),
+            target,
             source: "documents/retained-draft".into(),
             observed_at_ms: SystemClock.now_ms()?,
             status: host::QueryStatus::Ready,

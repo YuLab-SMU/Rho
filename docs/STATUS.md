@@ -82,8 +82,25 @@ settings retained with the draft. Independent checks preserve text, selection,
 document version and native file state. Both native browser cases pass, including
 actual font size, two-space indentation, undo and restoration after close. The
 settings dialog and larger-font Editor were inspected at all four widths, as were
-the affected narrow R controls. Shared defaults, document context and default composition remain within
-the continuing Editor migration.
+the affected narrow R controls. Shared defaults, document context and default
+composition remain within the continuing Editor migration.
+
+The generic `documents.list@1` query now returns bounded synchronized metadata
+for one explicit window, with exact source filtering and an exclusive identity
+cursor. It excludes discarded drafts, preserves caller/window fences and does not
+read content, collect staging leases or start providers. Each page observes current
+state; content consumers must verify the returned version and digest. The 12 focused
+draft/protocol cases pass, including changes between pages and continuation after
+discard. Generated public types, independent TypeScript consumption and client
+build and generated-content checks pass. All 11 Host draft/shared-port cases pass
+(`cargo test -p rho-host --test plugin_drafts --test port_contracts --locked`),
+including closing-source restrictions and refusal of listing after instance drain.
+Editor publishes names, paths, text versions, selections and read-only flags with
+the same synchronized capture. Its independent controller checks and outside-checkout
+package build pass, including later typing, selection-only changes and save-result updates.
+This prepares context discovery; Editor search/preview contributions are not yet
+registered. The added core query requires a newly built Host. Existing user Hosts
+and R sessions have not been restarted.
 
 The ordinary Objects, Packages, Help and Plots views are assembled. Packages-to-Help
 and pinned Plots comparisons now pass native acceptance in the generic window;

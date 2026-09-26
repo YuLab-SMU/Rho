@@ -146,11 +146,15 @@ restart user sessions or establish native input-method acceptance.
 
 The generic draft storage and public content contracts are checked with
 `cargo test -p rho-plugins -p rho-plugin-protocol --lib draft --locked`. These
-checks cover storage, captured/accepted chunk leases, version fences and source
+checks cover storage, bounded draft enumeration, captured/accepted chunk leases, version fences and source
 references. `cargo test -p rho-host --test plugin_drafts --locked` exercises the
-shared Host draft ports: scoped bounded reads/staging, compare-and-swap saves,
+shared Host draft ports: scoped bounded listing/reads/staging, compare-and-swap saves,
 discard fences, exact view grants, original replay, failed journal writes,
 cleanup failure and original commit recovery after restart and successor edits.
+Listing checks cover exclusive pagination after discard, exact source filters,
+current metadata after edits, window and caller fences, and no implicit publication
+or lease collection. A list is not a snapshot across pages or a claim about edits
+that have not reached synchronized storage.
 `node scripts/test-plugin-ui.mjs` builds the public UI SDK outside the checkout and
 checks frozen captures, verified staging/read transfers, malformed content,
 acknowledgement identity, interruptions and view cooperation. The Host draft target

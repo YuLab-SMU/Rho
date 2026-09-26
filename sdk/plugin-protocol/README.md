@@ -226,10 +226,22 @@ Regenerate these artifacts from the repository with `npm run generate --prefix u
 ## Document draft content
 
 `DocumentDraft`, `StageDraftChunk`, `SaveDocumentDraft`, `ReadDocumentDraft` and
-`DiscardDocumentDraft` describe generic synchronized bytes. This contract and the
-repository storage are being connected to Host ports and the UI SDK; their types
-alone do not establish an available draft capability or an implemented Editor.
-Draft metadata is opaque, and a version is not evidence of a file save or run.
+`DiscardDocumentDraft` describe generic synchronized bytes exposed by the shared
+`documents.inspect/read/stage/save/discard` Host ports. The UI SDK stages and
+verifies this content without interpreting it. Draft metadata is opaque, and a
+version is not evidence of a file save or run.
+
+`documents.list@1` accepts `ListDocumentDrafts` and returns `DocumentDraftPage`.
+It enumerates at most 20 non-discarded summaries in an explicit window under the
+authenticated project and principal. An optional exact source filter selects the
+encoding revision and contribution. A summary includes identity, version, digest,
+byte count and bounded metadata; content and its chunk map are read separately.
+The exclusive identity cursor remains valid after that identity is discarded.
+Each page observes current state, so callers must inspect and read at the returned
+version; enumeration does not freeze all pages or attest to unsynchronized edits.
+Plugin views retain their original-window fence and current parent scopes. A
+closing view is restricted to its own source; listing is not a persistence
+exception for inactive instances. Reads never start providers or collect leases.
 
 An upload identifies one captured save attempt. Its chunks are canonical 64 KiB
 byte slices, except for the last slice, with per-chunk and full-content SHA-256.
