@@ -98,6 +98,13 @@ navigation. The Editor is a routing fixture, not document-editing acceptance.
 combined packages can declare exact self-capability grants before first activation
 without early publication, scope escalation or undeclared access.
 
+The generic draft storage and public content contracts are checked with
+`cargo test -p rho-plugins -p rho-plugin-protocol --lib draft --locked`. These
+checks cover storage, captured/accepted chunk leases, version fences and source references; they do
+not establish the Host draft ports, SDK close-time persistence or Editor UI.
+After contract changes, regenerate with `npm run generate --prefix ui` and run
+`node scripts/test-plugin-protocol.mjs` for an independent TypeScript consumer.
+
 When one cross-boundary check needs several packages, prefer one Cargo invocation
 with multiple `-p` selections and the required target selectors when possible.
 Cargo [unifies their dependency features](https://doc.rust-lang.org/cargo/reference/resolver.html#feature-unification),

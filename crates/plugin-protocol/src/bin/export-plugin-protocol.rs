@@ -52,6 +52,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     UpdatePluginWindowLayout::export_all(&types)?;
     OpenPluginWindowView::export_all(&types)?;
     OpenedPluginWindowView::export_all(&types)?;
+    DocumentDraft::export_all(&types)?;
+    StageDraftChunk::export_all(&types)?;
+    SaveDocumentDraft::export_all(&types)?;
+    DocumentDraftArguments::export_all(&types)?;
+    ReadDocumentDraft::export_all(&types)?;
+    DocumentDraftChunk::export_all(&types)?;
+    DiscardDocumentDraft::export_all(&types)?;
     RpcFrame::export_all(&types)?;
     ScenarioRevision::export_all(&types)?;
     WindowScenario::export_all(&types)?;
@@ -66,6 +73,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("view-close", schemars::schema_for!(ClosePluginView)),
         ("window-layout", schemars::schema_for!(PluginWindowLayout)),
         ("window-open-view", schemars::schema_for!(OpenPluginWindowView)),
+        ("document-draft", schemars::schema_for!(DocumentDraft)),
+        ("save-document-draft", schemars::schema_for!(SaveDocumentDraft)),
         ("resource-transfer-request", schemars::schema_for!(ResourceTransferRequest)),
         ("resource-transfer-response", schemars::schema_for!(ResourceTransferResponse)),
         ("scenario", schemars::schema_for!(ScenarioRevision)),

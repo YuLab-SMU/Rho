@@ -504,6 +504,19 @@
         "plugin_self_requirements",
         "--locked"
       ]
+    },
+    "plugins.drafts": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-plugins",
+        "-p",
+        "rho-plugin-protocol",
+        "--lib",
+        "draft",
+        "--locked"
+      ]
     }
   },
   "areas": {
@@ -736,7 +749,8 @@
         "plugins.files-public-types",
         "plugins.files-ui",
         "plugins.files-browser",
-        "plugins.self-requirements"
+        "plugins.self-requirements",
+        "plugins.drafts"
       ]
     }
   }

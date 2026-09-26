@@ -72,6 +72,22 @@ browser TypeScript check was unavailable because Node type definitions are absen
 the standard browser runner executed successfully. The fixed Files/Editor
 composition is not yet replaced. A newly built Host is required for the added
 query and self-capability grants; existing user sessions have not been restarted.
+All 18 Host plugin/shared-port regression cases also pass after the combined-package
+grant change (`cargo test -p rho-host --test plugins --test port_contracts --locked`).
+
+Editor migration now has a generic draft contract and repository owner, separate
+from the 256 KiB view-state record. It verifies bounded chunks and complete content,
+uses document-specific versions, preserves concurrent upload leases and protects
+the exact source revision. Core-only retention hooks keep accepted captures until
+original settlement, including across repository reopening and successor edits.
+Discard refuses pending settlement; explicit completed discard leaves a tombstone
+to fence delayed saves. All 34 affected protocol, plugin-owner and package-repository
+cases pass, including 11 draft-specific cases (`cargo test -p rho-plugins -p
+rho-plugin-protocol --lib --test package_repository --locked`). Generated public
+declarations compile in an independent strict TypeScript consumer; client build
+and generated-type/embedded-asset checks pass. Host capability registration, actual Operation admission/settlement
+wiring, SDK close-time flushing and the ordinary Editor UI remain to be implemented;
+storage tests do not establish those integrations. No user Host was restarted.
 
 The Host regression exposed a lease-release case reproducible with the pre-change
 ownership source: a duplicated descriptor kept the project locked after its last

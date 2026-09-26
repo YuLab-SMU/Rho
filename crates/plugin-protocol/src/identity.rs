@@ -123,6 +123,7 @@ identity!(ArtifactId, digest);
 identity!(ScenarioRevisionId, digest);
 identity!(PluginInstanceId, opaque);
 identity!(ViewInstanceId, opaque);
+identity!(DraftId, opaque);
 identity!(ConnectionId, opaque);
 identity!(RequestId, opaque);
 identity!(ProjectId, opaque);

@@ -14,6 +14,7 @@ mod resource_channel;
 mod views;
 mod view_close;
 mod window_layout;
+mod drafts;
 pub use views::PluginViewAsset;
 mod service;
 mod service_handlers;

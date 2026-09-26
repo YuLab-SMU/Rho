@@ -55,6 +55,30 @@ as a requirement and reads it through an active parent's delegated authority.
 Initialization wire fields remain unchanged. These paths are containment metadata
 for trusted native code, not OS sandbox permissions.
 
+Generic document drafts store opaque bytes and metadata separately from the
+256 KiB view presentation record. Project, principal, window and the exact source
+revision/contribution scope each draft. Saving checks the expected document
+version, verifies every 64 KiB chunk and the assembled digest, and commits content,
+metadata and the source revision reference together. Each captured save has its
+own staging lease; publishing one capture cannot consume another capture's bytes.
+Core admission can pin the original upload's bytes and source revision until the
+Operation owner establishes settlement. Those leases survive expiry, reopening
+and successor saves; they record retention rather than another execution result.
+Pending settlement also prevents explicit discard. Unaccepted, unreferenced staged
+bytes expire after ten minutes; ordinary reads do not collect or create state.
+A current draft protects its source revision independently of
+the view and backend lifetime. Explicit discard releases its content/reference
+but retains an identity tombstone so delayed writes cannot recreate it.
+
+These versions describe synchronized current drafts, not historical document
+captures, saved files or scientific execution. Reading a changed version fails;
+it never substitutes newer content. Content encoding, editable size, file paths,
+saved-base hashes, selection and execution bindings remain with the plugin. The
+storage limits are 8 MiB per draft, 32 KiB metadata, and per project/principal
+128 MiB of chunks, 256 live drafts, 4096 identities, 8192 staging references and
+256 accepted captures awaiting original settlement.
+Exhaustion is an explicit failure that leaves the acknowledged draft intact.
+
 The R domain contracts now live in `plugins/r/api`; the native Ark/R implementation
 and its R bridge live in `plugins/r/backend/engine`. They depend only on public
 plugin contracts and third-party libraries, not Host or Operation implementation.

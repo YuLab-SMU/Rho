@@ -212,6 +212,23 @@ storage. History is not a rollback mechanism for scientific effects or R memory.
 
 Regenerate these artifacts from the repository with `npm run generate --prefix ui`.
 
+## Document draft content
+
+`DocumentDraft`, `StageDraftChunk`, `SaveDocumentDraft`, `ReadDocumentDraft` and
+`DiscardDocumentDraft` describe generic synchronized bytes. This contract and the
+repository storage are being connected to Host ports and the UI SDK; their types
+alone do not establish an available draft capability or an implemented Editor.
+Draft metadata is opaque, and a version is not evidence of a file save or run.
+
+An upload identifies one captured save attempt. Its chunks are canonical 64 KiB
+byte slices, except for the last slice, with per-chunk and full-content SHA-256.
+Staging is bounded and expires when unreferenced; only an atomic save publishes
+the new content and expected document version. A draft retains its exact source
+revision and contribution independently of a live view. Reads require the current
+version, return bounded base64 bytes and preserve Unicode by avoiding character
+offsets. A changed version fails instead of following the latest text. Discard
+retains an identity tombstone but releases content and the revision reference.
+
 Public types are emitted as `.d.ts` declarations with ESM `.js` specifiers. They
 contain no runtime implementation and do not force a consumer to widen its
 TypeScript source root. The external conformance check pins a separate `rootDir`.

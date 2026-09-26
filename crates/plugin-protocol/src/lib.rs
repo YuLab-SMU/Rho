@@ -14,6 +14,8 @@ mod view;
 pub use view::*;
 mod window;
 pub use window::*;
+mod draft;
+pub use draft::*;
 
 pub use identity::*;
 pub use manifest::*;
