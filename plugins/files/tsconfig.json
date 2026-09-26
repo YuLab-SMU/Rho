@@ -1,17 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "lib": [
       "ES2022",
       "DOM"
     ],
+    "rootDir": ".",
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "verbatimModuleSyntax": true,
-    "rootDir": "..",
+    "noEmitOnError": true,
     "skipLibCheck": true,
     "jsx": "react-jsx",
     "noEmit": true

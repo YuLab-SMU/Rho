@@ -47,4 +47,29 @@ recovery and historical replay after release/removal/restart. No R, existing use
 project or running Host is used. Manifest generation is checked with
 `node plugins/files/generate-manifest.mjs --check`.
 
-The Files view, Editor navigation and default scenario delivery remain in progress.
+The same package contributes a Files view through the public UI SDK. Its directory
+and bounded search model lives in `src/files.ts`; the retiring UI delegates to this
+model while default composition migrates. The view binds to its own exact backend,
+keeps the protocol project ID distinct from the normalized native root, preserves
+cached entries on failed reads, and serializes acknowledged presentation state.
+Closing captures that state without releasing the backend. Slow read-only refreshes
+observe external file changes without coupling to a particular scientific runtime.
+Manually loaded continuation pages stay cached until explicit refresh; polling
+does not collapse them or expire an explicit search.
+
+View configuration optionally names an exact Editor instance and destination tab
+group (`editor` and `editor_group`). Missing Editor configuration disables opening
+and creation. An explicit open captures the regular file's native hash/size before
+reading layout, then persists the original request before `windows.open_view`.
+The Editor receives `{ source: InstanceRef, file: FileObservation | null }`; `null`
+means a new draft, not a filesystem creation. It must read the selected file using
+the captured SHA. Lost acknowledgements retain the original navigation identity;
+copying a view's state cannot replay its old request from a new caller.
+The complete ordinary Editor and default scenario remain in progress.
+
+`node scripts/test-files-ui.mjs` compiles and tests the independent model,
+connection and actions. After building the current client and Host, run
+`RHO_FILES_PLUGIN_PACKAGE=/absolute/built/package npm run test:browser --prefix ui -- files-plugin.spec.ts`.
+It uses native Files in a disposable project and the actual generic window; the
+Editor destination is explicitly a route fixture, not a document editor. Synthetic
+composition events establish close guards, not native input-method acceptance.

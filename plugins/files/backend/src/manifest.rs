@@ -7,6 +7,12 @@ use serde_json::{Value, json};
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct Empty {}
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct FilesViewConfiguration {
+    editor: Option<InstanceRef>,
+    editor_group: Option<String>,
+}
 fn capability(id: &str, input: Value, output: Value, example: Value) -> CapabilityContribution {
     let operation = id == "files.apply_patch";
     let mut required_scopes = [PROJECT_READ_SCOPE.into()].into();
@@ -102,22 +108,46 @@ pub fn manifest() -> PluginManifest {
                 PackagePath::new("build.mjs").unwrap(),
             ]
             .into(),
-            lockfiles: [PackagePath::new("Cargo.lock").unwrap()].into(),
+            lockfiles: [
+                PackagePath::new("Cargo.lock").unwrap(),
+                PackagePath::new("dependencies.lock").unwrap(),
+            ]
+            .into(),
             build_instructions: PackagePath::new("BUILD.md").unwrap(),
             build: Some(BuildRecipe {
                 command: vec!["node".into(), "build.mjs".into()],
             }),
         },
         dependencies: Default::default(),
-        requires: vec![CapabilityRequirement {
+        requires: [
+            ("workspace.paths", vec![PROJECT_READ_SCOPE]),
+            ("files.list_directory", vec![PROJECT_READ_SCOPE]),
+            ("files.search_files", vec![PROJECT_READ_SCOPE]),
+            ("files.storage_status", vec![PROJECT_READ_SCOPE]),
+            ("files.snapshot", vec![PROJECT_READ_SCOPE]),
+            ("windows.layout", vec!["plugins.run"]),
+            ("windows.open_view", vec!["plugins.run", "project.read"]),
+            ("operation.get", vec!["operation.read"]),
+            ("operation.list_recent", vec!["operation.read"]),
+        ]
+        .into_iter()
+        .map(|(id, scopes)| CapabilityRequirement {
             capability: CapabilityKey {
-                id: ContributionId::new("workspace.paths").unwrap(),
+                id: ContributionId::new(id).unwrap(),
                 version: 1,
             },
-            scopes: [PROJECT_READ_SCOPE.into()].into(),
-        }],
+            scopes: scopes.into_iter().map(String::from).collect(),
+        })
+        .collect(),
         capabilities,
-        views: vec![],
+        views: vec![ViewContribution {
+            id: ContributionId::new("files").unwrap(),
+            title: "Files".into(),
+            entrypoint: PackagePath::new("dist/ui/index.html").unwrap(),
+            state_schema: json!({"type":"object","properties":{"files":{"type":"object"},"actions":{"type":["object","null"]}},"additionalProperties":false}),
+            configuration_schema: schema_for!(FilesViewConfiguration).to_value(),
+            resource_kinds: Default::default(),
+        }],
         contexts: vec![],
         backend: Some(BackendEntrypoint {
             executable: PackagePath::new("dist/rho-files-backend").unwrap(),

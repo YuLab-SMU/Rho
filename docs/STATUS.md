@@ -1,6 +1,6 @@
 # Rho: current state and focus
 
-Updated: 2026-09-24. This is the single current status summary. Git retains history.
+Updated: 2026-09-26. This is the single current status summary. Git retains history.
 
 ## Unified plugin refactor — active implementation
 
@@ -49,8 +49,29 @@ exact revisions with separately owned facts. Generated Files capability schemas
 match their public types. All 19 Host lifecycle/shared-port/path regression cases
 pass (`cargo test -p rho-host --test plugins --test port_contracts --test
 plugin_workspace_paths --locked`). Transient Control diagnostics remain redacted.
-The fixed Files/Editor composition is not yet replaced. A newly built Host is
-required for the added query; existing user sessions have not been restarted.
+The same Files package now includes its public-SDK view, built outside the checkout
+without changing the Host binary. The directory/search model has one owner in the
+package; the retiring UI delegates to it. The view binds its own exact backend,
+preserves cached continuation pages during background refresh and serializes its
+presentation state. Opening captures a native file identity and retains the
+original navigation request before invoking the exact configured Editor instance.
+Missing Editor configuration disables navigation; a new draft does not create a
+file. Exact self-capability requirements can be granted before first activation,
+without publishing capabilities before readiness or expanding caller scopes.
+The focused Host self-grant case passes, as do 26 independent Files UI cases,
+the 506-case client suite, the later nine-case retiring Files model check, client
+build and generated/assets check. Native Chrome acceptance now passes in the
+generic window: directory/search, explicit buttons and Enter inside the sandbox,
+synthetic composition guards, exact navigation, close capture/reopening and an
+external file change. Screenshots at 1440, 1920, 390 and 220 pixels were inspected.
+The initial browser failure exposed blocked form submission; explicit events fixed
+it without relaxing the iframe sandbox. The Editor destination in this acceptance
+is a routing fixture, not an implemented document editor. Native input-method
+acceptance is not established by synthetic composition events. An optional ad-hoc
+browser TypeScript check was unavailable because Node type definitions are absent;
+the standard browser runner executed successfully. The fixed Files/Editor
+composition is not yet replaced. A newly built Host is required for the added
+query and self-capability grants; existing user sessions have not been restarted.
 
 The Host regression exposed a lease-release case reproducible with the pre-change
 ownership source: a duplicated descriptor kept the project locked after its last

@@ -8,7 +8,7 @@ assert.ok(process.argv[2], 'Specify a new directory outside the checkout');
 const output = path.join(fs.realpathSync(path.dirname(path.resolve(process.argv[2]))), path.basename(process.argv[2]));
 assert.ok(output !== root && !output.startsWith(root + path.sep), 'Use a standalone directory');
 fs.mkdirSync(output);
-for (const [from, to] of [['plugins/files', '.'], ['plugins/process/api', 'process/api'], ['plugins/process/backend/engine', 'process/backend/engine'], ['crates/plugin-protocol', 'public/plugin-protocol'], ['crates/plugin-sdk', 'public/plugin-sdk']]) {
+for (const [from, to] of [['plugins/files', '.'], ['plugins/process/api', 'process/api'], ['plugins/process/backend/engine', 'process/backend/engine'], ['crates/plugin-protocol', 'public/plugin-protocol'], ['crates/plugin-sdk', 'public/plugin-sdk'], ['sdk/plugin-ui', 'public/plugin-ui'], ['sdk/plugin-protocol', 'public/plugin-protocol']]) {
   fs.cpSync(path.join(root, from), path.join(output, to), { recursive: true, filter: file => !/[\\/](?:target|dist|node_modules)(?:[\\/]|$)/.test(file) });
 }
 fs.copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));
@@ -23,7 +23,7 @@ for (const [file, from, to] of [
 fs.writeFileSync(path.join(output, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["api", "backend", "backend/engine", "backend/owner", "process/api", "process/backend/engine", "public/plugin-protocol", "public/plugin-sdk"]\n');
 fs.copyFileSync(path.join(root, 'Cargo.lock'), path.join(output, 'Cargo.lock'));
 const installed = name => fs.realpathSync(execFileSync('rustup', ['which', name], { cwd: root, encoding: 'utf8' }).trim());
-const env = { ...process.env, RHO_PLUGIN_CARGO: installed('cargo'), RUSTC: installed('rustc'), RUSTDOC: installed('rustdoc'), CARGO_BUILD_JOBS: '1', CARGO_TARGET_DIR: path.join(root, 'target') };
+const env = { ...process.env, RHO_PLUGIN_CARGO: installed('cargo'), RUSTC: installed('rustc'), RUSTDOC: installed('rustdoc'), RHO_PLUGIN_NODE_MODULES: path.join(root, 'ui/node_modules'), CARGO_BUILD_JOBS: '1', CARGO_TARGET_DIR: path.join(root, 'target') };
 const target = execFileSync(env.RUSTC, ['-vV'], { encoding: 'utf8' }).match(/^host: (.+)$/m)?.[1];
 assert.ok(target, 'Installed compiler did not identify its target');
 const metadata = JSON.parse(execFileSync(env.RHO_PLUGIN_CARGO, ['metadata', '--offline', '--filter-platform', target, '--format-version', '1'], { cwd: output, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }));

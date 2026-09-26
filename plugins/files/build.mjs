@@ -8,6 +8,7 @@ assert.ok(fs.existsSync(path.join(root, 'Cargo.toml')), 'Assemble a standalone F
 execFileSync(process.env.RHO_PLUGIN_CARGO ?? 'cargo', ['build', '--locked', '--offline', '-p', 'rho-files-backend', '--bins'], { cwd: root, stdio: 'inherit' });
 const target = process.env.CARGO_TARGET_DIR ? path.resolve(root, process.env.CARGO_TARGET_DIR) : path.join(root, 'target');
 execFileSync(path.join(target, 'debug/export-files-manifest'), [path.join(root, 'plugin.json')], { cwd: root, stdio: 'inherit' });
+execFileSync(process.execPath, [path.join(root, 'build-ui.mjs')], { cwd: root, stdio: 'inherit' });
 const walk = directory => fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
   assert.ok(!entry.isSymbolicLink(), 'Package sources must not contain symlinks');
   if (['target', 'dist', 'node_modules', '.git'].includes(entry.name)) return [];
@@ -15,7 +16,7 @@ const walk = directory => fs.readdirSync(directory, { withFileTypes: true }).fla
   return entry.isDirectory() ? walk(location) : [path.relative(root, location).split(path.sep).join('/')];
 });
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
-manifest.source.files = walk(root).filter(file => !['plugin.json', 'Cargo.lock'].includes(file)).sort();
+manifest.source.files = walk(root).filter(file => file !== 'plugin.json' && !manifest.source.lockfiles.includes(file)).sort();
 fs.writeFileSync(path.join(root, 'plugin.json'), JSON.stringify(manifest, null, 2) + '\n');
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 fs.copyFileSync(path.join(target, 'debug/rho-files-backend'), path.join(root, 'dist/rho-files-backend'));

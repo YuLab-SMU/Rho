@@ -476,6 +476,34 @@
         "node",
         "scripts/test-files-protocol.mjs"
       ]
+    },
+    "plugins.files-ui": {
+      "command": [
+        "node",
+        "scripts/test-files-ui.mjs"
+      ]
+    },
+    "plugins.files-browser": {
+      "command": [
+        "npm",
+        "run",
+        "test:browser",
+        "--prefix",
+        "ui",
+        "--",
+        "files-plugin.spec.ts"
+      ]
+    },
+    "plugins.self-requirements": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-host",
+        "--test",
+        "plugin_self_requirements",
+        "--locked"
+      ]
     }
   },
   "areas": {
@@ -657,7 +685,10 @@
         "scripts/build-files-plugin.mjs",
         "scripts/test-files-plugin.mjs",
         "crates/host/tests/files_plugin.rs",
-        "scripts/test-files-protocol.mjs"
+        "scripts/test-files-protocol.mjs",
+        "scripts/test-files-ui.mjs",
+        "ui/e2e/files-plugin.spec.ts",
+        "crates/host/tests/plugin_self_requirements.rs"
       ],
       "checks": [
         "docs.index",
@@ -702,7 +733,10 @@
         "plugins.files-backend",
         "plugins.files-manifest",
         "plugins.files-native",
-        "plugins.files-public-types"
+        "plugins.files-public-types",
+        "plugins.files-ui",
+        "plugins.files-browser",
+        "plugins.self-requirements"
       ]
     }
   }

@@ -1,0 +1,19 @@
+{
+  "name": "@rho/files",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "@fontsource/inter": "5.3.0"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vite": "8.2.2",
+    "vitest": "5.0.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7"
+  }
+}

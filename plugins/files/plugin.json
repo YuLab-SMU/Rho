@@ -11,7 +11,8 @@
       "build.mjs"
     ],
     "lockfiles": [
-      "Cargo.lock"
+      "Cargo.lock",
+      "dependencies.lock"
     ],
     "build_instructions": "BUILD.md",
     "build": {
@@ -31,9 +32,154 @@
       "scopes": [
         "project.read"
       ]
+    },
+    {
+      "capability": {
+        "id": "files.list_directory",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.search_files",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.storage_status",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.snapshot",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.layout",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.open_view",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run",
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
     }
   ],
-  "views": [],
+  "views": [
+    {
+      "id": "files",
+      "title": "Files",
+      "entrypoint": "dist/ui/index.html",
+      "state_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "files": {
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "configuration_schema": {
+        "$defs": {
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "editor": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "editor_group": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "title": "FilesViewConfiguration",
+        "type": "object"
+      },
+      "resource_kinds": []
+    }
+  ],
   "capabilities": [
     {
       "capability": {

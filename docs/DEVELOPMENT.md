@@ -87,6 +87,17 @@ user Host. This is backend acceptance; it does not establish Files/Editor UI or
 default scenario delivery. Set `RHO_FILES_PLUGIN_PACKAGE` to reuse an independently
 built package while recompiling and testing a changed Host.
 
+The combined Files UI has an independent model/connection/action check:
+`node scripts/test-files-ui.mjs`. After building the current client and Host,
+`RHO_FILES_PLUGIN_PACKAGE=/absolute/built/package npm run test:browser --prefix ui -- files-plugin.spec.ts`
+uses the real Files backend and generic window in a disposable project. Omit the
+variable to assemble a fresh package first. It covers native directories/search,
+responsive input, close capture, reopening, external changes and exact Editor
+navigation. The Editor is a routing fixture, not document-editing acceptance.
+`cargo test -p rho-host --test plugin_self_requirements --locked` verifies that
+combined packages can declare exact self-capability grants before first activation
+without early publication, scope escalation or undeclared access.
+
 When one cross-boundary check needs several packages, prefer one Cargo invocation
 with multiple `-p` selections and the required target selectors when possible.
 Cargo [unifies their dependency features](https://doc.rust-lang.org/cargo/reference/resolver.html#feature-unification),
