@@ -4,9 +4,10 @@ import { EditorDocument, type DocumentBody } from './document.js';
 import { EditorFiles } from './files.js';
 import { DraftSync } from './draft-sync.js';
 import { type Client, type Intent, type RecordReply, inspectOriginal, verifyOriginal, same, json, terminal } from './operations.js';
-import { bytes, filePatch, sha256, validatePath } from './text.js';
+import { bytes, filePatch, sha256, validatePath, MAX_EDIT_BYTES } from './text.js';
 interface FileSave { intent: Intent; path: string; raw: string; before: string | null; baseHash: string | null; digest: string; }
-interface Payload { schema: 1; files: InstanceRef; document: DocumentBody; save: FileSave | null; }
+interface DiskComparison { path: string; raw: string; digest: string; }
+interface Payload { schema: 1; files: InstanceRef; document: DocumentBody; save: FileSave | null; disk: DiskComparison | null; }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 /** Coordinates a single ordinary Editor view. Native file actions and generic
  * draft saves keep separate requests, outcomes and capture identities. */
@@ -15,6 +16,7 @@ export class EditorController {
   readonly drafts: DraftSync;
   document: EditorDocument | null = null;
   pending: FileSave | null = null;
+  disk: DiskComparison | null = null;
   error = '';
   synchronizationError = '';
   private paused = false;
@@ -40,7 +42,7 @@ export class EditorController {
   }
   private payload(): Payload {
     if (!this.document) throw new Error('No acknowledged Editor document is available.');
-    return { schema: 1, files: this.files.source, document: this.document.snapshot, save: this.pending && structuredClone(this.pending) };
+    return { schema: 1, files: this.files.source, document: this.document.snapshot, save: this.pending && structuredClone(this.pending), disk: this.disk && structuredClone(this.disk) };
   }
   async open() {
     this.live();
@@ -50,10 +52,14 @@ export class EditorController {
     const retained = await this.drafts.read(); this.live();
     if (retained !== null) {
       const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(retained)) as Payload;
-      if (value.schema !== 1 || !same(value.files, this.files.source) || !Object.hasOwn(value, 'save')) throw new Error('The retained Editor body has another encoding or Files provider.');
+      if (value.schema !== 1 || !same(value.files, this.files.source) || !Object.hasOwn(value, 'save') || !Object.hasOwn(value, 'disk')) throw new Error('The retained Editor body has another encoding or Files provider.');
       const document = new EditorDocument(value.document);
       if (value.save !== null) await this.checkSave(value.save, false);
+      if (value.disk !== null && (!value.disk || value.disk.path !== document.path || typeof value.disk.raw !== 'string' ||
+        bytes(value.disk.raw).length > MAX_EDIT_BYTES || value.disk.raw.includes('\0') || await sha256(value.disk.raw) !== value.disk.digest))
+        throw new Error('The retained disk comparison has another file or content digest.');
       this.live(); this.document = document; this.pending = structuredClone(value.save);
+      this.disk = structuredClone(value.disk);
     } else {
       if (this.drafts.unresolved) throw new Error('The first draft save remains unconfirmed. Inspect its original Operation before opening another document.');
       if (this.initial) {
@@ -63,6 +69,24 @@ export class EditorController {
     }
     this.notify();
   }
+  compareDisk(): Promise<void> { return this.act(async () => {
+    const document = this.document;
+    if (!document?.path || document.snapshot.readonly || this.pending) throw new Error('A saved editable file without an unconfirmed save is required.');
+    await this.files.connect(); this.editable(); const observed = await this.files.inspect(document.path); this.editable();
+    if (!observed) throw new Error('The path is no longer a regular file. Your edits are retained.');
+    const captured = await this.files.read(observed); this.editable();
+    if (captured.readonly) throw new Error('The disk content cannot be compared as editable text. Your edits are retained.');
+    this.disk = { path: observed.path, raw: captured.raw, digest: captured.file.sha256! }; await this.flush();
+  }); }
+  acceptDisk(useDisk: boolean): Promise<void> { return this.act(async () => {
+    const document = this.document, disk = this.disk;
+    if (!document || !disk || disk.path !== document.path || this.pending) throw new Error('The disk comparison is no longer available for this document.');
+    await this.files.connect(); this.editable(); const current = await this.files.inspect(disk.path); this.editable();
+    if (current?.sha256 !== disk.digest) throw new Error('The file changed again. Refresh the comparison before choosing a version.');
+    if (useDisk) document.useDisk(disk.raw, disk.digest); else document.saved(disk.path, disk.raw, disk.digest);
+    this.disk = null; await this.flush();
+  }); }
+  closeDisk(): Promise<void> { return this.act(async () => { this.disk = null; await this.flush(); }); }
   refreshInitial(): Promise<void> { return this.act(async () => {
     if (this.document || this.drafts.snapshot.draft || this.drafts.unresolved || !this.initial) throw new Error('A retained document cannot be replaced by refreshing its initial file.');
     await this.files.connect(); const current = await this.files.inspect(this.initial.path); this.editable();
@@ -102,6 +126,7 @@ export class EditorController {
     const raw = document.raw, base = document.snapshot;
     return this.act(async () => {
       if (this.pending) throw new Error('Inspect the original file save before starting another.');
+      if (this.disk) throw new Error('Finish the disk comparison before saving.');
       if (!path) throw new Error('Choose a project-relative path with Save As.');
       validatePath(path); await this.files.connect(); this.editable();
       let before = base.baseRaw, baseHash = base.baseHash;

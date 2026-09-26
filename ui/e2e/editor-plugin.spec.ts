@@ -79,6 +79,49 @@ test('Editor preserves later edits across a native save and close, restores orig
   const dialog=second.getByRole('dialog');await expect(dialog).toBeVisible();await dialog.getByLabel('Project-relative file path').fill('复制 α.R');
   await page.screenshot({path:info.outputPath('editor-save-as-390.png')});await dialog.getByRole('button',{name:'Save File',exact:true}).click();
   await expect(dialog).toBeHidden();await expect(second.locator('#file-state')).toHaveText('Saved');expect(readFileSync(join(project,'复制 α.R'),'utf8')).toBe(expected);
+  await restored.click();await restored.press('Meta+a');await page.keyboard.insertText('# local edits 中文\n');
+  writeFileSync(join(project,'复制 α.R'),'# disk version one\n');await second.getByRole('button',{name:'Compare Disk',exact:true}).click();
+  const comparison=second.getByRole('dialog',{name:'Compare Disk',exact:true});await expect(comparison).toBeVisible();
+  await expect(comparison.locator('#disk-local')).toContainText('local edits 中文');await expect(comparison.locator('#disk-observed')).toContainText('disk version one');
+  await expect(comparison.getByRole('button',{name:'Keep My Edits',exact:true})).toBeEnabled();
+  for(const width of [1440,1920,390,220]){
+    await page.setViewportSize({width,height:900});
+    await expect.poll(()=>comparison.evaluate((element,width)=>{
+      const rect=element.getBoundingClientRect();return Math.abs(innerWidth-width)<4&&rect.left>=0&&rect.right<=innerWidth;
+    },width)).toBe(true);
+    expect(await comparison.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+    await page.screenshot({path:info.outputPath(`editor-disk-comparison-${width}.png`)});
+  }
+  await page.setViewportSize({width:390,height:900});
+  writeFileSync(join(project,'复制 α.R'),'# disk version two\n');await comparison.getByRole('button',{name:'Keep My Edits',exact:true}).click();
+  await expect(comparison.getByRole('alert')).toContainText('changed again');await comparison.getByRole('button',{name:'Refresh Comparison',exact:true}).click();
+  await expect(comparison.locator('#disk-observed')).toContainText('disk version two');await comparison.getByRole('button',{name:'Keep My Edits',exact:true}).click();
+  await expect(comparison).toBeHidden();await expect(restored).toContainText('local edits 中文');await expect(second.locator('#file-state')).toHaveText('Unsaved');
+  expect(readFileSync(join(project,'复制 α.R'),'utf8')).toBe('# disk version two\n');
+  await second.getByRole('button',{name:'Save',exact:true}).click();await expect(second.locator('#file-state')).toHaveText('Saved');
+  expect(readFileSync(join(project,'复制 α.R'),'utf8')).toBe('\ufeff# local edits 中文\r\n');
+  const diskExact='\ufeff# explicit disk replacement\r\nx <- 4\n';writeFileSync(join(project,'复制 α.R'),diskExact);
+  await second.getByRole('button',{name:'Compare Disk',exact:true}).click();await comparison.getByRole('button',{name:'Use Disk Content',exact:true}).click();
+  await expect(comparison).toBeHidden();await expect(restored).toContainText('explicit disk replacement');await expect(second.locator('#file-state')).toHaveText('Saved');
+  await restored.click();await restored.press('Meta+z');await expect(restored).toContainText('local edits 中文');await expect(second.locator('#file-state')).toHaveText('Unsaved');
+  expect(readFileSync(join(project,'复制 α.R'),'utf8')).toBe(diskExact);
+  let lostDraftReply=false;
+  await page.route('**/api/plugin-view',async route=>{
+    const body=route.request().postDataJSON()?.message?.body;
+    if(!lostDraftReply&&body?.type==='invoke'&&body.capability?.id==='documents.save'){
+      // Keep the channel alive while withholding this original admission reply.
+      // A transport abort correctly removes the frame and exercises reconnect,
+      // not the retained dialog's acknowledgement-error controls.
+      lostDraftReply=true;await route.fetch();await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:false,error:'Original draft acknowledgement unavailable (fixture)'})});return;
+    }
+    await route.continue();
+  });
+  await second.getByRole('button',{name:'Compare Disk',exact:true}).click();await expect(comparison).toBeVisible();
+  await expect(comparison.getByRole('alert')).toBeVisible();await expect(comparison.getByRole('button',{name:'Close',exact:true})).toBeEnabled();
+  await comparison.getByRole('button',{name:'Close',exact:true}).click();await expect(comparison).toBeHidden();
+  expect(lostDraftReply).toBe(true);await page.unroute('**/api/plugin-view');
+  await second.getByRole('button',{name:'Inspect Original Draft Save',exact:true}).click();await expect(second.locator('#recovery')).toBeHidden();
+  await expect(restored).toContainText('local edits 中文');expect(readFileSync(join(project,'复制 α.R'),'utf8')).toBe(diskExact);
   await page.getByRole('tab',{name:'Editor',exact:true}).locator('[data-layout-path$="/button/close"]').click();await expect(region(secondView.view)).toHaveCount(0);
   // Load a genuine editable file whose body plus base exceeds view-state quota.
   const large='\ufeff'+('x <- "中文🙂"; '.repeat(25)+'\r\n').repeat(700);expect(Buffer.byteLength(large)).toBeGreaterThan(256*1024);expect(Buffer.byteLength(large)).toBeLessThan(512*1024);
@@ -94,7 +137,7 @@ test('Editor preserves later edits across a native save and close, restores orig
   const operations:any[]=[];let cursor:any=null;
   for(let page=0;page<10;page++){const found=await query('operation.list_recent',{limit:100,...(cursor===null?{}:{before_cursor:cursor})});operations.push(...found.operations);cursor=found.next_cursor;if(cursor===null)break;}
   expect(cursor).toBeNull();
-  expect(operations.filter((operation:any)=>operation.capability.id==='files.apply_patch')).toHaveLength(3);
+  expect(operations.filter((operation:any)=>operation.capability.id==='files.apply_patch')).toHaveLength(4);
   expect(operations.filter((operation:any)=>['r.execute','workspace.run_r'].includes(operation.capability.id))).toHaveLength(0);
   expect(errors).toEqual([]);completed=true;
 });

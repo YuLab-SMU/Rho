@@ -90,10 +90,12 @@ built package while recompiling and testing a changed Host.
 The combined Files UI has an independent model/connection/action check:
 `node scripts/test-files-ui.mjs`. After building the current client and Host,
 `RHO_FILES_PLUGIN_PACKAGE=/absolute/built/package npm run test:browser --prefix ui -- files-plugin.spec.ts`
-uses the real Files backend and generic window in a disposable project. Omit the
-variable to assemble a fresh package first. It covers native directories/search,
+uses the real Files backend, ordinary Editor and generic window in a disposable
+project. `RHO_EDITOR_PLUGIN_PACKAGE` can also select an already assembled Editor;
+omitting either variable assembles its fresh package first. It covers directories/search,
 responsive input, close capture, reopening, external changes and exact Editor
-navigation. The Editor is a routing fixture, not document-editing acceptance.
+navigation, native editing/saving and new unsaved documents. A file changed after
+the Files capture is refused until an explicit refresh; saving then remains usable.
 `cargo test -p rho-host --test plugin_self_requirements --locked` verifies that
 combined packages can declare exact self-capability grants before first activation
 without early publication, scope escalation or undeclared access.
@@ -110,7 +112,10 @@ After building the current client and Host,
 Files and Editor packages in a disposable project; set `RHO_FILES_PLUGIN_PACKAGE`
 and `RHO_EDITOR_PLUGIN_PACKAGE` to reuse exact built packages. It checks native file
 saves, held admission during close, original-result restoration, Unicode Save As,
-larger-than-view-state drafts and responsive CodeMirror presentation. This does
+larger-than-view-state drafts, explicit disk comparison/replacement and responsive
+CodeMirror presentation. Comparisons preserve local edits, recheck the captured
+digest before choosing a base and do not write files; replacement retains undo.
+This does
 not establish R execution, native input-method behavior or default composition.
 
 The generic draft storage and public content contracts are checked with

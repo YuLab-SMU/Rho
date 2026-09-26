@@ -18,12 +18,22 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 function render() {
   if (!controller || stopped) return;
   const doc = controller.document, busy = controller.busy || preparing, readonly = !!doc?.snapshot.readonly;
+  const synchronizing = !!pendingFlush || controller.busy && controller.drafts.unresolved;
+  if (editor && doc && editor.state !== doc.state) editor.setState(doc.state);
   get('name').textContent = doc?.name ?? 'Editor'; get('name').title = doc?.path ?? 'Untitled.R';
   get('file-state').textContent = readonly ? 'Read-only' : controller.pending ? 'Save unconfirmed' : doc?.dirty ? 'Unsaved' : doc ? 'Saved' : '';
-  for (const id of ['save', 'save-as']) get<HTMLButtonElement>(id).disabled = !doc || readonly || busy || composing || !!controller.pending || controller.drafts.unresolved;
+  for (const id of ['save', 'save-as']) get<HTMLButtonElement>(id).disabled = !doc || readonly || busy || composing || !!controller.pending || controller.drafts.unresolved || !!controller.disk;
+  get<HTMLButtonElement>('compare-disk').disabled = !doc?.path || readonly || busy || !!controller.pending || controller.drafts.unresolved;
+  const diskDialog = get<HTMLDialogElement>('disk-dialog');
+  get<HTMLButtonElement>('cancel-disk').disabled = busy;
+  for (const id of ['refresh-disk', 'keep-edits', 'use-disk']) get<HTMLButtonElement>(id).disabled = busy || controller.drafts.unresolved;
+  if (controller.disk && doc) {
+    get('disk-local').textContent = doc.raw; get('disk-observed').textContent = controller.disk.raw; show('disk-error', controller.error);
+    if (!diskDialog.open) diskDialog.showModal();
+  } else if (diskDialog.open) diskDialog.close();
   show('error', controller.error); show('draft-error', controller.synchronizationError);
   show('preview', doc?.snapshot.readonly ?? '');
-  get('recovery').hidden = !controller.drafts.unresolved;
+  get('recovery').hidden = !controller.drafts.unresolved || synchronizing;
   get('refresh-file').hidden = !!doc || !!controller.drafts.snapshot.draft || controller.drafts.unresolved;
   const ownDraft = controller.drafts.snapshot.pending?.view === client.view.view;
   get<HTMLButtonElement>('retry-draft').disabled = !ownDraft || busy;
@@ -34,7 +44,7 @@ function render() {
   get<HTMLButtonElement>('retry-file').disabled = busy || controller.pending?.intent.view !== client.view.view;
   get<HTMLButtonElement>('inspect-file').disabled = busy;
   get<HTMLButtonElement>('acknowledge-file').disabled = busy;
-  get('draft-state').textContent = controller.drafts.unresolved ? 'Draft save unconfirmed' : pendingFlush ? 'Synchronizing draft…' : controller.synchronizationError ? 'Draft synchronization failed' : controller.drafts.snapshot.draft ? 'Draft synchronized' : 'Draft in this view';
+  get('draft-state').textContent = synchronizing ? 'Synchronizing draft…' : controller.drafts.unresolved ? 'Draft save unconfirmed' : controller.synchronizationError ? 'Draft synchronization failed' : controller.drafts.snapshot.draft ? 'Draft synchronized' : 'Draft in this view';
   if (doc) {
     const head = doc.state.selection.main.head, line = doc.state.doc.lineAt(head);
     get('position').textContent = `Ln ${line.number}, Col ${head - line.from + 1} · ${doc.snapshot.byteSize.toLocaleString()} bytes`;
@@ -81,7 +91,6 @@ try {
   await controller.open();
   await ensureClose();
   mount(); render();
-  poll();
 } catch (error) { if (controller!) { controller.error = message(error); render(); } else show('error', message(error)); get('opening').textContent = 'The document could not be opened. Its saved state is retained.'; }
 async function ensureClose() {
   if (closeInstalled) return;
@@ -92,9 +101,16 @@ async function ensureClose() {
   }, resume: () => { preparing = false; controller.resume(); poll(); } });
   close.subscribe(() => { const state = close.getSnapshot(); if (state.error) show('error', state.error); });
   closeInstalled = true;
+  poll();
 }
 function wireActions() {
   get('save').onclick = save; get('save-as').onclick = saveAs;
+  get('compare-disk').onclick = () => action(() => controller.compareDisk());
+  get('refresh-disk').onclick = () => action(() => controller.compareDisk());
+  get('keep-edits').onclick = () => action(() => controller.acceptDisk(false));
+  get('use-disk').onclick = () => action(() => controller.acceptDisk(true));
+  get('cancel-disk').onclick = () => action(() => controller.closeDisk());
+  get('disk-dialog').addEventListener('cancel', event => { event.preventDefault(); if (!controller.busy) action(() => controller.closeDisk()); });
   get('cancel-save').onclick = () => get<HTMLDialogElement>('save-dialog').close();
   const confirm = () => {
     if (preparing || composing || controller.busy) return;

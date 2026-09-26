@@ -64,4 +64,16 @@ export class EditorDocument {
     if (!hash(digest) || bytes(raw).length > MAX_EDIT_BYTES || raw.includes('\0') || this.body.readonly !== null) throw new Error('The file-save receipt is invalid.');
     this.body.path = path; this.body.baseRaw = raw; this.body.baseHash = digest;
   }
+  /** An explicit disk replacement keeps the resident undo history. Its exact
+   * BOM/newlines become the new base; undoing text leaves that base unchanged. */
+  useDisk(raw: string, digest: string) {
+    if (!this.body.path || this.body.readonly !== null) throw new Error('This document cannot load a disk replacement.');
+    const replacement = EditorDocument.create(raw, this.body.path, digest);
+    const text = replacement.state.doc.toString(), selection = this.state.selection.main;
+    const transaction = this.state.update({ changes: { from: 0, to: this.state.doc.length, insert: text },
+      selection: { anchor: Math.min(selection.anchor, text.length), head: Math.min(selection.head, text.length) }, userEvent: 'input.disk' });
+    this.state = transaction.state;
+    this.body = { ...replacement.snapshot, anchor: this.state.selection.main.anchor, head: this.state.selection.main.head,
+      scrollTop: this.body.scrollTop, scrollLeft: this.body.scrollLeft };
+  }
 }

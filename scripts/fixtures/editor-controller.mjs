@@ -68,6 +68,16 @@ export async function checkEditorController({EditorController,make,sdk,applyPatc
   const conflict=await fixture();conflict.controller.document.update(conflict.controller.document.state.update({changes:{from:0,insert:'changed'}}));
   await conflict.controller.save();conflict.native.files.set(path,'external');await conflict.finish();await conflict.controller.inspectSave();assert.equal(conflict.controller.document.snapshot.baseRaw,initial);
   assert.ok(conflict.controller.pending);assert.match(conflict.controller.error,/changed/);assert.equal(conflict.native.mutations,0);await conflict.controller.acknowledgeFileFailure();assert.equal(conflict.controller.pending,null);
+  const local=conflict.controller.document.raw;
+  await conflict.controller.compareDisk();assert.equal(conflict.controller.document.raw,local);assert.equal(conflict.controller.disk.raw,'external');
+  await conflict.controller.pause();conflict.controller.stop();conflict.client.view={...conflict.client.view,view:'comparison-reopened'};
+  const comparison=new EditorController(conflict.client,conflict.configuration);await comparison.open();assert.equal(comparison.disk.raw,'external');assert.equal(comparison.document.raw,local);
+  conflict.native.files.set(path,'external again');await assert.rejects(comparison.acceptDisk(false),/changed again/);assert.equal(comparison.document.snapshot.baseRaw,initial);
+  await comparison.compareDisk();await comparison.acceptDisk(false);assert.equal(comparison.document.raw,local);assert.equal(comparison.document.snapshot.baseRaw,'external again');assert.equal(comparison.disk,null);assert.equal(conflict.native.mutations,0);
+  await comparison.save();await conflict.finish();await comparison.inspectSave();assert.equal(conflict.native.files.get(path),local);
+  const loadDisk=await fixture(),diskRaw='\ufeffdisk\r\nsecond\n';loadDisk.native.files.set(path,diskRaw);await loadDisk.controller.compareDisk();
+  await assert.rejects(loadDisk.controller.save(),/Finish the disk comparison/);await loadDisk.controller.acceptDisk(true);
+  assert.equal(loadDisk.controller.document.raw,diskRaw);assert.equal(loadDisk.controller.document.dirty,false);assert.equal(loadDisk.native.attempts.length,0);
   const fresh=await fixture(true);fresh.controller.document.update(fresh.controller.document.state.update({changes:{from:0,insert:'新 file\n'}}));
   await assert.rejects(fresh.controller.save(path),/target exists/);assert.equal(fresh.native.attempts.length,0);
   await fresh.controller.save('new.R');assert.equal(fresh.native.attempts[0].args.preconditions[0].expected,null);await fresh.finish();await fresh.controller.inspectSave();assert.equal(fresh.native.files.get('new.R'),'新 file\n');assert.equal(fresh.controller.document.dirty,false);

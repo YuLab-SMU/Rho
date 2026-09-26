@@ -126,7 +126,10 @@ pub fn manifest() -> PluginManifest {
             ("files.storage_status", vec![PROJECT_READ_SCOPE]),
             ("files.snapshot", vec![PROJECT_READ_SCOPE]),
             ("windows.layout", vec!["plugins.run"]),
-            ("windows.open_view", vec!["plugins.run", "project.read"]),
+            // Navigation can delegate only these declared scopes, intersected
+            // with its caller. Editor still declares and receives its own exact
+            // capability grants; Files gets no direct draft/file-write grant.
+            ("windows.open_view", vec!["plugins.run", "project.read", "project.write", "documents.read", "documents.write", "operation.read"]),
             ("operation.get", vec!["operation.read"]),
             ("operation.list_recent", vec!["operation.read"]),
         ]

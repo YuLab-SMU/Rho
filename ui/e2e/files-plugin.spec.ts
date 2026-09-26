@@ -1,5 +1,4 @@
-/** Actual independent combined Files backend/UI. The Editor target is a route
- * fixture only; this test does not claim an implemented ordinary Editor. */
+/** Actual independent Files and Editor packages through their declared grants. */
 import { test, expect } from "@playwright/test";
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, realpathSync, rmSync } from "node:fs";
@@ -20,20 +19,6 @@ async function invoke(id: string, args: any) {
   expect(record.status, JSON.stringify(record.error)).toBe("succeeded"); return record.output;
 }
 async function query(id: string, args: any) { return (await port("query_snapshot", { capability: { id, version: 1 }, arguments: args })).data; }
-function editorFixture() {
-  const root = join(directory, "editor-route"); mkdirSync(join(root, "dist"), { recursive: true });
-  const html = `<!doctype html><meta charset="utf-8"><h1>Editor route fixture</h1><pre id="file"></pre><script>
-  const nonce=new URLSearchParams(location.hash.slice(1)).get('rho-view-nonce');
-  addEventListener('message',event=>{if(event.source===parent&&event.data?.type==='rho:view:connect'&&event.data.nonce===nonce)
-    document.querySelector('#file').textContent=JSON.stringify(event.data.view.configuration,null,2);});
-  parent.postMessage({type:'rho:view:ready',nonce},'*');</script>`;
-  writeFileSync(join(root, "index.html"), html); writeFileSync(join(root, "dist/index.html"), html);
-  writeFileSync(join(root, "BUILD.md"), "Copy index.html into dist/index.html."); writeFileSync(join(root, "dependencies.lock"), "No dependencies.");
-  writeFileSync(join(root, "plugin.json"), JSON.stringify({ protocol_version: 1, id: "fixture.editor-route", name: "Editor route fixture", version: "1", description: "Observe an explicit Files navigation without editing data", license: "MIT",
-    source: { files: ["index.html"], lockfiles: ["dependencies.lock"], build_instructions: "BUILD.md", build: null }, dependencies: {}, requires: [], capabilities: [], contexts: [], backend: null,
-    views: [{ id: "editor", title: "Editor route fixture", entrypoint: "dist/index.html", state_schema: { type: "object" }, configuration_schema: { type: "object" }, resource_kinds: [] }], configuration_schema: { type: "object" }, default_configuration: {} }));
-  return root;
-}
 test.beforeAll(async () => {
   test.setTimeout(600000);
   directory = realpathSync(mkdtempSync(join(tmpdir(), "rho-files-ui-native-"))); project = join(directory, "project"); mkdirSync(project);
@@ -42,9 +27,11 @@ test.beforeAll(async () => {
   execFileSync("git", ["init", "-q", project]);
   const before = digest(binary), packagePath = process.env.RHO_FILES_PLUGIN_PACKAGE ?? join(directory, "files");
   if (!process.env.RHO_FILES_PLUGIN_PACKAGE) execFileSync(process.execPath, [resolve("../scripts/build-files-plugin.mjs"), packagePath], { stdio: "inherit" });
+  const editorPath = process.env.RHO_EDITOR_PLUGIN_PACKAGE ?? join(directory, "editor");
+  if (!process.env.RHO_EDITOR_PLUGIN_PACKAGE) execFileSync(process.execPath, [resolve("../scripts/build-editor-plugin.mjs"), editorPath], { stdio: "inherit" });
   expect(digest(binary)).toBe(before);
   const database = join(directory, "state.sqlite"), snapshot = (path: string, target: string) => JSON.parse(execFileSync(binary, ["--database", database, "plugins", "snapshot", path, "--target", target], { encoding: "utf8" })).result;
-  const files = snapshot(packagePath, "aarch64-apple-darwin"), target = snapshot(editorFixture(), "ui-web");
+  const files = snapshot(packagePath, "aarch64-apple-darwin"), target = snapshot(editorPath, "ui-web");
   process_ = spawn(binary, ["--database", database, "--project", project, "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = "", errors = ""; const timer = setTimeout(() => reject(new Error(`Files fixture Host startup timed out: ${errors}`)), 90000);
@@ -52,7 +39,7 @@ test.beforeAll(async () => {
     process_.once("exit", code => { clearTimeout(timer); reject(new Error(`Files fixture Host exited ${code}: ${errors}`)); });
   }));
   instance = (await invoke("plugins.activate", { revision: files.revision, artifact: files.artifacts[0], target: "aarch64-apple-darwin", alias: "files", configuration: {} })).instance;
-  editor = (await invoke("plugins.activate", { revision: target.revision, artifact: target.artifacts[0], target: "ui-web", alias: "editor-route", configuration: {} })).instance;
+  editor = (await invoke("plugins.activate", { revision: target.revision, artifact: target.artifacts[0], target: "ui-web", alias: "editor", configuration: {} })).instance;
   view = (await invoke("windows.open_view", { expected_layout_version: 0, group: null,
     view: { instance: instance.identity, contribution: "files", window: windowId, configuration: { editor: editor.identity, editor_group: null }, state: {} } })).view;
 });
@@ -88,13 +75,54 @@ test("independent Files lists, searches, captures state and opens an exact Edito
   await expect(frame.getByRole("button", { name: "data/sample.csv", exact: true })).toBeVisible();
   await frame.getByRole("button", { name: "data/sample.csv", exact: true }).click();
   await frame.getByRole("button", { name: "Open", exact: true }).click();
-  const editorTab = page.getByRole("tab", { name: "Editor route fixture", exact: true }); await expect(editorTab).toBeVisible();
+  const editorTab = page.getByRole("tab", { name: "Editor", exact: true }); await expect(editorTab).toBeVisible();
   const layout = await query("windows.layout", { window: windowId });
   const opened = await query("views.inspect", { view: layout.layout.selected });
   expect(opened.instance).toEqual(editor.identity); expect(opened.configuration.source).toEqual(instance.identity);
   expect(opened.configuration.file).toMatchObject({ path: "data/sample.csv", kind: "regular", sha256: `sha256:${digest(join(project, "data/sample.csv"))}` });
   expect(opened.window).toBe(windowId);
+  const editorFrame = region(opened.view).frameLocator("iframe"), code = editorFrame.getByRole("textbox", { name: "Code Editor", exact: true });
+  await expect(code).toContainText("sample,value"); await code.click(); await code.press("Meta+a"); await page.keyboard.insertText("sample,value\n中文,42\n");
+  await editorFrame.getByRole("button", { name: "Save", exact: true }).click(); await expect(editorFrame.locator("#file-state")).toHaveText("Saved");
+  expect(readFileSync(join(project, "data/sample.csv"), "utf8")).toBe("sample,value\n中文,42\n");
+  await page.screenshot({ path: info.outputPath("files-opened-editor-390.png") });
+  await editorTab.locator('[data-layout-path$="/button/close"]').click(); await expect(region(opened.view)).toHaveCount(0);
+  expect((await query("views.inspect", { view: opened.view })).state.draft.content.bytes).toBeGreaterThan(0);
   const filesTab = page.getByRole("tab", { name: "Files", exact: true }); await filesTab.click();
+  await frame.getByRole("button", { name: "New File", exact: true }).click(); await expect(editorTab).toBeVisible();
+  const freshLayout = await query("windows.layout", { window: windowId }), fresh = await query("views.inspect", { view: freshLayout.layout.selected });
+  expect(fresh.instance).toEqual(editor.identity); expect(fresh.configuration).toEqual({ source: instance.identity, file: null });
+  const freshFrame = region(fresh.view).frameLocator("iframe"), draftCode = freshFrame.getByRole("textbox", { name: "Code Editor", exact: true });
+  await expect(draftCode).toBeVisible(); await draftCode.fill("value <- 42\n");
+  const absent = await query("files.snapshot", { binding: await query("plugins.resolve", { instance: instance.identity, capability: { id: "files.snapshot", version: 1 } }), arguments: { paths: ["Untitled.R", "新建.R"], limit: 2 } });
+  expect(absent.files.every((file: any) => file.kind === "absent")).toBe(true);
+  await freshFrame.getByRole("button", { name: "Save", exact: true }).click();
+  const saveDialog = freshFrame.getByRole("dialog"); await expect(saveDialog).toBeVisible();
+  await saveDialog.getByLabel("Project-relative file path").fill("新建.R"); await saveDialog.getByRole("button", { name: "Save File", exact: true }).click();
+  await expect(saveDialog).toBeHidden(); await expect(freshFrame.locator("#file-state")).toHaveText("Saved");
+  expect(readFileSync(join(project, "新建.R"), "utf8")).toBe("value <- 42\n");
+  await editorTab.locator('[data-layout-path$="/button/close"]').click(); await expect(region(fresh.view)).toHaveCount(0); await filesTab.click();
+  // A file changing between the Files capture and Editor read must be visible,
+  // not silently substituted. Refresh is an explicit new read of the same path.
+  let changedAfterCapture = false;
+  await page.route("**/api/plugin-view", async route => {
+    const body = route.request().postDataJSON()?.message?.body;
+    if (!changedAfterCapture && body?.type === "invoke" && body.capability?.id === "windows.open_view") {
+      changedAfterCapture = true; writeFileSync(join(project, "analysis.R"), "# Changed after Files captured the original identity\n");
+    }
+    await route.continue();
+  });
+  await frame.getByRole("button", { name: "Open…", exact: true }).click();
+  await frame.getByLabel("Path within this project").fill("analysis.R"); await frame.getByLabel("Path within this project").press("Enter");
+  await expect(editorTab).toBeVisible(); const staleLayout = await query("windows.layout", { window: windowId });
+  const stale = staleLayout.layout.selected, staleFrame = region(stale).frameLocator("iframe");
+  await expect(staleFrame.locator("#error")).toBeVisible(); await expect(staleFrame.getByRole("textbox", { name: "Code Editor", exact: true })).toHaveCount(0);
+  expect(changedAfterCapture).toBe(true); await page.unroute("**/api/plugin-view");
+  await staleFrame.locator("#refresh-file").click(); await expect(staleFrame.getByRole("textbox", { name: "Code Editor", exact: true })).toContainText("Changed after Files captured");
+  await staleFrame.getByRole("textbox", { name: "Code Editor", exact: true }).fill("# Saved after explicitly refreshing the initial capture\n");
+  await staleFrame.getByRole("button", { name: "Save", exact: true }).click(); await expect(staleFrame.locator("#file-state")).toHaveText("Saved");
+  expect(readFileSync(join(project, "analysis.R"), "utf8")).toBe("# Saved after explicitly refreshing the initial capture\n");
+  await editorTab.locator('[data-layout-path$="/button/close"]').click(); await expect(region(stale)).toHaveCount(0); await filesTab.click();
   await frame.getByRole("combobox", { name: "File Search Scope" }).selectOption("directory"); await filter.fill("保留 中文");
   await filter.dispatchEvent("compositionstart"); await filesTab.locator('[data-layout-path$="/button/close"]').click();
   await expect(page.getByRole("button", { name: "Try closing again", exact: true })).toBeVisible();
@@ -115,7 +143,6 @@ test("independent Files lists, searches, captures state and opens an exact Edito
   await restored.getByLabel("Path within this project").fill("../outside"); await restored.getByLabel("Path within this project").press("Enter");
   await expect(restored.getByRole("dialog")).toContainText("inside the project"); await page.keyboard.press("Escape"); await expect(restored.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("tab", { name: "Files", exact: true }).locator('[data-layout-path$="/button/close"]').click(); await expect(region(reopened.view)).toHaveCount(0);
-  await invoke("views.close", { view: opened.view, mode: { kind: "retain_acknowledged", expected_version: opened.state_version } });
   await invoke("plugins.release", { instance: instance.identity }); await invoke("plugins.release", { instance: editor.identity });
   expect(errors).toEqual([]); completed = true;
 });

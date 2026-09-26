@@ -65,8 +65,7 @@ generic window: directory/search, explicit buttons and Enter inside the sandbox,
 synthetic composition guards, exact navigation, close capture/reopening and an
 external file change. Screenshots at 1440, 1920, 390 and 220 pixels were inspected.
 The initial browser failure exposed blocked form submission; explicit events fixed
-it without relaxing the iframe sandbox. The Editor destination in this acceptance
-is a routing fixture, not an implemented document editor. Native input-method
+it without relaxing the iframe sandbox. Native input-method
 acceptance is not established by synthetic composition events. An optional ad-hoc
 browser TypeScript check was unavailable because Node type definitions are absent;
 the standard browser runner executed successfully. The fixed Files/Editor
@@ -74,6 +73,14 @@ composition is not yet replaced. A newly built Host is required for the added
 query and self-capability grants; existing user sessions have not been restarted.
 All 18 Host plugin/shared-port regression cases also pass after the combined-package
 grant change (`cargo test -p rho-host --test plugins --test port_contracts --locked`).
+Files now opens the actual ordinary Editor through explicitly declared navigation
+scopes, intersected with the caller. Native browser acceptance passes for opening
+and editing a selected file, creating an unsaved document then explicitly saving,
+and detecting a file changed after the Files capture. Explicit refresh opens that
+new observation and subsequent editing/save works. The independent Files build,
+26 UI cases, three backend cases and generated-manifest check pass. The Host binary
+remains unchanged. The four responsive Files screenshots and its Editor destination
+were inspected. Navigation grants do not create direct Files draft/write grants.
 
 Editor migration now has a generic draft contract and repository owner, separate
 from the 256 KiB view-state record. It verifies bounded chunks and complete content,
@@ -130,13 +137,29 @@ Native Chrome acceptance passes (`npm run test:browser --prefix ui -- editor-plu
 real CodeMirror edits, held admission reply during close, restored later edits and
 original-result inspection in a new view, exact BOM/newline file bytes, Unicode
 Save As and a 333,903-byte file whose retained draft exceeds the view-state limit.
-The test observed exactly three native file writes and no R execution. Screenshots
+The current test observes exactly four native file writes and no R execution. Screenshots
 at 1440, 1920, 390 and 220 pixels, narrow Save As and the restored large file were
 inspected. The initial run failed only its final history query's excessive page
 size; the rerun uses bounded pagination and passes. The first independent build's
 composition-event typing error was corrected before the successful assembly.
-Native input-method acceptance is not established. Files-to-real-Editor navigation,
-dynamic outer tab labels, R actions/formatting/context and default composition remain
+Disk comparison now retains the exact observed bytes in the synchronized draft and
+survives reopening. Both choosing the disk version and retaining local edits check
+that the observed native digest still matches. Neither choice writes the file;
+an explicit later save uses that base. Model and native browser checks cover another
+external change, explicit refresh, retained local edits, exact disk replacement and
+resident undo. A withheld admission acknowledgement also leaves the comparison
+dismissible and the original draft-save inspection reachable; native file bytes
+and later edits remain unchanged. This uses a live-channel error reply. Its first
+fixture instead aborted transport, correctly fencing the frame, and was corrected
+to test the intended dialog recovery without changing transport behavior.
+Comparison screenshots at 1440, 1920, 390 and 220 pixels were inspected after
+waiting for the iframe's actual resized viewport; no clipping or overlap remains.
+The first combined browser
+run timed out initializing the Files backend before the Editor test body; its
+failure evidence is retained separately. Files passed in that run, and the isolated
+Editor rerun passed with the same artifacts. No startup deadline was weakened.
+Native input-method acceptance is not established. Dynamic outer tab labels,
+R actions/formatting/context and default composition remain
 to be completed. The retiring Editor still owns the default workspace experience.
 These draft ports require a newly built Host; no existing user Host was restarted.
 All 20 existing Host plugin, scoped-path, self-grant and shared-port regression

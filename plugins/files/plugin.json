@@ -84,8 +84,12 @@
         "version": 1
       },
       "scopes": [
+        "documents.read",
+        "documents.write",
+        "operation.read",
         "plugins.run",
-        "project.read"
+        "project.read",
+        "project.write"
       ]
     },
     {

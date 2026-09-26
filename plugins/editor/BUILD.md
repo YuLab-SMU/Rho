@@ -3,7 +3,9 @@
 This ordinary UI-only package uses the included public plugin protocol and UI SDK,
 public Files declarations, locked CodeMirror/diff libraries and its own document
 owner. It opens captured files, preserves local editing state, synchronizes opaque
-drafts and saves through the exact configured Files backend. R execution,
+drafts and saves through the exact configured Files backend. Disk comparisons
+retain their exact observed bytes, verify freshness before applying a choice, and
+preserve resident text undo when loading the disk version. R execution,
 formatting and document context contributions are still under migration.
 
 Use Node.js and the exact dependency versions in `package.json` and

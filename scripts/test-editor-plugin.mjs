@@ -47,6 +47,13 @@ try {
   assert.throws(()=>doc.update(doc.state.update({changes:{from:0,insert:'\0'}})),/without NUL/);assert.equal(doc.state,oldState);
   doc.update(doc.state.update({effects:StateEffect.reconfigure.of([history()])}));assert.equal(undo({state:doc.state,dispatch:transaction=>doc.update(transaction)}),true);
   const restoredDoc=new EditorDocument(doc.snapshot);assert.equal(restoredDoc.raw,doc.raw);assert.equal(restoredDoc.path,doc.path);
+  const diskDoc=EditorDocument.create('local\n','disk.R',await hash('local\n'));
+  diskDoc.update(diskDoc.state.update({effects:StateEffect.reconfigure.of([history()])}));
+  diskDoc.update(diskDoc.state.update({changes:{from:0,insert:'recent '},userEvent:'input.type'}));
+  const diskRaw='\ufeffdisk\r\nsecond\n';diskDoc.useDisk(diskRaw,await hash(diskRaw));
+  assert.equal(diskDoc.raw,diskRaw);assert.equal(diskDoc.dirty,false);
+  assert.equal(undo({state:diskDoc.state,dispatch:transaction=>diskDoc.update(transaction)}),true);
+  assert.equal(diskDoc.state.doc.toString(),'recent local\n');assert.equal(diskDoc.dirty,true);assert.equal(diskDoc.snapshot.baseRaw,diskRaw);
   const huge='x'.repeat(700000),nativeBefore='\ufeff'+'甲\r\n🙂\n'.repeat(15000);
   const provider={plugin:'org.rho.files',instance:'files',revision:'sha256:'+'c'.repeat(64),artifact:'sha256:'+'d'.repeat(64)};
   const native=async value=>{const raw=typeof value==='string'?new TextEncoder().encode(value):value,file={path:'中文 文件.R',kind:'regular',sha256:(await sdk.captureDraftContent(raw)).content.digest,byte_size:raw.length,mode:null,modified_at_ns:null};
