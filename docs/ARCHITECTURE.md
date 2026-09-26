@@ -79,6 +79,19 @@ storage limits are 8 MiB per draft, 32 KiB metadata, and per project/principal
 256 accepted captures awaiting original settlement.
 Exhaustion is an explicit failure that leaves the acknowledged draft intact.
 
+The public `documents.inspect` and `documents.read` queries require
+`documents.read`. `documents.stage` is a bounded transient Control;
+`documents.save` and `documents.discard` are caller-scoped Operations under
+`documents.write`. Host derives project/principal and fences view callers to
+their original window. Admission retains the captured upload before execution;
+accepted work does not depend on the requesting view staying open. Only an
+authoritative successful, failed-before-effect or cancelled original result
+releases that capture. Commit recovery uses the original Operation candidate,
+including after a Host restart and successor edits. Explicit
+`plugins.reconcile_references` can retry failed retention cleanup using original
+authority. An uncertain outcome without a durable candidate keeps its material;
+current matching text is not evidence of the original save's outcome.
+
 The R domain contracts now live in `plugins/r/api`; the native Ark/R implementation
 and its R bridge live in `plugins/r/backend/engine`. They depend only on public
 plugin contracts and third-party libraries, not Host or Operation implementation.

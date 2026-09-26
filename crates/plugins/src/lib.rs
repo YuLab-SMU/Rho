@@ -15,6 +15,7 @@ mod views;
 mod view_close;
 mod window_layout;
 mod drafts;
+mod draft_service;
 pub use views::PluginViewAsset;
 mod service;
 mod service_handlers;

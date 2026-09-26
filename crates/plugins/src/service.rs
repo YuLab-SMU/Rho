@@ -15,6 +15,8 @@ use std::{
 };
 
 pub const RESOURCES_READ_SCOPE: &str = "resources.read";
+pub const DOCUMENTS_READ_SCOPE: &str = "documents.read";
+pub const DOCUMENTS_WRITE_SCOPE: &str = "documents.write";
 
 pub const PLUGINS_READ_SCOPE: &str = "plugins.read";
 pub const PLUGINS_WRITE_SCOPE: &str = "plugins.write";
@@ -115,7 +117,8 @@ impl PluginService {
         self: &Arc<Self>,
         registry: &mut CapabilityRegistry,
     ) -> Result<(), OperationError> {
-        crate::service_handlers::register(self, registry)
+        crate::service_handlers::register(self, registry)?;
+        crate::draft_service::register(self, registry)
     }
     pub fn bind(
         self: &Arc<Self>,
@@ -260,7 +263,9 @@ impl PluginService {
                 missing,
             });
         }
-        if record.operation.domain == "plugins"
+        if record.operation.domain == "documents" && record.operation.capability.id == "documents.save" {
+            self.complete_draft_save(record)?;
+        } else if record.operation.domain == "plugins"
             && let Some(revision) = admission
                 .owner_context
                 .get("managed_revision")

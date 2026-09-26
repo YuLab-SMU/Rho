@@ -198,3 +198,5 @@ export function connectPluginView(timeoutMs = 15000): Promise<PluginViewClient> 
 
 export { readResource, isResourceReference, sameResource, DEFAULT_RESOURCE_VIEW_BYTES } from "./resources.js";
 export type { ResourceReference, ResourceReader } from "./resources.js";
+export { captureDraftContent, stageDraftContent, readDraft, isDraftContent, isDocumentDraft, MAX_DRAFT_BYTES, DRAFT_CHUNK_BYTES } from "./drafts.js";
+export type { CapturedDraftContent, DraftReader, DraftWriter, DocumentDraft, DraftContent } from "./drafts.js";

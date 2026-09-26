@@ -85,9 +85,22 @@ to fence delayed saves. All 34 affected protocol, plugin-owner and package-repos
 cases pass, including 11 draft-specific cases (`cargo test -p rho-plugins -p
 rho-plugin-protocol --lib --test package_repository --locked`). Generated public
 declarations compile in an independent strict TypeScript consumer; client build
-and generated-type/embedded-asset checks pass. Host capability registration, actual Operation admission/settlement
-wiring, SDK close-time flushing and the ordinary Editor UI remain to be implemented;
-storage tests do not establish those integrations. No user Host was restarted.
+and generated-type/embedded-asset checks pass. The shared Host now registers scoped
+`documents.inspect/read/stage/save/discard` ports. Save admission retains the exact
+capture; original commit settlement releases it. All four Host draft cases pass
+(`cargo test -p rho-host --test plugin_drafts --locked`), including greater-than-1-MiB
+Unicode content, view grants/window fences, stale versions, discard/removal,
+original replay, failed cleanup and durable commit recovery after restart and
+successor edits. An uncertain result without a durable candidate retains its bytes
+and refuses discard; matching current content cannot establish the lost outcome.
+Public SDK byte capture/staging/verified reads also pass
+the independent strict TypeScript consumer and transfer checks
+(`node scripts/test-plugin-ui.mjs`), and client build/check pass. SDK close-time
+flushing and the ordinary Editor UI remain to be implemented. These draft ports
+require a newly built Host; no existing user Host was restarted.
+All 20 existing Host plugin, scoped-path, self-grant and shared-port regression
+cases also pass (`cargo test -p rho-host --test plugins --test port_contracts
+--test plugin_self_requirements --test plugin_workspace_paths --locked`).
 
 The Host regression exposed a lease-release case reproducible with the pre-change
 ownership source: a duplicated descriptor kept the project locked after its last

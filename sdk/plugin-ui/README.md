@@ -38,6 +38,35 @@ it does not authorize automatic retry. Control errors redact native payloads.
 `ViewRequestError.diagnostic` retains the original structured Host diagnostic,
 including recovery material; an error string does not replace that evidence.
 
+For opaque document content larger than view state, use `captureDraftContent(bytes)`
+to freeze and hash the current bytes, then
+`stageDraftContent(client, { draft, upload }, capture)` with an explicit
+`documents.stage@1` / `documents.write` grant. Every capture needs its own upload
+identity. Staging verifies the entire capture before sending bounded 64 KiB chunks,
+and verifies each acknowledgement. It returns the content manifest; it does not
+publish the draft or invoke an Operation. Content is limited to 8 MiB. The plugin
+owns its encoding and any smaller editing limit.
+
+Publish explicitly through `documents.save@1` under `documents.write`, supplying
+the draft/window, upload identity, source revision/contribution, expected document
+version (or null for a new identity), returned content manifest and at most 32 KiB
+of metadata. Retain the original invocation identity and arguments in synchronized
+view state before invoking. Admission is not a saved-draft acknowledgement: inspect
+the original Operation until its outcome is established. Keep pending captures
+separate from later edits, and never replace an uncertain request with a new ID.
+Staging and read helpers accept an AbortSignal; interruption stops further transfer
+without cancelling accepted work or claiming rollback. These helpers do not bypass
+the existing close-time action fence.
+
+`readDraft(client, record, { maxBytes, signal })` requires explicit
+`documents.inspect@1` and `documents.read@1` grants under `documents.read`. It checks
+the record against the view's project, principal and window, observes its exact
+current version, and verifies bounded read ranges, every chunk and the complete
+digest. It refuses a changed version, discarded content or corrupt/incomplete bytes
+instead of returning newer content. Even empty content crosses authorized reads.
+This is synchronized current content, not historical execution evidence or a
+filesystem-save receipt. Ship the emitted `drafts.js` with the other SDK modules.
+
 The container creates one opaque-origin iframe and transfers one private
 MessagePort to that exact document. The SDK checks the parent, document nonce,
 connection/view identity, request correlation, ordering and a 1 MiB message quota.

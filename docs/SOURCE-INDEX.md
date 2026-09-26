@@ -150,6 +150,7 @@ Checks:
 - `plugins.console`: `["node","scripts/test-console-plugin.mjs"]`
 - `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
 - `plugins.download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-download.spec.ts"]`
+- `plugins.draft-ports`: `["cargo","test","-p","rho-host","--test","plugin_drafts","--locked"]`
 - `plugins.drafts`: `["cargo","test","-p","rho-plugins","-p","rho-plugin-protocol","--lib","draft","--locked"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
 - `plugins.files-backend`: `["cargo","test","-p","rho-files-backend","--lib","--locked"]`

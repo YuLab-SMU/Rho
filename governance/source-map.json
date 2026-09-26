@@ -505,6 +505,17 @@
         "--locked"
       ]
     },
+    "plugins.draft-ports": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-host",
+        "--test",
+        "plugin_drafts",
+        "--locked"
+      ]
+    },
     "plugins.drafts": {
       "command": [
         "cargo",
@@ -750,7 +761,8 @@
         "plugins.files-ui",
         "plugins.files-browser",
         "plugins.self-requirements",
-        "plugins.drafts"
+        "plugins.drafts",
+        "plugins.draft-ports"
       ]
     }
   }

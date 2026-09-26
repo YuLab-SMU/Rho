@@ -100,8 +100,15 @@ without early publication, scope escalation or undeclared access.
 
 The generic draft storage and public content contracts are checked with
 `cargo test -p rho-plugins -p rho-plugin-protocol --lib draft --locked`. These
-checks cover storage, captured/accepted chunk leases, version fences and source references; they do
-not establish the Host draft ports, SDK close-time persistence or Editor UI.
+checks cover storage, captured/accepted chunk leases, version fences and source
+references. `cargo test -p rho-host --test plugin_drafts --locked` exercises the
+shared Host draft ports: scoped bounded reads/staging, compare-and-swap saves,
+discard fences, exact view grants, original replay, failed journal writes,
+cleanup failure and original commit recovery after restart and successor edits.
+`node scripts/test-plugin-ui.mjs` builds the public UI SDK outside the checkout and
+checks frozen captures, verified staging/read transfers, malformed content,
+acknowledgement identity, interruptions and existing view cooperation. These checks
+do not establish close-time large-draft persistence or the Editor UI.
 After contract changes, regenerate with `npm run generate --prefix ui` and run
 `node scripts/test-plugin-protocol.mjs` for an independent TypeScript consumer.
 
