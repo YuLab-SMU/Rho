@@ -6527,6 +6527,7 @@ dependencies = [
  "rho-host",
  "rho-mcp",
  "rho-plugin-protocol",
+ "rho-plugins",
  "rmcp",
  "serde_json",
  "tempfile",

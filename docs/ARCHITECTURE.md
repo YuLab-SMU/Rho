@@ -60,7 +60,22 @@ fails. A current-process proof that no backend ever
 started can also establish stopped state; a historical record alone cannot.
 Confirmed stop releases parent source pins but preserves independent directories,
 archives and journals as recovery evidence. This native lifetime underpins the
-still-unfinished Studio test UI and shared-edge child transport.
+still-unfinished Studio test UI.
+Public transport selection retains the same caller and five Host ports. Optional
+`SessionFrame.test_project` selects an existing child for session/HTTP calls;
+connected CLI `--test-project` supplies that field. Parent project-root checks
+remain the transport precondition. MCP fixes `X-Rho-Test-Project` at initialization
+and retains the selected Host until the session closes; RPC, GET and DELETE reject
+changed or omitted selection. The generic browser shell retains `test-project` in
+its credential-free URL, uses the child's layout/view/state owners and routes
+immutable assets under `/view/plugin-test/{id}/…` so relative imports remain in
+the same project. View messages also carry the shell's selection outside the
+isolated iframe payload. View credentials still authorize only their original
+instance/project/window. Invalid, unavailable or stopped selection never falls
+back to analysis, starts a Host or recovers work. Fixed application endpoints are
+unavailable to this shell. These are transport references, not native filesystem
+sandboxing or additional authority.
+
 Host drain cancels and joins the plugin lifecycle publication task before returning;
 a pending observation cannot retain the original journal lock across immediate reopen.
 

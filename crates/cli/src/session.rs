@@ -135,7 +135,7 @@ async fn read_frame(
 
 async fn dispatch(host: Arc<NextHost>, frame: SessionFrame) -> SessionReply {
     match host
-        .dispatch(&NextHost::local_context(), frame.request)
+        .dispatch_selected(&NextHost::local_context(), frame.test_project.as_ref(), frame.request)
         .await
     {
         Ok(result) => SessionReply {

@@ -57,8 +57,30 @@ configuration and dependency aliases; it accepts no existing project path or
 session. Keep the returned test identity, lifecycle version and original Operation.
 Stop refuses active work or connections and reports failed cleanup explicitly.
 Directories and journals remain available as recovery evidence; reading history
-never restarts a test. Studio's end-user controls and shared-edge child transport
-remain unfinished; these native ports alone do not expose a child browser window.
+never restarts a test. Studio's end-user controls remain unfinished. To use an
+already created live test through the public edges:
+
+- HTTP `/api/host` and JSON-lines session frames accept `test_project` beside
+  `id` and `request`. Keep `project_root` as the parent Host's root on HTTP.
+- Connected CLI accepts `--connect-url-file PRIVATE_FILE --test-project TEST_ID`;
+  `--project`, when supplied, checks the parent Host. Use its original launch URL,
+  including the generic `?plugin-window` flag; a URL with project selection is
+  rejected so it cannot silently choose a different target.
+- MCP accepts `X-Rho-Test-Project: TEST_ID` on initialization and every subsequent
+  request, including GET/DELETE. Close the MCP session before stopping its test.
+- Open views using the selected child's normal `windows.open_view` port, then add
+  `?plugin-window&test-project=TEST_ID&window=WINDOW_ID` to the same private launch
+  address. Preserve its token fragment for initial navigation. The shell labels
+  the disposable workspace, retains selection on refresh and uses its independent
+  layouts and saved states. Closing the browser is not a request to stop the test.
+
+Unavailable or stopped tests report an error and never open the current analysis
+instead. Close contributed views normally before requesting stop. After browser refresh,
+previous document registrations can prevent a flush confirmation; inspect the
+saved version and use the explicit **Close with saved state…** recovery if needed.
+This retains acknowledged state and does not claim that an absent document saved
+its buffer. Retired-document cleanup is still unfinished. Retained test records
+remain readable through the parent lifecycle observation ports.
 
 ### Open the bundled demo
 

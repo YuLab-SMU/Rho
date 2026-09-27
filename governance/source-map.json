@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.test-project-session": {"command": ["cargo", "test", "-p", "rho-cli", "--test", "session_test_project", "--locked"]},
+    "plugins.test-project-edges": {"command": ["cargo", "test", "-p", "rho-workbench", "--lib", "plugin_test_", "--locked"]},
+    "plugins.test-project-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "plugin-test-project.spec.ts"]},
     "plugins.test-project-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_test_projects", "--locked"]},
     "plugins.test-project-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "test_projects", "--locked"]},
     "plugins.workspace-http": {"command": ["cargo", "test", "-p", "rho-workbench", "--lib", "plugin_workspace", "--locked"]},
@@ -925,6 +928,9 @@
         "crates/host/tests/plugin_preview.rs",
         "crates/host/tests/plugin_workspace.rs",
         "crates/host/tests/plugin_test_projects.rs",
+        "crates/cli/tests/session_test_project.rs",
+        "crates/workbench/src/plugin_test_project_tests.rs",
+        "ui/e2e/plugin-test-project.spec.ts",
         "crates/host/src/plugin_tests.rs",
         "ui/e2e/plugin-preview.spec.ts",
         "crates/plugin-protocol/**",
@@ -1032,6 +1038,7 @@
         "plugins.build-owner",
         "plugins.preview-host",
         "plugins.workspace-host", "plugins.test-project-host", "plugins.test-project-owner",
+        "plugins.test-project-edges", "plugins.test-project-browser", "plugins.test-project-session",
         "plugins.workspace-http",
         "plugins.workspace-cli",
         "plugins.preview-browser",

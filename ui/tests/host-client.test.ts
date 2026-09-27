@@ -163,3 +163,43 @@ it("retains structured component failures without reducing recovery decisions to
   });
   expect(fetch).toHaveBeenCalledTimes(1);
 });
+
+it('keeps a test selection across refresh without replacing the parent window or credentials', async () => {
+  const previous = location.pathname + location.search + location.hash;
+  try {
+    sessionStorage.setItem('rho-window-id', 'parent-window');
+    history.replaceState(null, '', '/?test-project=test-one&window=test-window#token=private-test-launch');
+    const host = HostClient.fromLocation(); clients.push(host);
+    expect(host.testProject).toBe('test-one'); expect(host.windowId).toBe('test-window');
+    expect(location.hash).toBe(''); expect(location.search).toContain('test-project=test-one');
+    expect(sessionStorage.getItem('rho-window-id')).toBe('parent-window');
+    const resumed = HostClient.fromLocation(); clients.push(resumed);
+    expect(resumed.testProject).toBe('test-one'); expect(resumed.windowId).toBe('test-window');
+    for (const query of ['test-project=', 'test-project=../bad', 'test-project=UPPER', 'test-project=a&test-project=b']) {
+      history.replaceState(null, '', `/?${query}`);
+      expect(() => HostClient.fromLocation()).toThrow(/test project/);
+    }
+  } finally { history.replaceState(null, '', previous); sessionStorage.clear(); }
+});
+
+it('routes shared ports and view assets to the exact child and reads lifecycle only from the parent', async () => {
+  const host = new HostClient('test-only-token', 'window', 'test-one'); clients.push(host);
+  const observation = { project: { id: 'test-one', state: 'ready' }, observed_in_this_host: true };
+  const fetch = vi.fn(async (_path: unknown, options?: RequestInit) => {
+    const body = JSON.parse(String(options?.body));
+    return response({ id: body.frame?.id, ok: true, result: { status: "ready", data: observation } });
+  }); vi.stubGlobal('fetch', fetch);
+  await host.query('/parent', 'plugins.instances', { limit: 100 });
+  expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toMatchObject({ project_root: '/parent', frame: { test_project: 'test-one' } });
+  await expect(host.testProjectObservation('/parent')).resolves.toEqual(observation);
+  expect(JSON.parse(String(fetch.mock.calls[1][1]?.body)).frame).not.toHaveProperty('test_project');
+  await host.request('/api/plugin-view', { test_project: 'forged', message: {} });
+  expect(JSON.parse(String(fetch.mock.calls[2][1]?.body)).test_project).toBe('test-one');
+  expect(host.pluginAssetUrl('connection', 'secret', 'dist/中文.html')).toBe('/view/plugin-test/test-one/connection/secret/dist/%E4%B8%AD%E6%96%87.html');
+  expect(new URL('./chunk.js', 'http://localhost' + host.pluginAssetUrl('connection', 'secret', 'dist/index.html')).pathname).toBe('/view/plugin-test/test-one/connection/secret/dist/chunk.js');
+  observation.observed_in_this_host = false;
+  await expect(host.testProjectObservation('/parent')).rejects.toThrow('unavailable');
+  for (const path of ['/api/r', '/api/project', '/api/application/bridge', '/api/agents/tasks/command'])
+    await expect(host.request(path, {})).rejects.toThrow('unavailable');
+  expect(fetch).toHaveBeenCalledTimes(4);
+});

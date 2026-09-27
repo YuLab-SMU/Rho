@@ -1,3 +1,4 @@
+import type { PluginTestProjectObservation } from "../../sdk/plugin-protocol/index.js";
 import type { HostRequest } from "./generated/HostRequest";
 import type { SessionReply } from "./generated/SessionReply";
 import type { WorkbenchInfo } from "./generated/WorkbenchInfo";
@@ -90,9 +91,12 @@ export class HostClient {
   private reads = new Set<AbortController>();
   readonly windowId: string;
   readonly incarnation = crypto.randomUUID();
-  constructor(private token: string, windowId?: string) {
-    this.windowId = windowId ?? sessionStorage.getItem("rho-window-id") ?? crypto.randomUUID();
-    if (!windowId) sessionStorage.setItem("rho-window-id", this.windowId);
+  constructor(private token: string, windowId?: string, readonly testProject?: string) {
+    if (testProject !== undefined && (!/^[a-z][a-z0-9._-]{0,127}$/.test(testProject) || testProject.includes("..")))
+      throw new Error("The Workbench URL contains an invalid test project identity.");
+    const windowKey = testProject ? `rho-test-window:${testProject}` : "rho-window-id";
+    this.windowId = windowId ?? sessionStorage.getItem(windowKey) ?? crypto.randomUUID();
+    if (!windowId) sessionStorage.setItem(windowKey, this.windowId);
   }
   previousBridgeSession(project: string): ApplicationBridgeSession | undefined {
     const saved = sessionStorage.getItem(`rho-application-session:${project}`);
@@ -109,13 +113,15 @@ export class HostClient {
     const address = new URL(location.href);
     const token = new URLSearchParams(address.hash.slice(1)).get("token");
     const requestedWindow = address.searchParams.get("window");
+    const testProjects = address.searchParams.getAll("test-project");
+    if (testProjects.length > 1) throw new Error("The Workbench URL contains duplicate test project selections.");
     if (requestedWindow !== null && !/^[A-Za-z0-9._:/-]{1,160}$/.test(requestedWindow))
       throw new Error("The Workbench URL contains an invalid window identity.");
     if (token) {
       sessionStorage.setItem("rho-token", token);
     }
-    const client = new HostClient(token ?? sessionStorage.getItem("rho-token") ?? "", requestedWindow ?? undefined);
-    sessionStorage.setItem("rho-window-id", client.windowId);
+    const client = new HostClient(token ?? sessionStorage.getItem("rho-token") ?? "", requestedWindow ?? undefined, testProjects[0]);
+    sessionStorage.setItem(client.testProject ? `rho-test-window:${client.testProject}` : "rho-window-id", client.windowId);
     // Window identity is a nonsecret reference. Keeping it in the document URL
     // lets this exact window be resumed after a Host port change without choosing
     // another window's drafts. Credentials remain scoped to sessionStorage.
@@ -124,7 +130,29 @@ export class HostClient {
     history.replaceState(null, "", address.pathname + address.search);
     return client;
   }
+  private assertEndpoint(path: string) {
+    if (this.testProject && !["/api/info", "/api/host", "/api/plugin-view"].includes(path))
+      throw new Error("This endpoint is unavailable in a disposable test workspace.");
+  }
+  pluginAssetUrl(connection: string, token: string, path: string) {
+    const prefix = this.testProject ? `/view/plugin-test/${encodeURIComponent(this.testProject)}` : "/view/plugin";
+    return `${prefix}/${encodeURIComponent(connection)}/${encodeURIComponent(token)}/${path.split("/").map(encodeURIComponent).join("/")}`;
+  }
+  async testProjectObservation(project: string): Promise<PluginTestProjectObservation | undefined> {
+    if (!this.testProject) return undefined;
+    const snapshot = await this.port<QuerySnapshot>(project, { method: "query_snapshot", params: {
+      capability: { id: "plugins.test_project", version: 1 }, arguments: { id: this.testProject },
+    } }, null);
+    const observation = snapshot.data as unknown as PluginTestProjectObservation | undefined;
+    if (snapshot.status !== "ready" || observation?.project?.id !== this.testProject || !observation.observed_in_this_host ||
+      !["ready", "failed"].includes(observation.project.state))
+      throw new Error("This disposable test workspace is unavailable. Inspect its original test record.");
+    return observation;
+  }
   async request<T>(path: string, body?: unknown): Promise<T> {
+    this.assertEndpoint(path);
+    if (path === "/api/plugin-view" && body !== undefined)
+      body = { ...(body as object), test_project: this.testProject ?? null };
     const method = (body as WorkbenchFrame | undefined)?.frame?.request?.method;
     const reading = body === undefined || path === "/api/state/read" || path === "/api/r/probe" || path === "/api/agents/tasks/query" ||
       ["/api/agents/components/query", "/api/agents/components/context", "/api/agents/components/context/search", "/api/agents/handoff/query"].includes(path) ||
@@ -171,6 +199,7 @@ export class HostClient {
     return this.request<ComponentCommandReplies[C["kind"]]>(request.command.kind === "add_asset" ? "/api/agents/components/asset/upload" : "/api/agents/components/command", request);
   }
   async componentAsset(request: ReadComponentAgentAsset) {
+    this.assertEndpoint("/api/agents/components/asset");
     const response = await fetch("/api/agents/components/asset", { method: "POST", headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
     if (!response.ok) throw new HostRequestError(response.status, await response.json());
     return response.blob();
@@ -181,6 +210,7 @@ export class HostClient {
   componentModelTest(request: ComponentModelTestRequest) { return this.request<{ diagnostic: ComponentModelDiagnostic }>("/api/agents/components/test", request); }
   testAgent(request: TestAgent) { return this.request<AgentDiagnostic>("/api/agents/test", request); }
   async agentAsset(request: ReadAgentAsset) {
+    this.assertEndpoint("/api/agents/tasks/asset");
     const response = await fetch("/api/agents/tasks/asset", { method: "POST", headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
     if (!response.ok) throw new Error((await response.json() as {error?: string}).error ?? "Attachment is unavailable.");
     return response.blob();
@@ -230,10 +260,10 @@ export class HostClient {
       state,
     });
   }
-  async port<T>(project_root: string, request: HostRequest): Promise<T> {
+  async port<T>(project_root: string, request: HostRequest, testProject: string | null = this.testProject ?? null): Promise<T> {
     const frame: WorkbenchFrame = {
       project_root,
-      frame: { id: crypto.randomUUID(), request: structuredClone(request) },
+      frame: { id: crypto.randomUUID(), ...(testProject ? { test_project: testProject } : {}), request: structuredClone(request) },
     };
     const reply = await this.request<SessionReply>(request.method === "application_bridge" ? "/api/application/bridge" : "/api/host", frame);
     if (!reply || typeof reply.ok !== "boolean")

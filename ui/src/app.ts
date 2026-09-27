@@ -15,4 +15,4 @@ setNonce(
   document.querySelector<HTMLMetaElement>("meta[name=rho-csp-nonce]")!.content,
 );
 const pluginView = new URL(location.href).searchParams.get("plugin-view");
-createRoot(document.getElementById("root")!).render(pluginView ? createElement(PluginViewWindow, { view: pluginView }) : new URL(location.href).searchParams.has("plugin-window") ? createElement(PluginWorkspaceWindow) : createElement(AppShell));
+createRoot(document.getElementById("root")!).render(pluginView ? createElement(PluginViewWindow, { view: pluginView }) : (new URL(location.href).searchParams.has("plugin-window") || new URL(location.href).searchParams.has("test-project")) ? createElement(PluginWorkspaceWindow) : createElement(AppShell));

@@ -63,7 +63,7 @@ impl McpEdge {
         let _: ViewOutputArguments =
             serde_json::from_value(args.clone()).map_err(invalid_operation)?;
         let snapshot = self
-            .host
+            .active_host()
             .query_snapshot(
                 context,
                 QueryRequest {
@@ -138,7 +138,7 @@ impl McpEdge {
             _ => return Err(invalid_operation("invalid output resource URI")),
         };
         let reference = token_reference(token)?;
-        let bytes = self.host.verified_output(context, &reference).await?;
+        let bytes = self.active_host().verified_output(context, &reference).await?;
         let content = resource_content(uri, kind, offset, token, reference, &bytes)?;
         Ok(ReadResourceResult::new(vec![content]))
     }

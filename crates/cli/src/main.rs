@@ -19,6 +19,9 @@ struct Cli {
     /// Connect to an existing Workbench using its private launch URL file; no local Host is opened.
     #[arg(long)]
     connect_url_file: Option<PathBuf>,
+    /// Select an existing disposable test project on the connected Host.
+    #[arg(long, requires = "connect_url_file")]
+    test_project: Option<String>,
     /// Open only generic plugin/Operation ports. Does not discover R or install packages.
     #[arg(long, requires = "project", conflicts_with_all = ["demo", "demo_project", "ark", "r_home", "checkpoint_helper", "rscript", "environment", "remote_host", "host_skills", "connect_url_file"])]
     plugins_only: bool,
@@ -269,7 +272,9 @@ async fn run() -> Result<(), CliFailure> {
             Command::Request {json}=>(serde_json::from_str::<serde_json::Value>(json).map_err(|e|e.to_string())?,"result"),
             _=>return Err(rho_host::OperationError::InvalidInput("--connect-url-file supports query, invoke, get-operation, bind-method and request; it never launches a server or runtime".into()).into()),
         };
-        let host = connection::ConnectedHost::open(path, cli.project.as_deref()).await?;
+        let test_project = cli.test_project.as_deref().map(rho_plugin_protocol::TestProjectId::new)
+            .transpose().map_err(|error|rho_host::OperationError::InvalidInput(error.to_string()))?;
+        let host = connection::ConnectedHost::open(path, cli.project.as_deref(), test_project).await?;
         let result = host.submit(request).await?;
         let mut response = json!({"ok":true,"mode":"connected_host"});
         response[label] = result;

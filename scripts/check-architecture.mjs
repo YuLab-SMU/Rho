@@ -90,7 +90,7 @@ for (const pkg of metadata.packages) {
       }
     }
     if (dep.name.startsWith("rho-")) {
-      if (["rho-host", "rho-mcp"].includes(pkg.name) && ["rho-plugin-protocol", "rho-plugins"].includes(dep.name) && dep.kind === "dev") continue;
+      if (["rho-host", "rho-mcp", "rho-workbench"].includes(pkg.name) && ["rho-plugin-protocol", "rho-plugins"].includes(dep.name) && dep.kind === "dev") continue;
       if (pkg.name === "rho-plugins" && dep.name === "rho-sqlite" && dep.kind === "dev") continue;
       assert.ok(allowed[pkg.name].includes(dep.name),
         `${pkg.name} -> ${dep.name} bypasses the declared ownership boundary`);

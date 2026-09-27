@@ -19,8 +19,37 @@ checked without borrowing current analysis instances. Open views and accepted
 work prevent stop; failed or partial cleanup retains its original records and
 source protections. Confirmed stop keeps the independent directory as evidence.
 Scoped observations and `plugins.test_operation` read retained original records
-without restarting a child. Studio controls and child selection through public
-edges remain unfinished; the lifecycle ports alone do not open a test window.
+without restarting a child. Session/HTTP frames, connected CLI and MCP now have
+explicit child selection, and the generic browser shell scopes layouts, view
+messages and immutable asset imports to that child. It labels the disposable
+workspace and preserves selection on refresh. Missing or stopped selections
+cannot fall back to analysis. MCP keeps selection fixed through RPC/GET/DELETE
+and holds a native lease until disconnect. Studio's end-user test controls remain
+unfinished; the transport alone does not complete that workflow.
+
+The two new HTTP/MCP cases pass after correcting a missing type qualification in
+the first compile. They verify separate journals/catalogs, scoped view tokens,
+opaque-origin imports, message replay refusal, stopped-state rejection and MCP
+connection leases. All 39 affected client unit cases, 29 Workbench and 15 MCP
+regressions, six connected-CLI cases and the real JSON-lines session case pass.
+Public DTO generation, independent protocol consumption, client build/consistency,
+current binary build, dependency boundaries and governance checks pass.
+
+The isolated Chrome test passes with the actual connected CLI, public UI SDK and
+native control. An analysis view retains its unsaved draft while a child saves,
+refreshes and stops independently. A fresh child view flushes and closes normally;
+a stopped child's URL displays unavailable without opening analysis. The normal,
+wide and constrained captures (1440/1920/390/220 px), standalone child view,
+recovery dialog and stopped state were inspected without overlap or page overflow. Fixture content
+scrolls normally inside the narrow iframe. Initial browser failures are retained:
+one click occurred while the analysis page held focus; after explicit foreground
+selection, the close-after-refresh expectation exposed retained registrations from
+previous documents. Those registrations are not silently treated as flushed.
+The browser case verifies explicit saved-state recovery after the close deadline;
+automatic retired-document lifecycle cleanup remains unresolved. Studio backend-
+test controls and real-R acceptance also remain unfinished. Exact commands,
+initial failures and current evidence are in
+`target/plugin-refactor/test-project-edges-verification.txt`.
 
 All five native lifecycle cases pass after fixing a plugin publication-task race
 that retained the parent journal during immediate reopen. Host drain now cancels

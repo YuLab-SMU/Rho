@@ -1209,6 +1209,15 @@ impl NextHost {
         self.runtime.test_projects.as_ref().ok_or_else(||OperationError::Unavailable("Test project hosting is unavailable".into()))?.host(context, id)
     }
 
+    /// Transport selection preserves the same caller and the selected Host's
+    /// ordinary ports. Holding the child handle fences native stop through the call.
+    pub async fn dispatch_selected(&self, context: &CallContext, test_project: Option<&rho_plugin_protocol::TestProjectId>, request: rho_contract::HostRequest) -> Result<serde_json::Value, OperationError> {
+        match test_project {
+            Some(id) => self.plugin_test_host(context, id)?.dispatch(context, request).await,
+            None => self.dispatch(context, request).await,
+        }
+    }
+
     pub fn capability_publications(&self) -> tokio::sync::watch::Receiver<u64> {
         self.runtime.registry.subscribe_publications()
     }

@@ -21,6 +21,7 @@ pub(super) struct ConnectedHost {
     origin: Url,
     token: String,
     project: String,
+    test_project: Option<rho_plugin_protocol::TestProjectId>,
 }
 struct Endpoint {
     origin: Url,
@@ -55,11 +56,11 @@ impl Endpoint {
         if url.scheme() != "http"
             || !url.username().is_empty()
             || url.password().is_some()
-            || url.query().is_some()
+            || url.query().is_some_and(|query| query != "plugin-window" && query != "plugin-window=")
             || url.path() != "/"
         {
             return Err(invalid(
-                "Connect requires a complete HTTP Workbench launch URL without userinfo, query or alternate path",
+                "Connect requires a complete HTTP Workbench launch URL without userinfo, project-selection query or alternate path",
             ));
         }
         let address = url
@@ -109,6 +110,7 @@ impl ConnectedHost {
     pub(super) async fn open(
         path: &Path,
         expected_project: Option<&Path>,
+        test_project: Option<rho_plugin_protocol::TestProjectId>,
     ) -> Result<Self, CliFailure> {
         let endpoint = Endpoint::read(path)?;
         let mut headers = HeaderMap::new();
@@ -178,6 +180,7 @@ impl ConnectedHost {
             origin: endpoint.origin,
             token: endpoint.token,
             project,
+            test_project,
         })
     }
     pub(super) async fn submit(&self, request: Value) -> Result<Value, CliFailure> {
@@ -197,7 +200,8 @@ impl ConnectedHost {
                 .map_err(|_| invalid("System clock is before Unix epoch"))?
                 .as_nanos()
         );
-        let frame = json!({"project_root":self.project,"frame":{"id":id,"request":request}});
+        let mut frame = json!({"project_root":self.project,"frame":{"id":id,"request":request}});
+        if let Some(id) = &self.test_project { frame["frame"]["test_project"] = json!(id); }
         let bytes =
             serde_json::to_vec(&frame).map_err(|_| invalid("Host request cannot be encoded"))?;
         if bytes.len() > REQUEST_BYTES {

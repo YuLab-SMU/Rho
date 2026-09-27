@@ -66,7 +66,13 @@ struct Entry {
 pub struct McpRequestIdentity {
     pub project: String,
     pub identity: String,
+    pub test_project: Option<rho_contract::TestProjectId>,
     pub managed: Option<rho_host::AgentMcpIdentity>,
+}
+struct HttpBinding {
+    identity: String,
+    test_project: Option<rho_contract::TestProjectId>,
+    host: Arc<NextHost>,
 }
 pub struct McpEdge {
     host: Arc<NextHost>,
@@ -78,7 +84,7 @@ pub struct McpEdge {
     in_flight: Semaphore,
     observations: Semaphore,
     http_project: Option<String>,
-    http_identity: OnceLock<String>,
+    http_binding: OnceLock<HttpBinding>,
 }
 struct ToolCatalog { identity: String, entries: BTreeMap<String, Entry> }
 struct CatalogCache {
@@ -233,11 +239,11 @@ impl McpEdge {
             in_flight: Semaphore::new(32),
             observations: Semaphore::new(16),
             http_project: None,
-            http_identity: OnceLock::new(),
+            http_binding: OnceLock::new(),
         })
     }
     fn catalog_for(&self, context: &CallContext) -> Result<Arc<ToolCatalog>, String> {
-        let descriptors=self.host.capabilities_for(context);
+        let descriptors=self.active_host().capabilities_for(context);
         let mut cache=self.catalog.lock().unwrap();
         if cache.descriptors != descriptors { *cache=CatalogCache::new(descriptors)?; }
         Ok(cache.catalog.clone())
@@ -266,19 +272,36 @@ impl McpEdge {
         self.http_project = Some(project);
         self
     }
+    fn active_host(&self) -> &Arc<NextHost> {
+        self.http_binding.get().map(|binding| &binding.host).unwrap_or(&self.host)
+    }
     fn request_context(&self, request: &RequestContext<RoleServer>) -> Result<CallContext, ErrorData> {
         let Some(project) = &self.http_project else { return Ok(self.context.clone()); };
         let identity = request.extensions.get::<http::request::Parts>()
             .and_then(|parts| parts.extensions.get::<McpRequestIdentity>())
             .ok_or_else(|| ErrorData::invalid_request("MCP request has no trusted connection identity", None))?;
-        if &identity.project != project || self.http_identity.get_or_init(|| identity.identity.clone()) != &identity.identity {
+        if &identity.project != project {
             return Err(ErrorData::invalid_request("MCP connection identity changed", None));
         }
-        match &identity.managed {
+        let context = match &identity.managed {
             Some(managed) if managed.is_valid() && &managed.project == project => Ok(managed.context.clone()),
             Some(_) => Err(ErrorData::invalid_request("MCP attachment is no longer active", None)),
             None => Ok(self.context.clone()),
+        }?;
+        // Selection is fixed by authenticated transport metadata, never by tool
+        // arguments. Keep the child leased until this MCP connection ends.
+        let selected = match &identity.test_project {
+            Some(id) => self.host.plugin_test_host(&context, id)
+                .map_err(|error|ErrorData::invalid_request(error.to_string(),None))?,
+            None => self.host.clone(),
+        };
+        let binding = self.http_binding.get_or_init(||HttpBinding {
+            identity:identity.identity.clone(),test_project:identity.test_project.clone(),host:selected,
+        });
+        if binding.identity != identity.identity || binding.test_project != identity.test_project {
+            return Err(ErrorData::invalid_request("MCP connection project selection changed",None));
         }
+        Ok(context)
     }
 
     fn observe_request(&self) {
@@ -335,7 +358,7 @@ impl McpEdge {
                 }
             }
         };
-        self.host.dispatch(context, request).await
+        self.active_host().dispatch(context, request).await
     }
     #[cfg(test)]
     async fn route(&self, route: &Route, args: Value) -> Result<Value, OperationError> {
@@ -352,7 +375,7 @@ impl ServerHandler for McpEdge {
     }
     async fn on_initialized(&self, context: NotificationContext<RoleServer>) {
         if self.notifications_started.set(()).is_ok() {
-            let mut publications=self.host.capability_publications();
+            let mut publications=self.active_host().capability_publications();
             let stopped=self.notifications.clone();
             let peer=context.peer.clone();
             tokio::spawn(async move {

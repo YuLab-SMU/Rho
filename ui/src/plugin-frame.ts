@@ -30,8 +30,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
   iframe.setAttribute("allow", "clipboard-read 'none'; clipboard-write 'none'; camera 'none'; microphone 'none'; geolocation 'none'");
   iframe.style.cssText = "flex:1;min-height:0;width:100%;height:0;border:0;display:block;background:white";
   const nonce = crypto.randomUUID();
-  const assetPath = connection.entrypoint.split("/").map(encodeURIComponent).join("/");
-  iframe.src = `/view/plugin/${encodeURIComponent(connection.connection)}/${encodeURIComponent(connection.asset_token)}/${assetPath}#rho-view-nonce=${nonce}`;
+  iframe.src = `${client.pluginAssetUrl(connection.connection, connection.asset_token, connection.entrypoint)}#rho-view-nonce=${nonce}`;
   const channel = new MessageChannel();
   const clipboardAvailable = typeof ClipboardItem === "function" && typeof navigator.clipboard?.write === "function";
   const clipboard = new PluginClipboard(text => navigator.clipboard.write([new ClipboardItem({ "text/plain": text })]));

@@ -82,6 +82,7 @@ Documentation:
 Sources:
 
 - `crates/cli/src/plugins.rs`
+- `crates/cli/tests/session_test_project.rs`
 - `crates/host/src/plugin_tests.rs`
 - `crates/host/tests/files_plugin.rs`
 - `crates/host/tests/fixtures/view_delegation.py`
@@ -97,6 +98,7 @@ Sources:
 - `crates/plugin-sdk/**`
 - `crates/plugins/**`
 - `crates/process-engine/**`
+- `crates/workbench/src/plugin_test_project_tests.rs`
 - `plugins/**`
 - `scripts/build-console-plugin.mjs`
 - `scripts/build-editor-plugin.mjs`
@@ -179,6 +181,7 @@ Sources:
 - `ui/e2e/plugin-drafts.spec.ts`
 - `ui/e2e/plugin-preview.spec.ts`
 - `ui/e2e/plugin-resource-download.spec.ts`
+- `ui/e2e/plugin-test-project.spec.ts`
 - `ui/e2e/plugin-workspace.spec.ts`
 - `ui/e2e/r-plugin-console.spec.ts`
 - `ui/e2e/r-plugin-help.spec.ts`
@@ -278,8 +281,11 @@ Checks:
 - `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
 - `plugins.studio-browser`: `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts"]`
 - `plugins.studio-model`: `["node","scripts/test-studio-plugin.mjs"]`
+- `plugins.test-project-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-test-project.spec.ts"]`
+- `plugins.test-project-edges`: `["cargo","test","-p","rho-workbench","--lib","plugin_test_","--locked"]`
 - `plugins.test-project-host`: `["cargo","test","-p","rho-host","--test","plugin_test_projects","--locked"]`
 - `plugins.test-project-owner`: `["cargo","test","-p","rho-plugins","--test","test_projects","--locked"]`
+- `plugins.test-project-session`: `["cargo","test","-p","rho-cli","--test","session_test_project","--locked"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
 - `plugins.view-delegation`: `["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"]`
 - `plugins.viewer`: `["node","scripts/test-viewer-plugin.mjs"]`

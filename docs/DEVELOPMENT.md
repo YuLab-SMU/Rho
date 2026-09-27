@@ -44,6 +44,20 @@ invalid grants/artifacts and symlink
 storage before backend startup. Run the repository and generic workspace
 regressions after changes to these shared owners. These tests do not establish
 Studio's backend-test UI or real-R acceptance.
+Transport selection uses `cargo test -p rho-workbench --lib plugin_test_ --locked`
+for independent ports/journals, token/asset separation, replay refusal, immutable
+MCP selection and connection leases. Run the existing MCP identity regression
+cases when changing that boundary. `cargo test -p rho-cli --test connection
+--locked` covers explicit child selection and the parent project precondition. The
+`--test session_test_project` CLI target exercises actual JSON-lines child
+selection, parent separation and stopped/missing-target refusal.
+After public DTO generation and client/binary builds, `npm run test:browser
+--prefix ui -- plugin-test-project.spec.ts` exercises the actual connected CLI,
+public SDK, native control, refresh, saved closure, stopped-state refusal and
+normal/wide/constrained layouts while another analysis view retains its draft.
+It checks ordinary flush closure on a fresh view and explicit saved-state recovery
+after refresh: old renderer registrations are not automatically reclaimed yet.
+
 
 Generic project read coverage is separate from scientific reference interpretation.
 `cargo test -p rho-sqlite --lib project_coverage --locked` and

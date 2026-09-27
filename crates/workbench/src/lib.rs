@@ -120,7 +120,8 @@ fn failure(status: StatusCode, error: impl Into<String>) -> Response {
 
 async fn boundary(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
     let deleting = request.method() == axum::http::Method::DELETE;
-    let plugin_asset = request.method() == axum::http::Method::GET && request.uri().path().starts_with("/view/plugin/");
+    let plugin_asset = request.method() == axum::http::Method::GET &&
+        (request.uri().path().starts_with("/view/plugin/") || request.uri().path().starts_with("/view/plugin-test/"));
     let headers = request.headers();
     if headers.get(header::HOST).and_then(|h| h.to_str().ok()) != Some(&state.authority) {
         return failure(StatusCode::FORBIDDEN, "unexpected local Host");
@@ -153,8 +154,24 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
         if managed.as_ref().is_some_and(|identity| identity.project != project || !identity.is_valid()) {
             return failure(StatusCode::UNAUTHORIZED, "MCP attachment is no longer active in this project");
         }
+        if request.headers().get_all("x-rho-test-project").iter().count() > 1 {
+            return failure(StatusCode::BAD_REQUEST,"Duplicate test project selection");
+        }
+        let test_project = match request.headers().get("x-rho-test-project") {
+            None => None,
+            Some(value) => match value.to_str().ok().and_then(|id|rho_contract::TestProjectId::new(id).ok()) {
+                Some(id) => Some(id),
+                None => return failure(StatusCode::BAD_REQUEST,"Invalid test project selection"),
+            },
+        };
+        if let Some(id) = &test_project {
+            let context = managed.as_ref().map(|identity| identity.context.clone()).unwrap_or_else(NextHost::local_context);
+            if let Err(error) = selected.host.plugin_test_host(&context,id) {
+                return failure(StatusCode::CONFLICT,error.to_string());
+            }
+        }
         let identity = managed.as_ref().map(|value| value.context.connection_id.clone()).unwrap_or_else(|| "manual-mcp".into());
-        let identity = rho_mcp::McpRequestIdentity { project, identity, managed };
+        let identity = rho_mcp::McpRequestIdentity { project, identity, test_project, managed };
         if request.headers().get_all("mcp-session-id").iter().count() > 1 {
             return failure(StatusCode::BAD_REQUEST, "Duplicate MCP session identity");
         }
@@ -377,7 +394,7 @@ async fn dispatch(
     }
     let result = selected
         .host
-        .dispatch(&context, request.frame.request)
+        .dispatch_selected(&context, request.frame.test_project.as_ref(), request.frame.request)
         .await;
     let reply = match result {
         Ok(result) => SessionReply {
@@ -412,6 +429,9 @@ async fn dispatch_bridge(
     headers: HeaderMap,
     Json(request): Json<WorkbenchFrame>,
 ) -> Response {
+    if request.frame.test_project.is_some() {
+        return failure(StatusCode::BAD_REQUEST,"The fixed application bridge is unavailable in a test project");
+    }
     if !matches!(request.frame.request, HostRequest::ApplicationBridge(_)) {
         return failure(
             StatusCode::BAD_REQUEST,
@@ -551,6 +571,7 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/html/token", post(annotations::html_token))
         .route("/view/html/{token}", get(annotations::html_view))
         .route("/view/plugin/{connection}/{token}/{*path}", get(plugin_views::asset))
+        .route("/view/plugin-test/{test_project}/{connection}/{token}/{*path}", get(plugin_views::test_asset))
         .route("/api/plugin-view", post(plugin_views::dispatch))
         .route("/api/agents/components/query", post(component_agents::query))
         .route("/api/agents/components/command", post(component_agents::command))
@@ -744,7 +765,7 @@ mod tests {
         fixture_with_runtime(RuntimeConfiguration::Project).await
     }
 
-    async fn fixture_with_runtime(
+    pub(super) async fn fixture_with_runtime(
         runtime: RuntimeConfiguration,
     ) -> (tempfile::TempDir, AppState, Router) {
         let temp = tempfile::tempdir().unwrap();
@@ -1325,3 +1346,6 @@ mod mcp_identity_tests;
 mod agent_handoff_tests;
 #[cfg(test)]
 mod annotation_tests;
+
+#[cfg(test)]
+mod plugin_test_project_tests;

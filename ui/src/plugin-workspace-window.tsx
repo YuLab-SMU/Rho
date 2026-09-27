@@ -19,7 +19,7 @@ function ConnectedFrame({ client, project, connection, failed }: {
 
 /** Scientific content is entirely contributed. The containing window only
  * observes layouts, retains isolated documents and requests cooperative close. */
-export function PluginWorkspace({ client, project }: { client: HostClient; project: string }) {
+export function PluginWorkspace({ client, project, testName }: { client: HostClient; project: string; testName?: string }) {
   const [owners] = useState(() => ({ layout: createPluginWindowState(client, project), views: createPluginWindowViews(client, project), closes: createPluginWindowClosures(client, project) }));
   const saved = useSyncExternalStore(owners.layout.subscribe, owners.layout.getSnapshot);
   const views = useSyncExternalStore(owners.views.subscribe, owners.views.getSnapshot);
@@ -91,6 +91,7 @@ export function PluginWorkspace({ client, project }: { client: HostClient; proje
     </div> };
   });
   return <main aria-label="Plugin workspace" style={{ height: '100dvh', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+    {client.testProject && <div role="note" style={{ flex: 'none', padding: '8px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-subtle)', overflowWrap: 'anywhere' }}>Disposable test workspace · {testName ?? client.testProject}</div>}
     {(error || saved.error || saved.saving || [...closes.values()].some(entry => entry.busy || entry.error)) && <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-border)', overflowWrap: 'anywhere', maxHeight: '30vh', overflow: 'auto' }}>
       {(error || saved.error) && <div role="alert">{saved.error || error}</div>}
       {saved.saving && <span role="status">Saving layout…</span>}
@@ -122,15 +123,16 @@ export function PluginWorkspace({ client, project }: { client: HostClient; proje
 }
 
 export function PluginWorkspaceWindow() {
-  const [connection, setConnection] = useState<{ client: HostClient; project: string } | null>(null);
+  const [connection, setConnection] = useState<{ client: HostClient; project: string; testName?: string } | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
     let client: HostClient | undefined, stopped = false;
     try {
       client = HostClient.fromLocation(); const current = client;
-      void client.info().then(info => {
+      void client.info().then(async info => {
         if (!info.project_root) throw new Error('Select a project before opening this window.');
-        if (!stopped) setConnection({ client: current, project: info.project_root });
+        const test = await current.testProjectObservation(info.project_root);
+        if (!stopped) setConnection({ client: current, project: info.project_root, testName: test?.project.selection.name });
       }).catch(error => { if (!stopped) setError(message(error)); });
     } catch (error) { setError(message(error)); }
     return () => { stopped = true; client?.stopReads(); };
