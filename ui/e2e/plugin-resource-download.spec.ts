@@ -27,12 +27,12 @@ test.beforeAll(async () => {
   const plugin = buildDownloadUiFixture(directory), database = join(directory, "state.sqlite");
   const installed = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", plugin], { encoding: "utf8" })).result;
   const native = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", buildDownloadBackendFixture(directory), "--target", "aarch64-apple-darwin"], { encoding: "utf8" })).result;
-  process_ = spawn(resolve("../target/debug/rho"), ["--database", database, "--project", project, "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
+  process_ = spawn(resolve("../target/debug/rho"), ["--database", database, "--project", project, "--plugins-only", "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = "", errors = "";
     const timer = setTimeout(() => reject(new Error(`Fixture Host startup timed out: ${errors}`)), 40000);
     process_.stderr!.on("data", b => errors += b);
-    process_.stdout!.on("data", b => { output += b; const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/); if (found) { clearTimeout(timer); done(found[0]); } });
+    process_.stdout!.on("data", b => { output += b; const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/); if (found) { clearTimeout(timer); done(found[0]); } });
     process_.once("exit", code => { clearTimeout(timer); reject(new Error(`Fixture Host exited ${code}: ${errors}`)); });
   }));
   const nativeInstance = (await invoke("plugins.activate", { revision: native.revision, artifact: native.artifacts[0], target: "aarch64-apple-darwin", alias: "native", configuration: {} })).instance;

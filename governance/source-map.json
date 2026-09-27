@@ -12,7 +12,7 @@
     "plugins.preview-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_preview", "--locked"]},
     "plugins.preview-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "plugin-preview.spec.ts"]},
     "plugins.studio-model": {"command": ["node", "scripts/test-studio-plugin.mjs"]},
-    "plugins.studio-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "studio-plugin.spec.ts", "studio-backend-test.spec.ts", "studio-scenario.spec.ts"]},
+    "plugins.studio-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "studio-plugin.spec.ts", "studio-backend-test.spec.ts", "studio-scenario.spec.ts", "studio-archive.spec.ts"]},
     "plugins.archive-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "archive_transfers", "--locked"]},
     "plugins.archive-ports": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_archives", "--locked"]},
     "plugins.build-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "build_operations", "--locked"]},
@@ -486,7 +486,8 @@
         "--prefix",
         "ui",
         "--",
-        "plugin-resource-download.spec.ts"
+        "plugin-resource-download.spec.ts",
+        "plugin-archive-download.spec.ts"
       ]
     },
     "plugins.download-browser": {
@@ -951,6 +952,7 @@
         "scripts/fixtures/plugin-ui.mjs",
         "scripts/fixtures/plugin-close.mjs",
         "scripts/fixtures/plugin-download.mjs",
+        "scripts/fixtures/plugin-archive-download.mjs",
         "scripts/test-r-plugin-engine.mjs",
         "scripts/build-r-plugin.mjs",
         "scripts/test-r-plugin.mjs",
@@ -962,8 +964,10 @@
         "scripts/test-studio-plugin.mjs",
         "scripts/fixtures/studio-development.mjs",
         "scripts/fixtures/studio-backend-test.mjs",
+        "scripts/fixtures/studio-archive.mjs",
         "ui/e2e/studio-plugin.spec.ts",
         "ui/e2e/studio-backend-test.spec.ts",
+        "ui/e2e/studio-archive.spec.ts",
         "scripts/build-manager-plugin.mjs",
         "scripts/test-manager-plugin.mjs",
         "ui/e2e/manager-plugin.spec.ts",
@@ -999,6 +1003,7 @@
         "ui/e2e/plugin-workspace.spec.ts",
         "ui/e2e/plugin-download.spec.ts",
         "ui/e2e/plugin-resource-download.spec.ts",
+        "ui/e2e/plugin-archive-download.spec.ts",
         "ui/e2e/fixtures/plugin-download.ts",
         "scripts/test-files-plugin-engine.mjs",
         "scripts/test-process-plugin-owner.mjs",
@@ -1025,6 +1030,7 @@
         "scripts/fixtures/plugin-drafts.mjs",
         "scripts/fixtures/plugin-archives.mjs",
         "scripts/fixtures/manager-archive.mjs",
+        "scripts/fixtures/manager-export.mjs",
         "ui/e2e/manager-archive.spec.ts",
         "scripts/fixtures/plugin-draft-view.mjs",
         "ui/e2e/plugin-drafts.spec.ts",

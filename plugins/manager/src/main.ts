@@ -2,6 +2,7 @@ import {connectPluginView} from '../public/plugin-ui/index.js';
 import type {PluginCatalogPage, PluginInspection, PluginInstanceObservation, PluginInstanceObservations, ScenarioPage,
   ScenarioRevision, PluginViewRecord, PluginWindowNode, WindowScenarioSnapshot, SaveScenario} from '../public/plugin-protocol/index.js';
 import {Manager, initial, read, short, same, matches, viewsOf, viewMatches, checkpointInput, own, type Saved} from './model.js';
+import {archiveExportPanel} from './export-panel.js';
 const client = await connectPluginView();
 const restored = client.view.state as Partial<Saved>;
 const manager = new Manager(client,{...initial(),...restored});
@@ -17,6 +18,7 @@ const node = <K extends keyof HTMLElementTagNameMap>(tag:K,text='',className='')
 const message = (e:unknown)=>e instanceof Error?e.message:String(e);
 const layoutViews = (layout:PluginWindowNode):string[]=>layout.kind==='tabs'?layout.views:layout.kind==='split'?layout.children.flatMap(layoutViews):[];
 const containingGroup = (layout:PluginWindowNode,view:string):string|null=>layout.kind==='tabs'?(layout.views.includes(view)?layout.id:null):layout.kind==='split'?layout.children.map(child=>containingGroup(child,view)).find(Boolean)??null:null;
+const exports=archiveExportPanel(manager,act,saveDraftSoon,()=>busy);
 function button(title:string,action:()=>Promise<unknown>|void,className='',readOnly=false) {const b=node('button',title,className);if(readOnly)b.dataset.readOnly='true';b.disabled=busy||!!manager.state.pending&&!readOnly;b.onclick=()=>act(action);return b;}
 function block(title:string,...children:HTMLElement[]){const e=node('div','','block');e.append(node('h3',title),...children);return e;}
 function heading(title:string,...children:HTMLElement[]){const e=node('div','','block');e.append(node('h2',title),...children);return e;}
@@ -46,6 +48,7 @@ function renderControls(){
   const selfRelease=document.querySelector<HTMLButtonElement>('[data-self-release]');if(selfRelease)selfRelease.disabled=true;
   document.querySelectorAll<HTMLButtonElement>('[data-protected]').forEach(b=>b.disabled=true);
   renderImport();
+  exports.render();get('export-error').textContent=error;get('export-error').hidden=!error;
 }
 function renderImport(){
   const upload=manager.state.upload,pending=!!manager.state.pending,out=get('archive-details');
@@ -139,12 +142,12 @@ function renderInspection(){
     block('Contributions',...p.manifest.views.map(v=>node('p',v.title)),...p.manifest.capabilities.map(c=>node('p',`${c.capability.id}@${c.capability.version}`))),
     block('Protecting references',node('p',`${p.summary.reference_count} references. Instances and saved scenario history can keep this revision in use.`)),
     detail('Dependencies and requested capabilities',{dependencies:p.manifest.dependencies,requires:p.manifest.requires,optional_requires:p.manifest.optional_requires??[]}));
-  const actions=node('div','','actions');actions.append(button('Create branch',async()=>{
+  const actions=node('div','','actions');actions.append(button('Export revision',()=>exports.open(p)),button('Create branch',async()=>{
     const created=await manager.invoke('plugins.branch',{name:`${p.manifest.name} experiment`,revision:p.summary.revision}) as {branch:string};await refresh();notice=`Created branch ${created.branch}.`;
   }));
   const remove=button('Remove revision',async()=>{await manager.invoke('plugins.remove',{revision:p.summary.revision});manager.state.selected='';manager.state.detail=false;await save();await refresh();},'danger');
   if(p.summary.reference_count>0){remove.dataset.protected='true';remove.title='Unbind retained references before removing this revision.';}actions.append(remove);out.append(actions);
-  out.append(node('p','Every installed revision uses the same package validation and permissions. Archive export currently uses the plugin CLI.','small'));
+  out.append(node('p','Every installed revision uses the same package validation and permissions. Export preserves the selected source and artifacts.','small'));
 }
 function renderInstance(){
   const p=instance!,i=p.instance,out=get('contents');out.replaceChildren(heading(i.alias,node('p',`${i.identity.plugin} · ${short(i.identity.revision)}`)));

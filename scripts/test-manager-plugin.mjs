@@ -5,12 +5,14 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {buildManagerPlugin} from './build-manager-plugin.mjs';
 import {checkManagerArchive} from './fixtures/manager-archive.mjs';
+import {checkManagerExport} from './fixtures/manager-export.mjs';
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'rho-manager-model-'));
 try {
   const plugin=buildManagerPlugin(path.join(dir,'manager'));
   const {Manager,checkpointInput,matches,viewMatches}=await import(pathToFileURL(path.join(plugin,'dist/src/model.js')));
   const {operationRequestId,ViewRequestError}=await import(pathToFileURL(path.join(plugin,'dist/public/plugin-ui/index.js')));
   await checkManagerArchive({Manager,operationRequestId});
+  await checkManagerExport({Manager,operationRequestId});
   const digest=n=>'sha256:'+n.repeat(64),identity={instance:'instance',plugin:'example.plugin',revision:digest('a'),artifact:digest('b')};
   const observed={instance:{identity,purpose:'runtime',configuration:{},state:'active',alias:'example'},observed_in_this_host:true};
   const definition={id:digest('c'),parent:null,scenario:'example',project:'project',name:'Example',instances:{example:{plugin:identity.plugin,revision:identity.revision,artifact:identity.artifact,configuration:{},dependencies:{}}},providers:[],

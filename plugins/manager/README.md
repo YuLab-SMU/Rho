@@ -24,6 +24,14 @@ replacement view. An uncertain Operation remains pending. Import never builds,
 activates, changes a scenario or replaces the current selection. Explicit discard
 removes only unheld transfer bytes, preserving imported revisions and receipts.
 
+Export revision retains the inspected source and an explicit sorted artifact
+selection; clearing all artifacts prepares source only. Prepare archive uses a
+normal original Operation, while Download archive is a separate gesture checked
+by the containing browser. A lost preparation reply is recovered without opening
+a download. The retained receipt, request identity and filename survive reload;
+export does not checkpoint edits, activate code or change a scenario. Discard
+export removes only unheld transfer bytes and leaves source/history intact.
+
 Scenarios are paged, immutable checkpoints. A retained JSON draft can edit exact
 definitions, including aliases, provider bindings, resource context and layout.
 Viewing an older checkpoint does not alter its branch. Saving it creates a new
@@ -43,10 +51,9 @@ management view. Only the original view can explicitly retry that identical
 request. Recovery does not start later preparation steps. Uncertain work stays
 visible. Hiding this view retains its DOM; closing cooperatively saves its state.
 
-This package is an implementation stage, not the completed Plugin Studio. Archive
-export still uses the CLI or public ports. Visual/source editing, build, preview
+This package is an implementation stage, not the completed Plugin Studio. Visual/source editing, build, preview
 and scenario application are provided by the separate ordinary Studio package;
-remaining archive/Agent workflows and default delivery are ongoing work. The
+remaining Studio archive/Agent workflows and default delivery are ongoing work. The
 manager does not add its own approval system, run scientific operations on read,
 or claim OS-level isolation for native plugins. See the repository Status page for
 executed checks; implementation alone does not establish browser acceptance.

@@ -22,3 +22,5 @@ Import controls require a Host that advertises the declared `plugins.archive_*`
 ports. A client refresh cannot add those native capabilities to an older running
 Host. New manager source must be built and snapshotted as an immutable revision;
 existing manager instances retain their original assets and grants.
+Export additionally requires the container's `archive_download_v1` presentation
+feature. Native export success is independent of browser download availability.

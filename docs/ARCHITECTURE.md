@@ -728,6 +728,16 @@ No scientific Operation, runtime startup or file-save claim is introduced.
 Closure stops unsubmitted collection; an already-requested browser download is
 not described as rolled back.
 
+Package archive download follows the same presentation boundary with a native
+`PluginArchiveReference` and the view's declared `plugins.archive_read` grant.
+The archive owner checks project/principal visibility; a runtime resource owner
+is never fabricated for package bytes. Archives and resources share one active
+download per containing view, with their own byte bounds. Preparation is an
+original archive-export Operation; downloading is a distinct user gesture and
+does not repeat that Operation. Fixture previews and intrinsic child-project
+selection cannot route this presentation action. The archive collection deadline
+aborts late reads before any browser request.
+
 The public UI SDK reads retained resources through the declared `resources.read`
 query. It captures the exact reference, bounds allocation, validates every chunk's
 owner/range/length and verifies the final SHA-256 before returning bytes. Stopping

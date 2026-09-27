@@ -84,16 +84,36 @@ public-port regressions. Public DTO changes also require client generation and
 `node scripts/test-plugin-protocol.mjs`. These establish archive port behavior;
 they do not establish a browser file save or Studio archive UI acceptance.
 
-The Manager import model runs in `node scripts/test-manager-plugin.mjs`: retained
+The Manager archive models run in `node scripts/test-manager-plugin.mjs`: retained
 file capture, identical-content reselection, partial uploads, lost acknowledgements,
 original import recovery, replacement views, preserved uncertainty and explicit
-discard. After building the current client and Host, run `npm run test:browser
+discard, exact export selections, source-only exports and recovery without downloads.
+After building the current client and Host, run `npm run test:browser
 --prefix ui -- manager-plugin.spec.ts manager-archive.spec.ts` for the ordinary
 Manager composition and local-file import flow. The archive fixture uses independent
 source and target catalogs, loses a chunk reply and an import reply, reloads the
 view, and verifies one import without activation while a second window keeps its
-unsaved Unicode text. Inspect normal, wide and constrained dialog captures and
+unsaved Unicode text. It also loses an export reply, recovers its original result
+and explicitly downloads both source-only and built archives with matching checksums.
+
+Studio archive models run in `node scripts/test-studio-plugin.mjs`. They exercise
+source draft preservation, identical-file reselection, original request recovery
+across views, result-save failure, exact source exports and uncertain outcomes.
+After the current client/binary build, run `npm run test:browser --prefix ui --
+studio-plugin.spec.ts studio-backend-test.spec.ts studio-scenario.spec.ts
+studio-archive.spec.ts`. The archive flow loses upload/import/export replies,
+retains unsaved Unicode source, downloads the immutable checkpoint, then opens
+imported source only after explicitly checkpointing edits. It also checks normal,
+wide and constrained controls, checkbox keyboard focus and another window's draft.
+Inspect normal, wide and constrained dialog captures and
 scrolled controls; passing model checks alone does not establish visual acceptance.
+
+Run `npm run test:browser --prefix ui -- plugin-resource-download.spec.ts
+plugin-archive-download.spec.ts` after rebuilding the client and current binary
+for both containing-browser download paths. The archive case checks gesture
+refusal, exact downloaded bytes, no extra Operations and closure during collection.
+Client download unit tests cover the separate archive byte bound, one shared
+download slot, integrity, revoked authority, disposal and transfer expiry.
 
 Source development uses `cargo test -p rho-plugins --test source_development --locked`
 for binary/paged reads, full-file corruption detection, source-only history,

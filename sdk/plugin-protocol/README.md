@@ -47,6 +47,14 @@ Archives can be unbuilt source checkpoints; activation needs a complete artifact
 
 ## Archive transfer ports
 
+The view-channel `download_archive` intrinsic takes a `PluginArchiveReference`
+and a plain filename, using that view's declared `plugins.archive_read@1` grant
+intersected with current parent authority. Native admission validates the original
+scope and byte reference; the containing browser separately checks a user gesture,
+the complete bytes and live authority before requesting a download. Its response
+does not prove local-file saving. Fixture preview, closure preparation and intrinsic
+child-project selection refuse this action. It creates no scientific Operation.
+
 Ordinary plugins, connected CLI and MCP use the same `plugins.archive_*@1`
 ports. `archive_stage` and `archive_discard` are Controls with `plugins.write`; `archive_import` is an
 Operation with that scope. Progress, inspection, chunk reads and original receipt

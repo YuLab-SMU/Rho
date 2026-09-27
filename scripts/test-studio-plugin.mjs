@@ -1,4 +1,5 @@
 import {testScenario} from './fixtures/studio-scenario.mjs';
+import {testArchives} from './fixtures/studio-archive.mjs';
 import {testBackendTest} from './fixtures/studio-backend-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -100,5 +101,6 @@ try {
  await testDevelopment(module,operationRequestId,ViewRequestError);
  await testBackendTest(module,operationRequestId,ViewRequestError);
  await testScenario(module,operationRequestId,ViewRequestError);
+ await testArchives(module,operationRequestId);
  completed=true;console.log('Studio model: source/canvas shared undo, invalid drafts, opaque custom source, atomic inventory edits, native receipts, lost acknowledgements, reopen recovery, source integrity and bounded pagination passed.');
 }finally{if(completed)fs.rmSync(directory,{recursive:true,force:true});else console.error(`Studio test retained at ${directory}`);}

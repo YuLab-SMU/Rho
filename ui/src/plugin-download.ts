@@ -1,4 +1,5 @@
-import type { ResourceReference } from '../../sdk/plugin-protocol/index.js';
+import type { PluginArchiveReference, ResourceReference } from '../../sdk/plugin-protocol/index.js';
+import { readPluginArchive, type ArchiveReader } from '../../sdk/plugin-ui/archives.js';
 
 export const MAX_DOWNLOAD_BYTES = 16 * 1024 * 1024;
 export function downloadFilename(value: string): string {
@@ -50,21 +51,34 @@ export function requestBrowserDownload(bytes:Uint8Array<ArrayBuffer>,filename:st
 export class PluginDownloads {
   private active:AbortController|null=null;
   private stopped=false;
-  constructor(private read:DownloadRead,private request=requestBrowserDownload,private authorize?:(reference:ResourceReference,filename:string)=>Promise<void>){}
+  constructor(private read:DownloadRead,private request=requestBrowserDownload,private authorize?:(reference:ResourceReference,filename:string)=>Promise<void>,
+    private archives?:{reader:ArchiveReader;authorize:(reference:PluginArchiveReference,filename:string)=>Promise<void>}){}
   async start(reference:ResourceReference,filename:string){
+    const captured=structuredClone(reference);
+    return this.collect(filename,signal=>collectDownload(this.read,captured,signal),name=>this.authorize?.(captured,name));
+  }
+  async startArchive(reference:PluginArchiveReference,filename:string){
+    const archives=this.archives,captured=structuredClone(reference);
+    if(!archives)throw new Error('Archive downloads are unavailable in this container.');
+    return this.collect(filename,signal=>readPluginArchive(archives.reader,captured,{signal}),name=>archives.authorize(captured,name),540000);
+  }
+  private async collect(filename:string,read:(signal:AbortSignal)=>Promise<Uint8Array<ArrayBuffer>>,authorize:(filename:string)=>Promise<void>|undefined,timeout?:number){
     if(this.stopped)throw new Error('The view download connection is closed.');
     if(this.active)throw new Error('Wait for the current original download.');
-    const captured=structuredClone(reference),name=downloadFilename(filename),abort=new AbortController();this.active=abort;
+    const name=downloadFilename(filename),abort=new AbortController();this.active=abort;
+    // Larger package reads get a bounded transfer interval. It ends before the
+    // SDK's archive response deadline, and late reads cannot request a download.
+    const timer=timeout===undefined?undefined:setTimeout(()=>abort.abort(),timeout);
     try{
-      const bytes=await collectDownload(this.read,captured,abort.signal);
+      const bytes=await read(abort.signal);
       if(this.stopped||abort.signal.aborted)throw new Error('The view closed before download was requested.');
       // Collection can outlive a close preparation or a revoked read grant.
       // Recheck the same original at the Host before the browser side effect.
-      await this.authorize?.(captured,name);
+      await authorize(name);
       if(this.stopped||abort.signal.aborted)throw new Error('The view closed before download was requested.');
       return this.request(bytes,name);
     }
-    finally{if(this.active===abort)this.active=null;}
+    finally{clearTimeout(timer);if(this.active===abort)this.active=null;}
   }
   dispose(){this.stopped=true;this.active?.abort();}
 }

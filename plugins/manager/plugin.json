@@ -16,7 +16,9 @@
       "package.json",
       "build.mjs",
       "README.md",
-      "src/archive.ts"
+      "src/archive.ts",
+      "src/export.ts",
+      "src/export-panel.ts"
     ],
     "lockfiles": [
       "dependencies.lock"
@@ -372,6 +374,24 @@
       },
       "scopes": [
         "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_export",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_read",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
       ]
     }
   ],

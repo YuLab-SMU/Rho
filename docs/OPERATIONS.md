@@ -886,8 +886,8 @@ Snapshot that package and open its `studio` contribution with `{}` configuration
 through the same activation/view ports as any UI plugin. It can inspect its own
 source and create development branches. Source editing and checkpoint history use
 the ports below. Explicit native build, isolated fixture preview, disposable backend
-tests and scenario application/history are implemented. Archive controls and Agent
-integration remain unfinished; see Status for the executed acceptance checks.
+tests and scenario application/history are implemented. Archive controls use the
+same ports. Agent integration remains unfinished; see Status for executed checks.
 
 Active Hosts expose `plugins.repository`, `plugins.list`, `plugins.inspect`,
 `plugins.instances`, `plugins.instance`, `plugins.resolve`, `plugins.branch_head`
@@ -938,8 +938,8 @@ ID; after observing a completed but unsuccessful reconciliation attempt, use a n
 client request ID for another explicit attempt. No scientific execution is repeated
 and no disconnected backend is restarted. The offline CLI recovery interface
 handles filesystem archive import/export and source snapshots. Active Hosts also
-provide the bounded archive ports below. Plugins provides the import workflow
-described below; export controls and Studio archive integration remain ongoing work.
+provide the bounded archive ports below. Plugins provides the import and export
+workflows described below; Studio keeps these transfers alongside its source draft.
 
 Archive transfer through an active Host uses ordinary Control, Query and Operation
 calls; no filesystem path is accepted. Stage the selected UTF-8 `.rho-plugin`
@@ -990,6 +990,27 @@ unheld upload bytes only; the installed revision and Operation records remain.
 These controls require the archive-capable Host and a new Manager package revision;
 refreshing an older Host or instance does not add the ports or replace its assets.
 
+In an installed revision's details, Export revision captures that exact source and
+the selected build artifacts. Select source only clears the artifact selection.
+Prepare archive retains the bytes and original Operation; Download archive is a
+separate click with a plain filename. The browser verifies the entire archive and
+current read authority, then reports that the download was requested. Browser
+settings and file-save completion remain outside that acknowledgement. A lost
+preparation reply uses Inspect original request, followed by Retained export;
+recovery never starts a download. Inspect original export verifies its original
+result. Discard export clears transient bytes while preserving installed revisions
+and history. Downloads require the rebuilt Host and client container's
+`archive_download_v1` feature. See Status for the current acceptance boundary.
+
+In Plugin Studio, Import / export captures transfers in the synchronized source
+draft. Upload and inspect precedes Import revision; Open imported source is a
+separate action enabled after checkpointing current edits. Use current checkpoint
+exports the displayed immutable baseline, explicitly excluding uncheckpointed
+source changes. Select source only or choose exact artifacts, then Prepare archive
+and Download archive separately. Original archive recovery never opens source,
+applies a scenario or starts a download. Retained transfers survive refresh; byte
+uploads require identical-file reselection. See Status for browser acceptance.
+
 In Scenarios, Review captures the current window version. Choose an exact existing
 instance or create a new one for each alias, and choose live view state or saved
 checkpoint state for each view. Prepare creates missing instances/views and
@@ -1006,8 +1027,8 @@ in that view. Inspect the original request to refresh its outcome; recovery neve
 continues later preparation steps automatically. Only the original view can retry
 the same captured request. A replacement manager can inspect the original record
 but cannot reissue it under a new identity. Read-only inspection and navigation
-remain available. Export/download UI, Studio archive integration and Agent-assisted
-development remain tracked implementation work; archive operations are already
+remain available. Agent-assisted
+development remains tracked implementation work; archive operations are already
 available through the public Host ports and offline CLI. See Status for verification
 and remaining scope.
 

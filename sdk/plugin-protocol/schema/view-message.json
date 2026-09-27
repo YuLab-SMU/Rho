@@ -85,6 +85,28 @@
         "artifact"
       ]
     },
+    "PluginArchiveReference": {
+      "type": "object",
+      "properties": {
+        "archive": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "archive",
+        "digest",
+        "bytes"
+      ]
+    },
     "PluginViewRequest": {
       "description": "Every request crosses the containing shell's scoped Host port. No browser\ncredential, project root or user identity is accepted from the iframe.",
       "oneOf": [
@@ -276,6 +298,28 @@
             "type": {
               "type": "string",
               "const": "download_resource"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "reference",
+            "filename"
+          ]
+        },
+        {
+          "description": "Download exact package bytes through the declared archive-read port.\nPresentation acknowledgement alone does not prove that a file was saved.",
+          "type": "object",
+          "properties": {
+            "filename": {
+              "type": "string"
+            },
+            "reference": {
+              "$ref": "#/$defs/PluginArchiveReference"
+            },
+            "type": {
+              "type": "string",
+              "const": "download_archive"
             }
           },
           "additionalProperties": false,

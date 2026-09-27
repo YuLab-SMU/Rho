@@ -122,6 +122,8 @@ Sources:
 - `scripts/fixtures/editor-save-run.mjs`
 - `scripts/fixtures/editor-sessions.mjs`
 - `scripts/fixtures/manager-archive.mjs`
+- `scripts/fixtures/manager-export.mjs`
+- `scripts/fixtures/plugin-archive-download.mjs`
 - `scripts/fixtures/plugin-archives.mjs`
 - `scripts/fixtures/plugin-close.mjs`
 - `scripts/fixtures/plugin-download.mjs`
@@ -129,6 +131,7 @@ Sources:
 - `scripts/fixtures/plugin-drafts.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/fixtures/ssh-slurm.mjs`
+- `scripts/fixtures/studio-archive.mjs`
 - `scripts/fixtures/studio-backend-test.mjs`
 - `scripts/fixtures/studio-development.mjs`
 - `scripts/generate-editor-context.mjs`
@@ -182,6 +185,7 @@ Sources:
 - `ui/e2e/objects-plugin.spec.ts`
 - `ui/e2e/packages-plugin.spec.ts`
 - `ui/e2e/plots-plugin.spec.ts`
+- `ui/e2e/plugin-archive-download.spec.ts`
 - `ui/e2e/plugin-download.spec.ts`
 - `ui/e2e/plugin-drafts.spec.ts`
 - `ui/e2e/plugin-preview.spec.ts`
@@ -193,6 +197,7 @@ Sources:
 - `ui/e2e/r-plugin-objects.spec.ts`
 - `ui/e2e/r-plugin-packages.spec.ts`
 - `ui/e2e/r-plugin-plots.spec.ts`
+- `ui/e2e/studio-archive.spec.ts`
 - `ui/e2e/studio-backend-test.spec.ts`
 - `ui/e2e/studio-plugin.spec.ts`
 
@@ -284,10 +289,10 @@ Checks:
 - `plugins.remote-public-types`: `["node","scripts/test-remote-plugin-types.mjs"]`
 - `plugins.remote-visibility`: `["cargo","test","-p","rho-execution","slurm","--locked"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
-- `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts"]`
+- `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts","plugin-archive-download.spec.ts"]`
 - `plugins.scenario-ports`: `["cargo","test","-p","rho-host","--test","plugin_scenarios","--locked"]`
 - `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
-- `plugins.studio-browser`: `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts","studio-scenario.spec.ts"]`
+- `plugins.studio-browser`: `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts","studio-scenario.spec.ts","studio-archive.spec.ts"]`
 - `plugins.studio-model`: `["node","scripts/test-studio-plugin.mjs"]`
 - `plugins.test-project-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-test-project.spec.ts"]`
 - `plugins.test-project-edges`: `["cargo","test","-p","rho-workbench","--lib","plugin_test_","--locked"]`

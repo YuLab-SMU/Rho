@@ -3,6 +3,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, realpath, readFile, writeFile, cp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { buildManagerPlugin } from '../../scripts/build-manager-plugin.mjs';
 import { buildUiFixture } from '../../scripts/fixtures/plugin-ui.mjs';
 
@@ -125,6 +126,60 @@ test('imports a chosen archive through an ordinary view and recovers original re
   await frame.getByRole('button', { name: 'Inspect original import', exact: true }).click(); await expect(frame.locator('#import-notice')).toContainText('confirmed');
   await frame.getByRole('button', { name: 'Discard transfer', exact: true }).click(); await expect(frame.locator('#archive-progress')).toHaveText('No archive selected.');
   expect((await query('plugins.inspect', { revision: subject.revision })).summary.revision).toBe(subject.revision);
+  await frame.getByRole('button', { name: 'Close', exact: true }).click();
+  const downloads: string[] = []; page.on('download', item => downloads.push(item.suggestedFilename()));
+  await frame.getByRole('button', { name: 'Export revision', exact: true }).click();
+  const artifactChoice = frame.getByRole('checkbox').first(); await artifactChoice.focus(); await artifactChoice.press('Space');
+  await expect(artifactChoice).not.toBeChecked(); await expect(artifactChoice).toBeFocused();
+  await artifactChoice.press('Space'); await expect(artifactChoice).toBeChecked(); await expect(artifactChoice).toBeFocused();
+  await frame.getByRole('button', { name: 'Select source only', exact: true }).click();
+  await frame.getByLabel('Filename', { exact: true }).fill('导出源码与视图-科学检查-Ω.rho-plugin');
+  let lostExport = false;
+  await page.route('**/api/plugin-view', async route => {
+    const body = route.request().postDataJSON()?.message?.body;
+    if (!lostExport && body?.type === 'invoke' && body.capability.id === 'plugins.archive_export') {
+      lostExport = true; const response = await route.fetch(), reply = await response.json(); expect(reply.ok).toBe(true);
+      await route.fulfill({ response, json: { ...reply, ok: false, result: undefined, error: 'Original export acknowledgement lost' } });
+    } else await route.continue();
+  });
+  await frame.getByRole('button', { name: 'Prepare archive', exact: true }).click();
+  await expect(frame.locator('#export-error')).toContainText('export acknowledgement lost'); await page.unroute('**/api/plugin-view'); await page.reload();
+  await frame.getByRole('button', { name: 'Inspect original request', exact: true }).click(); await expect(frame.locator('#recovery')).toBeHidden();
+  expect(lostExport).toBe(true); expect(downloads).toEqual([]);
+  expect((await query('operation.list_recent', { limit: 100 })).operations.filter((r: any) => r.capability.id === 'plugins.archive_export')).toHaveLength(1);
+  await frame.getByRole('button', { name: 'Retained export', exact: true }).click();
+  await expect(frame.locator('#export-details')).toContainText('Source-only archive');
+  await frame.getByRole('button', { name: 'Inspect original export', exact: true }).click(); await expect(frame.locator('#export-download-status')).toContainText('confirmed');
+  for (const width of [1440, 1920, 390, 220]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(async () => Math.abs(await frame.locator('body').evaluate(() => innerWidth) - width)).toBeLessThan(5);
+    await frame.locator('body').evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+    expect(await frame.getByRole('dialog').evaluate(element => element.scrollWidth > element.clientWidth)).toBe(false);
+    await page.screenshot({ path: info.outputPath(`archive-export-${width}.png`) });
+    if (width <= 390) { await frame.getByRole('button', { name: 'Download archive', exact: true }).scrollIntoViewIfNeeded(); await page.screenshot({ path: info.outputPath(`archive-export-actions-${width}.png`) }); }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const built of [false, true]) {
+    if (built) {
+      await frame.getByRole('button', { name: 'Discard export', exact: true }).click(); await frame.getByRole('button', { name: 'Close', exact: true }).click();
+      await frame.getByRole('button', { name: 'Export revision', exact: true }).click(); await frame.getByLabel('Filename', { exact: true }).fill('完整插件.rho-plugin');
+      await frame.getByRole('button', { name: 'Prepare archive', exact: true }).click();
+      await expect(frame.getByRole('button', { name: 'Download archive', exact: true })).toBeEnabled();
+    }
+    const captured = (await query('views.inspect', { view: managerView.view })).state.exported.receipt;
+    const pending = page.waitForEvent('download'); await frame.getByRole('button', { name: 'Download archive', exact: true }).click(); const download = await pending;
+    expect(download.suggestedFilename()).toBe(built ? '完整插件.rho-plugin' : '导出源码与视图-科学检查-Ω.rho-plugin');
+    const path = info.outputPath(built ? 'complete.rho-plugin' : 'source-only.rho-plugin'); await download.saveAs(path); expect(await download.failure()).toBeNull();
+    const bytes = await readFile(path), parsed = JSON.parse(bytes.toString());
+    expect(bytes.length).toBe(captured.reference.bytes); expect('sha256:' + createHash('sha256').update(bytes).digest('hex')).toBe(captured.reference.digest);
+    expect(parsed.revision.id).toBe(subject.revision); expect(parsed.artifacts.map((a: any) => a.id).sort()).toEqual(built ? subject.artifacts.sort() : []);
+    await expect(frame.locator('#export-download-status')).toContainText('Browser download requested');
+  }
+  expect(downloads).toHaveLength(2);
+  expect((await query('operation.list_recent', { limit: 100 })).operations.filter((r: any) => r.capability.id === 'plugins.archive_export')).toHaveLength(2);
+  await frame.getByRole('button', { name: 'Discard export', exact: true }).click(); await expect(frame.locator('#export-details')).toContainText('No export selected');
+  expect((await query('plugins.instances', { after: null, limit: 100 })).total).toBe(initialCount);
+  expect((await query('plugins.list', { after: null, limit: 100 })).total).toBe(initialCatalog + 1);
   await expect(note).toHaveValue('Unsaved analysis 中文 Ω'); expect((await query('views.inspect', { view: analysisView.view })).state.text).toBe('Saved analysis');
   expect(errors).toEqual([]); await analysisPage.close(); completed = true;
 });

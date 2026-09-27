@@ -1,7 +1,7 @@
 /** Original-operation inspection for this management view. No speculative replay. */
 import type { JsonValue, CapabilityKey } from '../public/plugin-protocol/index.js';
 import { operationRequestId, type PluginViewClient } from '../public/plugin-ui/index.js';
-export type Client = Pick<PluginViewClient, 'view' | 'query' | 'control' | 'invoke' | 'operation' | 'setState'>;
+export type Client = Pick<PluginViewClient, 'view' | 'query' | 'control' | 'invoke' | 'operation' | 'setState' | 'downloadArchive'>;
 export interface Intent { view: string; request: string; capability: CapabilityKey; arguments: JsonValue; operation: string | null; }
 export interface RecordReply {
   operation: { operation_id: string; caller: { kind: string; id: string }; client_request_id: string;

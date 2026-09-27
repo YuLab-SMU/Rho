@@ -72,8 +72,8 @@ inspectable through the parent journal port after stop. Failed activation and
 uncertain cleanup retain their original evidence; no replacement is automatic.
 The fixture preview and backend test have separate instances and state.
 
-Archive import/export, Agent tasks and scenario application remain unfinished. The inert editing canvas is separate
-from executable fixture preview. Default delivery is not yet changed.
+The inert editing canvas is separate from executable fixture preview. Agent tasks
+and default delivery remain unfinished.
 
 Apply to scenario reads named scenario heads and their immutable parent history.
 Choose the source checkpoint, its exact built artifact and an alias of the same
@@ -99,3 +99,25 @@ and other windows retain their versions. Restoration does not rewind files, R
 memory, credentials or scientific outputs. Partial preparations stay retained and
 can be inspected and managed through Plugins; Studio never releases them as an
 implicit rollback. These UI flows use the public ports and declared scopes only.
+
+Import / export keeps package transfers alongside the synchronized source draft.
+A chosen local file is captured before its first chunk leaves the view. After a
+refresh, inspect the retained upload and reselect identical bytes to resume.
+Import revision installs the inspected source/artifacts without selecting, building
+or activating them. Open imported source is a separate action; checkpoint current
+edits first. The current branch and source remain intact throughout transfer.
+
+Use current checkpoint captures that immutable revision, excluding uncheckpointed
+editor changes. Export includes source plus the exact checked artifact identities;
+Select source only excludes all artifacts. Prepare archive saves the original
+Operation before dispatch. Download archive then explicitly asks the containing
+browser to read and verify those bytes. Its acknowledgement means a browser request,
+not that the user saved the file. A plain Unicode filename is supported.
+
+Lost import/export acknowledgements retain the original request in the document.
+Inspection never replays a mutation or starts a download. A replacement view can
+inspect but cannot retry another view's request. Uncertain results stay unresolved.
+Discard transfer/export frees transient bytes after native confirmation; installed
+revisions, source checkpoints and running instances remain available. Downloads
+require a container advertising `archive_download_v1` and a rebuilt archive-capable
+Host. See the repository Status for executed browser acceptance.

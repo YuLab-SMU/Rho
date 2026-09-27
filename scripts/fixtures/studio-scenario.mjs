@@ -66,7 +66,7 @@ export async function testScenario(module,operationRequestId,ViewRequestError){
  const {Studio}=await module('model');const owner=new Studio(client);owner.application.restore(app.data);
  let synchronized;owner.drafts.save=async body=>{synchronized=body;};await owner.flush();
  const reopened=new Studio(client);reopened.drafts.read=async()=>synchronized;await reopened.open();assert.ok(reopened.application.data.pending);
- await assert.rejects(reopened.select(next),/original unconfirmed/);await assert.rejects(reopened.development.configure(next),/scenario or draft/);await assert.rejects(reopened.development.testing.configure('example.report',next,nextArtifact,{}),/scenario or draft/);
+ await assert.rejects(reopened.select(next),/original unconfirmed/);await assert.rejects(reopened.development.configure(next),/scenario.*draft/);await assert.rejects(reopened.development.testing.configure('example.report',next,nextArtifact,{}),/scenario.*draft/);
  uncertain.status=uncertain.outcome='failed';await assert.rejects(app.recover(),/failed/);assert.equal(app.data.pending,null);
  assert.equal(instances.get(reference.instance).instance.state,'active');assert.equal(views.get('old-view').closed,false);assert.ok(!calls.includes('views.close')&&!calls.includes('plugins.release'));
  console.log('Studio scenarios: explicit preview/state, head and window CAS, acknowledged intents, no speculative continuation, replacement-view recovery, partial preparation reuse, history restoration and retained live drafts passed.');

@@ -6,3 +6,4 @@
 .table-head{font-size:12px;color:var(--color-muted);cursor:default}@media(max-width:700px){.table-head{display:none}}
 .switch-grid>div{display:flex;flex-direction:column;gap:20px}
 #import-package{font-size:13px;line-height:20px}#archive-details{display:flex;flex-direction:column;gap:12px;overflow-wrap:anywhere}#import-error{color:var(--color-danger);overflow-wrap:anywhere}#import-dialog{width:min(660px,calc(100vw - 32px))}@media(max-width:700px){header{flex-wrap:wrap}header>div{flex-basis:100%}header>button{flex:1}}
+#export-dialog{width:min(660px,calc(100vw - 32px))}#export-details{display:flex;flex-direction:column;gap:12px;overflow-wrap:anywhere}#export-details code{display:block;color:var(--color-muted)}.export-artifact{display:flex;align-items:flex-start;gap:10px;margin:0}.export-artifact>span{min-width:0;flex:1}.export-artifact>input{flex:none;margin-top:4px}#export-error{color:var(--color-danger);overflow-wrap:anywhere}#export-filename{width:100%}

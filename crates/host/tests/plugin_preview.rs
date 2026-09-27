@@ -211,6 +211,7 @@ async fn exact_artifact_preview_has_no_backend_grants_routes_or_project_queries(
         json!({"type":"cancel","operation_id":started.operation.operation_id}),
         json!({"type":"open_external_url","url":"https://example.org"}),
         json!({"type":"download_resource","reference":{"owner":instance,"resource":"not-real","digest":h.archive.revision.id,"media_type":"text/plain","bytes":0},"filename":"result.txt"}),
+        json!({"type":"download_archive","reference":{"archive":"not-real","digest":h.archive.revision.id,"bytes":1},"filename":"package.rho-plugin"}),
     ] {
         assert!(matches!(
             channel.send(&h, body).await,

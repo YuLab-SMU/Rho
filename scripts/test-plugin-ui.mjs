@@ -112,7 +112,7 @@ try {
   const owner={plugin:"example.resources",instance:"source",revision:"sha256:"+"a".repeat(64),artifact:"sha256:"+"b".repeat(64)};
   const reference={owner,resource:"resource",digest:"sha256:"+sha,bytes:bytes.length,media_type:"text/html"};
   await assert.rejects(client.downloadResource(reference,'plot.png'),/unavailable/);
-  const downloadChannel=new MessageChannel(),downloadClient=new sdk.PluginViewClient(downloadChannel.port1,{...init,features:['resource_download_v1']});
+  const downloadChannel=new MessageChannel(),downloadClient=new sdk.PluginViewClient(downloadChannel.port1,{...init,features:['resource_download_v1','archive_download_v1']});
   let downloadSequence=0,confirmedDownload=true;const downloads=[];
   downloadChannel.port2.on('message',message=>{
     downloads.push(message.body);
@@ -126,6 +126,16 @@ try {
     await assert.rejects(downloadClient.downloadResource({...reference,bytes},'plot.png'),/limit|size/);
   assert.equal(downloads.length,1);
   confirmedDownload=false;await assert.rejects(downloadClient.downloadResource(reference,'original.html'),/unconfirmed/);
+  const archiveReference={archive:'exported-source',digest:reference.digest,bytes:17*1024*1024};
+  await assert.rejects(client.downloadArchive(archiveReference,'source.rho-plugin'),/unavailable/);
+  confirmedDownload=true;await downloadClient.downloadArchive(archiveReference,'源码 Ω.rho-plugin');
+  assert.deepEqual(downloads.at(-1),{type:'download_archive',reference:archiveReference,filename:'源码 Ω.rho-plugin'});
+  const archiveCalls=downloads.length;
+  for(const invalid of [{...archiveReference,owner},{...archiveReference,bytes:0},{...archiveReference,bytes:sdk.MAX_PLUGIN_ARCHIVE_BYTES+1},{...archiveReference,archive:'../outside'}])
+    await assert.rejects(downloadClient.downloadArchive(invalid,'source.rho-plugin'),/limit|identity/);
+  await assert.rejects(downloadClient.downloadArchive(archiveReference,'../source.rho-plugin'),/filename/);
+  assert.equal(downloads.length,archiveCalls);
+  confirmedDownload=false;await assert.rejects(downloadClient.downloadArchive(archiveReference,'source.rho-plugin'),/unconfirmed/);
   downloadClient.dispose();downloadChannel.port2.close();
   let resourceReads=0;
   const reader={query:async(cap,args)=>{

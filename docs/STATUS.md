@@ -11,6 +11,46 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
+and verified. The containing browser shares one download slot for archives/resources,
+validates the complete archive and rechecks native read authority before requesting
+a file. Manager and Studio capture exact source/artifact selections, retain original
+request recovery and require a separate Download action. Studio retains archive state
+with its source draft, exports immutable checkpoints independently of local edits,
+and requires checkpointing edits before explicitly opening imported source. Transfers
+do not implicitly build, activate code or apply a scenario.
+
+All 18 affected Host archive, draft and preview cases pass. Public protocol/SDK
+checks, independent Manager/Studio builds and models, client build/consistency,
+all 531 client tests and the current binary build pass. All eight affected browser
+flows pass across the recorded runs: ordinary resource/archive download, Manager
+composition and import/export, Studio source/build/preview, disposable backend tests,
+scenario application and archive transfers. Lost upload/import/export replies recover
+without duplicate mutations or automatic downloads. Controlled fixture downloads
+match the original digest/length and exact source/artifact selections. Other windows,
+running instances and unsaved Unicode source remain intact. Keyboard artifact
+selection retains focus. Twenty affected captures were inspected: Manager revision
+and export, Studio editor/header and archive controls at normal, wide and constrained
+sizes, including scrolled narrow download controls. No overlap or horizontal overflow
+was observed. Unchanged list, scenario, instance and preview observations are reused.
+
+The initial full client run aborted when a new 17 MiB deep-array assertion exhausted
+the worker heap; the corrected assertion checks the same complete bytes without
+formatting millions of entries. Focused and full reruns pass. Initial Studio models
+failed only on an old diagnostic-wording assertion. The first browser run passed
+seven flows; the independent archive fixture failed because appended JavaScript
+redeclared a variable. Explicit module syntax verification and a scoped fixture
+resolve it. Studio's passing archive fixture was also tightened to wait for the
+selected source before capturing its edit; the corrected run passes. Failures and
+exact commands remain in `target/plugin-refactor/archive-download-verification.txt`
+and `target/plugin-refactor/studio-archive-verification.txt`.
+
+New download admission requires a rebuilt Host and client. Manager and Studio assets
+require explicit package snapshot/activation; old immutable instances stay unchanged.
+User Hosts and R sessions were not replaced. No real-R/full-workspace audit,
+installation or publication ran. Agent integration, remaining scientific migration
+and removal of the fixed composition/default delivery remain active work.
+
 Active Hosts now expose scoped package archive staging, inspection, import,
 export, bounded reads, original transaction receipts and explicit transient-byte
 discard through the same public ports. Native project/principal identity and exact
@@ -26,8 +66,8 @@ limit. These helpers do not trigger browser downloads. Manager import controls a
 implemented and verified in Chrome: captured local files, retained
 upload inspection, identical-content reselection, explicit import and recovery of
 the original request. Model checks cover partial/lost replies, replacement views,
-uncertainty, receipt identity and explicit transient-byte discard. Export/download
-controls and Studio archive integration remain unfinished.
+uncertainty, receipt identity and explicit transient-byte discard. Studio archive
+acceptance is recorded above.
 The new ports require a rebuilt Host; existing user Hosts and R sessions have not
 been replaced. All 30 affected repository/build/source-development tests pass on
 the current implementation. Public protocol/SDK consumers, independent Studio and
@@ -37,7 +77,7 @@ library compiles (its library target has no tests), and client consistency passe
 Exact commands, initial fixture/build failures and results are retained in
 `target/plugin-refactor/archive-verification.txt`.
 
-The current binary builds, and both affected Manager browser flows pass across
+The import baseline binary builds, and both affected Manager browser flows pass across
 the recorded runs. Import resumes after a lost chunk acknowledgement, recovers a
 lost successful import reply without duplication, explicitly opens the imported
 revision and discards only transient bytes. Running instances and another window's
@@ -96,7 +136,7 @@ exact commands and current results are in
 audit, installation or publication was run. New Studio package revisions still
 need explicit snapshot/activation; existing instances retain immutable assets.
 The shell change requires updated client assets, not a new Host capability. User
-Hosts and R sessions have not been replaced. Archive UI, Agent integration,
+Hosts and R sessions have not been replaced. Agent integration,
 remaining scientific migration and default delivery are still active work.
 
 Explicit backend tests have a native disposable-project owner and ordinary Studio
@@ -157,7 +197,7 @@ and fixture-preview regressions pass all fourteen cases. Dependency and governan
 checks pass. Exact commands, failures and current evidence are in
 `target/plugin-refactor/studio-test-verification.txt`. No real-R or full-workspace
 audit, installation or publication was run for this change. The overall migration,
-Studio archive/Agent workflows, broader scientific acceptance and default delivery
+Studio Agent workflows, broader scientific acceptance and default delivery
 remain unfinished.
 
 Destroyed plugin documents retire their exact close-handler registration through
@@ -333,7 +373,7 @@ Plugin boundaries, architecture and governance checks pass. The Studio UI stage
 reused the native build/client verification above; it changed no Host capability
 or embedded client source. The later generic-Host verification is recorded at the
 top of this page. User Hosts and R sessions were not replaced.
-Archive UI, Agent integration, default delivery and remaining scientific migration are
+Agent integration, default delivery and remaining scientific migration are
 still unfinished. The inert editing canvas remains separate from executable
 fixture preview.
 

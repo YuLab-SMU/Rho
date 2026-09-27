@@ -25,7 +25,11 @@
       "src/backend-test.ts",
       "src/backend-test-panel.ts",
       "src/scenario.ts",
-      "src/scenario-panel.ts"
+      "src/scenario-panel.ts",
+      "src/archive.ts",
+      "src/archive-upload.ts",
+      "src/archive-export.ts",
+      "src/archive-panel.ts"
     ],
     "lockfiles": [
       "dependencies.lock"
@@ -495,6 +499,69 @@
       },
       "scopes": [
         "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_stage",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_progress",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_discard",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_import",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_export",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_read",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
       ]
     }
   ],

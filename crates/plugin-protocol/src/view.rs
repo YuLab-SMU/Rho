@@ -157,6 +157,9 @@ pub enum PluginViewRequest {
     /// Admit an explicit original-resource download. This is not evidence that
     /// the containing browser requested or completed a file download.
     DownloadResource { reference: ResourceReference, filename: String },
+    /// Download exact package bytes through the declared archive-read port.
+    /// Presentation acknowledgement alone does not prove that a file was saved.
+    DownloadArchive { reference: PluginArchiveReference, filename: String },
     Control {
         capability: CapabilityKey,
         arguments: Value,
@@ -195,6 +198,7 @@ impl std::fmt::Debug for PluginViewRequest {
             Self::OpenExternalUrl { .. } => "OpenExternalUrl",
             Self::OpenTestWorkspace { .. } => "OpenTestWorkspace",
             Self::DownloadResource { .. } => "DownloadResource",
+            Self::DownloadArchive { .. } => "DownloadArchive",
             Self::Control { .. } => "Control",
             Self::Query { .. } => "Query",
             Self::Invoke { .. } => "Invoke",

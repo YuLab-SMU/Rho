@@ -202,6 +202,17 @@ reads bounded chunks through the same view grant, verifies every identity/range
 and the complete SHA-256, then rechecks live Host authority before requesting
 the download. One download may be collected per view at a time.
 
+For a prepared package export, call `client.downloadArchive(reference, filename)`
+from a separate explicit Download action. It requires `archive_download_v1` and
+the declared `plugins.archive_read@1` / `plugins.read` grant. Package references
+retain their own archive bound and never impersonate runtime resources. The
+container reads 64 KiB pages with `readPluginArchive`, verifies the full checksum,
+then rechecks original authority before requesting the browser download. Archives
+and resources share the same per-view active-download slot. Archive collection
+stops after nine minutes; the SDK allows ten minutes for its response, while other
+requests retain their existing timeout. A late read cannot initiate a timed-out
+transfer. Intrinsic downloads cannot select a disposable child project.
+
 The acknowledgement means the browser download was requested; it does not claim
 that a file was saved. Browser settings, cancellation and disk failures remain
 outside this acknowledgement. Missing features, invalid references, failed reads,

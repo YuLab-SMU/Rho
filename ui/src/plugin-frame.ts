@@ -1,4 +1,4 @@
-import type { PluginViewConnection, PluginViewMessage, PluginViewRequest, ReleasePluginViewRenderer } from "../../sdk/plugin-protocol/index.js";
+import type { CapabilityKey, JsonValue, PluginViewConnection, PluginViewMessage, PluginViewRequest, ReleasePluginViewRenderer } from "../../sdk/plugin-protocol/index.js";
 import type { SessionReply } from "./generated/SessionReply";
 import { HostClient, json } from "./host-client";
 import { requestExternalNavigation } from "./plugin-external";
@@ -78,6 +78,14 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
       const final = await internal({ type: "download_resource", reference, filename });
       if ((final as { authorized_view?: string })?.authorized_view !== connection.view.view)
         throw new Error("The Host did not validate the original download request.");
+    }, {
+      reader: { query: async <T>(capability: CapabilityKey, arguments_: JsonValue) =>
+        await internal({ type: "query", capability, arguments: arguments_ }) as T },
+      authorize: async (reference, filename) => {
+        const final = await internal({ type: "download_archive", reference, filename });
+        if ((final as { authorized_view?: string })?.authorized_view !== connection.view.view)
+          throw new Error("The Host did not validate the original archive download.");
+      },
     });
   const dispose = () => {
     if (disposed) return;
@@ -97,7 +105,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
       message.view !== connection.view.view || message.sequence !== sequence + 1 || typeof message.request !== "string" ||
       !message.body || typeof message.body.type !== "string" || pending >= 128) { fence("The view connection failed its identity, sequence or size check."); return; }
     sequence++; pending++;
-    const currentGesture = (message.body.type === "open_external_url" || message.body.type === "open_test_workspace" || message.body.type === "download_resource" || message.body.type === "begin_text_copy" && clipboardAvailable) &&
+    const currentGesture = (message.body.type === "open_external_url" || message.body.type === "open_test_workspace" || message.body.type === "download_resource" || message.body.type === "download_archive" || message.body.type === "begin_text_copy" && clipboardAvailable) &&
       document.hasFocus() && document.activeElement === iframe && navigator.userActivation?.isActive === true;
     // Allocate the wire sequence before starting concurrent requests. The Host
     // orders their acceptance, not completion: slow reads cannot block control.
@@ -147,13 +155,15 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
           reply = { ...reply, ok: false, result: undefined, error: error instanceof Error ? error.message : String(error) };
         }
       }
-      if (reply.ok && message.body.type === "download_resource") {
+      if (reply.ok && (message.body.type === "download_resource" || message.body.type === "download_archive")) {
         try {
           if ((reply.result as { authorized_view?: string })?.authorized_view !== connection.view.view)
             throw new Error("The Host did not validate this view's download request.");
           if (!currentGesture || !document.hasFocus() || document.activeElement !== iframe || !navigator.userActivation?.isActive)
-            throw new Error("Use an explicit Export action in this view.");
-          reply = { ...reply, result: await downloads.start(message.body.reference, message.body.filename) };
+            throw new Error(message.body.type === "download_archive" ? "Use an explicit Download action in this view." : "Use an explicit Export action in this view.");
+          reply = { ...reply, result: await (message.body.type === "download_resource"
+            ? downloads.start(message.body.reference, message.body.filename)
+            : downloads.startArchive(message.body.reference, message.body.filename)) };
         } catch (error) {
           reply = { ...reply, ok: false, result: undefined, error: error instanceof Error ? error.message : String(error) };
         }
@@ -199,7 +209,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
     // Opaque origins require '*'; the transferred port is addressed to this
     // exact WindowProxy and bootstrap is tied to this document's random nonce.
     iframe.contentWindow?.postMessage({ type: "rho:view:connect", protocol_version: 1, nonce,
-      connection: connection.connection, view: connection.view, features: ["view_close_v1", "external_links_v1", "resource_download_v1", "test_projects_v1", ...(clipboardAvailable ? ["text_copy_v1"] : [])] }, "*", [channel.port2]);
+      connection: connection.connection, view: connection.view, features: ["view_close_v1", "external_links_v1", "resource_download_v1", "archive_download_v1", "test_projects_v1", ...(clipboardAvailable ? ["text_copy_v1"] : [])] }, "*", [channel.port2]);
   };
   window.addEventListener("message", ready);
   surface.append(iframe);

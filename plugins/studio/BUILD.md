@@ -11,3 +11,7 @@ For development in the Rho repository, `node scripts/build-studio-plugin.mjs
 /absolute/new/directory` assembles this package plus the public protocol/UI SDK
 source outside the checkout, then builds with the existing client TypeScript.
 The assembled manifest inventories all source files and ships their license.
+
+Archive controls declare the ordinary archive ports and scopes. Browser downloads
+also require `archive_download_v1` in the containing client and an archive-capable
+Host. Rebuilding the package cannot add capabilities to an already running Host.

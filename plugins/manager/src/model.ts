@@ -4,8 +4,9 @@ import type { ApplyScenario, ScenarioRevision, ScenarioLayout, ScenarioView, Plu
 import { type Client, type Intent, type RecordReply, json, same, verifyOriginal, inspectOriginal } from './operations.js';
 import { ViewRequestError } from '../public/plugin-ui/index.js';
 import { ArchiveUpload, verifyArchiveImport, type ArchiveUploadState } from './archive.js';
+import { ArchiveExport, type ArchiveExportState } from './export.js';
 export { same, json } from './operations.js';
-export type Purpose = { kind: 'activate' | 'view'; key: string } | { kind: 'apply' | 'checkpoint' | 'archive_import' | 'other' };
+export type Purpose = { kind: 'activate' | 'view'; key: string } | { kind: 'apply' | 'checkpoint' | 'archive_import' | 'archive_export' | 'other' };
 export interface Preparation { definition: ScenarioRevision; request: ApplyScenario; ready: boolean; }
 export interface Saved {
   section: 'installed' | 'instances' | 'scenarios'; selected: string; detail: boolean; scroll: number;
@@ -13,6 +14,7 @@ export interface Saved {
   retained_views: string[];
   pending: { intent: Intent; purpose: Purpose } | null;
   upload?: ArchiveUploadState | null;
+  exported?: ArchiveExportState | null;
 }
 export const initial = (): Saved => ({ section: 'installed', selected: '', detail: false, scroll: 0, draft: null, preparation: null, retained_views: [], pending: null });
 export const viewsOf = (layout: ScenarioLayout): ScenarioView[] => layout.kind === 'tabs' ? layout.views : layout.kind === 'split' ? layout.children.flatMap(viewsOf) : [];
@@ -54,11 +56,15 @@ export async function read<T>(client: Client, id: string, args: unknown): Promis
 export class Manager {
   state: Saved;
   readonly upload: ArchiveUpload;
+  readonly archiveExport: ArchiveExport;
   constructor(readonly client: Client, saved: Saved = initial()) {
     this.state = structuredClone(saved);
     this.upload = new ArchiveUpload(client, () => this.state.upload ?? null, value => { this.state.upload = value; }, () => this.save(), () => {
       if (this.state.pending) throw Error('Inspect the original request before changing its archive transfer.');
     });
+    this.archiveExport = new ArchiveExport(client, () => this.state.exported ?? null, value => { this.state.exported = value; }, () => this.save(), () => {
+      if (this.state.pending) throw Error('Inspect the original request before changing its export.');
+    }, args => this.invoke('plugins.archive_export', args, {kind:'archive_export'}));
   }
   save() { return this.client.setState(json(structuredClone(this.state))); }
   async importArchive() {
@@ -143,6 +149,8 @@ export class Manager {
         throw Error('The retained import differs from its captured archive.');
       upload.imported = verifyArchiveImport(record.output, upload);
       upload.original = structuredClone(pending.intent);
+    } else if (pending.purpose.kind === 'archive_export') {
+      this.archiveExport.accept(record, pending.intent);
     }
     this.state.pending = null;
     try { await this.save(); } catch (error) { this.state.pending = pending; throw error; }

@@ -1,5 +1,6 @@
 /** Public browser SDK. No React, Studio, Host credential or scientific owner. */
-import type { JsonValue, CapabilityKey, PluginViewMessage, PluginViewRecord, PluginViewRequest, ResourceReference } from "../plugin-protocol/index.js";
+import type { JsonValue, CapabilityKey, PluginViewMessage, PluginViewRecord, PluginViewRequest, ResourceReference, PluginArchiveReference } from "../plugin-protocol/index.js";
+import { isPluginArchiveReference } from "./archives.js";
 import { ViewCloseCooperation, type ViewCloseHandler } from "./view-close.js";
 import { downloadFilename } from "./download.js";
 export { downloadFilename } from "./download.js";
@@ -98,7 +99,7 @@ export class PluginViewClient {
       if (!this.initialization.features?.includes("test_projects_v1") || !testPortRequest(body))
         return Promise.reject(new Error("Test selection is available only for ordinary Host port calls in a supporting container."));
     }
-    if (this.closeCooperation?.getSnapshot().preparing && (!isDraftFlush(body) || testProject !== undefined) && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy", "open_external_url", "open_test_workspace", "download_resource"].includes(body.type))
+    if (this.closeCooperation?.getSnapshot().preparing && (!isDraftFlush(body) || testProject !== undefined) && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy", "open_external_url", "open_test_workspace", "download_resource", "download_archive"].includes(body.type))
       return Promise.reject(new Error("View closure is preparing; wait before starting another action."));
     if (this.pending.size >= MAX_UI_PENDING) return Promise.reject(new Error("View request quota reached"));
     if (this.sequence >= 0xffffffff) { this.dispose("View sequence exhausted"); return Promise.reject(new Error("View sequence exhausted")); }
@@ -111,7 +112,7 @@ export class PluginViewClient {
       const timer = setTimeout(() => {
         // A timeout is not evidence of cancellation, rollback or native failure.
         this.dispose("View response timed out; accepted operations may still be running");
-      }, 30000);
+      }, body.type === "download_archive" ? 600000 : 30000);
       this.pending.set(request, { resolve: value => resolve(value as T), reject, timer });
       try { this.port.postMessage(message); } catch { this.dispose("View message could not be sent"); }
     });
@@ -156,6 +157,15 @@ export class PluginViewClient {
       throw new Error("The original resource exceeds the download limit or has an invalid size.");
     const result = await this.request<{ download_requested: boolean }>({ type: "download_resource", reference: structuredClone(reference), filename: downloadFilename(filename) });
     if (result?.download_requested !== true) throw new Error("Original download request is unconfirmed.");
+  }
+  /** Call from an explicit Download action after preparing an export. The
+   * container checks exact archive bytes using this view's declared read grant.
+   * Resolution acknowledges only the browser request, never a saved file. */
+  async downloadArchive(reference: PluginArchiveReference, filename: string): Promise<void> {
+    if (!this.initialization.features?.includes("archive_download_v1")) throw new Error("Archive downloads are unavailable in this view container.");
+    if (!isPluginArchiveReference(reference)) throw new Error("The archive exceeds the download limit or has an invalid identity.");
+    const result = await this.request<{ download_requested: boolean }>({ type: "download_archive", reference: structuredClone(reference), filename: downloadFilename(filename) });
+    if (result?.download_requested !== true) throw new Error("Archive download request is unconfirmed.");
   }
   /** Invoke from an explicit Copy action. The producer runs only after the
    * containing browser reserves that gesture, allowing bounded asynchronous
